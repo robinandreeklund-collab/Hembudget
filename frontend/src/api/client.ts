@@ -40,6 +40,10 @@ export async function api<T = unknown>(
 
   const res = await fetch(`${apiBase()}${path}`, { ...options, headers });
   if (!res.ok) {
+    if (res.status === 401 && token) {
+      clearToken();
+      window.location.reload();
+    }
     let body: unknown = undefined;
     try {
       body = await res.json();
@@ -63,6 +67,10 @@ export async function uploadFile<T = unknown>(
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(`${apiBase()}${path}`, { method: "POST", body: form, headers });
   if (!res.ok) {
+    if (res.status === 401 && token) {
+      clearToken();
+      window.location.reload();
+    }
     throw new ApiError(res.status, `HTTP ${res.status}: ${res.statusText}`);
   }
   return (await res.json()) as T;
