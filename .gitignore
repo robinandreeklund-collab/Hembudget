@@ -14,6 +14,7 @@ dist/
 # Node / Vite
 node_modules/
 frontend/dist/
+*.tsbuildinfo
 
 # Tauri / Rust
 src-tauri/target/
