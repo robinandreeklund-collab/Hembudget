@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict
+
+
+class TransactionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    account_id: int
+    date: date
+    amount: Decimal
+    currency: str
+    raw_description: str
+    normalized_merchant: Optional[str]
+    category_id: Optional[int]
+    tags: Optional[list] = None
+    notes: Optional[str] = None
+    ai_confidence: Optional[float] = None
+    user_verified: bool
+
+
+class TransactionUpdate(BaseModel):
+    category_id: Optional[int] = None
+    notes: Optional[str] = None
+    tags: Optional[list] = None
+    user_verified: Optional[bool] = None
+    create_rule: bool = True
+
+
+class AccountIn(BaseModel):
+    name: str
+    bank: str
+    type: str = "checking"
+    currency: str = "SEK"
+
+
+class AccountOut(AccountIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class CategoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    parent_id: Optional[int]
+    budget_monthly: Optional[Decimal]
+    color: Optional[str]
+    icon: Optional[str]
+
+
+class BudgetIn(BaseModel):
+    month: str
+    category_id: int
+    planned_amount: Decimal
+
+
+class ChatMessageIn(BaseModel):
+    session_id: str
+    content: str
+
+
+class ScenarioIn(BaseModel):
+    name: str
+    kind: str
+    params: dict[str, Any]
+
+
+class ScenarioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    kind: str
+    params: dict
+    result: Optional[dict]
+    created_at: datetime
+
+
+class LoginIn(BaseModel):
+    password: str
+
+
+class LoginOut(BaseModel):
+    token: str
+    initialized: bool
