@@ -16,7 +16,10 @@ export default function Settings() {
   });
 
   const detectSubsMut = useMutation({
-    mutationFn: () => api("/budget/subscriptions/detect", { method: "POST" }),
+    mutationFn: () =>
+      api<{ count: number; subscriptions: unknown[] }>("/budget/subscriptions/detect", {
+        method: "POST",
+      }),
   });
 
   return (
