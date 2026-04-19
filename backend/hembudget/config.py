@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     lm_studio_base_url: str = "http://localhost:1234/v1"
     lm_studio_api_key: str = "lm-studio"
-    lm_studio_model: str = "nemotron-nano-3"
+    lm_studio_model: str = "nvidia/nemotron-3-nano"
 
     categorization_batch_size: int = 30
     llm_timeout_seconds: int = 120
