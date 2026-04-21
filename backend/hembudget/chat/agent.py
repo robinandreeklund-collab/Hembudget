@@ -329,6 +329,31 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "get_elpris",
+            "description": (
+                "Svenska spotelpriser per timme från elprisetjustnu.se. "
+                "Returnerar dagens/morgondagens snittpris inkl. moms, de 3 "
+                "billigaste timmarna och den dyraste timmen."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day": {
+                        "type": "string",
+                        "description": "'today', 'tomorrow' eller YYYY-MM-DD",
+                    },
+                    "zone": {
+                        "type": "string",
+                        "enum": ["SE1", "SE2", "SE3", "SE4"],
+                        "description": "SE3 är default (Stockholm/mellan).",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "subscription_health",
             "description": (
                 "Hälsokoll för prenumerationer: hitta de som inte dragits "
@@ -385,6 +410,7 @@ _DISPATCH = {
     "detect_anomalies": tools.detect_anomalies,
     "get_family_breakdown": tools.get_family_breakdown,
     "subscription_health": tools.subscription_health,
+    "get_elpris": tools.get_elpris,
 }
 
 

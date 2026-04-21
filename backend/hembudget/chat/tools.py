@@ -725,6 +725,58 @@ def detect_anomalies(
     return {"month": month, "anomalies": anomalies}
 
 
+def get_elpris(
+    session: Session,  # oanvänd men krävs av dispatch-signaturen
+    day: str = "today",
+    zone: str = "SE3",
+) -> dict:
+    """Hämta svenska spotelpriser per timme. day = 'today' | 'tomorrow' | YYYY-MM-DD."""
+    from datetime import timedelta
+    from ..elpris import ElprisClient, VALID_ZONES
+
+    if zone not in VALID_ZONES:
+        return {"error": f"zone must be one of {VALID_ZONES}"}
+
+    if day == "today":
+        target = date.today()
+    elif day == "tomorrow":
+        target = date.today() + timedelta(days=1)
+    else:
+        try:
+            target = date.fromisoformat(day)
+        except ValueError:
+            return {"error": "day must be 'today', 'tomorrow' or YYYY-MM-DD"}
+
+    # Återanvänd singleton-klienten i api/elpris.py så cachen delas
+    from ..api import elpris as elpris_api
+    try:
+        prices = elpris_api.get_client().get(target, zone)
+    except Exception as exc:
+        return {"error": f"kunde inte hämta priser: {exc}"}
+
+    return {
+        "date": prices.date.isoformat(),
+        "zone": prices.zone,
+        "average_sek_per_kwh_inc_vat": prices.avg_inc_vat,
+        "cheapest_hours": [
+            {
+                "start": h.time_start.isoformat(),
+                "sek_per_kwh_inc_vat": round(h.sek_inc_vat, 4),
+            }
+            for h in prices.cheapest_hours(3)
+        ],
+        "most_expensive_hour": (
+            {
+                "start": prices.max_hour.time_start.isoformat(),
+                "sek_per_kwh_inc_vat": round(prices.max_hour.sek_inc_vat, 4),
+            }
+            if prices.max_hour
+            else None
+        ),
+        "hours_count": len(prices.hours),
+    }
+
+
 def subscription_health(session: Session, stale_days: int = 60) -> dict:
     """Hälsokoll för aktiva prenumerationer: hitta de som inte dragits
     senaste `stale_days` dagarna (användaren kanske glömt säga upp).
