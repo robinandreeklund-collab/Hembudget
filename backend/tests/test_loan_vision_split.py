@@ -374,3 +374,34 @@ def test_omsattning_lan_no_longer_marked_as_transfer(session):
     from hembudget.transfers.detector import GENERIC_TRANSFER_PATTERNS
 
     assert "omsättning lån" not in GENERIC_TRANSFER_PATTERNS
+
+
+def test_interest_paid_year_filters_by_date(session):
+    """interest_paid_year ska bara räkna poster inom det specifika året."""
+    from datetime import timedelta
+    from hembudget.db.models import Account, Transaction
+    loan = Loan(
+        name="Bolån", lender="Nordea",
+        principal_amount=Decimal("875000"),
+        current_balance_at_creation=Decimal("734600"),
+        start_date=date(2021, 11, 16),
+        interest_rate=0.0311,
+    )
+    session.add(loan); session.flush()
+
+    # Historiska räntor i 2025 och 2026
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=date(2025, 12, 27),
+        amount=Decimal("1900"), payment_type="interest",
+    ))
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=date.today() - timedelta(days=1),
+        amount=Decimal("1800"), payment_type="interest",
+    ))
+    session.flush()
+
+    m = LoanMatcher(session)
+    this_year = date.today().year
+    assert m.interest_paid_year(loan, 2025) == Decimal("1900.00")
+    assert m.interest_paid_year(loan, this_year) == Decimal("1800.00")
+    assert m.interest_paid_year(loan, 2023) == Decimal("0.00")

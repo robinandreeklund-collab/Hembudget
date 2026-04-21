@@ -81,6 +81,8 @@ class LoanSummary(BaseModel):
     outstanding_balance: float
     amortization_paid: float
     interest_paid: float
+    interest_paid_year: float        # räntekostnad i år (YTD, för skatteavdrag)
+    interest_year: int               # vilket år "interest_paid_year" gäller
     interest_rate: float
     binding_type: str
     binding_end_date: Optional[date]
@@ -131,14 +133,12 @@ def delete_loan(loan_id: int, session: Session = Depends(db)) -> dict:
     return {"deleted": loan_id}
 
 
-@router.get("/{loan_id}/summary", response_model=LoanSummary)
-def loan_summary(loan_id: int, session: Session = Depends(db)) -> LoanSummary:
-    loan = session.get(Loan, loan_id)
-    if loan is None:
-        raise HTTPException(404, "Loan not found")
-    m = LoanMatcher(session)
+def _build_summary(loan: Loan, m: LoanMatcher, session: Session) -> LoanSummary:
+    from datetime import date as _date
+    year = _date.today().year
     balance = m.outstanding_balance(loan)
-    interest = m.total_interest_paid(loan)
+    interest_total = m.total_interest_paid(loan)
+    interest_ytd = m.interest_paid_year(loan, year)
     amortized = loan.principal_amount - balance
     count = session.query(LoanPayment).filter(LoanPayment.loan_id == loan.id).count()
     ltv = None
@@ -151,7 +151,9 @@ def loan_summary(loan_id: int, session: Session = Depends(db)) -> LoanSummary:
         principal_amount=loan.principal_amount,
         outstanding_balance=balance,
         amortization_paid=amortized,
-        interest_paid=interest,
+        interest_paid=interest_total,
+        interest_paid_year=interest_ytd,
+        interest_year=year,
         interest_rate=loan.interest_rate,
         binding_type=loan.binding_type,
         binding_end_date=loan.binding_end_date,
@@ -160,28 +162,19 @@ def loan_summary(loan_id: int, session: Session = Depends(db)) -> LoanSummary:
     )
 
 
+@router.get("/{loan_id}/summary", response_model=LoanSummary)
+def loan_summary(loan_id: int, session: Session = Depends(db)) -> LoanSummary:
+    loan = session.get(Loan, loan_id)
+    if loan is None:
+        raise HTTPException(404, "Loan not found")
+    return _build_summary(loan, LoanMatcher(session), session)
+
+
 @router.get("/summaries/all", response_model=list[LoanSummary])
 def all_summaries(session: Session = Depends(db)) -> list[LoanSummary]:
     loans = session.query(Loan).filter(Loan.active.is_(True)).all()
-    out: list[LoanSummary] = []
     m = LoanMatcher(session)
-    for loan in loans:
-        balance = m.outstanding_balance(loan)
-        interest = m.total_interest_paid(loan)
-        amortized = loan.principal_amount - balance
-        count = session.query(LoanPayment).filter(LoanPayment.loan_id == loan.id).count()
-        ltv = None
-        if loan.property_value and loan.property_value > 0:
-            ltv = float(balance / loan.property_value)
-        out.append(LoanSummary(
-            id=loan.id, name=loan.name, lender=loan.lender,
-            principal_amount=loan.principal_amount,
-            outstanding_balance=balance, amortization_paid=amortized,
-            interest_paid=interest, interest_rate=loan.interest_rate,
-            binding_type=loan.binding_type, binding_end_date=loan.binding_end_date,
-            ltv=ltv, payments_count=count,
-        ))
-    return out
+    return [_build_summary(loan, m, session) for loan in loans]
 
 
 @router.get("/{loan_id}/payments")

@@ -343,6 +343,54 @@ class LoanMatcher:
         amortized = sum((p.amount for p in rows), Decimal("0"))
         return (base - amortized).quantize(Decimal("0.01"))
 
+    def interest_paid_year(self, loan: Loan, year: int) -> Decimal:
+        """Betald ränta under specifikt år — används för skattedeklaration
+        (ränteavdrag) och YTD-visning på lånesidan.
+
+        Samma logik som total_interest_paid men med datumfilter. Räknar
+        både LoanPayment (matchade) och omatchade historiska
+        LoanScheduleEntry med due_date inom året.
+        """
+        from datetime import date as _date
+        year_start = _date(year, 1, 1)
+        year_end = _date(year + 1, 1, 1)
+        today = _date.today()
+
+        # Matchade bankbetalningar inom året
+        from_payments: Decimal = sum(
+            (
+                p.amount
+                for p in self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "interest",
+                    LoanPayment.date >= year_start,
+                    LoanPayment.date < year_end,
+                )
+                .all()
+            ),
+            Decimal("0"),
+        )
+
+        # Historiska schema-rader i året (bank bekräftat, ej matchat bank-CSV)
+        from_schedule: Decimal = sum(
+            (
+                e.amount
+                for e in self.session.query(LoanScheduleEntry)
+                .filter(
+                    LoanScheduleEntry.loan_id == loan.id,
+                    LoanScheduleEntry.payment_type == "interest",
+                    LoanScheduleEntry.due_date >= year_start,
+                    LoanScheduleEntry.due_date < year_end,
+                    LoanScheduleEntry.due_date < today,
+                    LoanScheduleEntry.matched_transaction_id.is_(None),
+                )
+                .all()
+            ),
+            Decimal("0"),
+        )
+        return (from_payments + from_schedule).quantize(Decimal("0.01"))
+
     def total_interest_paid(self, loan: Loan) -> Decimal:
         """Total betald ränta från två källor:
         1. Matchade bankbetalningar (LoanPayment) — säkraste signalen.

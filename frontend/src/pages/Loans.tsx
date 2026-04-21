@@ -35,6 +35,8 @@ interface LoanSummary {
   outstanding_balance: number;
   amortization_paid: number;
   interest_paid: number;
+  interest_paid_year: number;
+  interest_year: number;
   interest_rate: number;
   binding_type: string;
   binding_end_date: string | null;
@@ -131,6 +133,8 @@ export default function Loans() {
   const loans = loansQ.data ?? [];
   const totalDebt = summaries.reduce((s, l) => s + Number(l.outstanding_balance), 0);
   const totalInterest = summaries.reduce((s, l) => s + Number(l.interest_paid), 0);
+  const totalInterestYtd = summaries.reduce((s, l) => s + Number(l.interest_paid_year ?? 0), 0);
+  const interestYear = summaries[0]?.interest_year ?? new Date().getFullYear();
   const totalAmortized = summaries.reduce((s, l) => s + Number(l.amortization_paid), 0);
 
   return (
@@ -189,10 +193,17 @@ export default function Loans() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <div className="text-xs uppercase text-slate-500">Total skuld</div>
           <div className="text-2xl font-semibold text-rose-600">{formatSEK(totalDebt)}</div>
+        </Card>
+        <Card>
+          <div className="text-xs uppercase text-slate-500">
+            Betald ränta i år
+          </div>
+          <div className="text-2xl font-semibold">{formatSEK(totalInterestYtd)}</div>
+          <div className="text-xs text-slate-400 mt-1">{interestYear}</div>
         </Card>
         <Card>
           <div className="text-xs uppercase text-slate-500">Betald ränta (total)</div>
@@ -278,11 +289,15 @@ export default function Loans() {
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-3 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-3 text-sm">
                     <Stat label="Ursprung" value={formatSEK(s.principal_amount)} />
                     <Stat label="Kvarvarande" value={formatSEK(s.outstanding_balance)} strong />
                     <Stat label="Amorterat" value={formatSEK(s.amortization_paid)} />
-                    <Stat label="Betald ränta" value={formatSEK(s.interest_paid)} />
+                    <Stat
+                      label={`Ränta ${s.interest_year ?? ""}`}
+                      value={formatSEK(s.interest_paid_year ?? 0)}
+                    />
+                    <Stat label="Ränta (total)" value={formatSEK(s.interest_paid)} />
                   </div>
                   <div className="flex gap-4 mt-2 text-xs text-slate-500">
                     <span>{s.payments_count} betalningar länkade</span>
