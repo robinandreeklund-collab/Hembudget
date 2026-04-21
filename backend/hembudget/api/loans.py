@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from ..db.models import Loan, LoanPayment, Transaction
+from ..db.models import Loan, LoanPayment, LoanScheduleEntry, Transaction
 from ..loans.matcher import LoanMatcher
 from .deps import db, require_auth
 
@@ -202,9 +202,114 @@ def list_payments(loan_id: int, session: Session = Depends(db)) -> dict:
 @router.post("/rescan")
 def rescan(session: Session = Depends(db)) -> dict:
     """Kör om matchning mot alla historiska transaktioner."""
-    # Wipe existing links so pattern changes take effect
+    # Rensa tidigare länkar så att mönster- och schemaändringar slår igenom
     session.query(LoanPayment).delete()
+    session.query(LoanScheduleEntry).filter(
+        LoanScheduleEntry.matched_transaction_id.is_not(None)
+    ).update({"matched_transaction_id": None, "matched_at": None})
     session.flush()
     txs = session.query(Transaction).filter(Transaction.amount < 0).all()
     r = LoanMatcher(session).match_and_classify(txs)
-    return {"linked": r.linked, "unclassified": r.unclassified}
+    return {
+        "linked": r.linked,
+        "unclassified": r.unclassified,
+        "matched_via_schedule": r.matched_via_schedule,
+        "matched_via_pattern": r.matched_via_pattern,
+    }
+
+
+# ----- Schema / planerade betalningar -----
+
+class ScheduleEntryIn(BaseModel):
+    due_date: date
+    amount: Decimal
+    payment_type: str  # "interest" | "amortization"
+    notes: Optional[str] = None
+
+
+class ScheduleEntryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    loan_id: int
+    due_date: date
+    amount: Decimal
+    payment_type: str
+    matched_transaction_id: Optional[int]
+    notes: Optional[str]
+
+
+@router.get("/{loan_id}/schedule", response_model=list[ScheduleEntryOut])
+def list_schedule(loan_id: int, session: Session = Depends(db)) -> list[LoanScheduleEntry]:
+    return (
+        session.query(LoanScheduleEntry)
+        .filter(LoanScheduleEntry.loan_id == loan_id)
+        .order_by(LoanScheduleEntry.due_date.asc())
+        .all()
+    )
+
+
+@router.post("/{loan_id}/schedule", response_model=ScheduleEntryOut)
+def create_schedule_entry(
+    loan_id: int,
+    payload: ScheduleEntryIn,
+    session: Session = Depends(db),
+) -> LoanScheduleEntry:
+    loan = session.get(Loan, loan_id)
+    if loan is None:
+        raise HTTPException(404, "Loan not found")
+    if payload.payment_type not in ("interest", "amortization"):
+        raise HTTPException(400, "payment_type must be 'interest' or 'amortization'")
+    entry = LoanScheduleEntry(
+        loan_id=loan_id,
+        due_date=payload.due_date,
+        amount=payload.amount,
+        payment_type=payload.payment_type,
+        notes=payload.notes,
+    )
+    session.add(entry)
+    session.flush()
+    # Kör matcher så nya schemaraden kan plocka upp befintliga transaktioner
+    txs = session.query(Transaction).filter(Transaction.amount < 0).all()
+    LoanMatcher(session).match_and_classify(txs)
+    return entry
+
+
+@router.delete("/{loan_id}/schedule/{entry_id}")
+def delete_schedule_entry(
+    loan_id: int, entry_id: int, session: Session = Depends(db)
+) -> dict:
+    entry = session.get(LoanScheduleEntry, entry_id)
+    if entry is None or entry.loan_id != loan_id:
+        raise HTTPException(404, "Schedule entry not found")
+    # Rensa kopplade LoanPayment om schemat matchade en transaktion
+    if entry.matched_transaction_id:
+        session.query(LoanPayment).filter(
+            LoanPayment.transaction_id == entry.matched_transaction_id,
+            LoanPayment.loan_id == loan_id,
+        ).delete()
+    session.delete(entry)
+    return {"deleted": entry_id}
+
+
+class ScheduleGenerateIn(BaseModel):
+    months: int = 3
+    day_of_month: Optional[int] = None
+
+
+@router.post("/{loan_id}/schedule/generate", response_model=list[ScheduleEntryOut])
+def generate_schedule(
+    loan_id: int,
+    payload: ScheduleGenerateIn,
+    session: Session = Depends(db),
+) -> list[LoanScheduleEntry]:
+    loan = session.get(Loan, loan_id)
+    if loan is None:
+        raise HTTPException(404, "Loan not found")
+    m = LoanMatcher(session)
+    entries = m.generate_schedule(
+        loan, months=payload.months, day_of_month=payload.day_of_month
+    )
+    # Direkt-matcha mot befintliga transaktioner
+    txs = session.query(Transaction).filter(Transaction.amount < 0).all()
+    m.match_and_classify(txs)
+    return entries

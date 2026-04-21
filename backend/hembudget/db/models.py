@@ -208,6 +208,26 @@ class LoanPayment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class LoanScheduleEntry(Base):
+    """Planerad kommande lånebetalning — används för exakt belopp+datum-
+    matchning mot nya transaktioner. Betydligt pålitligare än textmatchning
+    eftersom bankens autogiro-beloppen är exakta.
+    """
+    __tablename__ = "loan_schedule_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    loan_id: Mapped[int] = mapped_column(ForeignKey("loans.id"), nullable=False, index=True)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    payment_type: Mapped[str] = mapped_column(String(20), nullable=False)  # interest | amortization
+    matched_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True, unique=True
+    )
+    matched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class TaxEvent(Base):
     __tablename__ = "tax_events"
 

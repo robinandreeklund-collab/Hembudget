@@ -1,8 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Home, Pencil, Trash2, Plus } from "lucide-react";
+import { CalendarClock, CheckCircle2, Home, Pencil, Trash2, Plus, X } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
+
+interface ScheduleEntry {
+  id: number;
+  loan_id: number;
+  due_date: string;
+  amount: number;
+  payment_type: "interest" | "amortization";
+  matched_transaction_id: number | null;
+  notes: string | null;
+}
 
 interface LoanSummary {
   id: number;
@@ -239,6 +249,7 @@ export default function Loans() {
                     {s.ltv !== null && <span>LTV {(s.ltv * 100).toFixed(1)} %</span>}
                     {s.binding_end_date && <span>Bindning slut {s.binding_end_date}</span>}
                   </div>
+                  <LoanSchedule loanId={s.id} />
                 </div>
               );
             })}
@@ -366,5 +377,174 @@ function Field({
       {children}
       {hint && <div className="text-xs text-slate-400 mt-0.5">{hint}</div>}
     </label>
+  );
+}
+
+function LoanSchedule({ loanId }: { loanId: number }) {
+  const qc = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const [newEntry, setNewEntry] = useState({
+    due_date: new Date().toISOString().slice(0, 10),
+    amount: 0,
+    payment_type: "interest" as "interest" | "amortization",
+  });
+
+  const scheduleQ = useQuery({
+    queryKey: ["loan-schedule", loanId],
+    queryFn: () => api<ScheduleEntry[]>(`/loans/${loanId}/schedule`),
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["loan-schedule", loanId] });
+    qc.invalidateQueries({ queryKey: ["loan-summaries"] });
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+  };
+
+  const generateMut = useMutation({
+    mutationFn: () =>
+      api<ScheduleEntry[]>(`/loans/${loanId}/schedule/generate`, {
+        method: "POST",
+        body: JSON.stringify({ months: 3 }),
+      }),
+    onSuccess: invalidate,
+  });
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      api<ScheduleEntry>(`/loans/${loanId}/schedule`, {
+        method: "POST",
+        body: JSON.stringify(newEntry),
+      }),
+    onSuccess: () => {
+      invalidate();
+      setAdding(false);
+      setNewEntry({ ...newEntry, amount: 0 });
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) =>
+      api(`/loans/${loanId}/schedule/${id}`, { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+
+  const entries = scheduleQ.data ?? [];
+
+  return (
+    <div className="mt-4 pt-3 border-t">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-sm text-slate-600">
+          <CalendarClock className="w-4 h-4" />
+          Planerade betalningar
+        </div>
+        <div className="flex gap-2 text-xs">
+          <button
+            onClick={() => generateMut.mutate()}
+            disabled={generateMut.isPending}
+            className="text-brand-600 hover:underline"
+          >
+            {generateMut.isPending ? "Genererar…" : "Generera 3 mån"}
+          </button>
+          <span className="text-slate-300">·</span>
+          <button
+            onClick={() => setAdding((a) => !a)}
+            className="text-brand-600 hover:underline flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" /> Lägg till manuellt
+          </button>
+        </div>
+      </div>
+
+      {adding && (
+        <div className="bg-slate-50 rounded p-2 mb-2 flex items-end gap-2 text-xs">
+          <label className="flex-1">
+            <div className="text-slate-500">Förväntat datum</div>
+            <input
+              type="date"
+              value={newEntry.due_date}
+              onChange={(e) => setNewEntry({ ...newEntry, due_date: e.target.value })}
+              className="border rounded px-2 py-1 w-full"
+            />
+          </label>
+          <label className="w-28">
+            <div className="text-slate-500">Belopp (kr)</div>
+            <input
+              type="number"
+              value={newEntry.amount || ""}
+              onChange={(e) => setNewEntry({ ...newEntry, amount: Number(e.target.value) })}
+              className="border rounded px-2 py-1 w-full"
+              placeholder="0"
+            />
+          </label>
+          <label className="w-36">
+            <div className="text-slate-500">Typ</div>
+            <select
+              value={newEntry.payment_type}
+              onChange={(e) =>
+                setNewEntry({ ...newEntry, payment_type: e.target.value as "interest" | "amortization" })
+              }
+              className="border rounded px-2 py-1 w-full"
+            >
+              <option value="interest">Ränta</option>
+              <option value="amortization">Amortering</option>
+            </select>
+          </label>
+          <button
+            onClick={() => createMut.mutate()}
+            disabled={!newEntry.amount || createMut.isPending}
+            className="bg-brand-600 text-white px-3 py-1 rounded disabled:opacity-40"
+          >
+            Spara
+          </button>
+          <button
+            onClick={() => setAdding(false)}
+            className="text-slate-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {entries.length === 0 ? (
+        <div className="text-xs text-slate-400 italic">
+          Inga planerade betalningar. Klicka "Generera 3 mån" så skapas ränta +
+          amortering automatiskt från lånevillkoren — då matchas kommande
+          transaktioner på exakt belopp + datum.
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {entries.map((e) => (
+            <div
+              key={e.id}
+              className="flex items-center gap-2 text-xs border rounded px-2 py-1.5 bg-white"
+            >
+              <div className="w-24 text-slate-500">{e.due_date}</div>
+              <div className="w-20 font-medium">{formatSEK(e.amount)}</div>
+              <div className="w-24 text-slate-600">
+                {e.payment_type === "interest" ? "Ränta" : "Amortering"}
+              </div>
+              <div className="flex-1">
+                {e.matched_transaction_id ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Matchad mot transaktion #{e.matched_transaction_id}
+                  </span>
+                ) : (
+                  <span className="text-amber-600">Väntar på matchning</span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm("Ta bort planerad rad?")) deleteMut.mutate(e.id);
+                }}
+                className="text-slate-300 hover:text-rose-600"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
