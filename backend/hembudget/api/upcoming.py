@@ -186,18 +186,29 @@ def parse_text(
     schema = _invoice_schema()
     schema["properties"]["owner"] = {"type": ["string", "null"]}
 
+    system_text = (
+        "Du tolkar svensk text om kommande fakturor eller löner. "
+        "Returnera JSON enligt schemat. Om datum saknas, sätt sista "
+        "dagen i nästa månad. Fält som inte nämns → null."
+    )
+    if kind == "income":
+        system_text += (
+            "\n\nFör inkomster (lön/utbetalning): "
+            "- name = arbetsgivaren/utbetalaren (t.ex. 'Inkab', 'VP Capital'). "
+            "- owner = personen som tar emot pengarna ('Robin', 'Partner'). "
+            "- Om texten är 'Lön Robin 11357 från Inkab 25 april', då är name='Inkab', "
+            "owner='Robin'. Om inte personen nämns, owner=null. "
+            "- Inkluderar INTE personens namn i name-fältet."
+        )
+    else:
+        system_text += (
+            "\n\nFör fakturor: name = betalningsmottagaren (företaget som ska få pengar)."
+        )
+
     try:
         parsed = llm.complete_json(
             [
-                {
-                    "role": "system",
-                    "content": (
-                        "Du tolkar svensk text om kommande fakturor eller löner. "
-                        "Returnera JSON enligt schemat. Om datum saknas, sätt sista "
-                        "dagen i nästa månad. Om det är en lön/inkomst, sätt owner till "
-                        "personens namn. Fält som inte nämns → null."
-                    ),
-                },
+                {"role": "system", "content": system_text},
                 {"role": "user", "content": text},
             ],
             schema=schema,

@@ -415,6 +415,27 @@ function UpcomingRow({
     i.invoice_number || i.ocr_reference || i.bankgiro || i.plusgiro || i.iban ||
     i.invoice_date || i.notes;
 
+  const isIncome = i.kind === "income";
+  const L = isIncome
+    ? {
+        dateLabel: "Utbetalningsdatum",
+        secondDateLabel: "Insätts",
+        secondDateField: "Insättningsdag",
+        accountLabel: "Insättningskonto",
+        nameLabel: "Avsändare / arbetsgivare",
+        summaryDate: "Utbetalas",
+        summaryAccount: "till",
+      }
+    : {
+        dateLabel: "Förfallodag",
+        secondDateLabel: "Dras",
+        secondDateField: "Debiteringsdag",
+        accountLabel: "Debiteringskonto",
+        nameLabel: "Mottagare / namn",
+        summaryDate: "Förfall",
+        summaryAccount: "från",
+      };
+
   return (
     <div className="border rounded text-sm">
       <div className="flex items-center gap-3 p-2">
@@ -427,17 +448,25 @@ function UpcomingRow({
         <div className="flex-1 min-w-0">
           <div className="font-medium truncate">{i.name}</div>
           <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
-            <span>Förfall {i.expected_date}</span>
-            {i.debit_date && <span>· Dras {i.debit_date}</span>}
-            {debitAccount && <span>· från {debitAccount.name}</span>}
-            {i.autogiro && <span className="text-amber-700">· autogiro</span>}
+            <span>{L.summaryDate} {i.expected_date}</span>
+            {i.debit_date && i.debit_date !== i.expected_date && (
+              <span>· {L.secondDateLabel} {i.debit_date}</span>
+            )}
+            {debitAccount && <span>· {L.summaryAccount} {debitAccount.name}</span>}
+            {!isIncome && i.autogiro && <span className="text-amber-700">· autogiro</span>}
             {i.owner && <span>· {i.owner}</span>}
             {i.recurring_monthly && <span>· återkommande</span>}
             {i.source !== "manual" && <span>· {i.source}</span>}
             {i.matched_transaction_id && <span className="text-emerald-600">· ✓ bokförd</span>}
           </div>
         </div>
-        <div className="font-semibold shrink-0">{formatSEK(i.amount)}</div>
+        <div
+          className={`font-semibold shrink-0 ${
+            isIncome ? "text-emerald-600" : ""
+          }`}
+        >
+          {isIncome ? "+" : ""}{formatSEK(i.amount)}
+        </div>
         <button
           onClick={() => onDelete(i.id)}
           className="text-slate-400 hover:text-rose-600 shrink-0"
@@ -451,19 +480,19 @@ function UpcomingRow({
         <div className="border-t bg-slate-50 p-3 space-y-3">
           <div className="grid grid-cols-2 gap-3 text-xs">
             <EditField
-              label="Förfallodag"
+              label={L.dateLabel}
               value={i.expected_date}
               type="date"
               onChange={(v) => onUpdate(i.id, { expected_date: v })}
             />
             <EditField
-              label="Debiteringsdag"
+              label={L.secondDateField}
               value={i.debit_date ?? i.expected_date}
               type="date"
               onChange={(v) => onUpdate(i.id, { debit_date: v })}
             />
             <div>
-              <div className="text-slate-500 mb-0.5">Debiteringskonto</div>
+              <div className="text-slate-500 mb-0.5">{L.accountLabel}</div>
               <select
                 value={i.debit_account_id ?? ""}
                 onChange={(e) =>
@@ -481,16 +510,24 @@ function UpcomingRow({
                   ))}
               </select>
             </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={i.autogiro}
-                  onChange={(e) => onUpdate(i.id, { autogiro: e.target.checked })}
-                />
-                <span className="text-slate-600">Autogiro (dras automatiskt)</span>
-              </label>
-            </div>
+            {!isIncome ? (
+              <div className="flex items-end">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={i.autogiro}
+                    onChange={(e) => onUpdate(i.id, { autogiro: e.target.checked })}
+                  />
+                  <span className="text-slate-600">Autogiro (dras automatiskt)</span>
+                </label>
+              </div>
+            ) : (
+              <EditField
+                label="Mottagare (du)"
+                value={i.owner ?? ""}
+                onChange={(v) => onUpdate(i.id, { owner: v || null as unknown as UpcomingItem["owner"] })}
+              />
+            )}
             <EditField
               label="Belopp (kr)"
               value={String(i.amount)}
@@ -498,7 +535,7 @@ function UpcomingRow({
               onChange={(v) => onUpdate(i.id, { amount: Number(v) as unknown as UpcomingItem["amount"] })}
             />
             <EditField
-              label="Mottagare / namn"
+              label={L.nameLabel}
               value={i.name}
               onChange={(v) => onUpdate(i.id, { name: v })}
             />
