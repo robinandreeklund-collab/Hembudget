@@ -8,7 +8,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import auth, budget, chat, reports, scenarios, tax, transactions, upload
+from .api import admin, auth, budget, chat, reports, scenarios, tax, transactions, upload
 from .config import settings
 
 logging.basicConfig(
@@ -45,6 +45,7 @@ def build_app() -> FastAPI:
     app.include_router(scenarios.router)
     app.include_router(tax.router)
     app.include_router(reports.router)
+    app.include_router(admin.router)
 
     @app.get("/healthz")
     def healthz() -> dict:

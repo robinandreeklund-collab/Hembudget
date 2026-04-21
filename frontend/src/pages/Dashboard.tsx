@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
+import { ResetDialog } from "@/components/ResetDialog";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ForecastPoint, MonthSummary } from "@/types/models";
 
@@ -11,6 +14,7 @@ function currentMonth(): string {
 
 export default function Dashboard() {
   const month = currentMonth();
+  const [showReset, setShowReset] = useState(false);
   const summaryQ = useQuery({
     queryKey: ["budget", month],
     queryFn: () => api<MonthSummary>(`/budget/${month}`),
@@ -26,9 +30,19 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <div className="text-sm text-slate-500">Månad: {month}</div>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <div className="text-sm text-slate-500">Månad: {month}</div>
+        </div>
+        <button
+          onClick={() => setShowReset(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-rose-200 text-rose-600 bg-white hover:bg-rose-50"
+          title="Nollställ all data"
+        >
+          <Trash2 className="w-4 h-4" />
+          Nollställ
+        </button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -70,6 +84,8 @@ export default function Dashboard() {
           </ResponsiveContainer>
         )}
       </Card>
+
+      {showReset && <ResetDialog onClose={() => setShowReset(false)} />}
     </div>
   );
 }
