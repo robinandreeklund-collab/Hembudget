@@ -35,6 +35,10 @@ def _token_valid(token: str) -> bool:
 
 
 def require_auth(authorization: str | None = Header(default=None)) -> str:
+    # Demo-mode: alla endpoints öppna (för publik Render-deploy)
+    import os
+    if os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes"):
+        return "demo"
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Missing bearer token")
     token = authorization[7:]

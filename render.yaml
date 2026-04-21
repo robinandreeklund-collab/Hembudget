@@ -1,0 +1,43 @@
+# Render.com deployment-konfiguration
+# Hooka upp repot via https://dashboard.render.com/blueprints → "New Blueprint"
+# och peka mot denna render.yaml. Den första deployen tar ~5 min.
+
+services:
+  - type: web
+    name: hembudget-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip &&
+      pip install -e . &&
+      pip install --no-deps fastapi uvicorn pandas openpyxl pypdfium2 Pillow reportlab httpx rapidfuzz argon2-cffi python-dateutil chardet pytesseract pydantic-settings
+    startCommand: python -m hembudget.main --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: HEMBUDGET_DEMO_MODE
+        value: "1"
+      - key: HEMBUDGET_DATA_DIR
+        value: /opt/render/project/src/hembudget-data
+      - key: HEMBUDGET_LM_STUDIO_BASE_URL
+        value: http://unused.example.com
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /healthz
+    autoDeploy: true
+
+  - type: web
+    name: hembudget-frontend
+    runtime: static
+    rootDir: frontend
+    plan: free
+    buildCommand: |
+      npm install &&
+      npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        sync: false     # Sätt manuellt till backendens URL efter första deploy
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

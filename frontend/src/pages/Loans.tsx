@@ -8,6 +8,8 @@ import { api, formatSEK, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
 
 function apiBase(): string {
+  const explicit = (import.meta as ImportMeta).env.VITE_API_BASE;
+  if (explicit) return explicit.replace(/\/$/, "");
   const port = localStorage.getItem("hembudget_api_port") || "8765";
   return `http://127.0.0.1:${port}`;
 }

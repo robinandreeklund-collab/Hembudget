@@ -26,16 +26,18 @@ def build_app() -> FastAPI:
         version="0.1.0",
         description="Lokal AI-driven familjeekonomi (Nemotron Nano 3 via LM Studio)",
     )
-    # Only allow Tauri-originated requests (or dev server)
+    # I demo-mode tillåt alla origins (publik Render-deploy)
+    import os
+    demo = os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
+        allow_origins=["*"] if demo else [
             "tauri://localhost",
             "http://tauri.localhost",
-            "http://localhost:1420",  # Vite dev
+            "http://localhost:1420",
             "http://127.0.0.1:1420",
         ],
-        allow_credentials=True,
+        allow_credentials=not demo,   # wildcard + credentials är inte tillåtet
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -62,6 +64,18 @@ def build_app() -> FastAPI:
 
 
 app = build_app()
+
+
+@app.on_event("startup")
+def _demo_bootstrap() -> None:
+    """Vid demo-mode: fyll databasen med användarens CSV/XLSX-data vid start."""
+    try:
+        from .demo import bootstrap_if_empty
+        result = bootstrap_if_empty()
+        if result and not result.get("skipped"):
+            logging.getLogger(__name__).info("demo bootstrap: %s", result)
+    except Exception:
+        logging.getLogger(__name__).exception("demo bootstrap failed")
 
 
 def main() -> None:

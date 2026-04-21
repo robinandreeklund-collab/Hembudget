@@ -31,6 +31,7 @@ CREDIT_CARD_PAYMENT_PATTERNS: dict[str, list[str]] = {
     "amex": [
         "amex",
         "american express",
+        "american exp",   # ofta trunkerat i Nordea
         "eurobonus amex",
     ],
     "seb_kort": [
@@ -38,6 +39,8 @@ CREDIT_CARD_PAYMENT_PATTERNS: dict[str, list[str]] = {
         "sebkort",
         "seb mastercard",
         "seb eurobonus",
+        "mastercard lån",     # "MASTERCARD LÅN FRÖJD,ROBIN" i Nordea
+        "mastercard fröjd",   # samma fall, alternativ form
     ],
 }
 
@@ -48,6 +51,10 @@ GENERIC_TRANSFER_PATTERNS: list[str] = [
     "egen överföring",
     "isk insättning",
     "sparkonto",
+    "nordea liv",         # pensionsöverföring (visas ofta som egen rad)
+    "omsättning lån",     # bolåne-ränteperiod swap, inte en riktig utgift
+    "mastercard lån",     # Nordea-interna kreditkortsrörelser
+    "mastercard fröjd",   # personnamn-versionen av samma
 ]
 
 
@@ -92,14 +99,25 @@ class TransferDetector:
         for tx in new_transactions:
             if tx.is_transfer:
                 continue
-            if tx.amount >= 0:
-                # Betalningar är negativa. Positiva rader hanteras via
-                # reverse-matchning (när kreditkorts-repayment hittas).
-                continue
 
             desc = (tx.raw_description or "").lower()
 
-            # 1. Match mot explicit kreditkortsbetalning
+            # 1. Generiska transfer-mönster (t.ex. till sparkonto, pension).
+            #    Matchar BÅDA tecknen — "Överföring 20XXXXX" kan vara både
+            #    inkommande och utgående mellan egna konton.
+            if any(p in desc for p in GENERIC_TRANSFER_PATTERNS):
+                tx.is_transfer = True
+                tx.category_id = None
+                marked += 1
+                continue
+
+            if tx.amount >= 0:
+                # Utgående betalningar (kreditkort) hanteras nedan.
+                # Inkommande rader utan transfer-pattern behåller sin
+                # klassificering (t.ex. Lön, Swish in).
+                continue
+
+            # 2. Match mot explicit kreditkortsbetalning
             matched_bank: str | None = None
             for bank, patterns in CREDIT_CARD_PAYMENT_PATTERNS.items():
                 if any(p in desc for p in patterns):
@@ -119,13 +137,6 @@ class TransferDetector:
                         repayment.transfer_pair_id = tx.id
                         repayment.category_id = None
                         paired += 1
-                continue
-
-            # 2. Generiska överförings-mönster (t.ex. till sparkonto)
-            if any(p in desc for p in GENERIC_TRANSFER_PATTERNS):
-                tx.is_transfer = True
-                tx.category_id = None
-                marked += 1
 
         if marked:
             self.session.flush()
