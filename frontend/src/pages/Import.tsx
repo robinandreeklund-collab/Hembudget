@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
+import { ACCOUNT_TYPES, accountTypeLabel, isPayer } from "@/lib/accountTypes";
 import type { Account } from "@/types/models";
 
 async function patchAccount(id: number, payload: Partial<Account>): Promise<Account> {
@@ -54,18 +55,19 @@ export default function ImportPage() {
 
   const accounts = accountsQ.data ?? [];
   const creditAccounts = accounts.filter((a) => a.type === "credit");
-  const checkingAccounts = accounts.filter((a) => a.type === "checking");
+  const payerAccounts = accounts.filter((a) => isPayer(a.type));
 
   return (
     <div className="p-6 space-y-5 max-w-3xl">
       <h1 className="text-2xl font-semibold">Importera CSV</h1>
 
-      {creditAccounts.length > 0 && checkingAccounts.length > 0 && (
+      {creditAccounts.length > 0 && payerAccounts.length > 0 && (
         <Card title="Kreditkorts-koppling">
           <div className="text-sm text-slate-600 mb-3">
-            Välj vilket lönekonto som betalar fakturan för varje kreditkort. Då markeras
-            autogiro-dragningen som <em>Överföring</em> och räknas inte som en utgift
-            (detaljerna finns ju redan i kortets transaktioner).
+            Välj vilket konto som betalar fakturan för varje kreditkort. Oftast
+            det gemensamma kontot. Då markeras autogiro-dragningen som
+            <em> Överföring</em> och räknas inte som en utgift (detaljerna
+            finns ju redan i kortets transaktioner).
           </div>
           <div className="space-y-2">
             {creditAccounts.map((cc) => (
@@ -83,8 +85,10 @@ export default function ImportPage() {
                   className="border rounded px-2 py-1"
                 >
                   <option value="">—</option>
-                  {checkingAccounts.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {payerAccounts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({accountTypeLabel(c.type)})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -115,10 +119,9 @@ export default function ImportPage() {
             value={newAcc.type}
             onChange={(e) => setNewAcc({ ...newAcc, type: e.target.value })}
           >
-            <option value="checking">Lönekonto</option>
-            <option value="credit">Kreditkort</option>
-            <option value="savings">Sparkonto</option>
-            <option value="isk">ISK</option>
+            {ACCOUNT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
           </select>
         </div>
         <button
@@ -140,7 +143,7 @@ export default function ImportPage() {
             <option value="">Välj konto…</option>
             {(accountsQ.data ?? []).map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name} ({a.bank})
+                {a.name} — {accountTypeLabel(a.type)} ({a.bank})
               </option>
             ))}
           </select>
