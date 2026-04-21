@@ -1,0 +1,50 @@
+{
+  "build": {
+    "beforeDevCommand": "npm run dev --prefix ../frontend",
+    "beforeBuildCommand": "npm run build --prefix ../frontend",
+    "devPath": "http://localhost:1420",
+    "distDir": "../frontend/dist"
+  },
+  "package": {
+    "productName": "Hembudget",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "sidecar": true,
+        "scope": [
+          { "name": "binaries/hembudget-backend", "sidecar": true, "args": ["--print-port"] }
+        ]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "identifier": "se.hembudget.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "targets": ["dmg", "msi", "appimage"],
+      "externalBin": ["binaries/hembudget-backend"]
+    },
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:* ipc: https://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;"
+    },
+    "windows": [
+      {
+        "title": "Hembudget",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 980,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ]
+  }
+}

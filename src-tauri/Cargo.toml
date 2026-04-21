@@ -1,0 +1,17 @@
+[package]
+name = "hembudget"
+version = "0.1.0"
+description = "Lokal AI-driven familjeekonomi"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "1.6", features = ["shell-open", "shell-sidecar"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
