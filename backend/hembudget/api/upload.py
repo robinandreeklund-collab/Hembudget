@@ -34,7 +34,7 @@ async def import_csv(
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty file")
 
-    parser = parser_for_bank(bank) if bank else detect_parser(content)
+    parser = parser_for_bank(bank, content) if bank else detect_parser(content)
     if parser is None:
         raise HTTPException(
             status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,

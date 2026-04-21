@@ -15,10 +15,22 @@ class RawTransaction:
     counterparty: str | None = None
     balance: Decimal | None = None
     reference: str | None = None
+    row_index: int | None = None   # fallback-unikgörare när balance saknas
     meta: dict = field(default_factory=dict)
 
     def stable_hash(self, account_id: int | str) -> str:
-        key = f"{account_id}|{self.date.isoformat()}|{self.amount}|{self.description.strip().lower()}"
+        # Include balance when available so two identical same-day rows don't
+        # dedupe each other (Nordea gives us this for free). Fall back to
+        # row_index for sources without balance (credit-card CSVs).
+        extra = ""
+        if self.balance is not None:
+            extra = f"|{self.balance}"
+        elif self.row_index is not None:
+            extra = f"|#{self.row_index}"
+        key = (
+            f"{account_id}|{self.date.isoformat()}|{self.amount}|"
+            f"{self.description.strip().lower()}{extra}"
+        )
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 

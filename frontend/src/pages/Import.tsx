@@ -155,7 +155,7 @@ export default function ImportPage() {
           </select>
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
           <button
