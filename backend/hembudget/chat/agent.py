@@ -329,6 +329,23 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "subscription_health",
+            "description": (
+                "Hälsokoll för prenumerationer: hitta de som inte dragits "
+                "senaste `stale_days` dagarna. Summerar stale årskostnad — "
+                "bra för att föreslå uppsägningar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stale_days": {"type": "integer", "default": 60}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_family_breakdown",
             "description": (
                 "Vem-betalade-vad per kontoägare (owner_id) och per konto under "
@@ -367,6 +384,7 @@ _DISPATCH = {
     "compare_months": tools.compare_months,
     "detect_anomalies": tools.detect_anomalies,
     "get_family_breakdown": tools.get_family_breakdown,
+    "subscription_health": tools.subscription_health,
 }
 
 

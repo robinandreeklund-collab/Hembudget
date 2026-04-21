@@ -1,7 +1,25 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api } from "@/api/client";
+import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
 import { useAuth } from "@/hooks/useAuth";
+
+interface SubHealth {
+  id: number;
+  merchant: string;
+  amount: number;
+  interval_days: number;
+  last_seen: string | null;
+  days_since: number | null;
+  is_stale: boolean;
+  annual_cost: number;
+}
+
+interface SubHealthResp {
+  stale_days: number;
+  subscriptions: SubHealth[];
+  stale_annual_cost: number;
+  total_annual_cost: number;
+}
 
 export default function Settings() {
   const { logout } = useAuth();
@@ -20,6 +38,12 @@ export default function Settings() {
       api<{ count: number; subscriptions: unknown[] }>("/budget/subscriptions/detect", {
         method: "POST",
       }),
+  });
+
+  const subHealthQ = useQuery({
+    queryKey: ["subs-health"],
+    queryFn: () =>
+      api<SubHealthResp>("/budget/subscriptions/health?stale_days=60"),
   });
 
   const scanTransfersMut = useMutation({
@@ -56,6 +80,77 @@ export default function Settings() {
           </div>
           <div>Modell: {lmQ.data?.model}</div>
         </div>
+      </Card>
+
+      <Card
+        title="Prenumerationer — hälsokoll"
+        action={
+          subHealthQ.data && (
+            <span className="text-xs text-slate-500">
+              Totalt {formatSEK(subHealthQ.data.total_annual_cost)}/år
+            </span>
+          )
+        }
+      >
+        {subHealthQ.isLoading ? (
+          <div className="text-sm text-slate-500">Analyserar…</div>
+        ) : !subHealthQ.data || subHealthQ.data.subscriptions.length === 0 ? (
+          <div className="text-sm text-slate-500">
+            Inga aktiva prenumerationer registrerade. Klicka "Hitta prenumerationer nu" nedan.
+          </div>
+        ) : (
+          <>
+            {subHealthQ.data.stale_annual_cost > 0 && (
+              <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded px-3 py-2 text-sm mb-3">
+                Du har {formatSEK(subHealthQ.data.stale_annual_cost)}/år i
+                prenumerationer som inte dragits senaste{" "}
+                {subHealthQ.data.stale_days} dagarna — överväg att säga upp.
+              </div>
+            )}
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-slate-500 border-b">
+                  <th className="py-1.5 pr-3">Tjänst</th>
+                  <th className="py-1.5 pr-3 text-right">Pris</th>
+                  <th className="py-1.5 pr-3 text-right">Senast dragen</th>
+                  <th className="py-1.5 pr-3 text-right">Per år</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subHealthQ.data.subscriptions.map((s) => (
+                  <tr
+                    key={s.id}
+                    className={`border-b last:border-0 ${
+                      s.is_stale ? "bg-amber-50" : ""
+                    }`}
+                  >
+                    <td className="py-1.5 pr-3">
+                      <div className="font-medium">{s.merchant}</div>
+                      <div className="text-xs text-slate-500">
+                        var {s.interval_days}:e dag
+                      </div>
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {formatSEK(s.amount)}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 text-right text-xs ${
+                        s.is_stale ? "text-amber-700 font-semibold" : "text-slate-500"
+                      }`}
+                    >
+                      {s.last_seen
+                        ? `${s.last_seen} (${s.days_since}d sedan)`
+                        : "— aldrig sedd"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right font-semibold">
+                      {formatSEK(s.annual_cost)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
       </Card>
 
       <Card title="Automatik">

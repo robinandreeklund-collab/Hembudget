@@ -377,6 +377,53 @@ def test_top_categories_honors_splits(session):
     assert cats["VA"] == -500.0
 
 
+def test_subscription_health_flags_stale(session):
+    from hembudget.db.models import Subscription
+    from datetime import timedelta
+    acc = _acc(session, "X")
+    # Aktiv prenumeration — Spotify senaste transaktion för 10 dagar sedan
+    spot = Subscription(
+        merchant="SPOTIFY", amount=Decimal("139"),
+        interval_days=30, active=True,
+        next_expected_date=date.today() + timedelta(days=20),
+    )
+    session.add(spot)
+    _tx(session, acc.id, date.today() - timedelta(days=10), -139, "SPOTIFY")
+    # Inaktiv: Gymcard, senast för 90 dagar sedan
+    gym = Subscription(
+        merchant="GYMCARD", amount=Decimal("299"),
+        interval_days=30, active=True,
+        next_expected_date=date.today() + timedelta(days=5),
+    )
+    session.add(gym)
+    tx = _tx(session, acc.id, date.today() - timedelta(days=90), -299, "GYMCARD")
+    tx.normalized_merchant = "GYMCARD"
+    # Prenumeration utan historik alls
+    never = Subscription(
+        merchant="NEVER_DRAWN", amount=Decimal("50"),
+        interval_days=30, active=True,
+        next_expected_date=date.today(),
+    )
+    session.add(never)
+    session.flush()
+
+    # Sätt normalized_merchant på Spotify-tx också
+    for t in session.query(Transaction).all():
+        if "SPOTIFY" in t.raw_description:
+            t.normalized_merchant = "SPOTIFY"
+    session.flush()
+
+    out = tools.subscription_health(session, stale_days=60)
+    by_m = {r["merchant"]: r for r in out["subscriptions"]}
+    assert by_m["SPOTIFY"]["is_stale"] is False
+    assert by_m["GYMCARD"]["is_stale"] is True
+    # Aldrig dragen → is_stale=False (last_seen är null)
+    assert by_m["NEVER_DRAWN"]["is_stale"] is False
+    assert by_m["NEVER_DRAWN"]["days_since"] is None
+    # Stale årskostnad > 0
+    assert out["stale_annual_cost"] > 0
+
+
 def test_query_transactions_returns_splits(session):
     el = _cat(session, "El")
     acc = _acc(session, "Gem")

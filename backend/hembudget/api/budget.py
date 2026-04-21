@@ -120,6 +120,15 @@ def family(month: str, session: Session = Depends(db)) -> dict:
     return chat_tools.get_family_breakdown(session, month)
 
 
+@router.get("/subscriptions/health")
+def subscription_health(
+    stale_days: int = 60,
+    session: Session = Depends(db),
+) -> dict:
+    """Hälsokoll för prenumerationer — hitta de som inte dragits på länge."""
+    return chat_tools.subscription_health(session, stale_days=stale_days)
+
+
 @router.post("/subscriptions/detect")
 def detect_subs(session: Session = Depends(db)) -> dict:
     det = SubscriptionDetector(session)

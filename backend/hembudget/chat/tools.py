@@ -725,6 +725,64 @@ def detect_anomalies(
     return {"month": month, "anomalies": anomalies}
 
 
+def subscription_health(session: Session, stale_days: int = 60) -> dict:
+    """Hälsokoll för aktiva prenumerationer: hitta de som inte dragits
+    senaste `stale_days` dagarna (användaren kanske glömt säga upp).
+
+    Returnerar per prenumeration:
+    - merchant, amount, interval_days
+    - last_seen: datum för senaste transaktion som matchar merchant
+    - days_since: dagar sedan senaste dragning (null om aldrig sett)
+    - is_stale: True om days_since > stale_days
+    - annual_cost: amount × (365 / interval_days)
+    """
+    from datetime import datetime
+    today = date.today()
+    subs = session.query(Subscription).filter(Subscription.active.is_(True)).all()
+    out = []
+    stale_total = 0.0
+    for s in subs:
+        last_tx = (
+            session.query(Transaction)
+            .filter(
+                Transaction.normalized_merchant == s.merchant,
+                Transaction.amount < 0,
+                Transaction.is_transfer.is_(False),
+            )
+            .order_by(Transaction.date.desc())
+            .first()
+        )
+        last_seen = last_tx.date if last_tx else None
+        days_since = (today - last_seen).days if last_seen else None
+        is_stale = days_since is not None and days_since > stale_days
+        interval = max(s.interval_days, 1)
+        annual = _d(s.amount) * (365.0 / interval)
+        if is_stale:
+            stale_total += abs(annual)
+        out.append(
+            {
+                "id": s.id,
+                "merchant": s.merchant,
+                "amount": _d(s.amount),
+                "interval_days": s.interval_days,
+                "last_seen": _iso(last_seen),
+                "days_since": days_since,
+                "is_stale": is_stale,
+                "annual_cost": round(abs(annual), 2),
+            }
+        )
+    # Sortera så inaktiva (stale) kommer först, sen efter kostnad
+    out.sort(key=lambda r: (not r["is_stale"], -r["annual_cost"]))
+    return {
+        "stale_days": stale_days,
+        "subscriptions": out,
+        "stale_annual_cost": round(stale_total, 2),
+        "total_annual_cost": round(
+            sum(r["annual_cost"] for r in out), 2
+        ),
+    }
+
+
 def get_family_breakdown(session: Session, month: str) -> dict:
     """Fördela månadens utgifter/inkomster per kontoägare (owner_id) och
     kontotyp. Används för familjeekonomi: 'vem betalade vad'.
