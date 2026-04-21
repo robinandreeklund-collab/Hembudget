@@ -36,6 +36,7 @@ class LoanIn(BaseModel):
     property_value: Optional[Decimal] = None
     match_pattern: Optional[str] = None
     notes: Optional[str] = None
+    category_id: Optional[int] = None
 
 
 class LoanUpdate(BaseModel):
@@ -52,6 +53,7 @@ class LoanUpdate(BaseModel):
     match_pattern: Optional[str] = None
     notes: Optional[str] = None
     active: Optional[bool] = None
+    category_id: Optional[int] = None
 
 
 class LoanOut(BaseModel):
@@ -70,6 +72,7 @@ class LoanOut(BaseModel):
     match_pattern: Optional[str]
     notes: Optional[str]
     active: bool
+    category_id: Optional[int] = None
 
 
 class LoanSummary(BaseModel):

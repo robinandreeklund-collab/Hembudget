@@ -207,6 +207,12 @@ class Loan(Base):
 
     match_pattern: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Budgetkategori — "Huslån", "Billån", "Studielån" etc. Ränta och
+    # amortering från detta lån kategoriseras automatiskt som den här
+    # kategorin när matchern länkar bankbetalningen.
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

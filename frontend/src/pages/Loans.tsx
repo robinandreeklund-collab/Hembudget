@@ -59,6 +59,7 @@ interface Loan {
   match_pattern: string | null;
   notes: string | null;
   active: boolean;
+  category_id: number | null;
 }
 
 interface LoanIn {
@@ -74,6 +75,7 @@ interface LoanIn {
   property_value?: number | null;
   match_pattern?: string | null;
   notes?: string | null;
+  category_id?: number | null;
 }
 
 export default function Loans() {
@@ -95,6 +97,11 @@ export default function Loans() {
   const loansQ = useQuery({
     queryKey: ["loans"],
     queryFn: () => api<Loan[]>("/loans/"),
+  });
+  const categoriesQ = useQuery({
+    queryKey: ["categories"],
+    queryFn: () =>
+      api<Array<{ id: number; name: string }>>("/categories"),
   });
 
   const invalidate = () => {
@@ -218,6 +225,7 @@ export default function Loans() {
       {mode.kind === "create" && (
         <LoanForm
           title="Nytt lån"
+          categories={categoriesQ.data ?? []}
           onSubmit={(data) => createMut.mutate(data)}
           onCancel={() => setMode({ kind: "idle" })}
           busy={createMut.isPending}
@@ -227,6 +235,7 @@ export default function Loans() {
       {mode.kind === "edit" && (
         <LoanForm
           title={`Redigera "${mode.loan.name}"`}
+          categories={categoriesQ.data ?? []}
           initial={{
             name: mode.loan.name,
             lender: mode.loan.lender,
@@ -240,6 +249,7 @@ export default function Loans() {
             property_value: mode.loan.property_value,
             match_pattern: mode.loan.match_pattern,
             notes: mode.loan.notes,
+            category_id: mode.loan.category_id,
           }}
           submitLabel="Spara ändringar"
           onSubmit={(data) => updateMut.mutate({ id: mode.loan.id, data })}
@@ -342,6 +352,7 @@ function LoanForm({
   onCancel,
   busy,
   error,
+  categories,
 }: {
   title: string;
   initial?: LoanIn;
@@ -350,6 +361,7 @@ function LoanForm({
   onCancel: () => void;
   busy: boolean;
   error: Error | null;
+  categories: Array<{ id: number; name: string }>;
 }) {
   const [f, setF] = useState<LoanIn>(initial ?? DEFAULT_FORM);
   return (
@@ -381,6 +393,25 @@ function LoanForm({
             <option value="3år">3 år</option>
             <option value="5år">5 år</option>
             <option value="10år">10 år</option>
+          </select>
+        </Field>
+        <Field label="Budgetkategori">
+          <select
+            value={f.category_id ?? ""}
+            onChange={(e) =>
+              setF({
+                ...f,
+                category_id: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+            className="input"
+          >
+            <option value="">— ingen (använder Bolåneränta/Amortering)</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Bindning slut">

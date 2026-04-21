@@ -220,6 +220,7 @@ def run_migrations(engine: Engine) -> list[str]:
                 applied.append("loan_schedule_entries.matched_transaction_id drop unique")
 
     # loans.current_balance_at_creation — saldo när lånet registrerades
+    # loans.category_id — valfri budgetkategori (Huslån/Billån/…)
     if _table_exists(engine, "loans"):
         loan_cols = _columns(engine, "loans")
         if "current_balance_at_creation" not in loan_cols:
@@ -229,6 +230,13 @@ def run_migrations(engine: Engine) -> list[str]:
                 "current_balance_at_creation NUMERIC(14, 2)",
             )
             applied.append("loans.current_balance_at_creation")
+        if "category_id" not in loan_cols:
+            _add_column(
+                engine,
+                "loans",
+                "category_id INTEGER REFERENCES categories(id)",
+            )
+            applied.append("loans.category_id")
 
     # Fakturarader på planerade fakturor (el/vatten/bredband etc.)
     if not _table_exists(engine, "upcoming_transaction_lines"):

@@ -220,11 +220,13 @@ class LoanMatcher:
                         entry, tx, entry.amount,
                         category_interest, category_amort,
                     )
-                # Kategorin på själva transaktionen: om både amort + ränta
-                # finns, välj amortering (oftare större belopp, tydligare
-                # signal att det är en lånebetalning totalt sett).
+                # Kategorin på själva transaktionen. Loanets category_id
+                # (Huslån/Billån) vinner över generiska Bolåneränta/Amort.
+                loan = self.session.get(Loan, best_bucket[0].loan_id)
                 types = {e.payment_type for e in best_bucket}
-                if "amortization" in types and category_amort is not None:
+                if loan is not None and loan.category_id is not None:
+                    tx.category_id = loan.category_id
+                elif "amortization" in types and category_amort is not None:
                     tx.category_id = category_amort
                 elif "interest" in types and category_interest is not None:
                     tx.category_id = category_interest
@@ -254,13 +256,21 @@ class LoanMatcher:
                 payment_type=entry.payment_type,
             )
         )
+        # Sätt kategori: lånets egen category_id vinner över den generiska
+        # Bolåneränta/Amortering (anpassar t.ex. "Huslån" vs "Billån"
+        # beroende på vilket lån det var).
+        loan_cat = None
+        loan = self.session.get(Loan, entry.loan_id)
+        if loan is not None and loan.category_id is not None:
+            loan_cat = loan.category_id
         # Sätt kategori endast om det är en single-row-match (kombo-fallet
         # hanteras av anroparen efter att alla raderna länkats)
-        if entry.payment_type == "interest" and category_interest is not None:
-            if tx.category_id is None:
+        if tx.category_id is None:
+            if loan_cat is not None:
+                tx.category_id = loan_cat
+            elif entry.payment_type == "interest" and category_interest is not None:
                 tx.category_id = category_interest
-        elif entry.payment_type == "amortization" and category_amort is not None:
-            if tx.category_id is None:
+            elif entry.payment_type == "amortization" and category_amort is not None:
                 tx.category_id = category_amort
 
     def generate_schedule(
