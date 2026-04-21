@@ -1,11 +1,33 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { AlertTriangle, Trash2, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
 import { ResetDialog } from "@/components/ResetDialog";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ForecastPoint, MonthSummary } from "@/types/models";
+
+interface Anomaly {
+  category: string;
+  current: number;
+  average: number;
+  stdev: number;
+  z_score: number;
+  direction: "higher" | "lower";
+}
+
+interface FamilyBreakdown {
+  month: string;
+  by_owner: Record<string, { income: number; expenses: number }>;
+  by_account: Array<{
+    account_id: number;
+    account: string;
+    type: string;
+    owner_id: number | null;
+    income: number;
+    expenses: number;
+  }>;
+}
 
 function currentMonth(): string {
   const d = new Date();
@@ -53,6 +75,18 @@ export default function Dashboard() {
   const forecastQ = useQuery({
     queryKey: ["forecast", 6],
     queryFn: () => api<{ forecast: ForecastPoint[] }>(`/budget/forecast/cashflow?months=6`),
+  });
+  const anomaliesQ = useQuery({
+    queryKey: ["anomalies", month],
+    queryFn: () => api<{ month: string; anomalies: Anomaly[] }>(
+      `/budget/anomalies/${month}`,
+    ),
+    enabled: !!month,
+  });
+  const familyQ = useQuery({
+    queryKey: ["family", month],
+    queryFn: () => api<FamilyBreakdown>(`/budget/family/${month}`),
+    enabled: !!month,
   });
 
   const s = summaryQ.data;
@@ -174,6 +208,127 @@ export default function Dashboard() {
           </ResponsiveContainer>
         )}
       </Card>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card
+          title={`Avvikelser — ${month}`}
+          action={
+            <span className="text-xs text-slate-500">
+              z‑score mot 6 mån snitt
+            </span>
+          }
+        >
+          {anomaliesQ.isLoading ? (
+            <div className="text-sm text-slate-500">Analyserar…</div>
+          ) : !anomaliesQ.data || anomaliesQ.data.anomalies.length === 0 ? (
+            <div className="text-sm text-slate-500">
+              Inga större avvikelser denna månad — allt ligger inom 2σ av
+              ditt vanliga mönster.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {anomaliesQ.data.anomalies.slice(0, 5).map((a) => (
+                <li
+                  key={a.category}
+                  className="flex items-start gap-3 text-sm"
+                >
+                  <span
+                    className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center ${
+                      a.direction === "higher"
+                        ? "bg-rose-50 text-rose-600"
+                        : "bg-emerald-50 text-emerald-600"
+                    }`}
+                  >
+                    {a.direction === "higher" ? (
+                      <TrendingUp className="w-4 h-4" />
+                    ) : (
+                      <TrendingDown className="w-4 h-4" />
+                    )}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{a.category}</div>
+                    <div className="text-xs text-slate-500">
+                      {formatSEK(a.current)} denna månad —{" "}
+                      snitt {formatSEK(a.average)} (±{formatSEK(a.stdev)})
+                    </div>
+                  </div>
+                  <span
+                    className={`text-xs font-mono font-semibold ${
+                      Math.abs(a.z_score) >= 3
+                        ? "text-rose-600"
+                        : "text-amber-600"
+                    }`}
+                  >
+                    {a.z_score > 0 ? "+" : ""}
+                    {a.z_score.toFixed(1)}σ
+                  </span>
+                </li>
+              ))}
+              {anomaliesQ.data.anomalies.length > 5 && (
+                <li className="text-xs text-slate-500 pt-1">
+                  …och {anomaliesQ.data.anomalies.length - 5} till
+                </li>
+              )}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title={`Familj — ${month}`}
+          action={
+            <span className="text-xs text-slate-500 inline-flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              per ägare
+            </span>
+          }
+        >
+          {familyQ.isLoading ? (
+            <div className="text-sm text-slate-500">Räknar…</div>
+          ) : !familyQ.data ||
+            Object.keys(familyQ.data.by_owner).length === 0 ? (
+            <div className="text-sm text-slate-500">
+              Ingen data denna månad. Koppla konton till ägare för att se
+              vem som betalat vad.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {Object.entries(familyQ.data.by_owner).map(([key, v]) => {
+                const label = key === "gemensamt" ? "Gemensamt" : key.replace("user_", "Användare ");
+                const net = v.income - v.expenses;
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between py-2 border-b last:border-0"
+                  >
+                    <div>
+                      <div className="font-medium text-sm">{label}</div>
+                      <div className="text-xs text-slate-500">
+                        In {formatSEK(v.income)} · Ut {formatSEK(v.expenses)}
+                      </div>
+                    </div>
+                    <div
+                      className={`text-sm font-semibold ${
+                        net >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }`}
+                    >
+                      {net >= 0 ? "+" : ""}
+                      {formatSEK(net)}
+                    </div>
+                  </div>
+                );
+              })}
+              {Object.keys(familyQ.data.by_owner).length === 1 &&
+                familyQ.data.by_owner["gemensamt"] && (
+                  <div className="text-xs text-slate-500 flex items-start gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-none" />
+                    Alla konton saknar ägare. Sätt <code>owner_id</code> på
+                    kontona för en "vem betalade vad"-vy.
+                  </div>
+                )}
+            </div>
+          )}
+        </Card>
+      </div>
 
       <Card title="Kassaflödesprognos (6 mån)">
         {fc.length === 0 ? (
