@@ -3,22 +3,35 @@ import { useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
-import type { Category, Transaction } from "@/types/models";
+import type { Account, Category, Transaction } from "@/types/models";
 
 const NEW_CATEGORY_SENTINEL = "__new__";
+const ALL_ACCOUNTS = "__all__";
 
 export default function Transactions() {
   const qc = useQueryClient();
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [hideTransfers, setHideTransfers] = useState(true);
   const [newCatFor, setNewCatFor] = useState<number | null>(null);
+  const [accountFilter, setAccountFilter] = useState<string>(
+    () => localStorage.getItem("tx_account_filter") || ALL_ACCOUNTS,
+  );
+
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api<Account[]>("/accounts"),
+  });
 
   const txsQ = useQuery({
-    queryKey: ["transactions", { uncategorizedOnly }],
-    queryFn: () =>
-      api<Transaction[]>(
-        `/transactions?limit=500${uncategorizedOnly ? "&uncategorized=true" : ""}`,
-      ),
+    queryKey: ["transactions", { uncategorizedOnly, accountFilter }],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: "500" });
+      if (uncategorizedOnly) params.set("uncategorized", "true");
+      if (accountFilter !== ALL_ACCOUNTS) {
+        params.set("account_id", accountFilter);
+      }
+      return api<Transaction[]>(`/transactions?${params.toString()}`);
+    },
   });
   const catsQ = useQuery({ queryKey: ["categories"], queryFn: () => api<Category[]>("/categories") });
 
@@ -64,6 +77,24 @@ export default function Transactions() {
         <h1 className="text-xl md:text-2xl font-semibold">Transaktioner</h1>
         <div className="flex flex-wrap items-center gap-3 md:gap-4 text-sm">
           <label className="flex items-center gap-2">
+            <span className="text-slate-600">Konto:</span>
+            <select
+              value={accountFilter}
+              onChange={(e) => {
+                setAccountFilter(e.target.value);
+                localStorage.setItem("tx_account_filter", e.target.value);
+              }}
+              className="border rounded-lg px-2 py-1 bg-white"
+            >
+              <option value={ALL_ACCOUNTS}>Alla konton</option>
+              {(accountsQ.data ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.bank})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={uncategorizedOnly}
@@ -91,6 +122,9 @@ export default function Transactions() {
               <thead>
                 <tr className="text-left text-xs uppercase text-slate-500 border-b">
                   <th className="py-2 pr-4">Datum</th>
+                  {accountFilter === ALL_ACCOUNTS && (
+                    <th className="py-2 pr-4">Konto</th>
+                  )}
                   <th className="py-2 pr-4">Beskrivning</th>
                   <th className="py-2 pr-4 text-right">Belopp</th>
                   <th className="py-2 pr-4">Kategori</th>
@@ -99,7 +133,9 @@ export default function Transactions() {
               <tbody>
                 {(txsQ.data ?? [])
                   .filter((tx) => (hideTransfers ? !tx.is_transfer : true))
-                  .map((tx) => (
+                  .map((tx) => {
+                    const acc = (accountsQ.data ?? []).find((a) => a.id === tx.account_id);
+                    return (
                   <tr
                     key={tx.id}
                     className={`border-b last:border-0 hover:bg-slate-50 ${
@@ -107,6 +143,11 @@ export default function Transactions() {
                     }`}
                   >
                     <td className="py-2 pr-4 text-slate-500">{tx.date}</td>
+                    {accountFilter === ALL_ACCOUNTS && (
+                      <td className="py-2 pr-4 text-slate-600 text-xs">
+                        {acc ? acc.name : `#${tx.account_id}`}
+                      </td>
+                    )}
                     <td className="py-2 pr-4">
                       <div className="font-medium flex items-center gap-2">
                         {tx.normalized_merchant ?? tx.raw_description}
@@ -186,7 +227,8 @@ export default function Transactions() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
