@@ -77,24 +77,6 @@ export default function Transactions() {
         <h1 className="text-xl md:text-2xl font-semibold">Transaktioner</h1>
         <div className="flex flex-wrap items-center gap-3 md:gap-4 text-sm">
           <label className="flex items-center gap-2">
-            <span className="text-slate-600">Konto:</span>
-            <select
-              value={accountFilter}
-              onChange={(e) => {
-                setAccountFilter(e.target.value);
-                localStorage.setItem("tx_account_filter", e.target.value);
-              }}
-              className="border rounded-lg px-2 py-1 bg-white"
-            >
-              <option value={ALL_ACCOUNTS}>Alla konton</option>
-              {(accountsQ.data ?? []).map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.bank})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={uncategorizedOnly}
@@ -111,6 +93,51 @@ export default function Transactions() {
             Dölj överföringar
           </label>
         </div>
+      </div>
+
+      {/* Konto-flikar — ett klick för att filtrera */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
+          onClick={() => {
+            setAccountFilter(ALL_ACCOUNTS);
+            localStorage.setItem("tx_account_filter", ALL_ACCOUNTS);
+          }}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition ${
+            accountFilter === ALL_ACCOUNTS
+              ? "bg-brand-600 text-white border-brand-600"
+              : "bg-white text-slate-700 border-slate-300 hover:border-brand-400"
+          }`}
+        >
+          Alla konton
+        </button>
+        {(accountsQ.data ?? []).map((a) => {
+          const active = accountFilter === String(a.id);
+          return (
+            <button
+              key={a.id}
+              onClick={() => {
+                setAccountFilter(String(a.id));
+                localStorage.setItem("tx_account_filter", String(a.id));
+              }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition ${
+                active
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "bg-white text-slate-700 border-slate-300 hover:border-brand-400"
+              }`}
+              title={`${a.bank} · ${a.type}`}
+            >
+              {a.name}
+              <span className={`ml-1.5 text-xs ${active ? "text-brand-100" : "text-slate-400"}`}>
+                {a.bank}
+              </span>
+            </button>
+          );
+        })}
+        {(accountsQ.data ?? []).length === 0 && (
+          <span className="text-xs text-slate-400">
+            (Inga konton hittades — gå till Importera för att sätta upp dem)
+          </span>
+        )}
       </div>
 
       <Card>
