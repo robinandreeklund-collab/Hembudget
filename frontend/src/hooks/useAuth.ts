@@ -6,6 +6,7 @@ export function useAuth() {
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [backendError, setBackendError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -16,15 +17,14 @@ export function useAuth() {
         setInitialized(s.initialized);
         if (s.demo_mode) {
           setDemoMode(true);
-          // Sätt en dummy-token så isAuthenticated blir true — backend
-          // ignorerar ändå auth-headern när HEMBUDGET_DEMO_MODE=1
           if (!getToken()) {
             setToken("demo");
             setTokenState("demo");
           }
         }
-      } catch {
+      } catch (e) {
         setInitialized(null);
+        setBackendError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
@@ -64,6 +64,7 @@ export function useAuth() {
     initialized,
     demoMode,
     loading,
+    backendError,
     login,
     initialize,
     logout,

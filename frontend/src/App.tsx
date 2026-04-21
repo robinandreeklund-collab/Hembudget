@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { BackendSetup } from "./components/BackendSetup";
 import { Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import Dashboard from "./pages/Dashboard";
@@ -16,8 +17,10 @@ import Login from "./pages/Login";
 import Import from "./pages/Import";
 
 export default function App() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, initialized, backendError } = useAuth();
   if (loading) return <div className="h-full grid place-items-center text-slate-500">Laddar…</div>;
+  // Om /status inte gick att nå alls → backend-URL behöver konfigureras
+  if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
   if (!isAuthenticated) return <Login />;
 
   return (

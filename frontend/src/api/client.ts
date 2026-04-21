@@ -1,5 +1,15 @@
 const TOKEN_KEY = "hembudget_token";
 const PORT_KEY = "hembudget_api_port";
+const BASE_OVERRIDE_KEY = "hembudget_api_base_override";
+
+export function setApiBaseOverride(url: string | null): void {
+  if (url) localStorage.setItem(BASE_OVERRIDE_KEY, url);
+  else localStorage.removeItem(BASE_OVERRIDE_KEY);
+}
+
+export function getApiBaseOverride(): string | null {
+  return localStorage.getItem(BASE_OVERRIDE_KEY);
+}
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
@@ -14,16 +24,22 @@ export function clearToken(): void {
 }
 
 function apiBase(): string {
-  // Produktion (Render): VITE_API_BASE pekar mot backendens URL eller hostname
+  // 1. Runtime-override (satt av användaren via UI)
+  const override = getApiBaseOverride();
+  if (override) return override.replace(/\/$/, "");
+  // 2. Build-time env (Render m.fl.)
   let explicit = import.meta.env.VITE_API_BASE;
   if (explicit) {
-    // Render's fromService host-property ger bara hostnamnet — lägg till https://
     if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
     return explicit.replace(/\/$/, "");
   }
-  // Tauri/lokalt dev: sidecar-porten injiceras via localStorage
+  // 3. Tauri/lokal dev
   const port = localStorage.getItem(PORT_KEY) || import.meta.env.VITE_API_PORT || "8765";
   return `http://127.0.0.1:${port}`;
+}
+
+export function getApiBase(): string {
+  return apiBase();
 }
 
 export function setApiPort(port: number | string): void {
