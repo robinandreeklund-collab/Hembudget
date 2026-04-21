@@ -38,8 +38,12 @@ CONFIRMATION_PHRASE = "NOLLSTÄLL"
 
 class ResetIn(BaseModel):
     confirm: str
-    keep_accounts: bool = False
+    # Konton och lån bevaras alltid vid nollställning — de är dyra att sätta
+    # upp (bankvision + lånescheman) och måste raderas manuellt var för sig.
+    # Fälten finns kvar för bakåtkompatibilitet med frontend men ignoreras.
+    keep_accounts: bool = True
     keep_rules: bool = False
+    keep_loans: bool = True
 
 
 @router.get("/stats")
@@ -136,17 +140,26 @@ def scan_transfers(
 
 @router.post("/reset")
 def reset(payload: ResetIn, session: Session = Depends(db)) -> dict:
+    """Nollställ data — BEVARAR konton och lån alltid (användaren måste
+    radera dem manuellt en i taget). Raderar transaktioner, budgetar,
+    prenumerationer, chatt, kommande fakturor m.fl."""
     if payload.confirm != CONFIRMATION_PHRASE:
         raise HTTPException(400, f"Skriv '{CONFIRMATION_PHRASE}' för att bekräfta")
 
-    # Delete in FK-safe order
     deleted: dict[str, int] = {}
+
+    # Lånekopplingar rensas (LoanPayment + matched_transaction_id nollas på
+    # schedule) men själva Loan- och LoanScheduleEntry-raderna behålls.
+    deleted[LoanPayment.__tablename__] = session.query(LoanPayment).delete()
+    # Nollställ schema-raders matchning så de kan paras ihop på nytt efter
+    # nästa import. Själva rad-innehållet (datum/belopp/typ) behålls.
+    session.query(LoanScheduleEntry).update(
+        {"matched_transaction_id": None, "matched_at": None}
+    )
+
     for model in (
         ChatMessage,
         TaxEvent,
-        LoanPayment,
-        LoanScheduleEntry,
-        Loan,
         UpcomingTransaction,
         Subscription,
         Transaction,
@@ -161,16 +174,20 @@ def reset(payload: ResetIn, session: Session = Depends(db)) -> dict:
     if not payload.keep_rules:
         deleted[Rule.__tablename__] = session.query(Rule).delete()
 
-    if not payload.keep_accounts:
-        deleted[Account.__tablename__] = session.query(Account).delete()
-
     session.flush()
 
     # Re-seed default rules (categories are kept; seed function is idempotent)
     if not payload.keep_rules:
         seed_categories_and_rules(session)
 
-    log_action(session, "reset", meta={"deleted": deleted, "keep_accounts": payload.keep_accounts,
-                                       "keep_rules": payload.keep_rules})
+    log_action(
+        session, "reset",
+        meta={
+            "deleted": deleted,
+            "keep_accounts": True,
+            "keep_loans": True,
+            "keep_rules": payload.keep_rules,
+        },
+    )
     log.warning("System reset performed: %s", deleted)
     return {"ok": True, "deleted": deleted}

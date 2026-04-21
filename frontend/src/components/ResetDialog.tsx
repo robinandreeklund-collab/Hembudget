@@ -16,12 +16,13 @@ interface Stats {
   chat_messages: number;
   tax_events: number;
   goals: number;
+  loans: number;
+  loan_payments: number;
 }
 
 export function ResetDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const [typed, setTyped] = useState("");
-  const [keepAccounts, setKeepAccounts] = useState(false);
   const [keepRules, setKeepRules] = useState(false);
 
   const statsQ = useQuery({
@@ -35,7 +36,6 @@ export function ResetDialog({ onClose }: { onClose: () => void }) {
         method: "POST",
         body: JSON.stringify({
           confirm: CONFIRM_PHRASE,
-          keep_accounts: keepAccounts,
           keep_rules: keepRules,
         }),
       }),
@@ -81,15 +81,12 @@ export function ResetDialog({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg p-3 text-xs">
+            <strong>Alltid bevarat:</strong> konton ({stats?.accounts ?? "?"}),
+            lån ({stats?.loans ?? "?"}) och lånescheman. Radera dessa manuellt
+            en i taget från respektive sida om du vill rensa dem.
+          </div>
           <div className="space-y-2">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={keepAccounts}
-                onChange={(e) => setKeepAccounts(e.target.checked)}
-              />
-              <span>Behåll konton (ta bara bort transaktioner och budgetar)</span>
-            </label>
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
