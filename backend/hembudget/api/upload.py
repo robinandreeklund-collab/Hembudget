@@ -13,6 +13,7 @@ from ..llm.client import LMStudioClient
 from ..loans.matcher import LoanMatcher
 from ..parsers import detect_parser, parser_for_bank
 from ..transfers.detector import TransferDetector
+from ..upcoming_match import UpcomingMatcher
 from .deps import db, llm_client, require_auth
 
 router = APIRouter(prefix="/import", tags=["import"], dependencies=[Depends(require_auth)])
@@ -101,6 +102,10 @@ async def import_csv(
 
     # Link matching expenses to registered loans (bolåneränta / amortering)
     loan_result = LoanMatcher(session).match_and_classify(new_transactions)
+
+    # Matcha planerade UpcomingTransaction mot de nya riktiga rader så
+    # fakturor markeras som "bokförda" och forecasten inte dubbelräknar.
+    upcoming_matched = UpcomingMatcher(session).match(new_transactions)
     session.flush()
 
     return {
@@ -119,4 +124,5 @@ async def import_csv(
         "internal_ambiguous": internal.ambiguous,
         "loan_payments_linked": loan_result.linked,
         "loan_payments_unclassified": loan_result.unclassified,
+        "upcoming_matched": upcoming_matched,
     }

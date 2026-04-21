@@ -101,6 +101,10 @@ export default function Upcoming() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["upcoming"] });
     qc.invalidateQueries({ queryKey: ["upcoming-forecast"] });
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.invalidateQueries({ queryKey: ["budget"] });
+    qc.invalidateQueries({ queryKey: ["balances"] });
+    qc.invalidateQueries({ queryKey: ["accounts"] });
   };
 
   const textMut = useMutation({
@@ -240,6 +244,8 @@ export default function Upcoming() {
           </div>
         </Card>
       )}
+
+      <CreditCardInvoiceCard onDone={invalidate} />
 
       <Card title="Tolka fakturor automatiskt">
         <div className="text-sm text-slate-500 mb-3">
@@ -620,5 +626,138 @@ function Stat({
       <div className={`text-xl font-semibold mt-1 ${color}`}>{value}</div>
       {hint && <div className="text-xs text-slate-400 mt-0.5">{hint}</div>}
     </div>
+  );
+}
+
+interface CCResult {
+  upcoming_id: number;
+  card_account_name: string;
+  transactions_created: number;
+  transactions_skipped_duplicates: number;
+  transfers_marked: number;
+  transfers_paired: number;
+  invoice_total: number;
+  due_date: string;
+  payer_account_id: number | null;
+}
+
+function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
+  const [jobs, setJobs] = useState<
+    { file: File; status: "uploading" | "done" | "error"; message?: string }[]
+  >([]);
+  const [result, setResult] = useState<CCResult | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  async function upload(files: FileList | File[]) {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    setJobs(arr.map((f) => ({ file: f, status: "uploading" })));
+    setResult(null);
+
+    const form = new FormData();
+    for (const f of arr) form.append("files", f);
+    const token = getToken();
+    try {
+      const res = await fetch(`${apiBase()}/upcoming/parse-credit-card-invoice`, {
+        method: "POST",
+        body: form,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        setJobs(arr.map((f) => ({ file: f, status: "error", message: text })));
+        return;
+      }
+      const data = (await res.json()) as CCResult;
+      setJobs(arr.map((f) => ({ file: f, status: "done" })));
+      setResult(data);
+      onDone();
+    } catch (e) {
+      setJobs(arr.map((f) => ({ file: f, status: "error", message: String(e) })));
+    }
+  }
+
+  return (
+    <Card title="Läs in kreditkortsfaktura (PDF/bild)">
+      <div className="text-sm text-slate-500 mb-3">
+        Dra in en eller flera Amex- eller SEB Kort-fakturor. AI läser BÅDE:
+        <ul className="list-disc pl-5 mt-1 space-y-0.5">
+          <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
+          <li>Alla enskilda köp → läggs in som transaktioner på kortkontot
+            (skapas automatiskt om det inte finns), kategoriseras av AI:n</li>
+        </ul>
+        <div className="mt-2 text-amber-700 text-xs">
+          Dubbelbokföring undviks: autogiro-dragningen från gemensamt markeras
+          som överföring, köpen blir de riktiga utgifterna. Krav: vision-kapabel
+          modell i LM Studio (Qwen2.5-VL, Pixtral).
+        </div>
+      </div>
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          if (e.dataTransfer.files.length) upload(e.dataTransfer.files);
+        }}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition ${
+          isDragging ? "border-brand-500 bg-brand-50" : "border-slate-300 bg-slate-50"
+        }`}
+      >
+        <ImageIcon className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+        <div className="text-sm text-slate-600">
+          Dra kreditkortsfaktura hit, eller{" "}
+          <label className="text-brand-600 cursor-pointer underline">
+            välj filer
+            <input
+              type="file"
+              multiple
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={(e) => e.target.files && upload(e.target.files)}
+            />
+          </label>
+        </div>
+      </div>
+
+      {jobs.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {jobs.map((j, i) => (
+            <div key={i} className="flex items-center gap-3 p-2 border rounded bg-white text-sm">
+              {j.status === "uploading" && <Loader2 className="w-4 h-4 animate-spin text-brand-600" />}
+              {j.status === "done" && <Sparkles className="w-4 h-4 text-emerald-600" />}
+              {j.status === "error" && <div className="w-4 h-4 rounded-full bg-rose-500" />}
+              <div className="flex-1 truncate">{j.file.name}</div>
+              {j.status === "error" && j.message && (
+                <div className="text-rose-600 text-xs truncate max-w-md">{j.message}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result && (
+        <div className="mt-3 p-3 rounded bg-emerald-50 border border-emerald-200 text-sm">
+          <div className="font-semibold mb-1">{result.card_account_name}</div>
+          <div>
+            Fakturasumma <strong>{formatSEK(result.invoice_total)}</strong> förfaller{" "}
+            <strong>{result.due_date}</strong>
+          </div>
+          <div>
+            <strong>{result.transactions_created}</strong> nya köp lades till
+            {result.transactions_skipped_duplicates > 0 &&
+              ` (${result.transactions_skipped_duplicates} dubletter hoppades över)`}
+            .
+          </div>
+          {result.transfers_marked > 0 && (
+            <div>{result.transfers_marked} autogiro-dragningar markerade som överföring.</div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }

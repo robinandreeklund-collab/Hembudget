@@ -13,9 +13,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from ..categorize.engine import CategorizationEngine
 from ..config import settings
-from ..db.models import Account, Category, Transaction, UpcomingTransaction
+from ..db.models import Account, Category, Import, Transaction, UpcomingTransaction
 from ..llm.client import LMStudioClient, LLMUnavailable
+from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
 
 log = logging.getLogger(__name__)
@@ -450,12 +452,15 @@ def monthly_forecast(
     else:
         end = date(year, mon + 1, 1)
 
+    # Endast ännu-ej-matchade rader räknas — redan bokförda finns redan
+    # i transaktionshistoriken och ska inte dubbelräknas.
     bills = (
         session.query(UpcomingTransaction)
         .filter(
             UpcomingTransaction.kind == "bill",
             UpcomingTransaction.expected_date >= start,
             UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.matched_transaction_id.is_(None),
         )
         .all()
     )
@@ -465,6 +470,7 @@ def monthly_forecast(
             UpcomingTransaction.kind == "income",
             UpcomingTransaction.expected_date >= start,
             UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.matched_transaction_id.is_(None),
         )
         .all()
     )
@@ -540,4 +546,320 @@ def monthly_forecast(
             "per_person_other": round(available * (1 - split_ratio), 2),
         },
         "income_by_owner": {k: float(v) for k, v in owners.items()},
+    }
+
+
+# ========== Kreditkortsfaktura — läs in hela fakturan på en gång ==========
+
+def _cc_invoice_schema() -> dict:
+    """Schema för en komplett kreditkortsfaktura: sammanfattning + alla köp."""
+    return {
+        "type": "object",
+        "properties": {
+            "card_issuer": {
+                "type": ["string", "null"],
+                "description": (
+                    "Vilken bank/kreditgivare: 'amex' för American Express, "
+                    "'seb_kort' för SEB Kort Mastercard, 'seb' för SEB, 'nordea' för Nordea."
+                ),
+            },
+            "card_name": {
+                "type": ["string", "null"],
+                "description": "Kortets visningsnamn, t.ex. 'Eurobonus Amex Gold' eller 'SEB Mastercard'",
+            },
+            "card_last_digits": {
+                "type": ["string", "null"],
+                "description": "Sista 4 siffrorna på kortnumret om synligt",
+            },
+            "statement_period_start": {"type": ["string", "null"]},
+            "statement_period_end": {"type": ["string", "null"]},
+            "total_amount": {
+                "type": "number",
+                "description": "Totalt belopp att betala",
+            },
+            "due_date": {
+                "type": "string",
+                "description": "Förfallodag, YYYY-MM-DD",
+            },
+            "bankgiro": {"type": ["string", "null"]},
+            "ocr_reference": {"type": ["string", "null"]},
+            "autogiro": {"type": "boolean"},
+            "transactions": {
+                "type": "array",
+                "description": "ALLA enskilda köp och återbetalningar som syns i fakturan",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string", "description": "YYYY-MM-DD"},
+                        "amount": {
+                            "type": "number",
+                            "description": (
+                                "Belopp i kr. Köp = NEGATIVT. Återbetalning/bonus = positivt."
+                            ),
+                        },
+                        "merchant": {"type": "string"},
+                        "city": {"type": ["string", "null"]},
+                        "foreign_amount": {
+                            "type": ["string", "null"],
+                            "description": "Valuta+belopp om utlandsköp, t.ex. 'USD 42.00'",
+                        },
+                    },
+                    "required": ["date", "amount", "merchant"],
+                },
+            },
+        },
+        "required": ["total_amount", "due_date", "transactions"],
+    }
+
+
+def _cc_invoice_system_prompt() -> str:
+    return (
+        "Du läser svenska kreditkortsfakturor (American Express Eurobonus, "
+        "SEB Kort Mastercard, etc.) och extraherar BÅDE fakturasammanfattningen "
+        "OCH alla enskilda transaktioner.\n\n"
+        "Viktigt:\n"
+        "- card_issuer: 'amex' för Amex, 'seb_kort' för SEB Kort/Mastercard.\n"
+        "- total_amount = totalt att betala i SEK (komma → punkt, inget 'kr').\n"
+        "- due_date = förfallodag (YYYY-MM-DD).\n"
+        "- transactions: returnera ALLA rader som syns, även om det är många.\n"
+        "  - KÖP = NEGATIVT belopp (money leaves pocket).\n"
+        "  - ÅTERBETALNINGAR / BONUS = POSITIVT belopp.\n"
+        "  - date = transaktionsdatum (inte bokföringsdatum om båda syns).\n"
+        "  - merchant = kortet innehåller oftast 'HANDLARE STAD' — splitta "
+        "    så merchant = handlarnamnet och city = orten.\n"
+        "  - foreign_amount: om utlandsköp med valuta, t.ex. 'USD 42.00'.\n"
+        "- autogiro=true om fakturan indikerar autogiro.\n"
+        "- Om ett fält inte syns, returnera null."
+    )
+
+
+def _resolve_or_create_cc_account(
+    session: Session, issuer: str | None, card_name: str | None,
+) -> Account:
+    """Hitta befintligt kreditkortskonto, eller skapa ett nytt."""
+    issuer_map = {
+        "amex": "amex",
+        "american express": "amex",
+        "seb_kort": "seb_kort",
+        "seb kort": "seb_kort",
+        "mastercard": "seb_kort",
+    }
+    bank_key = None
+    if issuer:
+        bank_key = issuer_map.get(issuer.strip().lower())
+
+    if bank_key:
+        existing = (
+            session.query(Account)
+            .filter(Account.bank == bank_key, Account.type == "credit")
+            .first()
+        )
+        if existing:
+            return existing
+
+    # Skapa nytt credit-konto
+    new = Account(
+        name=card_name or (issuer or "Kreditkort"),
+        bank=bank_key or "other",
+        type="credit",
+    )
+    session.add(new)
+    session.flush()
+    return new
+
+
+@router.post("/parse-credit-card-invoice")
+async def parse_credit_card_invoice(
+    files: list[UploadFile] = File(...),
+    session: Session = Depends(db),
+    llm: LMStudioClient = Depends(llm_client),
+) -> dict:
+    """Läs en kreditkortsfaktura (PDF eller bild) och:
+    1. Skapa en UpcomingTransaction för hela fakturan (för cashflow)
+    2. Skapa alla enskilda köp som Transaction-rader på kortkontot
+       (med dedup + auto-kategorisering)
+    3. Kör transfer-detektering så autogiro-dragningen från
+       lönekontot/gemensamt paras ihop när den kommer i nästa CSV-import
+    """
+    if not files:
+        raise HTTPException(400, "Inga filer skickades")
+    if not llm.is_alive():
+        raise HTTPException(503, "LM Studio är inte tillgänglig")
+
+    invoice_dir = settings.data_dir / "cc_invoices"
+    invoice_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+
+    all_images: list[bytes] = []
+    img_mime = "image/png"
+    saved_paths: list[str] = []
+    for idx, f in enumerate(files):
+        data = await f.read()
+        if not data:
+            continue
+        p = invoice_dir / f"{ts}_{idx}_{f.filename or 'cc'}"
+        p.write_bytes(data)
+        saved_paths.append(str(p))
+        imgs, mime = _file_to_images(data, f.content_type)
+        all_images.extend(imgs)
+        img_mime = mime
+
+    if not all_images:
+        raise HTTPException(400, "Inga läsbara bilder")
+
+    user_content: list[dict] = [{
+        "type": "text",
+        "text": (
+            "Extrahera kreditkortsfakturan: sammanfattning + alla enskilda "
+            "transaktioner. Returnera JSON enligt schemat."
+        ),
+    }]
+    for img in all_images:
+        b64 = base64.b64encode(img).decode("ascii")
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{img_mime};base64,{b64}"},
+        })
+
+    try:
+        parsed = llm.complete_json(
+            [{"role": "system", "content": _cc_invoice_system_prompt()},
+             {"role": "user", "content": user_content}],
+            schema=_cc_invoice_schema(),
+            temperature=0.0,
+        )
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except Exception as exc:
+        log.exception("CC invoice parse failed")
+        raise HTTPException(
+            500,
+            f"Modellen kunde inte tolka fakturan. Byt till vision-kapabel "
+            f"modell i LM Studio (Qwen2.5-VL, Pixtral). Fel: {exc}",
+        ) from exc
+
+    # Hitta eller skapa kortkontot
+    cc_account = _resolve_or_create_cc_account(
+        session,
+        issuer=parsed.get("card_issuer"),
+        card_name=parsed.get("card_name"),
+    )
+
+    # Rooten — skapa en "import"-post för audit
+    imp = Import(
+        filename=saved_paths[0].split("/")[-1] if saved_paths else "cc_invoice",
+        bank=cc_account.bank,
+        sha256="cc-" + ts + "-" + str(cc_account.id),
+        row_count=0,
+    )
+    session.add(imp)
+    session.flush()
+
+    # Skapa enskilda transaktioner med dedup
+    import hashlib
+    existing_hashes = {
+        h for (h,) in session.query(Transaction.hash)
+        .filter(Transaction.account_id == cc_account.id).all()
+    }
+
+    new_txs: list[Transaction] = []
+    skipped = 0
+    for row_index, row in enumerate(parsed.get("transactions") or []):
+        try:
+            tx_date = date.fromisoformat(row["date"])
+        except (KeyError, ValueError):
+            continue
+        amount = Decimal(str(row["amount"]))
+        merchant = str(row.get("merchant") or "").strip()
+        city = str(row.get("city") or "").strip()
+        description = f"{merchant} [{city}]" if merchant and city else (merchant or "Okänt")
+
+        # Hash nyckel: account + datum + belopp + beskrivning + row_index
+        key = f"{cc_account.id}|{tx_date.isoformat()}|{amount}|{description.strip().lower()}|#{row_index}"
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        if h in existing_hashes:
+            skipped += 1
+            continue
+        existing_hashes.add(h)
+
+        tx = Transaction(
+            account_id=cc_account.id,
+            date=tx_date,
+            amount=amount,
+            currency="SEK",
+            raw_description=description,
+            source_file_id=imp.id,
+            hash=h,
+        )
+        session.add(tx)
+        new_txs.append(tx)
+
+    imp.row_count = len(new_txs)
+    session.flush()
+
+    # Kategorisering (regler + LLM fallback)
+    if new_txs:
+        engine = CategorizationEngine(session, llm=llm)
+        results = engine.categorize_batch(new_txs)
+        engine.apply_results(new_txs, results)
+        session.flush()
+
+    # Transfer-detektor kör mot hela setet
+    detector = TransferDetector(session)
+    transfer_result = detector.detect_and_link(new_txs)
+    internal = detector.detect_internal_transfers()
+    session.flush()
+
+    # Skapa UpcomingTransaction för själva fakturan
+    due_str = parsed.get("due_date")
+    try:
+        due_date = date.fromisoformat(due_str)
+    except (TypeError, ValueError):
+        due_date = date.today()
+
+    # Hitta konto som betalar detta kreditkort via pays_credit_account_id
+    payer = (
+        session.query(Account)
+        .filter(Account.pays_credit_account_id == cc_account.id)
+        .first()
+    )
+
+    card_label = parsed.get("card_name") or cc_account.name
+    notes_parts = []
+    if parsed.get("statement_period_start") and parsed.get("statement_period_end"):
+        notes_parts.append(
+            f"Period: {parsed['statement_period_start']} – {parsed['statement_period_end']}"
+        )
+    if parsed.get("card_last_digits"):
+        notes_parts.append(f"Kort ****{parsed['card_last_digits']}")
+
+    upcoming = UpcomingTransaction(
+        kind="bill",
+        name=f"Kreditkortsfaktura — {card_label}",
+        amount=Decimal(str(parsed["total_amount"])),
+        expected_date=due_date,
+        debit_date=due_date,
+        debit_account_id=payer.id if payer else None,
+        autogiro=bool(parsed.get("autogiro", False)),
+        bankgiro=parsed.get("bankgiro"),
+        ocr_reference=parsed.get("ocr_reference"),
+        source="vision_ai",
+        source_image_path=saved_paths[0] if saved_paths else None,
+        notes=" · ".join(notes_parts) or None,
+    )
+    session.add(upcoming)
+    session.flush()
+
+    return {
+        "upcoming_id": upcoming.id,
+        "card_account_id": cc_account.id,
+        "card_account_name": cc_account.name,
+        "transactions_created": len(new_txs),
+        "transactions_skipped_duplicates": skipped,
+        "transfers_marked": transfer_result.marked,
+        "transfers_paired": transfer_result.paired,
+        "internal_pairs": internal.pairs,
+        "invoice_total": float(upcoming.amount),
+        "due_date": due_date.isoformat(),
+        "payer_account_id": payer.id if payer else None,
     }
