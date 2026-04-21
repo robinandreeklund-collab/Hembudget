@@ -228,6 +228,30 @@ class LoanScheduleEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class UpcomingTransaction(Base):
+    """Planerade kommande transaktioner — fakturor och löner som ännu inte
+    bokats, men som vi vet kommer. Används för cashflow-prognos + att räkna
+    ut hur mycket pengar som kan fördelas 50/50 som privata pengar.
+    """
+    __tablename__ = "upcoming_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # "bill" | "income"
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # positivt
+    expected_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    owner: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)  # "Robin", "Partner"
+    category_id: Mapped[Optional[int]] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    recurring_monthly: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | vision_ai | ocr
+    source_image_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    matched_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True, unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class TaxEvent(Base):
     __tablename__ = "tax_events"
 

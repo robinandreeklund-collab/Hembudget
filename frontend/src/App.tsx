@@ -7,6 +7,8 @@ import Budget from "./pages/Budget";
 import Chat from "./pages/Chat";
 import Scenarios from "./pages/Scenarios";
 import Loans from "./pages/Loans";
+import Transfers from "./pages/Transfers";
+import Upcoming from "./pages/Upcoming";
 import Tax from "./pages/Tax";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -31,6 +33,8 @@ export default function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/loans" element={<Loans />} />
+          <Route path="/transfers" element={<Transfers />} />
+          <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/tax" element={<Tax />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />

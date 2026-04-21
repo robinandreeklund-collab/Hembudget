@@ -24,6 +24,7 @@ from ..db.models import (
     Subscription,
     TaxEvent,
     Transaction,
+    UpcomingTransaction,
 )
 from ..security.audit import log_action
 from ..transfers.detector import TransferDetector
@@ -146,6 +147,7 @@ def reset(payload: ResetIn, session: Session = Depends(db)) -> dict:
         LoanPayment,
         LoanScheduleEntry,
         Loan,
+        UpcomingTransaction,
         Subscription,
         Transaction,
         Import,

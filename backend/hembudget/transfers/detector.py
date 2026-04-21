@@ -162,14 +162,19 @@ class TransferDetector:
 
     def detect_internal_transfers(
         self,
-        date_tolerance_days: int = 3,
+        date_tolerance_days: int = 5,
         amount_tolerance: float = 0.005,   # 0.5 %
     ) -> InternalScanResult:
         """Para ihop överföringar mellan egna konton baserat på datum + belopp.
 
-        Conservative: parar bara om exakt en kandidat matchar, eller en
-        kandidat ligger på samma dag medan övriga ligger utanför. Detta
-        minimerar falska positiva som kan gömma riktiga utgifter.
+        Tre nivåer:
+        1. **Unik kandidat:** exakt en positiv rad matchar → paras direkt.
+        2. **1:1 bland identiska:** om N negativa och N positiva rader med
+           exakt samma belopp finns på samma datum (eller inom fönstret),
+           paras de i tids-ordning — fångar "5 000 kr två gånger samma dag".
+        3. **Samma-dag-tiebreak:** flera kandidater, men exakt en ligger på
+           samma dag → välj den.
+        Allt annat räknas som tvetydigt och hamnar i InternalScanResult.
         """
         account_ids = [a.id for a in self.session.query(Account).all()]
         if len(account_ids) < 2:
@@ -194,6 +199,7 @@ class TransferDetector:
         ambiguous = 0
         tol = Decimal(str(amount_tolerance))
 
+        # Steg 1+3 (samma kod som tidigare) + steg 2 som nytt tiebreak
         for src in unpaired:
             if src.id in claimed or src.amount >= 0:
                 continue
@@ -216,12 +222,43 @@ class TransferDetector:
             if len(candidates) == 1:
                 dst = candidates[0]
             elif len(candidates) > 1:
-                # Om exakt en ligger samma dag, välj den
+                # 2a. Exakt en ligger samma dag → välj den
                 same_day = [c for c in candidates if c.date == src.date]
                 if len(same_day) == 1:
                     dst = same_day[0]
                 else:
-                    ambiguous += 1
+                    # 2b. 1:1 pairing: hitta alla obrukade källor som har
+                    # exakt samma belopp+datum som src, och se om antalet
+                    # motsvarande destinationer är lika. Paras då i ordning.
+                    sibling_sources = [
+                        t for t in unpaired
+                        if t.id not in claimed
+                        and t.amount == src.amount
+                        and t.date == src.date
+                        and t.account_id == src.account_id
+                    ]
+                    identical_dests = [
+                        c for c in candidates
+                        if c.amount == abs_amt and c.date == src.date
+                    ]
+                    if (
+                        len(sibling_sources) >= 1
+                        and len(sibling_sources) == len(identical_dests)
+                    ):
+                        # Alla source[i] ↔ dest[i] paras
+                        for s, d in zip(sibling_sources, identical_dests):
+                            s.is_transfer = True
+                            s.transfer_pair_id = d.id
+                            s.category_id = None
+                            d.is_transfer = True
+                            d.transfer_pair_id = s.id
+                            d.category_id = None
+                            claimed.add(s.id)
+                            claimed.add(d.id)
+                            pairs.append((s.id, d.id))
+                        continue
+                    else:
+                        ambiguous += 1
 
             if dst is not None:
                 src.is_transfer = True

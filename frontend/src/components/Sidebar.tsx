@@ -1,11 +1,13 @@
 import { NavLink } from "react-router-dom";
 import {
   BarChart3,
+  CalendarPlus,
   CircleDollarSign,
   FileDown,
   Home,
-  LineChart,
   Landmark,
+  Link2,
+  LineChart,
   MessageSquare,
   Settings as Cog,
   Upload,
@@ -19,6 +21,8 @@ const ITEMS = [
   { to: "/transactions", label: "Transaktioner", icon: Receipt },
   { to: "/import", label: "Importera", icon: Upload },
   { to: "/budget", label: "Budget", icon: CircleDollarSign },
+  { to: "/upcoming", label: "Kommande", icon: CalendarPlus },
+  { to: "/transfers", label: "Överföringar", icon: Link2 },
   { to: "/chat", label: "AI-chatt", icon: MessageSquare },
   { to: "/scenarios", label: "Scenarion", icon: CalculatorIcon },
   { to: "/loans", label: "Lån", icon: Landmark },

@@ -199,6 +199,32 @@ def test_internal_transfer_same_day_disambiguates(session):
     assert inn2.is_transfer is False
 
 
+def test_internal_transfer_one_to_one_pairing_for_identical_amounts(session):
+    """Regression för användarklagomål: två swishar samma dag, samma belopp,
+    till gemensamma kontot ska paras ihop 1:1 istället för att markeras
+    som tvetydiga och hoppas över."""
+    lon = _acc(session, "Lönekonto", "nordea", "checking")
+    gem = _acc(session, "Gemensamt", "nordea", "checking")
+
+    out1 = _tx(session, lon.id, date(2026, 3, 25), -5000, "Överföring 1")
+    out2 = _tx(session, lon.id, date(2026, 3, 25), -5000, "Överföring 2")
+    inn1 = _tx(session, gem.id, date(2026, 3, 25), 5000, "Insättning 1")
+    inn2 = _tx(session, gem.id, date(2026, 3, 25), 5000, "Insättning 2")
+
+    r = TransferDetector(session).detect_internal_transfers()
+
+    # Båda sourcer paras ihop i tur och ordning
+    assert r.pairs == 2
+    assert r.ambiguous == 0
+    session.refresh(out1); session.refresh(out2)
+    session.refresh(inn1); session.refresh(inn2)
+    assert all(tx.is_transfer for tx in (out1, out2, inn1, inn2))
+    # Verifiera att varje har en parning
+    assert out1.transfer_pair_id in (inn1.id, inn2.id)
+    assert out2.transfer_pair_id in (inn1.id, inn2.id)
+    assert out1.transfer_pair_id != out2.transfer_pair_id
+
+
 def test_internal_transfer_no_match_amount_off(session):
     a = _acc(session, "A", "nordea", "checking")
     b = _acc(session, "B", "nordea", "savings")
