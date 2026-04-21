@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..budget.forecast import CashflowForecaster
 from ..budget.monthly import MonthlyBudgetService
+from ..chat import tools as chat_tools
 from ..db.models import Transaction
 from ..subscriptions.detector import SubscriptionDetector
 from .deps import db, require_auth
@@ -101,6 +102,22 @@ def forecast(months: int = 6, session: Session = Depends(db)) -> dict:
             for m in out
         ]
     }
+
+
+@router.get("/anomalies/{month}")
+def anomalies(
+    month: str,
+    threshold_sigma: float = 2.0,
+    session: Session = Depends(db),
+) -> dict:
+    """Statistiska avvikelser mot 6 månaders historik — z-score per kategori."""
+    return chat_tools.detect_anomalies(session, month, threshold_sigma=threshold_sigma)
+
+
+@router.get("/family/{month}")
+def family(month: str, session: Session = Depends(db)) -> dict:
+    """Per-ägare och per-konto: inkomst och utgift separat för månaden."""
+    return chat_tools.get_family_breakdown(session, month)
 
 
 @router.post("/subscriptions/detect")
