@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
-  CalendarPlus, Image as ImageIcon, Loader2, Sparkles, Trash2,
+  CalendarPlus, ChevronDown, ChevronRight, Image as ImageIcon,
+  Loader2, Sparkles, Trash2,
   TrendingDown, TrendingUp, Users,
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
+import type { Account } from "@/types/models";
 
 interface UpcomingItem {
   id: number;
@@ -19,6 +21,15 @@ interface UpcomingItem {
   source: string;
   source_image_path: string | null;
   notes: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  ocr_reference: string | null;
+  bankgiro: string | null;
+  plusgiro: string | null;
+  iban: string | null;
+  debit_account_id: number | null;
+  debit_date: string | null;
+  autogiro: boolean;
   matched_transaction_id: number | null;
 }
 
@@ -69,6 +80,18 @@ export default function Upcoming() {
   const listQ = useQuery({
     queryKey: ["upcoming"],
     queryFn: () => api<UpcomingItem[]>("/upcoming/?only_future=false"),
+  });
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api<Account[]>("/accounts"),
+  });
+  const updateMut = useMutation({
+    mutationFn: (p: { id: number; data: Partial<UpcomingItem> }) =>
+      api(`/upcoming/${p.id}`, { method: "PATCH", body: JSON.stringify(p.data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+      qc.invalidateQueries({ queryKey: ["upcoming-forecast"] });
+    },
   });
   const forecastQ = useQuery({
     queryKey: ["upcoming-forecast", month],
@@ -326,51 +349,213 @@ export default function Upcoming() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Card title={`Kommande fakturor (${bills.length})`}>
-          <ItemList items={bills} onDelete={(id) => deleteMut.mutate(id)} />
-        </Card>
-        <Card title={`Kommande löner (${incomes.length})`}>
-          <ItemList items={incomes} onDelete={(id) => deleteMut.mutate(id)} />
-        </Card>
-      </div>
+      <Card title={`Kommande fakturor (${bills.length})`}>
+        <ItemList
+          items={bills}
+          accounts={accountsQ.data ?? []}
+          onDelete={(id) => deleteMut.mutate(id)}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+        />
+      </Card>
+      <Card title={`Kommande löner (${incomes.length})`}>
+        <ItemList
+          items={incomes}
+          accounts={accountsQ.data ?? []}
+          onDelete={(id) => deleteMut.mutate(id)}
+          onUpdate={(id, data) => updateMut.mutate({ id, data })}
+        />
+      </Card>
     </div>
   );
 }
 
 function ItemList({
   items,
+  accounts,
   onDelete,
+  onUpdate,
 }: {
   items: UpcomingItem[];
+  accounts: Account[];
   onDelete: (id: number) => void;
+  onUpdate: (id: number, data: Partial<UpcomingItem>) => void;
 }) {
   if (items.length === 0) {
     return <div className="text-sm text-slate-500">Inget registrerat ännu.</div>;
   }
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {items.map((i) => (
-        <div key={i.id} className="flex items-center gap-3 border rounded p-2 text-sm">
-          <div className="flex-1 min-w-0">
-            <div className="font-medium truncate">{i.name}</div>
-            <div className="text-xs text-slate-500">
-              {i.expected_date}
-              {i.owner ? ` · ${i.owner}` : ""}
-              {i.recurring_monthly ? " · återkommande" : ""}
-              {i.source !== "manual" ? ` · källa: ${i.source}` : ""}
-              {i.matched_transaction_id ? " · ✓ bokförd" : ""}
-            </div>
-          </div>
-          <div className="font-semibold shrink-0">{formatSEK(i.amount)}</div>
-          <button
-            onClick={() => onDelete(i.id)}
-            className="text-slate-400 hover:text-rose-600 shrink-0"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+        <UpcomingRow
+          key={i.id}
+          item={i}
+          accounts={accounts}
+          onDelete={onDelete}
+          onUpdate={onUpdate}
+        />
       ))}
+    </div>
+  );
+}
+
+function UpcomingRow({
+  item: i,
+  accounts,
+  onDelete,
+  onUpdate,
+}: {
+  item: UpcomingItem;
+  accounts: Account[];
+  onDelete: (id: number) => void;
+  onUpdate: (id: number, data: Partial<UpcomingItem>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const debitAccount = accounts.find((a) => a.id === i.debit_account_id);
+  const hasDetails =
+    i.invoice_number || i.ocr_reference || i.bankgiro || i.plusgiro || i.iban ||
+    i.invoice_date || i.notes;
+
+  return (
+    <div className="border rounded text-sm">
+      <div className="flex items-center gap-3 p-2">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="text-slate-400 hover:text-slate-700"
+        >
+          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{i.name}</div>
+          <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
+            <span>Förfall {i.expected_date}</span>
+            {i.debit_date && <span>· Dras {i.debit_date}</span>}
+            {debitAccount && <span>· från {debitAccount.name}</span>}
+            {i.autogiro && <span className="text-amber-700">· autogiro</span>}
+            {i.owner && <span>· {i.owner}</span>}
+            {i.recurring_monthly && <span>· återkommande</span>}
+            {i.source !== "manual" && <span>· {i.source}</span>}
+            {i.matched_transaction_id && <span className="text-emerald-600">· ✓ bokförd</span>}
+          </div>
+        </div>
+        <div className="font-semibold shrink-0">{formatSEK(i.amount)}</div>
+        <button
+          onClick={() => onDelete(i.id)}
+          className="text-slate-400 hover:text-rose-600 shrink-0"
+          title="Ta bort"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {open && (
+        <div className="border-t bg-slate-50 p-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <EditField
+              label="Förfallodag"
+              value={i.expected_date}
+              type="date"
+              onChange={(v) => onUpdate(i.id, { expected_date: v })}
+            />
+            <EditField
+              label="Debiteringsdag"
+              value={i.debit_date ?? i.expected_date}
+              type="date"
+              onChange={(v) => onUpdate(i.id, { debit_date: v })}
+            />
+            <div>
+              <div className="text-slate-500 mb-0.5">Debiteringskonto</div>
+              <select
+                value={i.debit_account_id ?? ""}
+                onChange={(e) =>
+                  onUpdate(i.id, { debit_account_id: e.target.value ? Number(e.target.value) : null })
+                }
+                className="border rounded px-2 py-1 w-full"
+              >
+                <option value="">— välj —</option>
+                {accounts
+                  .filter((a) => a.type === "checking" || a.type === "shared")
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.type})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={i.autogiro}
+                  onChange={(e) => onUpdate(i.id, { autogiro: e.target.checked })}
+                />
+                <span className="text-slate-600">Autogiro (dras automatiskt)</span>
+              </label>
+            </div>
+            <EditField
+              label="Belopp (kr)"
+              value={String(i.amount)}
+              type="number"
+              onChange={(v) => onUpdate(i.id, { amount: Number(v) as unknown as UpcomingItem["amount"] })}
+            />
+            <EditField
+              label="Mottagare / namn"
+              value={i.name}
+              onChange={(v) => onUpdate(i.id, { name: v })}
+            />
+          </div>
+
+          {hasDetails && (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs border-t pt-2">
+              {i.invoice_number && <Detail label="Fakturanummer" value={i.invoice_number} />}
+              {i.invoice_date && <Detail label="Fakturadatum" value={i.invoice_date} />}
+              {i.ocr_reference && <Detail label="OCR/Referens" value={i.ocr_reference} mono />}
+              {i.bankgiro && <Detail label="Bankgiro" value={i.bankgiro} mono />}
+              {i.plusgiro && <Detail label="Plusgiro" value={i.plusgiro} mono />}
+              {i.iban && <Detail label="IBAN" value={i.iban} mono />}
+              {i.notes && (
+                <div className="col-span-2">
+                  <Detail label="Anteckningar" value={i.notes} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditField({
+  label,
+  value,
+  type = "text",
+  onChange,
+}: {
+  label: string;
+  value: string;
+  type?: string;
+  onChange: (v: string) => void;
+}) {
+  const [v, setV] = useState(value);
+  return (
+    <div>
+      <div className="text-slate-500 mb-0.5">{label}</div>
+      <input
+        type={type}
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => v !== value && onChange(v)}
+        className="border rounded px-2 py-1 w-full"
+      />
+    </div>
+  );
+}
+
+function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <span className="text-slate-500">{label}: </span>
+      <span className={mono ? "font-mono" : ""}>{value}</span>
     </div>
   );
 }

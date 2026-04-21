@@ -19,6 +19,15 @@ def _columns(engine: Engine, table: str) -> set[str]:
     return {row[1] for row in rows}
 
 
+def _table_exists(engine: Engine, table: str) -> bool:
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
+            {"n": table},
+        ).first()
+    return row is not None
+
+
 def _add_column(engine: Engine, table: str, column_sql: str) -> None:
     with engine.begin() as conn:
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column_sql}"))
@@ -51,8 +60,26 @@ def run_migrations(engine: Engine) -> list[str]:
         )
         applied.append("accounts.pays_credit_account_id")
 
-    # New tables (loans, loan_payments) are created by Base.metadata.create_all
-    # in auth routes; nothing to ALTER here.
+    # upcoming_transactions — rika fakturafält + debitering
+    if _table_exists(engine, "upcoming_transactions"):
+        up_cols = _columns(engine, "upcoming_transactions")
+        for col_name, col_sql in [
+            ("invoice_number", "invoice_number VARCHAR(80)"),
+            ("invoice_date", "invoice_date DATE"),
+            ("ocr_reference", "ocr_reference VARCHAR(40)"),
+            ("bankgiro", "bankgiro VARCHAR(20)"),
+            ("plusgiro", "plusgiro VARCHAR(20)"),
+            ("iban", "iban VARCHAR(40)"),
+            ("debit_account_id", "debit_account_id INTEGER REFERENCES accounts(id)"),
+            ("debit_date", "debit_date DATE"),
+            ("autogiro", "autogiro BOOLEAN NOT NULL DEFAULT 0"),
+        ]:
+            if col_name not in up_cols:
+                _add_column(engine, "upcoming_transactions", col_sql)
+                applied.append(f"upcoming_transactions.{col_name}")
+
+    # New tables (loans, loan_payments, upcoming_transactions) are created
+    # by Base.metadata.create_all in auth routes; nothing to ALTER here.
 
     if applied:
         log.info("Schema migrations applied: %s", ", ".join(applied))

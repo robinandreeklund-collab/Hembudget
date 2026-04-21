@@ -239,13 +239,27 @@ class UpcomingTransaction(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # "bill" | "income"
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # positivt
-    expected_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    expected_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)   # förfallodag
     owner: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)  # "Robin", "Partner"
     category_id: Mapped[Optional[int]] = mapped_column(ForeignKey("categories.id"), nullable=True)
     recurring_monthly: Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | vision_ai | ocr
     source_image_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Extraherad fakturadata
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    invoice_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    ocr_reference: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    bankgiro: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    plusgiro: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    iban: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+
+    # Debitering: vilket konto och vilket datum
+    debit_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+    debit_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)   # default = expected_date
+    autogiro: Mapped[bool] = mapped_column(Boolean, default=False)
+
     matched_transaction_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("transactions.id"), nullable=True, unique=True
     )

@@ -69,6 +69,15 @@ class UpcomingIn(BaseModel):
     category_id: Optional[int] = None
     recurring_monthly: bool = False
     notes: Optional[str] = None
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[date] = None
+    ocr_reference: Optional[str] = None
+    bankgiro: Optional[str] = None
+    plusgiro: Optional[str] = None
+    iban: Optional[str] = None
+    debit_account_id: Optional[int] = None
+    debit_date: Optional[date] = None
+    autogiro: bool = False
 
 
 class UpcomingUpdate(BaseModel):
@@ -80,6 +89,15 @@ class UpcomingUpdate(BaseModel):
     category_id: Optional[int] = None
     recurring_monthly: Optional[bool] = None
     notes: Optional[str] = None
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[date] = None
+    ocr_reference: Optional[str] = None
+    bankgiro: Optional[str] = None
+    plusgiro: Optional[str] = None
+    iban: Optional[str] = None
+    debit_account_id: Optional[int] = None
+    debit_date: Optional[date] = None
+    autogiro: Optional[bool] = None
 
 
 class UpcomingOut(BaseModel):
@@ -95,6 +113,15 @@ class UpcomingOut(BaseModel):
     source: str
     source_image_path: Optional[str]
     notes: Optional[str]
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[date] = None
+    ocr_reference: Optional[str] = None
+    bankgiro: Optional[str] = None
+    plusgiro: Optional[str] = None
+    iban: Optional[str] = None
+    debit_account_id: Optional[int] = None
+    debit_date: Optional[date] = None
+    autogiro: bool = False
     matched_transaction_id: Optional[int]
 
 
@@ -156,17 +183,8 @@ def parse_text(
     if not llm.is_alive():
         raise HTTPException(503, "LM Studio är inte tillgänglig")
 
-    schema = {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "amount": {"type": "number"},
-            "expected_date": {"type": "string", "description": "YYYY-MM-DD"},
-            "owner": {"type": ["string", "null"]},
-            "notes": {"type": ["string", "null"]},
-        },
-        "required": ["name", "amount", "expected_date"],
-    }
+    schema = _invoice_schema()
+    schema["properties"]["owner"] = {"type": ["string", "null"]}
 
     try:
         parsed = llm.complete_json(
@@ -175,8 +193,9 @@ def parse_text(
                     "role": "system",
                     "content": (
                         "Du tolkar svensk text om kommande fakturor eller löner. "
-                        "Returnera JSON enligt schemat. Belopp som positivt tal i kr. "
-                        "Datum i YYYY-MM-DD. Om datum saknas, sätt sista dagen i nästa månad."
+                        "Returnera JSON enligt schemat. Om datum saknas, sätt sista "
+                        "dagen i nästa månad. Om det är en lön/inkomst, sätt owner till "
+                        "personens namn. Fält som inte nämns → null."
                     ),
                 },
                 {"role": "user", "content": text},
@@ -187,15 +206,8 @@ def parse_text(
     except LLMUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
 
-    u = UpcomingTransaction(
-        kind=kind,
-        name=parsed["name"],
-        amount=Decimal(str(parsed["amount"])),
-        expected_date=date.fromisoformat(parsed["expected_date"]),
-        owner=parsed.get("owner"),
-        notes=parsed.get("notes"),
-        source="ai_text",
-    )
+    u = _build_upcoming_from_parsed(parsed, kind=kind, source="ai_text")
+    u.owner = parsed.get("owner")
     session.add(u)
     session.flush()
     return u
@@ -241,9 +253,9 @@ async def parse_invoice_image(
         {
             "type": "text",
             "text": (
-                "Extrahera mottagare, totalbelopp och förfallodatum från denna "
-                "svenska faktura. Om flera sidor visas, hitta informationen på "
-                "den sida där totalbeloppet står."
+                "Extrahera ALLA betalningsrelaterade uppgifter du kan hitta från "
+                "denna svenska faktura. Om flera sidor visas, titta på alla och "
+                "slå samman informationen. Om något fält inte syns, använd null."
             ),
         }
     ]
@@ -254,31 +266,12 @@ async def parse_invoice_image(
             "image_url": {"url": f"data:{img_mime};base64,{b64}"},
         })
 
-    schema = {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string", "description": "Mottagare/företagsnamn"},
-            "amount": {"type": "number"},
-            "expected_date": {"type": "string"},
-            "notes": {"type": ["string", "null"]},
-        },
-        "required": ["name", "amount", "expected_date"],
-    }
+    schema = _invoice_schema()
 
     try:
         parsed = llm.complete_json(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "Du läser svenska fakturor och extraherar mottagare, "
-                        "förfallodatum och totalbelopp. Returnera JSON. "
-                        "Datum YYYY-MM-DD, belopp i kr som tal (bara siffror, "
-                        "inget 'kr' eller mellanslag)."
-                    ),
-                },
-                {"role": "user", "content": user_content},
-            ],
+            [{"role": "system", "content": _vision_system_prompt()},
+             {"role": "user", "content": user_content}],
             schema=schema,
             temperature=0.0,
         )
@@ -292,18 +285,84 @@ async def parse_invoice_image(
             f"i LM Studio (t.ex. Qwen2.5-VL). Fel: {exc}",
         ) from exc
 
-    u = UpcomingTransaction(
+    u = _build_upcoming_from_parsed(parsed, kind=kind, source="vision_ai",
+                                    source_image_path=str(original_path))
+    session.add(u)
+    session.flush()
+    return u
+
+
+def _invoice_schema() -> dict:
+    """JSON-schema som tvingar vision-modellen att returnera rika data."""
+    return {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Mottagare/betalningsmottagare"},
+            "amount": {"type": "number", "description": "Totalbelopp att betala i kr"},
+            "expected_date": {"type": "string", "description": "Förfallodatum YYYY-MM-DD"},
+            "invoice_date": {"type": ["string", "null"], "description": "Fakturadatum"},
+            "invoice_number": {"type": ["string", "null"]},
+            "ocr_reference": {"type": ["string", "null"],
+                              "description": "OCR- eller referensnummer"},
+            "bankgiro": {"type": ["string", "null"], "description": "BG-nummer, t.ex. 123-4567"},
+            "plusgiro": {"type": ["string", "null"], "description": "PG-nummer"},
+            "iban": {"type": ["string", "null"]},
+            "autogiro": {"type": "boolean",
+                         "description": "true om fakturan anger autogiro / e-faktura-autobetalning"},
+            "notes": {"type": ["string", "null"],
+                      "description": "Övrig kort info (t.ex. period, mätarställning)"},
+        },
+        "required": ["name", "amount", "expected_date"],
+    }
+
+
+def _vision_system_prompt() -> str:
+    return (
+        "Du läser svenska fakturor och extraherar strukturerad data. "
+        "Returnera JSON enligt det givna schemat. Viktigt:\n"
+        "- Belopp ska vara totalbeloppet att betala i SEK som ett tal "
+        "(inget 'kr', inga mellanslag, komma → punkt).\n"
+        "- expected_date är förfallodatum (förfallodag), YYYY-MM-DD.\n"
+        "- invoice_date är fakturadatumet.\n"
+        "- OCR-nummer / referens står ofta på betalningsavin eller under 'Avi'.\n"
+        "- Bankgiro anges som '123-4567' eller 'BG 123-4567'.\n"
+        "- autogiro=true om fakturan anger att den betalas via autogiro "
+        "eller att man inte behöver betala manuellt.\n"
+        "- Om ett fält inte syns, returnera null för det fältet."
+    )
+
+
+def _build_upcoming_from_parsed(
+    parsed: dict,
+    *,
+    kind: str,
+    source: str,
+    source_image_path: str | None = None,
+) -> UpcomingTransaction:
+    def _parse_date_opt(s: str | None) -> date | None:
+        if not s:
+            return None
+        try:
+            return date.fromisoformat(s)
+        except (ValueError, TypeError):
+            return None
+
+    return UpcomingTransaction(
         kind=kind,
         name=parsed["name"],
         amount=Decimal(str(parsed["amount"])),
         expected_date=date.fromisoformat(parsed["expected_date"]),
+        invoice_number=parsed.get("invoice_number"),
+        invoice_date=_parse_date_opt(parsed.get("invoice_date")),
+        ocr_reference=parsed.get("ocr_reference"),
+        bankgiro=parsed.get("bankgiro"),
+        plusgiro=parsed.get("plusgiro"),
+        iban=parsed.get("iban"),
+        autogiro=bool(parsed.get("autogiro", False)),
         notes=parsed.get("notes"),
-        source="vision_ai",
-        source_image_path=str(original_path),
+        source=source,
+        source_image_path=source_image_path,
     )
-    session.add(u)
-    session.flush()
-    return u
 
 
 @router.get("/forecast")
