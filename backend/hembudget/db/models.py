@@ -169,6 +169,45 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class Loan(Base):
+    __tablename__ = "loans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    lender: Mapped[str] = mapped_column(String(80), nullable=False)  # SBAB, SEB, Länsförsäkringar…
+    loan_number: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+
+    principal_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    interest_rate: Mapped[float] = mapped_column(nullable=False)         # nominell, t.ex. 0.042
+    binding_type: Mapped[str] = mapped_column(String(40), default="rörlig")  # rörlig, 3mån, 1år, 3år, 5år
+    binding_end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    amortization_monthly: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    property_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+
+    match_pattern: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class LoanPayment(Base):
+    """Koppling transaktion → lån, klassificerad som ränta eller amortering."""
+    __tablename__ = "loan_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    loan_id: Mapped[int] = mapped_column(ForeignKey("loans.id"), nullable=False, index=True)
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id"), nullable=False, unique=True
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # alltid positivt
+    payment_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "interest" | "amortization"
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class TaxEvent(Base):
     __tablename__ = "tax_events"
 

@@ -51,6 +51,9 @@ def run_migrations(engine: Engine) -> list[str]:
         )
         applied.append("accounts.pays_credit_account_id")
 
+    # New tables (loans, loan_payments) are created by Base.metadata.create_all
+    # in auth routes; nothing to ALTER here.
+
     if applied:
         log.info("Schema migrations applied: %s", ", ".join(applied))
     return applied

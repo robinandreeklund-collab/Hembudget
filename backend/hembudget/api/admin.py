@@ -14,6 +14,8 @@ from ..db.models import (
     ChatMessage,
     Goal,
     Import,
+    Loan,
+    LoanPayment,
     Rule,
     Scenario,
     Subscription,
@@ -49,6 +51,8 @@ def stats(session: Session = Depends(db)) -> dict:
         "chat_messages": session.query(ChatMessage).count(),
         "tax_events": session.query(TaxEvent).count(),
         "goals": session.query(Goal).count(),
+        "loans": session.query(Loan).count(),
+        "loan_payments": session.query(LoanPayment).count(),
     }
 
 
@@ -84,6 +88,8 @@ def reset(payload: ResetIn, session: Session = Depends(db)) -> dict:
     for model in (
         ChatMessage,
         TaxEvent,
+        LoanPayment,
+        Loan,
         Subscription,
         Transaction,
         Import,

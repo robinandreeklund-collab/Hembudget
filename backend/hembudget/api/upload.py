@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..categorize.engine import CategorizationEngine
 from ..db.models import Account, Import, Transaction
 from ..llm.client import LMStudioClient
+from ..loans.matcher import LoanMatcher
 from ..parsers import detect_parser, parser_for_bank
 from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
@@ -97,6 +98,9 @@ async def import_csv(
     # Catches own-account transfers (lönekonto → hushållskonto) that only
     # become visible once both sides are imported.
     internal = detector.detect_internal_transfers()
+
+    # Link matching expenses to registered loans (bolåneränta / amortering)
+    loan_result = LoanMatcher(session).match_and_classify(new_transactions)
     session.flush()
 
     return {
@@ -113,4 +117,6 @@ async def import_csv(
         "transfers_paired": transfer_result.paired,
         "internal_pairs": internal.pairs,
         "internal_ambiguous": internal.ambiguous,
+        "loan_payments_linked": loan_result.linked,
+        "loan_payments_unclassified": loan_result.unclassified,
     }

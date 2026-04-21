@@ -211,16 +211,49 @@ def test_internal_transfer_no_match_amount_off(session):
     assert out.is_transfer is False
 
 
+def test_internal_transfer_pairs_generic_marked(session):
+    """Regression: a row that the generic-pattern pass flagged as transfer
+    (e.g. 'Överföring 3435 20 01910' on Nordea) must still be pairable with
+    its matching destination in detect_internal_transfers()."""
+    lon = _acc(session, "Lönekonto", "nordea", "checking")
+    gem = _acc(session, "Gemensamt", "nordea", "checking")
+
+    src = _tx(session, lon.id, date(2026, 3, 25), -10000, "Överföring 3435 20 01910")
+    dst = _tx(session, gem.id, date(2026, 3, 25), 10000, "Insättning")
+
+    # First pass: generic pattern flags src as transfer but without a pair
+    r1 = TransferDetector(session).detect_and_link([src, dst])
+    assert src.is_transfer is True
+    assert src.transfer_pair_id is None   # unpaired
+    assert dst.is_transfer is False        # not matched by generic pattern
+
+    # Second pass: internal matching should now pair them
+    r2 = TransferDetector(session).detect_internal_transfers()
+    assert r2.pairs == 1
+    assert src.transfer_pair_id == dst.id
+    assert dst.is_transfer is True
+    assert dst.transfer_pair_id == src.id
+
+
 def test_internal_transfer_skips_already_paired(session):
     a = _acc(session, "A", "nordea", "checking")
     b = _acc(session, "B", "nordea", "savings")
+    c = _acc(session, "C", "nordea", "savings")
 
-    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Tidigare markerad", is_transfer=True)
-    inn = _tx(session, b.id, date(2026, 3, 25), 5000, "Insättning")
+    # Redan paret paired — ska inte röras
+    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Överföring", is_transfer=True)
+    done = _tx(session, b.id, date(2026, 3, 25), 5000, "Redan länkad", is_transfer=True)
+    out.transfer_pair_id = done.id
+    done.transfer_pair_id = out.id
+    session.flush()
+
+    # En kandidat på ett tredje konto — ska INTE få paras med den redan-länkade
+    other = _tx(session, c.id, date(2026, 3, 25), 5000, "Annan")
 
     r = TransferDetector(session).detect_internal_transfers()
-    assert r.pairs == 0  # ignorerar redan-markerade
-    assert inn.is_transfer is False
+    assert r.pairs == 0
+    assert other.is_transfer is False
+    assert out.transfer_pair_id == done.id   # oförändrat
 
 
 def test_generic_transfer_pattern_marks_but_doesnt_pair(session):

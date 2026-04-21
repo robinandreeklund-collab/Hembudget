@@ -175,11 +175,14 @@ class TransferDetector:
         if len(account_ids) < 2:
             return InternalScanResult(0, 0, [])
 
+        # Include rows already flagged as transfer but not yet paired — that
+        # happens when the generic-pattern pass marks an "Överföring"-row
+        # without knowing the destination, or when a credit-card payment was
+        # flagged before the matching repayment was imported.
         unpaired = (
             self.session.query(Transaction)
             .filter(
                 Transaction.account_id.in_(account_ids),
-                Transaction.is_transfer.is_(False),
                 Transaction.transfer_pair_id.is_(None),
             )
             .order_by(Transaction.date.asc(), Transaction.id.asc())
