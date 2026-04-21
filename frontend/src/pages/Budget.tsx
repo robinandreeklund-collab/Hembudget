@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Category, MonthSummary } from "@/types/models";
@@ -27,17 +28,56 @@ export default function Budget() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["budget", month] }),
   });
 
+  const autoMut = useMutation({
+    mutationFn: (opts: { overwrite: boolean }) =>
+      api<{ updated: number; budgets: unknown[] }>(
+        `/budget/auto?month=${month}&lookback_months=6&overwrite=${opts.overwrite}`,
+        { method: "POST" },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budget", month] }),
+  });
+
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-semibold">Budget</h1>
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="border rounded px-2 py-1"
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => autoMut.mutate({ overwrite: false })}
+            disabled={autoMut.isPending}
+            className="inline-flex items-center gap-1.5 text-sm bg-brand-50 text-brand-700 border border-brand-200 rounded-lg px-3 py-1.5 hover:bg-brand-100 disabled:opacity-50"
+            title="Fyll i tomma budgetrader från medianen av de senaste 6 månaderna"
+          >
+            <Sparkles className="w-4 h-4" />
+            {autoMut.isPending ? "Räknar…" : "Auto-fyll budget"}
+          </button>
+          <button
+            onClick={() => {
+              if (confirm("Ersätter ALLA budgetrader för denna månad med historiskt snitt. Fortsätta?")) {
+                autoMut.mutate({ overwrite: true });
+              }
+            }}
+            disabled={autoMut.isPending}
+            className="text-xs text-slate-500 hover:text-slate-700"
+            title="Ersätt även befintliga manuella värden"
+          >
+            (ersätt allt)
+          </button>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="border rounded px-2 py-1"
+          />
+        </div>
       </div>
+
+      {autoMut.data && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm text-emerald-800">
+          Uppdaterade {autoMut.data.updated} budgetrader från historiskt
+          snitt.
+        </div>
+      )}
 
       <Card title={`Budget vs utfall — ${month}`}>
         <table className="w-full text-sm">
