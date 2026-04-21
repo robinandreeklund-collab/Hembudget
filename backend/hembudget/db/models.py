@@ -188,6 +188,14 @@ class Loan(Base):
     loan_number: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
     principal_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # "Aktuellt lånebelopp" när lånet registrerades (från bankens vy via vision).
+    # Om satt används detta som bas i outstanding_balance i stället för
+    # principal_amount — så gamla amorteringar före vi började tracka inte
+    # behöver matchas för att saldot ska stämma. Nya amorteringar drar detta
+    # belopp på vanligt sätt.
+    current_balance_at_creation: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     interest_rate: Mapped[float] = mapped_column(nullable=False)         # nominell, t.ex. 0.042

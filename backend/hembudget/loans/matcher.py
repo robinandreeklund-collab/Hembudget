@@ -240,18 +240,38 @@ class LoanMatcher:
         return entries
 
     def outstanding_balance(self, loan: Loan) -> Decimal:
-        """Current = principal − summa amorteringar."""
-        rows = (
-            self.session.query(LoanPayment)
-            .filter(
-                LoanPayment.loan_id == loan.id,
-                LoanPayment.payment_type == "amortization",
-                LoanPayment.date >= loan.start_date,
+        """Aktuellt lånesaldo.
+
+        Om current_balance_at_creation är satt (från bankens egna siffra via
+        vision) används det som utgångspunkt och endast amorteringar EFTER
+        det datumet dras av. Annars fallback till principal − alla
+        matchade amorteringar (bakåtkompatibelt).
+        """
+        if loan.current_balance_at_creation is not None:
+            base = loan.current_balance_at_creation
+            cutoff = loan.created_at.date() if loan.created_at else loan.start_date
+            rows = (
+                self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date > cutoff,
+                )
+                .all()
             )
-            .all()
-        )
+        else:
+            base = loan.principal_amount
+            rows = (
+                self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date >= loan.start_date,
+                )
+                .all()
+            )
         amortized = sum((p.amount for p in rows), Decimal("0"))
-        return (loan.principal_amount - amortized).quantize(Decimal("0.01"))
+        return (base - amortized).quantize(Decimal("0.01"))
 
     def total_interest_paid(self, loan: Loan) -> Decimal:
         rows = (

@@ -438,26 +438,60 @@ def _loan_system_prompt() -> str:
     )
 
 
-def _derive_interest_rate(
-    schedule: list[dict], current_balance: float | None
-) -> float | None:
-    """När räntan inte står ut: beräkna från snitt-ränta per månad.
+def _split_schedule_row(
+    total: float | None,
+    amort_explicit: float | None,
+    prev_remaining: float | None,
+    this_remaining: float | None,
+) -> tuple[float, float]:
+    """Dela upp en schemarad i (amortering, ränta).
 
-    Räntedelen per rad = total_amount − amortization (om amort>0)
-    Om amort = 0: hela total_amount är ränta.
-    Årsränta = 12 × snitt(ränta) / återstående saldo.
+    Prio 1: Om amort_explicit anges (transaktionsvyn i Nordea), lita på den.
+    Prio 2: Om remaining_balance_after finns för både denna och föregående
+    rad, derivera: amortering = prev − this, ränta = total − amortering.
+    Prio 3: Annars, allt är ränta (0 amortering).
+
+    Alla NaN/None hanteras som 0.
+    """
+    t = float(total or 0)
+    if amort_explicit is not None:
+        ae = float(amort_explicit)
+        if ae > 0:
+            return ae, max(t - ae, 0.0)
+    if (
+        prev_remaining is not None
+        and this_remaining is not None
+        and prev_remaining > this_remaining
+    ):
+        amort = float(prev_remaining) - float(this_remaining)
+        return amort, max(t - amort, 0.0)
+    return 0.0, t
+
+
+def _derive_interest_rate(
+    schedule: list[dict], current_balance: float | None,
+) -> float | None:
+    """Årsränta = 12 × snitt(ränta per månad) / återstående saldo.
+
+    Räntedelen per rad härleds via _split_schedule_row — antingen explicit
+    amort, delta mot remaining_balance, eller hela beloppet.
     """
     if not schedule or not current_balance or current_balance <= 0:
         return None
+
+    prev_remaining: float | None = current_balance
     interest_amounts: list[float] = []
     for row in schedule:
         total = row.get("total_amount")
-        amort = row.get("amortization_amount") or 0
-        if total is None:
-            continue
-        interest = max(float(total) - float(amort), 0.0)
+        amort_exp = row.get("amortization_amount")
+        this_remaining = row.get("remaining_balance_after")
+        _, interest = _split_schedule_row(
+            total, amort_exp, prev_remaining, this_remaining
+        )
         if interest > 0:
             interest_amounts.append(interest)
+        if this_remaining is not None:
+            prev_remaining = float(this_remaining)
     if not interest_amounts:
         return None
     avg = sum(interest_amounts) / len(interest_amounts)
@@ -592,6 +626,11 @@ async def parse_loan_from_images(
         lender=parsed["lender"],
         loan_number=loan_number,
         principal_amount=Decimal(str(principal)),
+        # "Aktuellt lånebelopp" från banken — används som utgångspunkt för
+        # saldot så vi slipper materialisera alla gamla amorteringar
+        current_balance_at_creation=(
+            Decimal(str(current_balance)) if current_balance else None
+        ),
         start_date=start_date_val,
         interest_rate=float(interest_rate),
         binding_type=parsed.get("binding_type") or "rörlig",
@@ -617,49 +656,65 @@ async def parse_loan_from_images(
                 loan.notes = (prefix + f"\nÅterbetalningskonto: {acc.name}").strip()
                 break
 
-    def _add_schedule_row(due_date_str: str, total_raw, amort_raw) -> None:
+    def _add_schedule_row(
+        due_date_str: str,
+        total_raw,
+        amort_raw,
+        prev_remaining: float | None,
+        this_remaining: float | None,
+    ) -> float | None:
+        """Lägg till en schedule-rad. Returnerar this_remaining så
+        anropande loop kan använda det som prev för nästa rad.
+
+        Amortering deriveras från delta mellan remaining_balance_after om
+        inget explicit amorteringsvärde finns (Nordeas betalningsplan-vy
+        visar bara total + remaining). Täcker bank-UI:er som bara visar
+        total + remaining per rad."""
         try:
             due = date.fromisoformat(due_date_str)
         except (TypeError, ValueError):
-            return
-        total = Decimal(str(total_raw or 0))
-        if total <= 0:
-            return
-        amort = Decimal(str(amort_raw or 0))
-        if amort > 0:
+            return this_remaining
+        amort_f, interest_f = _split_schedule_row(
+            total_raw, amort_raw, prev_remaining, this_remaining
+        )
+        if amort_f > 0:
             session.add(LoanScheduleEntry(
                 loan_id=loan.id, due_date=due,
-                amount=amort, payment_type="amortization",
+                amount=Decimal(str(round(amort_f, 2))),
+                payment_type="amortization",
             ))
-            interest_part = max(total - amort, Decimal("0"))
-            if interest_part > 0:
-                session.add(LoanScheduleEntry(
-                    loan_id=loan.id, due_date=due,
-                    amount=interest_part, payment_type="interest",
-                ))
-        else:
-            # Hela beloppet är ränta
+        if interest_f > 0:
             session.add(LoanScheduleEntry(
                 loan_id=loan.id, due_date=due,
-                amount=total, payment_type="interest",
+                amount=Decimal(str(round(interest_f, 2))),
+                payment_type="interest",
             ))
+        return this_remaining
 
-    # Kommande betalningar
+    # Kommande betalningar — remaining_balance_after deltar ger amortering
+    prev_remaining: float | None = (
+        float(current_balance) if current_balance else None
+    )
     for row in schedule_raw:
-        _add_schedule_row(
+        this_remaining = row.get("remaining_balance_after")
+        prev_remaining = _add_schedule_row(
             row.get("due_date"),
             row.get("total_amount"),
             row.get("amortization_amount"),
+            prev_remaining,
+            float(this_remaining) if this_remaining is not None else None,
         )
 
-    # Historiska betalningar från Transaktioner-fliken — skapas som schema-
-    # rader med bakåtdatum så schedule-matchern kan para dem mot redan
-    # importerade CSV-transaktioner.
+    # Historiska betalningar från Transaktioner-fliken. Där brukar
+    # amortization_amount visas explicit — lita på den. Ingen delta-logik
+    # behövs (dessa rader har ofta inget remaining_balance angivet).
     for row in parsed.get("historical_transactions") or []:
         _add_schedule_row(
             row.get("date"),
             row.get("total_amount"),
             row.get("amortization_amount"),
+            None,
+            None,
         )
 
     session.flush()

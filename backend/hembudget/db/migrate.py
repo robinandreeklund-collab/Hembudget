@@ -87,6 +87,17 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "upcoming_transactions", col_sql)
                 applied.append(f"upcoming_transactions.{col_name}")
 
+    # loans.current_balance_at_creation — saldo när lånet registrerades
+    if _table_exists(engine, "loans"):
+        loan_cols = _columns(engine, "loans")
+        if "current_balance_at_creation" not in loan_cols:
+            _add_column(
+                engine,
+                "loans",
+                "current_balance_at_creation NUMERIC(14, 2)",
+            )
+            applied.append("loans.current_balance_at_creation")
+
     # Fakturarader på planerade fakturor (el/vatten/bredband etc.)
     if not _table_exists(engine, "upcoming_transaction_lines"):
         with engine.begin() as conn:
