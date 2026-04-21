@@ -90,7 +90,13 @@ async def import_csv(
     session.flush()
 
     # Detect transfers (credit-card payments etc.) to avoid double-counting
-    transfer_result = TransferDetector(session).detect_and_link(new_transactions)
+    detector = TransferDetector(session)
+    transfer_result = detector.detect_and_link(new_transactions)
+
+    # Retroactive pass over all still-unpaired internal transactions.
+    # Catches own-account transfers (lönekonto → hushållskonto) that only
+    # become visible once both sides are imported.
+    internal = detector.detect_internal_transfers()
     session.flush()
 
     return {
@@ -105,4 +111,6 @@ async def import_csv(
         ),
         "transfers_marked": transfer_result.marked,
         "transfers_paired": transfer_result.paired,
+        "internal_pairs": internal.pairs,
+        "internal_ambiguous": internal.ambiguous,
     }

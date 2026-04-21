@@ -21,6 +21,7 @@ from ..db.models import (
     Transaction,
 )
 from ..security.audit import log_action
+from ..transfers.detector import TransferDetector
 from .deps import db, require_auth
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_auth)])
@@ -48,6 +49,28 @@ def stats(session: Session = Depends(db)) -> dict:
         "chat_messages": session.query(ChatMessage).count(),
         "tax_events": session.query(TaxEvent).count(),
         "goals": session.query(Goal).count(),
+    }
+
+
+@router.post("/scan-transfers")
+def scan_transfers(
+    date_tolerance_days: int = 3,
+    amount_tolerance: float = 0.005,
+    session: Session = Depends(db),
+) -> dict:
+    """Retroaktiv scan av alla okategoriserade transfers mellan egna konton."""
+    result = TransferDetector(session).detect_internal_transfers(
+        date_tolerance_days=date_tolerance_days,
+        amount_tolerance=amount_tolerance,
+    )
+    log_action(
+        session, "scan-transfers",
+        meta={"pairs": result.pairs, "ambiguous": result.ambiguous},
+    )
+    return {
+        "pairs": result.pairs,
+        "ambiguous": result.ambiguous,
+        "details": result.details,
     }
 
 

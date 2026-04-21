@@ -139,6 +139,90 @@ def test_manual_link_and_unlink(session):
     assert inn.is_transfer is False and inn.transfer_pair_id is None
 
 
+def test_internal_transfer_same_day_pairs(session):
+    lon = _acc(session, "Lönekonto", "nordea", "checking")
+    gem = _acc(session, "Gemensamt", "nordea", "checking")
+
+    out = _tx(session, lon.id, date(2026, 3, 25), -15000, "Till gemensamt")
+    inn = _tx(session, gem.id, date(2026, 3, 25), 15000, "Från Robin")
+
+    r = TransferDetector(session).detect_internal_transfers()
+
+    assert r.pairs == 1
+    assert r.ambiguous == 0
+    assert out.is_transfer and inn.is_transfer
+    assert out.transfer_pair_id == inn.id
+    assert inn.transfer_pair_id == out.id
+    assert out.category_id is None
+
+
+def test_internal_transfer_date_tolerance(session):
+    a = _acc(session, "A", "nordea", "checking")
+    b = _acc(session, "B", "nordea", "savings")
+
+    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Överföring")
+    # 2 dagars fördröjning — ska fortfarande paras
+    inn = _tx(session, b.id, date(2026, 3, 27), 5000, "Insättning")
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 1
+
+
+def test_internal_transfer_skips_ambiguous(session):
+    a = _acc(session, "A", "nordea", "checking")
+    b = _acc(session, "B", "nordea", "savings")
+    c = _acc(session, "C", "nordea", "savings")
+
+    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Överföring")
+    # Två möjliga destinationer, ingen på exakt samma dag → tvetydigt
+    inn1 = _tx(session, b.id, date(2026, 3, 26), 5000, "Insättning")
+    inn2 = _tx(session, c.id, date(2026, 3, 26), 5000, "Insättning")
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 0
+    assert r.ambiguous == 1
+    assert out.is_transfer is False
+
+
+def test_internal_transfer_same_day_disambiguates(session):
+    a = _acc(session, "A", "nordea", "checking")
+    b = _acc(session, "B", "nordea", "savings")
+    c = _acc(session, "C", "nordea", "savings")
+
+    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Överföring")
+    inn1 = _tx(session, b.id, date(2026, 3, 25), 5000, "Samma dag — denna")  # vinner
+    inn2 = _tx(session, c.id, date(2026, 3, 27), 5000, "2 dagar bort")
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 1
+    assert out.transfer_pair_id == inn1.id
+    assert inn2.is_transfer is False
+
+
+def test_internal_transfer_no_match_amount_off(session):
+    a = _acc(session, "A", "nordea", "checking")
+    b = _acc(session, "B", "nordea", "savings")
+
+    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Överföring")
+    inn = _tx(session, b.id, date(2026, 3, 25), 4500, "Annat belopp")  # 10 % off
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 0
+    assert out.is_transfer is False
+
+
+def test_internal_transfer_skips_already_paired(session):
+    a = _acc(session, "A", "nordea", "checking")
+    b = _acc(session, "B", "nordea", "savings")
+
+    out = _tx(session, a.id, date(2026, 3, 25), -5000, "Tidigare markerad", is_transfer=True)
+    inn = _tx(session, b.id, date(2026, 3, 25), 5000, "Insättning")
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 0  # ignorerar redan-markerade
+    assert inn.is_transfer is False
+
+
 def test_generic_transfer_pattern_marks_but_doesnt_pair(session):
     nordea = _acc(session, "Nordea", "nordea", "checking")
     savings = _acc(session, "Sparkonto", "nordea", "savings")

@@ -54,7 +54,14 @@ GENERIC_TRANSFER_PATTERNS: list[str] = [
 @dataclass
 class TransferLinkResult:
     marked: int              # antal transaktioner markerade som transfer
-    paired: int              # antal som ocksÃ¥ parades ihop med sin motpart
+    paired: int              # antal som också parades ihop med sin motpart
+
+
+@dataclass
+class InternalScanResult:
+    pairs: int                         # antal ihoparade par
+    ambiguous: int                     # antal som hade flera matchningar
+    details: list[tuple[int, int]]     # (src_id, dst_id) par
 
 
 class TransferDetector:
@@ -152,6 +159,81 @@ class TransferDetector:
             )
             .first()
         )
+
+    def detect_internal_transfers(
+        self,
+        date_tolerance_days: int = 3,
+        amount_tolerance: float = 0.005,   # 0.5 %
+    ) -> InternalScanResult:
+        """Para ihop överföringar mellan egna konton baserat på datum + belopp.
+
+        Conservative: parar bara om exakt en kandidat matchar, eller en
+        kandidat ligger på samma dag medan övriga ligger utanför. Detta
+        minimerar falska positiva som kan gömma riktiga utgifter.
+        """
+        account_ids = [a.id for a in self.session.query(Account).all()]
+        if len(account_ids) < 2:
+            return InternalScanResult(0, 0, [])
+
+        unpaired = (
+            self.session.query(Transaction)
+            .filter(
+                Transaction.account_id.in_(account_ids),
+                Transaction.is_transfer.is_(False),
+                Transaction.transfer_pair_id.is_(None),
+            )
+            .order_by(Transaction.date.asc(), Transaction.id.asc())
+            .all()
+        )
+
+        claimed: set[int] = set()
+        pairs: list[tuple[int, int]] = []
+        ambiguous = 0
+        tol = Decimal(str(amount_tolerance))
+
+        for src in unpaired:
+            if src.id in claimed or src.amount >= 0:
+                continue
+            abs_amt = -src.amount
+            low = abs_amt * (Decimal("1") - tol)
+            high = abs_amt * (Decimal("1") + tol)
+
+            candidates = [
+                t
+                for t in unpaired
+                if t.id not in claimed
+                and t.id != src.id
+                and t.account_id != src.account_id
+                and t.amount > 0
+                and low <= t.amount <= high
+                and abs((t.date - src.date).days) <= date_tolerance_days
+            ]
+
+            dst: Transaction | None = None
+            if len(candidates) == 1:
+                dst = candidates[0]
+            elif len(candidates) > 1:
+                # Om exakt en ligger samma dag, välj den
+                same_day = [c for c in candidates if c.date == src.date]
+                if len(same_day) == 1:
+                    dst = same_day[0]
+                else:
+                    ambiguous += 1
+
+            if dst is not None:
+                src.is_transfer = True
+                src.transfer_pair_id = dst.id
+                src.category_id = None
+                dst.is_transfer = True
+                dst.transfer_pair_id = src.id
+                dst.category_id = None
+                claimed.add(src.id)
+                claimed.add(dst.id)
+                pairs.append((src.id, dst.id))
+
+        if pairs:
+            self.session.flush()
+        return InternalScanResult(pairs=len(pairs), ambiguous=ambiguous, details=pairs)
 
     def link_manual(self, tx_a_id: int, tx_b_id: int) -> None:
         """Manuellt para ihop två transaktioner som en överföring."""
