@@ -644,6 +644,10 @@ interface CCResult {
   invoice_total: number;
   due_date: string;
   payer_account_id: number | null;
+  opening_balance_extracted: number | null;
+  closing_balance_extracted: number | null;
+  opening_balance_set_on_account: number | null;
+  opening_balance_date: string | null;
 }
 
 function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
@@ -760,6 +764,19 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
           </div>
           {result.transfers_marked > 0 && (
             <div>{result.transfers_marked} autogiro-dragningar markerade som överföring.</div>
+          )}
+          {result.opening_balance_extracted !== null && (
+            <div>
+              Ingående saldo {formatSEK(result.opening_balance_extracted)} ·
+              Utgående {formatSEK(result.closing_balance_extracted ?? result.invoice_total)}
+              {result.opening_balance_set_on_account !== null && (
+                <span className="text-emerald-700">
+                  {" "}· Kortkontots saldo auto-satt till{" "}
+                  {formatSEK(result.opening_balance_set_on_account)}{" "}
+                  från {result.opening_balance_date}
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}

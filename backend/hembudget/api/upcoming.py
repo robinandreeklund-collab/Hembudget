@@ -637,6 +637,22 @@ def _cc_invoice_schema() -> dict:
             },
             "statement_period_start": {"type": ["string", "null"]},
             "statement_period_end": {"type": ["string", "null"]},
+            "opening_balance": {
+                "type": ["number", "null"],
+                "description": (
+                    "Ingående saldo / skuld vid periodens början "
+                    "(POSITIV = skuld på kortet). "
+                    "Visas ofta som 'Ingående saldo', 'Saldo föregående period' "
+                    "eller liknande."
+                ),
+            },
+            "closing_balance": {
+                "type": ["number", "null"],
+                "description": (
+                    "Utgående saldo vid periodens slut — samma som 'Att betala' "
+                    "på SEB/Amex-fakturor. POSITIV = skuld."
+                ),
+            },
             "total_amount": {
                 "type": "number",
                 "description": "Totalt belopp att betala",
@@ -685,6 +701,12 @@ def _cc_invoice_system_prompt() -> str:
         "- card_issuer: 'amex' för Amex, 'seb_kort' för SEB Kort/Mastercard.\n"
         "- total_amount = totalt att betala i SEK (komma → punkt, inget 'kr').\n"
         "- due_date = förfallodag (YYYY-MM-DD).\n"
+        "- opening_balance = 'Ingående saldo' / 'Saldo föregående period' / "
+        "  'Utestående skuld' vid periodens början. POSITIV = skuld på kortet. "
+        "  Null om det inte syns.\n"
+        "- closing_balance = 'Utgående saldo' / 'Saldo denna period' / "
+        "  'Att betala'. På de flesta fakturor är det samma som total_amount.\n"
+        "- statement_period_start / end: periodens datum (YYYY-MM-DD).\n"
         "- transactions: returnera ALLA rader som syns, även om det är många.\n"
         "  - KÖP = NEGATIVT belopp (money leaves pocket).\n"
         "  - ÅTERBETALNINGAR / BONUS = POSITIVT belopp.\n"
@@ -805,6 +827,26 @@ async def parse_credit_card_invoice(
         card_name=parsed.get("card_name"),
     )
 
+    # Auto-sätt ingående saldo på kortkontot om det saknas.
+    # "Ingående saldo" på en faktura = skuld vid periodens start.
+    # I vår modell: credit-konton har NEGATIVT saldo när man har skuld
+    # (pengar som ska ut), så invertera tecknet.
+    if cc_account.opening_balance is None and parsed.get("opening_balance") is not None:
+        try:
+            ob = Decimal(str(parsed["opening_balance"]))
+            # På kreditkort är positiv skuld = negativt saldo för oss
+            cc_account.opening_balance = -abs(ob) if ob > 0 else ob
+            # Periodstart som startdatum för saldot
+            period_start = parsed.get("statement_period_start")
+            if period_start:
+                try:
+                    cc_account.opening_balance_date = date.fromisoformat(period_start)
+                except (ValueError, TypeError):
+                    pass
+            session.flush()
+        except (ValueError, TypeError):
+            pass
+
     # Rooten — skapa en "import"-post för audit
     imp = Import(
         filename=saved_paths[0].split("/")[-1] if saved_paths else "cc_invoice",
@@ -922,4 +964,14 @@ async def parse_credit_card_invoice(
         "invoice_total": float(upcoming.amount),
         "due_date": due_date.isoformat(),
         "payer_account_id": payer.id if payer else None,
+        "opening_balance_extracted": parsed.get("opening_balance"),
+        "closing_balance_extracted": parsed.get("closing_balance"),
+        "opening_balance_set_on_account": (
+            float(cc_account.opening_balance)
+            if cc_account.opening_balance is not None else None
+        ),
+        "opening_balance_date": (
+            cc_account.opening_balance_date.isoformat()
+            if cc_account.opening_balance_date else None
+        ),
     }

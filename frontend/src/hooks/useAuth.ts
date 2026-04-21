@@ -4,13 +4,25 @@ import { api, clearToken, getToken, setToken } from "@/api/client";
 export function useAuth() {
   const [token, setTokenState] = useState<string | null>(getToken());
   const [initialized, setInitialized] = useState<boolean | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const s = await api<{ initialized: boolean }>("/status");
+        const s = await api<{ initialized: boolean; demo_mode?: boolean }>(
+          "/status",
+        );
         setInitialized(s.initialized);
+        if (s.demo_mode) {
+          setDemoMode(true);
+          // Sätt en dummy-token så isAuthenticated blir true — backend
+          // ignorerar ändå auth-headern när HEMBUDGET_DEMO_MODE=1
+          if (!getToken()) {
+            setToken("demo");
+            setTokenState("demo");
+          }
+        }
       } catch {
         setInitialized(null);
       } finally {
@@ -48,8 +60,9 @@ export function useAuth() {
 
   return {
     token,
-    isAuthenticated: Boolean(token),
+    isAuthenticated: Boolean(token) || demoMode,
     initialized,
+    demoMode,
     loading,
     login,
     initialize,

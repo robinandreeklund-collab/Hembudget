@@ -23,10 +23,13 @@ def _hash_path() -> Path:
 
 @router.get("/status")
 def status_route() -> dict:
+    import os
+    demo = os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes")
     return {
         "initialized": _hash_path().exists(),
         "db_path": str(settings.db_path),
         "lm_studio": settings.lm_studio_base_url,
+        "demo_mode": demo,
     }
 
 
