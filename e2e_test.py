@@ -192,6 +192,31 @@ def main() -> int:
     for merchant, count in uncat_merchants.most_common(30):
         print(f"  {count:3d}×  {merchant[:100]}")
 
+    # Kvalitetskontroll: gruppera matchade per kategori och visa
+    # exempel så vi kan se om någon regel kategoriserar fel.
+    cats_r = client.get("/categories", headers=h)
+    cats_map = {c["id"]: c["name"] for c in cats_r.json()}
+
+    from collections import defaultdict
+    by_cat: dict[str, list[str]] = defaultdict(list)
+    for t in all_tx:
+        if t["is_transfer"]:
+            continue
+        cat_name = cats_map.get(t["category_id"], "— okategoriserat —")
+        desc = t["normalized_merchant"] or t["raw_description"]
+        amt = float(t["amount"])
+        by_cat[cat_name].append(f"{amt:>+10,.0f}  {desc[:80]}")
+
+    print("\n=== KATEGORISERINGS-KVALITET (exempel per kategori) ===")
+    for cat, rows in sorted(by_cat.items(), key=lambda kv: -len(kv[1])):
+        if cat == "— okategoriserat —":
+            continue
+        # Skriv ut kategori + antal + unika merchants
+        unique = sorted(set(r.split(None, 1)[1] for r in rows))
+        print(f"\n  {cat} ({len(rows)} rader, {len(unique)} unika merchants)")
+        for ex in unique[:10]:
+            print(f"    {ex[:100]}")
+
     if report["errors"]:
         print("\nFEL:")
         for e in report["errors"]:

@@ -46,6 +46,7 @@ DEFAULT_CATEGORIES: list[tuple[str, str | None, str | None]] = [
     ("Semester", "Resor", None),
     ("Prenumerationer", None, "repeat"),
     ("Mobil", "Prenumerationer", None),
+    ("Tobak & Snus", None, "cigarette"),
     ("Hemelektronik", None, None),
     ("Hem & Hushåll", None, "package"),
     ("Presenter", None, "gift"),
@@ -155,14 +156,17 @@ SEED_RULES: list[tuple[str, str, int]] = [
     ("if skadeförs", "Bilförsäkring", 100),
     ("trygg-hansa", "Hemförsäkring", 90),
     ("moderna försäkring", "Hemförsäkring", 90),
-    # Swish — specific phrasings so incoming ≠ outgoing
-    ("swish inbetalning", "Swish in", 110),
-    ("swish betalning", "Swish ut", 110),
+    # Swish — prio 55 gör att specifika merchant-regler (80+) som
+    # "skatteverket", "telinet", "inet" vinner, men generiska regler
+    # under 55 inte får drawback av "wish" i "Swish".
+    ("swish inbetalning", "Swish in", 55),
+    ("swish betalning", "Swish ut", 55),
     # Lön
     ("lön", "Lön", 80),
     ("salary", "Lön", 80),
-    # ISK / Invest
-    ("isk", "ISK-insättning", 80),
+    # ISK / Invest — ordgräns så "frisktandv" INTE matchar "isk"
+    (r"\bisk\b", "ISK-insättning", 80, {"regex": True}),
+    ("månadssparande", "Sparande/Investering", 90),
     ("avanza", "Fondköp", 70),
     ("nordnet", "Fondköp", 70),
     # Kläder
@@ -254,7 +258,7 @@ SEED_RULES: list[tuple[str, str, int]] = [
     ("butik", "Hem & Hushåll", 50),     # svag default
     ("temu.com", "Hem & Hushåll", 100),
     ("temu", "Hem & Hushåll", 90),
-    ("wish ", "Hem & Hushåll", 90),
+    ("wish.com", "Hem & Hushåll", 100),       # UNDVIK bara "wish " — matchar "sWISH"!
     ("ebay", "Hem & Hushåll", 80),
 
     # Nöje & restaurang kedjor
@@ -289,7 +293,13 @@ SEED_RULES: list[tuple[str, str, int]] = [
     ("cursor", "Streaming", 100),
     ("perplexity", "Streaming", 100),
     ("anthropic", "Streaming", 100),
-    ("snusbolag", "Övrigt", 90),
+    # Tobak & snus (inkl. TF Bank — finansierar snusbolaget.com/svenska snuskedjor)
+    ("snusbolag", "Tobak & Snus", 100),
+    ("snuslagret", "Tobak & Snus", 100),
+    ("gotlands-snus", "Tobak & Snus", 100),
+    ("snusonline", "Tobak & Snus", 100),
+    ("tf bank", "Tobak & Snus", 90),
+    ("tfbank", "Tobak & Snus", 90),
     ("programvar", "Hemelektronik", 70),
     ("domän", "Hemelektronik", 60),
 
@@ -322,4 +332,23 @@ SEED_RULES: list[tuple[str, str, int]] = [
 
     # Löne-patterns — användaren har arbetsgivaren "Inkab"
     ("inkab", "Lön", 90),
+
+    # Specifika merchants som ofta kommer via Swish
+    ("inet ab", "Hemelektronik", 100),
+    ("inet.se", "Hemelektronik", 100),
+    (" inet ", "Hemelektronik", 90),
+    ("optihealth", "Träning/Gym", 100),
+    ("frisktandv", "Sjukvård", 100),
+    ("frisktandvård", "Sjukvård", 100),
+    ("apoteket", "Apotek", 100),
+    ("lekia", "Leksaker", 100),
+
+    # Frisör, skönhet
+    ("frisör", "Övrigt", 80),
+    ("salong", "Övrigt", 70),
+
+    # Fackförbund / pensionssparande — positivt att separera från ISK
+    ("unionen", "Avgifter & Ränta", 90),
+    ("saco", "Avgifter & Ränta", 90),
+    ("tco ", "Avgifter & Ränta", 90),
 ]

@@ -89,14 +89,19 @@ def seed_categories_and_rules(session: Session) -> None:
     # Seed rules
     if session.query(Rule).count() > 0:
         return
-    for pattern, cat_name, priority in SEED_RULES:
+    for entry in SEED_RULES:
+        # Entry kan vara (pattern, cat, prio) eller (pattern, cat, prio, {"regex": True})
+        pattern, cat_name, priority = entry[0], entry[1], entry[2]
+        is_regex = False
+        if len(entry) > 3 and isinstance(entry[3], dict):
+            is_regex = bool(entry[3].get("regex", False))
         cat = existing.get(cat_name)
         if not cat:
             continue
         session.add(
             Rule(
                 pattern=pattern,
-                is_regex=False,
+                is_regex=is_regex,
                 category_id=cat.id,
                 priority=priority,
                 source="seed",
