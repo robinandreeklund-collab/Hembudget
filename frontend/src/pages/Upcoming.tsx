@@ -7,7 +7,15 @@ import {
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
-import type { Account } from "@/types/models";
+import type { Account, Category } from "@/types/models";
+
+interface UpcomingLine {
+  id: number;
+  description: string;
+  amount: number;
+  category_id: number | null;
+  sort_order: number;
+}
 
 interface UpcomingItem {
   id: number;
@@ -31,6 +39,7 @@ interface UpcomingItem {
   debit_date: string | null;
   autogiro: boolean;
   matched_transaction_id: number | null;
+  lines: UpcomingLine[];
 }
 
 interface Forecast {
@@ -89,6 +98,18 @@ export default function Upcoming() {
   const accountsQ = useQuery({
     queryKey: ["accounts"],
     queryFn: () => api<Account[]>("/accounts"),
+  });
+  const categoriesQ = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api<Category[]>("/categories"),
+  });
+  const setLinesMut = useMutation({
+    mutationFn: (p: { id: number; lines: Array<Omit<UpcomingLine, "id">> }) =>
+      api<UpcomingLine[]>(`/upcoming/${p.id}/lines`, {
+        method: "PUT",
+        body: JSON.stringify(p.lines),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["upcoming"] }),
   });
   const updateMut = useMutation({
     mutationFn: (p: { id: number; data: Partial<UpcomingItem> }) =>
@@ -364,16 +385,20 @@ export default function Upcoming() {
         <ItemList
           items={bills}
           accounts={accountsQ.data ?? []}
+          categories={categoriesQ.data ?? []}
           onDelete={(id) => deleteMut.mutate(id)}
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
         />
       </Card>
       <Card title={`Kommande löner (${incomes.length})`}>
         <ItemList
           items={incomes}
           accounts={accountsQ.data ?? []}
+          categories={categoriesQ.data ?? []}
           onDelete={(id) => deleteMut.mutate(id)}
           onUpdate={(id, data) => updateMut.mutate({ id, data })}
+          onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
         />
       </Card>
     </div>
@@ -383,13 +408,17 @@ export default function Upcoming() {
 function ItemList({
   items,
   accounts,
+  categories,
   onDelete,
   onUpdate,
+  onSetLines,
 }: {
   items: UpcomingItem[];
   accounts: Account[];
+  categories: Category[];
   onDelete: (id: number) => void;
   onUpdate: (id: number, data: Partial<UpcomingItem>) => void;
+  onSetLines: (id: number, lines: Array<Omit<UpcomingLine, "id">>) => void;
 }) {
   if (items.length === 0) {
     return <div className="text-sm text-slate-500">Inget registrerat ännu.</div>;
@@ -401,8 +430,10 @@ function ItemList({
           key={i.id}
           item={i}
           accounts={accounts}
+          categories={categories}
           onDelete={onDelete}
           onUpdate={onUpdate}
+          onSetLines={onSetLines}
         />
       ))}
     </div>
@@ -412,13 +443,17 @@ function ItemList({
 function UpcomingRow({
   item: i,
   accounts,
+  categories,
   onDelete,
   onUpdate,
+  onSetLines,
 }: {
   item: UpcomingItem;
   accounts: Account[];
+  categories: Category[];
   onDelete: (id: number) => void;
   onUpdate: (id: number, data: Partial<UpcomingItem>) => void;
+  onSetLines: (id: number, lines: Array<Omit<UpcomingLine, "id">>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const debitAccount = accounts.find((a) => a.id === i.debit_account_id);
@@ -567,6 +602,147 @@ function UpcomingRow({
               )}
             </div>
           )}
+
+          <LinesEditor
+            upcomingId={i.id}
+            totalAmount={i.amount}
+            initialLines={i.lines ?? []}
+            categories={categories}
+            onSave={onSetLines}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinesEditor({
+  upcomingId,
+  totalAmount,
+  initialLines,
+  categories,
+  onSave,
+}: {
+  upcomingId: number;
+  totalAmount: number;
+  initialLines: UpcomingLine[];
+  categories: Category[];
+  onSave: (id: number, lines: Array<Omit<UpcomingLine, "id">>) => void;
+}) {
+  const [open, setOpen] = useState(initialLines.length > 0);
+  const [draft, setDraft] = useState<Array<Omit<UpcomingLine, "id">>>(
+    initialLines.map((l) => ({
+      description: l.description,
+      amount: l.amount,
+      category_id: l.category_id,
+      sort_order: l.sort_order,
+    })),
+  );
+
+  const sum = draft.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+  const diff = Math.round((totalAmount - sum) * 100) / 100;
+  const isValid = Math.abs(diff) <= 1;
+
+  function addRow() {
+    setDraft((d) => [
+      ...d,
+      { description: "", amount: 0, category_id: null, sort_order: d.length },
+    ]);
+  }
+
+  function removeRow(idx: number) {
+    setDraft((d) => d.filter((_, i) => i !== idx));
+  }
+
+  function update(idx: number, patch: Partial<Omit<UpcomingLine, "id">>) {
+    setDraft((d) => d.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  }
+
+  return (
+    <div className="border-t pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs text-slate-600 hover:text-brand-700 inline-flex items-center gap-1"
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        Fakturarader ({draft.length})
+        {draft.length > 0 && (
+          <span className={isValid ? "text-emerald-600" : "text-amber-600"}>
+            · summa {formatSEK(sum)}
+            {!isValid && ` (diff ${formatSEK(diff)})`}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          {draft.length === 0 && (
+            <div className="text-xs text-slate-500">
+              Dela upp fakturan per kategori — t.ex. energifaktura i el, vatten
+              och bredband. Summan ska stämma med fakturasumman (±1 kr).
+            </div>
+          )}
+          {draft.map((line, idx) => (
+            <div key={idx} className="flex gap-1.5 items-center text-xs">
+              <input
+                type="text"
+                placeholder="Beskrivning"
+                value={line.description}
+                onChange={(e) => update(idx, { description: e.target.value })}
+                className="flex-1 border rounded px-2 py-1"
+              />
+              <input
+                type="number"
+                placeholder="Belopp"
+                value={line.amount || ""}
+                onChange={(e) =>
+                  update(idx, { amount: Number(e.target.value) })
+                }
+                className="w-24 border rounded px-2 py-1 text-right"
+              />
+              <select
+                value={line.category_id ?? ""}
+                onChange={(e) =>
+                  update(idx, {
+                    category_id: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                className="border rounded px-2 py-1"
+              >
+                <option value="">Kategori…</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => removeRow(idx)}
+                className="text-rose-500 hover:text-rose-700"
+                title="Ta bort rad"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+          <div className="flex gap-2 items-center">
+            <button
+              type="button"
+              onClick={addRow}
+              className="text-xs text-brand-600 hover:text-brand-700"
+            >
+              + Lägg till rad
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave(upcomingId, draft)}
+              disabled={draft.length === 0}
+              className="text-xs bg-brand-600 text-white px-3 py-1 rounded hover:bg-brand-700 disabled:opacity-50 ml-auto"
+            >
+              Spara rader
+            </button>
+          </div>
         </div>
       )}
     </div>
