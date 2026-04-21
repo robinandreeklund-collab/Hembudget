@@ -50,7 +50,7 @@ def run_migrations(engine: Engine) -> list[str]:
         )
         applied.append("transactions.transfer_pair_id")
 
-    # accounts.pays_credit_account_id
+    # accounts.pays_credit_account_id + account_number
     acc_cols = _columns(engine, "accounts")
     if "pays_credit_account_id" not in acc_cols:
         _add_column(
@@ -59,6 +59,15 @@ def run_migrations(engine: Engine) -> list[str]:
             "pays_credit_account_id INTEGER REFERENCES accounts(id)",
         )
         applied.append("accounts.pays_credit_account_id")
+    if "account_number" not in acc_cols:
+        _add_column(engine, "accounts", "account_number VARCHAR(40)")
+        applied.append("accounts.account_number")
+    if "opening_balance" not in acc_cols:
+        _add_column(engine, "accounts", "opening_balance NUMERIC(14, 2)")
+        applied.append("accounts.opening_balance")
+    if "opening_balance_date" not in acc_cols:
+        _add_column(engine, "accounts", "opening_balance_date DATE")
+        applied.append("accounts.opening_balance_date")
 
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):

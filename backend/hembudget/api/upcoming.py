@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..db.models import Category, Transaction, UpcomingTransaction
+from ..db.models import Account, Category, Transaction, UpcomingTransaction
 from ..llm.client import LMStudioClient, LLMUnavailable
 from .deps import db, llm_client, require_auth
 
@@ -206,7 +206,7 @@ def parse_text(
     except LLMUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
 
-    u = _build_upcoming_from_parsed(parsed, kind=kind, source="ai_text")
+    u = _build_upcoming_from_parsed(parsed, kind=kind, source="ai_text", session=session)
     u.owner = parsed.get("owner")
     session.add(u)
     session.flush()
@@ -286,7 +286,8 @@ async def parse_invoice_image(
         ) from exc
 
     u = _build_upcoming_from_parsed(parsed, kind=kind, source="vision_ai",
-                                    source_image_path=str(original_path))
+                                    source_image_path=str(original_path),
+                                    session=session)
     session.add(u)
     session.flush()
     return u
@@ -300,17 +301,26 @@ def _invoice_schema() -> dict:
             "name": {"type": "string", "description": "Mottagare/betalningsmottagare"},
             "amount": {"type": "number", "description": "Totalbelopp att betala i kr"},
             "expected_date": {"type": "string", "description": "Förfallodatum YYYY-MM-DD"},
+            "debit_date": {"type": ["string", "null"],
+                           "description": "Betalningsdag — när pengarna dras från kontot, YYYY-MM-DD"},
             "invoice_date": {"type": ["string", "null"], "description": "Fakturadatum"},
             "invoice_number": {"type": ["string", "null"]},
             "ocr_reference": {"type": ["string", "null"],
-                              "description": "OCR- eller referensnummer"},
-            "bankgiro": {"type": ["string", "null"], "description": "BG-nummer, t.ex. 123-4567"},
+                              "description": "OCR/referensnummer/meddelande till betalningen"},
+            "bankgiro": {"type": ["string", "null"],
+                         "description": "Bankgiro/mottagarkonto, t.ex. 123-4567"},
             "plusgiro": {"type": ["string", "null"], "description": "PG-nummer"},
             "iban": {"type": ["string", "null"]},
+            "from_account": {"type": ["string", "null"],
+                             "description": "Avsändarkontonummer ('Från konto'), t.ex. '1709 20 72840'"},
+            "payment_type": {"type": ["string", "null"],
+                             "description": "Betalningstyp: Bankgiro, Plusgiro, Swish, IBAN"},
+            "payment_status": {"type": ["string", "null"],
+                               "description": "Signerad, Betald, Väntande"},
             "autogiro": {"type": "boolean",
                          "description": "true om fakturan anger autogiro / e-faktura-autobetalning"},
             "notes": {"type": ["string", "null"],
-                      "description": "Övrig kort info (t.ex. period, mätarställning)"},
+                      "description": "Övrig kort info (t.ex. period, meddelande)"},
         },
         "required": ["name", "amount", "expected_date"],
     }
@@ -318,18 +328,40 @@ def _invoice_schema() -> dict:
 
 def _vision_system_prompt() -> str:
     return (
-        "Du läser svenska fakturor och extraherar strukturerad data. "
-        "Returnera JSON enligt det givna schemat. Viktigt:\n"
-        "- Belopp ska vara totalbeloppet att betala i SEK som ett tal "
-        "(inget 'kr', inga mellanslag, komma → punkt).\n"
-        "- expected_date är förfallodatum (förfallodag), YYYY-MM-DD.\n"
-        "- invoice_date är fakturadatumet.\n"
-        "- OCR-nummer / referens står ofta på betalningsavin eller under 'Avi'.\n"
-        "- Bankgiro anges som '123-4567' eller 'BG 123-4567'.\n"
-        "- autogiro=true om fakturan anger att den betalas via autogiro "
-        "eller att man inte behöver betala manuellt.\n"
-        "- Om ett fält inte syns, returnera null för det fältet."
+        "Du läser svenska fakturor och betalningsbekräftelser och extraherar "
+        "strukturerad data. Returnera JSON enligt det givna schemat. Viktigt:\n"
+        "- Belopp = totalbeloppet att betala i SEK (inget 'kr', komma → punkt).\n"
+        "- expected_date är förfallodatum/betalningsdag YYYY-MM-DD.\n"
+        "- debit_date är 'Betalningsdag' på Nordeas bekräftelser (när pengarna "
+        "dras från kontot). Om ingen skiljelse, samma som expected_date.\n"
+        "- from_account är 'Från konto' — avsändarens kontonummer, t.ex. "
+        "'1709 20 72840'. Håll blanksteg som i källan.\n"
+        "- bankgiro = 'Till konto' om betalningstyp är Bankgiro, t.ex. '104-4882'.\n"
+        "- plusgiro = 'Till konto' om betalningstyp är Plusgiro.\n"
+        "- ocr_reference = Meddelande eller Referens-fältet.\n"
+        "- autogiro=true bara om dokumentet uttryckligen anger autogiro.\n"
+        "- Om ett fält inte syns, returnera null."
     )
+
+
+def _normalize_account_number(num: str | None) -> str | None:
+    """Strippa blanksteg och bindestreck för matchning."""
+    if not num:
+        return None
+    return "".join(c for c in num if c.isdigit())
+
+
+def _resolve_debit_account(session: Session, from_account: str | None) -> int | None:
+    """Slå upp användarens Account via account_number-fältet (normaliserat)."""
+    if not from_account:
+        return None
+    target = _normalize_account_number(from_account)
+    if not target:
+        return None
+    for acc in session.query(Account).filter(Account.account_number.is_not(None)).all():
+        if _normalize_account_number(acc.account_number) == target:
+            return acc.id
+    return None
 
 
 def _build_upcoming_from_parsed(
@@ -338,6 +370,7 @@ def _build_upcoming_from_parsed(
     kind: str,
     source: str,
     source_image_path: str | None = None,
+    session: Session | None = None,
 ) -> UpcomingTransaction:
     def _parse_date_opt(s: str | None) -> date | None:
         if not s:
@@ -347,11 +380,34 @@ def _build_upcoming_from_parsed(
         except (ValueError, TypeError):
             return None
 
+    debit_date = _parse_date_opt(parsed.get("debit_date"))
+    expected = date.fromisoformat(parsed["expected_date"])
+    # Om betalningsbekräftelse har Betalningsdag men ingen förfallodag,
+    # använd betalningsdagen som förfallodag också
+    if debit_date is None:
+        debit_date = expected
+
+    debit_account_id: int | None = None
+    if session is not None:
+        debit_account_id = _resolve_debit_account(session, parsed.get("from_account"))
+
+    # Bygg ihop notes med extra fält som inte har egen kolumn
+    extra_notes = []
+    if parsed.get("notes"):
+        extra_notes.append(str(parsed["notes"]))
+    if parsed.get("payment_type"):
+        extra_notes.append(f"Typ: {parsed['payment_type']}")
+    if parsed.get("payment_status"):
+        extra_notes.append(f"Status: {parsed['payment_status']}")
+    notes = " | ".join(extra_notes) if extra_notes else None
+
     return UpcomingTransaction(
         kind=kind,
         name=parsed["name"],
         amount=Decimal(str(parsed["amount"])),
-        expected_date=date.fromisoformat(parsed["expected_date"]),
+        expected_date=expected,
+        debit_date=debit_date,
+        debit_account_id=debit_account_id,
         invoice_number=parsed.get("invoice_number"),
         invoice_date=_parse_date_opt(parsed.get("invoice_date")),
         ocr_reference=parsed.get("ocr_reference"),
@@ -359,7 +415,7 @@ def _build_upcoming_from_parsed(
         plusgiro=parsed.get("plusgiro"),
         iban=parsed.get("iban"),
         autogiro=bool(parsed.get("autogiro", False)),
-        notes=parsed.get("notes"),
+        notes=notes,
         source=source,
         source_image_path=source_image_path,
     )

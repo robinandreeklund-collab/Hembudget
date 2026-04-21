@@ -23,7 +23,9 @@ export default function ImportPage() {
   const [accountId, setAccountId] = useState<number | null>(null);
   const [bank, setBank] = useState<string>("");
   const [result, setResult] = useState<unknown>(null);
-  const [newAcc, setNewAcc] = useState({ name: "", bank: "nordea", type: "checking" });
+  const [newAcc, setNewAcc] = useState<{
+    name: string; bank: string; type: string; account_number: string;
+  }>({ name: "", bank: "nordea", type: "checking", account_number: "" });
 
   const createAccMut = useMutation({
     mutationFn: () =>
@@ -60,6 +62,29 @@ export default function ImportPage() {
   return (
     <div className="p-6 space-y-5 max-w-3xl">
       <h1 className="text-2xl font-semibold">Importera CSV</h1>
+
+      {accounts.length > 0 && (
+        <Card title="Konto-inställningar">
+          <div className="text-sm text-slate-500 mb-3">
+            Kontonummer används för auto-koppling av fakturor (vision AI). Ingående
+            saldo + startdatum gör att systemet kan räkna ut nuvarande saldo.
+            Lämna saldo-fälten tomma om du inte har startat spåra kontot än.
+          </div>
+          <div className="space-y-2">
+            {accounts.map((a) => (
+              <AccountSetupRow
+                key={a.id}
+                account={a}
+                onSave={(updates) =>
+                  patchAccount(a.id, updates).then(() =>
+                    qc.invalidateQueries({ queryKey: ["accounts"] }),
+                  )
+                }
+              />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {creditAccounts.length > 0 && payerAccounts.length > 0 && (
         <Card title="Kreditkorts-koppling">
@@ -123,6 +148,12 @@ export default function ImportPage() {
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
+          <input
+            className="border rounded px-2 py-1.5 col-span-4"
+            placeholder="Kontonummer (t.ex. 1709 20 72840) — används för att auto-koppla fakturor"
+            value={newAcc.account_number}
+            onChange={(e) => setNewAcc({ ...newAcc, account_number: e.target.value })}
+          />
         </div>
         <button
           className="mt-3 bg-slate-800 text-white px-3 py-1.5 rounded"
@@ -175,6 +206,78 @@ export default function ImportPage() {
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function AccountSetupRow({
+  account,
+  onSave,
+}: {
+  account: Account;
+  onSave: (updates: Partial<Account>) => Promise<unknown>;
+}) {
+  const [num, setNum] = useState(account.account_number ?? "");
+  const [ob, setOb] = useState(
+    account.opening_balance != null ? String(account.opening_balance) : "",
+  );
+  const [obDate, setObDate] = useState(account.opening_balance_date ?? "");
+
+  function saveIfChanged(field: "account_number" | "opening_balance" | "opening_balance_date",
+                        value: string) {
+    const current =
+      field === "account_number"
+        ? account.account_number ?? ""
+        : field === "opening_balance"
+        ? (account.opening_balance != null ? String(account.opening_balance) : "")
+        : account.opening_balance_date ?? "";
+    if (value === current) return;
+    const updates: Partial<Account> = {};
+    if (field === "account_number") updates.account_number = value || null;
+    else if (field === "opening_balance")
+      updates.opening_balance = value ? (Number(value) as unknown as Account["opening_balance"]) : null;
+    else updates.opening_balance_date = value || null;
+    onSave(updates);
+  }
+
+  return (
+    <div className="grid grid-cols-12 gap-2 items-center border rounded p-2 text-sm">
+      <div className="col-span-3">
+        <div className="font-medium truncate">{account.name}</div>
+        <div className="text-xs text-slate-500">{account.bank} · {account.type}</div>
+      </div>
+      <label className="col-span-4">
+        <div className="text-xs text-slate-500">Kontonummer</div>
+        <input
+          value={num}
+          onChange={(e) => setNum(e.target.value)}
+          onBlur={() => saveIfChanged("account_number", num)}
+          placeholder="1709 20 72840"
+          className="border rounded px-2 py-1 w-full font-mono text-xs"
+        />
+      </label>
+      <label className="col-span-3">
+        <div className="text-xs text-slate-500">Ingående saldo</div>
+        <input
+          type="number"
+          step="0.01"
+          value={ob}
+          onChange={(e) => setOb(e.target.value)}
+          onBlur={() => saveIfChanged("opening_balance", ob)}
+          placeholder="0"
+          className="border rounded px-2 py-1 w-full text-right"
+        />
+      </label>
+      <label className="col-span-2">
+        <div className="text-xs text-slate-500">Startdatum</div>
+        <input
+          type="date"
+          value={obDate}
+          onChange={(e) => setObDate(e.target.value)}
+          onBlur={() => saveIfChanged("opening_balance_date", obDate)}
+          className="border rounded px-2 py-1 w-full text-xs"
+        />
+      </label>
     </div>
   );
 }

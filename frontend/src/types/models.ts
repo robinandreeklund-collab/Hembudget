@@ -4,6 +4,9 @@ export interface Account {
   bank: string;
   type: string;
   currency: string;
+  account_number?: string | null;
+  opening_balance?: number | null;
+  opening_balance_date?: string | null;
   pays_credit_account_id?: number | null;
 }
 

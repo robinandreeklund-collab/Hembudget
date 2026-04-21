@@ -45,6 +45,9 @@ class AccountIn(BaseModel):
     bank: str
     type: str = "checking"
     currency: str = "SEK"
+    account_number: Optional[str] = None
+    opening_balance: Optional[Decimal] = None
+    opening_balance_date: Optional[date] = None
     pays_credit_account_id: Optional[int] = None
 
 
@@ -55,6 +58,9 @@ class AccountOut(AccountIn):
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
+    account_number: Optional[str] = None
+    opening_balance: Optional[Decimal] = None
+    opening_balance_date: Optional[date] = None
     pays_credit_account_id: Optional[int] = None
 
 

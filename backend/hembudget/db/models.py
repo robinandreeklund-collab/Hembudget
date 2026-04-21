@@ -38,6 +38,9 @@ class Account(Base):
     bank: Mapped[str] = mapped_column(String(60), nullable=False)
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # checking, credit, isk, savings
     currency: Mapped[str] = mapped_column(String(8), default="SEK")
+    account_number: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, index=True)
+    opening_balance: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    opening_balance_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     pays_credit_account_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("accounts.id"), nullable=True

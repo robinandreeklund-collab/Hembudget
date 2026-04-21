@@ -13,6 +13,12 @@ function currentMonth(): string {
 }
 
 interface MonthOption { month: string; count: number }
+interface BalanceRow {
+  id: number; name: string; bank: string; type: string;
+  account_number: string | null;
+  opening_balance: number; opening_balance_date: string | null;
+  movement_since_opening: number; current_balance: number;
+}
 
 export default function Dashboard() {
   const [showReset, setShowReset] = useState(false);
@@ -36,6 +42,13 @@ export default function Dashboard() {
   const summaryQ = useQuery({
     queryKey: ["budget", month],
     queryFn: () => api<MonthSummary>(`/budget/${month}`),
+  });
+  const balancesQ = useQuery({
+    queryKey: ["balances"],
+    queryFn: () =>
+      api<{ as_of: string; accounts: BalanceRow[]; total_balance: number }>(
+        "/balances/",
+      ),
   });
   const forecastQ = useQuery({
     queryKey: ["forecast", 6],
@@ -88,6 +101,60 @@ export default function Dashboard() {
         <Stat label="Sparande" value={s ? formatSEK(s.savings) : "—"} tone={s && s.savings > 0 ? "good" : "bad"} />
         <Stat label="Sparkvot" value={s ? `${(s.savings_rate * 100).toFixed(1)} %` : "—"} />
       </div>
+
+      {balancesQ.data && balancesQ.data.accounts.length > 0 && (
+        <Card
+          title={`Saldo per konto — ${balancesQ.data.as_of}`}
+          action={
+            <span className="text-sm font-semibold">
+              Totalt {formatSEK(balancesQ.data.total_balance)}
+            </span>
+          }
+        >
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase text-slate-500 border-b">
+                <th className="py-1.5 pr-3">Konto</th>
+                <th className="py-1.5 pr-3 text-right">Ingående</th>
+                <th className="py-1.5 pr-3 text-right">Rörelse</th>
+                <th className="py-1.5 pr-3 text-right">Nuvarande saldo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {balancesQ.data.accounts.map((a) => (
+                <tr key={a.id} className="border-b last:border-0">
+                  <td className="py-1.5 pr-3">
+                    <div className="font-medium">{a.name}</div>
+                    <div className="text-xs text-slate-500">
+                      {a.bank} · {a.type}
+                      {a.opening_balance_date && ` · från ${a.opening_balance_date}`}
+                    </div>
+                  </td>
+                  <td className="py-1.5 pr-3 text-right text-slate-500">
+                    {a.opening_balance_date ? formatSEK(a.opening_balance) : "—"}
+                  </td>
+                  <td
+                    className={`py-1.5 pr-3 text-right ${
+                      a.movement_since_opening < 0 ? "text-rose-600" : "text-emerald-600"
+                    }`}
+                  >
+                    {formatSEK(a.movement_since_opening)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right font-semibold">
+                    {formatSEK(a.current_balance)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!balancesQ.data.accounts.some((a) => a.opening_balance_date) && (
+            <div className="text-xs text-slate-500 mt-2">
+              Tips: ange ingående saldo + startdatum på varje konto (Import-sidan)
+              för mer exakt saldo — just nu summeras bara alla transaktioner från 0.
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card title={`Utgifter per kategori — ${month}`}>
         {topExpenses.length === 0 ? (

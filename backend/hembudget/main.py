@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import (
-    admin, auth, budget, chat, loans, reports, scenarios, tax,
+    admin, auth, balances, budget, chat, loans, reports, scenarios, tax,
     transactions, transfers, upcoming, upload,
 )
 from .config import settings
@@ -51,6 +51,7 @@ def build_app() -> FastAPI:
     app.include_router(loans.router)
     app.include_router(transfers.router)
     app.include_router(upcoming.router)
+    app.include_router(balances.router)
     app.include_router(admin.router)
 
     @app.get("/healthz")
