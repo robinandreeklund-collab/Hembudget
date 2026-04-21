@@ -7,6 +7,17 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 
+class TransactionSplitOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    description: str
+    amount: Decimal
+    category_id: Optional[int]
+    sort_order: int
+    source: str
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -24,6 +35,7 @@ class TransactionOut(BaseModel):
     user_verified: bool
     is_transfer: bool = False
     transfer_pair_id: Optional[int] = None
+    splits: list[TransactionSplitOut] = []
 
 
 class TransactionUpdate(BaseModel):

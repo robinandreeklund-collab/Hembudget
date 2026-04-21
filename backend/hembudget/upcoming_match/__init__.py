@@ -14,6 +14,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from ..db.models import Transaction, UpcomingTransaction
+from ..splits import apply_upcoming_lines_to_transaction
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +32,9 @@ class UpcomingMatcher:
 
     def match(self, new_transactions: list[Transaction]) -> int:
         """Returnera antal par-ihopningar. Kollar bara UpcomingTransaction
-        som ännu inte är matchade."""
+        som ännu inte är matchade. När en match sker och UpcomingTransaction
+        har lines (t.ex. el/vatten/bredband på samma faktura), kopieras de
+        till transaction_splits så budget/rapporter kan fördela rätt."""
         if not new_transactions:
             return 0
 
@@ -74,6 +77,10 @@ class UpcomingMatcher:
             up.matched_transaction_id = chosen.id
             used_tx_ids.add(chosen.id)
             matched += 1
+
+            # Kopiera ev. fakturarader till transaction_splits
+            if up.lines:
+                apply_upcoming_lines_to_transaction(self.session, up, chosen)
 
         if matched:
             self.session.flush()

@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..db.models import Budget, Category, Transaction
+from ..db.models import Budget, Category, Transaction, TransactionSplit
 
 
 @dataclass
@@ -59,7 +59,15 @@ class MonthlyBudgetService:
 
     def summary(self, month: str) -> MonthSummary:
         start, end = _month_bounds(month)
-        rows = (
+
+        # Transaktioner som INTE är uppsplittrade — grupperas på
+        # transactions.category_id som vanligt.
+        split_tx_ids = (
+            select(TransactionSplit.transaction_id)
+            .distinct()
+            .scalar_subquery()
+        )
+        tx_rows = (
             self.session.execute(
                 select(
                     Transaction.category_id,
@@ -71,22 +79,56 @@ class MonthlyBudgetService:
                     Transaction.date >= start,
                     Transaction.date < end,
                     Transaction.is_transfer.is_(False),
+                    Transaction.id.not_in(split_tx_ids),
                 )
                 .group_by(Transaction.category_id, Category.name)
+            )
+        ).all()
+
+        # Uppsplittrade transaktioner — grupperas på splits.category_id.
+        # Filtrerar även här bort transfers via join mot transactions.
+        split_rows = (
+            self.session.execute(
+                select(
+                    TransactionSplit.category_id,
+                    Category.name,
+                    func.sum(TransactionSplit.amount).label("total"),
+                )
+                .join(Category, Category.id == TransactionSplit.category_id, isouter=True)
+                .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+                .where(
+                    Transaction.date >= start,
+                    Transaction.date < end,
+                    Transaction.is_transfer.is_(False),
+                )
+                .group_by(TransactionSplit.category_id, Category.name)
             )
         ).all()
 
         income = Decimal("0")
         expenses = Decimal("0")
         actual_by_cat: dict[int, tuple[str, Decimal]] = {}
-        for cat_id, cat_name, total in rows:
+
+        def _accumulate(cat_id, cat_name, total):
+            nonlocal income, expenses
             total = Decimal(total or 0)
             if cat_id is not None:
-                actual_by_cat[cat_id] = (cat_name or "Okategoriserat", total)
+                prev_name, prev_total = actual_by_cat.get(
+                    cat_id, (cat_name or "Okategoriserat", Decimal("0"))
+                )
+                actual_by_cat[cat_id] = (
+                    cat_name or prev_name or "Okategoriserat",
+                    prev_total + total,
+                )
             if total > 0:
                 income += total
             else:
                 expenses += -total
+
+        for cat_id, cat_name, total in tx_rows:
+            _accumulate(cat_id, cat_name, total)
+        for cat_id, cat_name, total in split_rows:
+            _accumulate(cat_id, cat_name, total)
 
         planned_rows = (
             self.session.query(Budget, Category)

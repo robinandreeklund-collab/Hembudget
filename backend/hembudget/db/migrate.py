@@ -87,6 +87,51 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "upcoming_transactions", col_sql)
                 applied.append(f"upcoming_transactions.{col_name}")
 
+    # Fakturarader på planerade fakturor (el/vatten/bredband etc.)
+    if not _table_exists(engine, "upcoming_transaction_lines"):
+        with engine.begin() as conn:
+            conn.execute(text(
+                """
+                CREATE TABLE upcoming_transaction_lines (
+                    id INTEGER PRIMARY KEY,
+                    upcoming_id INTEGER NOT NULL REFERENCES upcoming_transactions(id) ON DELETE CASCADE,
+                    description VARCHAR(200) NOT NULL,
+                    amount NUMERIC(14, 2) NOT NULL,
+                    category_id INTEGER REFERENCES categories(id),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_upcoming_lines_upcoming_id "
+                "ON upcoming_transaction_lines(upcoming_id)"
+            ))
+        applied.append("upcoming_transaction_lines (new table)")
+
+    # Splits på faktiska transaktioner — samma struktur, men med tecken.
+    if not _table_exists(engine, "transaction_splits"):
+        with engine.begin() as conn:
+            conn.execute(text(
+                """
+                CREATE TABLE transaction_splits (
+                    id INTEGER PRIMARY KEY,
+                    transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                    description VARCHAR(200) NOT NULL,
+                    amount NUMERIC(14, 2) NOT NULL,
+                    category_id INTEGER REFERENCES categories(id),
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    source VARCHAR(20) NOT NULL DEFAULT 'upcoming',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_tx_splits_transaction_id "
+                "ON transaction_splits(transaction_id)"
+            ))
+        applied.append("transaction_splits (new table)")
+
     # New tables (loans, loan_payments, upcoming_transactions) are created
     # by Base.metadata.create_all in auth routes; nothing to ALTER here.
 

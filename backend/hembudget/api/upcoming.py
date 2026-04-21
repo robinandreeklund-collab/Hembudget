@@ -15,8 +15,16 @@ from sqlalchemy.orm import Session
 
 from ..categorize.engine import CategorizationEngine
 from ..config import settings
-from ..db.models import Account, Category, Import, Transaction, UpcomingTransaction
+from ..db.models import (
+    Account,
+    Category,
+    Import,
+    Transaction,
+    UpcomingTransaction,
+    UpcomingTransactionLine,
+)
 from ..llm.client import LMStudioClient, LLMUnavailable
+from ..splits import build_lines_from_vision, resolve_category_id
 from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
 
@@ -130,6 +138,22 @@ def _file_to_images(content: bytes, content_type: str | None) -> tuple[list[byte
         return [content], content_type or "image/png"
 
 
+class UpcomingLineIn(BaseModel):
+    description: str
+    amount: Decimal
+    category_id: Optional[int] = None
+    sort_order: int = 0
+
+
+class UpcomingLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    description: str
+    amount: Decimal
+    category_id: Optional[int]
+    sort_order: int
+
+
 class UpcomingIn(BaseModel):
     kind: str  # "bill" | "income"
     name: str
@@ -148,6 +172,7 @@ class UpcomingIn(BaseModel):
     debit_account_id: Optional[int] = None
     debit_date: Optional[date] = None
     autogiro: bool = False
+    lines: list[UpcomingLineIn] = []
 
 
 class UpcomingUpdate(BaseModel):
@@ -193,6 +218,7 @@ class UpcomingOut(BaseModel):
     debit_date: Optional[date] = None
     autogiro: bool = False
     matched_transaction_id: Optional[int]
+    lines: list[UpcomingLineOut] = []
 
 
 @router.get("/", response_model=list[UpcomingOut])
@@ -213,7 +239,16 @@ def list_upcoming(
 def create_upcoming(payload: UpcomingIn, session: Session = Depends(db)) -> UpcomingTransaction:
     if payload.kind not in ("bill", "income"):
         raise HTTPException(400, "kind must be 'bill' or 'income'")
-    u = UpcomingTransaction(**payload.model_dump())
+    data = payload.model_dump()
+    line_dicts = data.pop("lines", []) or []
+    u = UpcomingTransaction(**data)
+    for i, ld in enumerate(line_dicts):
+        u.lines.append(UpcomingTransactionLine(
+            description=ld["description"],
+            amount=Decimal(str(ld["amount"])),
+            category_id=ld.get("category_id"),
+            sort_order=ld.get("sort_order", i),
+        ))
     session.add(u)
     session.flush()
     return u
@@ -239,6 +274,37 @@ def delete_upcoming(upcoming_id: int, session: Session = Depends(db)) -> dict:
         raise HTTPException(404, "Upcoming not found")
     session.delete(u)
     return {"deleted": upcoming_id}
+
+
+@router.put("/{upcoming_id}/lines", response_model=list[UpcomingLineOut])
+def set_upcoming_lines(
+    upcoming_id: int,
+    lines: list[UpcomingLineIn],
+    session: Session = Depends(db),
+) -> list[UpcomingTransactionLine]:
+    """Ersätt alla rader på en planerad faktura. Totalsumman på
+    UpcomingTransaction.amount justeras INTE automatiskt — användaren kan
+    välja att behålla fakturasumman som presenterad av leverantören."""
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+    # Radera befintliga rader och skapa nya
+    for existing in list(u.lines):
+        session.delete(existing)
+    session.flush()
+    new_lines: list[UpcomingTransactionLine] = []
+    for i, payload in enumerate(lines):
+        line = UpcomingTransactionLine(
+            upcoming_id=u.id,
+            description=payload.description,
+            amount=payload.amount,
+            category_id=payload.category_id,
+            sort_order=payload.sort_order or i,
+        )
+        session.add(line)
+        new_lines.append(line)
+    session.flush()
+    return new_lines
 
 
 @router.post("/parse-text", response_model=UpcomingOut)
@@ -336,7 +402,10 @@ async def parse_invoice_image(
             "text": (
                 "Extrahera ALLA betalningsrelaterade uppgifter du kan hitta från "
                 "denna svenska faktura. Om flera sidor visas, titta på alla och "
-                "slå samman informationen. Om något fält inte syns, använd null."
+                "slå samman informationen. Om något fält inte syns, använd null. "
+                "Om fakturan innehåller flera poster från olika hushållsområden "
+                "(t.ex. el + vatten + bredband) fyll i 'lines' — annars lämna "
+                "'lines' tom."
             ),
         }
     ]
@@ -347,11 +416,12 @@ async def parse_invoice_image(
             "image_url": {"url": f"data:{img_mime};base64,{b64}"},
         })
 
-    schema = _invoice_schema()
+    category_names = [c.name for c in session.query(Category).all()]
+    schema = _invoice_schema(category_names)
 
     try:
         parsed = llm.complete_json(
-            [{"role": "system", "content": _vision_system_prompt()},
+            [{"role": "system", "content": _vision_system_prompt(category_names)},
              {"role": "user", "content": user_content}],
             schema=schema,
             temperature=0.0,
@@ -365,13 +435,39 @@ async def parse_invoice_image(
     u = _build_upcoming_from_parsed(parsed, kind=kind, source="vision_ai",
                                     source_image_path=str(original_path),
                                     session=session)
+    # Koppla rader om vision hittade några (och endast om totalsumman
+    # stämmer överens; annars är det troligen en hallucination)
+    parsed_lines = parsed.get("lines") or []
+    if parsed_lines:
+        u.lines.extend(build_lines_from_vision(session, parsed_lines))
     session.add(u)
     session.flush()
     return u
 
 
-def _invoice_schema() -> dict:
-    """JSON-schema som tvingar vision-modellen att returnera rika data."""
+def _invoice_schema(category_names: list[str] | None = None) -> dict:
+    """JSON-schema som tvingar vision-modellen att returnera rika data.
+
+    Om `category_names` skickas in begränsas line-items category-fältet till
+    dessa namn (pluss null) vilket kraftigt minskar risken för att modellen
+    hittar på nya kategorier. Om None accepteras valfri sträng eller null.
+    """
+    if category_names:
+        # JSON-schema med enum + null — matchar existerande kategorier exakt.
+        line_cat_schema = {
+            "type": ["string", "null"],
+            "enum": [*category_names, None],
+            "description": (
+                "Kategori för denna rad. Använd EXAKT ett av de listade "
+                "kategorinamnen, eller null om inget passar."
+            ),
+        }
+    else:
+        line_cat_schema = {
+            "type": ["string", "null"],
+            "description": "Kategori för denna rad (svenskt namn) eller null.",
+        }
+
     return {
         "type": "object",
         "properties": {
@@ -398,13 +494,43 @@ def _invoice_schema() -> dict:
                          "description": "true om fakturan anger autogiro / e-faktura-autobetalning"},
             "notes": {"type": ["string", "null"],
                       "description": "Övrig kort info (t.ex. period, meddelande)"},
+            "lines": {
+                "type": "array",
+                "description": (
+                    "Fakturarader — ENDAST om fakturan uttryckligen listar olika "
+                    "poster som var och en kan höra till olika kategorier. "
+                    "Exempel: en faktura från ett energibolag som innehåller "
+                    "el, vatten OCH bredband. En vanlig faktura med bara en "
+                    "produkt behöver INGA lines (lämna tom array). "
+                    "Summan av lines.amount ska matcha amount."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "description": {
+                            "type": "string",
+                            "description": (
+                                "Kort beskrivning av raden, t.ex. 'Elnät', "
+                                "'Elförbrukning', 'Vatten och avlopp', "
+                                "'Bredband 100/100 Mbit'."
+                            ),
+                        },
+                        "amount": {
+                            "type": "number",
+                            "description": "Positivt belopp i kr för just denna rad.",
+                        },
+                        "category": line_cat_schema,
+                    },
+                    "required": ["description", "amount"],
+                },
+            },
         },
         "required": ["name", "amount", "expected_date"],
     }
 
 
-def _vision_system_prompt() -> str:
-    return (
+def _vision_system_prompt(category_names: list[str] | None = None) -> str:
+    base = (
         "Du läser svenska fakturor och betalningsbekräftelser och extraherar "
         "strukturerad data. Returnera JSON enligt det givna schemat. Viktigt:\n"
         "- Belopp = totalbeloppet att betala i SEK (inget 'kr', komma → punkt).\n"
@@ -417,8 +543,27 @@ def _vision_system_prompt() -> str:
         "- plusgiro = 'Till konto' om betalningstyp är Plusgiro.\n"
         "- ocr_reference = Meddelande eller Referens-fältet.\n"
         "- autogiro=true bara om dokumentet uttryckligen anger autogiro.\n"
-        "- Om ett fält inte syns, returnera null."
+        "- Om ett fält inte syns, returnera null.\n\n"
+        "FAKTURARADER (lines):\n"
+        "- Titta efter en specifikation där fakturan listar FLERA poster som "
+        "  hör till olika hushållsområden. Klassiska exempel:\n"
+        "    * Hjo Energi: el (elnät + elförbrukning + energiskatt), "
+        "      vatten & avlopp, bredband → 3 olika budgetkategorier.\n"
+        "    * Kommunfakturor med VA + renhållning + sotning.\n"
+        "    * Bostadsrättsavgift + garage + förråd på samma avi.\n"
+        "- En faktura med bara ETT ämne (t.ex. rent Spotify, en enda hyra) "
+        "  ska ha lines = [] (tom array). Hitta ALDRIG på rader.\n"
+        "- Om fakturan har rader, ska sum(lines.amount) = amount (exakt eller "
+        "  ±1 kr). Moms/avgifter fördelas proportionellt eller tas med "
+        "  enskild rad.\n"
     )
+    if category_names:
+        base += (
+            "- category-fältet i varje rad MÅSTE vara exakt en av dessa "
+            "kategorier (eller null om du är osäker): "
+            f"{', '.join(category_names)}\n"
+        )
+    return base
 
 
 def _normalize_account_number(num: str | None) -> str | None:

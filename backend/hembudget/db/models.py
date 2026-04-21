@@ -88,6 +88,13 @@ class Transaction(Base):
 
     account: Mapped[Account] = relationship(back_populates="transactions")
     category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
+    splits: Mapped[list["TransactionSplit"]] = relationship(
+        back_populates=None,
+        primaryjoin="Transaction.id == TransactionSplit.transaction_id",
+        foreign_keys="[TransactionSplit.transaction_id]",
+        cascade="all, delete-orphan",
+        order_by="TransactionSplit.sort_order",
+    )
 
 
 class Rule(Base):
@@ -267,6 +274,74 @@ class UpcomingTransaction(Base):
         ForeignKey("transactions.id"), nullable=True, unique=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    lines: Mapped[list["UpcomingTransactionLine"]] = relationship(
+        back_populates="upcoming",
+        cascade="all, delete-orphan",
+        order_by="UpcomingTransactionLine.sort_order",
+    )
+
+
+class UpcomingTransactionLine(Base):
+    """Enskild post på en planerad faktura.
+
+    Exempel: en faktura från Hjo Energi kan innehålla rader för el,
+    vatten och bredband. Totalsumman på fakturan = sum(lines.amount)
+    (alla positiva). När fakturan matchas mot en riktig bankrad kopieras
+    raderna till transaction_splits med tecken enligt UpcomingTransaction.kind.
+    """
+
+    __tablename__ = "upcoming_transaction_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # positivt
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    upcoming: Mapped[UpcomingTransaction] = relationship(back_populates="lines")
+    category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
+
+
+class TransactionSplit(Base):
+    """Uppdelning av en faktisk transaktion i flera budgetposter.
+
+    När en UpcomingTransaction med lines matchas mot en bankrad kopieras
+    lines hit — varje split har tecken enligt transaktionen (negativt för
+    utgifter, positivt för inkomster). Budget/rapporter ska använda splits
+    om de finns, annars falla tillbaka på transactions.category_id + amount.
+
+    Invariant: sum(splits.amount) == transactions.amount (toleranstestas i
+    apply-lagret men DB-constraint är inte möjlig i sqlite).
+    """
+
+    __tablename__ = "transaction_splits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # tecken bevaras
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="upcoming")
+    # "upcoming" (kopierad från UpcomingTransactionLine), "manual", "llm"
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
 
 
 class TaxEvent(Base):
