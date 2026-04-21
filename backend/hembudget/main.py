@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import logging
 import sys
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Aktivera Pythons signalhanterare så ev. segfaults i C-moduler
+# (sqlcipher3, pypdfium2, Pillow) dumpar en stacktrace i stderr innan
+# processen dör — mycket lättare att felsöka än ett bart "core dumped".
+faulthandler.enable()
 
 from .api import (
     admin, auth, balances, budget, chat, elpris, loans, reports, scenarios,
