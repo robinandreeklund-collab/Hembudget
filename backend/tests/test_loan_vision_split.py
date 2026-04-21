@@ -168,6 +168,95 @@ def test_outstanding_subtracts_future_amortizations(session):
 
 # --- integrationstester av schedule-skapande via _add_schedule_row logik ---
 
+def test_interest_paid_counts_unmatched_historical_schedule(session):
+    """Vision-fångade historiska betalningar (Transaktioner-fliken) ska
+    räknas som 'betald ränta' även om bank-CSV inte importerats ännu.
+    När CSV:n senare matchas uppgraderas till LoanPayment utan
+    dubbelräkning."""
+    from datetime import timedelta
+
+    loan = Loan(
+        name="Bolån", lender="Nordea",
+        principal_amount=Decimal("875000"),
+        current_balance_at_creation=Decimal("734600"),
+        start_date=date(2021, 11, 16),
+        interest_rate=0.0311,
+    )
+    session.add(loan); session.flush()
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    tomorrow = today + timedelta(days=1)
+
+    # Historiska ränta-rader (omatchade) — räknas
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=yesterday - timedelta(days=30),
+        amount=Decimal("1962"), payment_type="interest",
+    ))
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=yesterday,
+        amount=Decimal("1955"), payment_type="interest",
+    ))
+    # Framtida ränta-rad — räknas INTE
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=tomorrow,
+        amount=Decimal("1940"), payment_type="interest",
+    ))
+    # Amortering-rad i förflutet — räknas INTE (bara interest)
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=yesterday,
+        amount=Decimal("2700"), payment_type="amortization",
+    ))
+    session.flush()
+
+    m = LoanMatcher(session)
+    assert m.total_interest_paid(loan) == Decimal("3917.00")  # 1962 + 1955
+
+
+def test_interest_paid_matched_schedule_excluded(session):
+    """När en schemarad matchats mot en bank-CSV (matched_transaction_id
+    satt) ska den INTE räknas som unmatched längre — istället räknas
+    motsvarande LoanPayment."""
+    from hembudget.db.models import Account, Transaction
+    from datetime import timedelta
+
+    loan = Loan(
+        name="Bolån", lender="Nordea",
+        principal_amount=Decimal("875000"),
+        current_balance_at_creation=Decimal("734600"),
+        start_date=date(2021, 11, 16),
+        interest_rate=0.0311,
+    )
+    session.add(loan); session.flush()
+
+    yesterday = date.today() - timedelta(days=1)
+    # Historisk schemarad som nu matchats
+    acc = Account(name="X", bank="nordea", type="checking")
+    session.add(acc); session.flush()
+    tx = Transaction(
+        account_id=acc.id, date=yesterday, amount=Decimal("-4459"),
+        currency="SEK", raw_description="Nordea Hypotek",
+        hash="h-matched",
+    )
+    session.add(tx); session.flush()
+    session.add(LoanScheduleEntry(
+        loan_id=loan.id, due_date=yesterday,
+        amount=Decimal("1759"), payment_type="interest",
+        matched_transaction_id=tx.id,
+    ))
+    # Och motsvarande LoanPayment
+    session.add(LoanPayment(
+        loan_id=loan.id, transaction_id=tx.id,
+        date=yesterday, amount=Decimal("1759"),
+        payment_type="interest",
+    ))
+    session.flush()
+
+    m = LoanMatcher(session)
+    # Bara LoanPayment-siffran ska räknas — inte schema-raden
+    assert m.total_interest_paid(loan) == Decimal("1759.00")
+
+
 def test_schedule_rows_derived_from_delta_match_reality(session):
     """Skapa ett lån + kör logiken som parse-from-images-endpointet gör
     på Nordea-datan för att verifiera att amortering + ränta hamnar rätt."""
@@ -220,3 +309,68 @@ def test_schedule_rows_derived_from_delta_match_reality(session):
         reverse=True,
     )
     assert interests == [Decimal("1940.00"), Decimal("1926.00"), Decimal("1871.00")]
+
+
+def test_combined_row_matches_sum_of_schedule_entries(session):
+    """Nordeas 'Omsättning lån': banken visar -4662 kr men schemat har
+    amort 2700 + ränta 1962. Matchern ska para ihop bankraden mot BÅDA
+    schemaraderna och skapa två LoanPayment (en per typ)."""
+    from hembudget.db.models import Account, Category, Transaction
+    from hembudget.loans.matcher import LoanMatcher
+
+    cat_i = Category(name="Bolåneränta")
+    cat_a = Category(name="Amortering")
+    session.add_all([cat_i, cat_a]); session.flush()
+
+    loan = Loan(
+        name="Bolån", lender="Nordea",
+        principal_amount=Decimal("875000"),
+        current_balance_at_creation=Decimal("734600"),
+        start_date=date(2021, 11, 16), interest_rate=0.0311,
+    )
+    session.add(loan); session.flush()
+    session.add_all([
+        LoanScheduleEntry(
+            loan_id=loan.id, due_date=date(2026, 1, 27),
+            amount=Decimal("2700"), payment_type="amortization",
+        ),
+        LoanScheduleEntry(
+            loan_id=loan.id, due_date=date(2026, 1, 27),
+            amount=Decimal("1962"), payment_type="interest",
+        ),
+    ])
+    session.flush()
+
+    acc = Account(name="Lönekonto", bank="nordea", type="checking")
+    session.add(acc); session.flush()
+    tx = Transaction(
+        account_id=acc.id, date=date(2026, 1, 28),
+        amount=Decimal("-4662"), currency="SEK",
+        raw_description="Omsättning lån 3992 68 11531",
+        hash="tx1",
+    )
+    session.add(tx); session.flush()
+
+    result = LoanMatcher(session).match_and_classify([tx])
+    assert result.linked == 1
+    # Två LoanPayment ska ha skapats: en per typ
+    payments = session.query(LoanPayment).filter(LoanPayment.transaction_id == tx.id).all()
+    types = {p.payment_type: p.amount for p in payments}
+    assert types == {
+        "amortization": Decimal("2700"),
+        "interest": Decimal("1962"),
+    }
+    # Båda schemaraderna markerade som matchade
+    entries = session.query(LoanScheduleEntry).filter(
+        LoanScheduleEntry.loan_id == loan.id
+    ).all()
+    assert all(e.matched_transaction_id == tx.id for e in entries)
+
+
+def test_omsattning_lan_no_longer_marked_as_transfer(session):
+    """Regression: 'Omsättning lån' skulle tidigare markeras som transfer
+    via generiska mönstret och hindra LoanMatcher. Nu ska det INTE hända."""
+    from hembudget.db.models import Account, Transaction
+    from hembudget.transfers.detector import GENERIC_TRANSFER_PATTERNS
+
+    assert "omsättning lån" not in GENERIC_TRANSFER_PATTERNS

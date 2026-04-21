@@ -212,13 +212,24 @@ class Loan(Base):
 
 
 class LoanPayment(Base):
-    """Koppling transaktion → lån, klassificerad som ränta eller amortering."""
+    """Koppling transaktion → lån, klassificerad som ränta eller amortering.
+
+    EJ unique på transaction_id — en bankrad kan splitta i både ränta och
+    amortering (t.ex. Nordeas "Omsättning lån 4662 kr" = amort 2700 + ränta
+    1962). Unikheten upprätthålls i stället av (transaction_id, payment_type)
+    så vi inte dubblar samma typ.
+    """
     __tablename__ = "loan_payments"
+    __table_args__ = (
+        UniqueConstraint(
+            "transaction_id", "payment_type", name="uq_loan_payment_tx_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     loan_id: Mapped[int] = mapped_column(ForeignKey("loans.id"), nullable=False, index=True)
     transaction_id: Mapped[int] = mapped_column(
-        ForeignKey("transactions.id"), nullable=False, unique=True
+        ForeignKey("transactions.id"), nullable=False, index=True
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # alltid positivt
@@ -238,8 +249,10 @@ class LoanScheduleEntry(Base):
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     payment_type: Mapped[str] = mapped_column(String(20), nullable=False)  # interest | amortization
+    # Ej unique — samma bankpost kan täcka två schedule-rader
+    # (ränta + amortering) i ett svep, t.ex. Nordeas "Omsättning lån".
     matched_transaction_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("transactions.id"), nullable=True, unique=True
+        ForeignKey("transactions.id"), nullable=True, index=True
     )
     matched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

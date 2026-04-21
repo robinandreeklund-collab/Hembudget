@@ -87,6 +87,138 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "upcoming_transactions", col_sql)
                 applied.append(f"upcoming_transactions.{col_name}")
 
+    # loan_payments: transaction_id måste få ha två rader per transaktion
+    # (ränta + amortering i en och samma bankpost). Gammal UNIQUE-constraint
+    # stoppar detta — byggs om till composite unique på (transaction_id,
+    # payment_type). SQLite stödjer inte ALTER DROP CONSTRAINT så vi gör
+    # table-rebuild.
+    if _table_exists(engine, "loan_payments"):
+        with engine.begin() as conn:
+            # Hitta alla unique-index på tabellen
+            idx_rows = conn.execute(
+                text("PRAGMA index_list(loan_payments)")
+            ).fetchall()
+            has_standalone_tx_unique = False
+            has_composite = False
+            for idx in idx_rows:
+                # columns: seq, name, unique, origin, partial
+                if idx[2] != 1:
+                    continue
+                idx_name = idx[1]
+                info = conn.execute(
+                    text(f"PRAGMA index_info({idx_name})")
+                ).fetchall()
+                cols = [r[2] for r in info]
+                if cols == ["transaction_id"]:
+                    has_standalone_tx_unique = True
+                if set(cols) == {"transaction_id", "payment_type"}:
+                    has_composite = True
+
+            if has_standalone_tx_unique and not has_composite:
+                # Rebuild utan standalone unique, med composite
+                conn.execute(text("PRAGMA foreign_keys = OFF"))
+                conn.execute(text(
+                    """
+                    CREATE TABLE loan_payments_new (
+                        id INTEGER PRIMARY KEY,
+                        loan_id INTEGER NOT NULL REFERENCES loans(id),
+                        transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+                        date DATE NOT NULL,
+                        amount NUMERIC(14, 2) NOT NULL,
+                        payment_type VARCHAR(20) NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_loan_payment_tx_type
+                            UNIQUE (transaction_id, payment_type)
+                    )
+                    """
+                ))
+                conn.execute(text(
+                    "INSERT INTO loan_payments_new "
+                    "(id, loan_id, transaction_id, date, amount, "
+                    "payment_type, created_at) "
+                    "SELECT id, loan_id, transaction_id, date, amount, "
+                    "payment_type, created_at FROM loan_payments"
+                ))
+                conn.execute(text("DROP TABLE loan_payments"))
+                conn.execute(text(
+                    "ALTER TABLE loan_payments_new RENAME TO loan_payments"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX ix_loan_payments_loan_id "
+                    "ON loan_payments(loan_id)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX ix_loan_payments_transaction_id "
+                    "ON loan_payments(transaction_id)"
+                ))
+                conn.execute(text("PRAGMA foreign_keys = ON"))
+                applied.append("loan_payments.transaction_id drop unique → composite")
+
+    # loan_schedule_entries: släpp unique på matched_transaction_id av
+    # samma skäl (en bankpost matchar både amort + ränta). SQLite kräver
+    # table-rebuild.
+    if _table_exists(engine, "loan_schedule_entries"):
+        with engine.begin() as conn:
+            idx_rows = conn.execute(
+                text("PRAGMA index_list(loan_schedule_entries)")
+            ).fetchall()
+            has_tx_unique = False
+            for idx in idx_rows:
+                if idx[2] != 1:
+                    continue
+                idx_name = idx[1]
+                info = conn.execute(
+                    text(f"PRAGMA index_info({idx_name})")
+                ).fetchall()
+                if [r[2] for r in info] == ["matched_transaction_id"]:
+                    has_tx_unique = True
+                    break
+
+            if has_tx_unique:
+                conn.execute(text("PRAGMA foreign_keys = OFF"))
+                conn.execute(text(
+                    """
+                    CREATE TABLE loan_schedule_entries_new (
+                        id INTEGER PRIMARY KEY,
+                        loan_id INTEGER NOT NULL REFERENCES loans(id),
+                        due_date DATE NOT NULL,
+                        amount NUMERIC(12, 2) NOT NULL,
+                        payment_type VARCHAR(20) NOT NULL,
+                        matched_transaction_id INTEGER REFERENCES transactions(id),
+                        matched_at DATETIME,
+                        notes TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                ))
+                conn.execute(text(
+                    "INSERT INTO loan_schedule_entries_new "
+                    "(id, loan_id, due_date, amount, payment_type, "
+                    "matched_transaction_id, matched_at, notes, created_at) "
+                    "SELECT id, loan_id, due_date, amount, payment_type, "
+                    "matched_transaction_id, matched_at, notes, created_at "
+                    "FROM loan_schedule_entries"
+                ))
+                conn.execute(text("DROP TABLE loan_schedule_entries"))
+                conn.execute(text(
+                    "ALTER TABLE loan_schedule_entries_new "
+                    "RENAME TO loan_schedule_entries"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX ix_schedule_loan_id "
+                    "ON loan_schedule_entries(loan_id)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX ix_schedule_due_date "
+                    "ON loan_schedule_entries(due_date)"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX ix_schedule_matched_tx "
+                    "ON loan_schedule_entries(matched_transaction_id)"
+                ))
+                conn.execute(text("PRAGMA foreign_keys = ON"))
+                applied.append("loan_schedule_entries.matched_transaction_id drop unique")
+
     # loans.current_balance_at_creation — saldo när lånet registrerades
     if _table_exists(engine, "loans"):
         loan_cols = _columns(engine, "loans")

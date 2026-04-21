@@ -92,7 +92,14 @@ async def import_csv(
     engine.apply_results(new_transactions, results)
     session.flush()
 
-    # Detect transfers (credit-card payments etc.) to avoid double-counting
+    # Link matching expenses to registered loans FÖRST — Nordeas
+    # "Omsättning lån NNNN" skulle annars fångas av generiska transfer-
+    # mönster och markeras som transfer innan loan-matchern hinner se dem.
+    loan_result = LoanMatcher(session).match_and_classify(new_transactions)
+
+    # Detect transfers (credit-card payments etc.) to avoid double-counting.
+    # Transaktioner som loan-matchern redan länkade har nu category_id satt
+    # (Bolåneränta/Amortering) och detect_and_link skippar dem där.
     detector = TransferDetector(session)
     transfer_result = detector.detect_and_link(new_transactions)
 
@@ -100,9 +107,6 @@ async def import_csv(
     # Catches own-account transfers (lönekonto → hushållskonto) that only
     # become visible once both sides are imported.
     internal = detector.detect_internal_transfers()
-
-    # Link matching expenses to registered loans (bolåneränta / amortering)
-    loan_result = LoanMatcher(session).match_and_classify(new_transactions)
 
     # Matcha planerade UpcomingTransaction mot de nya riktiga rader så
     # fakturor markeras som "bokförda" och forecasten inte dubbelräknar.

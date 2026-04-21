@@ -22,7 +22,7 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..db.models import Account, Transaction
+from ..db.models import Account, LoanPayment, Transaction
 
 log = logging.getLogger(__name__)
 
@@ -92,9 +92,11 @@ GENERIC_TRANSFER_PATTERNS: list[str] = [
     "isk insättning",
     "sparkonto",
     "nordea liv",         # pensionsöverföring (visas ofta som egen rad)
-    "omsättning lån",     # bolåne-ränteperiod swap, inte en riktig utgift
     "mastercard lån",     # Nordea-interna kreditkortsrörelser
     "mastercard fröjd",   # personnamn-versionen av samma
+    # OBS: "omsättning lån" borttaget — Nordea visar alla lånebetalningar
+    # (ränta + amort) som "Omsättning lån NNNN NN NNNNN" och de ska
+    # klassificeras av LoanMatcher, inte markeras som transfer.
 ]
 
 
@@ -136,8 +138,17 @@ class TransferDetector:
         marked = 0
         paired = 0
 
+        # Slå upp vilka transaktioner som redan är länkade till lån —
+        # dem ska vi inte röra.
+        loan_tx_ids: set[int] = {
+            row[0]
+            for row in self.session.query(LoanPayment.transaction_id).distinct().all()
+        }
+
         for tx in new_transactions:
             if tx.is_transfer:
+                continue
+            if tx.id in loan_tx_ids:
                 continue
 
             desc = (tx.raw_description or "").lower()
