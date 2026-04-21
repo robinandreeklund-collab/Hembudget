@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from statistics import median
+from typing import Iterable
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -39,6 +41,17 @@ def _month_bounds(month: str) -> tuple[date, date]:
     return start, end
 
 
+def _shift_months(d: date, months: int) -> date:
+    """Flytta till samma dag-i-månaden N månader framåt/bakåt (negativt tal = bakåt).
+    Vid månadsbyte där dagen inte finns (t.ex. 31 → februari) används sista dagen."""
+    import calendar
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    new_month = m % 12 + 1
+    last_day = calendar.monthrange(y, new_month)[1]
+    return date(y, new_month, min(d.day, last_day))
+
+
 class MonthlyBudgetService:
     def __init__(self, session: Session):
         self.session = session
@@ -56,6 +69,91 @@ class MonthlyBudgetService:
             self.session.add(b)
             self.session.flush()
         return b
+
+    def auto_budget(
+        self,
+        target_month: str,
+        lookback_months: int = 6,
+        overwrite: bool = False,
+    ) -> list[Budget]:
+        """Sätt planerad budget per kategori = median av de senaste N månaderna.
+
+        Utgiftskategorier sparas som NEGATIVA plannerade belopp (konsistent
+        med transaktionstecken). Inkomstkategorier sparas som positiva. Både
+        splits och plain transactions räknas.
+
+        Om `overwrite=False` lämnas befintliga budgetrader orörda — endast
+        kategorier utan budget i target_month uppdateras. Detta gör det
+        säkert att köra upprepade gånger utan att skriva över manuella
+        justeringar.
+        """
+        target_start, _ = _month_bounds(target_month)
+        lookback_start = _shift_months(target_start, -lookback_months)
+
+        # Samla utgift/inkomst per kategori per månad från båda tabellerna.
+        split_tx_ids = (
+            select(TransactionSplit.transaction_id).distinct().scalar_subquery()
+        )
+        plain_rows = self.session.execute(
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("m"),
+                Transaction.category_id,
+                func.sum(Transaction.amount).label("total"),
+            )
+            .where(
+                Transaction.date >= lookback_start,
+                Transaction.date < target_start,
+                Transaction.is_transfer.is_(False),
+                Transaction.category_id.is_not(None),
+                Transaction.id.not_in(split_tx_ids),
+            )
+            .group_by("m", Transaction.category_id)
+        ).all()
+
+        split_rows = self.session.execute(
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("m"),
+                TransactionSplit.category_id,
+                func.sum(TransactionSplit.amount).label("total"),
+            )
+            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+            .where(
+                Transaction.date >= lookback_start,
+                Transaction.date < target_start,
+                Transaction.is_transfer.is_(False),
+                TransactionSplit.category_id.is_not(None),
+            )
+            .group_by("m", TransactionSplit.category_id)
+        ).all()
+
+        # cat_id → { month → summa }
+        per_cat: dict[int, dict[str, float]] = {}
+        for month, cat_id, total in list(plain_rows) + list(split_rows):
+            if cat_id is None:
+                continue
+            per_cat.setdefault(int(cat_id), {})
+            per_cat[int(cat_id)][month] = (
+                per_cat[int(cat_id)].get(month, 0.0) + float(total or 0)
+            )
+
+        existing = {
+            b.category_id: b
+            for b in self.session.query(Budget).filter(Budget.month == target_month).all()
+        }
+
+        out: list[Budget] = []
+        for cat_id, series in per_cat.items():
+            values = list(series.values())
+            if not values:
+                continue
+            med = Decimal(str(round(median(values), 2)))
+            # Hoppa över kategorier med mycket liten aktivitet (median < 50 kr)
+            if abs(med) < Decimal("50"):
+                continue
+            if cat_id in existing and not overwrite:
+                continue
+            out.append(self.set_budget(target_month, cat_id, med))
+        return out
 
     def summary(self, month: str) -> MonthSummary:
         start, end = _month_bounds(month)

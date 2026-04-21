@@ -61,6 +61,32 @@ def set_budget(payload: BudgetIn, session: Session = Depends(db)) -> dict:
             "planned_amount": float(b.planned_amount)}
 
 
+@router.post("/auto")
+def auto_budget(
+    month: str,
+    lookback_months: int = 6,
+    overwrite: bool = False,
+    session: Session = Depends(db),
+) -> dict:
+    """Fyll i planerad budget automatiskt från medianen av senaste
+    `lookback_months` månader. Default: ändrar bara kategorier som saknar
+    budget för given månad — sätt overwrite=true för att ersätta allt."""
+    svc = MonthlyBudgetService(session)
+    created = svc.auto_budget(month, lookback_months=lookback_months, overwrite=overwrite)
+    return {
+        "month": month,
+        "lookback_months": lookback_months,
+        "updated": len(created),
+        "budgets": [
+            {
+                "category_id": b.category_id,
+                "planned_amount": float(b.planned_amount),
+            }
+            for b in created
+        ],
+    }
+
+
 @router.get("/forecast/cashflow")
 def forecast(months: int = 6, session: Session = Depends(db)) -> dict:
     out = CashflowForecaster(session).project(horizon_months=months)
