@@ -30,6 +30,16 @@ export default function Settings() {
       ),
   });
 
+  const recategorizeMut = useMutation({
+    mutationFn: () =>
+      api<{
+        seed_rules_removed: number;
+        txs_processed: number;
+        categorized: number;
+        still_uncategorized: number;
+      }>("/admin/recategorize", { method: "POST" }),
+  });
+
   return (
     <div className="p-6 space-y-4 max-w-2xl">
       <h1 className="text-2xl font-semibold">Inställningar</h1>
@@ -85,6 +95,31 @@ export default function Settings() {
                     {scanTransfersMut.data.ambiguous} tvetydiga (behöver manuell granskning).
                   </span>
                 )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <button
+              className="bg-slate-800 text-white px-4 py-2 rounded"
+              onClick={() => recategorizeMut.mutate()}
+              disabled={recategorizeMut.isPending}
+            >
+              {recategorizeMut.isPending ? "Kör om…" : "Omseeda regler + omkategorisera"}
+            </button>
+            <div className="text-xs text-slate-500 mt-1">
+              Tar bort inbyggda seed-regler, lägger till de senaste från koden och
+              kör om kategoriseringen på alla transaktioner som du inte själv har
+              rättat. Dina egna rättningar behålls.
+            </div>
+            {recategorizeMut.data && (
+              <div className="mt-2 text-sm">
+                <strong>{recategorizeMut.data.categorized}</strong> av{" "}
+                {recategorizeMut.data.txs_processed} transaktioner kategoriserade.
+                {" "}
+                ({recategorizeMut.data.seed_rules_removed} gamla seed-regler ersatta,
+                {" "}{recategorizeMut.data.still_uncategorized} kvar okategoriserade — de
+                hamnar hos LLM:en vid nästa import.)
               </div>
             )}
           </div>

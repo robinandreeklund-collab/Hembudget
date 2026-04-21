@@ -9,6 +9,16 @@ from sqlalchemy.orm import Session
 from ..db.models import Category, Rule
 
 
+# Kategorier som bara gäller för positiva belopp (inkomst)
+INCOME_ONLY_CATEGORIES = {
+    "Inkomst", "Lön", "Swish in", "Återbetalning",
+}
+# Kategorier som bara gäller för negativa belopp (utgift)
+EXPENSE_ONLY_CATEGORIES = {
+    "Swish ut",
+}
+
+
 @dataclass
 class RuleMatch:
     rule_id: int
@@ -19,7 +29,7 @@ class RuleMatch:
 class RuleEngine:
     """Regex / substring-baserad regelmotor. Prioritet avgör vid flera matchningar."""
 
-    def __init__(self, rules: Iterable[Rule]):
+    def __init__(self, rules: Iterable[Rule], categories_by_id: dict[int, str] | None = None):
         self._rules: list[tuple[Rule, re.Pattern | None]] = []
         for r in rules:
             pat = None
@@ -30,6 +40,7 @@ class RuleEngine:
                     pat = None
             self._rules.append((r, pat))
         self._rules.sort(key=lambda rp: -rp[0].priority)
+        self._cat_names = categories_by_id or {}
 
     def match(self, description: str, amount: float | None = None) -> RuleMatch | None:
         desc_l = (description or "").lower()
@@ -44,13 +55,20 @@ class RuleEngine:
         return None
 
     def _sign_ok(self, rule: Rule, amount: float | None) -> bool:
-        # "Swish in" only applies to positive amounts; "Lön" same.
-        return True  # placeholder — can be extended per-category
+        if amount is None:
+            return True
+        cat_name = self._cat_names.get(rule.category_id)
+        if cat_name in INCOME_ONLY_CATEGORIES and amount < 0:
+            return False
+        if cat_name in EXPENSE_ONLY_CATEGORIES and amount > 0:
+            return False
+        return True
 
 
 def load_rules(session: Session) -> RuleEngine:
     rules = session.query(Rule).order_by(Rule.priority.desc()).all()
-    return RuleEngine(rules)
+    cats = {c.id: c.name for c in session.query(Category).all()}
+    return RuleEngine(rules, categories_by_id=cats)
 
 
 def seed_categories_and_rules(session: Session) -> None:

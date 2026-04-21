@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..categorize.engine import CategorizationEngine
 from ..categorize.rules import seed_categories_and_rules
+from ..llm.client import LMStudioClient
 from ..db.models import (
     Account,
     AuditLog,
@@ -53,6 +55,58 @@ def stats(session: Session = Depends(db)) -> dict:
         "goals": session.query(Goal).count(),
         "loans": session.query(Loan).count(),
         "loan_payments": session.query(LoanPayment).count(),
+    }
+
+
+@router.post("/recategorize")
+def recategorize(
+    reseed: bool = True,
+    session: Session = Depends(db),
+) -> dict:
+    """Blåser bort gamla seed-regler, re-seedar från koden, och kör om
+    kategoriseringen på alla transaktioner som inte är användarverifierade
+    (respekterar dina manuella rättningar)."""
+    removed = 0
+    if reseed:
+        removed = session.query(Rule).filter(Rule.source == "seed").delete()
+        session.flush()
+        seed_categories_and_rules(session)
+        session.flush()
+
+    # Nollställ kategorin på icke-verifierade, icke-transfer transaktioner
+    # så att engine.categorize_batch kör om dem från början
+    txs = (
+        session.query(Transaction)
+        .filter(
+            Transaction.user_verified.is_(False),
+            Transaction.is_transfer.is_(False),
+        )
+        .all()
+    )
+    for t in txs:
+        t.category_id = None
+        t.ai_confidence = None
+    session.flush()
+
+    # Kör kategoriseringen igen (bara regler + historik — hoppa över LLM
+    # här för att undvika långsamt LM Studio-anrop; användaren kan kalla
+    # LLM manuellt via nästa import eller en annan knapp)
+    engine = CategorizationEngine(session, llm=None)
+    results = engine.categorize_batch(txs)
+    engine.apply_results(txs, results)
+    session.flush()
+
+    categorized = sum(1 for r in results if r.category_id is not None)
+    log_action(
+        session, "recategorize",
+        meta={"seed_rules_removed": removed, "txs_processed": len(txs),
+              "categorized": categorized},
+    )
+    return {
+        "seed_rules_removed": removed,
+        "txs_processed": len(txs),
+        "categorized": categorized,
+        "still_uncategorized": len(txs) - categorized,
     }
 
 

@@ -6,6 +6,7 @@ DEFAULT_CATEGORIES: list[tuple[str, str | None, str | None]] = [
     ("Lön", "Inkomst", None),
     ("Swish in", "Inkomst", None),
     ("Återbetalning", "Inkomst", None),
+    ("Swish ut", None, "arrow-up-right"),
     ("Boende", None, "home"),
     ("Bolåneränta", "Boende", None),
     ("Amortering", "Boende", None),
@@ -132,8 +133,9 @@ SEED_RULES: list[tuple[str, str, int]] = [
     ("folksam", "Hemförsäkring", 90),
     ("if skadeförsäkring", "Hemförsäkring", 90),
     ("trygg-hansa", "Hemförsäkring", 90),
-    # Swish / överföring — hanteras typiskt via amount sign
-    ("swish", "Swish in", 50),
+    # Swish — specific phrasings so incoming ≠ outgoing
+    ("swish inbetalning", "Swish in", 110),
+    ("swish betalning", "Swish ut", 110),
     # Lön
     ("lön", "Lön", 80),
     ("salary", "Lön", 80),
