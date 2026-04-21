@@ -4,6 +4,22 @@ Lokal AI-driven familjeekonomiplattform. All finansdata stannar på din dator.
 Drivs av en lokal LLM (Nemotron Nano 3) via [LM Studio](https://lmstudio.ai/)
 och en krypterad SQLite-databas.
 
+## 🚀 Prova direkt i browsern
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/robinandreeklund-collab/Hembudget)
+
+Ett klick ovan → Render läser `render.yaml`, sätter upp backend + frontend,
+startar i **demo-mode** och auto-importerar CSV/XLSX-data från `data/`-mappen.
+Ingen inloggning, inget att installera. Efter deploy: sätt frontendens
+`VITE_API_BASE` till backendens URL och gör en re-deploy.
+
+Efter den första deployen är kör `git pull` för att uppdatera.
+
+**Begränsningar på Render free tier:** ingen LM Studio (AI-chat och vision
+fungerar ej, men 96 % av kategoriseringen sker via regler). SQLite-databasen
+är ephemeral — återställs vid inaktivitet, men bootstrap fyller den igen
+automatiskt.
+
 ## Funktioner
 
 - 📥 **CSV-import** — Amex Eurobonus, Nordea, SEB Kort (Mastercard Eurobonus).
