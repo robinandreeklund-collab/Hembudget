@@ -405,45 +405,33 @@ def monthly_forecast(
     bills_total = sum((b.amount for b in bills), Decimal("0"))
     income_total = sum((i.amount for i in incomes), Decimal("0"))
 
-    # Fasta kostnader uppskattning = snitt av senaste 3 månadernas utgifter
-    # (endast negativa, exkl transfers)
+    # Fasta kostnader = snitt av senaste 3 månadernas utgifter
+    # (exkl. transfers, exkl. redan matchade kommande fakturor så de inte
+    # räknas dubbelt när de dyker upp som riktiga transaktioner nästa gång)
     from sqlalchemy import func as sql_func
-    rows = session.execute(
+
+    # Räkna ut lookback-fönstret korrekt över årsgräns
+    lookback_month = mon - 3
+    lookback_year = year
+    if lookback_month <= 0:
+        lookback_month += 12
+        lookback_year -= 1
+    lookback_start = date(lookback_year, lookback_month, 1)
+
+    monthly_exp = (
         session.query(
             sql_func.strftime("%Y-%m", Transaction.date).label("m"),
             sql_func.sum(Transaction.amount).label("tot"),
         )
-        .where(
-            Transaction.amount < 0,
-            Transaction.is_transfer.is_(False),
-            Transaction.date >= date(year - 1, mon, 1) if mon == 1
-                else date(year, mon - 3 if mon > 3 else 1, 1),
-            Transaction.date < start,
-        )
-        .group_by("m")
-        .order_by("m")
-        .subquery()
-        .select()
-    ).all()
-    # Enklare: direkt fråga
-    from sqlalchemy import select
-    lookback_start = (
-        date(year, mon - 3, 1) if mon > 3
-        else date(year - 1, mon + 9, 1)
-    )
-    monthly_exp = session.execute(
-        select(
-            sql_func.strftime("%Y-%m", Transaction.date).label("m"),
-            sql_func.sum(Transaction.amount).label("tot"),
-        )
-        .where(
+        .filter(
             Transaction.amount < 0,
             Transaction.is_transfer.is_(False),
             Transaction.date >= lookback_start,
             Transaction.date < start,
         )
         .group_by("m")
-    ).all()
+        .all()
+    )
 
     if monthly_exp:
         avg_expenses = abs(sum(float(t) for _, t in monthly_exp)) / len(monthly_exp)
@@ -452,10 +440,10 @@ def monthly_forecast(
 
     available = float(income_total) - float(bills_total) - avg_expenses
 
-    owners = {}
+    owners: dict[str, Decimal] = {}
     for i in incomes:
-        owners.setdefault(i.owner or "Okänd", Decimal("0"))
-        owners[i.owner or "Okänd"] += i.amount
+        key = i.owner or "Okänd"
+        owners[key] = owners.get(key, Decimal("0")) + i.amount
 
     return {
         "month": month,
