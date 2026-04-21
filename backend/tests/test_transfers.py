@@ -7,7 +7,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from hembudget.db.models import Account, Base, Transaction
-from hembudget.transfers.detector import TransferDetector
+from hembudget.transfers.detector import (
+    TransferDetector,
+    _find_account_in_description,
+    _normalize_number,
+)
 
 
 @pytest.fixture()
@@ -295,3 +299,109 @@ def test_generic_transfer_pattern_marks_but_doesnt_pair(session):
     assert result.paired == 0
     assert tx.is_transfer is True
     assert tx.category_id is None
+
+
+# --- Account-number-baserad matchning ---
+
+def test_normalize_number_strips_non_digits():
+    assert _normalize_number("1722 20 34439") == "17222034439"
+    assert _normalize_number("3992-68-11531") == "3992 68 11531".replace(" ", "")
+    assert _normalize_number(None) == ""
+    assert _normalize_number("") == ""
+
+
+def test_find_account_in_description_exact(session):
+    acc = Account(
+        name="Lön", bank="nordea", type="checking",
+        account_number="1722 20 34439",
+    )
+    session.add(acc); session.flush()
+    index = {"17222034439": acc}
+
+    assert _find_account_in_description(
+        "Överföring till 1722 20 34439", index
+    ) is acc
+    # Även utan mellanslag
+    assert _find_account_in_description(
+        "ÖVERF 17222034439 FRÖJD", index
+    ) is acc
+    # Inte match om kontonumret inte finns
+    assert _find_account_in_description("Något annat", index) is None
+
+
+def test_find_account_prefers_longer_match(session):
+    short = Account(name="Kort", bank="nordea", type="checking", account_number="1234")
+    long = Account(name="Långt", bank="nordea", type="checking", account_number="123456789")
+    session.add_all([short, long]); session.flush()
+    # Normaliseraren filtrerar bort kontonummer < 6 siffror → short ignoreras
+    from hembudget.transfers.detector import _build_account_number_index
+    index = _build_account_number_index(session)
+    assert "1234" not in index
+    assert "123456789" in index
+
+
+def test_internal_transfer_via_account_number(session):
+    """Robusthet: två konton, src-beskrivningen nämner dst-kontots
+    kontonummer. Ska paras även om beloppet avviker lite."""
+    src_acc = Account(
+        name="Lönekonto", bank="nordea", type="checking",
+        account_number="1722 20 34439",
+    )
+    dst_acc = Account(
+        name="Gemensamt", bank="nordea", type="checking",
+        account_number="3992 68 11531",
+    )
+    session.add_all([src_acc, dst_acc]); session.flush()
+
+    # src: -10 000 mot dst-kontonumret
+    _tx(session, src_acc.id, date(2026, 4, 1), -10000,
+        "Överföring till 3992 68 11531 Fröjd")
+    # dst: +10 000 utan namn
+    _tx(session, dst_acc.id, date(2026, 4, 1), 10000, "INSÄTTNING")
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 1
+
+
+def test_internal_transfer_reverse_account_number(session):
+    """Omvänt: dst-beskrivningen nämner src-kontots nummer — ska också para."""
+    src_acc = Account(
+        name="Sparkonto", bank="nordea", type="savings",
+        account_number="1111 22 33333",
+    )
+    dst_acc = Account(
+        name="Lönekonto", bank="nordea", type="checking",
+        account_number="9999 88 77777",
+    )
+    session.add_all([src_acc, dst_acc]); session.flush()
+
+    # src: generisk text
+    _tx(session, src_acc.id, date(2026, 4, 1), -5000, "UTTAG")
+    # dst: nämner src-kontonumret
+    _tx(session, dst_acc.id, date(2026, 4, 1), 5000,
+        "Från sparkonto 1111 22 33333")
+
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 1
+
+
+def test_account_number_match_survives_amount_drift(session):
+    """Med kontonummer-match ska vi tillåta liten amount-drift (inom
+    standardtolerans 0.5%). Säkerställer att kontonummer-signalen
+    alltid vinner över exakt-belopp-endast-fallet."""
+    src_acc = Account(
+        name="A", bank="nordea", type="checking", account_number="1000 00 00001",
+    )
+    dst_acc = Account(
+        name="B", bank="nordea", type="checking", account_number="2000 00 00002",
+    )
+    session.add_all([src_acc, dst_acc]); session.flush()
+
+    _tx(session, src_acc.id, date(2026, 4, 1), -10000,
+        "Till 2000 00 00002")
+    _tx(session, dst_acc.id, date(2026, 4, 1), 9995, "")  # 5 kr avgift drog
+
+    # Med 0.5 % tolerans är 9995 ≈ 10000 (inom +/- 50), så kandidaten
+    # finns i listan och account-number-matchen hittar den
+    r = TransferDetector(session).detect_internal_transfers()
+    assert r.pairs == 1

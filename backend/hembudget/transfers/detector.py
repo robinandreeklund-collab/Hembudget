@@ -14,6 +14,7 @@ räknas som utgifter (detaljerna finns ju i kreditkortsraderna).
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -24,6 +25,45 @@ from sqlalchemy.orm import Session
 from ..db.models import Account, Transaction
 
 log = logging.getLogger(__name__)
+
+
+def _normalize_number(s: str | None) -> str:
+    """Endast siffror — t.ex. '1722 20 34439' → '17222034439'."""
+    return re.sub(r"[^0-9]", "", s or "")
+
+
+def _build_account_number_index(
+    session: Session,
+) -> dict[str, Account]:
+    """Returnera map normaliserat_kontonummer → Account. Endast konton med
+    minst 6 siffror räknas (undviker kortnummer/kundnummer)."""
+    out: dict[str, Account] = {}
+    for acc in session.query(Account).filter(Account.account_number.is_not(None)).all():
+        num = _normalize_number(acc.account_number)
+        if len(num) >= 6:
+            out[num] = acc
+    return out
+
+
+def _find_account_in_description(
+    description: str,
+    index: dict[str, Account],
+) -> Account | None:
+    """Returnera Account vars normaliserade kontonummer förekommer i
+    beskrivningen (efter att alla icke-siffror strippats). Om flera matchar,
+    välj det längsta (mest specifika)."""
+    if not index:
+        return None
+    compacted = _normalize_number(description)
+    if not compacted:
+        return None
+    best: Account | None = None
+    best_len = 0
+    for num, acc in index.items():
+        if num in compacted and len(num) > best_len:
+            best = acc
+            best_len = len(num)
+    return best
 
 
 # Merchant-substring → bank-id. Matchas case-insensitivt.
@@ -178,7 +218,10 @@ class TransferDetector:
     ) -> InternalScanResult:
         """Para ihop överföringar mellan egna konton baserat på datum + belopp.
 
-        Tre nivåer:
+        Fyra nivåer (prioritetsordning):
+        0. **Kontonummer i beskrivning:** om src eller dst innehåller den
+           andres kontonummer i sin text, och belopp+datum matchar → para.
+           Starkast signal, tålig mot belopps-avvikelser.
         1. **Unik kandidat:** exakt en positiv rad matchar → paras direkt.
         2. **1:1 bland identiska:** om N negativa och N positiva rader med
            exakt samma belopp finns på samma datum (eller inom fönstret),
@@ -190,6 +233,8 @@ class TransferDetector:
         account_ids = [a.id for a in self.session.query(Account).all()]
         if len(account_ids) < 2:
             return InternalScanResult(0, 0, [])
+
+        account_num_index = _build_account_number_index(self.session)
 
         # Include rows already flagged as transfer but not yet paired — that
         # happens when the generic-pattern pass marks an "Överföring"-row
@@ -229,7 +274,43 @@ class TransferDetector:
                 and abs((t.date - src.date).days) <= date_tolerance_days
             ]
 
+            # Steg 0: kontonummer-signal (starkast). Kollar båda hållen —
+            # src kan nämna destkontot, eller dst kan nämna src-kontot.
+            src_mentions = _find_account_in_description(
+                src.raw_description, account_num_index
+            )
             dst: Transaction | None = None
+            if src_mentions and src_mentions.id != src.account_id:
+                for c in candidates:
+                    if c.account_id == src_mentions.id:
+                        dst = c
+                        break
+            if dst is None:
+                # Omvänt: hitta en kandidat vars beskrivning nämner src-kontot
+                src_account = self.session.get(Account, src.account_id)
+                src_account_num = (
+                    _normalize_number(src_account.account_number)
+                    if src_account and src_account.account_number
+                    else ""
+                )
+                if src_account_num and len(src_account_num) >= 6:
+                    for c in candidates:
+                        if src_account_num in _normalize_number(c.raw_description):
+                            dst = c
+                            break
+
+            if dst is not None:
+                src.is_transfer = True
+                src.transfer_pair_id = dst.id
+                src.category_id = None
+                dst.is_transfer = True
+                dst.transfer_pair_id = src.id
+                dst.category_id = None
+                claimed.add(src.id)
+                claimed.add(dst.id)
+                pairs.append((src.id, dst.id))
+                continue
+
             if len(candidates) == 1:
                 dst = candidates[0]
             elif len(candidates) > 1:
