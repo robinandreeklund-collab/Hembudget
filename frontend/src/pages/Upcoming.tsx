@@ -827,74 +827,167 @@ interface CCResult {
   parser?: string;   // "pdf:amex" | "pdf:seb_kort" | undefined (vision)
 }
 
+interface PdfDiagnostic {
+  file: File;
+  message: string;
+  textSample: string;
+  textLength: number;
+}
+
 function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
   const [jobs, setJobs] = useState<
     { file: File; status: "uploading" | "done" | "error"; message?: string }[]
   >([]);
   const [result, setResult] = useState<CCResult | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [pdfDiagnostic, setPdfDiagnostic] = useState<PdfDiagnostic | null>(null);
+
+  async function tryPdfParser(
+    file: File,
+    force: "amex" | "seb_kort" | null,
+  ): Promise<
+    | { ok: true; data: CCResult }
+    | { ok: false; status: number; detail: unknown }
+  > {
+    const token = getToken();
+    const pdfForm = new FormData();
+    pdfForm.append("file", file);
+    const url = force
+      ? `${apiBase()}/upcoming/parse-credit-card-pdf?force=${force}`
+      : `${apiBase()}/upcoming/parse-credit-card-pdf`;
+    const res = await fetch(url, {
+      method: "POST",
+      body: pdfForm,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) return { ok: true, data: (await res.json()) as CCResult };
+    let detail: unknown;
+    try {
+      detail = await res.json();
+    } catch {
+      detail = await res.text();
+    }
+    return { ok: false, status: res.status, detail };
+  }
+
+  async function visionFallback(files: File[]) {
+    const token = getToken();
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    try {
+      const res = await fetch(
+        `${apiBase()}/upcoming/parse-credit-card-invoice`,
+        {
+          method: "POST",
+          body: form,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        setJobs(files.map((f) => ({ file: f, status: "error", message: text })));
+        return;
+      }
+      const data = (await res.json()) as CCResult;
+      setJobs(files.map((f) => ({ file: f, status: "done", message: "vision" })));
+      setResult(data);
+      onDone();
+    } catch (e) {
+      setJobs(
+        files.map((f) => ({ file: f, status: "error", message: String(e) })),
+      );
+    }
+  }
 
   async function upload(files: FileList | File[]) {
     const arr = Array.from(files);
     if (arr.length === 0) return;
     setJobs(arr.map((f) => ({ file: f, status: "uploading" })));
     setResult(null);
-    const token = getToken();
+    setPdfDiagnostic(null);
 
-    // Steg 1: om exakt en PDF skickas, prova den deterministiska parsern
-    // först. Den är snabbare och stabilare än vision för kända format
-    // (Amex Eurobonus, SEB Kort Mastercard).
+    // Steg 1: om exakt en PDF, prova deterministisk parser
     if (arr.length === 1 && /\.pdf$/i.test(arr[0].name)) {
-      const pdfForm = new FormData();
-      pdfForm.append("file", arr[0]);
-      try {
-        const res = await fetch(
-          `${apiBase()}/upcoming/parse-credit-card-pdf`,
-          {
-            method: "POST",
-            body: pdfForm,
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          },
-        );
-        if (res.ok) {
-          const data = (await res.json()) as CCResult;
-          setJobs([{ file: arr[0], status: "done", message: data.parser }]);
-          setResult(data);
-          onDone();
-          return;
-        }
-        // 415 = okänt PDF-format → fall tillbaka till vision nedan
-        if (res.status !== 415) {
-          const txt = await res.text();
-          setJobs([{ file: arr[0], status: "error", message: txt }]);
-          return;
-        }
-      } catch (e) {
-        // Nätverksfel → försök vision som fallback
-        console.warn("PDF-parser fel, faller tillbaka till vision:", e);
-      }
-    }
-
-    // Steg 2: vision-fallback (bilder eller okända PDF-format)
-    const form = new FormData();
-    for (const f of arr) form.append("files", f);
-    try {
-      const res = await fetch(`${apiBase()}/upcoming/parse-credit-card-invoice`, {
-        method: "POST",
-        body: form,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        setJobs(arr.map((f) => ({ file: f, status: "error", message: text })));
+      const result = await tryPdfParser(arr[0], null);
+      if (result.ok) {
+        setJobs([{ file: arr[0], status: "done", message: result.data.parser }]);
+        setResult(result.data);
+        onDone();
         return;
       }
-      const data = (await res.json()) as CCResult;
-      setJobs(arr.map((f) => ({ file: f, status: "done", message: "vision" })));
-      setResult(data);
+      if (result.status === 415) {
+        // Auto-detektering misslyckades → visa diagnostik + knappar för
+        // att tvinga parser eller falla tillbaka på vision
+        interface ApiDetail {
+          message?: string;
+          extracted_text_sample?: string;
+          text_length?: number;
+        }
+        const detail = result.detail as {
+          message?: string;
+          detail?: ApiDetail;
+        };
+        // FastAPI wrappar custom detail i { detail: ... }; om strukturen
+        // kom platt (ingen wrap), använd det rakt av.
+        const info: ApiDetail = detail.detail ?? (detail as ApiDetail);
+        setPdfDiagnostic({
+          file: arr[0],
+          message:
+            info.message ??
+            detail.message ??
+            "PDF-parsern kunde inte avgöra utgivare",
+          textSample: info.extracted_text_sample ?? "",
+          textLength: info.text_length ?? 0,
+        });
+        setJobs([
+          {
+            file: arr[0],
+            status: "error",
+            message: "okänt PDF-format",
+          },
+        ]);
+        return;
+      }
+      // Annat fel — visa som generellt fel
+      setJobs([
+        {
+          file: arr[0],
+          status: "error",
+          message:
+            typeof result.detail === "string"
+              ? result.detail
+              : JSON.stringify(result.detail),
+        },
+      ]);
+      return;
+    }
+
+    // Steg 2: vision-fallback för bilder / flera filer
+    await visionFallback(arr);
+  }
+
+  async function retryWithForce(force: "amex" | "seb_kort") {
+    if (!pdfDiagnostic) return;
+    setJobs([{ file: pdfDiagnostic.file, status: "uploading" }]);
+    const result = await tryPdfParser(pdfDiagnostic.file, force);
+    if (result.ok) {
+      setJobs([
+        { file: pdfDiagnostic.file, status: "done", message: result.data.parser },
+      ]);
+      setResult(result.data);
+      setPdfDiagnostic(null);
       onDone();
-    } catch (e) {
-      setJobs(arr.map((f) => ({ file: f, status: "error", message: String(e) })));
+    } else {
+      setJobs([
+        {
+          file: pdfDiagnostic.file,
+          status: "error",
+          message:
+            typeof result.detail === "string"
+              ? result.detail
+              : JSON.stringify(result.detail),
+        },
+      ]);
     }
   }
 
@@ -953,11 +1046,60 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
               {j.status === "done" && <Sparkles className="w-4 h-4 text-emerald-600" />}
               {j.status === "error" && <div className="w-4 h-4 rounded-full bg-rose-500" />}
               <div className="flex-1 truncate">{j.file.name}</div>
+              {j.status === "done" && j.message && (
+                <div className="text-emerald-600 text-xs font-mono">{j.message}</div>
+              )}
               {j.status === "error" && j.message && (
                 <div className="text-rose-600 text-xs truncate max-w-md">{j.message}</div>
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {pdfDiagnostic && (
+        <div className="mt-3 p-3 rounded bg-amber-50 border border-amber-200 text-sm">
+          <div className="font-semibold text-amber-900 mb-1">
+            PDF-parsern kunde inte avgöra utgivare
+          </div>
+          <div className="text-amber-800 mb-2">
+            {pdfDiagnostic.message}
+          </div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              onClick={() => retryWithForce("amex")}
+              className="text-xs bg-brand-600 text-white px-3 py-1.5 rounded hover:bg-brand-700"
+            >
+              Tvinga Amex-parsern
+            </button>
+            <button
+              onClick={() => retryWithForce("seb_kort")}
+              className="text-xs bg-brand-600 text-white px-3 py-1.5 rounded hover:bg-brand-700"
+            >
+              Tvinga SEB Kort-parsern
+            </button>
+            <button
+              onClick={() => {
+                setPdfDiagnostic(null);
+                void visionFallback([pdfDiagnostic.file]);
+              }}
+              className="text-xs bg-slate-200 text-slate-700 px-3 py-1.5 rounded hover:bg-slate-300"
+            >
+              Kör vision AI istället
+            </button>
+          </div>
+          <details>
+            <summary className="text-xs text-amber-700 cursor-pointer">
+              Visa extraherad text ({pdfDiagnostic.textLength} tecken)
+            </summary>
+            <pre className="mt-2 text-xs font-mono bg-white border border-amber-200 rounded p-2 max-h-60 overflow-auto whitespace-pre-wrap">
+              {pdfDiagnostic.textSample || "(ingen text extraherad)"}
+            </pre>
+            <div className="text-xs text-amber-700 mt-1">
+              Skicka de första ~800 tecknen ovan till utvecklaren så
+              finjusteras regex-mönstren.
+            </div>
+          </details>
         </div>
       )}
 

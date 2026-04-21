@@ -23,17 +23,25 @@ log = logging.getLogger(__name__)
 
 
 SEB_HEADER_PATTERNS = (
-    "KONTOUTDRAG",
-    "SAS EuroBonus MC Premium",
-    "SEB Kort Bank",
-    "saseurobonusmastercard.se",
+    "kontoutdrag",
+    "sas eurobonus mc",
+    "seb kort bank",
+    "saseurobonusmastercard",
+    "eurobonus mastercard",
 )
 
 
 def looks_like_seb_kort(text: str) -> bool:
-    # SEB Kort har "KONTOUTDRAG" i rubrik (inte "Faktura") + SEB Kort Bank
-    has_kontoutdrag = "KONTOUTDRAG" in text
-    has_seb = ("SEB Kort Bank" in text or "saseurobonusmastercard" in text)
+    """Case-insensitive — SEB Kort har alltid "KONTOUTDRAG" + någon form
+    av SEB Kort/EuroBonus-märkning."""
+    low = (text or "").lower()
+    has_kontoutdrag = "kontoutdrag" in low
+    has_seb = (
+        "seb kort" in low
+        or "saseurobonusmastercard" in low
+        or "sas eurobonus mc" in low
+        or "eurobonus mastercard" in low
+    )
     return has_kontoutdrag and has_seb
 
 
@@ -116,28 +124,22 @@ _CARDHOLDER_RE = re.compile(
     re.MULTILINE,
 )
 
-# Transaktionsrad:
-#   251128   COOP HJO          HJO         SEK              251201      70,90
-#   251229   BETALT BG DATUM 251229                                    -6032,91
-# Columns: Datum Specifikation Ort [Valuta] [Kurs] Bokföringsdag Belopp
-# Belopp kan vara positiv (köp) eller negativ (inbetalning)
-_TX_RE = re.compile(
-    r"^\s*(\d{6})\s+"
-    r"(.+?)"                          # specifikation + ort (fångar allt mittemellan)
-    r"\s{2,}(SEK|EUR|USD|GBP|NOK|DKK|\w{3})?\s*"   # ev. valuta
-    r"(?:([\d .]+,\d{1,4})\s*)?"      # ev. kurs
-    r"(\d{6})?\s*"                    # ev. bokföringsdag
-    r"(-?[\d\s .]+,\d{2})\s*$",
-    re.MULTILINE,
+# Datum-mönster i SEB: YYMMDD som fristående 6-siffrigt tal
+_DATE_RE = re.compile(r"(?<!\d)(\d{6})(?!\d)")
+# Valuta: 3-letter code, bara stora bokstäver
+_CURRENCY_RE = re.compile(r"\b(SEK|EUR|USD|GBP|NOK|DKK|CHF|JPY)\b")
+# Amount: signed decimal, tusentalsavgränsare valfri
+_AMOUNT_RE = re.compile(
+    r"(?<![\d.,])(-?\d{1,3}(?:[.\s]?\d{3})*,\d{2})(?!\d)"
 )
 
 _SUMMARY_MARKERS = (
     "TOTALT DETTA KORT",
-    "SUMMA",
     "SKULD FRÅN",
     "SKULD PER",
     "OCR Nummer",
-    "Kostnad pappersfaktura",
+    # OBS: "Kostnad pappersfaktura" är en legitim transaktion (avgift) och
+    # ska INTE skippas trots att den ser ut som rubriktext.
 )
 
 
@@ -208,35 +210,63 @@ def parse_seb_kort(text: str) -> ParsedStatement:
                 break
         return holder, digits
 
-    # Transaktionsrader
-    for m in _TX_RE.finditer(text):
-        date_str = m.group(1)
-        spec = (m.group(2) or "").strip()
-        currency = m.group(3) or None
-        booking_date = m.group(5)  # ev. används framgent
-        amt_str = m.group(6)
+    # Transaktioner: processa rad för rad. På varje rad:
+    # 1. Hitta alla 6-siffriga datum + amounts i ordning
+    # 2. Första datum = transaktionsdatum, spec = text mellan datum och
+    #    amount (eller efter sista datum), sista amount = transaktionens
+    #    belopp, ev. 2:a datum = bokföringsdag.
+    # 3. Skippa SKULD FRÅN/SKULD PER/TOTALT-rader
+    cumulative_offset = 0
+    for line in text.split("\n"):
+        line_offset = cumulative_offset
+        cumulative_offset += len(line) + 1  # +1 för \n
 
-        # Skippa summarader och rubriker
-        if any(marker.lower() in spec.lower() for marker in _SUMMARY_MARKERS):
-            continue
-        if spec.upper().startswith("SKULD"):
+        low = line.lower()
+        if "skuld från" in low or "skuld per" in low or "totalt detta kort" in low:
             continue
 
-        tx_date = _parse_date_yymmdd(date_str)
+        dates = list(_DATE_RE.finditer(line))
+        amounts = list(_AMOUNT_RE.finditer(line))
+        if not dates or not amounts:
+            continue
+
+        tx_date = _parse_date_yymmdd(dates[0].group(1))
         if tx_date is None:
             continue
-        amount_raw = _parse_amount(amt_str)
 
-        # Tecken-logik: SEB:s layout visar belopp som POSITIVT för köp
-        # (ökar skuld) och NEGATIVT för inbetalningar. Vi vill ha
-        # motsatsen på kortkontot: köp = negativt (utgift), inbetalning
-        # = positivt (pengar in).
+        # Sista amount på raden = transaktionens belopp
+        amt_match = amounts[-1]
+        amt_str = amt_match.group(1)
+
+        # Description: text mellan första datumet och amountet, minus ev.
+        # andra datum, valuta, kurs
+        desc_region_start = dates[0].end()
+        desc_region_end = amt_match.start()
+        desc_region = line[desc_region_start:desc_region_end]
+        # Ta bort 6-siffrigt bokföringsdatum + valutakod från beskrivningen
+        desc_region = _DATE_RE.sub("", desc_region)
+        desc_region = _CURRENCY_RE.sub("", desc_region)
+        # Ta bort ev. kurs (decimal som inte är amount)
+        spec = re.sub(r"\s+", " ", desc_region).strip()
+        spec = spec.rstrip(",.- ")
+
+        # Hoppa över om spec är tom eller är rubrik-text
+        if not spec or len(spec) < 2:
+            continue
+        if any(marker.lower() in spec.lower() for marker in _SUMMARY_MARKERS):
+            continue
+
+        # Currency
+        cm = _CURRENCY_RE.search(line)
+        currency = cm.group(1) if cm else None
+
+        amount_raw = _parse_amount(amt_str)
+        # SEB visar köp som POSITIVT (skuld ökar) → utgift för oss = negativt
+        # Inbetalning (BETALT BG) är NEGATIVT i källan → positiv för oss
         amount = -amount_raw
 
-        # Specifikation = "COOP HJO   HJO" → merchant + city
         merchant, city = _split_merchant_city(spec)
-
-        holder, last4 = _current_holder_at(m.start())
+        holder, last4 = _current_holder_at(line_offset)
         if stmt.card_last_digits is None and last4 is not None:
             stmt.card_last_digits = last4
 

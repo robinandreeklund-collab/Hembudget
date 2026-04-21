@@ -919,17 +919,22 @@ def _resolve_or_create_cc_account(
 @router.post("/parse-credit-card-pdf")
 async def parse_credit_card_pdf(
     file: UploadFile = File(...),
+    force: Optional[str] = None,
     session: Session = Depends(db),
 ) -> dict:
     """Deterministisk PDF-parser för kända kortutgivare (Amex, SEB Kort).
     Använder regex-baserad extraktion direkt från PDF-textlager — ingen
-    LLM/vision krävs. Betydligt snabbare och exakt stabilare än
-    vision-flödet för dessa utgivare.
+    LLM/vision krävs.
 
-    Samma output-struktur som /parse-credit-card-invoice, så frontenden
-    kan behandla resultatet identiskt."""
+    `force` kan vara 'amex' eller 'seb_kort' för att tvinga en parser när
+    auto-detekteringen missar. Om `force` saknas och auto-detekteringen
+    inte matchar returnerar vi 415 med extraherad text i svaret så
+    frontend kan visa en felsöknings-diagnostik."""
     import hashlib
-    from ..parsers.pdf_statements.detect import parse_statement
+    from ..parsers.pdf_statements.detect import (
+        UnknownStatementFormat,
+        parse_statement,
+    )
 
     content = await file.read()
     if not content:
@@ -942,7 +947,27 @@ async def parse_credit_card_pdf(
         )
 
     try:
-        parsed = parse_statement(content)
+        parsed = parse_statement(content, force=force)
+    except UnknownStatementFormat as exc:
+        # Logga första bita av textet så användaren ser vad pypdfium2
+        # extraherade (mycket hjälpsamt för felsökning)
+        snippet = exc.extracted_text[:800] if exc.extracted_text else ""
+        log.warning(
+            "PDF-detektion misslyckades. Första 800 tecken:\n%s", snippet,
+        )
+        # Returnera 415 med textprov i body så frontend kan visa det
+        raise HTTPException(
+            415,
+            detail={
+                "message": (
+                    "Kunde inte detektera utgivaren från PDF-texten. "
+                    "Skicka med ?force=amex eller ?force=seb_kort för att "
+                    "tvinga en parser, eller använd vision-flödet."
+                ),
+                "extracted_text_sample": snippet,
+                "text_length": len(exc.extracted_text or ""),
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(415, str(exc)) from exc
     except Exception as exc:
