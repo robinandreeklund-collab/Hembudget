@@ -269,10 +269,16 @@ class LoanMatcher:
         return c.id if c else None
 
     def _find_loan(self, loans: list[Loan], tx: Transaction) -> Loan | None:
+        """match_pattern kan vara flera alternativ separerade med '|'.
+        Vi matchar case-insensitivt om NÅGOT av mönstren finns i beskrivningen."""
         desc = (tx.raw_description or "").lower()
         for loan in loans:
-            if loan.match_pattern and loan.match_pattern.lower() in desc:
-                return loan
+            if not loan.match_pattern:
+                continue
+            patterns = [p.strip().lower() for p in loan.match_pattern.split("|") if p.strip()]
+            for p in patterns:
+                if p in desc:
+                    return loan
         return None
 
     def _already_linked(self, tx_id: int) -> bool:

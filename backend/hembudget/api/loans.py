@@ -77,10 +77,10 @@ class LoanSummary(BaseModel):
     id: int
     name: str
     lender: str
-    principal_amount: Decimal
-    outstanding_balance: Decimal
-    amortization_paid: Decimal
-    interest_paid: Decimal
+    principal_amount: float
+    outstanding_balance: float
+    amortization_paid: float
+    interest_paid: float
     interest_rate: float
     binding_type: str
     binding_end_date: Optional[date]
@@ -406,6 +406,22 @@ def _loan_schema() -> dict:
                     "required": ["due_date", "total_amount"],
                 },
             },
+            "historical_transactions": {
+                "type": "array",
+                "description": (
+                    "Redan genomförda betalningar från 'Transaktioner'-fliken. "
+                    "Används för att matcha mot importerade CSV-transaktioner."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string"},
+                        "total_amount": {"type": "number"},
+                        "amortization_amount": {"type": ["number", "null"]},
+                    },
+                    "required": ["date", "total_amount"],
+                },
+            },
         },
         "required": ["lender"],
     }
@@ -428,6 +444,8 @@ def _loan_system_prompt() -> str:
         "- För schedule: returnera ALLA kommande rader som syns. "
         "  'total_amount' = 'Belopp'-kolumnen. "
         "  'remaining_balance_after' = 'Återstående belopp'.\n"
+        "- För historical_transactions: rader från 'Transaktioner'-fliken där "
+        "  Typ = 'Betalning'. total_amount = Belopp-kolumnen.\n"
         "- 'Ränta: 3 månaders bunden' → binding_type='3mån'.\n"
         "- Om ränta inte står explicit, sätt null — backend beräknar."
     )
@@ -561,12 +579,24 @@ async def parse_loan_from_images(
         if any(a > 0 for a in amorts):
             amort_monthly = max(amorts, default=0) or None
 
-    # match_pattern: lånnummer är bäst, annars långivarnamn
+    # match_pattern kan vara flera mönster separerade med '|' — matchern
+    # provar vart och ett. Lägg till både långivare (t.ex. 'Nordea Hypotek')
+    # OCH lånnumret, eftersom olika banker visar det ena eller andra i
+    # transaktionsbeskrivningen.
     loan_number = parsed.get("loan_number")
-    match_pattern = loan_number or parsed.get("lender")
+    lender = parsed.get("lender") or ""
+    patterns: list[str] = []
+    # Korta varianter: "Nordea Hypotek" → utan "AB (publ)"
+    lender_short = lender.replace(" AB (publ)", "").replace(" AB", "").strip()
+    if lender_short:
+        patterns.append(lender_short)
+    if loan_number:
+        patterns.append(loan_number)
+    # Fler lämpliga mönster: bolåneränta, bolån, amortering
+    match_pattern = "|".join(dict.fromkeys(patterns)) or None
 
     loan_name = parsed.get("name") or (
-        f"{parsed.get('lender')} {loan_number or ''}".strip()
+        f"{lender_short} {loan_number or ''}".strip()
     )
 
     # Skapa lånet
@@ -600,15 +630,15 @@ async def parse_loan_from_images(
                 loan.notes = (prefix + f"\nÅterbetalningskonto: {acc.name}").strip()
                 break
 
-    # Skapa schedule-rader
-    for row in schedule_raw:
+    def _add_schedule_row(due_date_str: str, total_raw, amort_raw) -> None:
         try:
-            due = date.fromisoformat(row["due_date"])
-        except (KeyError, ValueError):
-            continue
-        total = Decimal(str(row.get("total_amount", 0)))
-        amort = Decimal(str(row.get("amortization_amount") or 0))
-        # Dela upp i ränta + amort
+            due = date.fromisoformat(due_date_str)
+        except (TypeError, ValueError):
+            return
+        total = Decimal(str(total_raw or 0))
+        if total <= 0:
+            return
+        amort = Decimal(str(amort_raw or 0))
         if amort > 0:
             session.add(LoanScheduleEntry(
                 loan_id=loan.id, due_date=due,
@@ -626,6 +656,24 @@ async def parse_loan_from_images(
                 loan_id=loan.id, due_date=due,
                 amount=total, payment_type="interest",
             ))
+
+    # Kommande betalningar
+    for row in schedule_raw:
+        _add_schedule_row(
+            row.get("due_date"),
+            row.get("total_amount"),
+            row.get("amortization_amount"),
+        )
+
+    # Historiska betalningar från Transaktioner-fliken — skapas som schema-
+    # rader med bakåtdatum så schedule-matchern kan para dem mot redan
+    # importerade CSV-transaktioner.
+    for row in parsed.get("historical_transactions") or []:
+        _add_schedule_row(
+            row.get("date"),
+            row.get("total_amount"),
+            row.get("amortization_amount"),
+        )
 
     session.flush()
 

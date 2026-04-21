@@ -171,6 +171,29 @@ def test_generate_schedule_creates_entries(session):
     assert interest_amounts[0] > interest_amounts[1] > interest_amounts[2]
 
 
+def test_matcher_multi_pattern_matches_any(session):
+    """match_pattern kan innehålla flera varianter separerade med '|'."""
+    acc = _acc(session)
+    loan = Loan(
+        name="Bolån", lender="Nordea Hypotek AB",
+        principal_amount=Decimal("800000"),
+        start_date=date(2015, 11, 30), interest_rate=0.028,
+        match_pattern="Nordea Hypotek|3991 43 93314",
+    )
+    session.add(loan); session.flush()
+
+    # Matchar på lender-delen + klassificeras som ränta
+    tx1 = _tx(session, acc.id, date(2026, 3, 27), -1718, "Autogiro Nordea Hypotek ränta")
+    # Matchar på loan_number-delen + klassificeras som ränta
+    tx2 = _tx(session, acc.id, date(2026, 4, 27), -1902, "Ränta 3991 43 93314")
+    # Ingen match
+    tx3 = _tx(session, acc.id, date(2026, 5, 27), -500, "ICA")
+
+    r = LoanMatcher(session).match_and_classify([tx1, tx2, tx3])
+    assert r.linked == 2
+    assert r.matched_via_pattern == 2
+
+
 def test_matcher_unclassified_counts(session):
     acc = _acc(session)
     loan = Loan(

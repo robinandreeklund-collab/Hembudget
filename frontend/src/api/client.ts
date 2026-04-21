@@ -76,8 +76,11 @@ export async function uploadFile<T = unknown>(
   return (await res.json()) as T;
 }
 
-export function formatSEK(amount: number): string {
-  return amount.toLocaleString("sv-SE", {
+export function formatSEK(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined) return "—";
+  const n = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("sv-SE", {
     style: "currency",
     currency: "SEK",
     maximumFractionDigits: 0,

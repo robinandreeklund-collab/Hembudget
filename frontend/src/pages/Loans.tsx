@@ -124,9 +124,9 @@ export default function Loans() {
 
   const summaries = summariesQ.data ?? [];
   const loans = loansQ.data ?? [];
-  const totalDebt = summaries.reduce((s, l) => s + l.outstanding_balance, 0);
-  const totalInterest = summaries.reduce((s, l) => s + l.interest_paid, 0);
-  const totalAmortized = summaries.reduce((s, l) => s + l.amortization_paid, 0);
+  const totalDebt = summaries.reduce((s, l) => s + Number(l.outstanding_balance), 0);
+  const totalInterest = summaries.reduce((s, l) => s + Number(l.interest_paid), 0);
+  const totalAmortized = summaries.reduce((s, l) => s + Number(l.amortization_paid), 0);
 
   return (
     <div className="p-6 space-y-5 max-w-5xl">
