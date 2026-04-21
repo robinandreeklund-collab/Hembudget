@@ -26,6 +26,7 @@ from ..db.models import (
 from ..llm.client import LMStudioClient, LLMUnavailable
 from ..splits import build_lines_from_vision, resolve_category_id
 from ..transfers.detector import TransferDetector
+from ..upcoming_match.materializer import UpcomingMaterializer
 from .deps import db, llm_client, require_auth
 
 log = logging.getLogger(__name__)
@@ -274,6 +275,22 @@ def delete_upcoming(upcoming_id: int, session: Session = Depends(db)) -> dict:
         raise HTTPException(404, "Upcoming not found")
     session.delete(u)
     return {"deleted": upcoming_id}
+
+
+@router.post("/materialize")
+def materialize_upcoming(
+    horizon_days: int = 60,
+    session: Session = Depends(db),
+) -> dict:
+    """Skapa UpcomingTransaction-rader från lånescheman och aktiva
+    prenumerationer. Idempotent — kör säkert upprepade gånger."""
+    result = UpcomingMaterializer(session, horizon_days=horizon_days).run()
+    return {
+        "loan_upcoming_created": result.loan_upcoming_created,
+        "sub_upcoming_created": result.sub_upcoming_created,
+        "skipped_existing": result.skipped_existing,
+        "horizon_days": horizon_days,
+    }
 
 
 @router.put("/{upcoming_id}/lines", response_model=list[UpcomingLineOut])
