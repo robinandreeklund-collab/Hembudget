@@ -822,8 +822,9 @@ interface CCResult {
   payer_account_id: number | null;
   opening_balance_extracted: number | null;
   closing_balance_extracted: number | null;
-  opening_balance_set_on_account: number | null;
-  opening_balance_date: string | null;
+  opening_balance_set_on_account?: number | null;
+  opening_balance_date?: string | null;
+  parser?: string;   // "pdf:amex" | "pdf:seb_kort" | undefined (vision)
 }
 
 function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
@@ -838,10 +839,45 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
     if (arr.length === 0) return;
     setJobs(arr.map((f) => ({ file: f, status: "uploading" })));
     setResult(null);
+    const token = getToken();
 
+    // Steg 1: om exakt en PDF skickas, prova den deterministiska parsern
+    // först. Den är snabbare och stabilare än vision för kända format
+    // (Amex Eurobonus, SEB Kort Mastercard).
+    if (arr.length === 1 && /\.pdf$/i.test(arr[0].name)) {
+      const pdfForm = new FormData();
+      pdfForm.append("file", arr[0]);
+      try {
+        const res = await fetch(
+          `${apiBase()}/upcoming/parse-credit-card-pdf`,
+          {
+            method: "POST",
+            body: pdfForm,
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as CCResult;
+          setJobs([{ file: arr[0], status: "done", message: data.parser }]);
+          setResult(data);
+          onDone();
+          return;
+        }
+        // 415 = okänt PDF-format → fall tillbaka till vision nedan
+        if (res.status !== 415) {
+          const txt = await res.text();
+          setJobs([{ file: arr[0], status: "error", message: txt }]);
+          return;
+        }
+      } catch (e) {
+        // Nätverksfel → försök vision som fallback
+        console.warn("PDF-parser fel, faller tillbaka till vision:", e);
+      }
+    }
+
+    // Steg 2: vision-fallback (bilder eller okända PDF-format)
     const form = new FormData();
     for (const f of arr) form.append("files", f);
-    const token = getToken();
     try {
       const res = await fetch(`${apiBase()}/upcoming/parse-credit-card-invoice`, {
         method: "POST",
@@ -854,7 +890,7 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
         return;
       }
       const data = (await res.json()) as CCResult;
-      setJobs(arr.map((f) => ({ file: f, status: "done" })));
+      setJobs(arr.map((f) => ({ file: f, status: "done", message: "vision" })));
       setResult(data);
       onDone();
     } catch (e) {
@@ -865,16 +901,16 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
   return (
     <Card title="Läs in kreditkortsfaktura (PDF/bild)">
       <div className="text-sm text-slate-500 mb-3">
-        Dra in en eller flera Amex- eller SEB Kort-fakturor. AI läser BÅDE:
+        Dra in en eller flera Amex- eller SEB Kort-fakturor. Systemet läser BÅDE:
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
           <li>Alla enskilda köp → läggs in som transaktioner på kortkontot
-            (skapas automatiskt om det inte finns), kategoriseras av AI:n</li>
+            (skapas automatiskt om det inte finns), kategoriseras av regelmotorn</li>
         </ul>
-        <div className="mt-2 text-amber-700 text-xs">
-          Dubbelbokföring undviks: autogiro-dragningen från gemensamt markeras
-          som överföring, köpen blir de riktiga utgifterna. Krav: vision-kapabel
-          modell i LM Studio (Qwen2.5-VL, Pixtral).
+        <div className="mt-2 text-xs text-emerald-700">
+          <strong>PDF-fakturor (Amex, SEB Kort):</strong> parse:as deterministiskt
+          direkt från textlagret — ingen LLM, snabbt och exakt. Bilder och okända
+          PDF-format faller tillbaka på vision AI (Qwen2.5-VL, Pixtral).
         </div>
       </div>
 
@@ -927,7 +963,14 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
 
       {result && (
         <div className="mt-3 p-3 rounded bg-emerald-50 border border-emerald-200 text-sm">
-          <div className="font-semibold mb-1">{result.card_account_name}</div>
+          <div className="font-semibold mb-1 flex items-center gap-2">
+            {result.card_account_name}
+            {result.parser && (
+              <span className="text-xs bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-mono">
+                {result.parser}
+              </span>
+            )}
+          </div>
           <div>
             Fakturasumma <strong>{formatSEK(result.invoice_total)}</strong> förfaller{" "}
             <strong>{result.due_date}</strong>

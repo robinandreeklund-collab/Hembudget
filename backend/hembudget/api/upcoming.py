@@ -916,6 +916,180 @@ def _resolve_or_create_cc_account(
     return new
 
 
+@router.post("/parse-credit-card-pdf")
+async def parse_credit_card_pdf(
+    file: UploadFile = File(...),
+    session: Session = Depends(db),
+) -> dict:
+    """Deterministisk PDF-parser för kända kortutgivare (Amex, SEB Kort).
+    Använder regex-baserad extraktion direkt från PDF-textlager — ingen
+    LLM/vision krävs. Betydligt snabbare och exakt stabilare än
+    vision-flödet för dessa utgivare.
+
+    Samma output-struktur som /parse-credit-card-invoice, så frontenden
+    kan behandla resultatet identiskt."""
+    import hashlib
+    from ..parsers.pdf_statements.detect import parse_statement
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Tom fil")
+    if not content.startswith(b"%PDF"):
+        raise HTTPException(
+            400,
+            "Endast PDF-filer stöds av PDF-parsern. Använd vision-"
+            "flödet för bilder.",
+        )
+
+    try:
+        parsed = parse_statement(content)
+    except ValueError as exc:
+        raise HTTPException(415, str(exc)) from exc
+    except Exception as exc:
+        log.exception("pdf parse failed")
+        raise HTTPException(400, f"Kunde inte läsa PDF: {exc}") from exc
+
+    # Spara originalet för audit
+    invoice_dir = settings.data_dir / "cc_invoices"
+    invoice_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    original_path = invoice_dir / f"{ts}_{file.filename or 'cc.pdf'}"
+    original_path.write_bytes(content)
+
+    # Hitta eller skapa kortkonto
+    cc_account = _resolve_or_create_cc_account(
+        session,
+        issuer=parsed.issuer,
+        card_name=parsed.card_name,
+    )
+
+    # Sätt ingående saldo om det saknas
+    if cc_account.opening_balance is None and parsed.opening_balance is not None:
+        # Skuld på kortet → negativt saldo i vår modell
+        cc_account.opening_balance = -abs(parsed.opening_balance)
+        if parsed.statement_period_start:
+            cc_account.opening_balance_date = parsed.statement_period_start
+        session.flush()
+
+    # Audit-post
+    imp = Import(
+        filename=file.filename or "cc.pdf",
+        bank=cc_account.bank,
+        sha256=hashlib.sha256(content).hexdigest(),
+        row_count=len(parsed.transactions),
+    )
+    session.add(imp)
+    session.flush()
+
+    # Dubblettskydd: använd samma hash-mönster som CSV-import
+    existing_hashes = {
+        h for (h,) in session.query(Transaction.hash)
+        .filter(Transaction.account_id == cc_account.id).all()
+    }
+
+    new_txs: list[Transaction] = []
+    skipped = 0
+    for idx, line in enumerate(parsed.transactions):
+        # Kontraktet matchar CSV-parsers: nyckel inkluderar account_id,
+        # datum, belopp, beskrivning, och row-index för ordning.
+        desc = (
+            f"{line.merchant} [{line.city}]"
+            if line.merchant and line.city
+            else line.merchant or line.description
+        )
+        key = (
+            f"{cc_account.id}|{line.date.isoformat()}|{line.amount}|"
+            f"{desc.strip().lower()}|#{idx}"
+        )
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        if h in existing_hashes:
+            skipped += 1
+            continue
+        existing_hashes.add(h)
+
+        tx = Transaction(
+            account_id=cc_account.id,
+            date=line.date,
+            amount=line.amount,
+            currency="SEK",
+            raw_description=desc,
+            source_file_id=imp.id,
+            hash=h,
+        )
+        session.add(tx)
+        new_txs.append(tx)
+
+    session.flush()
+
+    # Kategorisering + transfers + loans + upcoming-match — samma flöde
+    # som CSV-import använder.
+    if new_txs:
+        engine = CategorizationEngine(session, llm=None)
+        results = engine.categorize_batch(new_txs)
+        engine.apply_results(new_txs, results)
+        session.flush()
+
+    detector = TransferDetector(session)
+    transfer_result = detector.detect_and_link(new_txs)
+    internal = detector.detect_internal_transfers()
+    session.flush()
+
+    # UpcomingTransaction för hela fakturan
+    payer = (
+        session.query(Account)
+        .filter(Account.pays_credit_account_id == cc_account.id)
+        .first()
+    )
+    card_label = parsed.card_name or cc_account.name
+    notes_parts = []
+    if parsed.statement_period_start and parsed.statement_period_end:
+        notes_parts.append(
+            f"Period: {parsed.statement_period_start.isoformat()} – "
+            f"{parsed.statement_period_end.isoformat()}"
+        )
+    if parsed.card_last_digits:
+        notes_parts.append(f"Kort ****{parsed.card_last_digits}")
+
+    upcoming = UpcomingTransaction(
+        kind="bill",
+        name=f"Kreditkortsfaktura — {card_label}",
+        amount=parsed.total_amount or (parsed.closing_balance or Decimal("0")),
+        expected_date=parsed.due_date or date.today(),
+        debit_date=parsed.due_date or date.today(),
+        debit_account_id=payer.id if payer else None,
+        autogiro=False,
+        bankgiro=parsed.bankgiro,
+        ocr_reference=parsed.ocr_reference,
+        source="pdf_parser",
+        source_image_path=str(original_path),
+        notes=" · ".join(notes_parts) or None,
+    )
+    session.add(upcoming)
+    session.flush()
+
+    return {
+        "parser": f"pdf:{parsed.issuer}",
+        "upcoming_id": upcoming.id,
+        "card_account_id": cc_account.id,
+        "card_account_name": cc_account.name,
+        "transactions_created": len(new_txs),
+        "transactions_skipped_duplicates": skipped,
+        "transfers_marked": transfer_result.marked,
+        "transfers_paired": transfer_result.paired,
+        "internal_pairs": internal.pairs,
+        "invoice_total": float(upcoming.amount),
+        "due_date": upcoming.expected_date.isoformat(),
+        "opening_balance_extracted": (
+            float(parsed.opening_balance) if parsed.opening_balance else None
+        ),
+        "closing_balance_extracted": (
+            float(parsed.closing_balance) if parsed.closing_balance else None
+        ),
+        "card_last_digits": parsed.card_last_digits,
+        "payer_account_id": payer.id if payer else None,
+    }
+
+
 @router.post("/parse-credit-card-invoice")
 async def parse_credit_card_invoice(
     files: list[UploadFile] = File(...),
