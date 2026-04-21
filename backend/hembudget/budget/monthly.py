@@ -67,7 +67,11 @@ class MonthlyBudgetService:
                     func.sum(Transaction.amount).label("total"),
                 )
                 .join(Category, Category.id == Transaction.category_id, isouter=True)
-                .where(Transaction.date >= start, Transaction.date < end)
+                .where(
+                    Transaction.date >= start,
+                    Transaction.date < end,
+                    Transaction.is_transfer.is_(False),
+                )
                 .group_by(Transaction.category_id, Category.name)
             )
         ).all()

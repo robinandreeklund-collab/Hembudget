@@ -138,6 +138,8 @@ class ChatAgent:
 
     def _tool_query_transactions(self, **kw) -> dict:
         q = self.session.query(Transaction)
+        if not kw.get("include_transfers"):
+            q = q.filter(Transaction.is_transfer.is_(False))
         if kw.get("category"):
             q = q.join(Category, Category.id == Transaction.category_id).filter(
                 Category.name == kw["category"]
@@ -174,6 +176,7 @@ class ChatAgent:
                 Transaction.date >= date.fromisoformat(from_date),
                 Transaction.date <= date.fromisoformat(to_date),
                 Transaction.amount < 0,
+                Transaction.is_transfer.is_(False),
             )
             .group_by(Category.name)
             .order_by(func.sum(Transaction.amount).asc())

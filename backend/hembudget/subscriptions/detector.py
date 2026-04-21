@@ -42,6 +42,7 @@ class SubscriptionDetector:
         q = self.session.query(Transaction).filter(
             Transaction.amount < 0,
             Transaction.normalized_merchant.is_not(None),
+            Transaction.is_transfer.is_(False),
         )
         if since:
             q = q.filter(Transaction.date >= since)

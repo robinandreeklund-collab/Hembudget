@@ -42,7 +42,11 @@ class CashflowForecaster:
                 func.strftime("%Y-%m", Transaction.date).label("month"),
                 func.sum(Transaction.amount).label("total"),
             )
-            .where(Transaction.date >= lookback_start, Transaction.date < end)
+            .where(
+                Transaction.date >= lookback_start,
+                Transaction.date < end,
+                Transaction.is_transfer.is_(False),
+            )
             .group_by("month")
             .order_by("month")
         ).all()

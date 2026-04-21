@@ -4,6 +4,7 @@ export interface Account {
   bank: string;
   type: string;
   currency: string;
+  pays_credit_account_id?: number | null;
 }
 
 export interface Category {
@@ -28,6 +29,8 @@ export interface Transaction {
   notes: string | null;
   ai_confidence: number | null;
   user_verified: boolean;
+  is_transfer: boolean;
+  transfer_pair_id: number | null;
 }
 
 export interface MonthSummary {

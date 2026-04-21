@@ -4,6 +4,10 @@ import { api, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account } from "@/types/models";
 
+async function patchAccount(id: number, payload: Partial<Account>): Promise<Account> {
+  return api<Account>(`/accounts/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
 const BANKS = [
   { value: "", label: "Auto-detektera" },
   { value: "amex", label: "American Express (Eurobonus)" },
@@ -42,9 +46,52 @@ export default function ImportPage() {
     onError: (err: Error) => setResult({ error: err.message }),
   });
 
+  const linkPayerMut = useMutation({
+    mutationFn: (p: { account_id: number; pays_credit_account_id: number | null }) =>
+      patchAccount(p.account_id, { pays_credit_account_id: p.pays_credit_account_id }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+  });
+
+  const accounts = accountsQ.data ?? [];
+  const creditAccounts = accounts.filter((a) => a.type === "credit");
+  const checkingAccounts = accounts.filter((a) => a.type === "checking");
+
   return (
     <div className="p-6 space-y-5 max-w-3xl">
       <h1 className="text-2xl font-semibold">Importera CSV</h1>
+
+      {creditAccounts.length > 0 && checkingAccounts.length > 0 && (
+        <Card title="Kreditkorts-koppling">
+          <div className="text-sm text-slate-600 mb-3">
+            Välj vilket lönekonto som betalar fakturan för varje kreditkort. Då markeras
+            autogiro-dragningen som <em>Överföring</em> och räknas inte som en utgift
+            (detaljerna finns ju redan i kortets transaktioner).
+          </div>
+          <div className="space-y-2">
+            {creditAccounts.map((cc) => (
+              <div key={cc.id} className="flex items-center gap-3 text-sm">
+                <div className="w-48 font-medium">{cc.name}</div>
+                <span className="text-slate-400">betalas från</span>
+                <select
+                  value={cc.pays_credit_account_id ?? ""}
+                  onChange={(e) =>
+                    linkPayerMut.mutate({
+                      account_id: cc.id,
+                      pays_credit_account_id: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="border rounded px-2 py-1"
+                >
+                  <option value="">—</option>
+                  {checkingAccounts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card title="Nytt konto">
         <div className="grid grid-cols-4 gap-2">

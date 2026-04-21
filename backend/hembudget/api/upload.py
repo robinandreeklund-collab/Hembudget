@@ -11,6 +11,7 @@ from ..categorize.engine import CategorizationEngine
 from ..db.models import Account, Import, Transaction
 from ..llm.client import LMStudioClient
 from ..parsers import detect_parser, parser_for_bank
+from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
 
 router = APIRouter(prefix="/import", tags=["import"], dependencies=[Depends(require_auth)])
@@ -88,11 +89,20 @@ async def import_csv(
     engine.apply_results(new_transactions, results)
     session.flush()
 
+    # Detect transfers (credit-card payments etc.) to avoid double-counting
+    transfer_result = TransferDetector(session).detect_and_link(new_transactions)
+    session.flush()
+
     return {
         "status": "ok",
         "import_id": imp.id,
         "bank": parser.bank,
         "rows_parsed": len(raw_rows),
         "rows_inserted": len(new_transactions),
-        "categorized": sum(1 for r in results if r.category_id is not None),
+        "categorized": sum(
+            1 for r, tx in zip(results, new_transactions)
+            if r.category_id is not None and not tx.is_transfer
+        ),
+        "transfers_marked": transfer_result.marked,
+        "transfers_paired": transfer_result.paired,
     }

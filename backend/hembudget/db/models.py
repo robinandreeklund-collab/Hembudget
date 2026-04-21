@@ -39,6 +39,9 @@ class Account(Base):
     type: Mapped[str] = mapped_column(String(20), nullable=False)  # checking, credit, isk, savings
     currency: Mapped[str] = mapped_column(String(8), default="SEK")
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    pays_credit_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
@@ -74,6 +77,10 @@ class Transaction(Base):
     hash: Mapped[str] = mapped_column(String(64), nullable=False)
     ai_confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
     user_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_transfer: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    transfer_pair_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="transactions")

@@ -22,6 +22,8 @@ class TransactionOut(BaseModel):
     notes: Optional[str] = None
     ai_confidence: Optional[float] = None
     user_verified: bool
+    is_transfer: bool = False
+    transfer_pair_id: Optional[int] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -30,6 +32,12 @@ class TransactionUpdate(BaseModel):
     tags: Optional[list] = None
     user_verified: Optional[bool] = None
     create_rule: bool = True
+    is_transfer: Optional[bool] = None
+
+
+class TransferLinkIn(BaseModel):
+    tx_a_id: int
+    tx_b_id: int
 
 
 class AccountIn(BaseModel):
@@ -37,11 +45,17 @@ class AccountIn(BaseModel):
     bank: str
     type: str = "checking"
     currency: str = "SEK"
+    pays_credit_account_id: Optional[int] = None
 
 
 class AccountOut(AccountIn):
     model_config = ConfigDict(from_attributes=True)
     id: int
+
+
+class AccountUpdate(BaseModel):
+    name: Optional[str] = None
+    pays_credit_account_id: Optional[int] = None
 
 
 class CategoryOut(BaseModel):

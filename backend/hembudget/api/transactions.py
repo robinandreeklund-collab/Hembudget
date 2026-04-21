@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from ..categorize.engine import normalize_merchant
 from ..categorize.rules import create_rule_from_correction
 from ..db.models import Account, Category, Transaction
+from ..transfers.detector import TransferDetector
 from .deps import db, require_auth
-from .schemas import AccountIn, AccountOut, CategoryOut, TransactionOut, TransactionUpdate
+from .schemas import AccountIn, AccountOut, AccountUpdate, CategoryOut, TransactionOut, TransactionUpdate, TransferLinkIn
 
 router = APIRouter(tags=["transactions"], dependencies=[Depends(require_auth)])
 
@@ -24,6 +25,19 @@ def list_accounts(session: Session = Depends(db)) -> list[Account]:
 def create_account(payload: AccountIn, session: Session = Depends(db)) -> Account:
     a = Account(**payload.model_dump())
     session.add(a)
+    session.flush()
+    return a
+
+
+@router.patch("/accounts/{account_id}", response_model=AccountOut)
+def update_account(
+    account_id: int, payload: AccountUpdate, session: Session = Depends(db)
+) -> Account:
+    a = session.get(Account, account_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(a, k, v)
     session.flush()
     return a
 
@@ -68,9 +82,19 @@ def update_transaction(
     fields = payload.model_dump(exclude_unset=True)
     create_rule = fields.pop("create_rule", True)
 
+    # Handle is_transfer toggle (clears category, unlinks pair if set)
+    if "is_transfer" in fields:
+        new_flag = bool(fields.pop("is_transfer"))
+        if new_flag and not tx.is_transfer:
+            tx.is_transfer = True
+            tx.category_id = None
+        elif not new_flag and tx.is_transfer:
+            TransferDetector(session).unlink(tx.id)
+
     if "category_id" in fields and fields["category_id"] is not None:
         tx.category_id = fields["category_id"]
         tx.user_verified = True
+        tx.is_transfer = False       # kategorisering motsäger transfer
         if create_rule and tx.normalized_merchant:
             create_rule_from_correction(
                 session,
@@ -84,6 +108,21 @@ def update_transaction(
         setattr(tx, k, v)
     session.flush()
     return tx
+
+
+@router.post("/transactions/transfers/link")
+def link_transfer(payload: TransferLinkIn, session: Session = Depends(db)) -> dict:
+    try:
+        TransferDetector(session).link_manual(payload.tx_a_id, payload.tx_b_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return {"ok": True}
+
+
+@router.post("/transactions/{tx_id}/transfers/unlink")
+def unlink_transfer(tx_id: int, session: Session = Depends(db)) -> dict:
+    TransferDetector(session).unlink(tx_id)
+    return {"ok": True}
 
 
 @router.post("/transactions/{tx_id}/reclassify", response_model=TransactionOut)

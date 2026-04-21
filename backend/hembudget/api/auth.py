@@ -5,7 +5,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 
 from ..config import settings
-from ..db.base import init_engine
+from ..db.base import get_engine, init_engine
+from ..db.migrate import run_migrations
 from ..db.models import create_all
 from ..categorize.rules import seed_categories_and_rules
 from ..db.base import session_scope
@@ -39,6 +40,7 @@ def init_route(payload: LoginIn) -> LoginOut:
     key = derive_key(payload.password)
     init_engine(key=key)
     create_all()
+    run_migrations(get_engine())
     with session_scope() as s:
         seed_categories_and_rules(s)
 
@@ -61,6 +63,7 @@ def login_route(payload: LoginIn) -> LoginOut:
     init_engine(key=key)
     # ensure schema exists (e.g. fresh install)
     create_all()
+    run_migrations(get_engine())
     with session_scope() as s:
         seed_categories_and_rules(s)
 
