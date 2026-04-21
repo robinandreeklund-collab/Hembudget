@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..chat import tools as chat_tools
 from ..db.models import Account, Transaction
 from .deps import db, require_auth
 
@@ -58,3 +59,52 @@ def list_balances(
         "accounts": out,
         "total_balance": float(total),
     }
+
+
+@router.get("/history")
+def balance_history(
+    months: int = 12,
+    account_id: Optional[int] = None,
+    session: Session = Depends(db),
+) -> dict:
+    """Månadsvisa slutsaldon för varje konto. Dashboard använder detta för
+    att visa nettoförmögenhetens utveckling över tid."""
+    return chat_tools.get_balance_history(session, account_id=account_id, months=months)
+
+
+@router.get("/net-worth")
+def net_worth_timeline(
+    months: int = 12,
+    session: Session = Depends(db),
+) -> dict:
+    """Nettoförmögenhet = sum(alla kontosaldon) - sum(alla lånesaldon),
+    per månad. Negativa kontotyper (credit) räknas som skuld redan."""
+    from ..db.models import Loan
+    from ..loans.matcher import LoanMatcher
+
+    history = chat_tools.get_balance_history(session, months=months)
+    # history.series är per konto; summera per tidpunkt
+    totals: dict[str, float] = {}
+    for serie in history.get("series", []):
+        for p in serie["points"]:
+            totals[p["date"]] = totals.get(p["date"], 0.0) + p["balance"]
+
+    # Dagens lånesaldo används för alla historiska månader (approximation).
+    # För exakt historik skulle vi behöva rekonstruera LoanPayment-summor
+    # per datum — skickar det till en framtida version.
+    loans = session.query(Loan).filter(Loan.active.is_(True)).all()
+    matcher = LoanMatcher(session)
+    debt = sum(
+        (float(matcher.outstanding_balance(loan)) for loan in loans), 0.0
+    )
+
+    points = [
+        {
+            "date": d,
+            "assets": round(totals[d], 2),
+            "debt": round(debt, 2),
+            "net_worth": round(totals[d] - debt, 2),
+        }
+        for d in sorted(totals)
+    ]
+    return {"points": points, "current_debt": round(debt, 2)}

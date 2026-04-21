@@ -16,6 +16,13 @@ interface Anomaly {
   direction: "higher" | "lower";
 }
 
+interface NetWorthPoint {
+  date: string;
+  assets: number;
+  debt: number;
+  net_worth: number;
+}
+
 interface FamilyBreakdown {
   month: string;
   by_owner: Record<string, { income: number; expenses: number }>;
@@ -87,6 +94,13 @@ export default function Dashboard() {
     queryKey: ["family", month],
     queryFn: () => api<FamilyBreakdown>(`/budget/family/${month}`),
     enabled: !!month,
+  });
+  const netWorthQ = useQuery({
+    queryKey: ["net-worth", 12],
+    queryFn: () =>
+      api<{ points: NetWorthPoint[]; current_debt: number }>(
+        `/balances/net-worth?months=12`,
+      ),
   });
 
   const s = summaryQ.data;
@@ -329,6 +343,66 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      {netWorthQ.data && netWorthQ.data.points.length > 0 && (
+        <Card
+          title="Nettoförmögenhet (12 mån)"
+          action={
+            (() => {
+              const pts = netWorthQ.data.points;
+              const latest = pts[pts.length - 1];
+              return (
+                <span className="text-sm font-semibold">
+                  {formatSEK(latest.net_worth)}
+                </span>
+              );
+            })()
+          }
+        >
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={netWorthQ.data.points}>
+              <XAxis
+                dataKey="date"
+                tickFormatter={(v) => v.slice(0, 7)}
+                tick={{ fontSize: 11 }}
+              />
+              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+              <Tooltip
+                formatter={(v: number) => formatSEK(v)}
+                labelFormatter={(v) => `Slutet av ${v}`}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="assets"
+                name="Tillgångar"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="debt"
+                name="Skuld"
+                stroke="#ef4444"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="net_worth"
+                name="Netto"
+                stroke="#4f46e5"
+                strokeWidth={3}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="text-xs text-slate-500 mt-2">
+            Tillgångar = summa alla bankkonton. Skuld = aktuellt lånesaldo
+            (approximation — historisk låneutveckling kommer i framtida version).
+          </div>
+        </Card>
+      )}
 
       <Card title="Kassaflödesprognos (6 mån)">
         {fc.length === 0 ? (
