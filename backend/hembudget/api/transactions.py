@@ -11,7 +11,11 @@ from ..categorize.rules import create_rule_from_correction
 from ..db.models import Account, Category, Transaction
 from ..transfers.detector import TransferDetector
 from .deps import db, require_auth
-from .schemas import AccountIn, AccountOut, AccountUpdate, CategoryOut, TransactionOut, TransactionUpdate, TransferLinkIn
+from .schemas import (
+    AccountIn, AccountOut, AccountUpdate,
+    CategoryIn, CategoryOut, CategoryUpdate,
+    TransactionOut, TransactionUpdate, TransferLinkIn,
+)
 
 router = APIRouter(tags=["transactions"], dependencies=[Depends(require_auth)])
 
@@ -45,6 +49,54 @@ def update_account(
 @router.get("/categories", response_model=list[CategoryOut])
 def list_categories(session: Session = Depends(db)) -> list[Category]:
     return session.query(Category).order_by(Category.name).all()
+
+
+@router.post("/categories", response_model=CategoryOut)
+def create_category(payload: CategoryIn, session: Session = Depends(db)) -> Category:
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Namn får inte vara tomt")
+    existing = session.query(Category).filter(Category.name == name).first()
+    if existing:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Kategori '{name}' finns redan",
+        )
+    c = Category(
+        name=name,
+        parent_id=payload.parent_id,
+        color=payload.color,
+        icon=payload.icon,
+    )
+    session.add(c)
+    session.flush()
+    return c
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryOut)
+def update_category(
+    category_id: int, payload: CategoryUpdate, session: Session = Depends(db)
+) -> Category:
+    c = session.get(Category, category_id)
+    if not c:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Category not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(c, k, v)
+    session.flush()
+    return c
+
+
+@router.delete("/categories/{category_id}")
+def delete_category(category_id: int, session: Session = Depends(db)) -> dict:
+    c = session.get(Category, category_id)
+    if not c:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Category not found")
+    # Flytta bort transaktioner som pekar hit (blir okategoriserade)
+    session.query(Transaction).filter(Transaction.category_id == category_id).update(
+        {"category_id": None}
+    )
+    session.delete(c)
+    return {"deleted": category_id}
 
 
 @router.get("/transactions", response_model=list[TransactionOut])

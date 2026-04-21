@@ -74,6 +74,21 @@ class CategoryOut(BaseModel):
     icon: Optional[str]
 
 
+class CategoryIn(BaseModel):
+    name: str
+    parent_id: Optional[int] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    parent_id: Optional[int] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    budget_monthly: Optional[Decimal] = None
+
+
 class BudgetIn(BaseModel):
     month: str
     category_id: int

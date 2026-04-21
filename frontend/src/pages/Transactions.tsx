@@ -5,10 +5,13 @@ import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Category, Transaction } from "@/types/models";
 
+const NEW_CATEGORY_SENTINEL = "__new__";
+
 export default function Transactions() {
   const qc = useQueryClient();
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [hideTransfers, setHideTransfers] = useState(true);
+  const [newCatFor, setNewCatFor] = useState<number | null>(null);
 
   const txsQ = useQuery({
     queryKey: ["transactions", { uncategorizedOnly }],
@@ -37,6 +40,19 @@ export default function Transactions() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["budget"] });
+    },
+  });
+
+  const createCategoryMut = useMutation({
+    mutationFn: (p: { name: string; parent_id: number | null; txId: number }) =>
+      api<Category>("/categories", {
+        method: "POST",
+        body: JSON.stringify({ name: p.name, parent_id: p.parent_id }),
+      }),
+    onSuccess: async (newCat, variables) => {
+      await qc.invalidateQueries({ queryKey: ["categories"] });
+      updateMut.mutate({ id: variables.txId, category_id: newCat.id });
+      setNewCatFor(null);
     },
   });
 
@@ -123,13 +139,27 @@ export default function Transactions() {
                         >
                           Markera som utgift
                         </button>
+                      ) : newCatFor === tx.id ? (
+                        <NewCategoryInline
+                          cats={cats}
+                          busy={createCategoryMut.isPending}
+                          error={createCategoryMut.error as Error | null}
+                          onCancel={() => setNewCatFor(null)}
+                          onSave={(name, parent_id) =>
+                            createCategoryMut.mutate({ name, parent_id, txId: tx.id })
+                          }
+                        />
                       ) : (
                         <div className="flex items-center gap-2">
                           <select
                             value={tx.category_id ?? ""}
-                            onChange={(e) =>
-                              updateMut.mutate({ id: tx.id, category_id: Number(e.target.value) })
-                            }
+                            onChange={(e) => {
+                              if (e.target.value === NEW_CATEGORY_SENTINEL) {
+                                setNewCatFor(tx.id);
+                                return;
+                              }
+                              updateMut.mutate({ id: tx.id, category_id: Number(e.target.value) });
+                            }}
                             className="border rounded px-2 py-1 text-sm bg-white"
                           >
                             <option value="">—</option>
@@ -138,6 +168,7 @@ export default function Transactions() {
                                 {c.name}
                               </option>
                             ))}
+                            <option value={NEW_CATEGORY_SENTINEL}>➕ Ny kategori…</option>
                           </select>
                           {!tx.user_verified && tx.category_id && (
                             <span className="text-xs text-slate-400">
@@ -162,10 +193,70 @@ export default function Transactions() {
         )}
         <div className="mt-3 text-xs text-slate-500">
           Tips: när du byter kategori skapas en regel automatiskt så att framtida liknande
-          transaktioner kategoriseras rätt.
+          transaktioner kategoriseras rätt. Välj <strong>➕ Ny kategori…</strong> i dropdownen
+          för att skapa en egen kategori på flugan — t.ex. "Online-spel" eller "Barn-prenumerationer".
         </div>
       </Card>
       <div className="text-xs text-slate-500">{(txsQ.data ?? []).length} rader. Kategorier tillgängliga: {cats.length}.</div>
+    </div>
+  );
+}
+
+function NewCategoryInline({
+  cats,
+  busy,
+  error,
+  onSave,
+  onCancel,
+}: {
+  cats: Category[];
+  busy: boolean;
+  error: Error | null;
+  onSave: (name: string, parent_id: number | null) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [parentId, setParentId] = useState<number | "">("");
+  // Föräldrar = bara top-level (utan parent)
+  const topLevel = cats.filter((c) => c.parent_id == null);
+
+  return (
+    <div className="flex flex-col gap-1 bg-slate-50 border border-slate-200 rounded p-2">
+      <div className="flex items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Kategorinamn (t.ex. Online-spel)"
+          autoFocus
+          className="border rounded px-2 py-1 text-sm flex-1"
+        />
+        <select
+          value={parentId}
+          onChange={(e) => setParentId(e.target.value === "" ? "" : Number(e.target.value))}
+          className="border rounded px-2 py-1 text-sm bg-white"
+        >
+          <option value="">Toppkategori</option>
+          {topLevel.map((c) => (
+            <option key={c.id} value={c.id}>
+              Under {c.name}
+            </option>
+          ))}
+        </select>
+        <button
+          disabled={!name.trim() || busy}
+          onClick={() => onSave(name.trim(), parentId === "" ? null : parentId)}
+          className="bg-brand-600 text-white text-xs px-3 py-1 rounded disabled:opacity-40"
+        >
+          {busy ? "Skapar…" : "Skapa"}
+        </button>
+        <button
+          onClick={onCancel}
+          className="text-slate-400 hover:text-slate-700 text-xs px-1"
+        >
+          Avbryt
+        </button>
+      </div>
+      {error && <div className="text-xs text-rose-600">{error.message}</div>}
     </div>
   );
 }
