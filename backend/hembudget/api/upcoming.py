@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 from datetime import date, datetime
@@ -20,6 +21,43 @@ from .deps import db, llm_client, require_auth
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/upcoming", tags=["upcoming"], dependencies=[Depends(require_auth)])
+
+PDF_MAGIC = b"%PDF"
+MAX_PDF_PAGES = 5     # inte fler sidor än så till vision-modellen
+
+
+def _rasterize_pdf(pdf_bytes: bytes, max_pages: int = MAX_PDF_PAGES) -> list[bytes]:
+    """Renderar PDF-sidor till PNG. Returnerar PNG-bytes per sida."""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as exc:
+        raise HTTPException(
+            500,
+            "pypdfium2 saknas — kör 'pip install -e .[dev]' i backend/",
+        ) from exc
+
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    if len(pdf) == 0:
+        raise HTTPException(400, "PDF:en innehåller inga sidor")
+
+    images: list[bytes] = []
+    for i in range(min(len(pdf), max_pages)):
+        page = pdf[i]
+        # scale=2.0 ≈ 144 DPI — bra balans mellan OCR-läsbarhet och filstorlek
+        pil_image = page.render(scale=2.0).to_pil()
+        buf = io.BytesIO()
+        pil_image.save(buf, format="PNG", optimize=True)
+        images.append(buf.getvalue())
+    return images
+
+
+def _file_to_images(content: bytes, content_type: str | None) -> tuple[list[bytes], str]:
+    """Returnera (lista med bild-bytes, mime-type för varje bild).
+    Bilder skickas direkt; PDF rasteriseras till PNG per sida.
+    """
+    if content.startswith(PDF_MAGIC) or (content_type or "").lower() == "application/pdf":
+        return _rasterize_pdf(content), "image/png"
+    return [content], content_type or "image/png"
 
 
 class UpcomingIn(BaseModel):
@@ -170,23 +208,51 @@ async def parse_invoice_image(
     session: Session = Depends(db),
     llm: LMStudioClient = Depends(llm_client),
 ) -> UpcomingTransaction:
-    """Skicka ett fakturafoto till en vision-kapabel modell i LM Studio
-    (t.ex. Qwen2.5-VL, Llava) för automatisk extraktion av betalningsmottagare,
-    belopp och förfallodag. Kräver att aktiv modell stödjer bild-input.
+    """Skicka en faktura (PNG/JPG/PDF) till en vision-kapabel modell i LM Studio
+    (t.ex. Qwen2.5-VL, Llava, Pixtral) för automatisk extraktion av
+    mottagare, belopp och förfallodag. PDF:er rasteriseras till PNG per sida
+    först (upp till 5 sidor) eftersom vision-modeller bara tar bilder.
     """
     if not llm.is_alive():
         raise HTTPException(503, "LM Studio är inte tillgänglig")
 
-    # Spara bild lokalt för audit
-    image_dir = settings.data_dir / "invoices"
-    image_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-    image_path = image_dir / f"{ts}_{file.filename or 'invoice.png'}"
+    # Spara originalfilen lokalt för audit
     content = await file.read()
-    image_path.write_bytes(content)
+    if not content:
+        raise HTTPException(400, "Tom fil")
 
-    b64 = base64.b64encode(content).decode("ascii")
-    mime = file.content_type or "image/png"
+    invoice_dir = settings.data_dir / "invoices"
+    invoice_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    original_path = invoice_dir / f"{ts}_{file.filename or 'invoice'}"
+    original_path.write_bytes(content)
+
+    # Konvertera till lista av bild-bytes (PDF → en bild per sida)
+    try:
+        images, img_mime = _file_to_images(content, file.content_type)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("PDF rasterization failed")
+        raise HTTPException(400, f"Kunde inte läsa filen: {exc}") from exc
+
+    # Bygg multi-image-payload till vision-modellen
+    user_content: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                "Extrahera mottagare, totalbelopp och förfallodatum från denna "
+                "svenska faktura. Om flera sidor visas, hitta informationen på "
+                "den sida där totalbeloppet står."
+            ),
+        }
+    ]
+    for img_bytes in images:
+        b64 = base64.b64encode(img_bytes).decode("ascii")
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{img_mime};base64,{b64}"},
+        })
 
     schema = {
         "type": "object",
@@ -207,19 +273,11 @@ async def parse_invoice_image(
                     "content": (
                         "Du läser svenska fakturor och extraherar mottagare, "
                         "förfallodatum och totalbelopp. Returnera JSON. "
-                        "Datum YYYY-MM-DD, belopp i kr som tal."
+                        "Datum YYYY-MM-DD, belopp i kr som tal (bara siffror, "
+                        "inget 'kr' eller mellanslag)."
                     ),
                 },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extrahera denna faktura:"},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{mime};base64,{b64}"},
-                        },
-                    ],
-                },
+                {"role": "user", "content": user_content},
             ],
             schema=schema,
             temperature=0.0,
@@ -241,7 +299,7 @@ async def parse_invoice_image(
         expected_date=date.fromisoformat(parsed["expected_date"]),
         notes=parsed.get("notes"),
         source="vision_ai",
-        source_image_path=str(image_path),
+        source_image_path=str(original_path),
     )
     session.add(u)
     session.flush()
