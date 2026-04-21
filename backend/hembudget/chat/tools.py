@@ -842,6 +842,87 @@ def subscription_health(session: Session, stale_days: int = 60) -> dict:
     }
 
 
+def ytd_income_by_person(
+    session: Session,
+    year: int | None = None,
+    category_name: str = "Lön",
+) -> dict:
+    """Totala inkomster (ofta lön) per kontoägare för innevarande eller
+    angivet år. Grupperas på Account.owner_id, inkomst = positiva belopp
+    i given kategori.
+
+    Fallback: om inga träffar på kategorin Lön, returnera alla positiva
+    non-transfer transaktioner grupperat på ägare (bättre än inget)."""
+    y = year or date.today().year
+    start = date(y, 1, 1)
+    end = date(y + 1, 1, 1)
+
+    cat = session.query(Category).filter(Category.name == category_name).first()
+
+    # Försök först med specifik kategori
+    rows = []
+    if cat is not None:
+        rows = session.execute(
+            select(
+                Account.owner_id,
+                Account.name.label("account_name"),
+                func.sum(Transaction.amount).label("total"),
+                func.count(Transaction.id).label("count"),
+            )
+            .join(Transaction, Transaction.account_id == Account.id)
+            .where(
+                Transaction.date >= start,
+                Transaction.date < end,
+                Transaction.amount > 0,
+                Transaction.is_transfer.is_(False),
+                Transaction.category_id == cat.id,
+            )
+            .group_by(Account.owner_id, Account.name)
+        ).all()
+
+    # Om tomt → fallback: alla positiva non-transfer
+    fallback_used = False
+    if not rows:
+        fallback_used = True
+        rows = session.execute(
+            select(
+                Account.owner_id,
+                Account.name.label("account_name"),
+                func.sum(Transaction.amount).label("total"),
+                func.count(Transaction.id).label("count"),
+            )
+            .join(Transaction, Transaction.account_id == Account.id)
+            .where(
+                Transaction.date >= start,
+                Transaction.date < end,
+                Transaction.amount > 0,
+                Transaction.is_transfer.is_(False),
+            )
+            .group_by(Account.owner_id, Account.name)
+        ).all()
+
+    by_owner: dict[str, dict] = {}
+    for owner_id, account_name, total, count in rows:
+        key = f"user_{owner_id}" if owner_id else "gemensamt"
+        bucket = by_owner.setdefault(
+            key, {"total": 0.0, "count": 0, "accounts": []}
+        )
+        bucket["total"] += _d(total)
+        bucket["count"] += int(count or 0)
+        bucket["accounts"].append(
+            {"name": account_name, "amount": _d(total)}
+        )
+
+    grand_total = sum(b["total"] for b in by_owner.values())
+    return {
+        "year": y,
+        "category": category_name,
+        "category_matched": not fallback_used,
+        "by_owner": by_owner,
+        "grand_total": round(grand_total, 2),
+    }
+
+
 def get_family_breakdown(session: Session, month: str) -> dict:
     """Fördela månadens utgifter/inkomster per kontoägare (owner_id) och
     kontotyp. Används för familjeekonomi: 'vem betalade vad'.

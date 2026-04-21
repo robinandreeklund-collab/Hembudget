@@ -120,6 +120,18 @@ def family(month: str, session: Session = Depends(db)) -> dict:
     return chat_tools.get_family_breakdown(session, month)
 
 
+@router.get("/ytd-income")
+def ytd_income(
+    year: int | None = None,
+    category_name: str = "Lön",
+    session: Session = Depends(db),
+) -> dict:
+    """Total lön/inkomst per kontoägare för året (YTD eller angivet år)."""
+    return chat_tools.ytd_income_by_person(
+        session, year=year, category_name=category_name
+    )
+
+
 @router.get("/subscriptions/health")
 def subscription_health(
     stale_days: int = 60,

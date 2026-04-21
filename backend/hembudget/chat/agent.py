@@ -371,6 +371,24 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "ytd_income_by_person",
+            "description": (
+                "Total lön/inkomst i år (eller angivet år) per kontoägare. "
+                "Filtrerar på kategori (default 'Lön'), faller tillbaka till "
+                "alla positiva non-transfer om kategorin inte gett träff."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {"type": "integer"},
+                    "category_name": {"type": "string", "default": "Lön"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_family_breakdown",
             "description": (
                 "Vem-betalade-vad per kontoägare (owner_id) och per konto under "
@@ -411,6 +429,7 @@ _DISPATCH = {
     "get_family_breakdown": tools.get_family_breakdown,
     "subscription_health": tools.subscription_health,
     "get_elpris": tools.get_elpris,
+    "ytd_income_by_person": tools.ytd_income_by_person,
 }
 
 

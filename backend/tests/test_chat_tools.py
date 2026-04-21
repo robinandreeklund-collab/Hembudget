@@ -439,3 +439,37 @@ def test_query_transactions_returns_splits(session):
     assert len(out["transactions"]) == 1
     assert len(out["transactions"][0]["splits"]) == 1
     assert out["transactions"][0]["splits"][0]["category"] == "El"
+
+
+def test_ytd_income_by_person(session):
+    from hembudget.db.models import Category
+    lon = _cat(session, "Lön")
+    robin = _acc(session, "Robin", owner_id=1)
+    partner = _acc(session, "Partner", owner_id=2)
+    from datetime import date
+    this_year = date.today().year
+    # Robin: 3 månader x 30k, Partner: 2 månader x 28k
+    for m in range(1, 4):
+        _tx(session, robin.id, date(this_year, m, 25), 30000, cat_id=lon.id, desc=f"Lön{m}")
+    for m in range(1, 3):
+        _tx(session, partner.id, date(this_year, m, 25), 28000, cat_id=lon.id, desc=f"Lön{m}P")
+    # Förra årets lön — ska ej räknas
+    _tx(session, robin.id, date(this_year - 1, 12, 25), 99999, cat_id=lon.id, desc="gammal")
+
+    out = tools.ytd_income_by_person(session)
+    assert out["category_matched"] is True
+    assert out["by_owner"]["user_1"]["total"] == 90000.0
+    assert out["by_owner"]["user_2"]["total"] == 56000.0
+    assert out["grand_total"] == 146000.0
+
+
+def test_ytd_income_fallback_when_no_lon_category(session):
+    """Om kategorin 'Lön' inte finns/har träffar → fallback till alla positiva."""
+    from datetime import date
+    acc = _acc(session, "Lön", owner_id=1)
+    this_year = date.today().year
+    _tx(session, acc.id, date(this_year, 3, 25), 30000)  # ingen kategori
+
+    out = tools.ytd_income_by_person(session)
+    assert out["category_matched"] is False
+    assert out["by_owner"]["user_1"]["total"] == 30000.0

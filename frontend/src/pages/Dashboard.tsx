@@ -18,6 +18,14 @@ interface Anomaly {
   direction: "higher" | "lower";
 }
 
+interface YtdIncome {
+  year: number;
+  category: string;
+  category_matched: boolean;
+  by_owner: Record<string, { total: number; count: number; accounts: Array<{ name: string; amount: number }> }>;
+  grand_total: number;
+}
+
 interface NetWorthPoint {
   date: string;
   assets: number;
@@ -119,6 +127,10 @@ export default function Dashboard() {
     queryFn: () => api<ElprisDay>(`/elpris/today?zone=${elprisZone}`),
     retry: false,
   });
+  const ytdIncomeQ = useQuery({
+    queryKey: ["ytd-income"],
+    queryFn: () => api<YtdIncome>(`/budget/ytd-income`),
+  });
   const netWorthQ = useQuery({
     queryKey: ["net-worth", 12],
     queryFn: () =>
@@ -173,6 +185,49 @@ export default function Dashboard() {
         <Stat label="Sparande" value={s ? formatSEK(s.savings) : "—"} tone={s && s.savings > 0 ? "good" : "bad"} />
         <Stat label="Sparkvot" value={s ? `${(s.savings_rate * 100).toFixed(1)} %` : "—"} />
       </div>
+
+      {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
+        <Card
+          title={`Lön i år (${ytdIncomeQ.data.year})`}
+          action={
+            <span className="text-sm font-semibold">
+              Totalt {formatSEK(ytdIncomeQ.data.grand_total)}
+            </span>
+          }
+        >
+          {!ytdIncomeQ.data.category_matched && (
+            <div className="text-xs text-amber-700 mb-2">
+              Inga transaktioner kategoriserade som "Lön" hittades — visar
+              alla positiva inkomster som fallback. Sätt kategori "Lön" på dina
+              lönerader för mer exakt siffra.
+            </div>
+          )}
+          <div className="space-y-2">
+            {Object.entries(ytdIncomeQ.data.by_owner).map(([key, v]) => {
+              const label =
+                key === "gemensamt"
+                  ? "Gemensamt konto"
+                  : key.replace("user_", "Användare ");
+              return (
+                <div
+                  key={key}
+                  className="flex items-start justify-between py-2 border-b last:border-0"
+                >
+                  <div>
+                    <div className="font-medium text-sm">{label}</div>
+                    <div className="text-xs text-slate-500">
+                      {v.count} inkomster · {v.accounts.map((a) => a.name).join(", ")}
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-emerald-600">
+                    {formatSEK(v.total)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {balancesQ.data && balancesQ.data.accounts.length > 0 && (
         <Card
