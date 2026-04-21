@@ -3,15 +3,32 @@ from __future__ import annotations
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..budget.forecast import CashflowForecaster
 from ..budget.monthly import MonthlyBudgetService
+from ..db.models import Transaction
 from ..subscriptions.detector import SubscriptionDetector
 from .deps import db, require_auth
 from .schemas import BudgetIn
 
 router = APIRouter(prefix="/budget", tags=["budget"], dependencies=[Depends(require_auth)])
+
+
+@router.get("/months")
+def available_months(session: Session = Depends(db)) -> dict:
+    """Returnerar alla månader som har minst en icke-transfer transaktion."""
+    rows = session.execute(
+        select(
+            func.strftime("%Y-%m", Transaction.date).label("month"),
+            func.count(Transaction.id).label("count"),
+        )
+        .where(Transaction.is_transfer.is_(False))
+        .group_by("month")
+        .order_by("month")
+    ).all()
+    return {"months": [{"month": m, "count": c} for m, c in rows]}
 
 
 @router.get("/{month}")
