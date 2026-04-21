@@ -14,6 +14,7 @@ from ..loans.matcher import LoanMatcher
 from ..parsers import detect_parser, parser_for_bank
 from ..transfers.detector import TransferDetector
 from ..upcoming_match import UpcomingMatcher
+from ..upcoming_match.materializer import UpcomingMaterializer
 from .deps import db, llm_client, require_auth
 
 router = APIRouter(prefix="/import", tags=["import"], dependencies=[Depends(require_auth)])
@@ -106,6 +107,11 @@ async def import_csv(
     # Matcha planerade UpcomingTransaction mot de nya riktiga rader så
     # fakturor markeras som "bokförda" och forecasten inte dubbelräknar.
     upcoming_matched = UpcomingMatcher(session).match(new_transactions)
+
+    # Materialisera kommande lån och prenumerationer — idempotent, rör inte
+    # redan materialiserade rader. Gör Dashboard:s "upcoming"-vy
+    # självuppdaterande efter varje import.
+    mat_result = UpcomingMaterializer(session).run()
     session.flush()
 
     return {
@@ -125,4 +131,6 @@ async def import_csv(
         "loan_payments_linked": loan_result.linked,
         "loan_payments_unclassified": loan_result.unclassified,
         "upcoming_matched": upcoming_matched,
+        "upcoming_materialized_loans": mat_result.loan_upcoming_created,
+        "upcoming_materialized_subs": mat_result.sub_upcoming_created,
     }
