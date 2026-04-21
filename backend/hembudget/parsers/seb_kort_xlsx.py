@@ -56,8 +56,8 @@ class SebKortXlsxParser(BankParser):
 
     HEADER_KEYWORDS = {"datum", "specifikation", "belopp"}
 
-    def detect(self, sample: bytes) -> bool:
-        if not sample.startswith(XLSX_MAGIC):
+    def detect(self, content: bytes) -> bool:
+        if not content.startswith(XLSX_MAGIC):
             return False
         try:
             from openpyxl import load_workbook
@@ -65,12 +65,15 @@ class SebKortXlsxParser(BankParser):
             log.warning("openpyxl unavailable — cannot detect SEB Kort xlsx")
             return False
         try:
-            wb = load_workbook(io.BytesIO(sample), read_only=True, data_only=True)
+            wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
         except Exception:
-            return False
+            # Fallback: if it's a valid xlsx with magic bytes but we can't
+            # fully parse from the sample, accept it as a SEB-like source.
+            # parse() will raise a clearer error if the structure is wrong.
+            return True
         for sheet in wb.sheetnames:
             ws = wb[sheet]
-            for row in ws.iter_rows(values_only=True, max_row=10):
+            for row in ws.iter_rows(values_only=True, max_row=15):
                 cells = {str(c).strip().lower() for c in row if c is not None}
                 if self.HEADER_KEYWORDS.issubset(cells):
                     return True

@@ -17,10 +17,12 @@ ALL_PARSERS: list[BankParser] = [
 
 
 def detect_parser(content: bytes) -> BankParser | None:
-    sample = content[:4000]
+    # Pass the full content — xlsx parsers need to open the archive to
+    # inspect the header row. Each parser slices internally for cheap
+    # text-based detection.
     for parser in ALL_PARSERS:
         try:
-            if parser.detect(sample):
+            if parser.detect(content):
                 return parser
         except Exception:
             continue
@@ -36,7 +38,7 @@ def parser_for_bank(bank: str, sample: bytes | None = None) -> BankParser | None
     if sample is not None:
         for p in matches:
             try:
-                if p.detect(sample[:4096]):
+                if p.detect(sample):   # full content — xlsx needs it
                     return p
             except Exception:
                 continue
