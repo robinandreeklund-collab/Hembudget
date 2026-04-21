@@ -25,11 +25,35 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/upcoming", tags=["upcoming"], dependencies=[Depends(require_auth)])
 
 PDF_MAGIC = b"%PDF"
-MAX_PDF_PAGES = 5     # inte fler sidor än så till vision-modellen
+MAX_PDF_PAGES = 3           # vision-kontexter är dyrt — håll oss till 3
+IMAGE_MAX_DIM = 1024        # max bredd/höjd i px innan vi skickar
+IMAGE_JPEG_QUALITY = 75     # bra balans text-läsbarhet/token-storlek
+
+
+def _downscale_to_jpeg(
+    pil_image, max_dim: int = IMAGE_MAX_DIM, quality: int = IMAGE_JPEG_QUALITY
+) -> bytes:
+    """Ta en PIL-bild, skala ner och JPEG-komprimera så vi håller token-antalet
+    nere. Svenska bankfakturor är textdrag-tunga — 1024 px räcker för vision
+    att läsa alla siffror."""
+    from PIL import Image
+
+    w, h = pil_image.size
+    if max(w, h) > max_dim:
+        ratio = max_dim / max(w, h)
+        pil_image = pil_image.resize(
+            (max(1, int(w * ratio)), max(1, int(h * ratio))),
+            Image.LANCZOS,
+        )
+    if pil_image.mode != "RGB":
+        pil_image = pil_image.convert("RGB")
+    buf = io.BytesIO()
+    pil_image.save(buf, format="JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
 
 
 def _rasterize_pdf(pdf_bytes: bytes, max_pages: int = MAX_PDF_PAGES) -> list[bytes]:
-    """Renderar PDF-sidor till PNG. Returnerar PNG-bytes per sida."""
+    """Renderar PDF-sidor till komprimerade JPEG-bilder."""
     try:
         import pypdfium2 as pdfium
     except ImportError as exc:
@@ -38,28 +62,72 @@ def _rasterize_pdf(pdf_bytes: bytes, max_pages: int = MAX_PDF_PAGES) -> list[byt
             "pypdfium2 saknas — kör 'pip install -e .[dev]' i backend/",
         ) from exc
 
-    pdf = pdfium.PdfDocument(pdf_bytes)
-    if len(pdf) == 0:
-        raise HTTPException(400, "PDF:en innehåller inga sidor")
-
     images: list[bytes] = []
-    for i in range(min(len(pdf), max_pages)):
-        page = pdf[i]
-        # scale=2.0 ≈ 144 DPI — bra balans mellan OCR-läsbarhet och filstorlek
-        pil_image = page.render(scale=2.0).to_pil()
-        buf = io.BytesIO()
-        pil_image.save(buf, format="PNG", optimize=True)
-        images.append(buf.getvalue())
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    try:
+        if len(pdf) == 0:
+            raise HTTPException(400, "PDF:en innehåller inga sidor")
+        for i in range(min(len(pdf), max_pages)):
+            page = pdf[i]
+            try:
+                # scale=1.5 + nedskalning till 1024 px = små, men läsbara JPEG
+                bitmap = page.render(scale=1.5)
+                try:
+                    pil_image = bitmap.to_pil()
+                    try:
+                        images.append(_downscale_to_jpeg(pil_image))
+                    finally:
+                        pil_image.close()
+                finally:
+                    bitmap.close()
+            finally:
+                page.close()
+    finally:
+        pdf.close()
     return images
 
 
+def _vision_error_hint(exc: Exception) -> str:
+    """Formaterar ett tydligt felmeddelande när vision-anrop misslyckas."""
+    msg = str(exc)
+    low = msg.lower()
+    if "context" in low and ("exceeds" in low or "tokens" in low):
+        return (
+            "Bildens storlek överskrider LM Studios kontextfönster. "
+            "Ladda om modellen i LM Studio med minst 16k context length "
+            "(i 'Model' → 'Load configuration' → 'Context length'). "
+            f"Detaljer: {msg}"
+        )
+    if "not support" in low or "image" in low and "unknown" in low:
+        return (
+            "Den aktiva modellen i LM Studio verkar inte stödja bilder. "
+            "Byt till en vision-kapabel modell (Qwen2.5-VL, Pixtral, Llava). "
+            f"Detaljer: {msg}"
+        )
+    return f"Vision-anropet misslyckades: {msg}"
+
+
+def _shrink_raw_image(content: bytes) -> bytes:
+    """Nedskala & JPEG-komprimera en uppladdad bild för vision-call."""
+    from PIL import Image
+
+    pil_image = Image.open(io.BytesIO(content))
+    try:
+        return _downscale_to_jpeg(pil_image)
+    finally:
+        pil_image.close()
+
+
 def _file_to_images(content: bytes, content_type: str | None) -> tuple[list[bytes], str]:
-    """Returnera (lista med bild-bytes, mime-type för varje bild).
-    Bilder skickas direkt; PDF rasteriseras till PNG per sida.
-    """
+    """Returnera (lista med JPEG-bytes, mime-type).
+    PDF → rasteriseras per sida; bilder → nedskalade & komprimerade."""
     if content.startswith(PDF_MAGIC) or (content_type or "").lower() == "application/pdf":
-        return _rasterize_pdf(content), "image/png"
-    return [content], content_type or "image/png"
+        return _rasterize_pdf(content), "image/jpeg"
+    try:
+        return [_shrink_raw_image(content)], "image/jpeg"
+    except Exception:
+        # Om det är nåt annat format vi inte kan öppna, skicka originalet
+        return [content], content_type or "image/png"
 
 
 class UpcomingIn(BaseModel):
@@ -292,11 +360,7 @@ async def parse_invoice_image(
         raise HTTPException(503, str(exc)) from exc
     except Exception as exc:
         log.exception("Vision parse failed")
-        raise HTTPException(
-            500,
-            f"Modellen kunde inte tolka bilden — byt till en vision-kapabel modell "
-            f"i LM Studio (t.ex. Qwen2.5-VL). Fel: {exc}",
-        ) from exc
+        raise HTTPException(500, _vision_error_hint(exc)) from exc
 
     u = _build_upcoming_from_parsed(parsed, kind=kind, source="vision_ai",
                                     source_image_path=str(original_path),
@@ -732,11 +796,7 @@ async def parse_credit_card_invoice(
         raise HTTPException(503, str(exc)) from exc
     except Exception as exc:
         log.exception("CC invoice parse failed")
-        raise HTTPException(
-            500,
-            f"Modellen kunde inte tolka fakturan. Byt till vision-kapabel "
-            f"modell i LM Studio (Qwen2.5-VL, Pixtral). Fel: {exc}",
-        ) from exc
+        raise HTTPException(500, _vision_error_hint(exc)) from exc
 
     # Hitta eller skapa kortkontot
     cc_account = _resolve_or_create_cc_account(

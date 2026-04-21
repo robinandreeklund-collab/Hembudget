@@ -123,8 +123,10 @@ def delete_loan(loan_id: int, session: Session = Depends(db)) -> dict:
     loan = session.get(Loan, loan_id)
     if loan is None:
         raise HTTPException(404, "Loan not found")
-    # Remove associated payment links (not the underlying transactions)
+    # Städa bort alla FK-kopplingar innan lånet kan raderas
     session.query(LoanPayment).filter(LoanPayment.loan_id == loan_id).delete()
+    session.query(LoanScheduleEntry).filter(LoanScheduleEntry.loan_id == loan_id).delete()
+    session.flush()
     session.delete(loan)
     return {"deleted": loan_id}
 
@@ -325,25 +327,10 @@ def generate_schedule(
 
 # ---- Skapa lån automatiskt från bankbilder via vision AI ----
 
-PDF_MAGIC = b"%PDF"
-
-
 def _file_to_images(content: bytes, content_type: str | None) -> tuple[list[bytes], str]:
-    """Samma bild/PDF-logik som i upcoming.py."""
-    if content.startswith(PDF_MAGIC) or (content_type or "").lower() == "application/pdf":
-        import pypdfium2 as pdfium
-        pdf = pdfium.PdfDocument(content)
-        if len(pdf) == 0:
-            raise HTTPException(400, "PDF:en innehåller inga sidor")
-        images: list[bytes] = []
-        for i in range(min(len(pdf), 5)):
-            page = pdf[i]
-            pil_image = page.render(scale=2.0).to_pil()
-            buf = io.BytesIO()
-            pil_image.save(buf, format="PNG", optimize=True)
-            images.append(buf.getvalue())
-        return images, "image/png"
-    return [content], content_type or "image/png"
+    """Delegera till upcoming-modulen så vi alltid nedskalar bilderna."""
+    from .upcoming import _file_to_images as _shared
+    return _shared(content, content_type)
 
 
 def _loan_schema() -> dict:
