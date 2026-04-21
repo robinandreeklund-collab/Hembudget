@@ -161,9 +161,14 @@ def top_categories(
     fd = _parse_date(from_date)
     td = _parse_date(to_date)
 
-    # Transaktioner UTAN splits
-    split_tx_ids = select(TransactionSplit.transaction_id).distinct().scalar_subquery()
-    plain = session.execute(
+    # Transaktioner UTAN splits (undvik scalar-subquery → stabilare i sqlcipher3)
+    split_tx_ids: set[int] = {
+        row[0]
+        for row in session.execute(
+            select(TransactionSplit.transaction_id).distinct()
+        ).all()
+    }
+    plain_q = (
         select(
             Category.name,
             func.sum(Transaction.amount).label("total"),
@@ -174,10 +179,12 @@ def top_categories(
             Transaction.date <= td,
             Transaction.amount < 0,
             Transaction.is_transfer.is_(False),
-            Transaction.id.not_in(split_tx_ids),
         )
         .group_by(Category.name)
-    ).all()
+    )
+    if split_tx_ids:
+        plain_q = plain_q.where(Transaction.id.not_in(split_tx_ids))
+    plain = session.execute(plain_q).all()
 
     # Transaktioner MED splits
     split_rows = session.execute(

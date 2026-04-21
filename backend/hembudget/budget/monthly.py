@@ -90,11 +90,14 @@ class MonthlyBudgetService:
         target_start, _ = _month_bounds(target_month)
         lookback_start = _shift_months(target_start, -lookback_months)
 
-        # Samla utgift/inkomst per kategori per månad från båda tabellerna.
-        split_tx_ids = (
-            select(TransactionSplit.transaction_id).distinct().scalar_subquery()
-        )
-        plain_rows = self.session.execute(
+        # Set av transaktion-IDs med splits (Python-set, ej scalar-subquery).
+        split_tx_ids: set[int] = {
+            row[0]
+            for row in self.session.execute(
+                select(TransactionSplit.transaction_id).distinct()
+            ).all()
+        }
+        plain_q = (
             select(
                 func.strftime("%Y-%m", Transaction.date).label("m"),
                 Transaction.category_id,
@@ -105,10 +108,12 @@ class MonthlyBudgetService:
                 Transaction.date < target_start,
                 Transaction.is_transfer.is_(False),
                 Transaction.category_id.is_not(None),
-                Transaction.id.not_in(split_tx_ids),
             )
             .group_by("m", Transaction.category_id)
-        ).all()
+        )
+        if split_tx_ids:
+            plain_q = plain_q.where(Transaction.id.not_in(split_tx_ids))
+        plain_rows = self.session.execute(plain_q).all()
 
         split_rows = self.session.execute(
             select(
@@ -158,30 +163,35 @@ class MonthlyBudgetService:
     def summary(self, month: str) -> MonthSummary:
         start, end = _month_bounds(month)
 
+        # Hämta alla transaktions-id som har splits — som Python-set.
+        # (Scalar-subquery mot en korrelerad NOT IN har visat sig segfaulta
+        # sqlcipher3 i WSL; vanlig SQL-IN med explicit lista är mer stabilt.)
+        split_tx_ids: set[int] = {
+            row[0]
+            for row in self.session.execute(
+                select(TransactionSplit.transaction_id).distinct()
+            ).all()
+        }
+
         # Transaktioner som INTE är uppsplittrade — grupperas på
         # transactions.category_id som vanligt.
-        split_tx_ids = (
-            select(TransactionSplit.transaction_id)
-            .distinct()
-            .scalar_subquery()
-        )
-        tx_rows = (
-            self.session.execute(
-                select(
-                    Transaction.category_id,
-                    Category.name,
-                    func.sum(Transaction.amount).label("total"),
-                )
-                .join(Category, Category.id == Transaction.category_id, isouter=True)
-                .where(
-                    Transaction.date >= start,
-                    Transaction.date < end,
-                    Transaction.is_transfer.is_(False),
-                    Transaction.id.not_in(split_tx_ids),
-                )
-                .group_by(Transaction.category_id, Category.name)
+        base_q = (
+            select(
+                Transaction.category_id,
+                Category.name,
+                func.sum(Transaction.amount).label("total"),
             )
-        ).all()
+            .join(Category, Category.id == Transaction.category_id, isouter=True)
+            .where(
+                Transaction.date >= start,
+                Transaction.date < end,
+                Transaction.is_transfer.is_(False),
+            )
+            .group_by(Transaction.category_id, Category.name)
+        )
+        if split_tx_ids:
+            base_q = base_q.where(Transaction.id.not_in(split_tx_ids))
+        tx_rows = self.session.execute(base_q).all()
 
         # Uppsplittrade transaktioner — grupperas på splits.category_id.
         # Filtrerar även här bort transfers via join mot transactions.
