@@ -62,7 +62,7 @@ export default function Dashboard() {
   const hasAnyData = availableMonths.length > 0;
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
@@ -95,7 +95,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <Stat label="Inkomst" value={s ? formatSEK(s.income) : "—"} tone="good" />
         <Stat label="Utgifter" value={s ? formatSEK(s.expenses) : "—"} tone="bad" />
         <Stat label="Sparande" value={s ? formatSEK(s.savings) : "—"} tone={s && s.savings > 0 ? "good" : "bad"} />

@@ -59,10 +59,10 @@ export default function Transactions() {
   const cats = catsQ.data ?? [];
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Transaktioner</h1>
-        <div className="flex items-center gap-4 text-sm">
+    <div className="p-3 md:p-6 space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <h1 className="text-xl md:text-2xl font-semibold">Transaktioner</h1>
+        <div className="flex flex-wrap items-center gap-3 md:gap-4 text-sm">
           <label className="flex items-center gap-2">
             <input
               type="checkbox"

@@ -60,7 +60,7 @@ export default function ImportPage() {
   const payerAccounts = accounts.filter((a) => isPayer(a.type));
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-3xl">
       <h1 className="text-2xl font-semibold">Importera CSV</h1>
 
       {accounts.length > 0 && (
@@ -123,7 +123,7 @@ export default function ImportPage() {
       )}
 
       <Card title="Nytt konto">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <input
             className="border rounded px-2 py-1.5 col-span-2"
             placeholder="Namn (t.ex. Privat lönekonto)"

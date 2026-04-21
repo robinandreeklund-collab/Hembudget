@@ -187,7 +187,7 @@ export default function Upcoming() {
   const incomes = items.filter((i) => i.kind === "income");
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
@@ -208,7 +208,7 @@ export default function Upcoming() {
 
       {forecastQ.data && (
         <Card title={`Månadsprognos — ${month}`}>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Stat
               icon={<TrendingUp className="w-4 h-4 text-emerald-600" />}
               label="Kommande lön"

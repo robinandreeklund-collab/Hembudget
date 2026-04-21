@@ -134,7 +134,7 @@ export default function Loans() {
   const totalAmortized = summaries.reduce((s, l) => s + Number(l.amortization_paid), 0);
 
   return (
-    <div className="p-6 space-y-5 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <Home className="w-6 h-6" />
@@ -189,7 +189,7 @@ export default function Loans() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <Card>
           <div className="text-xs uppercase text-slate-500">Total skuld</div>
           <div className="text-2xl font-semibold text-rose-600">{formatSEK(totalDebt)}</div>
@@ -278,7 +278,7 @@ export default function Loans() {
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-4 mt-3 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-3 text-sm">
                     <Stat label="Ursprung" value={formatSEK(s.principal_amount)} />
                     <Stat label="Kvarvarande" value={formatSEK(s.outstanding_balance)} strong />
                     <Stat label="Amorterat" value={formatSEK(s.amortization_paid)} />

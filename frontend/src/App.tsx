@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { BackendSetup } from "./components/BackendSetup";
-import { Sidebar } from "./components/Sidebar";
+import { MobileTopBar, Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
@@ -24,9 +24,10 @@ export default function App() {
   if (!isAuthenticated) return <Login />;
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex flex-col md:flex-row">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
+        <MobileTopBar />
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />

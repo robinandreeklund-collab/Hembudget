@@ -38,7 +38,7 @@ export default function Tax() {
   });
 
   return (
-    <div className="p-6 space-y-4 max-w-4xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-4xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Skatt</h1>
         <input
@@ -50,7 +50,7 @@ export default function Tax() {
       </div>
 
       <Card title="ISK — schablonbeskattning">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {(["opening_balance", "deposits", "q1", "q2", "q3", "q4"] as const).map((k) => (
             <label key={k} className="text-sm">
               <div className="text-slate-500">{k}</div>

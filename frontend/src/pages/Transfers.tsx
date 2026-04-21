@@ -68,7 +68,7 @@ export default function Transfers() {
   const suggestions = suggestionsQ.data?.suggestions ?? [];
 
   return (
-    <div className="p-6 space-y-5 max-w-6xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
@@ -97,7 +97,7 @@ export default function Transfers() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <Stat label="Parade överföringar" value={String(pairs.length)} tone="good" />
         <Stat label="Markerade utan par" value={String(unpaired.length)} tone={unpaired.length > 0 ? "warn" : "neutral"} />
         <Stat label="Föreslagna par" value={String(suggestions.length)} tone={suggestions.length > 0 ? "info" : "neutral"} />
