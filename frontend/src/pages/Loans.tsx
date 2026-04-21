@@ -1,8 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { CalendarClock, CheckCircle2, Home, Pencil, Trash2, Plus, X } from "lucide-react";
-import { api, formatSEK } from "@/api/client";
+import {
+  CalendarClock, CheckCircle2, Home, Image as ImageIcon, Loader2,
+  Pencil, Sparkles, Trash2, Plus, X,
+} from "lucide-react";
+import { api, formatSEK, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
+
+function apiBase(): string {
+  const port = localStorage.getItem("hembudget_api_port") || "8765";
+  return `http://127.0.0.1:${port}`;
+}
 
 interface ScheduleEntry {
   id: number;
@@ -67,7 +75,11 @@ export default function Loans() {
     | { kind: "idle" }
     | { kind: "create" }
     | { kind: "edit"; loan: Loan }
+    | { kind: "upload" }
   >({ kind: "idle" });
+  const [uploadJobs, setUploadJobs] = useState<
+    { file: File; status: "uploading" | "done" | "error"; message?: string }[]
+  >([]);
 
   const summariesQ = useQuery({
     queryKey: ["loan-summaries"],
@@ -132,6 +144,13 @@ export default function Loans() {
             {rescanMut.isPending ? "Scannar…" : "Scanna om alla betalningar"}
           </button>
           <button
+            onClick={() => setMode(mode.kind === "upload" ? { kind: "idle" } : { kind: "upload" })}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white"
+          >
+            <ImageIcon className="w-4 h-4" />
+            Skapa från bilder
+          </button>
+          <button
             onClick={() => setMode(mode.kind === "create" ? { kind: "idle" } : { kind: "create" })}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-brand-600 text-white"
           >
@@ -140,6 +159,22 @@ export default function Loans() {
           </button>
         </div>
       </div>
+
+      {mode.kind === "upload" && (
+        <LoanFromImagesUploader
+          jobs={uploadJobs}
+          setJobs={setUploadJobs}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ["loans"] });
+            qc.invalidateQueries({ queryKey: ["loan-summaries"] });
+            qc.invalidateQueries({ queryKey: ["transactions"] });
+          }}
+          onClose={() => {
+            setMode({ kind: "idle" });
+            setUploadJobs([]);
+          }}
+        />
+      )}
 
       {rescanMut.data && (
         <div className="text-sm text-slate-600">
@@ -546,5 +581,124 @@ function LoanSchedule({ loanId }: { loanId: number }) {
         </div>
       )}
     </div>
+  );
+}
+
+function LoanFromImagesUploader({
+  jobs,
+  setJobs,
+  onDone,
+  onClose,
+}: {
+  jobs: { file: File; status: "uploading" | "done" | "error"; message?: string }[];
+  setJobs: React.Dispatch<
+    React.SetStateAction<
+      { file: File; status: "uploading" | "done" | "error"; message?: string }[]
+    >
+  >;
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  async function upload(files: FileList | File[]) {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    setJobs(arr.map((f) => ({ file: f, status: "uploading" })));
+
+    const token = getToken();
+    const form = new FormData();
+    for (const f of arr) form.append("files", f);
+    try {
+      const res = await fetch(`${apiBase()}/loans/parse-from-images`, {
+        method: "POST",
+        body: form,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        setJobs(arr.map((f) => ({ file: f, status: "error", message: text })));
+        return;
+      }
+      await res.json();
+      setJobs(arr.map((f) => ({ file: f, status: "done" })));
+      onDone();
+    } catch (e) {
+      setJobs(arr.map((f) => ({ file: f, status: "error", message: String(e) })));
+    }
+  }
+
+  return (
+    <Card
+      title="Skapa lån automatiskt från bankbilder"
+      action={
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+          <X className="w-4 h-4" />
+        </button>
+      }
+    >
+      <div className="text-sm text-slate-600 mb-3">
+        Dra in skärmdumpar eller PDF:er från bankens lånesida. Vision-modellen
+        läser <strong>Låneinformation</strong> (grunden), <strong>Betalningsplan</strong>{" "}
+        (skapar schema) och eventuellt <strong>Transaktioner</strong>. Du kan
+        släppa flera bilder samtidigt — systemet sammanställer dem till ett lån
+        med komplett betalningsplan.
+        <div className="mt-1 text-xs text-amber-700">
+          Kräver vision-kapabel modell i LM Studio (Qwen2.5-VL, Pixtral, Llava).
+        </div>
+      </div>
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          if (e.dataTransfer.files.length) upload(e.dataTransfer.files);
+        }}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition ${
+          isDragging ? "border-emerald-500 bg-emerald-50" : "border-slate-300 bg-slate-50"
+        }`}
+      >
+        <ImageIcon className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+        <div className="text-sm text-slate-600">
+          Dra flera bilder hit, eller{" "}
+          <label className="text-emerald-700 cursor-pointer underline">
+            välj filer
+            <input
+              type="file"
+              multiple
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={(e) => e.target.files && upload(e.target.files)}
+            />
+          </label>
+        </div>
+      </div>
+
+      {jobs.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {jobs.map((j, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 p-2 border rounded bg-white text-sm"
+            >
+              {j.status === "uploading" && (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              )}
+              {j.status === "done" && <Sparkles className="w-4 h-4 text-emerald-600" />}
+              {j.status === "error" && <div className="w-4 h-4 rounded-full bg-rose-500" />}
+              <div className="flex-1 truncate">{j.file.name}</div>
+              {j.status === "error" && j.message && (
+                <div className="text-rose-600 text-xs truncate max-w-md">{j.message}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
