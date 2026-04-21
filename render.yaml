@@ -7,6 +7,7 @@ services:
     name: hembudget-backend
     runtime: python
     rootDir: backend
+    plan: free
     buildCommand: |
       pip install --upgrade pip &&
       pip install -e .
@@ -33,7 +34,10 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE
-        sync: false     # Sätt manuellt till backendens URL efter första deploy
+        fromService:
+          name: hembudget-backend
+          type: web
+          property: host     # Renders auto-fyller backendens hostname
     routes:
       - type: rewrite
         source: /*

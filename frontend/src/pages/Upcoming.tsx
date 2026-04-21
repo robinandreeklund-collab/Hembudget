@@ -57,8 +57,11 @@ function currentMonth(): string {
 }
 
 function apiBase(): string {
-  const explicit = (import.meta as ImportMeta).env.VITE_API_BASE;
-  if (explicit) return explicit.replace(/\/$/, "");
+  let explicit = (import.meta as ImportMeta).env.VITE_API_BASE;
+  if (explicit) {
+    if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
+    return explicit.replace(/\/$/, "");
+  }
   const port = localStorage.getItem("hembudget_api_port") || "8765";
   return `http://127.0.0.1:${port}`;
 }

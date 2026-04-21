@@ -14,9 +14,13 @@ export function clearToken(): void {
 }
 
 function apiBase(): string {
-  // Produktion (Render): VITE_API_BASE pekar mot backendens URL
-  const explicit = import.meta.env.VITE_API_BASE;
-  if (explicit) return explicit.replace(/\/$/, "");
+  // Produktion (Render): VITE_API_BASE pekar mot backendens URL eller hostname
+  let explicit = import.meta.env.VITE_API_BASE;
+  if (explicit) {
+    // Render's fromService host-property ger bara hostnamnet — lägg till https://
+    if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
+    return explicit.replace(/\/$/, "");
+  }
   // Tauri/lokalt dev: sidecar-porten injiceras via localStorage
   const port = localStorage.getItem(PORT_KEY) || import.meta.env.VITE_API_PORT || "8765";
   return `http://127.0.0.1:${port}`;
