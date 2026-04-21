@@ -7,11 +7,9 @@ services:
     name: hembudget-backend
     runtime: python
     rootDir: backend
-    plan: free
     buildCommand: |
       pip install --upgrade pip &&
-      pip install -e . &&
-      pip install --no-deps fastapi uvicorn pandas openpyxl pypdfium2 Pillow reportlab httpx rapidfuzz argon2-cffi python-dateutil chardet pytesseract pydantic-settings
+      pip install -e .
     startCommand: python -m hembudget.main --host 0.0.0.0 --port $PORT
     envVars:
       - key: HEMBUDGET_DEMO_MODE
@@ -29,7 +27,6 @@ services:
     name: hembudget-frontend
     runtime: static
     rootDir: frontend
-    plan: free
     buildCommand: |
       npm install &&
       npm run build
