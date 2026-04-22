@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -319,3 +320,229 @@ def huvudbok(
             "uncategorized_count": uncategorized_count,
         },
     }
+
+
+@router.get("/export.yaml")
+def export_yaml(
+    year: Optional[int] = None,
+    month: Optional[str] = None,
+    session: Session = Depends(db),
+) -> Response:
+    """Huvudboken som YAML-fil — praktiskt för att klistra in i en
+    felsökning eller diffa mellan två perioder."""
+    import yaml
+    data = huvudbok(year=year, month=month, session=session)
+    # Safe-dump (inga Python-objekt, bara primitiver från JSON-dict)
+    body = yaml.safe_dump(
+        data, allow_unicode=True, sort_keys=False, default_flow_style=False,
+    )
+    label = data["period"]["label"].replace("/", "-")
+    return Response(
+        content=body,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": f'attachment; filename="huvudbok_{label}.yaml"',
+        },
+    )
+
+
+@router.get("/export.pdf")
+def export_pdf(
+    year: Optional[int] = None,
+    month: Optional[str] = None,
+    session: Session = Depends(db),
+) -> Response:
+    """Huvudboken som en snygg PDF — för arkiv eller utskrift."""
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak,
+    )
+
+    data = huvudbok(year=year, month=month, session=session)
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        title=f"Huvudbok {data['period']['label']}",
+    )
+    styles = getSampleStyleSheet()
+    h1 = styles["Heading1"]
+    h2 = styles["Heading2"]
+    body = styles["BodyText"]
+    small = ParagraphStyle(
+        "Small", parent=body, fontSize=8, textColor=colors.HexColor("#475569"),
+    )
+
+    def fmt_kr(n: float) -> str:
+        return f"{n:,.0f} kr".replace(",", " ")
+
+    elements = [
+        Paragraph(f"Huvudbok — {data['period']['label']}", h1),
+        Paragraph(
+            f"Period: {data['period']['start']} – {data['period']['end']}",
+            small,
+        ),
+        Spacer(1, 8),
+    ]
+
+    # Totals box
+    t = data["totals"]
+    totals_tbl = Table(
+        [
+            ["Inkomster", "Utgifter", "Netto", "Nettoförmögenhet"],
+            [fmt_kr(t["income"]), fmt_kr(t["expenses"]),
+             fmt_kr(t["net_result"]), fmt_kr(t["net_worth"])],
+        ],
+        hAlign="LEFT",
+    )
+    totals_tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(totals_tbl)
+    elements.append(Spacer(1, 12))
+
+    # Checks
+    elements.append(Paragraph("Avstämning", h2))
+    check_rows = [["✓/✗", "Kontroll", "Värde"]]
+    for ch in data["checks"]:
+        mark = "✓" if ch["passed"] else "✗"
+        check_rows.append([mark, ch["name"], str(ch["value"])])
+    if len(check_rows) > 1:
+        t = Table(check_rows, colWidths=[15 * mm, 110 * mm, 35 * mm], hAlign="LEFT")
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ]))
+        # Färgrad för misslyckade checkar
+        for idx, ch in enumerate(data["checks"], start=1):
+            if not ch["passed"]:
+                t.setStyle(TableStyle([
+                    ("BACKGROUND", (0, idx), (-1, idx), colors.HexColor("#fef3c7")),
+                ]))
+        elements.append(t)
+    elements.append(Spacer(1, 12))
+
+    # Balansrapport per konto
+    elements.append(Paragraph("Balansrapport per konto", h2))
+    acc_rows = [["Konto", "Ingående", "In", "Ut", "TrIn", "TrUt", "Utgående", "#"]]
+    for a in data["accounts"]:
+        acc_rows.append([
+            f"{a['name']}\n{a['bank']} · {a['type']}",
+            fmt_kr(a["opening_balance"]),
+            fmt_kr(a["income"]),
+            fmt_kr(a["expenses"]),
+            fmt_kr(a["transfer_in"]) if a["transfer_in"] else "—",
+            fmt_kr(a["transfer_out"]) if a["transfer_out"] else "—",
+            fmt_kr(a["closing_balance"]),
+            str(a["transaction_count"]),
+        ])
+    if len(acc_rows) > 1:
+        t = Table(
+            acc_rows,
+            colWidths=[45 * mm, 22 * mm, 20 * mm, 20 * mm, 18 * mm, 18 * mm, 22 * mm, 10 * mm],
+            hAlign="LEFT",
+        )
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elements.append(t)
+    elements.append(Spacer(1, 12))
+
+    # Resultaträkning per kategori
+    elements.append(PageBreak())
+    elements.append(Paragraph("Resultaträkning per kategori", h2))
+    cat_rows = [["Kategori", "Inkomst", "Utgift", "Netto", "#"]]
+    for c in data["categories"]:
+        cat_rows.append([
+            c["category"],
+            fmt_kr(c["income"]) if c["income"] > 0 else "—",
+            fmt_kr(c["expenses"]) if c["expenses"] > 0 else "—",
+            fmt_kr(c["net"]),
+            str(c["count"]),
+        ])
+    if len(cat_rows) > 1:
+        t = Table(
+            cat_rows,
+            colWidths=[70 * mm, 28 * mm, 28 * mm, 28 * mm, 15 * mm],
+            hAlign="LEFT",
+        )
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        # Okategoriserade i gult
+        for idx, c in enumerate(data["categories"], start=1):
+            if c["category"] == "Okategoriserat":
+                t.setStyle(TableStyle([
+                    ("BACKGROUND", (0, idx), (-1, idx), colors.HexColor("#fef3c7")),
+                ]))
+        elements.append(t)
+
+    # Lån
+    if data["loans"]:
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph("Lån", h2))
+        loan_rows = [["Lån", "Långivare", "Ursprung", "Kvar", "Ränta", "Betalt"]]
+        for l in data["loans"]:
+            loan_rows.append([
+                l["name"], l["lender"],
+                fmt_kr(l["principal_amount"]),
+                fmt_kr(l["outstanding_balance"]),
+                f"{l['interest_rate']*100:.2f}%",
+                fmt_kr(l["payments_in_period"]),
+            ])
+        t = Table(loan_rows, hAlign="LEFT")
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+        ]))
+        elements.append(t)
+
+    doc.build(elements)
+    pdf_bytes = buf.getvalue()
+    label = data["period"]["label"].replace("/", "-")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="huvudbok_{label}.pdf"',
+        },
+    )

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ArrowLeftRight, FileText, Paperclip } from "lucide-react";
+import { ArrowLeftRight, FileText, Link2, Paperclip, X } from "lucide-react";
 import { api, formatSEK, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, Category, Transaction } from "@/types/models";
@@ -28,6 +28,7 @@ export default function Transactions() {
     txId: number; ok: boolean; text: string;
   } | null>(null);
   const hiddenFileRef = useRef<HTMLInputElement>(null);
+  const [matchingTx, setMatchingTx] = useState<Transaction | null>(null);
   const invoicedQ = useQuery({
     queryKey: ["invoiced-ids"],
     queryFn: () => api<{ ids: number[] }>("/transactions/invoiced-ids"),
@@ -397,6 +398,13 @@ export default function Transactions() {
                           >
                             ↔
                           </button>
+                          <button
+                            onClick={() => setMatchingTx(tx)}
+                            className="text-xs text-slate-600 hover:text-brand-600 flex items-center"
+                            title="Matcha manuellt mot en befintlig kommande-rad (lön eller faktura)"
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
                           {invoicedSet.has(tx.id) ? (
                             <button
                               onClick={() => openInvoice(tx.id)}
@@ -462,6 +470,201 @@ export default function Transactions() {
           e.target.value = "";
         }}
       />
+      {matchingTx && (
+        <ManualMatchModal
+          tx={matchingTx}
+          onClose={() => setMatchingTx(null)}
+          onMatched={() => {
+            setMatchingTx(null);
+            qc.invalidateQueries({ queryKey: ["transactions"] });
+            qc.invalidateQueries({ queryKey: ["upcoming"] });
+            qc.invalidateQueries({ queryKey: ["ytd-income"] });
+            qc.invalidateQueries({ queryKey: ["ledger"] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface MatchCandidate {
+  id: number;
+  kind: "bill" | "income";
+  name: string;
+  amount: number;
+  expected_date: string;
+  owner: string | null;
+  source: string;
+  amount_diff: number;
+  date_diff_days: number;
+  exact_match: boolean;
+}
+
+function ManualMatchModal({
+  tx,
+  onClose,
+  onMatched,
+}: {
+  tx: Transaction;
+  onClose: () => void;
+  onMatched: () => void;
+}) {
+  const [kind, setKind] = useState<"" | "income" | "bill">(
+    tx.amount > 0 ? "income" : "bill",
+  );
+  const candsQ = useQuery({
+    queryKey: ["match-candidates", tx.id, kind],
+    queryFn: () =>
+      api<{
+        transaction: { id: number; date: string; amount: number; description: string };
+        kind: string;
+        candidates: MatchCandidate[];
+      }>(
+        `/transactions/${tx.id}/match-candidates${kind ? `?kind=${kind}` : ""}`,
+      ),
+  });
+  const matchMut = useMutation({
+    mutationFn: (upcomingId: number) =>
+      api(`/transactions/${tx.id}/match-upcoming`, {
+        method: "POST",
+        body: JSON.stringify({ upcoming_id: upcomingId }),
+      }),
+    onSuccess: onMatched,
+  });
+
+  const cands = candsQ.data?.candidates ?? [];
+
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-slate-900/50 flex items-start justify-center p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl mt-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between p-4 border-b">
+          <div>
+            <h2 className="text-lg font-semibold">Matcha manuellt</h2>
+            <div className="text-sm text-slate-700 mt-1">
+              Transaktion:{" "}
+              <span className="font-medium">{tx.raw_description}</span>{" "}
+              <span
+                className={tx.amount < 0 ? "text-rose-600" : "text-emerald-600"}
+              >
+                {formatSEK(tx.amount)}
+              </span>{" "}
+              <span className="text-xs text-slate-600">({tx.date})</span>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-600 hover:text-slate-900"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="flex gap-2 text-sm">
+            <span className="text-slate-700">Typ:</span>
+            {[
+              { v: "income", label: "Lön / Inkomst" },
+              { v: "bill", label: "Faktura" },
+              { v: "", label: "Alla" },
+            ].map((o) => (
+              <button
+                key={o.v}
+                onClick={() => setKind(o.v as "" | "income" | "bill")}
+                className={`px-2.5 py-1 rounded-full text-xs border ${
+                  kind === o.v
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {candsQ.isLoading ? (
+            <div className="text-sm text-slate-700">Söker kandidater…</div>
+          ) : cands.length === 0 ? (
+            <div className="text-sm text-slate-700 py-4 text-center">
+              Inga omatchade kommande-rader hittades med denna filter.
+              Gå till{" "}
+              <a href="/upcoming" className="text-brand-600 underline">
+                Kommande
+              </a>{" "}
+              och skapa en först.
+            </div>
+          ) : (
+            <div className="space-y-1 max-h-96 overflow-y-auto">
+              {cands.map((c) => (
+                <div
+                  key={c.id}
+                  className={`border rounded p-2 flex items-center gap-2 text-sm ${
+                    c.exact_match ? "bg-emerald-50 border-emerald-200" : ""
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{c.name}</div>
+                    <div className="text-xs text-slate-700 flex flex-wrap gap-x-2">
+                      <span>{c.expected_date}</span>
+                      <span>·</span>
+                      <span
+                        className={
+                          c.amount_diff < 1
+                            ? "text-emerald-700"
+                            : c.amount_diff < 10
+                            ? "text-slate-700"
+                            : "text-amber-700"
+                        }
+                      >
+                        Δ {c.amount_diff.toFixed(0)} kr
+                      </span>
+                      <span
+                        className={
+                          c.date_diff_days <= 5
+                            ? "text-emerald-700"
+                            : c.date_diff_days <= 15
+                            ? "text-slate-700"
+                            : "text-amber-700"
+                        }
+                      >
+                        · Δ {c.date_diff_days}d
+                      </span>
+                      {c.owner && <span>· {c.owner}</span>}
+                      {c.source !== "manual" && <span>· {c.source}</span>}
+                      {c.exact_match && (
+                        <span className="text-emerald-600 font-medium">· exakt</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-semibold">
+                      {c.kind === "income" ? "+" : ""}
+                      {formatSEK(c.amount)}
+                    </div>
+                    <button
+                      onClick={() => matchMut.mutate(c.id)}
+                      disabled={matchMut.isPending}
+                      className="mt-1 text-xs bg-brand-600 text-white px-2 py-0.5 rounded disabled:opacity-50"
+                    >
+                      {matchMut.isPending ? "…" : "Matcha"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {matchMut.isError && (
+            <div className="text-xs text-rose-600">
+              {(matchMut.error as Error).message}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

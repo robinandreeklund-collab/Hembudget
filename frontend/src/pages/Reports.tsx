@@ -167,11 +167,34 @@ export default function Reports() {
           </div>
         }
       >
-        <div className="text-sm text-slate-700 mb-4">
+        <div className="text-sm text-slate-700 mb-3">
           Huvudboken visar ALLA pengar under perioden: opening-saldo per
           konto, alla rörelser, closing-saldo, samt en resultaträkning per
           kategori. Längst ner visas avstämnings-checkar så du snabbt ser
           om något inte balanserar.
+        </div>
+        <div className="flex gap-2 mb-4 text-sm">
+          <button
+            className="bg-slate-800 text-white px-3 py-1.5 rounded"
+            onClick={() => {
+              const q = scope === "month" ? `month=${month}` : `year=${year}`;
+              const label = scope === "month" ? month : String(year);
+              download(`/ledger/export.pdf?${q}`, `huvudbok-${label}.pdf`);
+            }}
+          >
+            Ladda ner som PDF
+          </button>
+          <button
+            className="bg-slate-600 text-white px-3 py-1.5 rounded"
+            onClick={() => {
+              const q = scope === "month" ? `month=${month}` : `year=${year}`;
+              const label = scope === "month" ? month : String(year);
+              download(`/ledger/export.yaml?${q}`, `huvudbok-${label}.yaml`);
+            }}
+            title="YAML-fil med all rådata — klistra in vid felsökning"
+          >
+            Ladda ner YAML (rådata)
+          </button>
         </div>
 
         {ledgerQ.isLoading ? (

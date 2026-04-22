@@ -466,6 +466,165 @@ def reclassify(tx_id: int, session: Session = Depends(db)) -> Transaction:
     return tx
 
 
+@router.get("/transactions/{tx_id}/match-candidates")
+def list_match_candidates(
+    tx_id: int,
+    kind: Optional[str] = Query(None, description="'income' eller 'bill'"),
+    session: Session = Depends(db),
+) -> dict:
+    """Lista omatchade UpcomingTransactions som kan bindas manuellt till
+    denna transaktion. Sorteras efter relevans:
+    1. Exakt beloppsmatch (±1 kr)
+    2. Närhet i datum
+    3. Rätt 'kind' (positiv tx → income; negativ → bill)
+
+    Returnerar max 20 kandidater. Används av UI:t för "Matcha manuellt"."""
+    from ..db.models import UpcomingTransaction
+    from decimal import Decimal as _Dec
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+
+    # Default kind efter tx:s tecken
+    default_kind = "income" if tx.amount > 0 else "bill"
+    use_kind = kind or default_kind
+
+    q = session.query(UpcomingTransaction).filter(
+        UpcomingTransaction.matched_transaction_id.is_(None),
+    )
+    if use_kind in ("income", "bill"):
+        q = q.filter(UpcomingTransaction.kind == use_kind)
+    ups = q.all()
+
+    # Beräkna expected_amount per upcoming
+    tx_date = tx.date
+    tx_amount = tx.amount
+    scored: list[tuple[int, int, bool, UpcomingTransaction]] = []
+    for up in ups:
+        expected = up.amount if up.kind == "income" else -up.amount
+        date_diff = abs((up.expected_date - tx_date).days)
+        amount_diff = abs(float(tx_amount - expected))
+        # Matchgrad:
+        # 0 = perfekt (belopp ±1 kr, datum ±10 dagar)
+        # 1 = belopp rimligt (±10 kr) eller datum nära
+        # 2 = annat
+        if amount_diff <= 1.0 and date_diff <= 10:
+            rank = 0
+        elif amount_diff <= 10.0 or date_diff <= 30:
+            rank = 1
+        else:
+            rank = 2
+        exact = amount_diff <= 1.0 and date_diff <= 5
+        scored.append((rank, date_diff, exact, up))
+
+    scored.sort(key=lambda t: (t[0], t[1]))
+    top = scored[:20]
+
+    return {
+        "transaction": {
+            "id": tx.id,
+            "date": tx.date.isoformat(),
+            "amount": float(tx.amount),
+            "description": tx.raw_description,
+            "account_id": tx.account_id,
+        },
+        "kind": use_kind,
+        "candidates": [
+            {
+                "id": up.id,
+                "kind": up.kind,
+                "name": up.name,
+                "amount": float(up.amount),
+                "expected_date": up.expected_date.isoformat(),
+                "owner": up.owner,
+                "source": up.source,
+                "amount_diff": round(abs(float(tx_amount) - float(
+                    up.amount if up.kind == "income" else -up.amount
+                )), 2),
+                "date_diff_days": abs((up.expected_date - tx_date).days),
+                "exact_match": bool(exact),
+            }
+            for rank, date_diff, exact, up in top
+        ],
+    }
+
+
+@router.post("/transactions/{tx_id}/match-upcoming")
+def match_upcoming(
+    tx_id: int,
+    payload: dict,
+    session: Session = Depends(db),
+) -> dict:
+    """Koppla manuellt en Transaction till en befintlig UpcomingTransaction.
+
+    Body: `{"upcoming_id": N}`. Sätter upcoming.matched_transaction_id=tx_id
+    och kopierar ev. fakturarader till transaction_splits (samma som
+    backfill-matchern gör automatiskt).
+    """
+    from ..db.models import UpcomingTransaction
+    from ..splits import apply_upcoming_lines_to_transaction
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+    upcoming_id = payload.get("upcoming_id")
+    if not isinstance(upcoming_id, int):
+        raise HTTPException(400, "upcoming_id (int) krävs i body")
+    up = session.get(UpcomingTransaction, upcoming_id)
+    if up is None:
+        raise HTTPException(404, "Upcoming not found")
+    if up.matched_transaction_id is not None and up.matched_transaction_id != tx_id:
+        raise HTTPException(
+            409,
+            f"Upcoming #{upcoming_id} är redan matchad mot transaktion "
+            f"#{up.matched_transaction_id}. Koppla loss den först om du vill flytta.",
+        )
+
+    up.matched_transaction_id = tx.id
+    # Kopiera ev. lines till splits
+    if up.lines:
+        apply_upcoming_lines_to_transaction(session, up, tx)
+    session.flush()
+
+    return {
+        "transaction_id": tx.id,
+        "upcoming_id": up.id,
+        "upcoming_name": up.name,
+        "amount": float(up.amount),
+        "kind": up.kind,
+        "splits_created": bool(up.lines),
+    }
+
+
+@router.post("/transactions/{tx_id}/unmatch-upcoming")
+def unmatch_upcoming(tx_id: int, session: Session = Depends(db)) -> dict:
+    """Koppla bort en Transaction från sin matchade upcoming + rensa splits
+    som kom från upcoming:en (source='upcoming'). Transaktionen finns kvar."""
+    from ..db.models import UpcomingTransaction, TransactionSplit
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+    ups = (
+        session.query(UpcomingTransaction)
+        .filter(UpcomingTransaction.matched_transaction_id == tx_id)
+        .all()
+    )
+    if not ups:
+        raise HTTPException(404, "Ingen upcoming matchad mot denna tx")
+
+    for up in ups:
+        up.matched_transaction_id = None
+    # Radera splits som skapats från upcoming (behåll manuella)
+    session.query(TransactionSplit).filter(
+        TransactionSplit.transaction_id == tx_id,
+        TransactionSplit.source == "upcoming",
+    ).delete(synchronize_session=False)
+    session.flush()
+    return {"transaction_id": tx_id, "unmatched": [u.id for u in ups]}
+
+
 @router.post("/transactions/{tx_id}/attach-invoice")
 async def attach_invoice_to_transaction(
     tx_id: int,
