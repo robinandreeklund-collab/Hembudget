@@ -7,6 +7,8 @@ export interface Account {
   account_number?: string | null;
   opening_balance?: number | null;
   opening_balance_date?: string | null;
+  credit_limit?: number | null;
+  bankgiro?: string | null;
   pays_credit_account_id?: number | null;
 }
 

@@ -41,6 +41,13 @@ class Account(Base):
     account_number: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, index=True)
     opening_balance: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
     opening_balance_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Kreditgräns — sätts bara för credit-kort. Används för att visa
+    # kvar att utnyttja ("kredit kvar") och varna vid nära-gräns.
+    credit_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    # För kreditkort: bankgiro som används för att betala fakturan.
+    # Används för att para autogiro-transaktioner från lönekontot mot
+    # rätt kortkonto ("Betalning BG 5127-5477 American Exp" → Amex-kort).
+    bankgiro: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     pays_credit_account_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("accounts.id"), nullable=True

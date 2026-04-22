@@ -988,13 +988,22 @@ async def parse_credit_card_pdf(
         card_name=parsed.card_name,
     )
 
-    # Sätt ingående saldo om det saknas
+    # Sätt ingående saldo om det saknas.
+    # "Föregående faktura"-beloppet = skuld vid periodens start.
+    # Credit-konto konvention: skuld = NEGATIVT saldo (pengar du
+    # är skyldig banken).
     if cc_account.opening_balance is None and parsed.opening_balance is not None:
-        # Skuld på kortet → negativt saldo i vår modell
         cc_account.opening_balance = -abs(parsed.opening_balance)
         if parsed.statement_period_start:
             cc_account.opening_balance_date = parsed.statement_period_start
-        session.flush()
+
+    # Sätt bankgiro på kortkontot — används av transfer-matchern för att
+    # para autogiro-dragningar från lönekontot ("Betalning BG 5127-5477")
+    # med rätt kortkonto automatiskt.
+    if cc_account.bankgiro is None and parsed.bankgiro:
+        cc_account.bankgiro = parsed.bankgiro
+
+    session.flush()
 
     # Audit-post
     imp = Import(

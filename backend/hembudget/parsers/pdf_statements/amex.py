@@ -201,6 +201,23 @@ def parse_amex(text: str) -> ParsedStatement:
         except Exception:
             pass
 
+    # Derive opening_balance om det inte hittades direkt. I Amex:s PDF
+    # står "Föregående faktura"-labeln ofta på annan Y-rad än siffran
+    # pga layout. Men vi kan reverse-enginera eftersom identiteten
+    #   opening + new_purchases + payments_total = closing (= total_amount)
+    # alltid håller. Om vi har 3 av 4, räkna fjärde.
+    if stmt.opening_balance is None:
+        if (
+            stmt.total_amount
+            and stmt.new_purchases_total is not None
+            and stmt.payments_total is not None
+        ):
+            stmt.opening_balance = (
+                stmt.total_amount
+                - stmt.new_purchases_total
+                - stmt.payments_total
+            ).quantize(Decimal("0.01"))
+
     # --- Kortinnehavar-sektioner: mappa text-positioner till holders ---
     cardholders: list[tuple[int, str]] = []
     for m in _CARDHOLDER_SECTION_RE.finditer(text):

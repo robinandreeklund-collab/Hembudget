@@ -49,6 +49,19 @@ export default function ImportPage() {
     onError: (err: Error) => setResult({ error: err.message }),
   });
 
+  const deleteAccMut = useMutation({
+    mutationFn: (p: { id: number; force: boolean }) =>
+      api<{ deleted: number; deleted_transactions: number }>(
+        `/accounts/${p.id}?force=${p.force}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+    },
+  });
+
   const linkPayerMut = useMutation({
     mutationFn: (p: { account_id: number; pays_credit_account_id: number | null }) =>
       patchAccount(p.account_id, { pays_credit_account_id: p.pays_credit_account_id }),
@@ -80,9 +93,22 @@ export default function ImportPage() {
                     qc.invalidateQueries({ queryKey: ["accounts"] }),
                   )
                 }
+                onDelete={(force) =>
+                  deleteAccMut.mutate({ id: a.id, force })
+                }
               />
             ))}
           </div>
+          {deleteAccMut.isError && (
+            <div className="mt-2 text-sm text-rose-600">
+              {(deleteAccMut.error as Error).message}
+            </div>
+          )}
+          {deleteAccMut.data && (
+            <div className="mt-2 text-sm text-emerald-700">
+              Raderade konto och {deleteAccMut.data.deleted_transactions} transaktioner.
+            </div>
+          )}
         </Card>
       )}
 
@@ -213,71 +239,153 @@ export default function ImportPage() {
 function AccountSetupRow({
   account,
   onSave,
+  onDelete,
 }: {
   account: Account;
   onSave: (updates: Partial<Account>) => Promise<unknown>;
+  onDelete: (force: boolean) => void;
 }) {
   const [num, setNum] = useState(account.account_number ?? "");
   const [ob, setOb] = useState(
     account.opening_balance != null ? String(account.opening_balance) : "",
   );
   const [obDate, setObDate] = useState(account.opening_balance_date ?? "");
+  const [creditLimit, setCreditLimit] = useState(
+    account.credit_limit != null ? String(account.credit_limit) : "",
+  );
+  const [bg, setBg] = useState(account.bankgiro ?? "");
 
-  function saveIfChanged(field: "account_number" | "opening_balance" | "opening_balance_date",
-                        value: string) {
+  const isCredit = account.type === "credit";
+
+  function saveIfChanged(
+    field:
+      | "account_number"
+      | "opening_balance"
+      | "opening_balance_date"
+      | "credit_limit"
+      | "bankgiro",
+    value: string,
+  ) {
     const current =
       field === "account_number"
         ? account.account_number ?? ""
         : field === "opening_balance"
         ? (account.opening_balance != null ? String(account.opening_balance) : "")
-        : account.opening_balance_date ?? "";
+        : field === "opening_balance_date"
+        ? account.opening_balance_date ?? ""
+        : field === "credit_limit"
+        ? (account.credit_limit != null ? String(account.credit_limit) : "")
+        : account.bankgiro ?? "";
     if (value === current) return;
     const updates: Partial<Account> = {};
     if (field === "account_number") updates.account_number = value || null;
     else if (field === "opening_balance")
       updates.opening_balance = value ? (Number(value) as unknown as Account["opening_balance"]) : null;
-    else updates.opening_balance_date = value || null;
+    else if (field === "opening_balance_date")
+      updates.opening_balance_date = value || null;
+    else if (field === "credit_limit")
+      updates.credit_limit = value ? (Number(value) as unknown as Account["credit_limit"]) : null;
+    else updates.bankgiro = value || null;
     onSave(updates);
   }
 
   return (
-    <div className="grid grid-cols-12 gap-2 items-center border rounded p-2 text-sm">
-      <div className="col-span-3">
-        <div className="font-medium truncate">{account.name}</div>
-        <div className="text-xs text-slate-500">{account.bank} · {account.type}</div>
+    <div className="border rounded p-2 text-sm space-y-2">
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <div className="font-medium truncate">{account.name}</div>
+          <div className="text-xs text-slate-500">{account.bank} · {account.type}</div>
+        </div>
+        <button
+          onClick={() => {
+            const msg =
+              "Radera kontot '" +
+              account.name +
+              "'?\n\nOm kontot har transaktioner raderas även alla transaktioner, splits och loan-länkar. Detta kan inte ångras.";
+            if (confirm(msg)) onDelete(true);
+          }}
+          className="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded"
+          title="Radera kontot"
+        >
+          Radera
+        </button>
       </div>
-      <label className="col-span-4">
-        <div className="text-xs text-slate-500">Kontonummer</div>
-        <input
-          value={num}
-          onChange={(e) => setNum(e.target.value)}
-          onBlur={() => saveIfChanged("account_number", num)}
-          placeholder="1709 20 72840"
-          className="border rounded px-2 py-1 w-full font-mono text-xs"
-        />
-      </label>
-      <label className="col-span-3">
-        <div className="text-xs text-slate-500">Ingående saldo</div>
-        <input
-          type="number"
-          step="0.01"
-          value={ob}
-          onChange={(e) => setOb(e.target.value)}
-          onBlur={() => saveIfChanged("opening_balance", ob)}
-          placeholder="0"
-          className="border rounded px-2 py-1 w-full text-right"
-        />
-      </label>
-      <label className="col-span-2">
-        <div className="text-xs text-slate-500">Startdatum</div>
-        <input
-          type="date"
-          value={obDate}
-          onChange={(e) => setObDate(e.target.value)}
-          onBlur={() => saveIfChanged("opening_balance_date", obDate)}
-          className="border rounded px-2 py-1 w-full text-xs"
-        />
-      </label>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <label>
+          <div className="text-xs text-slate-500">Kontonummer</div>
+          <input
+            value={num}
+            onChange={(e) => setNum(e.target.value)}
+            onBlur={() => saveIfChanged("account_number", num)}
+            placeholder="1709 20 72840"
+            className="border rounded px-2 py-1 w-full font-mono text-xs"
+          />
+        </label>
+        {isCredit ? (
+          <label>
+            <div className="text-xs text-slate-500">Kreditgräns (kr)</div>
+            <input
+              type="number"
+              step="1000"
+              value={creditLimit}
+              onChange={(e) => setCreditLimit(e.target.value)}
+              onBlur={() => saveIfChanged("credit_limit", creditLimit)}
+              placeholder="150000"
+              className="border rounded px-2 py-1 w-full text-right"
+            />
+          </label>
+        ) : (
+          <label>
+            <div className="text-xs text-slate-500">Ingående saldo</div>
+            <input
+              type="number"
+              step="0.01"
+              value={ob}
+              onChange={(e) => setOb(e.target.value)}
+              onBlur={() => saveIfChanged("opening_balance", ob)}
+              placeholder="0"
+              className="border rounded px-2 py-1 w-full text-right"
+            />
+          </label>
+        )}
+        {isCredit ? (
+          <label>
+            <div className="text-xs text-slate-500">Bankgiro (för autogiro-match)</div>
+            <input
+              value={bg}
+              onChange={(e) => setBg(e.target.value)}
+              onBlur={() => saveIfChanged("bankgiro", bg)}
+              placeholder="5127-5477"
+              className="border rounded px-2 py-1 w-full font-mono text-xs"
+            />
+          </label>
+        ) : (
+          <label>
+            <div className="text-xs text-slate-500">Startdatum</div>
+            <input
+              type="date"
+              value={obDate}
+              onChange={(e) => setObDate(e.target.value)}
+              onBlur={() => saveIfChanged("opening_balance_date", obDate)}
+              className="border rounded px-2 py-1 w-full text-xs"
+            />
+          </label>
+        )}
+        {isCredit && (
+          <label>
+            <div className="text-xs text-slate-500">Skuld (negativt saldo)</div>
+            <input
+              type="number"
+              step="0.01"
+              value={ob}
+              onChange={(e) => setOb(e.target.value)}
+              onBlur={() => saveIfChanged("opening_balance", ob)}
+              placeholder="-39683.78"
+              className="border rounded px-2 py-1 w-full text-right"
+            />
+          </label>
+        )}
+      </div>
     </div>
   );
 }

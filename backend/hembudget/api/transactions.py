@@ -46,6 +46,101 @@ def update_account(
     return a
 
 
+@router.delete("/accounts/{account_id}")
+def delete_account(
+    account_id: int,
+    force: bool = False,
+    session: Session = Depends(db),
+) -> dict:
+    """Radera ett konto.
+
+    Utan `force`: tillåter bara radering av tomma konton (inga transaktioner,
+    inte ett återbetalningskonto för ett lån eller kreditkort).
+    Med `force=true`: raderar även transaktioner + loan_payments + splits
+    kopplade till kontot. Irreversibelt.
+    """
+    a = session.get(Account, account_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+
+    tx_count = session.query(Transaction).filter(
+        Transaction.account_id == account_id
+    ).count()
+    # Om ett annat konto pekar hit via pays_credit_account_id
+    dependents = session.query(Account).filter(
+        Account.pays_credit_account_id == account_id
+    ).all()
+
+    if not force:
+        if tx_count > 0:
+            raise HTTPException(
+                409,
+                f"Kontot har {tx_count} transaktioner. Använd force=true "
+                "för att radera ändå (alla transaktioner försvinner).",
+            )
+        if dependents:
+            names = ", ".join(d.name for d in dependents)
+            raise HTTPException(
+                409,
+                f"Kontot är kopplat som återbetalningskonto för: {names}. "
+                "Koppla bort innan du raderar.",
+            )
+
+    # Vid force: koppla bort ev. dependents så FK inte bryter
+    for d in dependents:
+        d.pays_credit_account_id = None
+
+    # Radera relaterade rader FK-säkert
+    from ..db.models import LoanPayment, TransactionSplit
+    tx_ids = [t.id for t in session.query(Transaction).filter(
+        Transaction.account_id == account_id
+    ).all()]
+    if tx_ids:
+        session.query(LoanPayment).filter(
+            LoanPayment.transaction_id.in_(tx_ids)
+        ).delete(synchronize_session=False)
+        session.query(TransactionSplit).filter(
+            TransactionSplit.transaction_id.in_(tx_ids)
+        ).delete(synchronize_session=False)
+        # Nollställ upcoming som matchats till dessa transaktioner
+        from ..db.models import UpcomingTransaction, LoanScheduleEntry
+        session.query(UpcomingTransaction).filter(
+            UpcomingTransaction.matched_transaction_id.in_(tx_ids)
+        ).update(
+            {"matched_transaction_id": None}, synchronize_session=False
+        )
+        session.query(LoanScheduleEntry).filter(
+            LoanScheduleEntry.matched_transaction_id.in_(tx_ids)
+        ).update(
+            {"matched_transaction_id": None, "matched_at": None},
+            synchronize_session=False,
+        )
+        # Rensa transfer_pair_id på transaktioner som pekar hit
+        session.query(Transaction).filter(
+            Transaction.transfer_pair_id.in_(tx_ids)
+        ).update(
+            {"transfer_pair_id": None, "is_transfer": False},
+            synchronize_session=False,
+        )
+        # Ta bort själva transaktionerna
+        session.query(Transaction).filter(
+            Transaction.account_id == account_id
+        ).delete(synchronize_session=False)
+
+    # Nollställ upcoming.debit_account_id som pekar på kontot
+    from ..db.models import UpcomingTransaction
+    session.query(UpcomingTransaction).filter(
+        UpcomingTransaction.debit_account_id == account_id
+    ).update({"debit_account_id": None}, synchronize_session=False)
+
+    session.flush()
+    session.delete(a)
+    return {
+        "deleted": account_id,
+        "deleted_transactions": tx_count,
+    }
+
+
 @router.get("/categories", response_model=list[CategoryOut])
 def list_categories(session: Session = Depends(db)) -> list[Category]:
     return session.query(Category).order_by(Category.name).all()

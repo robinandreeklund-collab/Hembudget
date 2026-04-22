@@ -68,6 +68,12 @@ def run_migrations(engine: Engine) -> list[str]:
     if "opening_balance_date" not in acc_cols:
         _add_column(engine, "accounts", "opening_balance_date DATE")
         applied.append("accounts.opening_balance_date")
+    if "credit_limit" not in acc_cols:
+        _add_column(engine, "accounts", "credit_limit NUMERIC(14, 2)")
+        applied.append("accounts.credit_limit")
+    if "bankgiro" not in acc_cols:
+        _add_column(engine, "accounts", "bankgiro VARCHAR(20)")
+        applied.append("accounts.bankgiro")
 
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):

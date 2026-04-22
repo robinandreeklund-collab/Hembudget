@@ -60,6 +60,8 @@ class AccountIn(BaseModel):
     account_number: Optional[str] = None
     opening_balance: Optional[Decimal] = None
     opening_balance_date: Optional[date] = None
+    credit_limit: Optional[Decimal] = None
+    bankgiro: Optional[str] = None
     pays_credit_account_id: Optional[int] = None
 
 
@@ -73,6 +75,8 @@ class AccountUpdate(BaseModel):
     account_number: Optional[str] = None
     opening_balance: Optional[Decimal] = None
     opening_balance_date: Optional[date] = None
+    credit_limit: Optional[Decimal] = None
+    bankgiro: Optional[str] = None
     pays_credit_account_id: Optional[int] = None
 
 
