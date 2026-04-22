@@ -90,16 +90,27 @@ export default function Transactions() {
   const [accountFilter, setAccountFilter] = useState<string>(
     () => localStorage.getItem("tx_account_filter") || ALL_ACCOUNTS,
   );
+  const [monthFilter, setMonthFilter] = useState<string>(() => {
+    const saved = localStorage.getItem("tx_month_filter");
+    if (saved != null) return saved;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
 
   const accountsQ = useQuery({
     queryKey: ["accounts"],
     queryFn: () => api<Account[]>("/accounts"),
   });
+  const monthsQ = useQuery({
+    queryKey: ["budget-months"],
+    queryFn: () =>
+      api<{ months: Array<{ month: string; count: number }> }>("/budget/months"),
+  });
 
   const txsQ = useQuery({
     queryKey: ["transactions", { uncategorizedOnly, accountFilter }],
     queryFn: () => {
-      const params = new URLSearchParams({ limit: "500" });
+      const params = new URLSearchParams({ limit: "2000" });
       if (uncategorizedOnly) params.set("uncategorized", "true");
       if (accountFilter !== ALL_ACCOUNTS) {
         params.set("account_id", accountFilter);
@@ -150,6 +161,27 @@ export default function Transactions() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <h1 className="text-xl md:text-2xl font-semibold">Transaktioner</h1>
         <div className="flex flex-wrap items-center gap-3 md:gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            Månad
+            <select
+              value={monthFilter}
+              onChange={(e) => {
+                setMonthFilter(e.target.value);
+                localStorage.setItem("tx_month_filter", e.target.value);
+              }}
+              className="border rounded px-2 py-1 bg-white"
+            >
+              <option value="">Alla månader</option>
+              {(monthsQ.data?.months ?? [])
+                .slice()
+                .reverse()
+                .map((m) => (
+                  <option key={m.month} value={m.month}>
+                    {m.month} ({m.count})
+                  </option>
+                ))}
+            </select>
+          </label>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -219,6 +251,39 @@ export default function Transactions() {
           <div className="text-sm text-slate-700">Laddar…</div>
         ) : (
           <div className="overflow-x-auto">
+            {(() => {
+              const filtered = (txsQ.data ?? [])
+                .filter((tx) => (hideTransfers ? !tx.is_transfer : true))
+                .filter((tx) =>
+                  monthFilter ? tx.date.startsWith(monthFilter) : true,
+                );
+              let income = 0;
+              let expenses = 0;
+              for (const tx of filtered) {
+                const amt = Number(tx.amount);
+                if (amt > 0) income += amt;
+                else expenses += -amt;
+              }
+              return (
+                <div className="mb-3 flex flex-wrap gap-4 text-xs text-slate-700">
+                  <span>
+                    <strong className="text-slate-900">{filtered.length}</strong> rader
+                    {monthFilter ? ` i ${monthFilter}` : ""}
+                  </span>
+                  <span className="text-emerald-700">
+                    In: {income.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} kr
+                  </span>
+                  <span className="text-rose-600">
+                    Ut: {expenses.toLocaleString("sv-SE", { maximumFractionDigits: 0 })} kr
+                  </span>
+                  <span>
+                    Netto: <strong className={income - expenses >= 0 ? "text-emerald-700" : "text-rose-600"}>
+                      {(income - expenses).toLocaleString("sv-SE", { maximumFractionDigits: 0 })} kr
+                    </strong>
+                  </span>
+                </div>
+              );
+            })()}
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase text-slate-700 border-b">
@@ -234,6 +299,9 @@ export default function Transactions() {
               <tbody>
                 {(txsQ.data ?? [])
                   .filter((tx) => (hideTransfers ? !tx.is_transfer : true))
+                  .filter((tx) =>
+                    monthFilter ? tx.date.startsWith(monthFilter) : true,
+                  )
                   .map((tx) => {
                     const acc = (accountsQ.data ?? []).find((a) => a.id === tx.account_id);
                     return (
