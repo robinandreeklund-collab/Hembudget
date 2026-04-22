@@ -944,9 +944,10 @@ def monthly_forecast(
     bills_total = sum((b.amount for b in bills), Decimal("0"))
     income_total = sum((i.amount for i in incomes), Decimal("0"))
 
-    # Fasta kostnader = snitt av senaste 3 månadernas utgifter
-    # (exkl. transfers, exkl. redan matchade kommande fakturor så de inte
-    # räknas dubbelt när de dyker upp som riktiga transaktioner nästa gång)
+    # "Övriga utgifter" = snitt av senaste 3 månadernas utgifter, MINUS
+    # de transaktioner som redan matchats mot en UpcomingTransaction (de
+    # representerar kända återkommande fakturor som räknas separat via
+    # upcoming_bills för kommande månad — annars dubbelräknar vi dem).
     from sqlalchemy import func as sql_func
 
     # Räkna ut lookback-fönstret korrekt över årsgräns
@@ -956,6 +957,19 @@ def monthly_forecast(
         lookback_month += 12
         lookback_year -= 1
     lookback_start = date(lookback_year, lookback_month, 1)
+
+    # IDs för transaktioner som matchats mot en upcoming bill — dessa är
+    # "kända" återkommande kostnader och ska INTE inkluderas i snittet av
+    # övriga utgifter, eftersom nästa månads version redan är inräknad
+    # i upcoming_bills.
+    matched_tx_ids_subq = (
+        session.query(UpcomingTransaction.matched_transaction_id)
+        .filter(
+            UpcomingTransaction.kind == "bill",
+            UpcomingTransaction.matched_transaction_id.is_not(None),
+        )
+        .subquery()
+    )
 
     monthly_exp = (
         session.query(
@@ -967,6 +981,7 @@ def monthly_forecast(
             Transaction.is_transfer.is_(False),
             Transaction.date >= lookback_start,
             Transaction.date < start,
+            Transaction.id.not_in(matched_tx_ids_subq.select()),
         )
         .group_by("m")
         .all()

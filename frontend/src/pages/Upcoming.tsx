@@ -265,9 +265,9 @@ export default function Upcoming() {
             />
             <Stat
               icon={<TrendingDown className="w-4 h-4 text-rose-600" />}
-              label="Snitt fasta kostnader"
+              label="Snitt övriga utgifter"
               value={formatSEK(forecastQ.data.totals.avg_fixed_expenses)}
-              hint="Genomsnitt senaste 3 mån (exkl. transfers)"
+              hint="Snitt senaste 3 mån — mat, transport, nöje etc. (exkl. kommande fakturor)"
             />
             <Stat
               icon={<Users className="w-4 h-4 text-brand-600" />}
@@ -277,11 +277,20 @@ export default function Upcoming() {
             />
           </div>
           <div className="mt-4 p-3 bg-brand-50 border border-brand-100 rounded text-sm">
-            <strong>50/50-fördelning:</strong>{" "}
-            <span className="font-semibold">
-              {formatSEK(forecastQ.data.split.per_person_share)}
-            </span>{" "}
-            till var och en som privata pengar efter fasta kostnader och kommande fakturor.
+            <strong>Så här räknas det:</strong>{" "}
+            <span className="font-mono text-xs">
+              {formatSEK(forecastQ.data.totals.expected_income)} lön
+              − {formatSEK(forecastQ.data.totals.upcoming_bills)} fakturor
+              − {formatSEK(forecastQ.data.totals.avg_fixed_expenses)} övrigt
+              = {formatSEK(forecastQ.data.totals.available_to_split)}
+            </span>
+            <div className="mt-2">
+              <strong>50/50-fördelning:</strong>{" "}
+              <span className="font-semibold">
+                {formatSEK(forecastQ.data.split.per_person_share)}
+              </span>{" "}
+              till var och en som privata pengar.
+            </div>
             {Object.keys(forecastQ.data.income_by_owner).length > 0 && (
               <div className="text-xs text-slate-700 mt-1">
                 Inkomst per person:{" "}

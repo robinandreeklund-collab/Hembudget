@@ -15,7 +15,12 @@ from sqlalchemy.pool import StaticPool
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
     monkeypatch.setenv("HEMBUDGET_DEMO_MODE", "1")
-    # Använd en filbaserad DB så VACUUM INTO funkar (i-minne klarar inte)
+    # Settings() körs vid import-tid — env räcker inte för att påverka
+    # den redan skapade singleton:en. Patcha attributet direkt så att
+    # backup-katalogen hamnar i tmp_path (annars skrivs backuper till
+    # användarens riktiga data_dir och förorenar andra tester).
+    from hembudget.config import settings as _settings
+    monkeypatch.setattr(_settings, "data_dir", tmp_path)
     monkeypatch.setenv("HEMBUDGET_DATA_DIR", str(tmp_path))
 
     from hembudget.db.models import Base
