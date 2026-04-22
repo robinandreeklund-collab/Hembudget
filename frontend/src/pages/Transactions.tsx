@@ -323,9 +323,7 @@ export default function Transactions() {
                     return (
                   <tr
                     key={tx.id}
-                    className={`border-b last:border-0 hover:bg-slate-50 ${
-                      tx.is_transfer ? "opacity-60" : ""
-                    }`}
+                    className="border-b last:border-0 hover:bg-slate-50"
                   >
                     <td className="py-2 pr-4 text-slate-700">{tx.date}</td>
                     {accountFilter === ALL_ACCOUNTS && (
@@ -363,109 +361,115 @@ export default function Transactions() {
                       {formatSEK(tx.amount)}
                     </td>
                     <td className="py-2 pr-4">
-                      {tx.is_transfer ? (
-                        <button
-                          onClick={() => toggleTransferMut.mutate({ id: tx.id, is_transfer: false })}
-                          className="text-xs text-slate-700 hover:text-slate-700 underline"
-                        >
-                          Markera som utgift
-                        </button>
-                      ) : newCatFor === tx.id ? (
-                        <NewCategoryInline
-                          cats={cats}
-                          busy={createCategoryMut.isPending}
-                          error={createCategoryMut.error as Error | null}
-                          onCancel={() => setNewCatFor(null)}
-                          onSave={(name, parent_id) =>
-                            createCategoryMut.mutate({ name, parent_id, txId: tx.id })
-                          }
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={tx.category_id ?? ""}
-                            onChange={(e) => {
-                              if (e.target.value === NEW_CATEGORY_SENTINEL) {
-                                setNewCatFor(tx.id);
-                                return;
-                              }
-                              updateMut.mutate({ id: tx.id, category_id: Number(e.target.value) });
-                            }}
-                            className="border rounded px-2 py-1 text-sm bg-white"
-                          >
-                            <option value="">—</option>
-                            {cats.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                            <option value={NEW_CATEGORY_SENTINEL}>➕ Ny kategori…</option>
-                          </select>
-                          {!tx.user_verified && tx.category_id && (
-                            <span className="text-xs text-slate-600">
-                              AI ({Math.round((tx.ai_confidence ?? 0) * 100)} %)
-                            </span>
-                          )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {tx.is_transfer ? (
                           <button
-                            onClick={() => toggleTransferMut.mutate({ id: tx.id, is_transfer: true })}
-                            className="text-xs text-slate-600 hover:text-blue-600"
-                            title="Markera som överföring"
+                            onClick={() => toggleTransferMut.mutate({ id: tx.id, is_transfer: false })}
+                            className="text-xs text-slate-700 hover:text-slate-900 underline"
                           >
-                            ↔
+                            Avmarkera överföring
                           </button>
-                          <button
-                            onClick={() => setMatchingTx(tx)}
-                            className="text-xs text-slate-600 hover:text-brand-600 flex items-center"
-                            title="Matcha manuellt mot en befintlig kommande-rad (lön eller faktura)"
-                          >
-                            <Link2 className="w-3.5 h-3.5" />
-                          </button>
-                          {invoicedSet.has(tx.id) ? (
-                            <button
-                              onClick={() => openInvoice(tx.id)}
-                              className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5"
-                              title="Visa bifogad faktura"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                if (hiddenFileRef.current) {
-                                  hiddenFileRef.current.dataset.txid = String(tx.id);
-                                  hiddenFileRef.current.click();
+                        ) : newCatFor === tx.id ? (
+                          <NewCategoryInline
+                            cats={cats}
+                            busy={createCategoryMut.isPending}
+                            error={createCategoryMut.error as Error | null}
+                            onCancel={() => setNewCatFor(null)}
+                            onSave={(name, parent_id) =>
+                              createCategoryMut.mutate({ name, parent_id, txId: tx.id })
+                            }
+                          />
+                        ) : (
+                          <>
+                            <select
+                              value={tx.category_id ?? ""}
+                              onChange={(e) => {
+                                if (e.target.value === NEW_CATEGORY_SENTINEL) {
+                                  setNewCatFor(tx.id);
+                                  return;
                                 }
+                                updateMut.mutate({ id: tx.id, category_id: Number(e.target.value) });
                               }}
-                              disabled={uploadingFor === tx.id}
-                              className="text-xs text-slate-600 hover:text-brand-600 flex items-center gap-0.5 disabled:opacity-50"
-                              title="Bifoga faktura (AI analyserar + kategoriserar)"
+                              className="border rounded px-2 py-1 text-sm bg-white"
                             >
-                              {uploadingFor === tx.id ? (
-                                <span>…</span>
-                              ) : (
-                                <Paperclip className="w-3.5 h-3.5" />
-                              )}
+                              <option value="">—</option>
+                              {cats.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                              <option value={NEW_CATEGORY_SENTINEL}>➕ Ny kategori…</option>
+                            </select>
+                            {!tx.user_verified && tx.category_id && (
+                              <span className="text-xs text-slate-600">
+                                AI ({Math.round((tx.ai_confidence ?? 0) * 100)} %)
+                              </span>
+                            )}
+                            <button
+                              onClick={() => toggleTransferMut.mutate({ id: tx.id, is_transfer: true })}
+                              className="text-xs text-slate-600 hover:text-blue-600"
+                              title="Markera som överföring"
+                            >
+                              ↔
                             </button>
-                          )}
+                          </>
+                        )}
+
+                        {/* Dessa action-ikoner visas alltid — även för
+                            transfer-rader — så användaren kan matcha,
+                            bifoga faktura eller radera oavsett tx-typ. */}
+                        <button
+                          onClick={() => setMatchingTx(tx)}
+                          className="text-xs text-slate-600 hover:text-brand-600 flex items-center"
+                          title="Matcha manuellt mot en befintlig kommande-rad (lön eller faktura) — även som delbetalning"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                        {invoicedSet.has(tx.id) ? (
+                          <button
+                            onClick={() => openInvoice(tx.id)}
+                            className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5"
+                            title="Visa bifogad faktura"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
                           <button
                             onClick={() => {
-                              const msg =
-                                `Radera transaktion permanent?\n\n${tx.date} · ` +
-                                `${tx.raw_description} · ${tx.amount} kr\n\n` +
-                                "Detta tar bort transaktionen + ev. " +
-                                "kopplingar (split, lånebetalning, " +
-                                "upcoming-match, transfer-pair). Kan ej " +
-                                "ångras.";
-                              if (confirm(msg)) deleteMut.mutate(tx.id);
+                              if (hiddenFileRef.current) {
+                                hiddenFileRef.current.dataset.txid = String(tx.id);
+                                hiddenFileRef.current.click();
+                              }
                             }}
-                            disabled={deleteMut.isPending}
-                            className="text-xs text-slate-600 hover:text-rose-600 disabled:opacity-50"
-                            title="Radera transaktionen (för dubbletter etc.)"
+                            disabled={uploadingFor === tx.id}
+                            className="text-xs text-slate-600 hover:text-brand-600 flex items-center gap-0.5 disabled:opacity-50"
+                            title="Bifoga faktura (AI analyserar + kategoriserar)"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            {uploadingFor === tx.id ? (
+                              <span>…</span>
+                            ) : (
+                              <Paperclip className="w-3.5 h-3.5" />
+                            )}
                           </button>
-                        </div>
-                      )}
+                        )}
+                        <button
+                          onClick={() => {
+                            const msg =
+                              `Radera transaktion permanent?\n\n${tx.date} · ` +
+                              `${tx.raw_description} · ${tx.amount} kr\n\n` +
+                              "Detta tar bort transaktionen + ev. " +
+                              "kopplingar (split, lånebetalning, " +
+                              "upcoming-match, transfer-pair). Kan ej " +
+                              "ångras.";
+                            if (confirm(msg)) deleteMut.mutate(tx.id);
+                          }}
+                          disabled={deleteMut.isPending}
+                          className="text-xs text-slate-600 hover:text-rose-600 disabled:opacity-50"
+                          title="Radera transaktionen (för dubbletter etc.)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       {attachMsg && attachMsg.txId === tx.id && (
                         <div
                           className={`mt-1 text-xs ${

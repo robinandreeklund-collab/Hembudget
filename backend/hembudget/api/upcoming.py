@@ -528,14 +528,28 @@ def find_bank_tx_candidates(
     if u is None:
         raise HTTPException(404, "Upcoming not found")
 
-    expected_amount = u.amount if u.kind == "income" else -u.amount
+    from ..db.models import UpcomingPayment as _UpPay
+    from sqlalchemy import select as _select
+
+    # Räkna ut "remaining" — om upcomingen redan är delbetald söker vi
+    # primärt efter kandidater som täcker ÅTERSTOENDE, inte hela beloppet.
+    paid = float(session.query(_sa_func.coalesce(
+        _sa_func.sum(_sa_func.abs(Transaction.amount)), 0
+    )).join(
+        _UpPay, _UpPay.transaction_id == Transaction.id,
+    ).filter(_UpPay.upcoming_id == u.id).scalar() or 0)
+    remaining_abs = float(u.amount) - paid
+    # Target = remaining (om redan delbetald) annars hela beloppet
+    target_abs = remaining_abs if paid > 0.01 else float(u.amount)
+    if u.kind == "income":
+        expected_amount = target_abs
+    else:
+        expected_amount = -target_abs
+
     target_date = u.debit_date or u.expected_date
     low_date = target_date - _td(days=date_tolerance_days)
     high_date = target_date + _td(days=date_tolerance_days)
 
-    from ..db.models import UpcomingPayment as _UpPay
-    # Exkludera redan matchade
-    from sqlalchemy import select as _select
     q = session.query(Transaction).filter(
         Transaction.date >= low_date,
         Transaction.date <= high_date,
@@ -575,6 +589,8 @@ def find_bank_tx_candidates(
         "upcoming_id": u.id,
         "upcoming_name": u.name,
         "upcoming_amount": float(u.amount),
+        "paid_amount": round(paid, 2),
+        "remaining_amount": round(remaining_abs, 2),
         "expected_tx_amount": float(expected_amount),
         "target_date": target_date.isoformat(),
         "candidates": out,
