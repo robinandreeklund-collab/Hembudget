@@ -99,6 +99,10 @@ class Transaction(Base):
     transfer_pair_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("transactions.id"), nullable=True
     )
+    # För kreditkort: vilken kortinnehavare köpet gjordes med. Endast
+    # en fördelnings-etikett — inte ett separat konto. Hela fakturan
+    # betalas från parent-kontot.
+    cardholder: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="transactions")

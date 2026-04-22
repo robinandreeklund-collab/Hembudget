@@ -49,6 +49,9 @@ def run_migrations(engine: Engine) -> list[str]:
             "transfer_pair_id INTEGER REFERENCES transactions(id)",
         )
         applied.append("transactions.transfer_pair_id")
+    if "cardholder" not in tx_cols:
+        _add_column(engine, "transactions", "cardholder VARCHAR(80)")
+        applied.append("transactions.cardholder")
 
     # accounts.pays_credit_account_id + account_number
     acc_cols = _columns(engine, "accounts")
@@ -303,4 +306,55 @@ def run_migrations(engine: Engine) -> list[str]:
 
     if applied:
         log.info("Schema migrations applied: %s", ", ".join(applied))
+
+    # Data-migration: flytta transaktioner från sub-konton (med
+    # parent_account_id satt) till deras parent-konto. Sätt
+    # transactions.cardholder från sub-kontots namn. Radera sub-kontona.
+    # Detta körs efter schema-migrationen så `cardholder`-kolumnen finns.
+    if (
+        _table_exists(engine, "accounts")
+        and "parent_account_id" in _columns(engine, "accounts")
+        and "cardholder" in _columns(engine, "transactions")
+    ):
+        with engine.begin() as conn:
+            subs = conn.execute(text(
+                "SELECT id, name, parent_account_id FROM accounts "
+                "WHERE parent_account_id IS NOT NULL"
+            )).fetchall()
+            migrated = 0
+            for sub_id, sub_name, parent_id in subs:
+                # Härled cardholder-namnet ur sub-kontots namn:
+                # "SAS Amex Premium — Karl Robin Ludvig Fröjd" → "Karl Robin…"
+                name_for_holder = (sub_name or "").strip()
+                if " — " in name_for_holder:
+                    name_for_holder = name_for_holder.split(" — ", 1)[1].strip()
+                # Flytta transaktioner till parent + sätt cardholder
+                result = conn.execute(
+                    text(
+                        "UPDATE transactions "
+                        "SET account_id = :parent, cardholder = :holder "
+                        "WHERE account_id = :sub"
+                    ),
+                    {
+                        "parent": parent_id,
+                        "holder": name_for_holder or None,
+                        "sub": sub_id,
+                    },
+                )
+                migrated += result.rowcount
+                # Ta bort subkontot
+                conn.execute(
+                    text("DELETE FROM accounts WHERE id = :sub"),
+                    {"sub": sub_id},
+                )
+            if subs:
+                log.info(
+                    "Merged %d sub-accounts (%d transactions) into parents",
+                    len(subs), migrated,
+                )
+                applied.append(
+                    f"accounts.parent_account_id → cardholder "
+                    f"({len(subs)} sub, {migrated} tx)"
+                )
+
     return applied

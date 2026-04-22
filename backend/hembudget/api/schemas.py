@@ -35,6 +35,7 @@ class TransactionOut(BaseModel):
     user_verified: bool
     is_transfer: bool = False
     transfer_pair_id: Optional[int] = None
+    cardholder: Optional[str] = None
     splits: list[TransactionSplitOut] = []
 
 

@@ -1015,83 +1015,31 @@ async def parse_credit_card_pdf(
     session.add(imp)
     session.flush()
 
-    # Hitta alla kortinnehavare i transaktionerna. Om > 1, splitta per kort.
-    cardholders = {
-        (line.cardholder or "").strip()
-        for line in parsed.transactions
-        if line.cardholder
-    }
-    cardholders.discard("")
+    # ALLA transaktioner hamnar på parent-kortkontot. cardholder-fältet
+    # på Transaction används som fördelnings-etikett (inte ett separat
+    # konto) så rapporter kan visa "Robin köpte X, Evelina köpte Y".
+    # Parent är det enda riktiga kontot — fakturan betalas från BG till
+    # parent, inte till varje kortinnehavare individuellt.
 
-    # Karta cardholder → sub-account. Skapa sub-konton om de saknas.
-    subacc_by_holder: dict[str, Account] = {}
-    if len(cardholders) >= 2:
-        for holder in cardholders:
-            # Försök hitta last_digits per kortinnehavare från transaktionerna
-            # (alla transaktioner för samma holder antas ha samma last_digits
-            # — vilket är fallet i bankens fakturor).
-            last4 = None
-            # SEB Kort visar inte last4 per transaktion men holder finns.
-            # Amex: last4 ligger på PDF:en (parsed.card_last_digits) men
-            # bara för huvudkortet. Extrakort har annan 4 som står i
-            # "Extrakort som slutar på NNNN"-raden men inte extraheras
-            # idag. Vi använder holder-namnet som identifiering.
-            safe_name = holder.strip()
-            existing = (
-                session.query(Account)
-                .filter(
-                    Account.parent_account_id == cc_account.id,
-                    Account.name.ilike(f"%{safe_name}%"),
-                )
-                .first()
-            )
-            if existing:
-                subacc_by_holder[holder] = existing
-                continue
-
-            sub_name = f"{cc_account.name} — {safe_name}"
-            sub = Account(
-                name=sub_name,
-                bank=cc_account.bank,
-                type="credit",
-                currency=cc_account.currency,
-                parent_account_id=cc_account.id,
-                card_last_digits=last4,
-            )
-            session.add(sub)
-            session.flush()
-            subacc_by_holder[holder] = sub
-
-    def _target_account(holder: str | None) -> Account:
-        """Transaktioner med holder hamnar på sub-konto, utan holder
-        (BETALT BG, pappersfaktura) stannar på parent."""
-        if holder and holder in subacc_by_holder:
-            return subacc_by_holder[holder]
-        return cc_account
-
-    # Dubblettskydd per mål-konto
-    target_account_ids = {cc_account.id} | {
-        a.id for a in subacc_by_holder.values()
-    }
+    # Dubblettskydd: hash som inkluderar cardholder så två identiska
+    # belopp på samma dag med olika holders inte räknas som duplikat.
     existing_hashes = {
         h for (h,) in session.query(Transaction.hash)
-        .filter(Transaction.account_id.in_(target_account_ids)).all()
+        .filter(Transaction.account_id == cc_account.id).all()
     }
 
     new_txs: list[Transaction] = []
     skipped = 0
     for idx, line in enumerate(parsed.transactions):
-        target = _target_account(line.cardholder)
-        # Kontraktet matchar CSV-parsers: nyckel inkluderar account_id,
-        # datum, belopp, beskrivning, och row-index för ordning.
         desc = (
             f"{line.merchant} [{line.city}]"
             if line.merchant and line.city
             else line.merchant or line.description
         )
+        holder_key = (line.cardholder or "").strip().lower()
         key = (
-            f"{target.id}|{line.date.isoformat()}|{line.amount}|"
-            f"{desc.strip().lower()}|#{idx}"
+            f"{cc_account.id}|{line.date.isoformat()}|{line.amount}|"
+            f"{desc.strip().lower()}|{holder_key}|#{idx}"
         )
         h = hashlib.sha256(key.encode("utf-8")).hexdigest()
         if h in existing_hashes:
@@ -1100,13 +1048,14 @@ async def parse_credit_card_pdf(
         existing_hashes.add(h)
 
         tx = Transaction(
-            account_id=target.id,
+            account_id=cc_account.id,
             date=line.date,
             amount=line.amount,
             currency="SEK",
             raw_description=desc,
             source_file_id=imp.id,
             hash=h,
+            cardholder=line.cardholder,
         )
         session.add(tx)
         new_txs.append(tx)
@@ -1159,14 +1108,23 @@ async def parse_credit_card_pdf(
     session.add(upcoming)
     session.flush()
 
+    # Kortinnehavar-summering: hur mycket var och en köpte
+    cardholders_breakdown: dict[str, float] = {}
+    for tx in new_txs:
+        if not tx.cardholder:
+            continue
+        cardholders_breakdown[tx.cardholder] = (
+            cardholders_breakdown.get(tx.cardholder, 0.0) + float(tx.amount)
+        )
+
     return {
         "parser": f"pdf:{parsed.issuer}",
         "upcoming_id": upcoming.id,
         "card_account_id": cc_account.id,
         "card_account_name": cc_account.name,
-        "sub_accounts": [
-            {"id": a.id, "name": a.name} for a in subacc_by_holder.values()
-        ],
+        "cardholders_breakdown": {
+            k: round(v, 2) for k, v in cardholders_breakdown.items()
+        },
         "transactions_created": len(new_txs),
         "transactions_skipped_duplicates": skipped,
         "transfers_marked": transfer_result.marked,

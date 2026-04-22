@@ -36,6 +36,7 @@ export interface Transaction {
   user_verified: boolean;
   is_transfer: boolean;
   transfer_pair_id: number | null;
+  cardholder?: string | null;
 }
 
 export interface MonthSummary {

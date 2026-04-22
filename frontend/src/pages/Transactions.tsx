@@ -176,11 +176,16 @@ export default function Transactions() {
                       </td>
                     )}
                     <td className="py-2 pr-4">
-                      <div className="font-medium flex items-center gap-2">
+                      <div className="font-medium flex items-center gap-2 flex-wrap">
                         {tx.normalized_merchant ?? tx.raw_description}
                         {tx.is_transfer && (
                           <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
                             <ArrowLeftRight className="w-3 h-3" /> Överföring
+                          </span>
+                        )}
+                        {tx.cardholder && (
+                          <span className="inline-flex items-center text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                            👤 {tx.cardholder.split(" ")[0]}
                           </span>
                         )}
                       </div>
