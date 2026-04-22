@@ -226,15 +226,88 @@ class UpcomingOut(BaseModel):
     autogiro: bool = False
     matched_transaction_id: Optional[int]
     lines: list[UpcomingLineOut] = []
+    # Delbetalningar (flera Transactions kan peka mot samma upcoming)
+    payment_tx_ids: list[int] = []
+    paid_amount: float = 0.0
+    payment_status: str = "unpaid"  # unpaid | partial | paid | overpaid
 
 
-@router.get("/", response_model=list[UpcomingOut])
+def _enrich_upcoming(
+    session: Session, ups: list[UpcomingTransaction],
+) -> list[dict]:
+    """Bygg UpcomingOut-dicts med paid_amount/status från UpcomingPayment."""
+    from ..db.models import UpcomingPayment
+    if not ups:
+        return []
+    ids = [u.id for u in ups]
+    # Hämta alla payments + tx-amounts i en query
+    pay_rows = (
+        session.query(
+            UpcomingPayment.upcoming_id,
+            UpcomingPayment.transaction_id,
+            Transaction.amount,
+        )
+        .join(Transaction, Transaction.id == UpcomingPayment.transaction_id)
+        .filter(UpcomingPayment.upcoming_id.in_(ids))
+        .all()
+    )
+    by_up: dict[int, list[tuple[int, Decimal]]] = {}
+    for up_id, tx_id, amount in pay_rows:
+        by_up.setdefault(up_id, []).append((tx_id, amount))
+
+    TOLERANCE = Decimal("2.00")
+    out: list[dict] = []
+    for u in ups:
+        entries = by_up.get(u.id, [])
+        paid = sum((abs(a) for _, a in entries), Decimal("0"))
+        if paid == 0:
+            status = "unpaid"
+        else:
+            remaining = u.amount - paid
+            if abs(remaining) <= TOLERANCE:
+                status = "paid"
+            elif remaining > 0:
+                status = "partial"
+            else:
+                status = "overpaid"
+        d = {
+            "id": u.id, "kind": u.kind, "name": u.name,
+            "amount": float(u.amount),
+            "expected_date": u.expected_date.isoformat(),
+            "owner": u.owner, "category_id": u.category_id,
+            "recurring_monthly": u.recurring_monthly,
+            "source": u.source, "source_image_path": u.source_image_path,
+            "notes": u.notes, "invoice_number": u.invoice_number,
+            "invoice_date": u.invoice_date.isoformat() if u.invoice_date else None,
+            "ocr_reference": u.ocr_reference, "bankgiro": u.bankgiro,
+            "plusgiro": u.plusgiro, "iban": u.iban,
+            "debit_account_id": u.debit_account_id,
+            "debit_date": u.debit_date.isoformat() if u.debit_date else None,
+            "autogiro": u.autogiro,
+            "matched_transaction_id": u.matched_transaction_id,
+            "lines": [
+                {
+                    "id": ln.id, "description": ln.description,
+                    "amount": float(ln.amount),
+                    "category_id": ln.category_id, "sort_order": ln.sort_order,
+                }
+                for ln in u.lines
+            ],
+            "payment_tx_ids": [tid for tid, _ in entries],
+            "paid_amount": float(paid),
+            "payment_status": status,
+        }
+        out.append(d)
+    return out
+
+
+@router.get("/")
 def list_upcoming(
     kind: Optional[str] = None,
     only_future: bool = True,
     status: Optional[str] = None,
     session: Session = Depends(db),
-) -> list[UpcomingTransaction]:
+) -> list[dict]:
     """List upcoming transactions.
 
     `status` optional: "open" (matched_transaction_id is NULL) or "paid"
@@ -249,7 +322,8 @@ def list_upcoming(
         q = q.filter(UpcomingTransaction.matched_transaction_id.is_(None))
     elif status == "paid":
         q = q.filter(UpcomingTransaction.matched_transaction_id.is_not(None))
-    return q.order_by(UpcomingTransaction.expected_date.asc()).all()
+    ups = q.order_by(UpcomingTransaction.expected_date.asc()).all()
+    return _enrich_upcoming(session, ups)
 
 
 def _materialize_on_incognito_account(

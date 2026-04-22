@@ -135,13 +135,18 @@ def test_match_upcoming_links_and_copies_splits(client):
         assert u.matched_transaction_id == tx_id
 
 
-def test_match_upcoming_409_if_already_matched_elsewhere(client):
+def test_match_upcoming_supports_multiple_payments(client):
+    """En faktura kan betalas i flera omgångar — t.ex. Amex 13 445 kr
+    som betalas 5 000 + 8 445 på två bankdagar. Båda Transactions ska
+    kunna kopplas till samma upcoming och bidra till paid_amount."""
     c, SL = client
     tx_id, u1_id, _, _ = _setup_tx_and_upcomings(SL)
-    # Matcha först
-    c.post(f"/transactions/{tx_id}/match-upcoming", json={"upcoming_id": u1_id})
+    # Första delbetalningen
+    r = c.post(f"/transactions/{tx_id}/match-upcoming", json={"upcoming_id": u1_id})
+    assert r.status_code == 200
+    assert r.json()["status"] == "paid"  # samma belopp → full
 
-    # Skapa en ANDRA transaktion och försök matcha samma upcoming
+    # En andra tx — också 35 000
     from hembudget.db.models import Transaction, Account
     with SL() as s:
         acc = s.query(Account).first()
@@ -157,7 +162,11 @@ def test_match_upcoming_409_if_already_matched_elsewhere(client):
         f"/transactions/{tx2_id}/match-upcoming",
         json={"upcoming_id": u1_id},
     )
-    assert r.status_code == 409
+    # Nu accepteras ett andra pair (som delbetalning) — blir "overpaid"
+    assert r.status_code == 200
+    body = r.json()
+    assert body["paid_amount"] == pytest.approx(70000.0)  # 35k + 35k
+    assert body["status"] == "overpaid"
 
 
 def test_unmatch_upcoming_frees_it(client):

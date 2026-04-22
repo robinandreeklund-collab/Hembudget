@@ -152,6 +152,75 @@ def unlink(tx_id: int, session: Session = Depends(db)) -> dict:
     return {"ok": True}
 
 
+@router.post("/batch-create-counterparts")
+def batch_create_counterparts(
+    payload: dict, session: Session = Depends(db),
+) -> dict:
+    """Skapa motsvarigheter för ALLA orphan-transfers mot ett valt konto.
+
+    Typiskt användsfall: du har massor av insättningar från partnerns
+    sida som flaggats som transfer utan motpart. Välj hennes inkognito-
+    konto, klicka "Skapa motsvarande för alla" → systemet gör det i ett
+    svep.
+
+    Body: `{"target_account_id": int, "tx_ids"?: list[int]}`. Om tx_ids
+    är None körs det för ALLA orphans (is_transfer=True, inget pair-id,
+    och inte redan på target-kontot).
+    """
+    import hashlib
+
+    target_id = payload.get("target_account_id")
+    if not isinstance(target_id, int):
+        raise HTTPException(400, "target_account_id (int) krävs i body")
+    target = session.get(Account, target_id)
+    if target is None:
+        raise HTTPException(404, "Target account not found")
+
+    tx_ids_raw = payload.get("tx_ids")
+    q = (
+        session.query(Transaction)
+        .filter(
+            Transaction.is_transfer.is_(True),
+            Transaction.transfer_pair_id.is_(None),
+            Transaction.account_id != target_id,
+        )
+    )
+    if tx_ids_raw:
+        q = q.filter(Transaction.id.in_(tx_ids_raw))
+    orphans = q.all()
+
+    created_ids: list[int] = []
+    detector = TransferDetector(session)
+    for tx in orphans:
+        counterpart_amount = -tx.amount
+        key = f"batch-counter|{target_id}|{tx.date}|{counterpart_amount}|from-{tx.id}"
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        counter = Transaction(
+            account_id=target_id,
+            date=tx.date,
+            amount=counterpart_amount,
+            currency=tx.currency,
+            raw_description=f"Motpart till {tx.raw_description or 'tx #' + str(tx.id)}",
+            hash=h,
+        )
+        session.add(counter)
+        session.flush()
+        try:
+            detector.link_manual(tx.id, counter.id)
+            created_ids.append(counter.id)
+        except ValueError:
+            # Något gick fel med pairing — rulla inte tillbaka hela batchen
+            continue
+    session.flush()
+    return {
+        "target_account_id": target_id,
+        "target_account_name": target.name,
+        "orphans_processed": len(orphans),
+        "counterparts_created": len(created_ids),
+        "counterpart_tx_ids": created_ids,
+    }
+
+
 @router.post("/{tx_id}/create-counterpart")
 def create_counterpart(
     tx_id: int, payload: dict, session: Session = Depends(db),

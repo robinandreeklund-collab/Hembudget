@@ -14,8 +14,9 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db.models import Transaction, UpcomingTransaction
+from ..db.models import Transaction, UpcomingPayment, UpcomingTransaction
 from ..splits import apply_upcoming_lines_to_transaction
+from .payments import add_payment
 
 log = logging.getLogger(__name__)
 
@@ -76,8 +77,13 @@ class UpcomingMatcher:
             )
             if up.debit_account_id is not None:
                 q = q.where(Transaction.account_id == up.debit_account_id)
-            # Undvik transaktioner som redan är bundna till en annan upcoming
+            # Undvik transaktioner som redan är kopplade till NÅGON upcoming.
+            # Kollar både nya junction-tabellen OCH legacy matched_transaction_id
+            # för att hantera data som migrerats och testscenarios.
             q = q.where(
+                Transaction.id.not_in(
+                    select(UpcomingPayment.transaction_id)
+                ),
                 Transaction.id.not_in(
                     select(UpcomingTransaction.matched_transaction_id).where(
                         UpcomingTransaction.matched_transaction_id.is_not(None),
@@ -92,7 +98,7 @@ class UpcomingMatcher:
                 continue
             candidates.sort(key=lambda t: abs((t.date - target_date).days))
             chosen = candidates[0]
-            up.matched_transaction_id = chosen.id
+            add_payment(self.session, up, chosen)
             matched += 1
             if up.lines:
                 apply_upcoming_lines_to_transaction(self.session, up, chosen)
@@ -139,7 +145,7 @@ class UpcomingMatcher:
 
             candidates.sort(key=lambda t: abs((t.date - target_date).days))
             chosen = candidates[0]
-            up.matched_transaction_id = chosen.id
+            add_payment(self.session, up, chosen)
             used_tx_ids.add(chosen.id)
             matched += 1
 

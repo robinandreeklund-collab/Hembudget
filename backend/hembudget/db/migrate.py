@@ -93,6 +93,39 @@ def run_migrations(engine: Engine) -> list[str]:
         )
         applied.append("accounts.incognito")
 
+    # upcoming_payments junction (om inte skapad via create_all)
+    if not _table_exists(engine, "upcoming_payments"):
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE upcoming_payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    upcoming_id INTEGER NOT NULL REFERENCES upcoming_transactions(id) ON DELETE CASCADE,
+                    transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_upcoming_payment UNIQUE (upcoming_id, transaction_id)
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_upcoming_payments_upcoming_id "
+                "ON upcoming_payments(upcoming_id)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_upcoming_payments_transaction_id "
+                "ON upcoming_payments(transaction_id)"
+            ))
+        applied.append("upcoming_payments (table)")
+
+    # Migrera existerande matched_transaction_id till upcoming_payments
+    # så vi har EN källa av sanning (ingen dubbelräkning)
+    if _table_exists(engine, "upcoming_payments"):
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT OR IGNORE INTO upcoming_payments (upcoming_id, transaction_id)
+                SELECT id, matched_transaction_id
+                FROM upcoming_transactions
+                WHERE matched_transaction_id IS NOT NULL
+            """))
+
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):
         up_cols = _columns(engine, "upcoming_transactions")

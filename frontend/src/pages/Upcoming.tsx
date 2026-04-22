@@ -40,6 +40,9 @@ interface UpcomingItem {
   autogiro: boolean;
   matched_transaction_id: number | null;
   lines: UpcomingLine[];
+  payment_tx_ids?: number[];
+  paid_amount?: number;
+  payment_status?: "unpaid" | "partial" | "paid" | "overpaid";
 }
 
 interface Forecast {
@@ -767,12 +770,34 @@ function UpcomingRow({
             {i.owner && <span>· {i.owner}</span>}
             {i.recurring_monthly && <span>· återkommande</span>}
             {i.source !== "manual" && <span>· {i.source}</span>}
-            {i.matched_transaction_id && (
+            {i.payment_status === "paid" && (
+              <span className="text-emerald-600">
+                · ✓ fullt betald
+                {(i.payment_tx_ids?.length ?? 0) > 1 &&
+                  ` (${i.payment_tx_ids?.length} delbetalningar)`}
+              </span>
+            )}
+            {i.payment_status === "partial" && (
+              <span className="text-amber-700">
+                · ⚠ delbetalt {formatSEK(i.paid_amount ?? 0)} av{" "}
+                {formatSEK(i.amount)} (kvar{" "}
+                {formatSEK(i.amount - (i.paid_amount ?? 0))})
+              </span>
+            )}
+            {i.payment_status === "overpaid" && (
+              <span className="text-rose-600">
+                · ⚠ överbetald {formatSEK(i.paid_amount ?? 0)} av{" "}
+                {formatSEK(i.amount)}
+              </span>
+            )}
+            {i.matched_transaction_id && i.payment_status !== "paid" &&
+              i.payment_status !== "partial" && i.payment_status !== "overpaid" && (
               <span className="text-emerald-600">
                 · ✓ matchad mot transaktion #{i.matched_transaction_id}
               </span>
             )}
-            {!i.matched_transaction_id && (
+            {(!i.payment_status || i.payment_status === "unpaid") &&
+              !i.matched_transaction_id && (
               <MaterializeDropdown item={i} accounts={accounts} />
             )}
             {i.source_image_path && (

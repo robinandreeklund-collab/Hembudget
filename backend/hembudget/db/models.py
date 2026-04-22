@@ -470,6 +470,37 @@ class FundHoldingSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class UpcomingPayment(Base):
+    """Junction-table för att koppla flera Transactions mot en
+    UpcomingTransaction — t.ex. när en Amex-faktura på 13 445 kr betalas
+    i två delar (5 000 + 8 445).
+
+    UpcomingTransaction.matched_transaction_id fortsätter vara 'primär
+    match' (första betalningen) för bakåtkompatibilitet, men riktiga
+    summeringar (är fakturan helt betald?) räknas från denna tabell.
+    """
+    __tablename__ = "upcoming_payments"
+    __table_args__ = (
+        UniqueConstraint(
+            "upcoming_id", "transaction_id",
+            name="uq_upcoming_payment",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppSetting(Base):
     """Enkelt key/value-lager för användarinställningar.
 

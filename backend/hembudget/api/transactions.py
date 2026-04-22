@@ -617,14 +617,21 @@ def match_upcoming(
     payload: dict,
     session: Session = Depends(db),
 ) -> dict:
-    """Koppla manuellt en Transaction till en befintlig UpcomingTransaction.
+    """Koppla manuellt en Transaction till en UpcomingTransaction som
+    en (del)betalning.
 
-    Body: `{"upcoming_id": N}`. Sätter upcoming.matched_transaction_id=tx_id
-    och kopierar ev. fakturarader till transaction_splits (samma som
-    backfill-matchern gör automatiskt).
+    Flera Transactions kan kopplas till samma upcoming — användbart för
+    fakturor som betalas i två omgångar (t.ex. Amex 13 445 kr = 5 000 +
+    8 445 från två bankdagar). Varje samtal adderar en ny betalning via
+    UpcomingPayment-junctiontabellen.
+
+    Body: `{"upcoming_id": N}`.
     """
     from ..db.models import UpcomingTransaction
     from ..splits import apply_upcoming_lines_to_transaction
+    from ..upcoming_match.payments import (
+        add_payment, paid_amount, payment_status,
+    )
 
     tx = session.get(Transaction, tx_id)
     if tx is None:
@@ -635,17 +642,14 @@ def match_upcoming(
     up = session.get(UpcomingTransaction, upcoming_id)
     if up is None:
         raise HTTPException(404, "Upcoming not found")
-    if up.matched_transaction_id is not None and up.matched_transaction_id != tx_id:
-        raise HTTPException(
-            409,
-            f"Upcoming #{upcoming_id} är redan matchad mot transaktion "
-            f"#{up.matched_transaction_id}. Koppla loss den först om du vill flytta.",
-        )
 
-    up.matched_transaction_id = tx.id
-    # Kopiera ev. lines till splits
-    if up.lines:
+    created = add_payment(session, up, tx)
+    splits_created = False
+    # Kopiera splits bara vid första matchningen (fler tx:er ska inte
+    # generera flera uppsättningar splits för samma faktura-rader)
+    if created and up.lines and up.matched_transaction_id == tx.id:
         apply_upcoming_lines_to_transaction(session, up, tx)
+        splits_created = True
     session.flush()
 
     return {
@@ -653,37 +657,42 @@ def match_upcoming(
         "upcoming_id": up.id,
         "upcoming_name": up.name,
         "amount": float(up.amount),
+        "paid_amount": float(paid_amount(session, up)),
+        "remaining_amount": float(up.amount - paid_amount(session, up)),
+        "status": payment_status(session, up),
         "kind": up.kind,
-        "splits_created": bool(up.lines),
+        "splits_created": splits_created,
+        "already_matched": not created,
     }
 
 
 @router.post("/transactions/{tx_id}/unmatch-upcoming")
 def unmatch_upcoming(tx_id: int, session: Session = Depends(db)) -> dict:
     """Koppla bort en Transaction från sin matchade upcoming + rensa splits
-    som kom från upcoming:en (source='upcoming'). Transaktionen finns kvar."""
-    from ..db.models import UpcomingTransaction, TransactionSplit
+    som kom från upcoming:en (source='upcoming'). Transaktionen finns kvar.
+
+    Rensar även UpcomingPayment-rader (junction) så delbetalnings-summan
+    räknas om korrekt. Om upcomingen hade flera betalningar och denna
+    var den 'primära' matchningen flyttas primary till nästa kvarvarande
+    betalning."""
+    from ..db.models import TransactionSplit
+    from ..upcoming_match.payments import remove_all_payments_for_tx
 
     tx = session.get(Transaction, tx_id)
     if tx is None:
         raise HTTPException(404, "Transaction not found")
-    ups = (
-        session.query(UpcomingTransaction)
-        .filter(UpcomingTransaction.matched_transaction_id == tx_id)
-        .all()
-    )
-    if not ups:
+
+    affected = remove_all_payments_for_tx(session, tx_id)
+    if not affected:
         raise HTTPException(404, "Ingen upcoming matchad mot denna tx")
 
-    for up in ups:
-        up.matched_transaction_id = None
     # Radera splits som skapats från upcoming (behåll manuella)
     session.query(TransactionSplit).filter(
         TransactionSplit.transaction_id == tx_id,
         TransactionSplit.source == "upcoming",
     ).delete(synchronize_session=False)
     session.flush()
-    return {"transaction_id": tx_id, "unmatched": [u.id for u in ups]}
+    return {"transaction_id": tx_id, "unmatched": affected}
 
 
 @router.post("/transactions/{tx_id}/attach-invoice")

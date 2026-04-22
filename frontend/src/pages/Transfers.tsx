@@ -147,6 +147,11 @@ export default function Transfers() {
             dropdownen för att skapa motsvarande transaktion där — systemet
             parar ihop dem direkt som överföring.
           </div>
+          <BatchCounterpartSection
+            count={unpaired.length}
+            accounts={accountsQ.data ?? []}
+            onDone={invalidate}
+          />
           <div className="space-y-1">
             {unpaired.map((tx) => (
               <div key={tx.id} className="flex items-center gap-3 border rounded p-2 text-sm">
@@ -294,5 +299,84 @@ function CreateCounterpartDropdown({
         </option>
       ))}
     </select>
+  );
+}
+
+function BatchCounterpartSection({
+  count,
+  accounts,
+  onDone,
+}: {
+  count: number;
+  accounts: Account[];
+  onDone: () => void;
+}) {
+  const [targetId, setTargetId] = useState<string>("");
+  const [message, setMessage] = useState<string | null>(null);
+  const mut = useMutation({
+    mutationFn: (id: number) =>
+      api<{ orphans_processed: number; counterparts_created: number }>(
+        "/transfers/batch-create-counterparts",
+        {
+          method: "POST",
+          body: JSON.stringify({ target_account_id: id }),
+        },
+      ),
+    onSuccess: (data) => {
+      setMessage(
+        `Skapade ${data.counterparts_created} motsvarande transaktioner av ${data.orphans_processed} orphans.`,
+      );
+      setTargetId("");
+      onDone();
+    },
+    onError: (e: Error) => setMessage("Fel: " + e.message),
+  });
+
+  const sorted = [...accounts].sort((a, b) => {
+    const rank = (acc: Account) => (acc.incognito ? -1 : 0);
+    return rank(a) - rank(b);
+  });
+
+  return (
+    <div className="mb-3 p-3 bg-brand-50 border border-brand-100 rounded text-sm">
+      <div className="font-medium text-brand-800 mb-1">
+        Fixa alla {count} på en gång
+      </div>
+      <div className="text-xs text-slate-700 mb-2">
+        Välj ett konto (typiskt partnerns inkognito) så skapas motsvarande
+        transaktion på det kontot för varje orphan. Alla paras ihop som
+        överföringar automatiskt.
+      </div>
+      <div className="flex gap-2 items-center">
+        <select
+          value={targetId}
+          onChange={(e) => setTargetId(e.target.value)}
+          className="border rounded px-2 py-1 bg-white text-sm flex-1"
+        >
+          <option value="">Välj målkonto…</option>
+          {sorted.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name} {a.incognito ? "(inkognito)" : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => targetId && mut.mutate(Number(targetId))}
+          disabled={!targetId || mut.isPending}
+          className="bg-brand-600 text-white text-sm px-3 py-1.5 rounded disabled:opacity-50"
+        >
+          {mut.isPending ? "Kör…" : "Skapa motsvarande för alla"}
+        </button>
+      </div>
+      {message && (
+        <div
+          className={`mt-2 text-xs ${
+            message.startsWith("Fel") ? "text-rose-600" : "text-emerald-700"
+          }`}
+        >
+          {message}
+        </div>
+      )}
+    </div>
   );
 }
