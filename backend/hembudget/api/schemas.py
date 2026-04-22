@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as date_type, date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -58,8 +58,11 @@ class TransactionUpdate(BaseModel):
     is_transfer: Optional[bool] = None
     # Gör det möjligt att korrigera belopp/datum/beskrivning manuellt —
     # t.ex. när en lönematerialisering från /upcoming fick fel summa.
+    # OBS: fältnamnet "date" kolliderar med `from datetime import date`
+    # när `from __future__ import annotations` är på — därför använder
+    # vi `date_type`-aliaset för att typa fältet korrekt.
     amount: Optional[Decimal] = None
-    date: Optional[date] = None
+    date: Optional[date_type] = None
     raw_description: Optional[str] = None
 
 
