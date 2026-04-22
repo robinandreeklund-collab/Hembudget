@@ -56,6 +56,11 @@ class TransactionUpdate(BaseModel):
     user_verified: Optional[bool] = None
     create_rule: bool = True
     is_transfer: Optional[bool] = None
+    # Gör det möjligt att korrigera belopp/datum/beskrivning manuellt —
+    # t.ex. när en lönematerialisering från /upcoming fick fel summa.
+    amount: Optional[Decimal] = None
+    date: Optional[date] = None
+    raw_description: Optional[str] = None
 
 
 class TransferLinkIn(BaseModel):

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
-import { ArrowLeftRight, CheckCircle2, FileText, Link2, Paperclip, Trash2, X } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { ArrowLeftRight, CheckCircle2, FileText, Link2, Paperclip, Pencil, Trash2, X } from "lucide-react";
 import { api, formatSEK, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, Category, Transaction } from "@/types/models";
@@ -139,6 +139,40 @@ export default function Transactions() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["budget"] });
+    },
+  });
+
+  // Redigera belopp/datum/beskrivning — t.ex. för felaktigt importerade löner
+  // som materialiserats på inkognito-konton.
+  const [editFor, setEditFor] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    amount: string;
+    date: string;
+    raw_description: string;
+  }>({ amount: "", date: "", raw_description: "" });
+  const editMut = useMutation({
+    mutationFn: (p: {
+      id: number;
+      amount: number;
+      date: string;
+      raw_description: string;
+    }) =>
+      api<Transaction>(`/transactions/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          amount: p.amount,
+          date: p.date,
+          raw_description: p.raw_description,
+          create_rule: false,
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["budget"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["ytd-income"] });
+      setEditFor(null);
     },
   });
 
@@ -320,9 +354,11 @@ export default function Transactions() {
                   )
                   .map((tx) => {
                     const acc = (accountsQ.data ?? []).find((a) => a.id === tx.account_id);
+                    const isEditing = editFor === tx.id;
+                    const editColSpan = accountFilter === ALL_ACCOUNTS ? 5 : 4;
                     return (
+                  <React.Fragment key={tx.id}>
                   <tr
-                    key={tx.id}
                     className="border-b last:border-0 hover:bg-slate-50"
                   >
                     <td className="py-2 pr-4 text-slate-700">{tx.date}</td>
@@ -428,6 +464,20 @@ export default function Transactions() {
                             transfer-rader — så användaren kan matcha,
                             bifoga faktura eller radera oavsett tx-typ. */}
                         <button
+                          onClick={() => {
+                            setEditFor(tx.id);
+                            setEditDraft({
+                              amount: String(tx.amount),
+                              date: tx.date,
+                              raw_description: tx.raw_description,
+                            });
+                          }}
+                          className="text-xs text-slate-600 hover:text-brand-600 flex items-center"
+                          title="Redigera belopp/datum/beskrivning — t.ex. om lönen importerades fel"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => setMatchingTx(tx)}
                           className="text-xs text-slate-600 hover:text-brand-600 flex items-center"
                           title="Matcha manuellt mot en befintlig kommande-rad (lön eller faktura) — även som delbetalning"
@@ -490,6 +540,70 @@ export default function Transactions() {
                       )}
                     </td>
                   </tr>
+                  {isEditing && (
+                    <tr className="bg-amber-50 border-b">
+                      <td colSpan={editColSpan} className="px-4 py-3">
+                        <div className="flex flex-wrap items-end gap-3 text-sm">
+                          <label className="flex flex-col">
+                            <span className="text-xs text-slate-700">Datum</span>
+                            <input
+                              type="date"
+                              value={editDraft.date}
+                              onChange={(e) => setEditDraft({ ...editDraft, date: e.target.value })}
+                              className="border rounded px-2 py-1"
+                            />
+                          </label>
+                          <label className="flex flex-col">
+                            <span className="text-xs text-slate-700">Belopp (kr, minus = utgift)</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editDraft.amount}
+                              onChange={(e) => setEditDraft({ ...editDraft, amount: e.target.value })}
+                              className="border rounded px-2 py-1 w-40"
+                            />
+                          </label>
+                          <label className="flex flex-col flex-1 min-w-60">
+                            <span className="text-xs text-slate-700">Beskrivning</span>
+                            <input
+                              type="text"
+                              value={editDraft.raw_description}
+                              onChange={(e) => setEditDraft({ ...editDraft, raw_description: e.target.value })}
+                              className="border rounded px-2 py-1"
+                            />
+                          </label>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() =>
+                                editMut.mutate({
+                                  id: tx.id,
+                                  amount: Number(editDraft.amount),
+                                  date: editDraft.date,
+                                  raw_description: editDraft.raw_description,
+                                })
+                              }
+                              disabled={editMut.isPending || !editDraft.date || editDraft.amount === ""}
+                              className="bg-brand-600 text-white px-3 py-1.5 rounded disabled:opacity-50"
+                            >
+                              {editMut.isPending ? "Sparar…" : "Spara"}
+                            </button>
+                            <button
+                              onClick={() => setEditFor(null)}
+                              className="px-3 py-1.5 rounded border border-slate-300 bg-white"
+                            >
+                              Avbryt
+                            </button>
+                          </div>
+                        </div>
+                        {editMut.error && (
+                          <div className="text-xs text-rose-600 mt-2">
+                            {(editMut.error as Error).message}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                   );
                 })}
               </tbody>

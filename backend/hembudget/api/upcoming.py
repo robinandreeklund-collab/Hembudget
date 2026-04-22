@@ -310,20 +310,26 @@ def list_upcoming(
 ) -> list[dict]:
     """List upcoming transactions.
 
-    `status` optional: "open" (matched_transaction_id is NULL) or "paid"
-    (matched). Default None = alla.
+    `status` optional: "open" (unpaid + partial — bill ej fullt betald) eller
+    "paid" (fullt betald). Default None = alla.
+
+    OBS: vi filtrerar på payment_status (räknat från UpcomingPayment-junction),
+    INTE på matched_transaction_id. En delbetald faktura har
+    matched_transaction_id satt men ska fortsätta synas i "open" tills hela
+    beloppet är betalt.
     """
     q = session.query(UpcomingTransaction)
     if kind:
         q = q.filter(UpcomingTransaction.kind == kind)
     if only_future:
         q = q.filter(UpcomingTransaction.expected_date >= date.today())
-    if status == "open":
-        q = q.filter(UpcomingTransaction.matched_transaction_id.is_(None))
-    elif status == "paid":
-        q = q.filter(UpcomingTransaction.matched_transaction_id.is_not(None))
     ups = q.order_by(UpcomingTransaction.expected_date.asc()).all()
-    return _enrich_upcoming(session, ups)
+    enriched = _enrich_upcoming(session, ups)
+    if status == "open":
+        enriched = [e for e in enriched if e["payment_status"] != "paid"]
+    elif status == "paid":
+        enriched = [e for e in enriched if e["payment_status"] == "paid"]
+    return enriched
 
 
 def _materialize_on_incognito_account(

@@ -193,7 +193,9 @@ def test_ledger_categories_aggregates_income_and_expenses(client):
 
 def test_ledger_upcoming_summary_counts_matched_vs_unmatched(client):
     c, SL = client
-    from hembudget.db.models import UpcomingTransaction, Transaction, Account
+    from hembudget.db.models import (
+        Account, Transaction, UpcomingPayment, UpcomingTransaction,
+    )
     with SL() as s:
         acc = Account(name="A", bank="nordea", type="checking")
         s.add(acc); s.flush()
@@ -203,12 +205,15 @@ def test_ledger_upcoming_summary_counts_matched_vs_unmatched(client):
             raw_description="Elräkning", hash="h1",
         )
         s.add(tx); s.flush()
-        # Matchad
-        s.add(UpcomingTransaction(
+        # Matchad (fullt betald — UpcomingPayment räknas nu, inte bara
+        # matched_transaction_id, så vi måste skapa junction-rad)
+        up_paid = UpcomingTransaction(
             kind="bill", name="El", amount=Decimal("3000"),
             expected_date=date(2026, 1, 27),
             matched_transaction_id=tx.id,
-        ))
+        )
+        s.add(up_paid); s.flush()
+        s.add(UpcomingPayment(upcoming_id=up_paid.id, transaction_id=tx.id))
         # Omatchad
         s.add(UpcomingTransaction(
             kind="bill", name="Bredband", amount=Decimal("500"),
@@ -224,3 +229,41 @@ def test_ledger_upcoming_summary_counts_matched_vs_unmatched(client):
     assert up["unmatched"] == 1
     assert up["matched_sum"] == pytest.approx(3000.0)
     assert up["unmatched_sum"] == pytest.approx(500.0)
+
+
+def test_ledger_partial_upcoming_counts_as_unmatched_with_remaining(client):
+    """Regression: delbetalda fakturor ska räknas som unmatched (de är
+    inte klara) och unmatched_sum ska använda ÅTERSTÅENDE belopp — inte
+    ursprungsbeloppet — så översikten speglar vad som faktiskt är kvar
+    att betala."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Transaction, UpcomingPayment, UpcomingTransaction,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="nordea", type="checking")
+        s.add(acc); s.flush()
+        # Delbetalning 2 000 kr på Amex-faktura 27 000 kr
+        tx = Transaction(
+            account_id=acc.id, date=date(2026, 1, 10),
+            amount=Decimal("-2000"), currency="SEK",
+            raw_description="Amex delbet", hash="h_amex",
+        )
+        s.add(tx); s.flush()
+        up = UpcomingTransaction(
+            kind="bill", name="Amex januari", amount=Decimal("27000"),
+            expected_date=date(2026, 1, 25),
+            matched_transaction_id=tx.id,
+        )
+        s.add(up); s.flush()
+        s.add(UpcomingPayment(upcoming_id=up.id, transaction_id=tx.id))
+        s.commit()
+
+    r = c.get("/ledger/?month=2026-01")
+    body = r.json()
+    summary = body["upcoming_summary"]
+    # Delbetald räknas som unmatched eftersom fakturan ej är klar
+    assert summary["matched"] == 0
+    assert summary["unmatched"] == 1
+    # unmatched_sum = ÅTERSTÅENDE, inte 27 000
+    assert summary["unmatched_sum"] == pytest.approx(25000.0)

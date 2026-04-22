@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..db.models import ChatMessage
 from ..llm.client import LLMUnavailable, LMStudioClient
-from ..llm.prompts import CHAT_SYSTEM
+from ..llm.prompts import build_chat_system
 from . import tools
 
 log = logging.getLogger(__name__)
@@ -467,7 +467,11 @@ class ChatAgent:
             .order_by(ChatMessage.id.asc())
             .all()
         )
-        messages: list[dict[str, Any]] = [{"role": "system", "content": CHAT_SYSTEM}]
+        # VIKTIGT: bygg system-prompten vid ANROPSTID så dagens datum är
+        # med. Annars tror LLM:en att det är 2024 (träningsdatum).
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": build_chat_system()},
+        ]
         for m in history_rows:
             entry: dict[str, Any] = {"role": m.role, "content": m.content}
             if m.tool_calls:

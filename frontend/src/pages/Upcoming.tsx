@@ -231,17 +231,16 @@ export default function Upcoming() {
   }
 
   const items = listQ.data ?? [];
-  // "Framtiden" = idag eller senare (expected_date >= today).
-  // Historiska rader hamnar i sektionerna "Betalda fakturor" / "Historiska
-  // löner" oavsett om de matchats mot en bankrad eller inte — fokus är
-  // att "Kommande" bara visar det som faktiskt är kommande.
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const isFuture = (i: UpcomingItem) =>
-    i.expected_date >= todayStr && i.matched_transaction_id == null;
-  const openBills = items.filter((i) => i.kind === "bill" && isFuture(i));
-  const paidBills = items.filter((i) => i.kind === "bill" && !isFuture(i));
-  const openIncomes = items.filter((i) => i.kind === "income" && isFuture(i));
-  const paidIncomes = items.filter((i) => i.kind === "income" && !isFuture(i));
+  // "Öppen" = INTE fullt betald (payment_status !== "paid"). Delbetalda
+  // fakturor (t.ex. Amex 27 000 kr där 2 000 kr är inbetalt) ska fortsätta
+  // ligga i Kommande med resterande belopp tills hela summan är klar —
+  // matched_transaction_id är bara "primär match" och blir satt redan vid
+  // första delbetalningen, så det dugger INTE som paid-indikator.
+  const isFullyPaid = (i: UpcomingItem) => i.payment_status === "paid";
+  const openBills = items.filter((i) => i.kind === "bill" && !isFullyPaid(i));
+  const paidBills = items.filter((i) => i.kind === "bill" && isFullyPaid(i));
+  const openIncomes = items.filter((i) => i.kind === "income" && !isFullyPaid(i));
+  const paidIncomes = items.filter((i) => i.kind === "income" && isFullyPaid(i));
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">

@@ -311,6 +311,12 @@ def huvudbok(
     total_liabilities += total_loan_debt
 
     # 5. Kommande fakturor vs matchade transaktioner
+    # OBS: "matchad" = fullt betald (payment_status == "paid"), INTE bara
+    # att matched_transaction_id är satt. En delbetald faktura har en
+    # primär match men är inte klar — den ska räknas som unmatched med
+    # RESTERANDE belopp (inte ursprungsbelopp).
+    from ..upcoming_match.payments import paid_amount as _paid_amount
+    _PAID_TOLERANCE = Decimal("2.00")
     ups = (
         session.query(UpcomingTransaction)
         .filter(
@@ -319,8 +325,20 @@ def huvudbok(
         )
         .all()
     )
-    matched_ups = [u for u in ups if u.matched_transaction_id is not None]
-    unmatched_ups = [u for u in ups if u.matched_transaction_id is None]
+    matched_ups: list[UpcomingTransaction] = []
+    unmatched_ups: list[UpcomingTransaction] = []
+    unmatched_sum_remaining = Decimal("0")
+    matched_sum_amount = Decimal("0")
+    for u in ups:
+        paid = _paid_amount(session, u)
+        remaining = u.amount - paid
+        if abs(remaining) <= _PAID_TOLERANCE:
+            matched_ups.append(u)
+            matched_sum_amount += u.amount
+        else:
+            unmatched_ups.append(u)
+            # Partiellt betalda räknas med bara återstående del
+            unmatched_sum_remaining += remaining if remaining > 0 else Decimal("0")
     unmatched_past = [
         u for u in unmatched_ups if u.expected_date < date.today()
     ]
@@ -343,8 +361,8 @@ def huvudbok(
         "matched": len(matched_ups),
         "unmatched": len(unmatched_ups),
         "unmatched_past": len(unmatched_past),
-        "matched_sum": float(sum((u.amount for u in matched_ups), Decimal("0"))),
-        "unmatched_sum": float(sum((u.amount for u in unmatched_ups), Decimal("0"))),
+        "matched_sum": float(matched_sum_amount),
+        "unmatched_sum": float(unmatched_sum_remaining),
     }
 
     net_worth = total_assets - total_liabilities
@@ -509,18 +527,28 @@ def check_details(
         }
 
     if check_type == "unmatched_past_upcomings":
+        # "Omatchad" = inte fullt betald. Delbetalda fakturor räknas
+        # fortfarande som unmatched eftersom användaren fortfarande
+        # måste åtgärda resten.
+        from ..upcoming_match.payments import paid_amount as _paid_amount
+        from decimal import Decimal as _D
         today = date.today()
-        ups = (
+        candidates = (
             session.query(UpcomingTransaction)
             .filter(
                 UpcomingTransaction.expected_date >= period_start,
                 UpcomingTransaction.expected_date < period_end,
                 UpcomingTransaction.expected_date < today,
-                UpcomingTransaction.matched_transaction_id.is_(None),
             )
             .order_by(UpcomingTransaction.expected_date.desc())
             .all()
         )
+        PAID_TOL = _D("2.00")
+        ups = []
+        for u in candidates:
+            remaining = u.amount - _paid_amount(session, u)
+            if abs(remaining) > PAID_TOL:
+                ups.append((u, remaining))
         return {
             "check_type": check_type,
             "count": len(ups),
@@ -530,12 +558,13 @@ def check_details(
                     "kind": u.kind,
                     "name": u.name,
                     "amount": float(u.amount),
+                    "remaining_amount": float(remaining),
                     "expected_date": u.expected_date.isoformat(),
                     "owner": u.owner,
                     "debit_account_id": u.debit_account_id,
                     "source": u.source,
                 }
-                for u in ups
+                for u, remaining in ups
             ],
         }
 
