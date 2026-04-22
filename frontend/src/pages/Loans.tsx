@@ -514,6 +514,15 @@ function LoanSchedule({ loanId }: { loanId: number }) {
     onSuccess: invalidate,
   });
 
+  const pruneMut = useMutation({
+    mutationFn: () =>
+      api<{ deleted: number; cutoff: string }>(
+        `/loans/${loanId}/schedule/prune-history`,
+        { method: "POST" },
+      ),
+    onSuccess: invalidate,
+  });
+
   const entries = scheduleQ.data ?? [];
 
   return (
@@ -533,6 +542,25 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           </button>
           <span className="text-slate-300">·</span>
           <button
+            onClick={() => {
+              if (
+                confirm(
+                  "Radera alla omatchade planerade betalningar från innan " +
+                    "du började importera transaktioner? De kan ändå aldrig " +
+                    "matchas.",
+                )
+              ) {
+                pruneMut.mutate();
+              }
+            }}
+            disabled={pruneMut.isPending}
+            className="text-rose-600 hover:underline"
+            title="Rensa historiska rader som aldrig kan matchas"
+          >
+            {pruneMut.isPending ? "Rensar…" : "Rensa historik"}
+          </button>
+          <span className="text-slate-300">·</span>
+          <button
             onClick={() => setAdding((a) => !a)}
             className="text-brand-600 hover:underline flex items-center gap-1"
           >
@@ -540,6 +568,12 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           </button>
         </div>
       </div>
+
+      {pruneMut.data && (
+        <div className="text-xs text-emerald-700 mb-2">
+          Raderade {pruneMut.data.deleted} rader före {pruneMut.data.cutoff}.
+        </div>
+      )}
 
       {adding && (
         <div className="bg-slate-50 rounded p-2 mb-2 flex items-end gap-2 text-xs">

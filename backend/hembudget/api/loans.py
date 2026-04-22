@@ -297,6 +297,37 @@ def delete_schedule_entry(
     return {"deleted": entry_id}
 
 
+@router.post("/{loan_id}/schedule/prune-history")
+def prune_history_schedule(
+    loan_id: int, session: Session = Depends(db),
+) -> dict:
+    """Radera ALLA omatchade schema-rader med due_date före cutoff.
+
+    Cutoff = äldsta importerade transaktionens datum, eller lånets
+    start_date om inga transaktioner är importerade. Syfte: rensa skräpet
+    "Väntar på matchning" som aldrig kan matchas eftersom CSV-data inte
+    går så långt bakåt.
+    """
+    loan = session.get(Loan, loan_id)
+    if loan is None:
+        raise HTTPException(404, "Loan not found")
+    earliest_tx = (
+        session.query(Transaction.date)
+        .order_by(Transaction.date.asc())
+        .first()
+    )
+    cutoff: date = earliest_tx[0] if earliest_tx else loan.start_date
+    q = session.query(LoanScheduleEntry).filter(
+        LoanScheduleEntry.loan_id == loan_id,
+        LoanScheduleEntry.due_date < cutoff,
+        LoanScheduleEntry.matched_transaction_id.is_(None),
+    )
+    count = q.count()
+    q.delete(synchronize_session=False)
+    session.flush()
+    return {"deleted": count, "cutoff": cutoff.isoformat()}
+
+
 class ScheduleGenerateIn(BaseModel):
     months: int = 3
     day_of_month: Optional[int] = None
@@ -345,11 +376,26 @@ def _loan_schema() -> dict:
             "loan_number": {"type": ["string", "null"]},
             "principal_amount": {
                 "type": ["number", "null"],
-                "description": "Ursprungligt lånebelopp",
+                "description": (
+                    "'Ursprungligt lånebelopp' — det ursprungliga beloppet "
+                    "lånet togs ut på. OBS: inte samma som 'Aktuellt lånebelopp'. "
+                    "På Nordea-sidan heter fältet just 'Ursprungligt lånebelopp'."
+                ),
             },
             "current_balance": {
                 "type": ["number", "null"],
-                "description": "Aktuellt lånebelopp / återstående skuld",
+                "description": (
+                    "'Aktuellt lånebelopp' eller 'Återstående lånebelopp' — "
+                    "kvarvarande skuld just nu. OBS: inte 'Ursprungligt'."
+                ),
+            },
+            "amortized_total": {
+                "type": ["number", "null"],
+                "description": (
+                    "'Amorterat' — hittills betald amortering, typiskt visad "
+                    "som separat siffra (t.ex. '168 367,00'). Om den syns, "
+                    "returnera ALLTID detta fält."
+                ),
             },
             "start_date": {
                 "type": ["string", "null"],
@@ -393,7 +439,12 @@ def _loan_schema() -> dict:
                 "type": "array",
                 "description": (
                     "Redan genomförda betalningar från 'Transaktioner'-fliken. "
-                    "Används för att matcha mot importerade CSV-transaktioner."
+                    "VIKTIGT: 'Transaktioner'-fliken i Nordea har TVÅ kolumner "
+                    "med siffror: 'Amortering' OCH 'Belopp'. "
+                    "total_amount = 'Belopp'-kolumnen (den större). "
+                    "amortization_amount = 'Amortering'-kolumnen (vanligtvis "
+                    "exakt samma varje månad, t.ex. 1 667,00). "
+                    "Fyll ALLTID i båda fälten om båda kolumnerna syns."
                 ),
                 "items": {
                     "type": "object",
@@ -415,23 +466,71 @@ def _loan_system_prompt() -> str:
         "Du läser svenska banksidor och skärmdumpar om bolån/privatlån "
         "(Nordea, SBAB, SEB, Handelsbanken, Länsförsäkringar m.fl.) och "
         "extraherar strukturerad lånedata. Returnera JSON enligt schemat.\n\n"
-        "Viktigt:\n"
-        "- Belopp som TAL i SEK (inget 'kr', komma → punkt). \n"
+        "Regler:\n"
+        "- Alla belopp som TAL i SEK (inget 'kr', komma → punkt, inga mellanslag).\n"
         "- Datum YYYY-MM-DD.\n"
         "- 'Utbetalningsdag' är lånets start_date.\n"
         "- 'Återbetalningskonto' är användarens bankkonto — lägg i "
         "  repayment_account_number (med blanksteg som i källan).\n"
-        "- Om flera bilder visas, kombinera data: Låneinformation-bilden ger "
-        "  grunden, Betalningsplan-bilden ger schedule[], Transaktioner-bilden "
-        "  visar historiska betalningar (ignorera — vi läser dessa ur CSV).\n"
-        "- För schedule: returnera ALLA kommande rader som syns. "
-        "  'total_amount' = 'Belopp'-kolumnen. "
-        "  'remaining_balance_after' = 'Återstående belopp'.\n"
-        "- För historical_transactions: rader från 'Transaktioner'-fliken där "
-        "  Typ = 'Betalning'. total_amount = Belopp-kolumnen.\n"
-        "- 'Ränta: 3 månaders bunden' → binding_type='3mån'.\n"
-        "- Om ränta inte står explicit, sätt null — backend beräknar."
+        "\n"
+        "FÄLT-MAPPNING (kritisk) — matcha dessa svenska etiketter EXAKT mot "
+        "rätt JSON-nyckel:\n"
+        "  'Ursprungligt lånebelopp' → principal_amount  (t.ex. 200000.00)\n"
+        "  'Aktuellt lånebelopp'     → current_balance    (t.ex. 31633.00)\n"
+        "  'Amorterat'               → amortized_total    (t.ex. 168367.00)\n"
+        "  'Återstående lånebelopp'  → current_balance    (synonym)\n"
+        "  'Lånenummer'              → loan_number\n"
+        "  'Utbetalningsdag'         → start_date\n"
+        "  'Ränta' (procent)         → interest_rate (0.0311 för 3,11 %)\n"
+        "Returnera ALDRIG 0 eller null för principal_amount eller "
+        "current_balance om motsvarande siffra faktiskt syns i bilden — "
+        "dubbelkolla innan du skickar svaret.\n"
+        "\n"
+        "Om flera bilder visas, kombinera data:\n"
+        "- 'Låneinformation'-bilden → grundfält + principal/current/amortized\n"
+        "- 'Betalningsplan'-bilden  → schedule[]\n"
+        "- 'Transaktioner'-bilden   → historical_transactions[]\n"
+        "\n"
+        "schedule[]:\n"
+        "  'total_amount' = 'Belopp'-kolumnen\n"
+        "  'remaining_balance_after' = 'Återstående belopp'-kolumnen\n"
+        "  Returnera ALLA synliga rader.\n"
+        "\n"
+        "historical_transactions[] (Transaktioner-fliken):\n"
+        "  Tabellen har kolumnerna: Datum · Typ · Amortering · Belopp.\n"
+        "  total_amount         = 'Belopp'-kolumnen (t.ex. 1 746,00)\n"
+        "  amortization_amount  = 'Amortering'-kolumnen (t.ex. 1 667,00)\n"
+        "  Fyll ALLTID båda om båda kolumnerna syns.\n"
+        "\n"
+        "'Ränta: 3 månaders bunden' → binding_type='3mån'.\n"
+        "Om ränta inte står explicit, sätt null — backend beräknar."
     )
+
+
+def _reconcile_loan_amounts(
+    principal: float | None,
+    current_balance: float | None,
+    amortized_total: float | None,
+) -> tuple[float, float]:
+    """Härled saknade fält ur de andra två.
+
+    Returnerar (principal, current_balance) där åtminstone en av dem
+    kommer direkt från input och den andra kan vara härledd från
+    `principal = current + amortized` eller `current = principal - amortized`.
+    """
+    p = float(principal) if principal else 0.0
+    c = float(current_balance) if current_balance else 0.0
+    a = float(amortized_total) if amortized_total else 0.0
+
+    if p <= 0 and c > 0 and a > 0:
+        p = c + a
+    elif c <= 0 and p > 0 and a > 0:
+        c = p - a
+    elif p <= 0 and c > 0:
+        p = c
+    elif c <= 0 and p > 0:
+        c = p
+    return p, c
 
 
 def _split_schedule_row(
@@ -571,9 +670,13 @@ async def parse_loan_from_images(
             f"modell i LM Studio (t.ex. Qwen2.5-VL). Fel: {exc}",
         ) from exc
 
-    # Plocka ut fält med säkra defaultvärden
-    principal = parsed.get("principal_amount") or parsed.get("current_balance") or 0
-    current_balance = parsed.get("current_balance") or parsed.get("principal_amount") or 0
+    # Plocka ut fält och härled saknade från de andra (principal = current +
+    # amortized om banken visar alla tre men LLM:n råkade tappa en)
+    principal, current_balance = _reconcile_loan_amounts(
+        parsed.get("principal_amount"),
+        parsed.get("current_balance"),
+        parsed.get("amortized_total"),
+    )
     start_date_str = parsed.get("start_date")
     try:
         start_date_val = date.fromisoformat(start_date_str) if start_date_str else date.today()
@@ -652,12 +755,40 @@ async def parse_loan_from_images(
                 loan.notes = (prefix + f"\nÅterbetalningskonto: {acc.name}").strip()
                 break
 
+    # Cutoff: äldsta importerade transaktion. Historiska schema-rader som är
+    # äldre än detta kommer aldrig kunna matchas, så vi skapar dem inte.
+    # Om inga transaktioner är importerade än använder vi loan.start_date.
+    earliest_tx = (
+        session.query(Transaction.date)
+        .order_by(Transaction.date.asc())
+        .first()
+    )
+    history_cutoff: date = earliest_tx[0] if earliest_tx else loan.start_date
+    # Fallback för amortering-endast-fallet: om historical_transactions har
+    # rader där amort saknas men vi har en konsistent månadsamortering
+    # (t.ex. 1 667 varje månad i Nordeas annuitetslån) använder vi den.
+    monthly_amort_hint: float | None = (
+        float(amort_monthly) if amort_monthly else None
+    )
+    if monthly_amort_hint is None:
+        hist_amorts = [
+            r.get("amortization_amount")
+            for r in (parsed.get("historical_transactions") or [])
+            if r.get("amortization_amount")
+        ]
+        if hist_amorts:
+            # Ta modvärdet — alla rader samma amortering är typiskt
+            from collections import Counter
+            c = Counter(round(float(a), 2) for a in hist_amorts)
+            monthly_amort_hint = c.most_common(1)[0][0]
+
     def _add_schedule_row(
         due_date_str: str,
         total_raw,
         amort_raw,
         prev_remaining: float | None,
         this_remaining: float | None,
+        historical: bool = False,
     ) -> float | None:
         """Lägg till en schedule-rad. Returnerar this_remaining så
         anropande loop kan använda det som prev för nästa rad.
@@ -665,14 +796,31 @@ async def parse_loan_from_images(
         Amortering deriveras från delta mellan remaining_balance_after om
         inget explicit amorteringsvärde finns (Nordeas betalningsplan-vy
         visar bara total + remaining). Täcker bank-UI:er som bara visar
-        total + remaining per rad."""
+        total + remaining per rad.
+
+        Om `historical=True` och raden ligger före cutoff hoppas den över —
+        vi har inga importerade transaktioner för den perioden, så den
+        skulle bara stå som "Väntar på matchning" för evigt."""
         try:
             due = date.fromisoformat(due_date_str)
         except (TypeError, ValueError):
             return this_remaining
+        if historical and due < history_cutoff:
+            return this_remaining
         amort_f, interest_f = _split_schedule_row(
             total_raw, amort_raw, prev_remaining, this_remaining
         )
+        # Om historisk rad saknar explicit amort men vi har en hint om
+        # månatlig amortering (t.ex. 1 667 annuitets-stil), använd den.
+        if (
+            historical
+            and amort_f == 0.0
+            and monthly_amort_hint
+            and monthly_amort_hint > 0
+            and float(total_raw or 0) > monthly_amort_hint
+        ):
+            amort_f = monthly_amort_hint
+            interest_f = max(float(total_raw or 0) - amort_f, 0.0)
         if amort_f > 0:
             session.add(LoanScheduleEntry(
                 loan_id=loan.id, due_date=due,
@@ -704,6 +852,9 @@ async def parse_loan_from_images(
     # Historiska betalningar från Transaktioner-fliken. Där brukar
     # amortization_amount visas explicit — lita på den. Ingen delta-logik
     # behövs (dessa rader har ofta inget remaining_balance angivet).
+    # Skippar rader äldre än cutoff (äldsta importerade transaktion) så vi
+    # inte fyller skärmen med "Väntar på matchning" för månader vi aldrig
+    # hade CSV för.
     for row in parsed.get("historical_transactions") or []:
         _add_schedule_row(
             row.get("date"),
@@ -711,6 +862,7 @@ async def parse_loan_from_images(
             row.get("amortization_amount"),
             None,
             None,
+            historical=True,
         )
 
     session.flush()
