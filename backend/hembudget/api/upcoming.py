@@ -226,13 +226,23 @@ class UpcomingOut(BaseModel):
 def list_upcoming(
     kind: Optional[str] = None,
     only_future: bool = True,
+    status: Optional[str] = None,
     session: Session = Depends(db),
 ) -> list[UpcomingTransaction]:
+    """List upcoming transactions.
+
+    `status` optional: "open" (matched_transaction_id is NULL) or "paid"
+    (matched). Default None = alla.
+    """
     q = session.query(UpcomingTransaction)
     if kind:
         q = q.filter(UpcomingTransaction.kind == kind)
     if only_future:
         q = q.filter(UpcomingTransaction.expected_date >= date.today())
+    if status == "open":
+        q = q.filter(UpcomingTransaction.matched_transaction_id.is_(None))
+    elif status == "paid":
+        q = q.filter(UpcomingTransaction.matched_transaction_id.is_not(None))
     return q.order_by(UpcomingTransaction.expected_date.asc()).all()
 
 
@@ -252,6 +262,10 @@ def create_upcoming(payload: UpcomingIn, session: Session = Depends(db)) -> Upco
         ))
     session.add(u)
     session.flush()
+    # Om raden skapas retroaktivt (gammalt datum) så ska den auto-matchas
+    # mot en ev. redan befintlig Transaction.
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([u])
     return u
 
 
@@ -374,6 +388,8 @@ def parse_text(
     u.owner = parsed.get("owner")
     session.add(u)
     session.flush()
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([u])
     return u
 
 
@@ -459,6 +475,8 @@ async def parse_invoice_image(
         u.lines.extend(build_lines_from_vision(session, parsed_lines))
     session.add(u)
     session.flush()
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([u])
     return u
 
 
@@ -1108,6 +1126,11 @@ async def parse_credit_card_pdf(
     session.add(upcoming)
     session.flush()
 
+    # Gammal faktura? Matcha direkt mot redan befintlig bankrad så den
+    # flyttas från "Kommande" → "Betalda" utan omväg.
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([upcoming])
+
     # Kortinnehavar-summering: hur mycket var och en köpte
     cardholders_breakdown: dict[str, float] = {}
     for tx in new_txs:
@@ -1340,6 +1363,8 @@ async def parse_credit_card_invoice(
     )
     session.add(upcoming)
     session.flush()
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([upcoming])
 
     return {
         "upcoming_id": upcoming.id,

@@ -204,8 +204,18 @@ export default function Upcoming() {
   }
 
   const items = listQ.data ?? [];
-  const bills = items.filter((i) => i.kind === "bill");
-  const incomes = items.filter((i) => i.kind === "income");
+  const openBills = items.filter(
+    (i) => i.kind === "bill" && i.matched_transaction_id == null,
+  );
+  const paidBills = items.filter(
+    (i) => i.kind === "bill" && i.matched_transaction_id != null,
+  );
+  const openIncomes = items.filter(
+    (i) => i.kind === "income" && i.matched_transaction_id == null,
+  );
+  const paidIncomes = items.filter(
+    (i) => i.kind === "income" && i.matched_transaction_id != null,
+  );
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
@@ -381,9 +391,9 @@ export default function Upcoming() {
         </div>
       </Card>
 
-      <Card title={`Kommande fakturor (${bills.length})`}>
+      <Card title={`Kommande fakturor (${openBills.length})`}>
         <ItemList
-          items={bills}
+          items={openBills}
           accounts={accountsQ.data ?? []}
           categories={categoriesQ.data ?? []}
           onDelete={(id) => deleteMut.mutate(id)}
@@ -391,9 +401,25 @@ export default function Upcoming() {
           onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
         />
       </Card>
-      <Card title={`Kommande löner (${incomes.length})`}>
+      {paidBills.length > 0 && (
+        <Card title={`Betalda fakturor (${paidBills.length})`}>
+          <div className="text-xs text-slate-700 mb-2">
+            Fakturor som auto-matchats mot en befintlig bankrad — visas här
+            för historik. Tas inte med i cashflow-prognosen.
+          </div>
+          <ItemList
+            items={paidBills}
+            accounts={accountsQ.data ?? []}
+            categories={categoriesQ.data ?? []}
+            onDelete={(id) => deleteMut.mutate(id)}
+            onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
+          />
+        </Card>
+      )}
+      <Card title={`Kommande löner (${openIncomes.length})`}>
         <ItemList
-          items={incomes}
+          items={openIncomes}
           accounts={accountsQ.data ?? []}
           categories={categoriesQ.data ?? []}
           onDelete={(id) => deleteMut.mutate(id)}
@@ -401,6 +427,18 @@ export default function Upcoming() {
           onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
         />
       </Card>
+      {paidIncomes.length > 0 && (
+        <Card title={`Utbetalda löner (${paidIncomes.length})`}>
+          <ItemList
+            items={paidIncomes}
+            accounts={accountsQ.data ?? []}
+            categories={categoriesQ.data ?? []}
+            onDelete={(id) => deleteMut.mutate(id)}
+            onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
+          />
+        </Card>
+      )}
     </div>
   );
 }
@@ -503,7 +541,11 @@ function UpcomingRow({
             {i.owner && <span>· {i.owner}</span>}
             {i.recurring_monthly && <span>· återkommande</span>}
             {i.source !== "manual" && <span>· {i.source}</span>}
-            {i.matched_transaction_id && <span className="text-emerald-600">· ✓ bokförd</span>}
+            {i.matched_transaction_id && (
+              <span className="text-emerald-600">
+                · ✓ matchad mot transaktion #{i.matched_transaction_id}
+              </span>
+            )}
           </div>
         </div>
         <div
