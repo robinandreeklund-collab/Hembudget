@@ -401,6 +401,23 @@ def _loan_schema() -> dict:
                 "type": ["string", "null"],
                 "description": "Utbetalningsdag / startdatum YYYY-MM-DD",
             },
+            "contract_end_date": {
+                "type": ["string", "null"],
+                "description": (
+                    "'Avtalets slut' / slutbetalningsdatum (används av billån "
+                    "t.ex. VW Financial Services) — YYYY-MM-DD. Lagras som "
+                    "binding_end_date i backend och används för att auto-"
+                    "generera amorteringsplan från idag till kontraktets slut."
+                ),
+            },
+            "next_payment_date": {
+                "type": ["string", "null"],
+                "description": (
+                    "'Nästa betalning' — YYYY-MM-DD. Dagen-i-månaden från "
+                    "detta datum (t.ex. 12 från '2026-05-12') används som "
+                    "betalningsdag för alla framtida schema-rader."
+                ),
+            },
             "interest_rate": {
                 "type": ["number", "null"],
                 "description": "Nominell ränta som decimaltal (0.042 = 4.2 %). null om ej synlig.",
@@ -413,6 +430,14 @@ def _loan_schema() -> dict:
             "repayment_account_number": {
                 "type": ["string", "null"],
                 "description": "Återbetalningskonto - användarens konto, t.ex. '1722 20 34439'.",
+            },
+            "payment_bankgiro": {
+                "type": ["string", "null"],
+                "description": (
+                    "Långivarens bankgiro för att betala in lånet (t.ex. "
+                    "'5078-3489' för VW Financial Services). Används för att "
+                    "matcha bankbetalningar i CSV:er."
+                ),
             },
             "security": {
                 "type": ["string", "null"],
@@ -477,14 +502,22 @@ def _loan_system_prompt() -> str:
         "rätt JSON-nyckel:\n"
         "  'Ursprungligt lånebelopp' → principal_amount  (t.ex. 200000.00)\n"
         "  'Aktuellt lånebelopp'     → current_balance    (t.ex. 31633.00)\n"
-        "  'Amorterat'               → amortized_total    (t.ex. 168367.00)\n"
+        "  'Kvar att betala'         → current_balance    (synonym, billån)\n"
         "  'Återstående lånebelopp'  → current_balance    (synonym)\n"
+        "  'Amorterat'               → amortized_total    (t.ex. 168367.00)\n"
         "  'Lånenummer'              → loan_number\n"
         "  'Utbetalningsdag'         → start_date\n"
+        "  'Avtalets slut'           → contract_end_date  (billån, VW Financial)\n"
+        "  'Nästa betalning'         → next_payment_date  (billån)\n"
         "  'Ränta' (procent)         → interest_rate (0.0311 för 3,11 %)\n"
-        "Returnera ALDRIG 0 eller null för principal_amount eller "
-        "current_balance om motsvarande siffra faktiskt syns i bilden — "
-        "dubbelkolla innan du skickar svaret.\n"
+        "  Bankgiro i inbetalningssektionen (t.ex. 'bankgiro 5078-3489' i\n"
+        "  'Lös lånet'/inbetalningsinformation) → payment_bankgiro\n"
+        "Returnera ALDRIG 0 eller null för current_balance om siffran syns\n"
+        "i bilden (vanligaste felet är att missa 'Kvar att betala' på billån).\n"
+        "Om lånet är ett BILLÅN (VW Financial Services, Santander, Nordea\n"
+        "Finans, m.fl.) saknas typiskt 'Ursprungligt lånebelopp' och\n"
+        "amorteringsplan — i de fallen räcker contract_end_date +\n"
+        "current_balance + next_payment_date + interest_rate.\n"
         "\n"
         "Om flera bilder visas, kombinera data:\n"
         "- 'Låneinformation'-bilden → grundfält + principal/current/amortized\n"
@@ -683,6 +716,23 @@ async def parse_loan_from_images(
     except ValueError:
         start_date_val = date.today()
 
+    # "Avtalets slut" (billån) — t.ex. VW Financial Services 2027-10-31
+    contract_end_str = parsed.get("contract_end_date")
+    contract_end: date | None = None
+    if contract_end_str:
+        try:
+            contract_end = date.fromisoformat(contract_end_str)
+        except ValueError:
+            contract_end = None
+
+    next_payment_str = parsed.get("next_payment_date")
+    next_payment: date | None = None
+    if next_payment_str:
+        try:
+            next_payment = date.fromisoformat(next_payment_str)
+        except ValueError:
+            next_payment = None
+
     schedule_raw = parsed.get("schedule") or []
 
     interest_rate = parsed.get("interest_rate")
@@ -691,48 +741,59 @@ async def parse_loan_from_images(
     if interest_rate is None:
         interest_rate = 0.0
 
-    # Amortering: från schema om möjligt, annars nyligen historik (nej —
-    # vi har inget här), default 0
+    # Amortering: från schema om möjligt, annars härled från billån-fakta
     amort_monthly = parsed.get("amortization_monthly")
     if amort_monthly is None and schedule_raw:
         amorts = [r.get("amortization_amount") or 0 for r in schedule_raw]
         if any(a > 0 for a in amorts):
             amort_monthly = max(amorts, default=0) or None
+    # Billån-fall: ingen schema-rad extraherad MEN vi har contract_end +
+    # current_balance → räkna ut linjär månadsamortering från idag till
+    # kontraktets slut. Bättre än ingen estimering för cashflow-prognosen.
+    if amort_monthly is None and contract_end and current_balance and current_balance > 0:
+        from datetime import date as _date
+        today = _date.today()
+        if contract_end > today:
+            months_left = (
+                (contract_end.year - today.year) * 12
+                + (contract_end.month - today.month)
+            )
+            if months_left > 0:
+                amort_monthly = round(float(current_balance) / months_left, 2)
 
     # match_pattern kan vara flera mönster separerade med '|' — matchern
-    # provar vart och ett. Lägg till både långivare (t.ex. 'Nordea Hypotek')
-    # OCH lånnumret, eftersom olika banker visar det ena eller andra i
-    # transaktionsbeskrivningen.
+    # provar vart och ett. Lägg till långivare, lånenummer OCH bankgiro
+    # (senare matchar bankbetalningar som "BG 5078-3489 Volkswagen").
     loan_number = parsed.get("loan_number")
     lender = parsed.get("lender") or ""
+    payment_bankgiro = parsed.get("payment_bankgiro")
     patterns: list[str] = []
-    # Korta varianter: "Nordea Hypotek" → utan "AB (publ)"
     lender_short = lender.replace(" AB (publ)", "").replace(" AB", "").strip()
     if lender_short:
         patterns.append(lender_short)
     if loan_number:
         patterns.append(loan_number)
-    # Fler lämpliga mönster: bolåneränta, bolån, amortering
+    if payment_bankgiro:
+        patterns.append(payment_bankgiro)
     match_pattern = "|".join(dict.fromkeys(patterns)) or None
 
     loan_name = parsed.get("name") or (
         f"{lender_short} {loan_number or ''}".strip()
     )
 
-    # Skapa lånet
+    # Skapa lånet. För billån är contract_end binding_end_date.
     loan = Loan(
         name=loan_name,
         lender=parsed["lender"],
         loan_number=loan_number,
         principal_amount=Decimal(str(principal)),
-        # "Aktuellt lånebelopp" från banken — används som utgångspunkt för
-        # saldot så vi slipper materialisera alla gamla amorteringar
         current_balance_at_creation=(
             Decimal(str(current_balance)) if current_balance else None
         ),
         start_date=start_date_val,
         interest_rate=float(interest_rate),
         binding_type=parsed.get("binding_type") or "rörlig",
+        binding_end_date=contract_end,
         amortization_monthly=(
             Decimal(str(amort_monthly)) if amort_monthly else None
         ),
@@ -866,6 +927,35 @@ async def parse_loan_from_images(
         )
 
     session.flush()
+
+    # Billån-autogenerering: om ingen schema-rad skapats från bilden men
+    # vi har contract_end + amort_monthly + next_payment → generera rader
+    # från idag till kontraktets slut via LoanMatcher. Användbart för
+    # VW Financial Services, Santander m.fl. där fakturan inte visar plan.
+    existing_schedule_count = (
+        session.query(LoanScheduleEntry)
+        .filter(LoanScheduleEntry.loan_id == loan.id)
+        .count()
+    )
+    if (
+        existing_schedule_count == 0
+        and contract_end is not None
+        and amort_monthly
+        and current_balance
+        and current_balance > 0
+    ):
+        from datetime import date as _date
+        today = _date.today()
+        if contract_end > today:
+            months_left = (
+                (contract_end.year - today.year) * 12
+                + (contract_end.month - today.month)
+            )
+            if months_left > 0:
+                day_of_month = next_payment.day if next_payment else 27
+                LoanMatcher(session).generate_schedule(
+                    loan, months=months_left, day_of_month=day_of_month,
+                )
 
     # Kör matchern över befintliga transaktioner — loan_number i beskrivningen
     # kan matcha äldre betalningar också
