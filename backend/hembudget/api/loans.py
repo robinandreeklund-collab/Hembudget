@@ -28,6 +28,11 @@ class LoanIn(BaseModel):
     lender: str
     loan_number: Optional[str] = None
     principal_amount: Decimal
+    # Valfri: kvarvarande skuld vid lånets registrering (t.ex. för billån
+    # där originalbelopp redan är delvis amorterat). När detta är satt
+    # räknas skuld = current_balance_at_creation - amorteringar efter
+    # start_date, istället för principal_amount - alla amorteringar.
+    current_balance_at_creation: Optional[Decimal] = None
     start_date: date
     interest_rate: float
     binding_type: str = "rörlig"
@@ -44,6 +49,7 @@ class LoanUpdate(BaseModel):
     lender: Optional[str] = None
     loan_number: Optional[str] = None
     principal_amount: Optional[Decimal] = None
+    current_balance_at_creation: Optional[Decimal] = None
     start_date: Optional[date] = None
     interest_rate: Optional[float] = None
     binding_type: Optional[str] = None
@@ -63,6 +69,7 @@ class LoanOut(BaseModel):
     lender: str
     loan_number: Optional[str]
     principal_amount: Decimal
+    current_balance_at_creation: Optional[Decimal] = None
     start_date: date
     interest_rate: float
     binding_type: str

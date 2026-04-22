@@ -51,6 +51,7 @@ interface Loan {
   lender: string;
   loan_number: string | null;
   principal_amount: number;
+  current_balance_at_creation: number | null;
   start_date: string;
   interest_rate: number;
   binding_type: string;
@@ -68,6 +69,7 @@ interface LoanIn {
   lender: string;
   loan_number?: string | null;
   principal_amount: number;
+  current_balance_at_creation?: number | null;
   start_date: string;
   interest_rate: number;
   binding_type: string;
@@ -250,6 +252,7 @@ export default function Loans() {
             lender: mode.loan.lender,
             loan_number: mode.loan.loan_number,
             principal_amount: mode.loan.principal_amount,
+            current_balance_at_creation: mode.loan.current_balance_at_creation,
             start_date: mode.loan.start_date,
             interest_rate: mode.loan.interest_rate,
             binding_type: mode.loan.binding_type,
@@ -382,6 +385,7 @@ const DEFAULT_FORM: LoanIn = {
   name: "",
   lender: "",
   principal_amount: 2500000,
+  current_balance_at_creation: null,
   start_date: new Date().toISOString().slice(0, 10),
   interest_rate: 0.042,
   binding_type: "rörlig",
@@ -422,6 +426,21 @@ function LoanForm({
         </Field>
         <Field label="Originalbelopp (kr)">
           <input type="number" value={f.principal_amount} onChange={(e) => setF({ ...f, principal_amount: Number(e.target.value) })} className="input" />
+        </Field>
+        <Field label="Kvarvarande skuld nu (kr, valfritt)">
+          <input
+            type="number"
+            value={f.current_balance_at_creation ?? ""}
+            onChange={(e) =>
+              setF({
+                ...f,
+                current_balance_at_creation: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+            className="input"
+            placeholder="Ex. 39081 för billån med 39k kvar"
+            title="Används för billån/lån där originalbelopp redan är delvis amorterat — gamla amorteringar subtraheras inte, bara nya efter startdatum"
+          />
         </Field>
         <Field label="Startdatum">
           <input type="date" value={f.start_date} onChange={(e) => setF({ ...f, start_date: e.target.value })} className="input" />

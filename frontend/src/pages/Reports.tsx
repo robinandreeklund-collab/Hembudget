@@ -5,9 +5,23 @@ import { Card } from "@/components/Card";
 import { api, formatSEK, getToken } from "@/api/client";
 import type { Account, Category } from "@/types/models";
 
-function defaultMonth(): string {
+function currentMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Default: föregående (senast avslutade) månad. Huvudboken blir missvisande
+// för pågående månad eftersom import ofta sker i efterhand — användaren vill
+// normalt se en KOMPLETT period när de öppnar /reports.
+function defaultMonth(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isCurrentOrFutureMonth(m: string): boolean {
+  return m >= currentMonth();
 }
 
 interface LedgerAccount {
@@ -175,6 +189,20 @@ export default function Reports() {
           kategori. Längst ner visas avstämnings-checkar så du snabbt ser
           om något inte balanserar.
         </div>
+        {scope === "month" && isCurrentOrFutureMonth(month) && (
+          <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <strong>Pågående månad.</strong> Du tittar på {month} — data kan
+            vara ofullständig eftersom du oftast importerar transaktioner i
+            efterhand. Välj föregående månad för ett avstämt resultat.
+          </div>
+        )}
+        {scope === "year" && year >= new Date().getFullYear() && (
+          <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <strong>Pågående år.</strong> {year} är inte avslutat — siffrorna
+            är YTD och kommer förändras allt eftersom fler transaktioner
+            importeras.
+          </div>
+        )}
         <div className="flex gap-2 mb-4 text-sm">
           <button
             className="bg-slate-800 text-white px-3 py-1.5 rounded"
