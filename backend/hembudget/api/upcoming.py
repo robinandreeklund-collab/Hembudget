@@ -1179,30 +1179,45 @@ def monthly_forecast(
         lookback_year -= 1
     lookback_start = date(lookback_year, lookback_month, 1)
 
-    # IDs för transaktioner som matchats mot en upcoming bill — dessa är
-    # "kända" återkommande kostnader och ska INTE inkluderas i snittet av
-    # övriga utgifter, eftersom nästa månads version redan är inräknad
-    # i upcoming_bills.
-    matched_tx_ids_subq = (
+    # "Övriga utgifter" = genomsnitt av VARIABLA utgifter senaste 3 mån.
+    # Exkluderar från snittet:
+    # 1. Transfers (is_transfer=True) — är ej riktig utgift
+    # 2. Inkognito-kontons utgifter (redan via Account-filter nedan)
+    # 3. Transaktioner matchade mot en UpcomingTransaction (junction) —
+    #    dessa fångas av upcoming_bills för kommande månad
+    # 4. Lånebetalningar (LoanPayment) — fångas av låneschemat
+    # 5. Transaktioner markerade som kreditkorts-betalning (kategori
+    #    "Avgifter & Ränta" eller liknande — krediten täcks via fakturan)
+    from ..db.models import (
+        LoanPayment as _LoanPayment, UpcomingPayment as _UpPay,
+        Account as _Acc,
+    )
+    # Subqueries för exkluderade tx-ID
+    payment_tx_ids_subq = session.query(_UpPay.transaction_id).subquery()
+    # Legacy: också matched_transaction_id (för data som inte migrerats
+    # till junction-tabellen ännu, t.ex. testscenarios)
+    legacy_matched_subq = (
         session.query(UpcomingTransaction.matched_transaction_id)
-        .filter(
-            UpcomingTransaction.kind == "bill",
-            UpcomingTransaction.matched_transaction_id.is_not(None),
-        )
+        .filter(UpcomingTransaction.matched_transaction_id.is_not(None))
         .subquery()
     )
+    loan_tx_ids_subq = session.query(_LoanPayment.transaction_id).subquery()
 
     monthly_exp = (
         session.query(
             sql_func.strftime("%Y-%m", Transaction.date).label("m"),
             sql_func.sum(Transaction.amount).label("tot"),
         )
+        .join(_Acc, _Acc.id == Transaction.account_id)
         .filter(
             Transaction.amount < 0,
             Transaction.is_transfer.is_(False),
+            _Acc.incognito.is_(False),
             Transaction.date >= lookback_start,
             Transaction.date < start,
-            Transaction.id.not_in(matched_tx_ids_subq.select()),
+            Transaction.id.not_in(payment_tx_ids_subq.select()),
+            Transaction.id.not_in(legacy_matched_subq.select()),
+            Transaction.id.not_in(loan_tx_ids_subq.select()),
         )
         .group_by("m")
         .all()
@@ -1213,7 +1228,24 @@ def monthly_forecast(
     else:
         avg_expenses = 0.0
 
-    available = float(income_total) - float(bills_total) - avg_expenses
+    # Lånebetalningar för månaden från schemat (räntor + amorteringar)
+    from ..db.models import LoanScheduleEntry
+    loan_scheduled_total = float(
+        session.query(sql_func.coalesce(sql_func.sum(LoanScheduleEntry.amount), 0))
+        .filter(
+            LoanScheduleEntry.due_date >= start,
+            LoanScheduleEntry.due_date < end,
+            LoanScheduleEntry.matched_transaction_id.is_(None),
+        )
+        .scalar() or 0
+    )
+
+    # Två siffror:
+    # 1. "Kvar efter kända fakturor" = lön - upcoming_bills - loan_schedule
+    #    (vad som blir över om ingenting variabelt spenderas alls)
+    # 2. "Kvar att dela" = ovanstående - avg_expenses (prognos för månaden)
+    after_known = float(income_total) - float(bills_total) - loan_scheduled_total
+    available = after_known - avg_expenses
 
     owners: dict[str, Decimal] = {}
     for i in incomes:
@@ -1239,7 +1271,9 @@ def monthly_forecast(
         "totals": {
             "expected_income": float(income_total),
             "upcoming_bills": float(bills_total),
+            "loan_scheduled": round(loan_scheduled_total, 2),
             "avg_fixed_expenses": round(avg_expenses, 2),
+            "after_known_bills": round(after_known, 2),
             "available_to_split": round(available, 2),
         },
         "split": {

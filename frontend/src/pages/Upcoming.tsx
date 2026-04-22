@@ -52,7 +52,9 @@ interface Forecast {
   totals: {
     expected_income: number;
     upcoming_bills: number;
+    loan_scheduled?: number;
     avg_fixed_expenses: number;
+    after_known_bills?: number;
     available_to_split: number;
   };
   split: {
@@ -263,7 +265,7 @@ export default function Upcoming() {
 
       {forecastQ.data && (
         <Card title={`Månadsprognos — ${month}`}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <Stat
               icon={<TrendingUp className="w-4 h-4 text-emerald-600" />}
               label="Kommande lön"
@@ -274,17 +276,36 @@ export default function Upcoming() {
               label="Kommande fakturor"
               value={formatSEK(forecastQ.data.totals.upcoming_bills)}
             />
+            {(forecastQ.data.totals.loan_scheduled ?? 0) > 0 && (
+              <Stat
+                icon={<TrendingDown className="w-4 h-4 text-amber-700" />}
+                label="Lån (ränta + amort.)"
+                value={formatSEK(forecastQ.data.totals.loan_scheduled ?? 0)}
+                hint="Från låneschemat för månaden"
+              />
+            )}
             <Stat
-              icon={<TrendingDown className="w-4 h-4 text-rose-600" />}
-              label="Snitt övriga utgifter"
-              value={formatSEK(forecastQ.data.totals.avg_fixed_expenses)}
-              hint="Snitt senaste 3 mån — mat, transport, nöje etc. (exkl. kommande fakturor)"
+              icon={<Users className="w-4 h-4 text-emerald-700" />}
+              label="Kvar efter kända"
+              value={formatSEK(
+                forecastQ.data.totals.after_known_bills ??
+                (forecastQ.data.totals.expected_income -
+                  forecastQ.data.totals.upcoming_bills),
+              )}
+              hint="Lön − fakturor − lån (ignorerar variabla utgifter)"
+              tone={
+                (forecastQ.data.totals.after_known_bills ??
+                  (forecastQ.data.totals.expected_income -
+                    forecastQ.data.totals.upcoming_bills)) >= 0
+                  ? "good"
+                  : "bad"
+              }
             />
             <Stat
-              icon={<Users className="w-4 h-4 text-brand-600" />}
-              label="Kvar att dela"
-              value={formatSEK(forecastQ.data.totals.available_to_split)}
-              tone={forecastQ.data.totals.available_to_split >= 0 ? "good" : "bad"}
+              icon={<TrendingDown className="w-4 h-4 text-rose-600" />}
+              label="Snitt variabla utg."
+              value={formatSEK(forecastQ.data.totals.avg_fixed_expenses)}
+              hint="3-mån-snitt: mat, transport, nöje (exkl. fakturor + lån)"
             />
           </div>
           <div className="mt-4 p-3 bg-brand-50 border border-brand-100 rounded text-sm">
@@ -292,15 +313,28 @@ export default function Upcoming() {
             <span className="font-mono text-xs">
               {formatSEK(forecastQ.data.totals.expected_income)} lön
               − {formatSEK(forecastQ.data.totals.upcoming_bills)} fakturor
-              − {formatSEK(forecastQ.data.totals.avg_fixed_expenses)} övrigt
-              = {formatSEK(forecastQ.data.totals.available_to_split)}
+              {(forecastQ.data.totals.loan_scheduled ?? 0) > 0 && (
+                <> − {formatSEK(forecastQ.data.totals.loan_scheduled ?? 0)} lån</>
+              )}
+              {" "}= {formatSEK(forecastQ.data.totals.after_known_bills ?? 0)}{" "}
+              kvar efter kända
             </span>
+            <div className="text-xs font-mono mt-1">
+              − {formatSEK(forecastQ.data.totals.avg_fixed_expenses)} snitt variabla
+              = <strong className={
+                forecastQ.data.totals.available_to_split >= 0
+                  ? "text-emerald-700"
+                  : "text-rose-600"
+              }>
+                {formatSEK(forecastQ.data.totals.available_to_split)}
+              </strong> prognostiserat överskott
+            </div>
             <div className="mt-2">
-              <strong>50/50-fördelning:</strong>{" "}
+              <strong>50/50-fördelning av överskott:</strong>{" "}
               <span className="font-semibold">
                 {formatSEK(forecastQ.data.split.per_person_share)}
               </span>{" "}
-              till var och en som privata pengar.
+              till var och en.
             </div>
             {Object.keys(forecastQ.data.income_by_owner).length > 0 && (
               <div className="text-xs text-slate-700 mt-1">
