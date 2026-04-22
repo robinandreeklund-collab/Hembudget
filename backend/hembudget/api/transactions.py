@@ -402,7 +402,41 @@ def list_transactions(
         q = q.filter(Transaction.date <= to_date)
     if uncategorized:
         q = q.filter(Transaction.category_id.is_(None))
-    return q.order_by(Transaction.date.desc(), Transaction.id.desc()).offset(offset).limit(limit).all()
+    rows = (
+        q.order_by(Transaction.date.desc(), Transaction.id.desc())
+        .offset(offset).limit(limit).all()
+    )
+    _attach_upcoming_matches(session, rows)
+    return rows
+
+
+def _attach_upcoming_matches(
+    session: Session, txs: list[Transaction],
+) -> None:
+    """Sätt .upcoming_matches på varje tx (läses av Pydantic via
+    from_attributes). Tom lista om ingen match — användaren ser då ingen
+    badge."""
+    from ..db.models import UpcomingPayment, UpcomingTransaction
+
+    if not txs:
+        return
+    tx_ids = [t.id for t in txs]
+    rows = (
+        session.query(UpcomingPayment, UpcomingTransaction)
+        .join(UpcomingTransaction, UpcomingTransaction.id == UpcomingPayment.upcoming_id)
+        .filter(UpcomingPayment.transaction_id.in_(tx_ids))
+        .all()
+    )
+    by_tx: dict[int, list] = {tid: [] for tid in tx_ids}
+    for pay, up in rows:
+        by_tx[pay.transaction_id].append({
+            "upcoming_id": up.id,
+            "name": up.name,
+            "kind": up.kind,
+            "amount": up.amount,
+        })
+    for t in txs:
+        t.upcoming_matches = by_tx.get(t.id, [])
 
 
 @router.patch("/transactions/{tx_id}", response_model=TransactionOut)

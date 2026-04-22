@@ -150,3 +150,92 @@ def test_ledger_returns_check_type_on_failing_checks(client):
     )
     assert uncat is not None
     assert uncat["check_type"] == "uncategorized"
+
+
+def test_upcoming_matched_tx_excluded_from_orphan_transfers(client):
+    """Regression: en tx med is_transfer=True men matchad till en
+    UpcomingTransaction ska EJ synas som orphan — användaren har
+    redan redovisat den som bill-betalning."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Transaction, UpcomingPayment, UpcomingTransaction,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="nordea", type="checking")
+        s.add(acc); s.flush()
+        # Orphan som är matchad mot upcoming → ska filtreras bort
+        tx_matched = Transaction(
+            account_id=acc.id, date=date(2026, 4, 17),
+            amount=Decimal("-2922"), currency="SEK",
+            raw_description="Betalning BG 5127-5477 American Exp",
+            hash="h_amex", is_transfer=True,
+        )
+        # Orphan utan match → ska finnas kvar
+        tx_bare = Transaction(
+            account_id=acc.id, date=date(2026, 4, 1),
+            amount=Decimal("-166"), currency="SEK",
+            raw_description="Nordea LIV", hash="h_liv",
+            is_transfer=True,
+        )
+        s.add_all([tx_matched, tx_bare]); s.flush()
+        up = UpcomingTransaction(
+            kind="bill", name="Amex-faktura",
+            amount=Decimal("2922"), expected_date=date(2026, 4, 25),
+        )
+        s.add(up); s.flush()
+        s.add(UpcomingPayment(upcoming_id=up.id, transaction_id=tx_matched.id))
+        s.commit()
+
+    r = c.get("/ledger/check/transfers_imbalance?month=2026-04")
+    body = r.json()
+    # Bara den omatchade kvar i orphan-listan
+    assert body["count"] == 1
+    assert body["transactions"][0]["description"] == "Nordea LIV"
+
+    # Och huvudbokens transfer-sum ska inte längre räkna med Amex-raden
+    r2 = c.get("/ledger/?month=2026-04")
+    body2 = r2.json()
+    transfer_check = next(
+        (c for c in body2["checks"]
+         if c["name"] == "Interna överföringar balanserar"), None,
+    )
+    assert transfer_check is not None
+    # -166 är ensam orphan kvar; -2922 ska ha reklassificerats till expense
+    assert transfer_check["value"] == pytest.approx(-166.0)
+
+
+def test_transactions_list_exposes_upcoming_matches(client):
+    """/transactions ska returnera upcoming_matches så UI kan visa
+    bekräftelse-badge på matchade rader."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Transaction, UpcomingPayment, UpcomingTransaction,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="nordea", type="checking")
+        s.add(acc); s.flush()
+        tx = Transaction(
+            account_id=acc.id, date=date(2026, 4, 17),
+            amount=Decimal("-2922"), currency="SEK",
+            raw_description="Amex-betalning", hash="h1",
+        )
+        s.add(tx); s.flush()
+        up = UpcomingTransaction(
+            kind="bill", name="Amex april",
+            amount=Decimal("5000"), expected_date=date(2026, 4, 25),
+        )
+        s.add(up); s.flush()
+        s.add(UpcomingPayment(upcoming_id=up.id, transaction_id=tx.id))
+        s.commit()
+
+    r = c.get("/transactions?account_id=1")
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["upcoming_matches"] == [
+        {
+            "upcoming_id": 1,
+            "name": "Amex april",
+            "kind": "bill",
+            "amount": "5000.00",
+        },
+    ]

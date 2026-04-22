@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ArrowLeftRight, FileText, Link2, Paperclip, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, FileText, Link2, Paperclip, Trash2, X } from "lucide-react";
 import { api, formatSEK, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, Category, Transaction } from "@/types/models";
@@ -339,6 +339,15 @@ export default function Transactions() {
                             <ArrowLeftRight className="w-3 h-3" /> Överföring
                           </span>
                         )}
+                        {(tx.upcoming_matches ?? []).map((m) => (
+                          <span
+                            key={m.upcoming_id}
+                            className="inline-flex items-center gap-1 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded"
+                            title={`Matchad mot kommande ${m.kind}: ${m.name} (${formatSEK(Number(m.amount))})`}
+                          >
+                            <CheckCircle2 className="w-3 h-3" /> Matchad: {m.name}
+                          </span>
+                        ))}
                         {tx.cardholder && (
                           <span className="inline-flex items-center text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
                             👤 {tx.cardholder.split(" ")[0]}

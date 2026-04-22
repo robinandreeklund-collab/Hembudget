@@ -28,6 +28,13 @@ export interface Category {
   icon: string | null;
 }
 
+export interface UpcomingMatch {
+  upcoming_id: number;
+  name: string;
+  kind: string;
+  amount: number | string;
+}
+
 export interface Transaction {
   id: number;
   account_id: number;
@@ -44,6 +51,7 @@ export interface Transaction {
   is_transfer: boolean;
   transfer_pair_id: number | null;
   cardholder?: string | null;
+  upcoming_matches?: UpcomingMatch[];
 }
 
 export interface MonthSummary {

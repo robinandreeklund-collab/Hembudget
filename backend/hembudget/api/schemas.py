@@ -18,6 +18,15 @@ class TransactionSplitOut(BaseModel):
     source: str
 
 
+class UpcomingMatchOut(BaseModel):
+    """Kort sammanfattning av en upcoming som en Transaction är matchad
+    mot — visas som badge i /transactions så användaren ser bekräftelsen."""
+    upcoming_id: int
+    name: str
+    kind: str
+    amount: Decimal
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,6 +46,7 @@ class TransactionOut(BaseModel):
     transfer_pair_id: Optional[int] = None
     cardholder: Optional[str] = None
     splits: list[TransactionSplitOut] = []
+    upcoming_matches: list[UpcomingMatchOut] = []
 
 
 class TransactionUpdate(BaseModel):

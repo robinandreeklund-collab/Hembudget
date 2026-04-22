@@ -28,6 +28,7 @@ from ..db.models import (
     Loan,
     LoanPayment,
     Transaction,
+    UpcomingPayment,
     UpcomingTransaction,
 )
 from ..loans.matcher import LoanMatcher
@@ -66,6 +67,15 @@ def huvudbok(
     """
     period_start, period_end, period_label = _parse_period(year, month)
 
+    # En tx som användaren manuellt matchat mot en kommande faktura räknas
+    # INTE som transfer här, även om is_transfer=True råkar stå kvar från
+    # import. Intentionen vid matchning är "detta är en bill-betalning",
+    # inte "flytt mellan mina konton" — så vi vill att den syns som utgift
+    # i resultaträkningen och inte flaggas som orphan-transfer.
+    upcoming_matched_ids: set[int] = {
+        tid for (tid,) in session.query(UpcomingPayment.transaction_id).all()
+    }
+
     # ---------- Balansrapport per konto ----------
     accounts = session.query(Account).order_by(Account.id).all()
     account_rows = []
@@ -94,20 +104,25 @@ def huvudbok(
             Transaction.date < period_end,
         ).all()
 
+        def _is_transfer(t: Transaction) -> bool:
+            # Upcoming-matchade tx räknas som vanliga utgifter/inkomster,
+            # inte transfers — även om is_transfer-flaggan råkar stå kvar.
+            return bool(t.is_transfer) and t.id not in upcoming_matched_ids
+
         income_in = sum(
-            (t.amount for t in tx_in_period if t.amount > 0 and not t.is_transfer),
+            (t.amount for t in tx_in_period if t.amount > 0 and not _is_transfer(t)),
             Decimal("0"),
         )
         expenses_in = sum(
-            (-t.amount for t in tx_in_period if t.amount < 0 and not t.is_transfer),
+            (-t.amount for t in tx_in_period if t.amount < 0 and not _is_transfer(t)),
             Decimal("0"),
         )
         transfer_in = sum(
-            (t.amount for t in tx_in_period if t.amount > 0 and t.is_transfer),
+            (t.amount for t in tx_in_period if t.amount > 0 and _is_transfer(t)),
             Decimal("0"),
         )
         transfer_out = sum(
-            (-t.amount for t in tx_in_period if t.amount < 0 and t.is_transfer),
+            (-t.amount for t in tx_in_period if t.amount < 0 and _is_transfer(t)),
             Decimal("0"),
         )
 
@@ -152,17 +167,25 @@ def huvudbok(
     # Hämtar alla transaktioner + join:ar Category + Account (för incognito-
     # filter). Inkognito-kontons PRIVATA UTGIFTER exkluderas helt (vi vet
     # inte vad de går till), men deras inkomster räknas i familj/YTD.
-    all_tx = (
+    # is_transfer=False ELLER upcoming-matchad. Se kommentar kring
+    # upcoming_matched_ids ovan — matchade tx räknas som utgifter.
+    tx_q = (
         session.query(Transaction, Category, Account)
         .outerjoin(Category, Category.id == Transaction.category_id)
         .join(Account, Account.id == Transaction.account_id)
         .filter(
             Transaction.date >= period_start,
             Transaction.date < period_end,
-            Transaction.is_transfer.is_(False),
         )
-        .all()
     )
+    if upcoming_matched_ids:
+        tx_q = tx_q.filter(
+            (Transaction.is_transfer.is_(False))
+            | (Transaction.id.in_(upcoming_matched_ids))
+        )
+    else:
+        tx_q = tx_q.filter(Transaction.is_transfer.is_(False))
+    all_tx = tx_q.all()
     cat_agg: dict[tuple[int | None, str], dict] = {}
     income_total = Decimal("0")
     expense_total = Decimal("0")
@@ -369,6 +392,12 @@ def check_details(
     # Ladda konton en gång så vi kan berika transaction-svar
     accounts = {a.id: a for a in session.query(Account).all()}
 
+    # Upcoming-matchade tx räknas inte som transfers — exkludera dem
+    # både från orphan-listan och paired-mismatch-walken.
+    upcoming_matched_ids: set[int] = {
+        tid for (tid,) in session.query(UpcomingPayment.transaction_id).all()
+    }
+
     def _tx_out(tx: Transaction) -> dict:
         acc = accounts.get(tx.account_id)
         return {
@@ -384,8 +413,10 @@ def check_details(
         }
 
     if check_type == "transfers_imbalance":
-        # Orphan-transfers: is_transfer=True men ingen motpart
-        orphans = (
+        # Orphan-transfers: is_transfer=True men ingen motpart.
+        # Upcoming-matchade exkluderas — användaren har redan redovisat
+        # dem som bill-betalningar.
+        orphans_q = (
             session.query(Transaction)
             .filter(
                 Transaction.date >= period_start,
@@ -393,9 +424,12 @@ def check_details(
                 Transaction.is_transfer.is_(True),
                 Transaction.transfer_pair_id.is_(None),
             )
-            .order_by(Transaction.date.desc())
-            .all()
         )
+        if upcoming_matched_ids:
+            orphans_q = orphans_q.filter(
+                ~Transaction.id.in_(upcoming_matched_ids)
+            )
+        orphans = orphans_q.order_by(Transaction.date.desc()).all()
         orphan_net = sum((float(t.amount) for t in orphans), 0.0)
 
         # Parade men med beloppsskillnad (öresavrundning eller större fel).
