@@ -170,9 +170,11 @@ def test_cardholder_detection():
     assert any("EVELINA FRÖJD" in h for h in holders)
     assert any("ROBIN FRÖJD" in h for h in holders)
 
-    # Varje transaktion ska ha en holder
+    # Varje transaktion (utom bankavgifter + SKULD-rader) ska ha en holder
+    _no_holder_markers = ("BETALT BG", "SKULD", "pappersfaktura",
+                          "valutatillägg", "årsavgift", "aviavgift")
     for t in s.transactions:
-        if "BETALT BG" in t.description or "SKULD" in t.description:
+        if any(m.lower() in t.description.lower() for m in _no_holder_markers):
             continue
         assert t.cardholder is not None, f"Saknar holder på {t.description}"
 

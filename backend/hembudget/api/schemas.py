@@ -62,6 +62,8 @@ class AccountIn(BaseModel):
     opening_balance_date: Optional[date] = None
     credit_limit: Optional[Decimal] = None
     bankgiro: Optional[str] = None
+    card_last_digits: Optional[str] = None
+    parent_account_id: Optional[int] = None
     pays_credit_account_id: Optional[int] = None
 
 

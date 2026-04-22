@@ -74,6 +74,15 @@ def run_migrations(engine: Engine) -> list[str]:
     if "bankgiro" not in acc_cols:
         _add_column(engine, "accounts", "bankgiro VARCHAR(20)")
         applied.append("accounts.bankgiro")
+    if "card_last_digits" not in acc_cols:
+        _add_column(engine, "accounts", "card_last_digits VARCHAR(4)")
+        applied.append("accounts.card_last_digits")
+    if "parent_account_id" not in acc_cols:
+        _add_column(
+            engine, "accounts",
+            "parent_account_id INTEGER REFERENCES accounts(id)",
+        )
+        applied.append("accounts.parent_account_id")
 
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):

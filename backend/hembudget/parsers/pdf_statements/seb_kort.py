@@ -270,6 +270,16 @@ def parse_seb_kort(text: str) -> ParsedStatement:
         if stmt.card_last_digits is None and last4 is not None:
             stmt.card_last_digits = last4
 
+        # Bankavgifter (pappersfaktura, valutatillägg etc.) attribueras
+        # INTE till en kortinnehavare — de är gemensamma fakturaavgifter
+        # som hör till parent-kortkontot.
+        low_spec = spec.lower()
+        if any(m in low_spec for m in (
+            "pappersfaktura", "valutatillägg", "årsavgift", "aviavgift",
+            "överdragsavgift", "försenings",
+        )):
+            holder = None
+
         stmt.transactions.append(StatementLine(
             date=tx_date,
             description=spec,

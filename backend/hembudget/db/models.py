@@ -48,6 +48,14 @@ class Account(Base):
     # Används för att para autogiro-transaktioner från lönekontot mot
     # rätt kortkonto ("Betalning BG 5127-5477 American Exp" → Amex-kort).
     bankgiro: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
+    # Sista 4 siffror på kortnumret. Används för att skilja på sub-konton
+    # för olika kortinnehavare (huvudkort + extrakort på samma faktura).
+    card_last_digits: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    # Parent-kort-konto: när vi delar upp en MC-faktura per kortinnehavare
+    # pekar sub-kontona på parent som håller fakturasumman + betalningen.
+    parent_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     pays_credit_account_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("accounts.id"), nullable=True
