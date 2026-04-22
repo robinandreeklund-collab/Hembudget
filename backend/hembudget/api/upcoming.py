@@ -354,6 +354,75 @@ def create_upcoming(payload: UpcomingIn, session: Session = Depends(db)) -> Upco
     return u
 
 
+@router.post("/{upcoming_id}/materialize-to-account")
+def materialize_to_account(
+    upcoming_id: int, payload: dict, session: Session = Depends(db),
+) -> dict:
+    """Skapa en riktig Transaction på ett specifikt konto och bind den
+    mot en UpcomingTransaction.
+
+    Användarkontroll: användaren klickar 'Koppla till konto' i UI:t på
+    en lön-rad, väljer sitt konto (t.ex. Evelinas inkognito), systemet
+    skapar en Transaction där och sätter matched_transaction_id.
+
+    Fungerar för både kind=income och kind=bill. Tecknet på Transaction
+    följer upcoming:ens kind (income = positivt, bill = negativt).
+    """
+    import hashlib
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+    if u.matched_transaction_id is not None:
+        raise HTTPException(
+            409,
+            f"Upcomingen är redan matchad mot transaktion "
+            f"#{u.matched_transaction_id}. Koppla loss den först om du "
+            "vill flytta.",
+        )
+    account_id = payload.get("account_id")
+    if not isinstance(account_id, int):
+        raise HTTPException(400, "account_id (int) krävs i body")
+    acc = session.get(Account, account_id)
+    if acc is None:
+        raise HTTPException(404, "Account not found")
+
+    amount = u.amount if u.kind == "income" else -u.amount
+    key = (
+        f"{acc.id}|{u.expected_date.isoformat()}|{amount}|"
+        f"manual-up-{u.id}"
+    )
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    tx = Transaction(
+        account_id=acc.id,
+        date=u.expected_date,
+        amount=amount,
+        currency=acc.currency or "SEK",
+        raw_description=u.name or f"Manuell ({u.kind})",
+        hash=h,
+    )
+    session.add(tx)
+    session.flush()
+    u.matched_transaction_id = tx.id
+
+    # Kopiera ev. lines till splits
+    if u.lines:
+        from ..splits import apply_upcoming_lines_to_transaction
+        apply_upcoming_lines_to_transaction(session, u, tx)
+
+    # Kör transfer-detektorn så att t.ex. en manuell lön på inkognito-
+    # konto som är "Till gemensamt" paras ihop mot motsvarande bankrad.
+    TransferDetector(session).detect_internal_transfers()
+    session.flush()
+
+    return {
+        "upcoming_id": u.id,
+        "transaction_id": tx.id,
+        "account_id": acc.id,
+        "amount": float(amount),
+    }
+
+
 @router.patch("/{upcoming_id}", response_model=UpcomingOut)
 def update_upcoming(
     upcoming_id: int, payload: UpcomingUpdate, session: Session = Depends(db)

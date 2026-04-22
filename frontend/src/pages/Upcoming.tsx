@@ -772,6 +772,9 @@ function UpcomingRow({
                 · ✓ matchad mot transaktion #{i.matched_transaction_id}
               </span>
             )}
+            {!i.matched_transaction_id && (
+              <MaterializeDropdown item={i} accounts={accounts} />
+            )}
             {i.source_image_path && (
               <button
                 onClick={() => {
@@ -1430,5 +1433,63 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function MaterializeDropdown({
+  item,
+  accounts,
+}: {
+  item: UpcomingItem;
+  accounts: Account[];
+}) {
+  const qc = useQueryClient();
+  const [pick, setPick] = useState<string>("");
+  const mut = useMutation({
+    mutationFn: (accountId: number) =>
+      api(`/upcoming/${item.id}/materialize-to-account`, {
+        method: "POST",
+        body: JSON.stringify({ account_id: accountId }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["ytd-income"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+    },
+  });
+
+  // Sortera: ägar-matchade konton först, inkognito och valt-owner högst
+  const sorted = [...accounts].sort((a, b) => {
+    const ownerMatch = (acc: Account) =>
+      item.owner && acc.incognito ? -2 : acc.incognito ? -1 : 0;
+    return ownerMatch(a) - ownerMatch(b);
+  });
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-slate-400">·</span>
+      <select
+        value={pick}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (v) mut.mutate(v);
+          setPick("");
+        }}
+        disabled={mut.isPending}
+        className="text-xs border rounded px-1 py-0.5 bg-white"
+        title="Skapa motsvarande transaktion på valt konto (t.ex. hennes inkognito-konto) och koppla ihop"
+      >
+        <option value="">
+          {mut.isPending ? "Kopplar…" : "Koppla till konto…"}
+        </option>
+        {sorted.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name} {a.incognito ? "(inkognito)" : ""}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }

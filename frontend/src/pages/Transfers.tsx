@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { ArrowRight, CheckCircle2, Link2, Unlink2 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
+import type { Account } from "@/types/models";
 
 interface TxView {
   id: number;
@@ -39,6 +41,10 @@ export default function Transfers() {
     queryKey: ["transfers-suggestions"],
     queryFn: () => api<{ suggestions: Suggestion[]; count: number }>("/transfers/suggestions"),
   });
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api<Account[]>("/accounts"),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["transfers-paired"] });
@@ -46,6 +52,7 @@ export default function Transfers() {
     qc.invalidateQueries({ queryKey: ["transfers-suggestions"] });
     qc.invalidateQueries({ queryKey: ["transactions"] });
     qc.invalidateQueries({ queryKey: ["budget"] });
+    qc.invalidateQueries({ queryKey: ["balances"] });
   };
 
   const scanMut = useMutation({
@@ -135,21 +142,32 @@ export default function Transfers() {
       {unpaired.length > 0 && (
         <Card title={`Markerade som överföring men utan par (${unpaired.length})`}>
           <div className="text-sm text-slate-700 mb-2">
-            Oftast för att motparten inte är importerad än, eller beloppen skiljer för mycket.
-            Du kan manuellt ta bort transfer-flaggan för att räkna raden som vanlig utgift.
+            Oftast för att motparten inte är importerad än (t.ex. partnerns sida
+            av en överföring från hennes inkognito-konto). Välj ett konto i
+            dropdownen för att skapa motsvarande transaktion där — systemet
+            parar ihop dem direkt som överföring.
           </div>
           <div className="space-y-1">
             {unpaired.map((tx) => (
               <div key={tx.id} className="flex items-center gap-3 border rounded p-2 text-sm">
                 <TxRow tx={tx} />
-                <button
-                  onClick={() => unlinkMut.mutate(tx.id)}
-                  className="ml-auto shrink-0 flex items-center gap-1 text-slate-700 hover:text-rose-600 text-xs"
-                  title="Avmarkera som överföring — räkna som vanlig transaktion"
-                >
-                  <Unlink2 className="w-3.5 h-3.5" />
-                  Avmarkera
-                </button>
+                <div className="ml-auto shrink-0 flex items-center gap-2">
+                  <CreateCounterpartDropdown
+                    tx={tx}
+                    accounts={(accountsQ.data ?? []).filter(
+                      (a) => a.id !== tx.account_id,
+                    )}
+                    onCreated={invalidate}
+                  />
+                  <button
+                    onClick={() => unlinkMut.mutate(tx.id)}
+                    className="flex items-center gap-1 text-slate-700 hover:text-rose-600 text-xs"
+                    title="Avmarkera som överföring — räkna som vanlig transaktion"
+                  >
+                    <Unlink2 className="w-3.5 h-3.5" />
+                    Avmarkera
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -225,5 +243,56 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: "goo
       <div className="text-xs uppercase text-slate-700">{label}</div>
       <div className={`text-2xl font-semibold mt-1 ${color}`}>{value}</div>
     </div>
+  );
+}
+
+function CreateCounterpartDropdown({
+  tx,
+  accounts,
+  onCreated,
+}: {
+  tx: TxView;
+  accounts: Account[];
+  onCreated: () => void;
+}) {
+  const [_pick, setPick] = useState<string>("");
+  const mut = useMutation({
+    mutationFn: (accountId: number) =>
+      api(`/transfers/${tx.id}/create-counterpart`, {
+        method: "POST",
+        body: JSON.stringify({
+          account_id: accountId,
+          description: `Motpart till ${tx.description}`,
+        }),
+      }),
+    onSuccess: onCreated,
+  });
+
+  const sorted = [...accounts].sort((a, b) => {
+    const rank = (acc: Account) => (acc.incognito ? -1 : 0);
+    return rank(a) - rank(b);
+  });
+
+  return (
+    <select
+      value=""
+      onChange={(e) => {
+        const v = Number(e.target.value);
+        if (v) mut.mutate(v);
+        setPick("");
+      }}
+      disabled={mut.isPending}
+      className="text-xs border rounded px-1.5 py-1 bg-white"
+      title="Skapa motsvarande transaktion på valt konto (motsatt tecken) och para ihop som överföring"
+    >
+      <option value="">
+        {mut.isPending ? "Skapar…" : "Skapa motsvarande…"}
+      </option>
+      {sorted.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.name} {a.incognito ? "(inkognito)" : ""}
+        </option>
+      ))}
+    </select>
   );
 }

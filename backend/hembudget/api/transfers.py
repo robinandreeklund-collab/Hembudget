@@ -150,3 +150,71 @@ def link_pair(payload: LinkIn, session: Session = Depends(db)) -> dict:
 def unlink(tx_id: int, session: Session = Depends(db)) -> dict:
     TransferDetector(session).unlink(tx_id)
     return {"ok": True}
+
+
+@router.post("/{tx_id}/create-counterpart")
+def create_counterpart(
+    tx_id: int, payload: dict, session: Session = Depends(db),
+) -> dict:
+    """Skapa en motsatt-tecknad Transaction på ett annat konto och para
+    ihop de som överföring. Används för att manuellt dokumentera
+    partnerns sida när man bara ser en orphan-transfer på gemensamt
+    kontot.
+
+    Body: `{account_id: int, description?: str, date?: YYYY-MM-DD}`.
+    Datumet defaultar till source-tx:s datum.
+    """
+    import hashlib
+    from datetime import date as _date
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+    account_id = payload.get("account_id")
+    if not isinstance(account_id, int):
+        raise HTTPException(400, "account_id (int) krävs")
+    if account_id == tx.account_id:
+        raise HTTPException(400, "Motparten måste vara ett ANNAT konto")
+    acc = session.get(Account, account_id)
+    if acc is None:
+        raise HTTPException(404, "Target account not found")
+
+    date_s = payload.get("date")
+    if date_s:
+        try:
+            tx_date = _date.fromisoformat(date_s)
+        except ValueError:
+            raise HTTPException(400, f"Ogiltigt datum: {date_s}") from None
+    else:
+        tx_date = tx.date
+
+    description = (payload.get("description") or "").strip()
+    if not description:
+        description = f"Motpart till tx #{tx.id}"
+
+    counterpart_amount = -tx.amount  # motsatt tecken
+    key = f"counterpart|{account_id}|{tx_date}|{counterpart_amount}|from-tx-{tx.id}"
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    counter = Transaction(
+        account_id=account_id,
+        date=tx_date,
+        amount=counterpart_amount,
+        currency=tx.currency,
+        raw_description=description,
+        hash=h,
+    )
+    session.add(counter)
+    session.flush()
+
+    # Para ihop dem som transfer
+    TransferDetector(session).link_manual(tx.id, counter.id)
+    session.flush()
+
+    return {
+        "source_tx_id": tx.id,
+        "counterpart_tx_id": counter.id,
+        "account_id": account_id,
+        "amount": float(counterpart_amount),
+        "paired_as_transfer": True,
+    }
