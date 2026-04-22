@@ -17,7 +17,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -222,6 +222,7 @@ def huvudbok(
             "Summan av alla transfer_in minus transfer_out ska vara 0 — "
             "om inte så finns orphan-överföringar (bara en sida av paret)"
         ),
+        "check_type": "transfers_imbalance" if not transfer_passed else None,
     })
 
     # 2. Kredit-konto: closing balance ≤ 0 (skuld-konto)
@@ -248,6 +249,7 @@ def huvudbok(
             f"{uncategorized_count} transaktioner saknar kategori — "
             "påverkar budget och rapporter"
         ),
+        "check_type": "uncategorized" if uncategorized_count > 0 else None,
     })
 
     # 4. Lån: outstanding_balance stämmer med principal/current - amort
@@ -304,6 +306,9 @@ def huvudbok(
             "saknar matchning mot en Transaction — antingen ska de "
             "raderas eller matcha en bankrad"
         ),
+        "check_type": (
+            "unmatched_past_upcomings" if len(unmatched_past) > 0 else None
+        ),
     })
 
     upcoming_summary = {
@@ -338,6 +343,113 @@ def huvudbok(
             "uncategorized_count": uncategorized_count,
         },
     }
+
+
+@router.get("/check/{check_type}")
+def check_details(
+    check_type: str,
+    year: Optional[int] = None,
+    month: Optional[str] = None,
+    session: Session = Depends(db),
+) -> dict:
+    """Returnerar underliggande rader för en huvudbok-kontroll.
+
+    check_type = 'transfers_imbalance' | 'uncategorized' |
+                  'unmatched_past_upcomings'
+
+    Används av huvudbok-UI:t för att expandera varje avstämningsrad och
+    visa vilka poster som orsakar problemet, med snabb-åtgärdsknappar.
+    """
+    period_start, period_end, _label = _parse_period(year, month)
+
+    # Ladda konton en gång så vi kan berika transaction-svar
+    accounts = {a.id: a for a in session.query(Account).all()}
+
+    def _tx_out(tx: Transaction) -> dict:
+        acc = accounts.get(tx.account_id)
+        return {
+            "id": tx.id,
+            "date": tx.date.isoformat(),
+            "amount": float(tx.amount),
+            "description": tx.raw_description,
+            "account_id": tx.account_id,
+            "account_name": acc.name if acc else None,
+            "category_id": tx.category_id,
+            "is_transfer": tx.is_transfer,
+            "transfer_pair_id": tx.transfer_pair_id,
+        }
+
+    if check_type == "transfers_imbalance":
+        # Orphan-transfers: is_transfer=True men ingen motpart
+        rows = (
+            session.query(Transaction)
+            .filter(
+                Transaction.date >= period_start,
+                Transaction.date < period_end,
+                Transaction.is_transfer.is_(True),
+                Transaction.transfer_pair_id.is_(None),
+            )
+            .order_by(Transaction.date.desc())
+            .all()
+        )
+        net_diff = sum((float(t.amount) for t in rows), 0.0)
+        return {
+            "check_type": check_type,
+            "count": len(rows),
+            "net_diff": round(net_diff, 2),
+            "transactions": [_tx_out(t) for t in rows],
+        }
+
+    if check_type == "uncategorized":
+        rows = (
+            session.query(Transaction)
+            .filter(
+                Transaction.date >= period_start,
+                Transaction.date < period_end,
+                Transaction.category_id.is_(None),
+                Transaction.is_transfer.is_(False),
+            )
+            .order_by(Transaction.date.desc())
+            .all()
+        )
+        return {
+            "check_type": check_type,
+            "count": len(rows),
+            "transactions": [_tx_out(t) for t in rows],
+        }
+
+    if check_type == "unmatched_past_upcomings":
+        today = date.today()
+        ups = (
+            session.query(UpcomingTransaction)
+            .filter(
+                UpcomingTransaction.expected_date >= period_start,
+                UpcomingTransaction.expected_date < period_end,
+                UpcomingTransaction.expected_date < today,
+                UpcomingTransaction.matched_transaction_id.is_(None),
+            )
+            .order_by(UpcomingTransaction.expected_date.desc())
+            .all()
+        )
+        return {
+            "check_type": check_type,
+            "count": len(ups),
+            "upcomings": [
+                {
+                    "id": u.id,
+                    "kind": u.kind,
+                    "name": u.name,
+                    "amount": float(u.amount),
+                    "expected_date": u.expected_date.isoformat(),
+                    "owner": u.owner,
+                    "debit_account_id": u.debit_account_id,
+                    "source": u.source,
+                }
+                for u in ups
+            ],
+        }
+
+    raise HTTPException(400, f"Unknown check_type: {check_type}")
 
 
 @router.get("/export.yaml")

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, ChevronDown, ChevronRight, XCircle } from "lucide-react";
 import { Card } from "@/components/Card";
 import { api, formatSEK, getToken } from "@/api/client";
+import type { Account, Category } from "@/types/models";
 
 function defaultMonth(): string {
   const d = new Date();
@@ -49,6 +50,7 @@ interface LedgerCheck {
   passed: boolean;
   value: number;
   detail: string;
+  check_type?: string | null;
 }
 
 interface Ledger {
@@ -222,29 +224,13 @@ export default function Reports() {
             <Section title={`Avstämning (${ledger.checks.filter(c => c.passed).length}/${ledger.checks.length} OK)`}>
               <div className="space-y-1.5">
                 {ledger.checks.map((c, i) => (
-                  <div
+                  <CheckRow
                     key={i}
-                    className={`flex items-start gap-2 text-sm p-2 rounded ${
-                      c.passed ? "bg-emerald-50" : "bg-amber-50"
-                    }`}
-                  >
-                    {c.passed ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                    ) : (
-                      <XCircle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
-                    )}
-                    <div className="flex-1">
-                      <div className="font-medium">
-                        {c.name}
-                        {!c.passed && (
-                          <span className="text-amber-700 ml-2">
-                            ({c.value})
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-700">{c.detail}</div>
-                    </div>
-                  </div>
+                    check={c}
+                    scope={scope}
+                    month={month}
+                    year={year}
+                  />
                 ))}
               </div>
             </Section>
@@ -438,6 +424,402 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div>
       <h3 className="text-sm font-semibold text-slate-800 mb-2">{title}</h3>
       {children}
+    </div>
+  );
+}
+
+interface CheckTxRow {
+  id: number;
+  date: string;
+  amount: number;
+  description: string;
+  account_id: number;
+  account_name: string | null;
+  category_id: number | null;
+  is_transfer: boolean;
+  transfer_pair_id: number | null;
+}
+
+interface CheckUpcomingRow {
+  id: number;
+  kind: "bill" | "income";
+  name: string;
+  amount: number;
+  expected_date: string;
+  owner: string | null;
+  debit_account_id: number | null;
+  source: string;
+}
+
+function CheckRow({
+  check,
+  scope,
+  month,
+  year,
+}: {
+  check: LedgerCheck;
+  scope: "month" | "year";
+  month: string;
+  year: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const clickable = !check.passed && !!check.check_type;
+  return (
+    <div
+      className={`text-sm p-2 rounded ${
+        check.passed ? "bg-emerald-50" : "bg-amber-50"
+      }`}
+    >
+      <div
+        onClick={() => clickable && setOpen((o) => !o)}
+        className={`flex items-start gap-2 ${
+          clickable ? "cursor-pointer" : ""
+        }`}
+      >
+        {check.passed ? (
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+        ) : (
+          <XCircle className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+        )}
+        <div className="flex-1">
+          <div className="font-medium flex items-center gap-2">
+            {check.name}
+            {!check.passed && (
+              <span className="text-amber-700">({check.value})</span>
+            )}
+            {clickable && (
+              <span className="text-xs text-brand-600 ml-auto flex items-center">
+                {open ? (
+                  <ChevronDown className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+                {open ? "dölj" : "åtgärda"}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-slate-700">{check.detail}</div>
+        </div>
+      </div>
+      {open && clickable && check.check_type && (
+        <CheckDetails
+          checkType={check.check_type}
+          scope={scope}
+          month={month}
+          year={year}
+        />
+      )}
+    </div>
+  );
+}
+
+function CheckDetails({
+  checkType,
+  scope,
+  month,
+  year,
+}: {
+  checkType: string;
+  scope: "month" | "year";
+  month: string;
+  year: number;
+}) {
+  const qc = useQueryClient();
+  const queryStr = scope === "month" ? `month=${month}` : `year=${year}`;
+  const dataQ = useQuery({
+    queryKey: ["ledger-check", checkType, scope, month, year],
+    queryFn: () =>
+      api<{
+        count: number;
+        transactions?: CheckTxRow[];
+        upcomings?: CheckUpcomingRow[];
+        net_diff?: number;
+      }>(`/ledger/check/${checkType}?${queryStr}`),
+  });
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api<Account[]>("/accounts"),
+  });
+  const categoriesQ = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api<Category[]>("/categories"),
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["ledger-check", checkType] });
+    qc.invalidateQueries({ queryKey: ["ledger"] });
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.invalidateQueries({ queryKey: ["upcoming"] });
+    qc.invalidateQueries({ queryKey: ["transfers-unpaired"] });
+  };
+
+  if (dataQ.isLoading) {
+    return <div className="mt-2 text-xs text-slate-700">Laddar…</div>;
+  }
+  if (!dataQ.data) return null;
+
+  if (checkType === "uncategorized" && dataQ.data.transactions) {
+    return (
+      <UncategorizedList
+        rows={dataQ.data.transactions}
+        categories={categoriesQ.data ?? []}
+        onDone={invalidate}
+      />
+    );
+  }
+  if (checkType === "transfers_imbalance" && dataQ.data.transactions) {
+    return (
+      <OrphanTransferList
+        rows={dataQ.data.transactions}
+        accounts={accountsQ.data ?? []}
+        onDone={invalidate}
+      />
+    );
+  }
+  if (checkType === "unmatched_past_upcomings" && dataQ.data.upcomings) {
+    return (
+      <UnmatchedPastUpcomingList
+        rows={dataQ.data.upcomings}
+        accounts={accountsQ.data ?? []}
+        onDone={invalidate}
+      />
+    );
+  }
+  return null;
+}
+
+function UncategorizedList({
+  rows,
+  categories,
+  onDone,
+}: {
+  rows: CheckTxRow[];
+  categories: Category[];
+  onDone: () => void;
+}) {
+  const setCatMut = useMutation({
+    mutationFn: (p: { id: number; category_id: number }) =>
+      api(`/transactions/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ category_id: p.category_id, create_rule: true }),
+      }),
+    onSuccess: onDone,
+  });
+
+  return (
+    <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
+      {rows.length === 0 ? (
+        <div className="text-xs text-slate-700">Allt åtgärdat ✓</div>
+      ) : (
+        rows.map((tx) => (
+          <div
+            key={tx.id}
+            className="flex items-center gap-2 text-xs bg-white rounded px-2 py-1.5"
+          >
+            <span className="text-slate-700 w-20 shrink-0">{tx.date}</span>
+            <span
+              className={`w-24 text-right shrink-0 font-medium ${
+                tx.amount < 0 ? "text-rose-600" : "text-emerald-700"
+              }`}
+            >
+              {formatSEK(tx.amount)}
+            </span>
+            <span className="flex-1 min-w-0 truncate">{tx.description}</span>
+            <span className="text-slate-600 w-32 shrink-0 truncate">
+              {tx.account_name}
+            </span>
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  setCatMut.mutate({
+                    id: tx.id,
+                    category_id: Number(e.target.value),
+                  });
+                }
+              }}
+              className="border rounded px-1 py-0.5 text-xs bg-white"
+            >
+              <option value="">Välj kategori…</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function OrphanTransferList({
+  rows,
+  accounts,
+  onDone,
+}: {
+  rows: CheckTxRow[];
+  accounts: Account[];
+  onDone: () => void;
+}) {
+  const counterpartMut = useMutation({
+    mutationFn: (p: { tx_id: number; account_id: number }) =>
+      api(`/transfers/${p.tx_id}/create-counterpart`, {
+        method: "POST",
+        body: JSON.stringify({
+          account_id: p.account_id,
+          description: "Motpart från huvudboksfix",
+        }),
+      }),
+    onSuccess: onDone,
+  });
+  const unlinkMut = useMutation({
+    mutationFn: (tx_id: number) =>
+      api(`/transfers/unlink/${tx_id}`, { method: "POST" }),
+    onSuccess: onDone,
+  });
+
+  const sorted = [...accounts].sort((a, b) =>
+    (b.incognito ? 1 : 0) - (a.incognito ? 1 : 0),
+  );
+
+  return (
+    <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
+      {rows.map((tx) => (
+        <div
+          key={tx.id}
+          className="flex items-center gap-2 text-xs bg-white rounded px-2 py-1.5 flex-wrap"
+        >
+          <span className="text-slate-700 w-20 shrink-0">{tx.date}</span>
+          <span
+            className={`w-24 text-right shrink-0 font-medium ${
+              tx.amount < 0 ? "text-rose-600" : "text-emerald-700"
+            }`}
+          >
+            {formatSEK(tx.amount)}
+          </span>
+          <span className="flex-1 min-w-0 truncate">{tx.description}</span>
+          <span className="text-slate-600 shrink-0 truncate">
+            {tx.account_name}
+          </span>
+          <select
+            defaultValue=""
+            onChange={(e) => {
+              if (e.target.value) {
+                counterpartMut.mutate({
+                  tx_id: tx.id,
+                  account_id: Number(e.target.value),
+                });
+              }
+            }}
+            className="border rounded px-1 py-0.5 text-xs bg-white"
+            title="Skapa motsvarande transaktion på valt konto"
+          >
+            <option value="">Skapa motpart…</option>
+            {sorted
+              .filter((a) => a.id !== tx.account_id)
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.incognito ? " (inkognito)" : ""}
+                </option>
+              ))}
+          </select>
+          <button
+            onClick={() => unlinkMut.mutate(tx.id)}
+            className="text-xs text-slate-700 hover:text-rose-600"
+            title="Avmarkera som överföring (räkna som vanlig utgift)"
+          >
+            Avmarkera
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function UnmatchedPastUpcomingList({
+  rows,
+  accounts,
+  onDone,
+}: {
+  rows: CheckUpcomingRow[];
+  accounts: Account[];
+  onDone: () => void;
+}) {
+  const deleteMut = useMutation({
+    mutationFn: (id: number) =>
+      api(`/upcoming/${id}`, { method: "DELETE" }),
+    onSuccess: onDone,
+  });
+  const materializeMut = useMutation({
+    mutationFn: (p: { id: number; account_id: number }) =>
+      api(`/upcoming/${p.id}/materialize-to-account`, {
+        method: "POST",
+        body: JSON.stringify({ account_id: p.account_id }),
+      }),
+    onSuccess: onDone,
+  });
+
+  const sorted = [...accounts].sort((a, b) =>
+    (b.incognito ? 1 : 0) - (a.incognito ? 1 : 0),
+  );
+
+  return (
+    <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
+      {rows.map((u) => (
+        <div
+          key={u.id}
+          className="flex items-center gap-2 text-xs bg-white rounded px-2 py-1.5 flex-wrap"
+        >
+          <span className="text-slate-700 w-20 shrink-0">
+            {u.expected_date}
+          </span>
+          <span className="w-10 text-slate-600 shrink-0 text-xs uppercase">
+            {u.kind === "income" ? "lön" : "fakt."}
+          </span>
+          <span
+            className={`w-24 text-right shrink-0 font-medium ${
+              u.kind === "income" ? "text-emerald-700" : "text-rose-600"
+            }`}
+          >
+            {formatSEK(u.amount)}
+          </span>
+          <span className="flex-1 min-w-0 truncate">{u.name}</span>
+          {u.owner && (
+            <span className="text-slate-600 text-xs">{u.owner}</span>
+          )}
+          <select
+            defaultValue=""
+            onChange={(e) => {
+              if (e.target.value) {
+                materializeMut.mutate({
+                  id: u.id,
+                  account_id: Number(e.target.value),
+                });
+              }
+            }}
+            className="border rounded px-1 py-0.5 text-xs bg-white"
+          >
+            <option value="">Koppla till konto…</option>
+            {sorted.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.incognito ? " (inkognito)" : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              if (confirm(`Radera "${u.name}"?`)) deleteMut.mutate(u.id);
+            }}
+            className="text-xs text-slate-700 hover:text-rose-600"
+          >
+            Radera
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
