@@ -297,7 +297,6 @@ def parse_amex(text: str) -> ParsedStatement:
                     low_desc = desc_clean.lower()
                     if any(m in low_desc for m in (
                         "betalning mottagen", "betalning tack",
-                        "årsavgift", "aviavgift", "valutatillägg",
                     )):
                         holder = None
                     stmt.transactions.append(StatementLine(
@@ -370,14 +369,11 @@ def parse_amex(text: str) -> ParsedStatement:
             # Detta gör att sub-konton bara visar EGENKORTETS köp och
             # refunder, inte lönekontots inbetalningar.
             low_desc = desc_clean.lower()
+            # Endast äkta fakturabetalningar (pengar in) tillhör parent.
+            # Årsavgifter och aviavgifter är "köp" i Amex-systemet och
+            # tillhör huvudkortinnehavaren enligt PDF:ens summa-rader.
             if any(m in low_desc for m in (
-                "betalning mottagen",
-                "betalning tack",
-                "periodens del av årsavgift",
-                "årsavgift",
-                "aviavgift",
-                "valutatillägg",
-                "överdragsavgift",
+                "betalning mottagen", "betalning tack",
             )):
                 holder = None
 
@@ -406,120 +402,188 @@ def parse_amex(text: str) -> ParsedStatement:
     return stmt
 
 
-_HOLDER_SUM_RE = re.compile(
-    r"Summa\s+nya\s+köp\s+för\s+([A-ZÅÄÖ][A-Za-zÅÄÖåäö ]+?)\s+"
-    r"(-?\d{1,3}(?:\.\d{3})*,\d{2})",
-    re.IGNORECASE,
+_SECTION_HEADER_NAME_RE = re.compile(
+    r"^[A-ZÅÄÖ][A-Za-zÅÄÖåäö]+(?:\s+[A-ZÅÄÖ][A-Za-zÅÄÖåäö]+)*$"
 )
 
+# X-kolumn-gräns för Amex sida 2+: X<COL_CUTOFF = vänster spalt,
+# X>=COL_CUTOFF = höger spalt. Empiriskt ~280 från PDF-fragments.
+AMEX_COL_CUTOFF_X = 280.0
 
-def reattribute_holders_by_sum(stmt: ParsedStatement, raw_text: str) -> None:
-    """Använd PDF:ens egna "Summa nya köp för X = NNNN,NN" som sanning för
-    att korrigera cardholder-attribution.
 
-    Amex-textlayouten gör att transaktioner i slutet av huvudkortssektionen
-    ibland får fel holder (KLM-refunder på extrakort osv.). PDF:en visar
-    dock EXAKT summa per holder, och den kan vi lita på.
+def _find_amex_sections(
+    pages_fragments: list[list[tuple[float, float, float, str]]],
+) -> list[tuple[int, float, str]]:
+    """Hitta 'Nya köp för <namn>'-rubriker med (page_idx, Y, holder_name)
+    sorterade per (page, Y descending). Ignorerar 'Summa nya köp för ...'."""
+    sections: list[tuple[int, float, str]] = []
+    for page_idx, frags in enumerate(pages_fragments):
+        frags_sorted = sorted(frags, key=lambda t: (-t[1], t[0]))
+        for i, (x, y, _ph, text) in enumerate(frags_sorted):
+            if text.strip() != "Nya köp för":
+                continue
+            # "Summa nya köp för..." börjar med "Summa" inte "Nya"
+            # Skanna framåt på samma Y för första namn-fragment
+            name_parts: list[str] = []
+            for x2, y2, _ph2, text2 in frags_sorted[i + 1:]:
+                if y2 < y - 2:
+                    break  # lämnat raden
+                if abs(y2 - y) > 2:
+                    continue
+                if x2 <= x:
+                    continue
+                t2 = text2.strip()
+                # Stoppa vid delimiter-ord
+                if t2 in ("Extrakort", "som", "slutar", "på") or t2.isdigit():
+                    break
+                if _SECTION_HEADER_NAME_RE.match(t2):
+                    name_parts.append(t2)
+                else:
+                    break
+            if name_parts:
+                holder = " ".join(name_parts)
+                sections.append((page_idx, y, holder))
+    # Sortera per (page, Y descending) så "toppsektion" kommer först
+    sections.sort(key=lambda t: (t[0], -t[1]))
+    return sections
 
-    Algoritm (greedy):
-    1. Hitta alla summa-rader från texten → mapping {holder → target_netto}
-    2. Räkna nuvarande netto per holder (exklusive None/gemensamma)
-    3. Om någon holder är FÖR låg (mer negativ) eller FÖR hög (mindre
-       negativ/mer positiv) än target → hitta kandidater att flytta till
-       annan holder tills summorna matchar inom tolerans.
-    4. Om total-avvikelsen är > 50 kr → ge upp (någonting är avvikande)
-       och behåll initial attribution.
 
-    Målet är netto (positive + negative) per holder, eftersom KLM-refunder
-    räknas som 'negativa köp' i Amex-summa-raden.
+def _build_merchant_position_map(
+    pages_fragments: list[list[tuple[float, float, float, str]]],
+) -> dict[str, list[tuple[int, float, float]]]:
+    """Mapa merchant-text → lista av (page_idx, y, x) förekomster.
+    Används för att slå upp var en transaktion faktiskt står i PDF:en."""
+    positions: dict[str, list[tuple[int, float, float]]] = {}
+    for page_idx, frags in enumerate(pages_fragments):
+        for x, y, _ph, text in frags:
+            # Bara merchant-relevanta rader (hoppas vara unika)
+            if len(text) < 3 or x < 80:
+                # X<80 = mycket vänsterjusterat = meta/rubrik
+                pass
+            positions.setdefault(text.strip(), []).append((page_idx, y, x))
+    return positions
+
+
+def reattribute_holders_by_layout(
+    stmt: ParsedStatement,
+    pages_fragments: list[list[tuple[float, float, float, str]]],
+) -> None:
+    """EXAKT cardholder-attribution via fragment-layout.
+
+    Amex sida 2+ är tvåspaltslayout:
+    - VÄNSTER kolumn (X < 280): HUVUDKORTETS sektion (över hela sidan)
+    - HÖGER kolumn (X >= 280): flödar igenom sektionerna i Y-ordning —
+      transaktioner under en sektionsrubrik tillhör den rubriken.
+
+    Matchar tx till fragment genom att hitta ett (merchant-fragment,
+    amount-fragment)-PAR på samma Y där beloppet matchar tx.amount.
+    Detta fungerar även när samma merchant förekommer i båda kolumner.
     """
-    # Läs mål-summor från texten
-    targets: dict[str, Decimal] = {}
-    for m in _HOLDER_SUM_RE.finditer(raw_text):
-        name = m.group(1).strip()
-        amt = _parse_amount(m.group(2))
-        # Normalisera namn: ibland följer "Extrakort..." på samma rad
-        # men regexen fångar bara [A-Za-zÅÄÖ ] som ger rent namn
-        if name and amt > 0:
-            targets[name] = -amt  # netto hos oss = negativt (skuld)
+    sections = _find_amex_sections(pages_fragments)
+    if len(sections) < 2:
+        return  # Inte multi-holder
 
-    if len(targets) < 2:
-        return  # Bara en holder eller ingen — ingen re-attribution behövs
+    # Per-sida huvudkortet = sektionen med högsta Y (första efter topp)
+    primary_per_page: dict[int, str] = {}
+    for page_idx, y_sec, holder in sections:
+        if page_idx not in primary_per_page:
+            primary_per_page[page_idx] = holder
 
-    # Räkna nuvarande netto per holder (exklusive gemensamma)
-    current: dict[str, Decimal] = {name: Decimal("0") for name in targets}
+    # Förbered amount-fragments per sida (alla tal med ,\d{2})
+    amount_frags: list[list[tuple[float, float, Decimal, bool]]] = []
+    amount_re = re.compile(r"^(-?)(\d{1,3}(?:\.\d{3})*,\d{2})$")
+    for frags in pages_fragments:
+        page_amounts: list[tuple[float, float, Decimal, bool]] = []
+        for x, y, _ph, text in frags:
+            m = amount_re.match(text.strip())
+            if m:
+                sign = -1 if m.group(1) == "-" else 1
+                val = _parse_amount(m.group(2))
+                page_amounts.append((x, y, val * sign, sign < 0))
+        amount_frags.append(page_amounts)
+
+    # Spåra redan använda (x, y) så samma fragment inte matchas av två
+    # transaktioner med identiska belopp (t.ex. två Klm -495,00).
+    used_positions: set[tuple[int, float, float]] = set()
+
+    def _find_tx_position(
+        tx: StatementLine,
+    ) -> tuple[int, float, float] | None:
+        """Amount-first matching: hitta amount-fragment som matchar
+        tx.amount och INTE redan är använt, sen ta X från amount. Detta
+        är entydigt även när samma merchant förekommer i flera kolumner."""
+        target_abs = abs(tx.amount)
+        target_sign_neg = tx.amount > 0  # positivt hos oss = negativt i källan (-XX,XX)
+        for page_idx, page_amounts in enumerate(amount_frags):
+            # Kandidater: amount matchar inom 0.02 kr OCH rätt tecken
+            for ax, ay, aval, is_neg_source in page_amounts:
+                if (page_idx, ax, ay) in used_positions:
+                    continue
+                if abs(abs(aval) - target_abs) > Decimal("0.02"):
+                    continue
+                if is_neg_source != target_sign_neg:
+                    continue
+                # Hitta merchant-fragment på samma Y, till VÄNSTER om amount
+                merchant_cands: list[tuple[float, str]] = []
+                for x, y, _ph, text in pages_fragments[page_idx]:
+                    if abs(y - ay) > 3 or x >= ax:
+                        continue
+                    ts = text.strip()
+                    if not ts or ts in ("CR", ".", ","):
+                        continue
+                    # Skippa datum-siffror (2-siffriga tal)
+                    if ts.isdigit() and len(ts) <= 2:
+                        continue
+                    merchant_cands.append((x, ts))
+                if not merchant_cands:
+                    continue
+                # Välj den som ligger längst till höger (närmast amount) som
+                # är en riktig text (inte bara datum-siffror). Merchant-text
+                # har normalt X=89 (vänster kolumn) eller X=355 (höger kolumn).
+                # X-värdet för MERCHANT = X där köp sitter → avgör kolumn.
+                merchant_cands.sort(key=lambda t: -t[0])  # högst X först
+                # Ta första som är en "merchant-X" (X<280 eller X>=280, inte
+                # datum i mitten 281-340)
+                merchant_x = None
+                for x, ts in merchant_cands:
+                    if x < 200 or x >= 340:
+                        merchant_x = x
+                        break
+                if merchant_x is None:
+                    merchant_x = merchant_cands[0][0]
+                used_positions.add((page_idx, ax, ay))
+                return (page_idx, ay, merchant_x)
+        return None
+
     for tx in stmt.transactions:
-        if tx.cardholder in current:
-            current[tx.cardholder] += tx.amount
+        if tx.cardholder is None:
+            continue
+        low_desc = tx.description.lower()
+        if any(m in low_desc for m in (
+            "betalning mottagen", "betalning tack",
+        )):
+            continue
 
-    # Om båda är redan nära mål → klart
-    total_diff = sum(
-        abs(current[n] - targets[n]) for n in targets
-    )
-    if total_diff < Decimal("5"):
-        return
+        pos = _find_tx_position(tx)
+        if pos is None:
+            continue
+        page_idx, y_tx, x_tx = pos
 
-    # Hitta transaktioner som är KANDIDATER att flytta (inte gemensamma).
-    # Bankavgifter och fakturabetalningar har cardholder=None → inte med.
-    candidates = [t for t in stmt.transactions if t.cardholder in current]
+        if x_tx < AMEX_COL_CUTOFF_X:
+            new_holder = primary_per_page.get(page_idx)
+        else:
+            above = [
+                (y_s, h) for p, y_s, h in sections
+                if p == page_idx and y_s > y_tx
+            ]
+            if not above:
+                new_holder = primary_per_page.get(page_idx)
+            else:
+                above.sort(key=lambda t: t[0] - y_tx)
+                new_holder = above[0][1]
 
-    # Greedy: för varje holder som har för "mycket" (dvs for negativ netto,
-    # eller för lite positivt), leta transaktion att flytta till rätt holder.
-    # Max 200 iterationer för säkerhet.
-    for _ in range(200):
-        worst_name = None
-        worst_diff = Decimal("0")
-        for name in targets:
-            d = current[name] - targets[name]
-            if abs(d) > abs(worst_diff):
-                worst_diff = d
-                worst_name = name
-        if worst_name is None or abs(worst_diff) < Decimal("1"):
-            break
-
-        # worst_diff > 0: worst har MER positivt än target → flytta POS tx bort
-        #                  ELLER flytta NEG tx hit från annan
-        # worst_diff < 0: worst har MER negativt → flytta NEG tx bort
-        other_names = [n for n in targets if n != worst_name]
-        # Hitta bästa tx att flytta
-        best_tx = None
-        best_move = None  # (from_holder, to_holder)
-        best_score = Decimal("9999999")
-        for tx in candidates:
-            for other in other_names:
-                if tx.cardholder == worst_name:
-                    # Flytta FROM worst TO other
-                    # Nytt worst_diff = worst_diff - tx.amount
-                    # Nytt other_diff = (current[other] - tx.amount) - targets[other]
-                    new_worst_diff = worst_diff - tx.amount
-                    new_other_diff = (current[other] + tx.amount) - targets[other]
-                    # Poäng: minimera total absolut avvikelse
-                    score = abs(new_worst_diff) + abs(new_other_diff)
-                    if score < best_score:
-                        best_score = score
-                        best_tx = tx
-                        best_move = (worst_name, other)
-                elif tx.cardholder == other:
-                    # Flytta FROM other TO worst
-                    new_worst_diff = worst_diff + tx.amount
-                    new_other_diff = (current[other] - tx.amount) - targets[other]
-                    score = abs(new_worst_diff) + abs(new_other_diff)
-                    if score < best_score:
-                        best_score = score
-                        best_tx = tx
-                        best_move = (other, worst_name)
-
-        # Om ingen flytt förbättrar → sluta
-        current_score = sum(
-            abs(current[n] - targets[n]) for n in targets
-        )
-        if best_tx is None or best_score >= current_score:
-            break
-        # Applicera flytten
-        from_h, to_h = best_move
-        current[from_h] -= best_tx.amount
-        current[to_h] += best_tx.amount
-        best_tx.cardholder = to_h
+        if new_holder and new_holder != tx.cardholder:
+            tx.cardholder = new_holder
 
 
 _KNOWN_CITIES = {

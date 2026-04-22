@@ -1,8 +1,8 @@
 """Autodetect: vilken kortutgivare är detta PDF-kontoutdrag?"""
 from __future__ import annotations
 
-from . import ParsedStatement, extract_pdf_text_layout
-from .amex import looks_like_amex, parse_amex, reattribute_holders_by_sum
+from . import ParsedStatement, extract_pdf_fragments, extract_pdf_text_layout
+from .amex import looks_like_amex, parse_amex, reattribute_holders_by_layout
 from .seb_kort import looks_like_seb_kort, parse_seb_kort
 
 
@@ -34,12 +34,12 @@ def parse_statement(
 
     if is_amex:
         stmt = parse_amex(text)
-        # Re-attribute cardholders via PDF:ens egna "Summa nya köp för X"
-        # rader — Amex text-layout ger fel cardholder för köp i slutet
-        # av huvudkortssektionen (KLM-refunder m.fl.). Vi har sanningen
-        # direkt i PDF:ens summa-rader och använder greedy assignment.
+        # EXAKT re-attribution via fragment-layout:
+        # - VÄNSTER kolumn (X<280) → huvudkort
+        # - HÖGER kolumn (X>=280) → sektionsrubrikens holder närmast ovanför
         try:
-            reattribute_holders_by_sum(stmt, text)
+            fragments = extract_pdf_fragments(pdf_bytes)
+            reattribute_holders_by_layout(stmt, fragments)
         except Exception:
             pass
         return stmt
