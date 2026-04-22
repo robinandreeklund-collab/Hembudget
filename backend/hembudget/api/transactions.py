@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -463,6 +464,66 @@ def reclassify(tx_id: int, session: Session = Depends(db)) -> Transaction:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
     tx.normalized_merchant = normalize_merchant(tx.raw_description)
     session.flush()
+    return tx
+
+
+@router.post("/accounts/{account_id}/manual-transaction", response_model=TransactionOut)
+def create_manual_transaction(
+    account_id: int, payload: dict, session: Session = Depends(db),
+) -> Transaction:
+    """Skapa en manuell Transaction på ett konto. Används främst för att
+    dokumentera inkognito-kontots löner och överföringar.
+
+    Body: `{date: YYYY-MM-DD, amount: number, description: str,
+    category_id?: int}`. Körs igenom kategoriserings- och transfer-
+    detektorns pipeline så den paras automatiskt mot motsvarande rader
+    på andra konton.
+    """
+    import hashlib
+    from datetime import date as _date
+
+    acc = session.get(Account, account_id)
+    if acc is None:
+        raise HTTPException(404, "Account not found")
+
+    date_s = payload.get("date")
+    amount_raw = payload.get("amount")
+    description = (payload.get("description") or "").strip()
+    category_id = payload.get("category_id")
+
+    if not date_s or amount_raw is None or not description:
+        raise HTTPException(400, "date, amount och description krävs")
+
+    try:
+        tx_date = _date.fromisoformat(date_s)
+    except ValueError:
+        raise HTTPException(400, f"Ogiltigt datum: {date_s}") from None
+
+    try:
+        amount = Decimal(str(amount_raw))
+    except Exception:
+        raise HTTPException(400, f"Ogiltigt belopp: {amount_raw}") from None
+
+    # Unik hash för dedup
+    key = f"manual|{account_id}|{date_s}|{amount}|{description.lower()}"
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    tx = Transaction(
+        account_id=account_id, date=tx_date, amount=amount,
+        currency=acc.currency or "SEK",
+        raw_description=description, hash=h,
+        normalized_merchant=normalize_merchant(description),
+        category_id=category_id,
+        user_verified=bool(category_id),
+    )
+    session.add(tx)
+    session.flush()
+
+    # Kör transfer-detektorn så överföringar mellan inkognito och
+    # gemensamma konton paras ihop automatiskt
+    TransferDetector(session).detect_internal_transfers()
+    session.flush()
+
     return tx
 
 

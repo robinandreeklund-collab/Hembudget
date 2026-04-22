@@ -518,6 +518,107 @@ function AccountSetupRow({
           </label>
         )}
       </div>
+      <ManualTxForm account={account} />
+    </div>
+  );
+}
+
+function ManualTxForm({ account }: { account: Account }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const mut = useMutation({
+    mutationFn: () =>
+      api(`/accounts/${account.id}/manual-transaction`, {
+        method: "POST",
+        body: JSON.stringify({
+          date,
+          amount: Number(amount),
+          description: description.trim(),
+        }),
+      }),
+    onSuccess: () => {
+      setMessage("Transaktion tillagd");
+      setAmount("");
+      setDescription("");
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["ytd-income"] });
+      setTimeout(() => setMessage(null), 3000);
+    },
+    onError: (e: Error) => setMessage("Fel: " + e.message),
+  });
+
+  return (
+    <div className="mt-2 pt-2 border-t">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs text-brand-600 hover:underline"
+      >
+        {open ? "− Dölj manuell transaktion" : "+ Lägg till manuell transaktion"}
+      </button>
+      {account.incognito && !open && (
+        <span className="text-xs text-slate-600 ml-2">
+          — används för att dokumentera lön och överföringar från detta konto
+        </span>
+      )}
+      {open && (
+        <div className="mt-2 grid grid-cols-1 md:grid-cols-[auto_auto_1fr_auto] gap-2 items-end text-sm">
+          <label>
+            <div className="text-xs text-slate-700">Datum</div>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="border rounded px-2 py-1"
+            />
+          </label>
+          <label>
+            <div className="text-xs text-slate-700">Belopp (+ in, − ut)</div>
+            <input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="30000 eller -10000"
+              className="border rounded px-2 py-1 w-40 text-right"
+            />
+          </label>
+          <label>
+            <div className="text-xs text-slate-700">Beskrivning</div>
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={
+                account.incognito
+                  ? "Lön Inkab / Överföring till gemensamt"
+                  : "Beskrivning"
+              }
+              className="border rounded px-2 py-1 w-full"
+            />
+          </label>
+          <button
+            onClick={() => mut.mutate()}
+            disabled={!amount || !description || mut.isPending}
+            className="bg-brand-600 text-white px-3 py-1.5 rounded disabled:opacity-50"
+          >
+            {mut.isPending ? "Sparar…" : "Lägg till"}
+          </button>
+        </div>
+      )}
+      {message && (
+        <div
+          className={`mt-1 text-xs ${
+            message.startsWith("Fel") ? "text-rose-600" : "text-emerald-700"
+          }`}
+        >
+          {message}
+        </div>
+      )}
     </div>
   );
 }

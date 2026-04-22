@@ -11,7 +11,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func as _sa_func
 from sqlalchemy.orm import Session
+
+
+def func_lower(col):
+    return _sa_func.lower(col)
 
 from ..categorize.engine import CategorizationEngine
 from ..config import settings
@@ -22,6 +27,7 @@ from ..db.models import (
     Transaction,
     UpcomingTransaction,
     UpcomingTransactionLine,
+    User,
 )
 from ..llm.client import LMStudioClient, LLMUnavailable
 from ..splits import build_lines_from_vision, resolve_category_id
@@ -246,6 +252,72 @@ def list_upcoming(
     return q.order_by(UpcomingTransaction.expected_date.asc()).all()
 
 
+def _materialize_on_incognito_account(
+    session: Session, upcoming: UpcomingTransaction,
+) -> Transaction | None:
+    """Om upcomingen är en inkomst med en `owner` som matchar ägaren av
+    ett inkognito-konto, skapa automatiskt en riktig Transaction på det
+    kontot och bind den mot upcomingen.
+
+    Avsikt: användaren lägger in partnerns lön via /upcoming/ eller
+    parse-text, och systemet genererar direkt en 'lönerad' på hennes
+    inkognito-konto — så saldot, YTD och family-breakdown speglar
+    verkligheten utan att hon måste exportera en CSV.
+
+    Returnerar den skapade Transaction:en, eller None om inget konto
+    hittas eller upcomingen redan är matchad."""
+    if upcoming.matched_transaction_id is not None:
+        return None
+    if upcoming.kind != "income":
+        return None
+    owner = (upcoming.owner or "").strip()
+    if not owner:
+        return None
+
+    # Hitta inkognito-konto där ägarens User.name matchar owner-strängen
+    user_row = (
+        session.query(User)
+        .filter(func_lower(User.name) == owner.lower())
+        .first()
+    )
+    if user_row is None:
+        return None
+
+    incog_acc = (
+        session.query(Account)
+        .filter(
+            Account.owner_id == user_row.id,
+            Account.incognito.is_(True),
+        )
+        .first()
+    )
+    if incog_acc is None:
+        return None
+
+    import hashlib
+    from datetime import datetime as _dt
+    # Unik hash baserat på konto+datum+belopp+upcoming-ID så dubbelkörning
+    # inte skapar dubletter
+    key = (
+        f"{incog_acc.id}|{upcoming.expected_date.isoformat()}|"
+        f"{upcoming.amount}|incog-up-{upcoming.id}"
+    )
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    tx = Transaction(
+        account_id=incog_acc.id,
+        date=upcoming.expected_date,
+        amount=upcoming.amount,  # positivt för income
+        currency="SEK",
+        raw_description=upcoming.name or f"Inkomst ({owner})",
+        hash=h,
+    )
+    session.add(tx)
+    session.flush()
+    upcoming.matched_transaction_id = tx.id
+    return tx
+
+
 @router.post("/", response_model=UpcomingOut)
 def create_upcoming(payload: UpcomingIn, session: Session = Depends(db)) -> UpcomingTransaction:
     if payload.kind not in ("bill", "income"):
@@ -275,6 +347,10 @@ def create_upcoming(payload: UpcomingIn, session: Session = Depends(db)) -> Upco
     # mot en ev. redan befintlig Transaction.
     from ..upcoming_match import UpcomingMatcher as _UM
     _UM(session).backfill_match([u])
+    # Inkognito-auto-materialize: partner-lön → skapa Transaction på
+    # hennes inkognito-konto så saldo och family-breakdown speglar den.
+    if u.matched_transaction_id is None:
+        _materialize_on_incognito_account(session, u)
     return u
 
 
@@ -399,6 +475,8 @@ def parse_text(
     session.flush()
     from ..upcoming_match import UpcomingMatcher as _UM
     _UM(session).backfill_match([u])
+    if u.matched_transaction_id is None:
+        _materialize_on_incognito_account(session, u)
     return u
 
 
