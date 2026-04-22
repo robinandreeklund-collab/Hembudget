@@ -236,30 +236,36 @@ def _enrich_upcoming(
     session: Session, ups: list[UpcomingTransaction],
 ) -> list[dict]:
     """Bygg UpcomingOut-dicts med paid_amount/status från UpcomingPayment."""
-    from ..db.models import UpcomingPayment
+    from ..db.models import UpcomingPayment, Account
     if not ups:
         return []
     ids = [u.id for u in ups]
-    # Hämta alla payments + tx-amounts i en query
+    # Hämta alla payments + tx-detaljer i en query. Frontend vill se
+    # belopp/datum/beskrivning per delbetalning så användaren kan
+    # granska matchningar och ångra felaktiga (t.ex. för överbetalda
+    # fakturor där någon tx matchats fel).
     pay_rows = (
         session.query(
             UpcomingPayment.upcoming_id,
-            UpcomingPayment.transaction_id,
-            Transaction.amount,
+            Transaction,
         )
         .join(Transaction, Transaction.id == UpcomingPayment.transaction_id)
         .filter(UpcomingPayment.upcoming_id.in_(ids))
+        .order_by(Transaction.date.asc(), Transaction.id.asc())
         .all()
     )
-    by_up: dict[int, list[tuple[int, Decimal]]] = {}
-    for up_id, tx_id, amount in pay_rows:
-        by_up.setdefault(up_id, []).append((tx_id, amount))
+    account_names = {
+        a.id: a.name for a in session.query(Account.id, Account.name).all()
+    }
+    by_up: dict[int, list[tuple[int, Decimal, Transaction]]] = {}
+    for up_id, tx in pay_rows:
+        by_up.setdefault(up_id, []).append((tx.id, tx.amount, tx))
 
     TOLERANCE = Decimal("2.00")
     out: list[dict] = []
     for u in ups:
         entries = by_up.get(u.id, [])
-        paid = sum((abs(a) for _, a in entries), Decimal("0"))
+        paid = sum((abs(a) for _, a, _ in entries), Decimal("0"))
         if paid == 0:
             status = "unpaid"
         else:
@@ -293,7 +299,18 @@ def _enrich_upcoming(
                 }
                 for ln in u.lines
             ],
-            "payment_tx_ids": [tid for tid, _ in entries],
+            "payment_tx_ids": [tid for tid, _, _ in entries],
+            "payment_transactions": [
+                {
+                    "id": tid,
+                    "date": tx.date.isoformat(),
+                    "amount": float(tx.amount),
+                    "description": tx.raw_description,
+                    "account_id": tx.account_id,
+                    "account_name": account_names.get(tx.account_id),
+                }
+                for tid, _, tx in entries
+            ],
             "paid_amount": float(paid),
             "payment_status": status,
         }

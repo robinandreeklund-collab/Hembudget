@@ -281,6 +281,41 @@ def test_ledger_transfer_balance_is_zero_for_paired_transfer(client):
     assert abs(transfer["value"]) <= 2.0
 
 
+def test_upcoming_list_exposes_payment_transactions_for_unmatch_ui(client):
+    """/upcoming/ ska returnera payment_transactions med full detalj per
+    delbetalning (date, amount, description, account_name) så /upcoming-
+    UI:t kan visa listan + 'Ångra'-knappar utan extra fetch."""
+    c, SL = client
+    ids = _seed_scenario(SL)
+
+    ups = c.get("/upcoming/?only_future=false").json()
+    amex = next(u for u in ups if u["id"] == ids["amex_up_id"])
+    assert len(amex["payment_transactions"]) == 1
+    p = amex["payment_transactions"][0]
+    assert p["id"] == ids["tx_partial_id"]
+    assert p["amount"] == pytest.approx(-2000.0)
+    assert p["description"] == "Amex delbet"
+    assert p["account_name"] == "Checking"
+
+
+def test_unmatch_upcoming_removes_tx_from_payment_list(client):
+    """Efter /transactions/{tx_id}/unmatch-upcoming ska tx:en ej längre
+    räknas som delbetalning — upcomingens payment_status går tillbaka
+    till 'unpaid' eller 'partial' beroende på om fler betalningar fanns."""
+    c, SL = client
+    ids = _seed_scenario(SL)
+
+    # Ångra Amex-delbetalningen
+    r = c.post(f"/transactions/{ids['tx_partial_id']}/unmatch-upcoming")
+    assert r.status_code == 200, r.text
+
+    ups = c.get("/upcoming/?only_future=false").json()
+    amex = next(u for u in ups if u["id"] == ids["amex_up_id"])
+    assert amex["payment_status"] == "unpaid"
+    assert amex["paid_amount"] == pytest.approx(0.0)
+    assert len(amex["payment_transactions"]) == 0
+
+
 def test_ledger_upcoming_summary_uses_remaining_for_partial(client):
     """upcoming_summary.unmatched_sum ska vara 26 500 (1500 el +
     25 000 Amex-remaining) + 7000 bolån = 33 500. Bolånet räknas med

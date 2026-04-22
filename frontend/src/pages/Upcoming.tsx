@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
   CalendarPlus, ChevronDown, ChevronRight, Image as ImageIcon,
-  Loader2, Sparkles, Trash2,
+  Loader2, Sparkles, Trash2, Unlink,
   TrendingDown, TrendingUp, Users,
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
@@ -41,6 +41,14 @@ interface UpcomingItem {
   matched_transaction_id: number | null;
   lines: UpcomingLine[];
   payment_tx_ids?: number[];
+  payment_transactions?: Array<{
+    id: number;
+    date: string;
+    amount: number;
+    description: string;
+    account_id: number;
+    account_name: string | null;
+  }>;
   paid_amount?: number;
   payment_status?: "unpaid" | "partial" | "paid" | "overpaid";
 }
@@ -765,7 +773,10 @@ function UpcomingRow({
   onUpdate: (id: number, data: Partial<UpcomingItem>) => void;
   onSetLines: (id: number, lines: Array<Omit<UpcomingLine, "id">>) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // Auto-expandera raden om den är överbetald — då är det troligtvis
+  // en fel-matchning och användaren vill se listan direkt för att
+  // kunna ångra den.
+  const [open, setOpen] = useState(i.payment_status === "overpaid");
   const debitAccount = accounts.find((a) => a.id === i.debit_account_id);
   const hasDetails =
     i.invoice_number || i.ocr_reference || i.bankgiro || i.plusgiro || i.iban ||
@@ -828,9 +839,11 @@ function UpcomingRow({
               </span>
             )}
             {i.payment_status === "overpaid" && (
-              <span className="text-rose-600">
-                · ⚠ överbetald {formatSEK(i.paid_amount ?? 0)} av{" "}
-                {formatSEK(i.amount)}
+              <span className="text-rose-600 font-medium">
+                · ⚠ överbetald: {formatSEK(i.paid_amount ?? 0)} av{" "}
+                {formatSEK(i.amount)} (+
+                {formatSEK((i.paid_amount ?? 0) - i.amount)} för mycket) —
+                expandera för att ångra fel-matchning
               </span>
             )}
             {i.matched_transaction_id && i.payment_status !== "paid" &&
@@ -891,6 +904,9 @@ function UpcomingRow({
 
       {open && (
         <div className="border-t bg-slate-50 p-3 space-y-3">
+          {(i.payment_transactions?.length ?? 0) > 0 && (
+            <MatchedPaymentsList item={i} />
+          )}
           <div className="grid grid-cols-2 gap-3 text-xs">
             <EditField
               label={L.dateLabel}
@@ -1147,6 +1163,84 @@ function Detail({ label, value, mono }: { label: string; value: string; mono?: b
     <div>
       <span className="text-slate-700">{label}: </span>
       <span className={mono ? "font-mono" : ""}>{value}</span>
+    </div>
+  );
+}
+
+function MatchedPaymentsList({ item }: { item: UpcomingItem }) {
+  const qc = useQueryClient();
+  const unmatchMut = useMutation({
+    mutationFn: (txId: number) =>
+      api(`/transactions/${txId}/unmatch-upcoming`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+    },
+  });
+  const payments = item.payment_transactions ?? [];
+  const isOverpaid = item.payment_status === "overpaid";
+  return (
+    <div className={
+      "rounded border p-2 " +
+      (isOverpaid
+        ? "border-rose-300 bg-rose-50"
+        : "border-slate-200 bg-white")
+    }>
+      <div className="text-xs font-medium text-slate-700 mb-1.5">
+        {isOverpaid ? (
+          <span className="text-rose-700">
+            ⚠ Överbetald — troligen fel-matchning. Ångra nedan för att
+            frigöra transaktionen:
+          </span>
+        ) : (
+          <>Matchade betalningar ({payments.length} st)</>
+        )}
+      </div>
+      <div className="space-y-1">
+        {payments.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center gap-2 text-xs bg-white rounded border px-2 py-1"
+          >
+            <span className="text-slate-700 w-20 shrink-0">{p.date}</span>
+            <span
+              className={
+                "w-24 text-right shrink-0 font-medium " +
+                (p.amount < 0 ? "text-rose-600" : "text-emerald-700")
+              }
+            >
+              {formatSEK(p.amount)}
+            </span>
+            <span className="flex-1 min-w-0 truncate" title={p.description}>
+              {p.description}
+            </span>
+            <span className="text-slate-600 w-32 shrink-0 truncate">
+              {p.account_name ?? `#${p.account_id}`}
+            </span>
+            <button
+              onClick={() => {
+                if (confirm(
+                  `Ångra matchningen av "${p.description}" (${formatSEK(p.amount)}) mot "${item.name}"?\n\nTransaktionen finns kvar — den bara slutar räknas som en betalning av denna faktura/lön.`,
+                )) {
+                  unmatchMut.mutate(p.id);
+                }
+              }}
+              disabled={unmatchMut.isPending}
+              className="text-rose-600 hover:text-rose-800 disabled:opacity-50 shrink-0"
+              title="Ångra denna matchning — transaktionen frigörs"
+            >
+              <Unlink className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      {unmatchMut.error && (
+        <div className="text-xs text-rose-600 mt-1">
+          {(unmatchMut.error as Error).message}
+        </div>
+      )}
     </div>
   );
 }
