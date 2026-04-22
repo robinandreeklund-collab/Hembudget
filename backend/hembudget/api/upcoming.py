@@ -505,6 +505,82 @@ def materialize_to_account(
     }
 
 
+@router.get("/{upcoming_id}/find-bank-tx")
+def find_bank_tx_candidates(
+    upcoming_id: int,
+    amount_tolerance: float = 10.0,
+    date_tolerance_days: int = 14,
+    session: Session = Depends(db),
+) -> dict:
+    """Lista befintliga Transactions som kan matcha denna upcoming.
+
+    Bredare sök än backfill_match (±10 kr, ±14 dagar som default) så
+    användaren kan hitta en kreditkorts-autogiro-dragning som inte
+    matchades automatiskt (t.ex. pga beloppsskillnad öresavrundning,
+    eller att användaren bara betalade minimibeloppet, eller fel
+    månads-faktura).
+
+    Sorterar efter exakthet (minst amount_diff + minst date_diff).
+    Exkluderar tx som redan är bundna till NÅGON upcoming.
+    """
+    from datetime import timedelta as _td
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+
+    expected_amount = u.amount if u.kind == "income" else -u.amount
+    target_date = u.debit_date or u.expected_date
+    low_date = target_date - _td(days=date_tolerance_days)
+    high_date = target_date + _td(days=date_tolerance_days)
+
+    from ..db.models import UpcomingPayment as _UpPay
+    # Exkludera redan matchade
+    from sqlalchemy import select as _select
+    q = session.query(Transaction).filter(
+        Transaction.date >= low_date,
+        Transaction.date <= high_date,
+        Transaction.id.not_in(_select(_UpPay.transaction_id)),
+    )
+    all_candidates = q.all()
+
+    amt_tol = float(amount_tolerance)
+    ranked: list[tuple[float, int, Transaction]] = []
+    for tx in all_candidates:
+        diff = abs(float(tx.amount) - float(expected_amount))
+        if diff > amt_tol:
+            continue
+        date_diff = abs((tx.date - target_date).days)
+        ranked.append((diff, date_diff, tx))
+    ranked.sort(key=lambda t: (t[0], t[1]))
+
+    # Bygg response
+    accounts = {a.id: a for a in session.query(Account).all()}
+    out = []
+    for diff, date_diff, tx in ranked[:30]:
+        acc = accounts.get(tx.account_id)
+        out.append({
+            "transaction_id": tx.id,
+            "date": tx.date.isoformat(),
+            "amount": float(tx.amount),
+            "description": tx.raw_description,
+            "account_id": tx.account_id,
+            "account_name": acc.name if acc else None,
+            "is_transfer": tx.is_transfer,
+            "amount_diff": round(diff, 2),
+            "date_diff_days": date_diff,
+            "exact_match": diff <= 1.0 and date_diff <= 3,
+        })
+
+    return {
+        "upcoming_id": u.id,
+        "upcoming_name": u.name,
+        "upcoming_amount": float(u.amount),
+        "expected_tx_amount": float(expected_amount),
+        "target_date": target_date.isoformat(),
+        "candidates": out,
+    }
+
+
 @router.patch("/{upcoming_id}", response_model=UpcomingOut)
 def update_upcoming(
     upcoming_id: int, payload: UpcomingUpdate, session: Session = Depends(db)

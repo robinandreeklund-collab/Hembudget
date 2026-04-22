@@ -830,6 +830,10 @@ function UpcomingRow({
                 · ✓ matchad mot transaktion #{i.matched_transaction_id}
               </span>
             )}
+            {(!i.payment_status || i.payment_status === "unpaid" ||
+              i.payment_status === "partial") && (
+              <FindBankTxButton item={i} />
+            )}
             {(!i.payment_status || i.payment_status === "unpaid") &&
               !i.matched_transaction_id && (
               <MaterializeDropdown item={i} accounts={accounts} />
@@ -1550,5 +1554,269 @@ function MaterializeDropdown({
         ))}
       </select>
     </span>
+  );
+}
+
+interface BankTxCandidate {
+  transaction_id: number;
+  date: string;
+  amount: number;
+  description: string;
+  account_id: number;
+  account_name: string | null;
+  is_transfer: boolean;
+  amount_diff: number;
+  date_diff_days: number;
+  exact_match: boolean;
+}
+
+function FindBankTxButton({ item }: { item: UpcomingItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <span className="text-slate-400">·</span>
+      <button
+        onClick={() => setOpen(true)}
+        className="text-brand-600 hover:underline text-xs"
+        title="Leta efter en befintlig bankrad och koppla (stödjer delbetalningar)"
+      >
+        hitta bankrad
+      </button>
+      {open && (
+        <FindBankTxModal item={item} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
+function FindBankTxModal({
+  item,
+  onClose,
+}: {
+  item: UpcomingItem;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [amtTol, setAmtTol] = useState(50);
+  const [dateTol, setDateTol] = useState(14);
+
+  const candsQ = useQuery({
+    queryKey: ["find-bank-tx", item.id, amtTol, dateTol],
+    queryFn: () =>
+      api<{
+        upcoming_name: string;
+        expected_tx_amount: number;
+        target_date: string;
+        candidates: BankTxCandidate[];
+      }>(
+        `/upcoming/${item.id}/find-bank-tx?amount_tolerance=${amtTol}&date_tolerance_days=${dateTol}`,
+      ),
+  });
+
+  const matchMut = useMutation({
+    mutationFn: async (txIds: number[]) => {
+      // Sekventiellt så vi inte skapar race conditions
+      for (const id of txIds) {
+        await api(`/transactions/${id}/match-upcoming`, {
+          method: "POST",
+          body: JSON.stringify({ upcoming_id: item.id }),
+        });
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["budget"] });
+      onClose();
+    },
+  });
+
+  const cands = candsQ.data?.candidates ?? [];
+  const selectedAmount = cands
+    .filter((c) => selected.has(c.transaction_id))
+    .reduce((s, c) => s + c.amount, 0);
+  const expectedAmount = candsQ.data?.expected_tx_amount ?? 0;
+  const selectionDiff = Math.abs(selectedAmount - expectedAmount);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-slate-900/50 flex items-start justify-center p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-3xl mt-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between p-4 border-b">
+          <div>
+            <h2 className="text-lg font-semibold">Hitta bankrad att koppla</h2>
+            <div className="text-sm text-slate-700 mt-1">
+              <strong>{item.name}</strong> · {formatSEK(item.amount)} ·
+              förfall {item.expected_date}
+            </div>
+            <div className="text-xs text-slate-600 mt-0.5">
+              Välj EN rad om fakturan betalats i ett svep, eller FLERA för
+              delbetalningar som summerar till{" "}
+              <strong>{formatSEK(expectedAmount)}</strong>.
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-600 hover:text-slate-900"
+          >
+            <span className="text-lg">×</span>
+          </button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="flex gap-3 text-xs items-center">
+            <label>
+              Beloppstolerans ±
+              <input
+                type="number"
+                value={amtTol}
+                onChange={(e) => setAmtTol(Number(e.target.value))}
+                className="border rounded px-1 py-0.5 w-16 ml-1"
+              />{" "}
+              kr
+            </label>
+            <label>
+              Datumtolerans ±
+              <input
+                type="number"
+                value={dateTol}
+                onChange={(e) => setDateTol(Number(e.target.value))}
+                className="border rounded px-1 py-0.5 w-16 ml-1"
+              />{" "}
+              dagar
+            </label>
+            <div className="ml-auto text-xs">
+              {cands.length} kandidater hittade
+            </div>
+          </div>
+
+          {candsQ.isLoading ? (
+            <div className="text-sm text-slate-700">Söker…</div>
+          ) : cands.length === 0 ? (
+            <div className="text-sm text-slate-700 py-4 text-center">
+              Inga kandidater — prova öka toleransen.
+            </div>
+          ) : (
+            <div className="space-y-1 max-h-96 overflow-y-auto">
+              {cands.map((c) => {
+                const isSel = selected.has(c.transaction_id);
+                return (
+                  <label
+                    key={c.transaction_id}
+                    className={`flex items-center gap-2 border rounded p-2 text-sm cursor-pointer hover:bg-slate-50 ${
+                      isSel ? "bg-brand-50 border-brand-300" : ""
+                    } ${c.exact_match ? "ring-1 ring-emerald-300" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={(e) => {
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(c.transaction_id);
+                          else next.delete(c.transaction_id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">
+                        {c.description}
+                      </div>
+                      <div className="text-xs text-slate-700 flex flex-wrap gap-x-2">
+                        <span>{c.date}</span>
+                        <span>· {c.account_name ?? `#${c.account_id}`}</span>
+                        <span>
+                          · Δ{" "}
+                          <span
+                            className={
+                              c.amount_diff < 1
+                                ? "text-emerald-700"
+                                : c.amount_diff < 10
+                                ? ""
+                                : "text-amber-700"
+                            }
+                          >
+                            {c.amount_diff.toFixed(0)} kr
+                          </span>
+                        </span>
+                        <span>· {c.date_diff_days}d från förfallodag</span>
+                        {c.is_transfer && (
+                          <span className="text-blue-600">· överföring</span>
+                        )}
+                        {c.exact_match && (
+                          <span className="text-emerald-600 font-medium">
+                            · exakt
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div
+                      className={`font-semibold shrink-0 ${
+                        c.amount < 0 ? "text-rose-600" : "text-emerald-600"
+                      }`}
+                    >
+                      {formatSEK(c.amount)}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {selected.size > 0 && (
+            <div className="bg-brand-50 border border-brand-200 rounded p-3 text-sm">
+              <div>
+                Valt:{" "}
+                <strong>{selected.size} rad(er)</strong> · summa{" "}
+                <strong>{formatSEK(selectedAmount)}</strong>
+                {" · "}
+                förväntat{" "}
+                <strong>{formatSEK(expectedAmount)}</strong>
+                {selectionDiff < 2 ? (
+                  <span className="text-emerald-700 ml-2">✓ matchar</span>
+                ) : (
+                  <span className="text-amber-700 ml-2">
+                    Δ {formatSEK(selectionDiff)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={onClose}
+              className="text-sm text-slate-700 hover:text-slate-900 px-3 py-1.5"
+            >
+              Avbryt
+            </button>
+            <button
+              onClick={() => matchMut.mutate(Array.from(selected))}
+              disabled={selected.size === 0 || matchMut.isPending}
+              className="bg-brand-600 text-white text-sm px-4 py-1.5 rounded disabled:opacity-50"
+            >
+              {matchMut.isPending
+                ? "Kopplar…"
+                : selected.size === 1
+                ? "Matcha mot vald rad"
+                : `Matcha mot ${selected.size} rader`}
+            </button>
+          </div>
+          {matchMut.isError && (
+            <div className="text-xs text-rose-600">
+              {(matchMut.error as Error).message}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
