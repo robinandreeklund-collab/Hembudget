@@ -6,7 +6,7 @@ from decimal import Decimal
 from statistics import median
 from typing import Iterable
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Budget, Category, Transaction, TransactionSplit
@@ -174,7 +174,10 @@ class MonthlyBudgetService:
         }
 
         # Transaktioner som INTE är uppsplittrade — grupperas på
-        # transactions.category_id som vanligt.
+        # transactions.category_id som vanligt. Inkognito-kontons privata
+        # utgifter exkluderas (vi spårar dem inte), bara deras inkomster
+        # räknas i familj/totaler.
+        from ..db.models import Account as _Acc
         base_q = (
             select(
                 Transaction.category_id,
@@ -182,10 +185,17 @@ class MonthlyBudgetService:
                 func.sum(Transaction.amount).label("total"),
             )
             .join(Category, Category.id == Transaction.category_id, isouter=True)
+            .join(_Acc, _Acc.id == Transaction.account_id)
             .where(
                 Transaction.date >= start,
                 Transaction.date < end,
                 Transaction.is_transfer.is_(False),
+                # Privata utgifter på inkognito-konton räknas inte —
+                # men inkomster gör det
+                or_(
+                    _Acc.incognito.is_(False),
+                    Transaction.amount > 0,
+                ),
             )
             .group_by(Transaction.category_id, Category.name)
         )
@@ -194,7 +204,7 @@ class MonthlyBudgetService:
         tx_rows = self.session.execute(base_q).all()
 
         # Uppsplittrade transaktioner — grupperas på splits.category_id.
-        # Filtrerar även här bort transfers via join mot transactions.
+        # Filtrerar även här bort transfers + privata utgifter på incognito.
         split_rows = (
             self.session.execute(
                 select(
@@ -204,10 +214,15 @@ class MonthlyBudgetService:
                 )
                 .join(Category, Category.id == TransactionSplit.category_id, isouter=True)
                 .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+                .join(_Acc, _Acc.id == Transaction.account_id)
                 .where(
                     Transaction.date >= start,
                     Transaction.date < end,
                     Transaction.is_transfer.is_(False),
+                    or_(
+                        _Acc.incognito.is_(False),
+                        TransactionSplit.amount > 0,
+                    ),
                 )
                 .group_by(TransactionSplit.category_id, Category.name)
             )

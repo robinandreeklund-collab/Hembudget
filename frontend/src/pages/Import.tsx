@@ -26,7 +26,11 @@ export default function ImportPage() {
   const [result, setResult] = useState<unknown>(null);
   const [newAcc, setNewAcc] = useState<{
     name: string; bank: string; type: string; account_number: string;
-  }>({ name: "", bank: "nordea", type: "checking", account_number: "" });
+    incognito: boolean;
+  }>({
+    name: "", bank: "nordea", type: "checking", account_number: "",
+    incognito: false,
+  });
 
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfAccountType, setPdfAccountType] = useState<string>("checking");
@@ -252,6 +256,23 @@ export default function ImportPage() {
             value={newAcc.account_number}
             onChange={(e) => setNewAcc({ ...newAcc, account_number: e.target.value })}
           />
+          <label className="col-span-4 flex items-start gap-2 text-sm py-1">
+            <input
+              type="checkbox"
+              checked={newAcc.incognito}
+              onChange={(e) => setNewAcc({ ...newAcc, incognito: e.target.checked })}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Inkognito-läge</span>
+              <span className="text-slate-700 text-xs block">
+                Partner-/privatkonto som inte spåras fullt ut. Lön och
+                överföringar till gemensamma konton räknas i familje-vyn,
+                men saldo och privata utgifter ignoreras. Perfekt för
+                partnerns konto när hen inte vill exportera kontoutdrag.
+              </span>
+            </span>
+          </label>
         </div>
         <button
           className="mt-3 bg-slate-800 text-white px-3 py-1.5 rounded"
@@ -367,9 +388,28 @@ function AccountSetupRow({
     <div className="border rounded p-2 text-sm space-y-2">
       <div className="flex items-start gap-2">
         <div className="flex-1">
-          <div className="font-medium truncate">{account.name}</div>
+          <div className="font-medium truncate flex items-center gap-2">
+            {account.name}
+            {account.incognito && (
+              <span
+                className="text-[10px] uppercase bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded"
+                title="Inkognito-konto: endast lön och överföringar spåras"
+              >
+                inkognito
+              </span>
+            )}
+          </div>
           <div className="text-xs text-slate-700">{account.bank} · {account.type}</div>
         </div>
+        <label className="text-xs flex items-center gap-1 pt-4">
+          <input
+            type="checkbox"
+            checked={!!account.incognito}
+            onChange={(e) => onSave({ incognito: e.target.checked })}
+            title="Inkognito-läge: partner-/privatkonto som bara spåras för lön + överföringar"
+          />
+          <span className="text-slate-700">Inkognito</span>
+        </label>
         <label className="text-xs">
           <div className="text-slate-700">Ägare</div>
           <select

@@ -86,6 +86,12 @@ def run_migrations(engine: Engine) -> list[str]:
             "parent_account_id INTEGER REFERENCES accounts(id)",
         )
         applied.append("accounts.parent_account_id")
+    if "incognito" not in acc_cols:
+        _add_column(
+            engine, "accounts",
+            "incognito BOOLEAN NOT NULL DEFAULT 0",
+        )
+        applied.append("accounts.incognito")
 
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):

@@ -11,6 +11,7 @@ export interface Account {
   bankgiro?: string | null;
   pays_credit_account_id?: number | null;
   owner_id?: number | null;
+  incognito?: boolean;
 }
 
 export interface HouseholdUser {

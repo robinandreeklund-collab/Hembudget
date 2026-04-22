@@ -67,6 +67,7 @@ class AccountIn(BaseModel):
     parent_account_id: Optional[int] = None
     pays_credit_account_id: Optional[int] = None
     owner_id: Optional[int] = None
+    incognito: bool = False
 
 
 class AccountOut(AccountIn):
@@ -83,6 +84,7 @@ class AccountUpdate(BaseModel):
     bankgiro: Optional[str] = None
     pays_credit_account_id: Optional[int] = None
     owner_id: Optional[int] = None
+    incognito: Optional[bool] = None
 
 
 class UserIn(BaseModel):

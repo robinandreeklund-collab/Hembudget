@@ -60,6 +60,12 @@ class Account(Base):
     pays_credit_account_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("accounts.id"), nullable=True
     )
+    # Inkognito-läge: partner-/privat-konto där vi BARA spårar inkomster och
+    # överföringar till gemensamma konton, inte saldo eller privata utgifter.
+    # Exkluderas från total förmögenhet, nettoförmögenhet i huvudbok och
+    # månadsutgifter. Transfer-detektorn använder dock ändå kontot för att
+    # para ihop överföringar (hennes -10 000 → vårt gemensamma +10 000).
+    incognito: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")

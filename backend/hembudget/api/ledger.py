@@ -76,6 +76,7 @@ def huvudbok(
         # Opening = opening_balance + rörelse FÖRE period_start
         ob = acc.opening_balance or Decimal("0")
         ob_date = acc.opening_balance_date
+        is_incognito = bool(getattr(acc, "incognito", False))
 
         pre_q = session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
             Transaction.account_id == acc.id,
@@ -114,10 +115,20 @@ def huvudbok(
             opening_at_period + income_in - expenses_in + transfer_in - transfer_out
         )
 
-        assets_contribution = float(closing) if acc.type not in ("credit",) else 0.0
-        liabilities_contribution = (
-            -float(closing) if acc.type == "credit" and closing < 0 else 0.0
-        )
+        # Inkognito-konton: saldo och privata utgifter räknas inte med i
+        # familjens totalekonomi. Bara lön (income) + överföringar får
+        # effekt — och bidrar till familjens helhet via mottagarkontots
+        # transfer_in/inkomst.
+        if is_incognito:
+            assets_contribution = 0.0
+            liabilities_contribution = 0.0
+        else:
+            assets_contribution = (
+                float(closing) if acc.type not in ("credit",) else 0.0
+            )
+            liabilities_contribution = (
+                -float(closing) if acc.type == "credit" and closing < 0 else 0.0
+            )
         total_assets += assets_contribution
         total_liabilities += liabilities_contribution
 
@@ -127,6 +138,7 @@ def huvudbok(
             "bank": acc.bank,
             "type": acc.type,
             "owner_id": acc.owner_id,
+            "incognito": is_incognito,
             "opening_balance": float(opening_at_period),
             "income": float(income_in),
             "expenses": float(expenses_in),
@@ -137,11 +149,13 @@ def huvudbok(
         })
 
     # ---------- Resultaträkning per kategori ----------
-    # Hämtar alla transaktioner + join:ar Category, aggregerar i Python
-    # för tydlig logik (okategoriserade, små summor).
+    # Hämtar alla transaktioner + join:ar Category + Account (för incognito-
+    # filter). Inkognito-kontons PRIVATA UTGIFTER exkluderas helt (vi vet
+    # inte vad de går till), men deras inkomster räknas i familj/YTD.
     all_tx = (
-        session.query(Transaction, Category)
+        session.query(Transaction, Category, Account)
         .outerjoin(Category, Category.id == Transaction.category_id)
+        .join(Account, Account.id == Transaction.account_id)
         .filter(
             Transaction.date >= period_start,
             Transaction.date < period_end,
@@ -153,7 +167,11 @@ def huvudbok(
     income_total = Decimal("0")
     expense_total = Decimal("0")
     uncategorized_count = 0
-    for tx, cat in all_tx:
+    for tx, cat, acc in all_tx:
+        is_incognito = bool(getattr(acc, "incognito", False))
+        # Skippa privata utgifter på inkognito-konton helt
+        if is_incognito and tx.amount < 0:
+            continue
         cat_id = cat.id if cat else None
         cat_name = cat.name if cat else "Okategoriserat"
         if cat_id is None:

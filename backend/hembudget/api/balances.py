@@ -41,7 +41,11 @@ def list_balances(
         movement = Decimal(str(q.scalar() or 0))
 
         current = ob + movement
-        total += current
+        is_incognito = bool(getattr(acc, "incognito", False))
+        # Inkognito-konton exkluderas från total förmögenhet — de spåras
+        # bara delvis (lön + överföringar) och saldo är meningslöst.
+        if not is_incognito:
+            total += current
         out.append({
             "id": acc.id,
             "name": acc.name,
@@ -52,6 +56,7 @@ def list_balances(
             "opening_balance_date": start.isoformat() if start else None,
             "movement_since_opening": float(movement),
             "current_balance": float(current),
+            "incognito": is_incognito,
         })
 
     return {

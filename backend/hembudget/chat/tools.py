@@ -1026,8 +1026,11 @@ def get_family_breakdown(session: Session, month: str) -> dict:
     positives = session.execute(
         base_q.where(Transaction.amount > 0)
     ).all()
+    # Inkognito-konton: exkludera privata utgifter (vi spårar dem inte).
+    # Inkomster räknas dock fortfarande (ovan).
     negatives = session.execute(
         base_q.where(Transaction.amount < 0)
+        .where(Account.incognito.is_(False))
     ).all()
 
     by_owner: dict[str, dict[str, float]] = {}
