@@ -33,9 +33,15 @@ function apiBase(): string {
     if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
     return explicit.replace(/\/$/, "");
   }
-  // 3. Tauri/lokal dev
+  // 3. Tauri/lokal dev — använd current hostname så att om frontend öppnas
+  // från ett annat LAN-device (http://192.168.1.x:1420) pekar API till
+  // samma maskin (http://192.168.1.x:8765), inte klienternas 127.0.0.1.
   const port = localStorage.getItem(PORT_KEY) || import.meta.env.VITE_API_PORT || "8765";
-  return `http://127.0.0.1:${port}`;
+  const hostname =
+    typeof window !== "undefined" && window.location.hostname
+      ? window.location.hostname
+      : "127.0.0.1";
+  return `http://${hostname}:${port}`;
 }
 
 export function getApiBase(): string {

@@ -33,18 +33,47 @@ def build_app() -> FastAPI:
         version="0.1.0",
         description="Lokal AI-driven familjeekonomi (Nemotron Nano 3 via LM Studio)",
     )
-    # I demo-mode tillåt alla origins (publik Render-deploy)
+    # CORS:
+    # - demo-mode: tillåt alla origins (publik Render-deploy)
+    # - lan-mode (HEMBUDGET_LAN=1): tillåt privata IP-ranges så familjen
+    #   kan nå servern från andra enheter på samma WiFi
+    # - default: bara localhost + Tauri (säkert för desktop-app)
     import os
+    import re
     demo = os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes")
+    lan = os.environ.get("HEMBUDGET_LAN", "").lower() in ("1", "true", "yes")
+    if demo:
+        cors_kwargs: dict = {
+            "allow_origins": ["*"],
+            "allow_credentials": False,
+        }
+    elif lan:
+        # Tillåt alla privata IP-ranges + localhost på vilken port som helst
+        cors_kwargs = {
+            "allow_origin_regex": (
+                r"^https?://("
+                r"localhost|127\.0\.0\.1|"
+                r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+                r"192\.168\.\d{1,3}\.\d{1,3}|"
+                r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|"
+                r"tauri\.localhost"
+                r")(:\d+)?$"
+            ),
+            "allow_credentials": True,
+        }
+    else:
+        cors_kwargs = {
+            "allow_origins": [
+                "tauri://localhost",
+                "http://tauri.localhost",
+                "http://localhost:1420",
+                "http://127.0.0.1:1420",
+            ],
+            "allow_credentials": True,
+        }
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if demo else [
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "http://localhost:1420",
-            "http://127.0.0.1:1420",
-        ],
-        allow_credentials=not demo,   # wildcard + credentials är inte tillåtet
+        **cors_kwargs,
         allow_methods=["*"],
         allow_headers=["*"],
     )
