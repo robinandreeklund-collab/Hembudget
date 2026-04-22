@@ -75,7 +75,7 @@ export default function Transfers() {
             <Link2 className="w-6 h-6" />
             Överföringar
           </h1>
-          <div className="text-sm text-slate-500 mt-0.5">
+          <div className="text-sm text-slate-700 mt-0.5">
             Hanterar överföringar mellan dina egna konton så de inte dubbelbokförs.
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function Transfers() {
 
       {suggestions.length > 0 && (
         <Card title={`Föreslagna par (${suggestions.length})`}>
-          <div className="text-sm text-slate-500 mb-2">
+          <div className="text-sm text-slate-700 mb-2">
             Rader på olika konton med matchande belopp och nära datum. Klicka "Para ihop"
             för att bekräfta, eller strunta i dem om det är riktiga utgifter/inkomster.
           </div>
@@ -114,9 +114,9 @@ export default function Transfers() {
               <div key={`${s.source.id}-${s.destination.id}`}
                    className="border rounded-lg p-3 bg-amber-50/50 flex items-center gap-3">
                 <TxRow tx={s.source} />
-                <ArrowRight className="w-5 h-5 text-slate-400 shrink-0" />
+                <ArrowRight className="w-5 h-5 text-slate-600 shrink-0" />
                 <TxRow tx={s.destination} />
-                <div className="flex flex-col items-end text-xs text-slate-500 shrink-0">
+                <div className="flex flex-col items-end text-xs text-slate-700 shrink-0">
                   <span>{s.date_diff_days === 0 ? "Samma dag" : `${s.date_diff_days} d isär`}</span>
                   <span>{s.amount_diff === 0 ? "Exakt belopp" : `±${formatSEK(s.amount_diff)}`}</span>
                 </div>
@@ -134,7 +134,7 @@ export default function Transfers() {
 
       {unpaired.length > 0 && (
         <Card title={`Markerade som överföring men utan par (${unpaired.length})`}>
-          <div className="text-sm text-slate-500 mb-2">
+          <div className="text-sm text-slate-700 mb-2">
             Oftast för att motparten inte är importerad än, eller beloppen skiljer för mycket.
             Du kan manuellt ta bort transfer-flaggan för att räkna raden som vanlig utgift.
           </div>
@@ -144,7 +144,7 @@ export default function Transfers() {
                 <TxRow tx={tx} />
                 <button
                   onClick={() => unlinkMut.mutate(tx.id)}
-                  className="ml-auto shrink-0 flex items-center gap-1 text-slate-500 hover:text-rose-600 text-xs"
+                  className="ml-auto shrink-0 flex items-center gap-1 text-slate-700 hover:text-rose-600 text-xs"
                   title="Avmarkera som överföring — räkna som vanlig transaktion"
                 >
                   <Unlink2 className="w-3.5 h-3.5" />
@@ -158,7 +158,7 @@ export default function Transfers() {
 
       <Card title={`Parade överföringar (${pairs.length})`}>
         {pairs.length === 0 ? (
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-700">
             Inga överföringar parade ännu. Importera alla dina konton och klicka
             "Kör om automatmatchning" — då söker systemet efter matchande belopp på
             olika konton inom ±5 dagars fönster.
@@ -169,11 +169,11 @@ export default function Transfers() {
               <div key={p.source.id} className="flex items-center gap-3 border rounded p-2 text-sm bg-emerald-50/30">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <TxRow tx={p.source} />
-                <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                <ArrowRight className="w-4 h-4 text-slate-600 shrink-0" />
                 <TxRow tx={p.destination} />
                 <button
                   onClick={() => unlinkMut.mutate(p.source.id)}
-                  className="ml-auto shrink-0 text-slate-400 hover:text-rose-600 text-xs"
+                  className="ml-auto shrink-0 text-slate-600 hover:text-rose-600 text-xs"
                   title="Ta bort parningen"
                 >
                   <Unlink2 className="w-3.5 h-3.5" />
@@ -204,8 +204,8 @@ function TxRow({ tx }: { tx: TxView }) {
         <span className={`font-semibold shrink-0 ${isNegative ? "text-rose-600" : "text-emerald-600"}`}>
           {formatSEK(tx.amount)}
         </span>
-        <span className="text-slate-500 text-xs shrink-0">{tx.date}</span>
-        <span className="text-slate-500 text-xs truncate">
+        <span className="text-slate-700 text-xs shrink-0">{tx.date}</span>
+        <span className="text-slate-700 text-xs truncate">
           {tx.account_name ?? `Konto #${tx.account_id}`}
         </span>
       </div>
@@ -222,7 +222,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: "goo
     : "text-slate-700";
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4">
-      <div className="text-xs uppercase text-slate-500">{label}</div>
+      <div className="text-xs uppercase text-slate-700">{label}</div>
       <div className={`text-2xl font-semibold mt-1 ${color}`}>{value}</div>
     </div>
   );

@@ -66,7 +66,7 @@ function Brand() {
         <LineChart className="w-5 h-5" />
         Hembudget
       </Link>
-      <div className="text-xs text-slate-400 mt-0.5">Lokalt • Nemotron Nano 3</div>
+      <div className="text-xs text-slate-600 mt-0.5">Lokalt • Nemotron Nano 3</div>
     </div>
   );
 }
@@ -103,7 +103,7 @@ export function MobileTopBar() {
           Hembudget
         </Link>
         {currentItem && (
-          <span className="ml-auto text-sm text-slate-500">{currentItem.label}</span>
+          <span className="ml-auto text-sm text-slate-700">{currentItem.label}</span>
         )}
       </div>
 
@@ -120,7 +120,7 @@ export function MobileTopBar() {
               <Brand />
               <button
                 onClick={() => setOpen(false)}
-                className="p-2 text-slate-400"
+                className="p-2 text-slate-600"
                 aria-label="Stäng"
               >
                 <X className="w-5 h-5" />

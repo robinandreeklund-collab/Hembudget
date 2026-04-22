@@ -58,7 +58,7 @@ export default function Budget() {
               }
             }}
             disabled={autoMut.isPending}
-            className="text-xs text-slate-500 hover:text-slate-700"
+            className="text-xs text-slate-700 hover:text-slate-700"
             title="Ersätt även befintliga manuella värden"
           >
             (ersätt allt)
@@ -82,7 +82,7 @@ export default function Budget() {
       <Card title={`Budget vs utfall — ${month}`}>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase text-slate-500 border-b">
+            <tr className="text-left text-xs uppercase text-slate-700 border-b">
               <th className="py-2 pr-4">Kategori</th>
               <th className="py-2 pr-4 text-right">Budgeterat</th>
               <th className="py-2 pr-4 text-right">Faktiskt</th>
@@ -117,7 +117,7 @@ export default function Budget() {
           </tbody>
         </table>
       </Card>
-      <div className="text-xs text-slate-500">{catsQ.data?.length ?? 0} kategorier totalt.</div>
+      <div className="text-xs text-slate-700">{catsQ.data?.length ?? 0} kategorier totalt.</div>
     </div>
   );
 }

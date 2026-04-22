@@ -116,11 +116,11 @@ function ToolResultBubble({ msg }: { msg: Msg }) {
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         <Wrench className="w-3 h-3" />
         <span className="font-mono font-medium text-slate-700">{name}</span>
-        {argStr && <span className="font-mono text-slate-400">({argStr})</span>}
-        <span className="text-slate-500 ml-auto">→ {summary}</span>
+        {argStr && <span className="font-mono text-slate-600">({argStr})</span>}
+        <span className="text-slate-700 ml-auto">→ {summary}</span>
       </button>
       {open && (
-        <pre className="px-3 py-2 text-slate-500 font-mono overflow-x-auto max-h-64 overflow-y-auto border-t border-slate-200 whitespace-pre-wrap break-all">
+        <pre className="px-3 py-2 text-slate-700 font-mono overflow-x-auto max-h-64 overflow-y-auto border-t border-slate-200 whitespace-pre-wrap break-all">
           {(() => {
             try {
               return JSON.stringify(JSON.parse(msg.content), null, 2);
@@ -198,7 +198,7 @@ export default function Chat() {
       <Card className="flex-1 flex flex-col">
         <div className="flex-1 overflow-y-auto space-y-3 pr-2">
           {msgs.length === 0 && (
-            <div className="text-sm text-slate-500">
+            <div className="text-sm text-slate-700">
               <div className="mb-3">
                 Fråga om din ekonomi. Nemotron har tillgång till 21 verktyg
                 och kan svara om konton, saldo, lån, fakturor, prenumerationer,
@@ -248,13 +248,13 @@ export default function Chat() {
                   <div className="whitespace-pre-wrap">{m.content}</div>
                 )}
                 {!m.content && (!calls || calls.length === 0) && (
-                  <div className="text-slate-400 italic">(tomt svar)</div>
+                  <div className="text-slate-600 italic">(tomt svar)</div>
                 )}
               </div>
             );
           })}
           {sendMut.isPending && (
-            <div className="text-sm text-slate-400">Nemotron funderar…</div>
+            <div className="text-sm text-slate-600">Nemotron funderar…</div>
           )}
           <div ref={endRef} />
         </div>

@@ -36,7 +36,7 @@ export default function Reports() {
       <Card title="Månadsrapport">
         <div className="flex items-end gap-3">
           <label className="text-sm">
-            <div className="text-slate-500">Månad</div>
+            <div className="text-slate-700">Månad</div>
             <input
               type="month"
               value={month}

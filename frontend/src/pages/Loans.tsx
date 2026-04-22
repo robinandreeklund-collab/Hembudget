@@ -202,22 +202,22 @@ export default function Loans() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
-          <div className="text-xs uppercase text-slate-500">Total skuld</div>
+          <div className="text-xs uppercase text-slate-700">Total skuld</div>
           <div className="text-2xl font-semibold text-rose-600">{formatSEK(totalDebt)}</div>
         </Card>
         <Card>
-          <div className="text-xs uppercase text-slate-500">
+          <div className="text-xs uppercase text-slate-700">
             Betald ränta i år
           </div>
           <div className="text-2xl font-semibold">{formatSEK(totalInterestYtd)}</div>
-          <div className="text-xs text-slate-400 mt-1">{interestYear}</div>
+          <div className="text-xs text-slate-600 mt-1">{interestYear}</div>
         </Card>
         <Card>
-          <div className="text-xs uppercase text-slate-500">Betald ränta (total)</div>
+          <div className="text-xs uppercase text-slate-700">Betald ränta (total)</div>
           <div className="text-2xl font-semibold">{formatSEK(totalInterest)}</div>
         </Card>
         <Card>
-          <div className="text-xs uppercase text-slate-500">Amorterat</div>
+          <div className="text-xs uppercase text-slate-700">Amorterat</div>
           <div className="text-2xl font-semibold text-emerald-600">{formatSEK(totalAmortized)}</div>
         </Card>
       </div>
@@ -261,7 +261,7 @@ export default function Loans() {
 
       <Card title="Registrerade lån">
         {summaries.length === 0 ? (
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-700">
             Inga lån registrerade. Lägg till ett så kopplar systemet dina
             betalningar automatiskt och räknar ned skulden per amortering.
           </div>
@@ -274,7 +274,7 @@ export default function Loans() {
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-semibold">{s.name}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-700">
                         {s.lender} · {s.binding_type} · {(s.interest_rate * 100).toFixed(2)} %
                         {full?.match_pattern ? ` · matchar "${full.match_pattern}"` : ""}
                       </div>
@@ -283,7 +283,7 @@ export default function Loans() {
                       <button
                         onClick={() => full && setMode({ kind: "edit", loan: full })}
                         disabled={!full}
-                        className="p-1.5 text-slate-400 hover:text-brand-600 disabled:opacity-40"
+                        className="p-1.5 text-slate-600 hover:text-brand-600 disabled:opacity-40"
                         title="Redigera"
                       >
                         <Pencil className="w-4 h-4" />
@@ -292,7 +292,7 @@ export default function Loans() {
                         onClick={() => {
                           if (confirm(`Ta bort lånet '${s.name}'?`)) deleteMut.mutate(s.id);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600"
+                        className="p-1.5 text-slate-600 hover:text-rose-600"
                         title="Ta bort"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -309,7 +309,7 @@ export default function Loans() {
                     />
                     <Stat label="Ränta (total)" value={formatSEK(s.interest_paid)} />
                   </div>
-                  <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                  <div className="flex gap-4 mt-2 text-xs text-slate-700">
                     <span>{s.payments_count} betalningar länkade</span>
                     {s.ltv !== null && <span>LTV {(s.ltv * 100).toFixed(1)} %</span>}
                     {s.binding_end_date && <span>Bindning slut {s.binding_end_date}</span>}
@@ -328,7 +328,7 @@ export default function Loans() {
 function Stat({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div>
-      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-xs text-slate-700">{label}</div>
       <div className={strong ? "font-semibold" : ""}>{value}</div>
     </div>
   );
@@ -459,9 +459,9 @@ function Field({
 }) {
   return (
     <label className={full ? "col-span-2 block" : "block"}>
-      <div className="text-slate-500 text-xs mb-0.5">{label}</div>
+      <div className="text-slate-700 text-xs mb-0.5">{label}</div>
       {children}
-      {hint && <div className="text-xs text-slate-400 mt-0.5">{hint}</div>}
+      {hint && <div className="text-xs text-slate-600 mt-0.5">{hint}</div>}
     </label>
   );
 }
@@ -544,7 +544,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
       {adding && (
         <div className="bg-slate-50 rounded p-2 mb-2 flex items-end gap-2 text-xs">
           <label className="flex-1">
-            <div className="text-slate-500">Förväntat datum</div>
+            <div className="text-slate-700">Förväntat datum</div>
             <input
               type="date"
               value={newEntry.due_date}
@@ -553,7 +553,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
             />
           </label>
           <label className="w-28">
-            <div className="text-slate-500">Belopp (kr)</div>
+            <div className="text-slate-700">Belopp (kr)</div>
             <input
               type="number"
               value={newEntry.amount || ""}
@@ -563,7 +563,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
             />
           </label>
           <label className="w-36">
-            <div className="text-slate-500">Typ</div>
+            <div className="text-slate-700">Typ</div>
             <select
               value={newEntry.payment_type}
               onChange={(e) =>
@@ -584,7 +584,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           </button>
           <button
             onClick={() => setAdding(false)}
-            className="text-slate-400"
+            className="text-slate-600"
           >
             <X className="w-4 h-4" />
           </button>
@@ -592,7 +592,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
       )}
 
       {entries.length === 0 ? (
-        <div className="text-xs text-slate-400 italic">
+        <div className="text-xs text-slate-600 italic">
           Inga planerade betalningar. Klicka "Generera 3 mån" så skapas ränta +
           amortering automatiskt från lånevillkoren — då matchas kommande
           transaktioner på exakt belopp + datum.
@@ -604,7 +604,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
               key={e.id}
               className="flex items-center gap-2 text-xs border rounded px-2 py-1.5 bg-white"
             >
-              <div className="w-24 text-slate-500">{e.due_date}</div>
+              <div className="w-24 text-slate-700">{e.due_date}</div>
               <div className="w-20 font-medium">{formatSEK(e.amount)}</div>
               <div className="w-24 text-slate-600">
                 {e.payment_type === "interest" ? "Ränta" : "Amortering"}
@@ -683,7 +683,7 @@ function LoanFromImagesUploader({
     <Card
       title="Skapa lån automatiskt från bankbilder"
       action={
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+        <button onClick={onClose} className="text-slate-600 hover:text-slate-700">
           <X className="w-4 h-4" />
         </button>
       }
@@ -714,7 +714,7 @@ function LoanFromImagesUploader({
           isDragging ? "border-emerald-500 bg-emerald-50" : "border-slate-300 bg-slate-50"
         }`}
       >
-        <ImageIcon className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+        <ImageIcon className="w-10 h-10 mx-auto text-slate-600 mb-2" />
         <div className="text-sm text-slate-600">
           Dra flera bilder hit, eller{" "}
           <label className="text-emerald-700 cursor-pointer underline">

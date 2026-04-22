@@ -215,7 +215,7 @@ export default function Upcoming() {
             <CalendarPlus className="w-6 h-6" />
             Kommande
           </h1>
-          <div className="text-sm text-slate-500 mt-0.5">
+          <div className="text-sm text-slate-700 mt-0.5">
             Planera kommande fakturor och löner — se hur mycket som blir kvar att dela.
           </div>
         </div>
@@ -260,7 +260,7 @@ export default function Upcoming() {
             </span>{" "}
             till var och en som privata pengar efter fasta kostnader och kommande fakturor.
             {Object.keys(forecastQ.data.income_by_owner).length > 0 && (
-              <div className="text-xs text-slate-500 mt-1">
+              <div className="text-xs text-slate-700 mt-1">
                 Inkomst per person:{" "}
                 {Object.entries(forecastQ.data.income_by_owner)
                   .map(([k, v]) => `${k} ${formatSEK(v)}`)
@@ -274,7 +274,7 @@ export default function Upcoming() {
       <CreditCardInvoiceCard onDone={invalidate} />
 
       <Card title="Tolka fakturor automatiskt">
-        <div className="text-sm text-slate-500 mb-3">
+        <div className="text-sm text-slate-700 mb-3">
           Dra och släpp fakturabilder. Systemet skickar varje bild till din lokala
           LM Studio-modell som extraherar betalningsmottagare, belopp och förfallodag
           helt automatiskt.{" "}
@@ -298,7 +298,7 @@ export default function Upcoming() {
               : "border-slate-300 bg-slate-50"
           }`}
         >
-          <ImageIcon className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+          <ImageIcon className="w-10 h-10 mx-auto text-slate-600 mb-2" />
           <div className="text-sm text-slate-600">
             Dra fakturabilder hit, eller{" "}
             <label className="text-brand-600 cursor-pointer underline">
@@ -343,7 +343,7 @@ export default function Upcoming() {
             ))}
             <button
               onClick={() => setParseJobs([])}
-              className="text-xs text-slate-500 hover:underline"
+              className="text-xs text-slate-700 hover:underline"
             >
               Rensa lista
             </button>
@@ -352,7 +352,7 @@ export default function Upcoming() {
       </Card>
 
       <Card title="Snabbinmatning via text">
-        <div className="text-sm text-slate-500 mb-2">
+        <div className="text-sm text-slate-700 mb-2">
           Skriv fritt, LM Studio tolkar: <em>"Vattenfall 1 420 kr förfaller 30 april"</em> eller
           <em> "Lön Robin 42 000 kr den 25:e"</em>. Bra för räkningar utan bild.
         </div>
@@ -421,7 +421,7 @@ function ItemList({
   onSetLines: (id: number, lines: Array<Omit<UpcomingLine, "id">>) => void;
 }) {
   if (items.length === 0) {
-    return <div className="text-sm text-slate-500">Inget registrerat ännu.</div>;
+    return <div className="text-sm text-slate-700">Inget registrerat ännu.</div>;
   }
   return (
     <div className="space-y-2">
@@ -487,13 +487,13 @@ function UpcomingRow({
       <div className="flex items-center gap-3 p-2">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="text-slate-400 hover:text-slate-700"
+          className="text-slate-600 hover:text-slate-700"
         >
           {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
         <div className="flex-1 min-w-0">
           <div className="font-medium truncate">{i.name}</div>
-          <div className="text-xs text-slate-500 flex flex-wrap gap-x-2">
+          <div className="text-xs text-slate-700 flex flex-wrap gap-x-2">
             <span>{L.summaryDate} {i.expected_date}</span>
             {i.debit_date && i.debit_date !== i.expected_date && (
               <span>· {L.secondDateLabel} {i.debit_date}</span>
@@ -515,7 +515,7 @@ function UpcomingRow({
         </div>
         <button
           onClick={() => onDelete(i.id)}
-          className="text-slate-400 hover:text-rose-600 shrink-0"
+          className="text-slate-600 hover:text-rose-600 shrink-0"
           title="Ta bort"
         >
           <Trash2 className="w-4 h-4" />
@@ -538,7 +538,7 @@ function UpcomingRow({
               onChange={(v) => onUpdate(i.id, { debit_date: v })}
             />
             <div>
-              <div className="text-slate-500 mb-0.5">{L.accountLabel}</div>
+              <div className="text-slate-700 mb-0.5">{L.accountLabel}</div>
               <select
                 value={i.debit_account_id ?? ""}
                 onChange={(e) =>
@@ -677,7 +677,7 @@ function LinesEditor({
       {open && (
         <div className="mt-2 space-y-1.5">
           {draft.length === 0 && (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-700">
               Dela upp fakturan per kategori — t.ex. energifaktura i el, vatten
               och bredband. Summan ska stämma med fakturasumman (±1 kr).
             </div>
@@ -763,7 +763,7 @@ function EditField({
   const [v, setV] = useState(value);
   return (
     <div>
-      <div className="text-slate-500 mb-0.5">{label}</div>
+      <div className="text-slate-700 mb-0.5">{label}</div>
       <input
         type={type}
         value={v}
@@ -778,7 +778,7 @@ function EditField({
 function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <span className="text-slate-500">{label}: </span>
+      <span className="text-slate-700">{label}: </span>
       <span className={mono ? "font-mono" : ""}>{value}</span>
     </div>
   );
@@ -800,12 +800,12 @@ function Stat({
   const color = tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-rose-600" : "";
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-3">
-      <div className="flex items-center gap-1.5 text-xs uppercase text-slate-500">
+      <div className="flex items-center gap-1.5 text-xs uppercase text-slate-700">
         {icon}
         {label}
       </div>
       <div className={`text-xl font-semibold mt-1 ${color}`}>{value}</div>
-      {hint && <div className="text-xs text-slate-400 mt-0.5">{hint}</div>}
+      {hint && <div className="text-xs text-slate-600 mt-0.5">{hint}</div>}
     </div>
   );
 }
@@ -993,7 +993,7 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
 
   return (
     <Card title="Läs in kreditkortsfaktura (PDF/bild)">
-      <div className="text-sm text-slate-500 mb-3">
+      <div className="text-sm text-slate-700 mb-3">
         Dra in en eller flera Amex- eller SEB Kort-fakturor. Systemet läser BÅDE:
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
@@ -1022,7 +1022,7 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
           isDragging ? "border-brand-500 bg-brand-50" : "border-slate-300 bg-slate-50"
         }`}
       >
-        <ImageIcon className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+        <ImageIcon className="w-10 h-10 mx-auto text-slate-600 mb-2" />
         <div className="text-sm text-slate-600">
           Dra kreditkortsfaktura hit, eller{" "}
           <label className="text-brand-600 cursor-pointer underline">

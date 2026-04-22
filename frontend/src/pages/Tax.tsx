@@ -53,7 +53,7 @@ export default function Tax() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {(["opening_balance", "deposits", "q1", "q2", "q3", "q4"] as const).map((k) => (
             <label key={k} className="text-sm">
-              <div className="text-slate-500">{k}</div>
+              <div className="text-slate-700">{k}</div>
               <input
                 type="number"
                 value={isk[k]}
@@ -63,7 +63,7 @@ export default function Tax() {
             </label>
           ))}
           <label className="text-sm">
-            <div className="text-slate-500">Statslåneränta 30/11</div>
+            <div className="text-slate-700">Statslåneränta 30/11</div>
             <input
               type="number"
               step="0.0001"
@@ -86,7 +86,7 @@ export default function Tax() {
             <div>Schablonintäkt: <strong>{formatSEK(iskResult.schablonintakt as number)}</strong></div>
             <div>Skatt (30 %): <strong>{formatSEK(iskResult.skatt as number)}</strong></div>
             {(iskResult.notes as string[])?.length > 0 && (
-              <div className="text-slate-500 text-xs mt-1">{(iskResult.notes as string[]).join("; ")}</div>
+              <div className="text-slate-700 text-xs mt-1">{(iskResult.notes as string[]).join("; ")}</div>
             )}
           </div>
         )}
@@ -96,16 +96,16 @@ export default function Tax() {
         {rotrutQ.data ? (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <div className="text-slate-500">ROT</div>
+              <div className="text-slate-700">ROT</div>
               <div className="text-xl font-semibold">{formatSEK(rotrutQ.data.rot_used as number)}</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-700">
                 Kvar: {formatSEK(rotrutQ.data.rot_remaining as number)} av tak {formatSEK(rotrutQ.data.rot_cap as number)}
               </div>
             </div>
             <div>
-              <div className="text-slate-500">RUT</div>
+              <div className="text-slate-700">RUT</div>
               <div className="text-xl font-semibold">{formatSEK(rotrutQ.data.rut_used as number)}</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-700">
                 Kvar: {formatSEK(rotrutQ.data.rut_remaining as number)} av tak {formatSEK(rotrutQ.data.rut_cap as number)}
               </div>
             </div>
@@ -116,12 +116,12 @@ export default function Tax() {
             )}
           </div>
         ) : (
-          <div className="text-sm text-slate-500">Laddar…</div>
+          <div className="text-sm text-slate-700">Laddar…</div>
         )}
       </Card>
 
       <Card title="K4 — kapitalvinstberäkning">
-        <div className="text-sm text-slate-500">
+        <div className="text-sm text-slate-700">
           K4 stöds via API <code>/tax/k4</code>. UI för manuell inmatning kan läggas till, men
           oftast är det bättre att importera trades från Avanza/Nordnet-CSV (kommande feature).
         </div>

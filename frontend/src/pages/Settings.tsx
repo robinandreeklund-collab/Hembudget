@@ -86,16 +86,16 @@ export default function Settings() {
         title="Prenumerationer — hälsokoll"
         action={
           subHealthQ.data && (
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-700">
               Totalt {formatSEK(subHealthQ.data.total_annual_cost)}/år
             </span>
           )
         }
       >
         {subHealthQ.isLoading ? (
-          <div className="text-sm text-slate-500">Analyserar…</div>
+          <div className="text-sm text-slate-700">Analyserar…</div>
         ) : !subHealthQ.data || subHealthQ.data.subscriptions.length === 0 ? (
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-700">
             Inga aktiva prenumerationer registrerade. Klicka "Hitta prenumerationer nu" nedan.
           </div>
         ) : (
@@ -109,7 +109,7 @@ export default function Settings() {
             )}
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase text-slate-500 border-b">
+                <tr className="text-left text-xs uppercase text-slate-700 border-b">
                   <th className="py-1.5 pr-3">Tjänst</th>
                   <th className="py-1.5 pr-3 text-right">Pris</th>
                   <th className="py-1.5 pr-3 text-right">Senast dragen</th>
@@ -126,7 +126,7 @@ export default function Settings() {
                   >
                     <td className="py-1.5 pr-3">
                       <div className="font-medium">{s.merchant}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-700">
                         var {s.interval_days}:e dag
                       </div>
                     </td>
@@ -135,7 +135,7 @@ export default function Settings() {
                     </td>
                     <td
                       className={`py-1.5 pr-3 text-right text-xs ${
-                        s.is_stale ? "text-amber-700 font-semibold" : "text-slate-500"
+                        s.is_stale ? "text-amber-700 font-semibold" : "text-slate-700"
                       }`}
                     >
                       {s.last_seen
@@ -178,7 +178,7 @@ export default function Settings() {
             >
               {scanTransfersMut.isPending ? "Skannar…" : "Hitta överföringar mellan konton"}
             </button>
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-slate-700 mt-1">
               Matchar transaktioner med motsatt belopp mellan dina konton (±0,5 %, ±3 dagar).
               Körs automatiskt efter varje import, men kan köras om manuellt.
             </div>
@@ -202,7 +202,7 @@ export default function Settings() {
             >
               {recategorizeMut.isPending ? "Kör om…" : "Omseeda regler + omkategorisera"}
             </button>
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-xs text-slate-700 mt-1">
               Tar bort inbyggda seed-regler, lägger till de senaste från koden och
               kör om kategoriseringen på alla transaktioner som du inte själv har
               rättat. Dina egna rättningar behålls.

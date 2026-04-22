@@ -78,7 +78,7 @@ export default function ImportPage() {
 
       {accounts.length > 0 && (
         <Card title="Konto-inställningar">
-          <div className="text-sm text-slate-500 mb-3">
+          <div className="text-sm text-slate-700 mb-3">
             Kontonummer används för auto-koppling av fakturor (vision AI). Ingående
             saldo + startdatum gör att systemet kan räkna ut nuvarande saldo.
             Lämna saldo-fälten tomma om du inte har startat spåra kontot än.
@@ -124,7 +124,7 @@ export default function ImportPage() {
             {creditAccounts.map((cc) => (
               <div key={cc.id} className="flex items-center gap-3 text-sm">
                 <div className="w-48 font-medium">{cc.name}</div>
-                <span className="text-slate-400">betalas från</span>
+                <span className="text-slate-600">betalas från</span>
                 <select
                   value={cc.pays_credit_account_id ?? ""}
                   onChange={(e) =>
@@ -294,7 +294,7 @@ function AccountSetupRow({
       <div className="flex items-start gap-2">
         <div className="flex-1">
           <div className="font-medium truncate">{account.name}</div>
-          <div className="text-xs text-slate-500">{account.bank} · {account.type}</div>
+          <div className="text-xs text-slate-700">{account.bank} · {account.type}</div>
         </div>
         <button
           onClick={() => {
@@ -312,7 +312,7 @@ function AccountSetupRow({
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label>
-          <div className="text-xs text-slate-500">Kontonummer</div>
+          <div className="text-xs text-slate-700">Kontonummer</div>
           <input
             value={num}
             onChange={(e) => setNum(e.target.value)}
@@ -323,7 +323,7 @@ function AccountSetupRow({
         </label>
         {isCredit ? (
           <label>
-            <div className="text-xs text-slate-500">Kreditgräns (kr)</div>
+            <div className="text-xs text-slate-700">Kreditgräns (kr)</div>
             <input
               type="number"
               step="1000"
@@ -336,7 +336,7 @@ function AccountSetupRow({
           </label>
         ) : (
           <label>
-            <div className="text-xs text-slate-500">Ingående saldo</div>
+            <div className="text-xs text-slate-700">Ingående saldo</div>
             <input
               type="number"
               step="0.01"
@@ -350,7 +350,7 @@ function AccountSetupRow({
         )}
         {isCredit ? (
           <label>
-            <div className="text-xs text-slate-500">Bankgiro (för autogiro-match)</div>
+            <div className="text-xs text-slate-700">Bankgiro (för autogiro-match)</div>
             <input
               value={bg}
               onChange={(e) => setBg(e.target.value)}
@@ -361,7 +361,7 @@ function AccountSetupRow({
           </label>
         ) : (
           <label>
-            <div className="text-xs text-slate-500">Startdatum</div>
+            <div className="text-xs text-slate-700">Startdatum</div>
             <input
               type="date"
               value={obDate}
@@ -373,7 +373,7 @@ function AccountSetupRow({
         )}
         {isCredit && (
           <label>
-            <div className="text-xs text-slate-500">Skuld (negativt saldo)</div>
+            <div className="text-xs text-slate-700">Skuld (negativt saldo)</div>
             <input
               type="number"
               step="0.01"

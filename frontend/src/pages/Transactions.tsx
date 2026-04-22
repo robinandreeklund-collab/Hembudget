@@ -127,14 +127,14 @@ export default function Transactions() {
               title={`${a.bank} · ${a.type}`}
             >
               {a.name}
-              <span className={`ml-1.5 text-xs ${active ? "text-brand-100" : "text-slate-400"}`}>
+              <span className={`ml-1.5 text-xs ${active ? "text-brand-100" : "text-slate-600"}`}>
                 {a.bank}
               </span>
             </button>
           );
         })}
         {(accountsQ.data ?? []).length === 0 && (
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-600">
             (Inga konton hittades — gå till Importera för att sätta upp dem)
           </span>
         )}
@@ -142,12 +142,12 @@ export default function Transactions() {
 
       <Card>
         {txsQ.isLoading ? (
-          <div className="text-sm text-slate-500">Laddar…</div>
+          <div className="text-sm text-slate-700">Laddar…</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase text-slate-500 border-b">
+                <tr className="text-left text-xs uppercase text-slate-700 border-b">
                   <th className="py-2 pr-4">Datum</th>
                   {accountFilter === ALL_ACCOUNTS && (
                     <th className="py-2 pr-4">Konto</th>
@@ -169,7 +169,7 @@ export default function Transactions() {
                       tx.is_transfer ? "opacity-60" : ""
                     }`}
                   >
-                    <td className="py-2 pr-4 text-slate-500">{tx.date}</td>
+                    <td className="py-2 pr-4 text-slate-700">{tx.date}</td>
                     {accountFilter === ALL_ACCOUNTS && (
                       <td className="py-2 pr-4 text-slate-600 text-xs">
                         {acc ? acc.name : `#${tx.account_id}`}
@@ -185,13 +185,13 @@ export default function Transactions() {
                         )}
                       </div>
                       {tx.normalized_merchant && (
-                        <div className="text-xs text-slate-400">{tx.raw_description}</div>
+                        <div className="text-xs text-slate-600">{tx.raw_description}</div>
                       )}
                     </td>
                     <td
                       className={`py-2 pr-4 text-right font-medium ${
                         tx.is_transfer
-                          ? "text-slate-400"
+                          ? "text-slate-600"
                           : tx.amount < 0
                           ? "text-rose-600"
                           : "text-emerald-600"
@@ -203,7 +203,7 @@ export default function Transactions() {
                       {tx.is_transfer ? (
                         <button
                           onClick={() => toggleTransferMut.mutate({ id: tx.id, is_transfer: false })}
-                          className="text-xs text-slate-500 hover:text-slate-700 underline"
+                          className="text-xs text-slate-700 hover:text-slate-700 underline"
                         >
                           Markera som utgift
                         </button>
@@ -239,13 +239,13 @@ export default function Transactions() {
                             <option value={NEW_CATEGORY_SENTINEL}>➕ Ny kategori…</option>
                           </select>
                           {!tx.user_verified && tx.category_id && (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-600">
                               AI ({Math.round((tx.ai_confidence ?? 0) * 100)} %)
                             </span>
                           )}
                           <button
                             onClick={() => toggleTransferMut.mutate({ id: tx.id, is_transfer: true })}
-                            className="text-xs text-slate-400 hover:text-blue-600"
+                            className="text-xs text-slate-600 hover:text-blue-600"
                             title="Markera som överföring"
                           >
                             ↔
@@ -260,13 +260,13 @@ export default function Transactions() {
             </table>
           </div>
         )}
-        <div className="mt-3 text-xs text-slate-500">
+        <div className="mt-3 text-xs text-slate-700">
           Tips: när du byter kategori skapas en regel automatiskt så att framtida liknande
           transaktioner kategoriseras rätt. Välj <strong>➕ Ny kategori…</strong> i dropdownen
           för att skapa en egen kategori på flugan — t.ex. "Online-spel" eller "Barn-prenumerationer".
         </div>
       </Card>
-      <div className="text-xs text-slate-500">{(txsQ.data ?? []).length} rader. Kategorier tillgängliga: {cats.length}.</div>
+      <div className="text-xs text-slate-700">{(txsQ.data ?? []).length} rader. Kategorier tillgängliga: {cats.length}.</div>
     </div>
   );
 }
@@ -320,7 +320,7 @@ function NewCategoryInline({
         </button>
         <button
           onClick={onCancel}
-          className="text-slate-400 hover:text-slate-700 text-xs px-1"
+          className="text-slate-600 hover:text-slate-700 text-xs px-1"
         >
           Avbryt
         </button>

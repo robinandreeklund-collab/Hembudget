@@ -18,7 +18,7 @@ import Import from "./pages/Import";
 
 export default function App() {
   const { isAuthenticated, loading, initialized, backendError } = useAuth();
-  if (loading) return <div className="h-full grid place-items-center text-slate-500">Laddar…</div>;
+  if (loading) return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
   // Om /status inte gick att nå alls → backend-URL behöver konfigureras
   if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
   if (!isAuthenticated) return <Login />;

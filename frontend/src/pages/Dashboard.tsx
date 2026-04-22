@@ -150,7 +150,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-700">
             {hasAnyData ? `${availableMonths.length} månader med data` : "Ingen data importerad ännu"}
           </div>
         </div>
@@ -215,7 +215,7 @@ export default function Dashboard() {
                 >
                   <div>
                     <div className="font-medium text-sm">{label}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-700">
                       {v.count} inkomster · {v.accounts.map((a) => a.name).join(", ")}
                     </div>
                   </div>
@@ -240,7 +240,7 @@ export default function Dashboard() {
         >
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase text-slate-500 border-b">
+              <tr className="text-left text-xs uppercase text-slate-700 border-b">
                 <th className="py-1.5 pr-3">Konto</th>
                 <th className="py-1.5 pr-3 text-right">Ingående</th>
                 <th className="py-1.5 pr-3 text-right">Rörelse</th>
@@ -252,12 +252,12 @@ export default function Dashboard() {
                 <tr key={a.id} className="border-b last:border-0">
                   <td className="py-1.5 pr-3">
                     <div className="font-medium">{a.name}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-700">
                       {a.bank} · {a.type}
                       {a.opening_balance_date && ` · från ${a.opening_balance_date}`}
                     </div>
                   </td>
-                  <td className="py-1.5 pr-3 text-right text-slate-500">
+                  <td className="py-1.5 pr-3 text-right text-slate-700">
                     {a.opening_balance_date ? formatSEK(a.opening_balance) : "—"}
                   </td>
                   <td
@@ -275,7 +275,7 @@ export default function Dashboard() {
             </tbody>
           </table>
           {!balancesQ.data.accounts.some((a) => a.opening_balance_date) && (
-            <div className="text-xs text-slate-500 mt-2">
+            <div className="text-xs text-slate-700 mt-2">
               Tips: ange ingående saldo + startdatum på varje konto (Import-sidan)
               för mer exakt saldo — just nu summeras bara alla transaktioner från 0.
             </div>
@@ -285,7 +285,7 @@ export default function Dashboard() {
 
       <Card title={`Utgifter per kategori — ${month}`}>
         {topExpenses.length === 0 ? (
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-700">
             {hasAnyData
               ? "Inga utgifter i denna månad. Välj en annan i listan ovan."
               : "Ingen data ännu. Gå till Importera och ladda upp en CSV."}
@@ -306,15 +306,15 @@ export default function Dashboard() {
         <Card
           title={`Avvikelser — ${month}`}
           action={
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-700">
               z‑score mot 6 mån snitt
             </span>
           }
         >
           {anomaliesQ.isLoading ? (
-            <div className="text-sm text-slate-500">Analyserar…</div>
+            <div className="text-sm text-slate-700">Analyserar…</div>
           ) : !anomaliesQ.data || anomaliesQ.data.anomalies.length === 0 ? (
-            <div className="text-sm text-slate-500">
+            <div className="text-sm text-slate-700">
               Inga större avvikelser denna månad — allt ligger inom 2σ av
               ditt vanliga mönster.
             </div>
@@ -340,7 +340,7 @@ export default function Dashboard() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{a.category}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-700">
                       {formatSEK(a.current)} denna månad —{" "}
                       snitt {formatSEK(a.average)} (±{formatSEK(a.stdev)})
                     </div>
@@ -358,7 +358,7 @@ export default function Dashboard() {
                 </li>
               ))}
               {anomaliesQ.data.anomalies.length > 5 && (
-                <li className="text-xs text-slate-500 pt-1">
+                <li className="text-xs text-slate-700 pt-1">
                   …och {anomaliesQ.data.anomalies.length - 5} till
                 </li>
               )}
@@ -369,17 +369,17 @@ export default function Dashboard() {
         <Card
           title={`Familj — ${month}`}
           action={
-            <span className="text-xs text-slate-500 inline-flex items-center gap-1">
+            <span className="text-xs text-slate-700 inline-flex items-center gap-1">
               <Users className="w-3.5 h-3.5" />
               per ägare
             </span>
           }
         >
           {familyQ.isLoading ? (
-            <div className="text-sm text-slate-500">Räknar…</div>
+            <div className="text-sm text-slate-700">Räknar…</div>
           ) : !familyQ.data ||
             Object.keys(familyQ.data.by_owner).length === 0 ? (
-            <div className="text-sm text-slate-500">
+            <div className="text-sm text-slate-700">
               Ingen data denna månad. Koppla konton till ägare för att se
               vem som betalat vad.
             </div>
@@ -395,7 +395,7 @@ export default function Dashboard() {
                   >
                     <div>
                       <div className="font-medium text-sm">{label}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-700">
                         In {formatSEK(v.income)} · Ut {formatSEK(v.expenses)}
                       </div>
                     </div>
@@ -412,7 +412,7 @@ export default function Dashboard() {
               })}
               {Object.keys(familyQ.data.by_owner).length === 1 &&
                 familyQ.data.by_owner["gemensamt"] && (
-                  <div className="text-xs text-slate-500 flex items-start gap-1.5">
+                  <div className="text-xs text-slate-700 flex items-start gap-1.5">
                     <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-none" />
                     Alla konton saknar ägare. Sätt <code>owner_id</code> på
                     kontona för en "vem betalade vad"-vy.
@@ -428,7 +428,7 @@ export default function Dashboard() {
           title={`Elpris idag — ${elprisQ.data.zone}`}
           action={
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-500">Snitt</span>
+              <span className="text-slate-700">Snitt</span>
               <span className="font-semibold">
                 {(elprisQ.data.avg_sek_per_kwh_inc_vat * 100).toFixed(0)} öre/kWh
               </span>
@@ -532,7 +532,7 @@ export default function Dashboard() {
               />
             </LineChart>
           </ResponsiveContainer>
-          <div className="text-xs text-slate-500 mt-2">
+          <div className="text-xs text-slate-700 mt-2">
             Tillgångar = summa alla bankkonton. Skuld = aktuellt lånesaldo
             (approximation — historisk låneutveckling kommer i framtida version).
           </div>
@@ -541,7 +541,7 @@ export default function Dashboard() {
 
       <Card title="Kassaflödesprognos (6 mån)">
         {fc.length === 0 ? (
-          <div className="text-sm text-slate-500">Behöver minst 2 månaders historik.</div>
+          <div className="text-sm text-slate-700">Behöver minst 2 månaders historik.</div>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={fc}>

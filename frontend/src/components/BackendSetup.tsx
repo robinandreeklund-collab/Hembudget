@@ -56,7 +56,7 @@ export function BackendSetup({ error }: { error?: string }) {
             autoFocus
             className="w-full mt-1 px-3 py-2 border rounded-lg border-slate-300 font-mono text-sm"
           />
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-xs text-slate-700 mt-1">
             Från Render-dashboarden: hitta "hembudget-backend"-tjänsten och
             kopiera URL:en (t.ex. <code>hembudget-backend-abc.onrender.com</code>).
             Jag lägger till <code>https://</code> automatiskt.
@@ -65,7 +65,7 @@ export function BackendSetup({ error }: { error?: string }) {
         {probeError && (
           <div className="text-sm text-rose-600">{probeError}</div>
         )}
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-700">
           Nuvarande försök: <code className="bg-slate-100 px-1 rounded">{getApiBase()}</code>
         </div>
         <button
