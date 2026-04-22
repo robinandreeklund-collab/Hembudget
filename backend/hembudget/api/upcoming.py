@@ -253,6 +253,15 @@ def create_upcoming(payload: UpcomingIn, session: Session = Depends(db)) -> Upco
     data = payload.model_dump()
     line_dicts = data.pop("lines", []) or []
     u = UpcomingTransaction(**data)
+    # Fyll i default-debit-konto om användaren inte angav ett. Sparas i
+    # app_settings som 'default_debit_account_id' via /settings-endpoint.
+    if u.debit_account_id is None and u.kind == "bill":
+        from ..db.models import AppSetting
+        s_row = session.get(AppSetting, "default_debit_account_id")
+        if s_row and isinstance(s_row.value, dict):
+            default_id = s_row.value.get("v")
+            if isinstance(default_id, int):
+                u.debit_account_id = default_id
     for i, ld in enumerate(line_dicts):
         u.lines.append(UpcomingTransactionLine(
             description=ld["description"],
@@ -819,6 +828,17 @@ def _resolve_debit_account(session: Session, from_account: str | None) -> int | 
     return None
 
 
+def _default_debit_account_id(session: Session) -> int | None:
+    """Hämta användarens inställda default-debit-konto (app_settings)."""
+    from ..db.models import AppSetting
+    row = session.get(AppSetting, "default_debit_account_id")
+    if row and isinstance(row.value, dict):
+        v = row.value.get("v")
+        if isinstance(v, int):
+            return v
+    return None
+
+
 def _build_upcoming_from_parsed(
     parsed: dict,
     *,
@@ -845,6 +865,10 @@ def _build_upcoming_from_parsed(
     debit_account_id: int | None = None
     if session is not None:
         debit_account_id = _resolve_debit_account(session, parsed.get("from_account"))
+        # Fallback till användarens default om fakturan inte uttryckligen
+        # angav ett avsändarkonto
+        if debit_account_id is None and kind == "bill":
+            debit_account_id = _default_debit_account_id(session)
 
     # Bygg ihop notes med extra fält som inte har egen kolumn
     extra_notes = []

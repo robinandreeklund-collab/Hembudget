@@ -464,6 +464,22 @@ class FundHoldingSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class AppSetting(Base):
+    """Enkelt key/value-lager för användarinställningar.
+
+    Användsfall: default_debit_account_id (kontot som föreslås för nya
+    upcoming bills), default_currency, osv. Värde lagras som JSON så vi
+    slipper migrera när datatyper ändras.
+    """
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

@@ -7,7 +7,7 @@ import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
 import { ResetDialog } from "@/components/ResetDialog";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { ForecastPoint, MonthSummary } from "@/types/models";
+import type { ForecastPoint, HouseholdUser, MonthSummary } from "@/types/models";
 
 interface Anomaly {
   category: string;
@@ -127,6 +127,17 @@ export default function Dashboard() {
     queryFn: () => api<ElprisDay>(`/elpris/today?zone=${elprisZone}`),
     retry: false,
   });
+  const usersQ = useQuery({
+    queryKey: ["users"],
+    queryFn: () => api<HouseholdUser[]>("/users"),
+  });
+  const userNameById: Record<string, string> = {};
+  for (const u of usersQ.data ?? []) userNameById[String(u.id)] = u.name;
+  const resolveOwnerLabel = (key: string): string => {
+    if (key === "gemensamt") return "Gemensamt";
+    const id = key.replace("user_", "");
+    return userNameById[id] ?? `Användare ${id}`;
+  };
   const ytdIncomeQ = useQuery({
     queryKey: ["ytd-income"],
     queryFn: () => api<YtdIncome>(`/budget/ytd-income`),
@@ -204,10 +215,7 @@ export default function Dashboard() {
           )}
           <div className="space-y-2">
             {Object.entries(ytdIncomeQ.data.by_owner).map(([key, v]) => {
-              const label =
-                key === "gemensamt"
-                  ? "Gemensamt konto"
-                  : key.replace("user_", "Användare ");
+              const label = resolveOwnerLabel(key);
               return (
                 <div
                   key={key}
@@ -386,7 +394,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {Object.entries(familyQ.data.by_owner).map(([key, v]) => {
-                const label = key === "gemensamt" ? "Gemensamt" : key.replace("user_", "Användare ");
+                const label = resolveOwnerLabel(key);
                 const net = v.income - v.expenses;
                 return (
                   <div

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import { ACCOUNT_TYPES, accountTypeLabel, isPayer } from "@/lib/accountTypes";
-import type { Account } from "@/types/models";
+import type { Account, HouseholdUser } from "@/types/models";
 
 async function patchAccount(id: number, payload: Partial<Account>): Promise<Account> {
   return api<Account>(`/accounts/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -19,6 +19,7 @@ const BANKS = [
 export default function ImportPage() {
   const qc = useQueryClient();
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => api<Account[]>("/accounts") });
+  const usersQ = useQuery({ queryKey: ["users"], queryFn: () => api<HouseholdUser[]>("/users") });
   const [file, setFile] = useState<File | null>(null);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [bank, setBank] = useState<string>("");
@@ -118,6 +119,7 @@ export default function ImportPage() {
               <AccountSetupRow
                 key={a.id}
                 account={a}
+                users={usersQ.data ?? []}
                 onSave={(updates) =>
                   patchAccount(a.id, updates).then(() =>
                     qc.invalidateQueries({ queryKey: ["accounts"] }),
@@ -308,10 +310,12 @@ export default function ImportPage() {
 
 function AccountSetupRow({
   account,
+  users,
   onSave,
   onDelete,
 }: {
   account: Account;
+  users: HouseholdUser[];
   onSave: (updates: Partial<Account>) => Promise<unknown>;
   onDelete: (force: boolean) => void;
 }) {
@@ -366,6 +370,24 @@ function AccountSetupRow({
           <div className="font-medium truncate">{account.name}</div>
           <div className="text-xs text-slate-700">{account.bank} · {account.type}</div>
         </div>
+        <label className="text-xs">
+          <div className="text-slate-700">Ägare</div>
+          <select
+            value={account.owner_id ?? ""}
+            onChange={(e) =>
+              onSave({
+                owner_id: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+            className="border rounded px-2 py-1 text-sm bg-white"
+            title="Vem i hushållet äger detta konto — används av 'fördela per person'"
+          >
+            <option value="">Gemensamt</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+        </label>
         <button
           onClick={() => {
             const msg =
@@ -374,7 +396,7 @@ function AccountSetupRow({
               "'?\n\nOm kontot har transaktioner raderas även alla transaktioner, splits och loan-länkar. Detta kan inte ångras.";
             if (confirm(msg)) onDelete(true);
           }}
-          className="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded"
+          className="text-xs text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded self-end"
           title="Radera kontot"
         >
           Radera

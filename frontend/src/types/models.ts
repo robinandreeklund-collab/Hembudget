@@ -10,6 +10,12 @@ export interface Account {
   credit_limit?: number | null;
   bankgiro?: string | null;
   pays_credit_account_id?: number | null;
+  owner_id?: number | null;
+}
+
+export interface HouseholdUser {
+  id: number;
+  name: string;
 }
 
 export interface Category {

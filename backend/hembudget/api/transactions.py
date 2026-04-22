@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..categorize.engine import normalize_merchant
 from ..categorize.rules import create_rule_from_correction
-from ..db.models import Account, Category, Import, Transaction
+from ..db.models import Account, Category, Import, Transaction, User
 from ..llm.client import LMStudioClient
 from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
@@ -16,6 +16,7 @@ from .schemas import (
     AccountIn, AccountOut, AccountUpdate,
     CategoryIn, CategoryOut, CategoryUpdate,
     TransactionOut, TransactionUpdate, TransferLinkIn,
+    UserIn, UserOut,
 )
 
 router = APIRouter(tags=["transactions"], dependencies=[Depends(require_auth)])
@@ -295,6 +296,33 @@ def delete_account(
         "deleted": account_id,
         "deleted_transactions": tx_count,
     }
+
+
+@router.get("/users", response_model=list[UserOut])
+def list_users(session: Session = Depends(db)) -> list[User]:
+    """Hushållsmedlemmar — används för att sätta ägare på konton."""
+    return session.query(User).order_by(User.id).all()
+
+
+@router.post("/users", response_model=UserOut)
+def create_user(payload: UserIn, session: Session = Depends(db)) -> User:
+    u = User(name=payload.name.strip())
+    session.add(u); session.flush()
+    return u
+
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, session: Session = Depends(db)) -> dict:
+    u = session.get(User, user_id)
+    if u is None:
+        raise HTTPException(404, "User not found")
+    # Nolla owner_id på konton som pekade på användaren
+    session.query(Account).filter(Account.owner_id == user_id).update(
+        {"owner_id": None},
+    )
+    session.delete(u)
+    session.flush()
+    return {"deleted": user_id}
 
 
 @router.get("/categories", response_model=list[CategoryOut])

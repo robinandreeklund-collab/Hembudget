@@ -66,6 +66,7 @@ class AccountIn(BaseModel):
     card_last_digits: Optional[str] = None
     parent_account_id: Optional[int] = None
     pays_credit_account_id: Optional[int] = None
+    owner_id: Optional[int] = None
 
 
 class AccountOut(AccountIn):
@@ -81,6 +82,17 @@ class AccountUpdate(BaseModel):
     credit_limit: Optional[Decimal] = None
     bankgiro: Optional[str] = None
     pays_credit_account_id: Optional[int] = None
+    owner_id: Optional[int] = None
+
+
+class UserIn(BaseModel):
+    name: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
 
 
 class CategoryOut(BaseModel):
