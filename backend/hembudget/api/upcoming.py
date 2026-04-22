@@ -479,6 +479,14 @@ def materialize_to_account(
     session.flush()
     u.matched_transaction_id = tx.id
 
+    # Om upcoming.owner är tomt och kontot har ägare, sätt owner-strängen
+    # till User.name så Familje-vyn och prognos-rad visar rätt namn
+    # (annars syns "Okänd" i income_by_owner).
+    if not (u.owner or "").strip() and acc.owner_id is not None:
+        owner_user = session.get(User, acc.owner_id)
+        if owner_user is not None:
+            u.owner = owner_user.name
+
     # Kopiera ev. lines till splits
     if u.lines:
         from ..splits import apply_upcoming_lines_to_transaction
@@ -1247,9 +1255,33 @@ def monthly_forecast(
     after_known = float(income_total) - float(bills_total) - loan_scheduled_total
     available = after_known - avg_expenses
 
+    # Inkomst per person — försök härleda namn i denna ordning:
+    # 1. upcoming.owner-strängen (om satt)
+    # 2. Om matched_transaction_id finns → slå upp Account.owner_id → User.name
+    # 3. Om upcoming.name innehåller en User.name som substring → använd det
+    #    (t.ex. "Evelinas Lön" → Evelina, "Lön Robin" → Robin)
+    # 4. "Okänd"
+    from ..db.models import User as _User
+    users_all = session.query(_User).all()
+    user_name_by_id = {u.id: u.name for u in users_all}
+
     owners: dict[str, Decimal] = {}
     for i in incomes:
-        key = i.owner or "Okänd"
+        owner_name = (i.owner or "").strip()
+        if not owner_name and i.matched_transaction_id is not None:
+            tx = session.get(Transaction, i.matched_transaction_id)
+            if tx is not None:
+                acc = session.get(Account, tx.account_id)
+                if acc is not None and acc.owner_id is not None:
+                    owner_name = user_name_by_id.get(acc.owner_id, "")
+        if not owner_name:
+            # Fallback: scanna upcoming-namnet efter en känd User.name
+            name_low = (i.name or "").lower()
+            for u in users_all:
+                if u.name and u.name.lower() in name_low:
+                    owner_name = u.name
+                    break
+        key = owner_name or "Okänd"
         owners[key] = owners.get(key, Decimal("0")) + i.amount
 
     return {
