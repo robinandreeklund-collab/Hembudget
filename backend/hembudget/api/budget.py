@@ -32,28 +32,6 @@ def available_months(session: Session = Depends(db)) -> dict:
     return {"months": [{"month": m, "count": c} for m, c in rows]}
 
 
-@router.get("/{month}")
-def get_summary(month: str, session: Session = Depends(db)) -> dict:
-    s = MonthlyBudgetService(session).summary(month)
-    return {
-        "month": s.month,
-        "income": float(s.income),
-        "expenses": float(s.expenses),
-        "savings": float(s.savings),
-        "savings_rate": s.savings_rate,
-        "lines": [
-            {
-                "category_id": l.category_id,
-                "category": l.category,
-                "planned": float(l.planned),
-                "actual": float(l.actual),
-                "diff": float(l.diff),
-            }
-            for l in s.lines
-        ],
-    }
-
-
 @router.post("/")
 def set_budget(payload: BudgetIn, session: Session = Depends(db)) -> dict:
     svc = MonthlyBudgetService(session)
@@ -157,5 +135,34 @@ def detect_subs(session: Session = Depends(db)) -> dict:
                 "occurrences": c.occurrences,
             }
             for c in candidates
+        ],
+    }
+
+
+@router.get("/{month}")
+def get_summary(month: str, session: Session = Depends(db)) -> dict:
+    """Månadsöversikt. OBS: måste deklareras SIST bland GET-routes annars
+    fångar `{month}` catch-all andra endpoints som /ytd-income, /family/…,
+    /subscriptions/health osv."""
+    import re
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Invalid month format: {month}")
+    s = MonthlyBudgetService(session).summary(month)
+    return {
+        "month": s.month,
+        "income": float(s.income),
+        "expenses": float(s.expenses),
+        "savings": float(s.savings),
+        "savings_rate": s.savings_rate,
+        "lines": [
+            {
+                "category_id": l.category_id,
+                "category": l.category,
+                "planned": float(l.planned),
+                "actual": float(l.actual),
+                "diff": float(l.diff),
+            }
+            for l in s.lines
         ],
     }

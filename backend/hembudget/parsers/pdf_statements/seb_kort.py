@@ -75,24 +75,40 @@ def _parse_iso_date(s: str) -> date | None:
 
 # --- Regex-mönster ---
 
-# SKULD FRÅN 251201   6032,91
+# Format A (e-faktura): "SKULD FRÅN 251201 6032,91"
+# Format B (pappersfaktura): "SALDO FRÅN FÖREGÅENDE KONTOUTDRAG 6985,50"
 _OPENING_RE = re.compile(
     r"SKULD\s+FRÅN\s+(\d{6})\s+([\d\s .]+,\d{2})",
     re.IGNORECASE,
 )
-# SKULD PER 251231   11344,02
+_OPENING_ALT_RE = re.compile(
+    r"SALDO\s+FRÅN\s+FÖREGÅENDE\s+KONTOUTDRAG\s+([\d\s .]+,\d{2})",
+    re.IGNORECASE,
+)
+# Format A: "SKULD PER 251231 11344,02"
+# Format B: "Totalt saldo 17324,23" (i header-block)
 _CLOSING_RE = re.compile(
     r"SKULD\s+PER\s+(\d{6})\s+([\d\s .]+,\d{2})",
     re.IGNORECASE,
 )
-# "Vill du betala hela månadens skuld ska du betala  11.344,02"
+_TOTAL_SALDO_RE = re.compile(
+    r"Totalt\s+saldo\s+([\d\s .]+,\d{2})",
+    re.IGNORECASE,
+)
+# "Vill du betala hela månadens skuld ska du betala  11.344,02" (format A)
 _TOTAL_RE = re.compile(
     r"hela\s+månadens\s+skuld\s+ska\s+du\s+betala[\s\n]+([\d\s .]+,\d{2})",
     re.IGNORECASE,
 )
-# "Vill du debitera är det lägsta beloppet att betala  345,00"
+# Format A: "Vill du debitera är det lägsta beloppet att betala  345,00"
+# Format B: "Lägsta belopp att betala** 519,72"
 _MIN_RE = re.compile(
-    r"lägsta\s+beloppet\s+att\s+betala[\s\n]+([\d\s .]+,\d{2})",
+    r"lägsta\s+belopp(?:et)?\s+att\s+betala\*?\*?[\s\n]+([\d\s .]+,\d{2})",
+    re.IGNORECASE,
+)
+# Kreditutrymme (format B): "Kreditutrymme 20000,00"
+_CREDIT_LIMIT_RE = re.compile(
+    r"Kreditutrymme\s+([\d\s .]+,\d{2})",
     re.IGNORECASE,
 )
 # "Betalning oss tillhanda senast  2026-01-30"
@@ -100,11 +116,13 @@ _DUE_RE = re.compile(
     r"oss\s+tillhanda\s+senast\s+(\d{4}-\d{2}-\d{2})",
     re.IGNORECASE,
 )
+# OCR: båda format stöds: "OCR Nummer: 403538411614789" och "OCR-nummer 128495819"
 _OCR_RE = re.compile(
-    r"OCR\s*Nummer\s*[:：]?\s*(\d{8,})", re.IGNORECASE,
+    r"OCR[\s\-]*[Nn]ummer\s*[:：]?\s*(\d{8,})", re.IGNORECASE,
 )
+# Bankgiro: "Bankgiro 595-4300" OCH "Bankgironummer 595-4300"
 _BANKGIRO_RE = re.compile(
-    r"Bankgiro(?:t)?[:\s]*(\d+-\d+)", re.IGNORECASE,
+    r"Bankgiro(?:t|nummer)?[:\s]*(\d+-?\d+)", re.IGNORECASE,
 )
 _ACCOUNT_NUM_RE = re.compile(
     r"Kontonummer\s*[:：]?\s*(\d{10,})", re.IGNORECASE,
@@ -112,15 +130,22 @@ _ACCOUNT_NUM_RE = re.compile(
 _PERIOD_RE = re.compile(
     r"KONTOUTDRAG\s+(\w+)\s+(\d{4})", re.IGNORECASE,
 )
-_CREDIT_LIMIT_RE = re.compile(
+_KOPGRANS_RE = re.compile(
     r"Köpgräns[\s\n]+([\d\s .]+,\d{2})", re.IGNORECASE,
 )
 _AMOUNT_ANY = re.compile(r"[\d .]+,\d{2}")
 
-# Kortinnehavare: "KORT NR **** **** **** 9506 EVELINA FRÖJD"
-# Banken visar 3 grupper av asterisker + sista 4 siffror + namn.
+# Kortinnehavare: två format stöds
+# Format A (e-faktura): "KORT NR **** **** **** 9506 EVELINA FRÖJD"
+# Format B (pappersfaktura): "EVELINA FRÖJD **** **** **** 9506"
+# Banken visar 3 grupper av asterisker + sista 4 siffror + namn
 _CARDHOLDER_RE = re.compile(
     r"KORT\s+NR\s+(?:\*+\s+){2,4}(\d{4})\s+([A-ZÅÄÖ][A-ZÅÄÖ ]+?)(?=\s*\n)",
+    re.MULTILINE,
+)
+_CARDHOLDER_ALT_RE = re.compile(
+    r"^(?!KORT\s+NR)([A-ZÅÄÖ][A-ZÅÄÖ]+(?:\s+[A-ZÅÄÖ][A-ZÅÄÖ]+)*)\s+"
+    r"(?:\*+\s+){2,4}(\d{4})",
     re.MULTILINE,
 )
 
@@ -137,7 +162,12 @@ _SUMMARY_MARKERS = (
     "TOTALT DETTA KORT",
     "SKULD FRÅN",
     "SKULD PER",
+    "SALDO FRÅN FÖREGÅENDE",
+    "SALDO FRÅN FÖREGÅENDE KONTOUTDRAG",
     "OCR Nummer",
+    "OCR-nummer",
+    "Totalt saldo",
+    "Kreditutrymme",
     # OBS: "Kostnad pappersfaktura" är en legitim transaktion (avgift) och
     # ska INTE skippas trots att den ser ut som rubriktext.
 )
@@ -147,7 +177,11 @@ def parse_seb_kort(text: str) -> ParsedStatement:
     stmt = ParsedStatement(issuer="seb_kort")
     stmt.card_name = "SEB EuroBonus Mastercard Premium"
 
+    # Format A: "Vill du betala hela månadens skuld ska du betala ..."
+    # Format B: "Totalt saldo ..."
     if m := _TOTAL_RE.search(text):
+        stmt.total_amount = _parse_amount(m.group(1))
+    elif m := _TOTAL_SALDO_RE.search(text):
         stmt.total_amount = _parse_amount(m.group(1))
     if m := _MIN_RE.search(text):
         stmt.minimum_amount = _parse_amount(m.group(1))
@@ -187,16 +221,32 @@ def parse_seb_kort(text: str) -> ParsedStatement:
     if m := _BANKGIRO_RE.search(text):
         stmt.bankgiro = m.group(1)
 
+    # Opening balance: format A eller B
     if m := _OPENING_RE.search(text):
         stmt.statement_period_start = _parse_date_yymmdd(m.group(1))
         stmt.opening_balance = _parse_amount(m.group(2))
+    elif m := _OPENING_ALT_RE.search(text):
+        stmt.opening_balance = _parse_amount(m.group(1))
+    # Closing balance: format A
     if m := _CLOSING_RE.search(text):
         stmt.statement_period_end = _parse_date_yymmdd(m.group(1))
         stmt.closing_balance = _parse_amount(m.group(2))
+    elif stmt.total_amount:
+        # Format B: closing = total_amount
+        stmt.closing_balance = stmt.total_amount
 
     # Kortinnehavare-index: mappa rad-position → holder
-    cardholders = [(m.start(), m.group(1), m.group(2).strip())
-                   for m in _CARDHOLDER_RE.finditer(text)]
+    # Stöd båda formaten:
+    # Format A: "KORT NR **** **** **** 9506 EVELINA FRÖJD" → (last4, name)
+    # Format B: "EVELINA FRÖJD **** **** **** 9506" → (last4, name)
+    cardholders: list[tuple[int, str, str]] = []
+    for m in _CARDHOLDER_RE.finditer(text):
+        cardholders.append((m.start(), m.group(1), m.group(2).strip()))
+    for m in _CARDHOLDER_ALT_RE.finditer(text):
+        # Format B: grupp 1 = namn, grupp 2 = last4
+        cardholders.append((m.start(), m.group(2), m.group(1).strip()))
+    # Sortera per text-position
+    cardholders.sort(key=lambda t: t[0])
 
     def _current_holder_at(pos: int) -> tuple[str | None, str | None]:
         """Senast nämnda kortinnehavare FÖRE given position i texten."""
@@ -288,6 +338,40 @@ def parse_seb_kort(text: str) -> ParsedStatement:
             amount=amount,
             cardholder=holder,
             foreign_currency=(currency if currency and currency != "SEK" else None),
+        ))
+
+    # Format B har rader utan datum för "Faktureringsavgift 35,00" och
+    # liknande metadata-rader. Lägg till dem som tx med period-slutdatum.
+    _FEE_RE = re.compile(
+        r"(Faktureringsavgift|Aviavgift|Årsavgift|Overdragsavgift)\s+"
+        r"([\d\s .]+,\d{2})",
+        re.IGNORECASE,
+    )
+    # Använd sista existerande tx som "period-slut" eller today
+    from datetime import date as _date
+    fallback_date = (
+        max((t.date for t in stmt.transactions), default=_date.today())
+        if stmt.transactions
+        else (stmt.statement_period_end or _date.today())
+    )
+    seen_fees: set[str] = set()
+    for m in _FEE_RE.finditer(text):
+        fee_name = m.group(1)
+        if fee_name.lower() in seen_fees:
+            continue
+        seen_fees.add(fee_name.lower())
+        amt_str = m.group(2)
+        try:
+            val = _parse_amount(amt_str)
+        except Exception:
+            continue
+        stmt.transactions.append(StatementLine(
+            date=fallback_date,
+            description=fee_name,
+            merchant=fee_name,
+            city=None,
+            amount=-val,  # avgifter = utgift
+            cardholder=None,  # gemensam avgift
         ))
 
     stmt.transactions.sort(key=lambda t: t.date)
