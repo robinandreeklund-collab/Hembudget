@@ -27,6 +27,36 @@ export default function ImportPage() {
     name: string; bank: string; type: string; account_number: string;
   }>({ name: "", bank: "nordea", type: "checking", account_number: "" });
 
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfAccountType, setPdfAccountType] = useState<string>("checking");
+  const [pdfResult, setPdfResult] = useState<unknown>(null);
+  const pdfParseMut = useMutation({
+    mutationFn: async () => {
+      if (!pdfFile) throw new Error("Välj PDF");
+      const form = new FormData();
+      form.append("file", pdfFile);
+      form.append("account_type", pdfAccountType);
+      return uploadFile<{
+        account_id: number;
+        account_name: string;
+        created: boolean;
+        transactions_created: number;
+        transactions_skipped_duplicates: number;
+        opening_balance: number;
+        closing_balance: number;
+        period_start: string | null;
+        period_end: string | null;
+      }>("/accounts/parse-pdf", form);
+    },
+    onSuccess: (data) => {
+      setPdfResult(data);
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+    },
+    onError: (err: Error) => setPdfResult({ error: err.message }),
+  });
+
   const createAccMut = useMutation({
     mutationFn: () =>
       api<Account>("/accounts", { method: "POST", body: JSON.stringify(newAcc) }),
@@ -147,6 +177,46 @@ export default function ImportPage() {
           </div>
         </Card>
       )}
+
+      <Card title="Auto-importera Nordea Kontohändelser-PDF">
+        <div className="text-sm text-slate-700 mb-3">
+          Ladda upp en PDF-utskrift av <em>Kontohändelser &amp; detaljer</em>{" "}
+          från Nordeas internetbank. Systemet skapar kontot automatiskt
+          (eller uppdaterar ett befintligt med samma kontonummer), läser in
+          alla transaktioner och kör kategorisering + transfer-matchning i en
+          svep. Idempotent — samma fil två gånger ger 0 dubbletter.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+            className="md:col-span-2 border rounded px-2 py-1.5 text-sm"
+          />
+          <select
+            className="border rounded px-2 py-1.5 text-sm"
+            value={pdfAccountType}
+            onChange={(e) => setPdfAccountType(e.target.value)}
+            title="Används bara för nya konton. ISK känns igen automatiskt på namnet."
+          >
+            {ACCOUNT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          className="mt-3 bg-brand-600 text-white px-4 py-2 rounded disabled:opacity-50"
+          disabled={!pdfFile || pdfParseMut.isPending}
+          onClick={() => pdfParseMut.mutate()}
+        >
+          {pdfParseMut.isPending ? "Läser in PDF…" : "Analysera & importera"}
+        </button>
+        {pdfResult !== null && (
+          <pre className="mt-3 bg-slate-900 text-slate-100 text-xs p-3 rounded overflow-x-auto">
+            {JSON.stringify(pdfResult, null, 2)}
+          </pre>
+        )}
+      </Card>
 
       <Card title="Nytt konto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

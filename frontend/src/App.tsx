@@ -15,6 +15,7 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Import from "./pages/Import";
+import Funds from "./pages/Funds";
 
 export default function App() {
   const { isAuthenticated, loading, initialized, backendError } = useAuth();
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/loans" element={<Loans />} />
+          <Route path="/funds" element={<Funds />} />
           <Route path="/transfers" element={<Transfers />} />
           <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/tax" element={<Tax />} />

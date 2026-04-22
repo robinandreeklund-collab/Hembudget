@@ -401,6 +401,69 @@ class TaxEvent(Base):
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
 
+class FundHolding(Base):
+    """Aktuell fondposition per konto — fond + antal andelar + värde.
+
+    Uppdateras en gång per månad från bankens vy (t.ex. Nordea ISK) via
+    vision-AI som extraherar raderna ur en skärmdump. Unik per (account,
+    fund_name) så samma fond alltid mappar mot samma rad.
+    """
+    __tablename__ = "fund_holdings"
+    __table_args__ = (
+        UniqueConstraint("account_id", "fund_name", name="uq_fund_acc_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    fund_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    units: Mapped[Optional[Decimal]] = mapped_column(Numeric(16, 4), nullable=True)
+    market_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    last_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
+    # Totalavkastning på positionen sedan den köptes — bankens "Värdeförändring".
+    change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    change_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    # Dagsförändring (kurs), från raden "+0,67% ▲".
+    day_change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="SEK")
+    last_update_date: Mapped[date] = mapped_column(Date, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class FundHoldingSnapshot(Base):
+    """Historik över månadsvisa fondinnehav — ger utveckling över tid per fond.
+
+    Skapas varje gång användaren importerar en ny skärmdump. En rad per fond
+    per uppdatering, med (account, fund, snapshot_date) som logisk nyckel så
+    två uppdateringar samma dag inte dubblerar.
+    """
+    __tablename__ = "fund_holding_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "fund_name", "snapshot_date",
+            name="uq_fund_snap_acc_name_date",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    fund_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    units: Mapped[Optional[Decimal]] = mapped_column(Numeric(16, 4), nullable=True)
+    market_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    last_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
+    change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    change_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    day_change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="SEK")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 

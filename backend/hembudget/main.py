@@ -15,8 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 faulthandler.enable()
 
 from .api import (
-    admin, auth, balances, budget, chat, elpris, loans, reports, scenarios,
-    tax, transactions, transfers, upcoming, upload,
+    admin, auth, balances, budget, chat, elpris, funds, loans, reports,
+    scenarios, tax, transactions, transfers, upcoming, upload,
 )
 from .config import settings
 
@@ -61,6 +61,7 @@ def build_app() -> FastAPI:
     app.include_router(upcoming.router)
     app.include_router(balances.router)
     app.include_router(elpris.router)
+    app.include_router(funds.router)
     app.include_router(admin.router)
 
     @app.get("/healthz")
