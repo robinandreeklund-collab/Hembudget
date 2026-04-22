@@ -293,13 +293,20 @@ def parse_amex(text: str) -> ParsedStatement:
                     else:
                         amount = -amount_val
                     merchant, city = _split_merchant_city(desc_clean)
+                    holder = _holder_at(line_off)
+                    low_desc = desc_clean.lower()
+                    if any(m in low_desc for m in (
+                        "betalning mottagen", "betalning tack",
+                        "årsavgift", "aviavgift", "valutatillägg",
+                    )):
+                        holder = None
                     stmt.transactions.append(StatementLine(
                         date=last_date,
                         description=desc_clean,
                         merchant=merchant,
                         city=city,
                         amount=amount,
-                        cardholder=_holder_at(line_off),
+                        cardholder=holder,
                     ))
             continue
         for i, dp in enumerate(date_pairs):
@@ -356,13 +363,31 @@ def parse_amex(text: str) -> ParsedStatement:
                 amount = -amount_val  # utgift → negativt
 
             merchant, city = _split_merchant_city(desc_clean)
+            holder = _holder_at(line_off + dp.start())
+
+            # Fakturabetalningar och bankavgifter är INTE per-kort — de är
+            # gemensamma händelser som tillhör parent-fakturakontot.
+            # Detta gör att sub-konton bara visar EGENKORTETS köp och
+            # refunder, inte lönekontots inbetalningar.
+            low_desc = desc_clean.lower()
+            if any(m in low_desc for m in (
+                "betalning mottagen",
+                "betalning tack",
+                "periodens del av årsavgift",
+                "årsavgift",
+                "aviavgift",
+                "valutatillägg",
+                "överdragsavgift",
+            )):
+                holder = None
+
             stmt.transactions.append(StatementLine(
                 date=tx_date,
                 description=desc_clean,
                 merchant=merchant,
                 city=city,
                 amount=amount,
-                cardholder=_holder_at(line_off + dp.start()),
+                cardholder=holder,
             ))
 
     # Deduplicering — samma (date, desc, amount, cardholder) får förekomma
@@ -379,6 +404,122 @@ def parse_amex(text: str) -> ParsedStatement:
 
     stmt.transactions.sort(key=lambda t: t.date)
     return stmt
+
+
+_HOLDER_SUM_RE = re.compile(
+    r"Summa\s+nya\s+köp\s+för\s+([A-ZÅÄÖ][A-Za-zÅÄÖåäö ]+?)\s+"
+    r"(-?\d{1,3}(?:\.\d{3})*,\d{2})",
+    re.IGNORECASE,
+)
+
+
+def reattribute_holders_by_sum(stmt: ParsedStatement, raw_text: str) -> None:
+    """Använd PDF:ens egna "Summa nya köp för X = NNNN,NN" som sanning för
+    att korrigera cardholder-attribution.
+
+    Amex-textlayouten gör att transaktioner i slutet av huvudkortssektionen
+    ibland får fel holder (KLM-refunder på extrakort osv.). PDF:en visar
+    dock EXAKT summa per holder, och den kan vi lita på.
+
+    Algoritm (greedy):
+    1. Hitta alla summa-rader från texten → mapping {holder → target_netto}
+    2. Räkna nuvarande netto per holder (exklusive None/gemensamma)
+    3. Om någon holder är FÖR låg (mer negativ) eller FÖR hög (mindre
+       negativ/mer positiv) än target → hitta kandidater att flytta till
+       annan holder tills summorna matchar inom tolerans.
+    4. Om total-avvikelsen är > 50 kr → ge upp (någonting är avvikande)
+       och behåll initial attribution.
+
+    Målet är netto (positive + negative) per holder, eftersom KLM-refunder
+    räknas som 'negativa köp' i Amex-summa-raden.
+    """
+    # Läs mål-summor från texten
+    targets: dict[str, Decimal] = {}
+    for m in _HOLDER_SUM_RE.finditer(raw_text):
+        name = m.group(1).strip()
+        amt = _parse_amount(m.group(2))
+        # Normalisera namn: ibland följer "Extrakort..." på samma rad
+        # men regexen fångar bara [A-Za-zÅÄÖ ] som ger rent namn
+        if name and amt > 0:
+            targets[name] = -amt  # netto hos oss = negativt (skuld)
+
+    if len(targets) < 2:
+        return  # Bara en holder eller ingen — ingen re-attribution behövs
+
+    # Räkna nuvarande netto per holder (exklusive gemensamma)
+    current: dict[str, Decimal] = {name: Decimal("0") for name in targets}
+    for tx in stmt.transactions:
+        if tx.cardholder in current:
+            current[tx.cardholder] += tx.amount
+
+    # Om båda är redan nära mål → klart
+    total_diff = sum(
+        abs(current[n] - targets[n]) for n in targets
+    )
+    if total_diff < Decimal("5"):
+        return
+
+    # Hitta transaktioner som är KANDIDATER att flytta (inte gemensamma).
+    # Bankavgifter och fakturabetalningar har cardholder=None → inte med.
+    candidates = [t for t in stmt.transactions if t.cardholder in current]
+
+    # Greedy: för varje holder som har för "mycket" (dvs for negativ netto,
+    # eller för lite positivt), leta transaktion att flytta till rätt holder.
+    # Max 200 iterationer för säkerhet.
+    for _ in range(200):
+        worst_name = None
+        worst_diff = Decimal("0")
+        for name in targets:
+            d = current[name] - targets[name]
+            if abs(d) > abs(worst_diff):
+                worst_diff = d
+                worst_name = name
+        if worst_name is None or abs(worst_diff) < Decimal("1"):
+            break
+
+        # worst_diff > 0: worst har MER positivt än target → flytta POS tx bort
+        #                  ELLER flytta NEG tx hit från annan
+        # worst_diff < 0: worst har MER negativt → flytta NEG tx bort
+        other_names = [n for n in targets if n != worst_name]
+        # Hitta bästa tx att flytta
+        best_tx = None
+        best_move = None  # (from_holder, to_holder)
+        best_score = Decimal("9999999")
+        for tx in candidates:
+            for other in other_names:
+                if tx.cardholder == worst_name:
+                    # Flytta FROM worst TO other
+                    # Nytt worst_diff = worst_diff - tx.amount
+                    # Nytt other_diff = (current[other] - tx.amount) - targets[other]
+                    new_worst_diff = worst_diff - tx.amount
+                    new_other_diff = (current[other] + tx.amount) - targets[other]
+                    # Poäng: minimera total absolut avvikelse
+                    score = abs(new_worst_diff) + abs(new_other_diff)
+                    if score < best_score:
+                        best_score = score
+                        best_tx = tx
+                        best_move = (worst_name, other)
+                elif tx.cardholder == other:
+                    # Flytta FROM other TO worst
+                    new_worst_diff = worst_diff + tx.amount
+                    new_other_diff = (current[other] - tx.amount) - targets[other]
+                    score = abs(new_worst_diff) + abs(new_other_diff)
+                    if score < best_score:
+                        best_score = score
+                        best_tx = tx
+                        best_move = (other, worst_name)
+
+        # Om ingen flytt förbättrar → sluta
+        current_score = sum(
+            abs(current[n] - targets[n]) for n in targets
+        )
+        if best_tx is None or best_score >= current_score:
+            break
+        # Applicera flytten
+        from_h, to_h = best_move
+        current[from_h] -= best_tx.amount
+        current[to_h] += best_tx.amount
+        best_tx.cardholder = to_h
 
 
 _KNOWN_CITIES = {

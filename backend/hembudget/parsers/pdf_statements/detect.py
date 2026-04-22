@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from . import ParsedStatement, extract_pdf_text_layout
-from .amex import looks_like_amex, parse_amex
+from .amex import looks_like_amex, parse_amex, reattribute_holders_by_sum
 from .seb_kort import looks_like_seb_kort, parse_seb_kort
 
 
@@ -29,13 +29,30 @@ def parse_statement(
     Kastar UnknownStatementFormat om formatet inte känns igen.
     """
     text = extract_pdf_text_layout(pdf_bytes)
-    return parse_statement_text(text, force=force)
+    is_amex = force == "amex" or (force is None and looks_like_amex(text))
+    is_seb = force == "seb_kort" or (force is None and looks_like_seb_kort(text))
+
+    if is_amex:
+        stmt = parse_amex(text)
+        # Re-attribute cardholders via PDF:ens egna "Summa nya köp för X"
+        # rader — Amex text-layout ger fel cardholder för köp i slutet
+        # av huvudkortssektionen (KLM-refunder m.fl.). Vi har sanningen
+        # direkt i PDF:ens summa-rader och använder greedy assignment.
+        try:
+            reattribute_holders_by_sum(stmt, text)
+        except Exception:
+            pass
+        return stmt
+    if is_seb:
+        return parse_seb_kort(text)
+    raise UnknownStatementFormat(text)
 
 
 def parse_statement_text(
     text: str, force: str | None = None
 ) -> ParsedStatement:
-    """Samma som parse_statement men tar redan extraherad text (för tester)."""
+    """Samma som parse_statement men tar redan extraherad text (för tester
+    utan riktig PDF-bytes). Ingen X-kolumn-re-attribution här."""
     if force == "amex":
         return parse_amex(text)
     if force == "seb_kort":
