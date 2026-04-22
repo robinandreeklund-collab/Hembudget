@@ -524,12 +524,15 @@ interface MatchCandidate {
   kind: "bill" | "income";
   name: string;
   amount: number;
+  paid_amount?: number;
+  remaining_amount?: number;
   expected_date: string;
   owner: string | null;
   source: string;
   amount_diff: number;
   date_diff_days: number;
   exact_match: boolean;
+  match_type?: "full" | "partial";
 }
 
 function ManualMatchModal({
@@ -632,11 +635,14 @@ function ManualMatchModal({
             </div>
           ) : (
             <div className="space-y-1 max-h-96 overflow-y-auto">
-              {cands.map((c) => (
+              {cands.map((c) => {
+                const isPartial = c.match_type === "partial";
+                return (
                 <div
                   key={c.id}
                   className={`border rounded p-2 flex items-center gap-2 text-sm ${
-                    c.exact_match ? "bg-emerald-50 border-emerald-200" : ""
+                    c.exact_match ? "bg-emerald-50 border-emerald-200" :
+                    isPartial ? "bg-amber-50/50 border-amber-200" : ""
                   }`}
                 >
                   <div className="flex-1 min-w-0">
@@ -644,32 +650,45 @@ function ManualMatchModal({
                     <div className="text-xs text-slate-700 flex flex-wrap gap-x-2">
                       <span>{c.expected_date}</span>
                       <span>·</span>
-                      <span
-                        className={
-                          c.amount_diff < 1
-                            ? "text-emerald-700"
-                            : c.amount_diff < 10
-                            ? "text-slate-700"
-                            : "text-amber-700"
-                        }
-                      >
-                        Δ {c.amount_diff.toFixed(0)} kr
-                      </span>
-                      <span
-                        className={
-                          c.date_diff_days <= 5
-                            ? "text-emerald-700"
-                            : c.date_diff_days <= 15
-                            ? "text-slate-700"
-                            : "text-amber-700"
-                        }
-                      >
-                        · Δ {c.date_diff_days}d
-                      </span>
+                      {isPartial ? (
+                        <span className="text-amber-700">
+                          Delbetalning (kvar {formatSEK(c.remaining_amount ?? c.amount)})
+                        </span>
+                      ) : (
+                        <>
+                          <span
+                            className={
+                              c.amount_diff < 1
+                                ? "text-emerald-700"
+                                : c.amount_diff < 10
+                                ? "text-slate-700"
+                                : "text-amber-700"
+                            }
+                          >
+                            Δ {c.amount_diff.toFixed(0)} kr
+                          </span>
+                          <span
+                            className={
+                              c.date_diff_days <= 5
+                                ? "text-emerald-700"
+                                : c.date_diff_days <= 15
+                                ? "text-slate-700"
+                                : "text-amber-700"
+                            }
+                          >
+                            · Δ {c.date_diff_days}d
+                          </span>
+                        </>
+                      )}
                       {c.owner && <span>· {c.owner}</span>}
                       {c.source !== "manual" && <span>· {c.source}</span>}
                       {c.exact_match && (
                         <span className="text-emerald-600 font-medium">· exakt</span>
+                      )}
+                      {(c.paid_amount ?? 0) > 0 && !isPartial && (
+                        <span className="text-emerald-700">
+                          · redan betalt {formatSEK(c.paid_amount ?? 0)}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -683,11 +702,16 @@ function ManualMatchModal({
                       disabled={matchMut.isPending}
                       className="mt-1 text-xs bg-brand-600 text-white px-2 py-0.5 rounded disabled:opacity-50"
                     >
-                      {matchMut.isPending ? "…" : "Matcha"}
+                      {matchMut.isPending
+                        ? "…"
+                        : isPartial
+                        ? "Delbetala"
+                        : "Matcha"}
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {matchMut.isError && (

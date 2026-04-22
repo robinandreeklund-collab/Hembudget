@@ -85,7 +85,7 @@ def _setup_tx_and_upcomings(SL):
 
 def test_match_candidates_sorts_exact_match_first(client):
     c, SL = client
-    tx_id, u1_id, u2_id, u3_id = _setup_tx_and_upcomings(SL)
+    tx_id, u1_id, _, u3_id = _setup_tx_and_upcomings(SL)
 
     r = c.get(f"/transactions/{tx_id}/match-candidates")
     assert r.status_code == 200
@@ -93,7 +93,7 @@ def test_match_candidates_sorts_exact_match_first(client):
     # Default kind=income eftersom tx är positiv
     assert body["kind"] == "income"
     cands = body["candidates"]
-    assert len(cands) >= 2
+    assert len(cands) >= 1
     # Första ska vara exakta matchen (u1 = 35 000 på samma datum)
     assert cands[0]["id"] == u1_id
     assert cands[0]["exact_match"] is True
@@ -105,9 +105,21 @@ def test_match_candidates_sorts_exact_match_first(client):
 
 def test_match_candidates_kind_bill_shows_only_bills(client):
     c, SL = client
-    tx_id, _, _, u3_id = _setup_tx_and_upcomings(SL)
+    _, _, _, u3_id = _setup_tx_and_upcomings(SL)
+    # Skapa en NEGATIV tx som kan matcha bill u3 (3000 kr)
+    from hembudget.db.models import Account, Transaction
+    from decimal import Decimal as _D
+    with SL() as s:
+        acc = s.query(Account).first()
+        tx_neg = Transaction(
+            account_id=acc.id, date=date(2026, 3, 28),
+            amount=_D("-3000"), currency="SEK",
+            raw_description="Amex", hash="h-neg",
+        )
+        s.add(tx_neg); s.commit()
+        tx_neg_id = tx_neg.id
 
-    r = c.get(f"/transactions/{tx_id}/match-candidates?kind=bill")
+    r = c.get(f"/transactions/{tx_neg_id}/match-candidates?kind=bill")
     body = r.json()
     ids = [c["id"] for c in body["candidates"]]
     assert u3_id in ids

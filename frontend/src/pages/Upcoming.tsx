@@ -1598,7 +1598,10 @@ function FindBankTxModal({
 }) {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [amtTol, setAmtTol] = useState(50);
+  // Default: upcoming.amount så ALLA delbetalningar syns (en del på 445 kr
+  // av en 13 445 kr faktura har Δ=13 000 kr, vilket är inom full
+  // upcoming-beloppet). Användaren kan strama åt om listan blir för lång.
+  const [amtTol, setAmtTol] = useState(Math.ceil(Number(item.amount)));
   const [dateTol, setDateTol] = useState(14);
 
   const candsQ = useQuery({

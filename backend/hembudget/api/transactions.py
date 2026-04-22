@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..categorize.engine import normalize_merchant
@@ -611,54 +612,81 @@ def list_match_candidates(
     kind: Optional[str] = Query(None, description="'income' eller 'bill'"),
     session: Session = Depends(db),
 ) -> dict:
-    """Lista omatchade UpcomingTransactions som kan bindas manuellt till
-    denna transaktion. Sorteras efter relevans:
-    1. Exakt beloppsmatch (±1 kr)
-    2. Närhet i datum
-    3. Rätt 'kind' (positiv tx → income; negativ → bill)
+    """Lista UpcomingTransactions som kan bindas manuellt till denna
+    transaktion, inklusive PARTIAL-kandidater.
 
-    Returnerar max 20 kandidater. Används av UI:t för "Matcha manuellt"."""
-    from ..db.models import UpcomingTransaction
-    from decimal import Decimal as _Dec
+    Returnerar upcomings där:
+    1. Exakt beloppsmatch (±1 kr) — denna tx kan helbetala upcomingen
+    2. Närhet i belopp (±10 kr) — nära-matchning
+    3. PARTIAL: upcoming.amount > |tx.amount| + 1 — denna tx kan vara
+       en delbetalning. Vi inkluderar bara om upcomingen har öppen
+       'remaining' (amount − paid_amount ≥ |tx.amount|)
+
+    Max 30 kandidater. Sorterade efter matchgrad + datumnärhet.
+    """
+    from ..db.models import UpcomingPayment, UpcomingTransaction
 
     tx = session.get(Transaction, tx_id)
     if tx is None:
         raise HTTPException(404, "Transaction not found")
 
-    # Default kind efter tx:s tecken
     default_kind = "income" if tx.amount > 0 else "bill"
     use_kind = kind or default_kind
 
-    q = session.query(UpcomingTransaction).filter(
-        UpcomingTransaction.matched_transaction_id.is_(None),
-    )
+    q = session.query(UpcomingTransaction)
     if use_kind in ("income", "bill"):
         q = q.filter(UpcomingTransaction.kind == use_kind)
+    # Acceptera även upcomings som redan har match (delbetalningar tillåts)
     ups = q.all()
 
-    # Beräkna expected_amount per upcoming
+    # Hämta paid_amount per upcoming i en query
+    paid_rows = (
+        session.query(
+            UpcomingPayment.upcoming_id,
+            func.coalesce(func.sum(func.abs(Transaction.amount)), 0).label("paid"),
+        )
+        .join(Transaction, Transaction.id == UpcomingPayment.transaction_id)
+        .group_by(UpcomingPayment.upcoming_id)
+        .all()
+    )
+    paid_by_id = {u_id: float(p) for u_id, p in paid_rows}
+
     tx_date = tx.date
     tx_amount = tx.amount
-    scored: list[tuple[int, int, bool, UpcomingTransaction]] = []
+    tx_abs = abs(float(tx_amount))
+    scored: list[tuple[int, int, bool, str, UpcomingTransaction]] = []
     for up in ups:
         expected = up.amount if up.kind == "income" else -up.amount
+        expected_f = float(expected)
         date_diff = abs((up.expected_date - tx_date).days)
-        amount_diff = abs(float(tx_amount - expected))
-        # Matchgrad:
-        # 0 = perfekt (belopp ±1 kr, datum ±10 dagar)
-        # 1 = belopp rimligt (±10 kr) eller datum nära
-        # 2 = annat
+        amount_diff = abs(float(tx_amount) - expected_f)
+        paid = paid_by_id.get(up.id, 0.0)
+        remaining = float(up.amount) - paid
+
+        match_type = "full"
+        same_sign = (tx_amount < 0) == (up.kind == "bill")
         if amount_diff <= 1.0 and date_diff <= 10:
             rank = 0
-        elif amount_diff <= 10.0 or date_diff <= 30:
+        elif amount_diff <= 10.0 and date_diff <= 30:
             rank = 1
-        else:
+        elif (
+            # Partial: tx är MINDRE än remaining (≤), inte samma belopp,
+            # och samma tecken-riktning.
+            same_sign
+            and tx_abs > 0.01
+            and tx_abs <= remaining + 1.0
+            and date_diff <= 30
+        ):
             rank = 2
+            match_type = "partial"
+        else:
+            continue  # skippa helt orelevanta
+
         exact = amount_diff <= 1.0 and date_diff <= 5
-        scored.append((rank, date_diff, exact, up))
+        scored.append((rank, date_diff, exact, match_type, up))
 
     scored.sort(key=lambda t: (t[0], t[1]))
-    top = scored[:20]
+    top = scored[:30]
 
     return {
         "transaction": {
@@ -675,6 +703,8 @@ def list_match_candidates(
                 "kind": up.kind,
                 "name": up.name,
                 "amount": float(up.amount),
+                "paid_amount": paid_by_id.get(up.id, 0.0),
+                "remaining_amount": float(up.amount) - paid_by_id.get(up.id, 0.0),
                 "expected_date": up.expected_date.isoformat(),
                 "owner": up.owner,
                 "source": up.source,
@@ -683,8 +713,9 @@ def list_match_candidates(
                 )), 2),
                 "date_diff_days": abs((up.expected_date - tx_date).days),
                 "exact_match": bool(exact),
+                "match_type": match_type,
             }
-            for rank, date_diff, exact, up in top
+            for rank, date_diff, exact, match_type, up in top
         ],
     }
 
