@@ -103,6 +103,20 @@ export default function Upcoming() {
     queryKey: ["categories"],
     queryFn: () => api<Category[]>("/categories"),
   });
+  const ytdIncomeQ = useQuery({
+    queryKey: ["ytd-income"],
+    queryFn: () =>
+      api<{
+        year: number;
+        category: string;
+        category_matched: boolean;
+        by_owner: Record<
+          string,
+          { total: number; count: number; accounts: Array<{ name: string; amount: number }> }
+        >;
+        grand_total: number;
+      }>("/budget/ytd-income"),
+  });
   const setLinesMut = useMutation({
     mutationFn: (p: { id: number; lines: Array<Omit<UpcomingLine, "id">> }) =>
       api<UpcomingLine[]>(`/upcoming/${p.id}/lines`, {
@@ -204,18 +218,17 @@ export default function Upcoming() {
   }
 
   const items = listQ.data ?? [];
-  const openBills = items.filter(
-    (i) => i.kind === "bill" && i.matched_transaction_id == null,
-  );
-  const paidBills = items.filter(
-    (i) => i.kind === "bill" && i.matched_transaction_id != null,
-  );
-  const openIncomes = items.filter(
-    (i) => i.kind === "income" && i.matched_transaction_id == null,
-  );
-  const paidIncomes = items.filter(
-    (i) => i.kind === "income" && i.matched_transaction_id != null,
-  );
+  // "Framtiden" = idag eller senare (expected_date >= today).
+  // Historiska rader hamnar i sektionerna "Betalda fakturor" / "Historiska
+  // löner" oavsett om de matchats mot en bankrad eller inte — fokus är
+  // att "Kommande" bara visar det som faktiskt är kommande.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isFuture = (i: UpcomingItem) =>
+    i.expected_date >= todayStr && i.matched_transaction_id == null;
+  const openBills = items.filter((i) => i.kind === "bill" && isFuture(i));
+  const paidBills = items.filter((i) => i.kind === "bill" && !isFuture(i));
+  const openIncomes = items.filter((i) => i.kind === "income" && isFuture(i));
+  const paidIncomes = items.filter((i) => i.kind === "income" && !isFuture(i));
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
@@ -427,16 +440,60 @@ export default function Upcoming() {
           onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
         />
       </Card>
-      {paidIncomes.length > 0 && (
-        <Card title={`Utbetalda löner (${paidIncomes.length})`}>
-          <ItemList
-            items={paidIncomes}
-            accounts={accountsQ.data ?? []}
-            categories={categoriesQ.data ?? []}
-            onDelete={(id) => deleteMut.mutate(id)}
-            onUpdate={(id, data) => updateMut.mutate({ id, data })}
-            onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
-          />
+      {(paidIncomes.length > 0 || (ytdIncomeQ.data?.grand_total ?? 0) > 0) && (
+        <Card
+          title={`Historiska löner (${
+            ytdIncomeQ.data?.year ?? new Date().getFullYear()
+          })`}
+        >
+          {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded p-3 mb-3 text-sm">
+              <div className="flex items-baseline justify-between">
+                <div className="font-medium text-emerald-800">
+                  Total lön hittills i år
+                </div>
+                <div className="text-lg font-semibold text-emerald-800">
+                  {formatSEK(ytdIncomeQ.data.grand_total)}
+                </div>
+              </div>
+              <div className="text-xs text-emerald-800 mt-1">
+                Summerat från alla transaktioner kategoriserade som{" "}
+                <em>{ytdIncomeQ.data.category}</em> i importerade kontoutdrag
+                {ytdIncomeQ.data.category_matched
+                  ? ""
+                  : " (fallback: alla positiva rader)"}.
+              </div>
+              {Object.entries(ytdIncomeQ.data.by_owner).length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {Object.entries(ytdIncomeQ.data.by_owner).map(([owner, b]) => (
+                    <div key={owner} className="flex justify-between text-xs">
+                      <span>
+                        {owner === "gemensamt" ? "Gemensamt" : owner}
+                        <span className="text-emerald-700 ml-1">
+                          · {b.count} st
+                        </span>
+                      </span>
+                      <span className="font-medium">{formatSEK(b.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {paidIncomes.length > 0 ? (
+            <ItemList
+              items={paidIncomes}
+              accounts={accountsQ.data ?? []}
+              categories={categoriesQ.data ?? []}
+              onDelete={(id) => deleteMut.mutate(id)}
+              onUpdate={(id, data) => updateMut.mutate({ id, data })}
+              onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
+            />
+          ) : (
+            <div className="text-xs text-slate-700">
+              Inga planerade löneposter med passerat datum.
+            </div>
+          )}
         </Card>
       )}
     </div>
