@@ -4,16 +4,21 @@ import { api, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account } from "@/types/models";
 
+// OBS: Decimal-fält (units, market_value, last_price osv.) serialiseras
+// som STRING av Pydantic. Vi typar därför som 'number | string' och
+// coerce:ar i format-helpers innan vi anropar .toFixed osv.
+type Num = number | string;
+
 interface Holding {
   id: number;
   account_id: number;
   fund_name: string;
-  units: number | null;
-  market_value: number;
-  last_price: number | null;
-  change_pct: number | null;
-  change_value: number | null;
-  day_change_pct: number | null;
+  units: Num | null;
+  market_value: Num;
+  last_price: Num | null;
+  change_pct: Num | null;
+  change_value: Num | null;
+  day_change_pct: Num | null;
   currency: string;
   last_update_date: string;
 }
@@ -21,8 +26,8 @@ interface Holding {
 interface Summary {
   account_id: number;
   account_name: string;
-  total_value: number;
-  available_cash: number | null;
+  total_value: Num;
+  available_cash: Num | null;
   fund_count: number;
   last_update_date: string | null;
   holdings: Holding[];
@@ -30,21 +35,27 @@ interface Summary {
 
 interface HistoryPoint {
   date: string;
-  market_value: number;
+  market_value: Num;
 }
 
-function formatKr(n: number | null | undefined): string {
+// Decimal-fält från Pydantic kommer som STRING i JSON. Vi coerce:ar så
+// UI:t inte kraschar när det anropar .toLocaleString/.toFixed på en string.
+function formatKr(n: number | string | null | undefined): string {
   if (n == null) return "—";
-  return n.toLocaleString("sv-SE", {
+  const num = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(num)) return "—";
+  return num.toLocaleString("sv-SE", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }) + " kr";
 }
 
-function formatPct(n: number | null | undefined): string {
+function formatPct(n: number | string | null | undefined): string {
   if (n == null) return "—";
-  const sign = n >= 0 ? "+" : "";
-  return sign + n.toFixed(2) + "%";
+  const num = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(num)) return "—";
+  const sign = num >= 0 ? "+" : "";
+  return sign + num.toFixed(2) + "%";
 }
 
 export default function FundsPage() {
@@ -169,11 +180,17 @@ export default function FundsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {summary.holdings.map((h) => (
+                      {summary.holdings.map((h) => {
+                        // OBS: Decimal-fält kommer som STRING från backend,
+                        // så Number()-cast innan vi anropar .toFixed().
+                        const units = h.units != null ? Number(h.units) : null;
+                        return (
                         <tr key={h.id} className="border-b last:border-b-0">
                           <td className="py-2 pr-2 font-medium">{h.fund_name}</td>
                           <td className="py-2 pr-2 text-right">
-                            {h.units != null ? h.units.toFixed(2) + " st" : "—"}
+                            {units != null && Number.isFinite(units)
+                              ? units.toFixed(2) + " st"
+                              : "—"}
                           </td>
                           <td className="py-2 pr-2 text-right">
                             {formatKr(h.last_price)}
@@ -184,7 +201,7 @@ export default function FundsPage() {
                           <td
                             className={
                               "py-2 pr-2 text-right " +
-                              ((h.change_pct ?? 0) >= 0
+                              (Number(h.change_pct ?? 0) >= 0
                                 ? "text-emerald-700"
                                 : "text-rose-600")
                             }
@@ -199,7 +216,7 @@ export default function FundsPage() {
                           <td
                             className={
                               "py-2 pr-2 text-right " +
-                              ((h.day_change_pct ?? 0) >= 0
+                              (Number(h.day_change_pct ?? 0) >= 0
                                 ? "text-emerald-700"
                                 : "text-rose-600")
                             }
@@ -207,7 +224,8 @@ export default function FundsPage() {
                             {formatPct(h.day_change_pct)}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -279,13 +297,14 @@ function MiniLineChart({ points }: { points: HistoryPoint[] }) {
   const W = 600;
   const H = 160;
   const PAD = 8;
-  const values = points.map((p) => p.market_value);
+  // market_value kan vara string från Pydantic Decimal → Number-casta
+  const values = points.map((p) => Number(p.market_value));
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const coords = points.map((p, i) => {
+  const coords = points.map((_, i) => {
     const x = PAD + (i * (W - 2 * PAD)) / (points.length - 1);
-    const y = H - PAD - ((p.market_value - min) / range) * (H - 2 * PAD);
+    const y = H - PAD - ((values[i] - min) / range) * (H - 2 * PAD);
     return `${x},${y}`;
   });
   return (
@@ -297,10 +316,10 @@ function MiniLineChart({ points }: { points: HistoryPoint[] }) {
           strokeWidth="2"
           points={coords.join(" ")}
         />
-        {points.map((p, i) => {
+        {points.map((_, i) => {
           const x = PAD + (i * (W - 2 * PAD)) / (points.length - 1);
           const y =
-            H - PAD - ((p.market_value - min) / range) * (H - 2 * PAD);
+            H - PAD - ((values[i] - min) / range) * (H - 2 * PAD);
           return <circle key={i} cx={x} cy={y} r="3" fill="#2563eb" />;
         })}
       </svg>

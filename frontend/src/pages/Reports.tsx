@@ -534,6 +534,12 @@ function CheckDetails({
         transactions?: CheckTxRow[];
         upcomings?: CheckUpcomingRow[];
         net_diff?: number;
+        mismatched_pairs?: Array<{
+          source: CheckTxRow;
+          destination: CheckTxRow;
+          pair_sum: number;
+        }>;
+        mismatched_net?: number;
       }>(`/ledger/check/${checkType}?${queryStr}`),
   });
   const accountsQ = useQuery({
@@ -571,6 +577,8 @@ function CheckDetails({
     return (
       <OrphanTransferList
         rows={dataQ.data.transactions}
+        mismatchedPairs={dataQ.data.mismatched_pairs}
+        mismatchedNet={dataQ.data.mismatched_net}
         accounts={accountsQ.data ?? []}
         onDone={invalidate}
       />
@@ -656,10 +664,18 @@ function UncategorizedList({
 
 function OrphanTransferList({
   rows,
+  mismatchedPairs,
+  mismatchedNet,
   accounts,
   onDone,
 }: {
   rows: CheckTxRow[];
+  mismatchedPairs?: Array<{
+    source: CheckTxRow;
+    destination: CheckTxRow;
+    pair_sum: number;
+  }>;
+  mismatchedNet?: number;
   accounts: Account[];
   onDone: () => void;
 }) {
@@ -684,8 +700,18 @@ function OrphanTransferList({
     (b.incognito ? 1 : 0) - (a.incognito ? 1 : 0),
   );
 
+  const hasOrphans = rows.length > 0;
+  const hasMismatched = (mismatchedPairs ?? []).length > 0;
+
   return (
     <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
+      {!hasOrphans && !hasMismatched && (
+        <div className="text-xs text-slate-700 bg-white rounded p-2">
+          Inga orphan-överföringar eller belopps-diff större än 1 öre.
+          Eventuellt kvarvarande summa beror på öresavrundning över
+          hela perioden och är inom tolerans.
+        </div>
+      )}
       {rows.map((tx) => (
         <div
           key={tx.id}
@@ -735,6 +761,41 @@ function OrphanTransferList({
           </button>
         </div>
       ))}
+      {hasMismatched && (
+        <>
+          <div className="text-xs text-slate-700 pt-2 pb-1 font-medium">
+            Parade överföringar med belopps-diff (
+            {formatSEK(mismatchedNet ?? 0)} totalt):
+          </div>
+          {(mismatchedPairs ?? []).map((p) => (
+            <div
+              key={`${p.source.id}-${p.destination.id}`}
+              className="flex items-center gap-2 text-xs bg-white rounded px-2 py-1.5 flex-wrap"
+            >
+              <span className="text-slate-700 w-20 shrink-0">
+                {p.source.date}
+              </span>
+              <span className="flex-1 min-w-0 truncate">
+                {p.source.description} → {p.destination.description}
+              </span>
+              <span className="text-slate-600 text-xs shrink-0">
+                {formatSEK(p.source.amount)} +{" "}
+                {formatSEK(p.destination.amount)}
+              </span>
+              <span
+                className={`font-semibold shrink-0 ${
+                  Math.abs(p.pair_sum) < 1
+                    ? "text-slate-700"
+                    : "text-amber-700"
+                }`}
+                title="Om diff är < 1 kr är det öresavrundning. Större diff tyder på fel."
+              >
+                Δ {p.pair_sum.toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }

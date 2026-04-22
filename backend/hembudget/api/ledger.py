@@ -213,14 +213,18 @@ def huvudbok(
         (float(r["transfer_in"] - r["transfer_out"]) for r in account_rows),
         0.0,
     )
-    transfer_passed = abs(transfer_sum) < 1.0
+    # Tolerans: upp till 2 kr öresavrundning över hela perioden är OK.
+    # Svenska banker avrundar olika för -tx och +tx, så par kan ha
+    # 0.01-0.50 kr diff var. 2 kr räcker för en hel familjs månad.
+    transfer_passed = abs(transfer_sum) <= 2.0
     checks.append({
         "name": "Interna överföringar balanserar",
         "passed": transfer_passed,
         "value": round(transfer_sum, 2),
         "detail": (
             "Summan av alla transfer_in minus transfer_out ska vara 0 — "
-            "om inte så finns orphan-överföringar (bara en sida av paret)"
+            "om inte så finns orphan-överföringar (bara en sida av paret) "
+            "eller parade överföringar med olika belopp (öresavrundning)"
         ),
         "check_type": "transfers_imbalance" if not transfer_passed else None,
     })
@@ -381,7 +385,7 @@ def check_details(
 
     if check_type == "transfers_imbalance":
         # Orphan-transfers: is_transfer=True men ingen motpart
-        rows = (
+        orphans = (
             session.query(Transaction)
             .filter(
                 Transaction.date >= period_start,
@@ -392,12 +396,64 @@ def check_details(
             .order_by(Transaction.date.desc())
             .all()
         )
-        net_diff = sum((float(t.amount) for t in rows), 0.0)
+        orphan_net = sum((float(t.amount) for t in orphans), 0.0)
+
+        # Parade men med beloppsskillnad (öresavrundning eller större fel).
+        # Walkar pairs och summerar source+destination — balanserat par
+        # ska summera till 0.
+        paired = (
+            session.query(Transaction)
+            .filter(
+                Transaction.date >= period_start,
+                Transaction.date < period_end,
+                Transaction.is_transfer.is_(True),
+                Transaction.transfer_pair_id.is_not(None),
+            )
+            .all()
+        )
+        # Gruppera i par: lägsta id i paret är "source"
+        seen_pair_ids: set[int] = set()
+        mismatched: list[dict] = []
+        by_id = {t.id: t for t in paired}
+        # Plocka även eventuella partners som ligger utanför perioden
+        missing_partner_ids = {
+            t.transfer_pair_id for t in paired
+            if t.transfer_pair_id and t.transfer_pair_id not in by_id
+        }
+        if missing_partner_ids:
+            extra = session.query(Transaction).filter(
+                Transaction.id.in_(missing_partner_ids),
+            ).all()
+            for t in extra:
+                by_id[t.id] = t
+        for t in paired:
+            if t.id in seen_pair_ids:
+                continue
+            pid = t.transfer_pair_id
+            if pid is None or pid not in by_id:
+                continue
+            partner = by_id[pid]
+            seen_pair_ids.add(t.id)
+            seen_pair_ids.add(partner.id)
+            # Balanserat par: source+dest = 0. Diff > 0.01 = mismatch
+            pair_sum = float(t.amount) + float(partner.amount)
+            if abs(pair_sum) > 0.01:
+                mismatched.append({
+                    "source": _tx_out(t),
+                    "destination": _tx_out(partner),
+                    "pair_sum": round(pair_sum, 2),
+                })
+
+        mismatched_net = sum(p["pair_sum"] for p in mismatched)
         return {
             "check_type": check_type,
-            "count": len(rows),
-            "net_diff": round(net_diff, 2),
-            "transactions": [_tx_out(t) for t in rows],
+            "count": len(orphans),
+            "mismatched_pairs_count": len(mismatched),
+            "net_diff": round(orphan_net + mismatched_net, 2),
+            "orphan_net": round(orphan_net, 2),
+            "mismatched_net": round(mismatched_net, 2),
+            "transactions": [_tx_out(t) for t in orphans],
+            "mismatched_pairs": mismatched,
         }
 
     if check_type == "uncategorized":
