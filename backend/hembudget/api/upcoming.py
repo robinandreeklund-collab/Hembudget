@@ -589,43 +589,53 @@ def _llm_parse_invoice(
     Strategi:
     1. Om PDF med text-lager → extrahera text och skicka till LLM (text-mode)
     2. Om PDF utan text eller ren bild → rasterisera & använd vision-modell
+    3. Efter LLM-parse: om LLM returnerade <=1 `lines` men PDF-texten
+       tydligt listar flera tjänster (el, vatten, bredband etc.) →
+       komplettera med deterministisk detektering.
 
     Returnerar parsed-dict berikad med `_source_method` så anropare kan
     markera UpcomingTransaction.source korrekt ('pdf_text_ai' eller 'vision_ai').
     """
+    from ..parsers.invoice_lines import enrich_parsed_with_detected_lines
+
     category_names = [c.name for c in session.query(Category).all()]
     schema = _invoice_schema(category_names)
     sys_prompt = _vision_system_prompt(category_names)
 
-    # 1) Text-mode för PDF med text-lager
+    # Extrahera PDF-text — används både av text-mode-LLM och av detektorn
+    pdf_text = ""
     is_pdf = content.startswith(PDF_MAGIC) or (content_type or "").lower() == "application/pdf"
     if is_pdf:
         try:
             from ..parsers.pdf_statements import extract_pdf_text_layout
-            text = extract_pdf_text_layout(content)
+            pdf_text = extract_pdf_text_layout(content)
         except Exception:
-            text = ""
-        if text and len(text.strip()) >= 200:
-            user_msg = (
-                "Här är texten som extraherats från en svensk faktura-PDF. "
-                "Extrahera strukturerad betalningsdata enligt schemat. "
-                "Om fakturan innehåller flera poster från olika områden "
-                "(t.ex. el + vatten + bredband), fyll i 'lines' med en rad "
-                "per post och hitta passande kategori. Annars lämna lines "
-                "tom. Returnera ENDAST giltig JSON.\n\n"
-                "--- PDF-TEXT ---\n"
-                f"{text[:12000]}"
-            )
-            parsed = llm.complete_json(
-                [
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_msg},
-                ],
-                schema=schema,
-                temperature=0.0,
-            )
-            parsed["_source_method"] = "pdf_text_ai"
-            return parsed
+            pdf_text = ""
+
+    # 1) Text-mode för PDF med text-lager
+    if is_pdf and pdf_text and len(pdf_text.strip()) >= 200:
+        user_msg = (
+            "Här är texten som extraherats från en svensk faktura-PDF. "
+            "Extrahera strukturerad betalningsdata enligt schemat. "
+            "Om fakturan innehåller flera poster från olika områden "
+            "(t.ex. el + vatten + bredband), fyll i 'lines' med en rad "
+            "per post och hitta passande kategori. Annars lämna lines "
+            "tom. Returnera ENDAST giltig JSON.\n\n"
+            "--- PDF-TEXT ---\n"
+            f"{pdf_text[:12000]}"
+        )
+        parsed = llm.complete_json(
+            [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            schema=schema,
+            temperature=0.0,
+        )
+        parsed["_source_method"] = "pdf_text_ai"
+        # Komplettera lines om LLM missade dem
+        enrich_parsed_with_detected_lines(parsed, pdf_text)
+        return parsed
 
     # 2) Vision-fallback
     try:
@@ -660,6 +670,11 @@ def _llm_parse_invoice(
         temperature=0.0,
     )
     parsed["_source_method"] = "vision_ai"
+    # Vision kan också missa lines — om vi har pdf_text (vilket vi kan ha
+    # om PDF:en har text-lager men var för kort för LLM-text-mode) så kör
+    # vi även detektorn på det.
+    if pdf_text:
+        enrich_parsed_with_detected_lines(parsed, pdf_text)
     return parsed
 
 
