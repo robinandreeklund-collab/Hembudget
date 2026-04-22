@@ -135,8 +135,14 @@ export default function Dashboard() {
   for (const u of usersQ.data ?? []) userNameById[String(u.id)] = u.name;
   const resolveOwnerLabel = (key: string): string => {
     if (key === "gemensamt") return "Gemensamt";
-    const id = key.replace("user_", "");
-    return userNameById[id] ?? `Användare ${id}`;
+    // Backend kan returnera antingen 'user_{id}' (när kontot har owner_id
+    // eller owner-strängen matchar en User) eller en rå sträng som 'Evelina'
+    // (manuell upcoming innan användaren är skapad i Settings).
+    if (key.startsWith("user_")) {
+      const id = key.slice(5);
+      return userNameById[id] ?? `Användare ${id}`;
+    }
+    return key;
   };
   const ytdIncomeQ = useQuery({
     queryKey: ["ytd-income"],

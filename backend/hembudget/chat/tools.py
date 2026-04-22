@@ -35,6 +35,7 @@ from ..db.models import (
     Transaction,
     TransactionSplit,
     UpcomingTransaction,
+    User,
 )
 from ..loans.matcher import LoanMatcher
 from ..scenarios.engine import ScenarioEngine
@@ -842,17 +843,49 @@ def subscription_health(session: Session, stale_days: int = 60) -> dict:
     }
 
 
+def _resolve_owner_bucket_key(
+    owner_string: str | None,
+    user_name_to_id: dict[str, int],
+) -> str:
+    """Mappa upcoming.owner (fritext, t.ex. 'Evelina') till en stabil
+    bucket-nyckel för family/ytd-aggregering.
+
+    Format-konsistens:
+      - None / tom  → 'gemensamt'
+      - matchar en User.name (case-insensitive) → 'user_{id}'
+      - annars → raw string (t.ex. 'Evelina' om användaren inte finns
+        i User-tabellen än — frontend visar namnet som det är)
+    """
+    if not owner_string:
+        return "gemensamt"
+    key = owner_string.strip()
+    if not key:
+        return "gemensamt"
+    for name, uid in user_name_to_id.items():
+        if name.lower() == key.lower():
+            return f"user_{uid}"
+    return key
+
+
 def ytd_income_by_person(
     session: Session,
     year: int | None = None,
     category_name: str = "Lön",
 ) -> dict:
     """Totala inkomster (ofta lön) per kontoägare för innevarande eller
-    angivet år. Grupperas på Account.owner_id, inkomst = positiva belopp
-    i given kategori.
+    angivet år.
 
-    Fallback: om inga träffar på kategorin Lön, returnera alla positiva
-    non-transfer transaktioner grupperat på ägare (bättre än inget)."""
+    Källor:
+    1. Transaction-rader kategoriserade som `category_name` (typ 'Lön'),
+       grupperade på Account.owner_id.
+    2. Manuellt inlagda UpcomingTransaction-rader (kind='income') med
+       expected_date inom året — användaren kan dokumentera en partners
+       lön utan att importera hens kontoutdrag. Endast omatchade
+       upcomings räknas (om de är matchade finns motsvarande Transaction
+       redan och räknas via källa 1).
+
+    Fallback: om inga träffar på kategorin Lön i Transaction-tabellen,
+    returnera alla positiva non-transfer transaktioner."""
     y = year or date.today().year
     start = date(y, 1, 1)
     end = date(y + 1, 1, 1)
@@ -913,6 +946,30 @@ def ytd_income_by_person(
             {"name": account_name, "amount": _d(total)}
         )
 
+    # Källa 2: manuellt inlagda upcoming incomes — kompletterar när
+    # partnerns kontoutdrag inte är importerat än.
+    user_name_to_id = {u.name: u.id for u in session.query(User).all()}
+    manual_incomes = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "income",
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.matched_transaction_id.is_(None),
+        )
+        .all()
+    )
+    for up in manual_incomes:
+        key = _resolve_owner_bucket_key(up.owner, user_name_to_id)
+        bucket = by_owner.setdefault(
+            key, {"total": 0.0, "count": 0, "accounts": []}
+        )
+        bucket["total"] += _d(up.amount)
+        bucket["count"] += 1
+        bucket["accounts"].append(
+            {"name": f"{up.name} (manuellt)", "amount": _d(up.amount)}
+        )
+
     grand_total = sum(b["total"] for b in by_owner.values())
     return {
         "year": y,
@@ -927,8 +984,9 @@ def get_family_breakdown(session: Session, month: str) -> dict:
     """Fördela månadens utgifter/inkomster per kontoägare (owner_id) och
     kontotyp. Används för familjeekonomi: 'vem betalade vad'.
 
-    Notera att positiva OCH negativa transaktioner på samma konto räknas
-    separat — inkomst och utgift får inte kvittas på kontonivå."""
+    Inkluderar både faktiska Transaction-rader OCH omatchade
+    UpcomingTransaction-rader (kind=income/bill) inom månaden — så
+    partner-löner som dokumenterats manuellt (utan CSV) också räknas."""
     start, end = _month_bounds(month)
 
     # Summera inkomster och utgifter SEPARAT, grupperat per ägare och konto.
@@ -957,17 +1015,16 @@ def get_family_breakdown(session: Session, month: str) -> dict:
 
     by_owner: dict[str, dict[str, float]] = {}
 
-    def _bucket(owner_id):
+    def _bucket_for_id(owner_id):
         key = f"user_{owner_id}" if owner_id else "gemensamt"
         return by_owner.setdefault(key, {"income": 0.0, "expenses": 0.0})
 
     for owner_id, _aid, _name, _type, total in positives:
-        _bucket(owner_id)["income"] += _d(total)
+        _bucket_for_id(owner_id)["income"] += _d(total)
     for owner_id, _aid, _name, _type, total in negatives:
-        _bucket(owner_id)["expenses"] += -_d(total)
+        _bucket_for_id(owner_id)["expenses"] += -_d(total)
 
-    # Per konto: nettot är summan av både sidor, men vi vill ha totalerna
-    # separat så UI/LLM kan presentera dem.
+    # Per konto
     per_account: dict[int, dict] = {}
     for owner_id, aid, name, acc_type, total in positives:
         per_account.setdefault(aid, {
@@ -979,6 +1036,35 @@ def get_family_breakdown(session: Session, month: str) -> dict:
             "account_id": aid, "account": name, "type": acc_type,
             "owner_id": owner_id, "income": 0.0, "expenses": 0.0,
         })["expenses"] += -_d(total)
+
+    # Komplettera med omatchade upcomings inom månaden — partner-lön
+    # som dokumenterats utan CSV, eller manuella fakturor.
+    user_name_to_id = {u.name: u.id for u in session.query(User).all()}
+
+    manual_ups = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.matched_transaction_id.is_(None),
+        )
+        .all()
+    )
+    for up in manual_ups:
+        if up.kind == "income":
+            key = _resolve_owner_bucket_key(up.owner, user_name_to_id)
+            b = by_owner.setdefault(key, {"income": 0.0, "expenses": 0.0})
+            b["income"] += _d(up.amount)
+        elif up.kind == "bill":
+            # Utgifter fördelas på debit-kontots ägare om satt, annars
+            # gemensamt.
+            owner_id = None
+            if up.debit_account_id is not None:
+                acc = session.get(Account, up.debit_account_id)
+                if acc is not None:
+                    owner_id = acc.owner_id
+            b = _bucket_for_id(owner_id)
+            b["expenses"] += _d(up.amount)
 
     return {
         "month": month,
