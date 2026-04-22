@@ -153,3 +153,51 @@ def test_avg_expenses_when_no_matched_upcomings(client):
     assert totals["avg_fixed_expenses"] == pytest.approx(12000.0)
     # 30000 - 0 - 12000 = 18 000
     assert totals["available_to_split"] == pytest.approx(18000.0)
+
+
+def test_loan_schedule_not_double_counted_as_bills(client):
+    """Regression: UpcomingMaterializer skapar UpcomingTransaction-rader
+    med source='auto:loan_schedule' för framtida låneraterna. Samma
+    LoanScheduleEntry räknas också direkt i loan_scheduled_total. Om
+    forecasten tar med materialiserade rader i bills_total dubbel-
+    subtraheras varje lånebetalning från 'Kvar efter kända'."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Loan, LoanScheduleEntry, UpcomingTransaction,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="nordea", type="checking")
+        loan = Loan(
+            name="Bolån", lender="SBAB",
+            principal_amount=Decimal("1000000"),
+            start_date=date(2020, 1, 1), interest_rate=0.03,
+        )
+        s.add_all([acc, loan]); s.flush()
+        # Lånerat för april — finns både som LoanScheduleEntry OCH
+        # som materialiserad UpcomingTransaction
+        s.add(LoanScheduleEntry(
+            loan_id=loan.id, due_date=date(2026, 4, 28),
+            amount=Decimal("7000"), payment_type="interest",
+        ))
+        s.add(UpcomingTransaction(
+            kind="bill", name="Bolån (interest)",
+            amount=Decimal("7000"),
+            expected_date=date(2026, 4, 28),
+            source="auto:loan_schedule",
+            notes=f"loan:{loan.id}:2026-04-28",
+        ))
+        # Inkomst 30 000 kr
+        s.add(UpcomingTransaction(
+            kind="income", name="Lön", amount=Decimal("30000"),
+            expected_date=date(2026, 4, 25),
+        ))
+        s.commit()
+
+    r = c.get("/upcoming/forecast?month=2026-04")
+    assert r.status_code == 200
+    totals = r.json()["totals"]
+    # Bolånet räknas BARA en gång, via loan_scheduled
+    assert totals["upcoming_bills"] == pytest.approx(0.0)
+    assert totals["loan_scheduled"] == pytest.approx(7000.0)
+    # Kvar efter kända = 30000 - 0 - 7000 = 23 000 (inte 16 000 om dubbel)
+    assert totals["after_known_bills"] == pytest.approx(23000.0)

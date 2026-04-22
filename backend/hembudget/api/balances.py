@@ -40,6 +40,25 @@ def list_balances(
             q = q.filter(Transaction.date > start)
         movement = Decimal(str(q.scalar() or 0))
 
+        # Diagnostik: total summa av ALLA transaktioner på kontot (ingen
+        # opening_balance_date-filter). Låter användaren jämföra mot
+        # bankens saldo och se om opening_balance är fel — t.ex. om
+        # saldot i banken är 24 964 men vi visar 12 631 och
+        # transactions_total_all_time är 12 631, då saknas 12 333 kr i
+        # opening_balance.
+        total_all_time = Decimal(str(
+            session.query(func.coalesce(func.sum(Transaction.amount), 0))
+            .filter(Transaction.account_id == acc.id)
+            .scalar() or 0
+        ))
+        # Första transaktionsdatum — hjälper användaren välja rätt
+        # opening_balance_date om de justerar.
+        first_tx_date = (
+            session.query(func.min(Transaction.date))
+            .filter(Transaction.account_id == acc.id)
+            .scalar()
+        )
+
         current = ob + movement
         is_incognito = bool(getattr(acc, "incognito", False))
         # Inkognito-konton exkluderas från total förmögenhet — de spåras
@@ -56,6 +75,10 @@ def list_balances(
             "opening_balance_date": start.isoformat() if start else None,
             "movement_since_opening": float(movement),
             "current_balance": float(current),
+            "transactions_total_all_time": float(total_all_time),
+            "first_transaction_date": (
+                first_tx_date.isoformat() if first_tx_date else None
+            ),
             "incognito": is_incognito,
         })
 

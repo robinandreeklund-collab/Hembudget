@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useState } from "react";
 import {
   AlertTriangle, Trash2, TrendingDown, TrendingUp, Users, Zap,
 } from "lucide-react";
@@ -72,11 +72,39 @@ interface BalanceRow {
   account_number: string | null;
   opening_balance: number; opening_balance_date: string | null;
   movement_since_opening: number; current_balance: number;
+  transactions_total_all_time?: number;
+  first_transaction_date?: string | null;
 }
 
 export default function Dashboard() {
+  const qc = useQueryClient();
   const [showReset, setShowReset] = useState(false);
   const [month, setMonth] = useState<string>(currentMonth());
+  const [editBalanceFor, setEditBalanceFor] = useState<number | null>(null);
+  const [balanceDraft, setBalanceDraft] = useState<{
+    opening_balance: string;
+    opening_balance_date: string;
+  }>({ opening_balance: "", opening_balance_date: "" });
+  const updateAccountMut = useMutation({
+    mutationFn: (p: {
+      id: number;
+      opening_balance: number;
+      opening_balance_date: string | null;
+    }) =>
+      api(`/accounts/${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          opening_balance: p.opening_balance,
+          opening_balance_date: p.opening_balance_date,
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["accounts"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      setEditBalanceFor(null);
+    },
+  });
 
   const monthsQ = useQuery({
     queryKey: ["budget-months"],
@@ -259,11 +287,15 @@ export default function Dashboard() {
                 <th className="py-1.5 pr-3 text-right">Ingående</th>
                 <th className="py-1.5 pr-3 text-right">Rörelse</th>
                 <th className="py-1.5 pr-3 text-right">Nuvarande saldo</th>
+                <th className="py-1.5 pr-3"></th>
               </tr>
             </thead>
             <tbody>
-              {balancesQ.data.accounts.map((a) => (
-                <tr key={a.id} className="border-b last:border-0">
+              {balancesQ.data.accounts.map((a) => {
+                const isEditing = editBalanceFor === a.id;
+                return (
+                  <React.Fragment key={a.id}>
+                <tr className="border-b last:border-0">
                   <td className="py-1.5 pr-3">
                     <div className="font-medium">{a.name}</div>
                     <div className="text-xs text-slate-700">
@@ -284,8 +316,100 @@ export default function Dashboard() {
                   <td className="py-1.5 pr-3 text-right font-semibold">
                     {formatSEK(a.current_balance)}
                   </td>
+                  <td className="py-1.5 pr-3 text-right">
+                    <button
+                      onClick={() => {
+                        if (isEditing) {
+                          setEditBalanceFor(null);
+                          return;
+                        }
+                        setEditBalanceFor(a.id);
+                        setBalanceDraft({
+                          opening_balance: String(a.opening_balance ?? 0),
+                          opening_balance_date:
+                            a.opening_balance_date ??
+                            a.first_transaction_date ??
+                            "",
+                        });
+                      }}
+                      className="text-xs text-brand-600 hover:underline"
+                      title="Justera ingående saldo + startdatum om saldot inte stämmer mot banken"
+                    >
+                      Justera
+                    </button>
+                  </td>
                 </tr>
-              ))}
+                {isEditing && (
+                  <tr className="bg-amber-50 border-b">
+                    <td colSpan={5} className="px-4 py-3">
+                      <div className="text-xs text-slate-700 mb-2">
+                        Stämmer inte saldot mot banken? Systemet räknar
+                        <strong> opening_balance + alla transaktioner efter startdatum</strong>.
+                        {" "}Om transactions_total_all_time ={" "}
+                        <strong>{formatSEK(a.transactions_total_all_time ?? 0)}</strong>
+                        {" "}ska du antingen sätta opening_balance = bank-saldo
+                        - alla transaktioner (och datum = dagen före första
+                        transaktionen, {a.first_transaction_date ?? "—"}),
+                        eller opening_balance = 0 och startdatum = null om
+                        du importerat hela historiken.
+                      </div>
+                      <div className="flex flex-wrap items-end gap-3 text-sm">
+                        <label className="flex flex-col">
+                          <span className="text-xs text-slate-700">Ingående saldo (kr)</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={balanceDraft.opening_balance}
+                            onChange={(e) =>
+                              setBalanceDraft({
+                                ...balanceDraft,
+                                opening_balance: e.target.value,
+                              })
+                            }
+                            className="border rounded px-2 py-1 w-40"
+                          />
+                        </label>
+                        <label className="flex flex-col">
+                          <span className="text-xs text-slate-700">Startdatum (tomt = från början)</span>
+                          <input
+                            type="date"
+                            value={balanceDraft.opening_balance_date}
+                            onChange={(e) =>
+                              setBalanceDraft({
+                                ...balanceDraft,
+                                opening_balance_date: e.target.value,
+                              })
+                            }
+                            className="border rounded px-2 py-1"
+                          />
+                        </label>
+                        <button
+                          onClick={() =>
+                            updateAccountMut.mutate({
+                              id: a.id,
+                              opening_balance: Number(balanceDraft.opening_balance || 0),
+                              opening_balance_date:
+                                balanceDraft.opening_balance_date || null,
+                            })
+                          }
+                          disabled={updateAccountMut.isPending}
+                          className="bg-brand-600 text-white px-3 py-1.5 rounded"
+                        >
+                          Spara
+                        </button>
+                        <button
+                          onClick={() => setEditBalanceFor(null)}
+                          className="px-3 py-1.5 rounded border border-slate-300 bg-white"
+                        >
+                          Avbryt
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
           {!balancesQ.data.accounts.some((a) => a.opening_balance_date) && (

@@ -1247,6 +1247,10 @@ def monthly_forecast(
 
     # Endast ännu-ej-matchade rader räknas — redan bokförda finns redan
     # i transaktionshistoriken och ska inte dubbelräknas.
+    # Vi exkluderar auto:loan_schedule-materialiserade bills eftersom
+    # loan_scheduled_total nedan räknar lånebetalningar direkt från
+    # LoanScheduleEntry. Annars skulle "Kvar efter kända" subtrahera
+    # varje lånebetalning TVÅ gånger.
     bills = (
         session.query(UpcomingTransaction)
         .filter(
@@ -1254,6 +1258,7 @@ def monthly_forecast(
             UpcomingTransaction.expected_date >= start,
             UpcomingTransaction.expected_date < end,
             UpcomingTransaction.matched_transaction_id.is_(None),
+            UpcomingTransaction.source != "auto:loan_schedule",
         )
         .all()
     )
