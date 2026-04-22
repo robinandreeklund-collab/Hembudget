@@ -405,3 +405,94 @@ def test_account_number_match_survives_amount_drift(session):
     # finns i listan och account-number-matchen hittar den
     r = TransferDetector(session).detect_internal_transfers()
     assert r.pairs == 1
+
+
+# --- BG-baserad kreditkortsmatching ---
+
+def test_bg_match_finds_credit_account(session):
+    """När ett kortkonto har bankgiro satt, ska betalnings-rader med
+    samma BG i beskrivningen markeras som transfer automatiskt."""
+    nordea = _acc(session, "Lönekonto", "nordea", "checking")
+    amex = Account(name="Amex", bank="amex", type="credit", bankgiro="5127-5477")
+    session.add(amex); session.flush()
+
+    tx = _tx(session, nordea.id, date(2026, 2, 27), -13000,
+             "Betalning BG 5127-5477 American Exp")
+
+    result = TransferDetector(session).detect_and_link([tx])
+
+    assert result.marked == 1
+    session.refresh(tx)
+    assert tx.is_transfer is True
+    assert tx.category_id is None
+
+
+def test_bg_match_pairs_with_credit_repayment(session):
+    nordea = _acc(session, "Lönekonto", "nordea", "checking")
+    amex = Account(name="Amex", bank="amex", type="credit", bankgiro="5127-5477")
+    session.add(amex); session.flush()
+
+    payment = _tx(session, nordea.id, date(2026, 2, 27), -13000,
+                  "Betalning BG 5127-5477 American Exp")
+    # Positiv motpart på kortkontot (inbetalning)
+    repayment = _tx(session, amex.id, date(2026, 2, 28), 13000,
+                    "Betalning mottagen, tack")
+
+    result = TransferDetector(session).detect_and_link([payment, repayment])
+    assert result.paired == 1
+    session.refresh(payment); session.refresh(repayment)
+    assert payment.transfer_pair_id == repayment.id
+    assert repayment.transfer_pair_id == payment.id
+
+
+def test_bg_match_via_internal_scan_retroactive(session):
+    """Om bankgiro läggs till på kortkontot EFTER att CSV:n importerats
+    ska 'Kör om automatmatchning' fånga upp det retroaktivt."""
+    nordea = _acc(session, "Lönekonto", "nordea", "checking")
+    amex = Account(name="Amex", bank="amex", type="credit")
+    session.add(amex); session.flush()
+
+    tx = _tx(session, nordea.id, date(2026, 2, 27), -13000,
+             "Betalning BG 5127-5477 American Exp")
+    # Körs FÖRE BG sätts — ska inte matcha
+    r1 = TransferDetector(session).detect_internal_transfers()
+    assert r1.pairs == 0
+    assert tx.is_transfer is False
+
+    # Sätt BG på kortet + kör retroaktivt
+    amex.bankgiro = "5127-5477"
+    session.flush()
+    r2 = TransferDetector(session).detect_internal_transfers()
+    session.refresh(tx)
+    assert tx.is_transfer is True
+    # Ingen positiv motpart på kortkontot i detta test → ingen pair
+    # men markeringen ska vara satt.
+
+
+def test_bg_match_doesnt_touch_loan_payments(session):
+    """Om en rad redan är länkad till ett lån (LoanPayment finns) ska
+    BG-matchningen skippa den — annars dubbelklassas lånebetalningar."""
+    from hembudget.db.models import Loan, LoanPayment
+    from decimal import Decimal as D
+
+    nordea = _acc(session, "Lönekonto", "nordea", "checking")
+    amex = Account(name="Amex", bank="amex", type="credit", bankgiro="5127-5477")
+    session.add(amex); session.flush()
+
+    # Rad som LOOKS like BG-match men är faktiskt en lånebetalning
+    tx = _tx(session, nordea.id, date(2026, 2, 27), -13000, "Omsättning lån 5127")
+    loan = Loan(
+        name="X", lender="Y", principal_amount=D("100000"),
+        start_date=date(2020, 1, 1), interest_rate=0.03,
+    )
+    session.add(loan); session.flush()
+    session.add(LoanPayment(
+        loan_id=loan.id, transaction_id=tx.id, date=tx.date,
+        amount=D("13000"), payment_type="amortization",
+    ))
+    session.flush()
+
+    TransferDetector(session).detect_internal_transfers()
+    session.refresh(tx)
+    # Ska inte röras — is_transfer förblir False
+    assert tx.is_transfer is False

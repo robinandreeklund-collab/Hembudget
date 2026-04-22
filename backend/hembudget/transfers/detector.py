@@ -126,14 +126,28 @@ class TransferDetector:
 
     def detect_and_link(self, new_transactions: list[Transaction]) -> TransferLinkResult:
         """Kör efter import. Markerar credit-card-payments från transaktionerna
-        och försöker para ihop med motsvarande rad på kreditkortskontot."""
+        och försöker para ihop med motsvarande rad på kreditkortskontot.
+
+        Tre nivåer av matchning mot kreditkort:
+        1. Bankgiro på kortkontot matchar BG-nummer i transaktionens
+           beskrivning → starkaste signal.
+        2. Textmönster (t.ex. "AMEX AUTOGIRO", "SEB KORT BANK").
+        3. Generiska transfer-mönster ("Överföring", etc.).
+        """
         if not new_transactions:
             return TransferLinkResult(0, 0)
 
         # Karta bank → credit-konto
         credit_by_bank: dict[str, Account] = {}
+        # Karta normaliserat bankgiro → credit-konto (för BG-match)
+        credit_by_bg: dict[str, Account] = {}
         for acc in self.session.query(Account).filter(Account.type == "credit").all():
             credit_by_bank[acc.bank] = acc
+            if acc.bankgiro:
+                # Normalisera: ta bort bindestreck/mellanslag
+                bg_norm = re.sub(r"[\s\-]", "", acc.bankgiro)
+                if bg_norm:
+                    credit_by_bg[bg_norm] = acc
 
         marked = 0
         paired = 0
@@ -168,18 +182,29 @@ class TransferDetector:
                 # klassificering (t.ex. Lön, Swish in).
                 continue
 
-            # 2. Match mot explicit kreditkortsbetalning
-            matched_bank: str | None = None
-            for bank, patterns in CREDIT_CARD_PAYMENT_PATTERNS.items():
-                if any(p in desc for p in patterns):
-                    matched_bank = bank
+            # 1a. BG-match: om beskrivningen innehåller en bankgiro som
+            #     tillhör ett registrerat kortkonto → starkaste signal.
+            #     Fungerar även när kortmärket inte är uppenbart i texten.
+            desc_digits = re.sub(r"[^\d]", "", desc)
+            cc_via_bg: Account | None = None
+            for bg_norm, acc in credit_by_bg.items():
+                if bg_norm and bg_norm in desc_digits:
+                    cc_via_bg = acc
                     break
 
-            if matched_bank:
+            # 1b/2. Eller matcha via textmönster (AMEX AUTOGIRO, SEB KORT)
+            matched_bank: str | None = None
+            if cc_via_bg is None:
+                for bank, patterns in CREDIT_CARD_PAYMENT_PATTERNS.items():
+                    if any(p in desc for p in patterns):
+                        matched_bank = bank
+                        break
+
+            if cc_via_bg is not None or matched_bank:
                 tx.is_transfer = True
                 tx.category_id = None  # inte en utgift
                 marked += 1
-                credit_acc = credit_by_bank.get(matched_bank)
+                credit_acc = cc_via_bg or credit_by_bank.get(matched_bank or "")
                 if credit_acc:
                     repayment = self._find_repayment_on_credit(tx, credit_acc.id)
                     if repayment is not None:
@@ -246,6 +271,56 @@ class TransferDetector:
             return InternalScanResult(0, 0, [])
 
         account_num_index = _build_account_number_index(self.session)
+
+        # Nivå 0.5: BG-match mot kortkonto för ALLA omarkerade/omatchade
+        # negativa rader (retro-fix — ibland körs detta efter att PDF-
+        # import satt bankgiro på kortkontot). Klassar som transfer och
+        # försöker para med motsvarande positiv rad på kortkontot.
+        credit_by_bg: dict[str, Account] = {}
+        for acc in self.session.query(Account).filter(Account.type == "credit").all():
+            if acc.bankgiro:
+                bg_norm = re.sub(r"[\s\-]", "", acc.bankgiro)
+                if bg_norm:
+                    credit_by_bg[bg_norm] = acc
+
+        bg_marked = 0
+        bg_paired = 0
+        if credit_by_bg:
+            for tx in (
+                self.session.query(Transaction)
+                .filter(Transaction.transfer_pair_id.is_(None))
+                .all()
+            ):
+                if tx.amount >= 0:
+                    continue
+                desc_digits = re.sub(r"[^\d]", "", tx.raw_description or "")
+                if not desc_digits:
+                    continue
+                matched_cc: Account | None = None
+                for bg_norm, acc in credit_by_bg.items():
+                    if bg_norm in desc_digits and acc.id != tx.account_id:
+                        matched_cc = acc
+                        break
+                if matched_cc is None:
+                    continue
+                # Säkerställ att inte raden redan är kopplad till ett lån
+                from ..db.models import LoanPayment as _LP
+                if self.session.query(_LP).filter(
+                    _LP.transaction_id == tx.id
+                ).first():
+                    continue
+                tx.is_transfer = True
+                tx.category_id = None
+                bg_marked += 1
+                repayment = self._find_repayment_on_credit(tx, matched_cc.id)
+                if repayment is not None:
+                    tx.transfer_pair_id = repayment.id
+                    repayment.is_transfer = True
+                    repayment.transfer_pair_id = tx.id
+                    repayment.category_id = None
+                    bg_paired += 1
+            if bg_marked:
+                self.session.flush()
 
         # Include rows already flagged as transfer but not yet paired — that
         # happens when the generic-pattern pass marks an "Överföring"-row
@@ -376,7 +451,9 @@ class TransferDetector:
 
         if pairs:
             self.session.flush()
-        return InternalScanResult(pairs=len(pairs), ambiguous=ambiguous, details=pairs)
+        # Räkna även BG-paringar i det totala pair-antalet så UI:t visar det.
+        total_pairs = len(pairs) + bg_paired
+        return InternalScanResult(pairs=total_pairs, ambiguous=ambiguous, details=pairs)
 
     def link_manual(self, tx_a_id: int, tx_b_id: int) -> None:
         """Manuellt para ihop två transaktioner som en överföring."""
