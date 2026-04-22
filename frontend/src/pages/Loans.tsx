@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  CalendarClock, CheckCircle2, Home, Image as ImageIcon, Loader2,
+  CalendarClock, CheckCircle2, ChevronDown, ChevronRight,
+  Home, Image as ImageIcon, Loader2,
   Pencil, Sparkles, Trash2, Plus, X,
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
@@ -89,6 +90,14 @@ export default function Loans() {
   const [uploadJobs, setUploadJobs] = useState<
     { file: File; status: "uploading" | "done" | "error"; message?: string }[]
   >([]);
+  const [expandedLoans, setExpandedLoans] = useState<Set<number>>(new Set());
+  const toggleExpanded = (id: number) =>
+    setExpandedLoans((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const summariesQ = useQuery({
     queryKey: ["loan-summaries"],
@@ -269,52 +278,87 @@ export default function Loans() {
           <div className="space-y-3">
             {summaries.map((s) => {
               const full = loans.find((l) => l.id === s.id);
+              const expanded = expandedLoans.has(s.id);
               return (
-                <div key={s.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-semibold">{s.name}</div>
-                      <div className="text-xs text-slate-700">
-                        {s.lender} · {s.binding_type} · {(s.interest_rate * 100).toFixed(2)} %
-                        {full?.match_pattern ? ` · matchar "${full.match_pattern}"` : ""}
+                <div key={s.id} className="border rounded-lg">
+                  {/* Alltid synlig kompakt header — klick för att expandera */}
+                  <button
+                    onClick={() => toggleExpanded(s.id)}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left"
+                  >
+                    {expanded ? (
+                      <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{s.name}</div>
+                      <div className="text-xs text-slate-700 truncate">
+                        {s.lender} · {(s.interest_rate * 100).toFixed(2)} % · {s.payments_count} betalningar
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => full && setMode({ kind: "edit", loan: full })}
-                        disabled={!full}
-                        className="p-1.5 text-slate-600 hover:text-brand-600 disabled:opacity-40"
-                        title="Redigera"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Ta bort lånet '${s.name}'?`)) deleteMut.mutate(s.id);
-                        }}
-                        className="p-1.5 text-slate-600 hover:text-rose-600"
-                        title="Ta bort"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div className="hidden md:flex gap-6 text-sm shrink-0">
+                      <div className="text-right">
+                        <div className="text-xs text-slate-600">Kvar</div>
+                        <div className="font-semibold">{formatSEK(s.outstanding_balance)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-slate-600">Ränta {s.interest_year ?? ""}</div>
+                        <div>{formatSEK(s.interest_paid_year ?? 0)}</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-3 text-sm">
-                    <Stat label="Ursprung" value={formatSEK(s.principal_amount)} />
-                    <Stat label="Kvarvarande" value={formatSEK(s.outstanding_balance)} strong />
-                    <Stat label="Amorterat" value={formatSEK(s.amortization_paid)} />
-                    <Stat
-                      label={`Ränta ${s.interest_year ?? ""}`}
-                      value={formatSEK(s.interest_paid_year ?? 0)}
-                    />
-                    <Stat label="Ränta (total)" value={formatSEK(s.interest_paid)} />
-                  </div>
-                  <div className="flex gap-4 mt-2 text-xs text-slate-700">
-                    <span>{s.payments_count} betalningar länkade</span>
-                    {s.ltv !== null && <span>LTV {(s.ltv * 100).toFixed(1)} %</span>}
-                    {s.binding_end_date && <span>Bindning slut {s.binding_end_date}</span>}
-                  </div>
-                  <LoanSchedule loanId={s.id} />
+                    <div className="md:hidden text-right shrink-0">
+                      <div className="font-semibold">{formatSEK(s.outstanding_balance)}</div>
+                      <div className="text-xs text-slate-700">kvar</div>
+                    </div>
+                  </button>
+
+                  {expanded && (
+                    <div className="border-t px-4 pt-3 pb-4">
+                      <div className="flex justify-between items-start">
+                        <div className="text-xs text-slate-700">
+                          {s.binding_type}
+                          {full?.match_pattern ? ` · matchar "${full.match_pattern}"` : ""}
+                          {s.ltv !== null && ` · LTV ${(s.ltv * 100).toFixed(1)} %`}
+                          {s.binding_end_date && ` · bindning slut ${s.binding_end_date}`}
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (full) setMode({ kind: "edit", loan: full });
+                            }}
+                            disabled={!full}
+                            className="p-1.5 text-slate-600 hover:text-brand-600 disabled:opacity-40"
+                            title="Redigera"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Ta bort lånet '${s.name}'?`)) deleteMut.mutate(s.id);
+                            }}
+                            className="p-1.5 text-slate-600 hover:text-rose-600"
+                            title="Ta bort"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-3 text-sm">
+                        <Stat label="Ursprung" value={formatSEK(s.principal_amount)} />
+                        <Stat label="Kvarvarande" value={formatSEK(s.outstanding_balance)} strong />
+                        <Stat label="Amorterat" value={formatSEK(s.amortization_paid)} />
+                        <Stat
+                          label={`Ränta ${s.interest_year ?? ""}`}
+                          value={formatSEK(s.interest_paid_year ?? 0)}
+                        />
+                        <Stat label="Ränta (total)" value={formatSEK(s.interest_paid)} />
+                      </div>
+                      <LoanSchedule loanId={s.id} />
+                    </div>
+                  )}
                 </div>
               );
             })}
