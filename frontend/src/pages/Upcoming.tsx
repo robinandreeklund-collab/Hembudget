@@ -691,7 +691,9 @@ function MonthSection({
   // OBS: amount kommer som string från Pydantic/Decimal JSON-serialisering,
   // så vi måste Number()-casta innan summering (annars blir det
   // strängkonkatenering "0" + "14110" + "19172" = "01411019172").
-  const total = items.reduce((s, i) => s + Number(i.amount), 0);
+  // Absolut belopp — månads-totalen är alltid positivt oavsett om det
+  // är bills eller incomes eller om datan har blandade tecken.
+  const total = items.reduce((s, i) => s + Math.abs(Number(i.amount)), 0);
   const allMatched = matched > 0 && unmatched === 0;
 
   return (
@@ -862,10 +864,14 @@ function UpcomingRow({
         </div>
         <div
           className={`font-semibold shrink-0 ${
-            isIncome ? "text-emerald-600" : ""
+            isIncome ? "text-emerald-600" : "text-rose-600"
           }`}
         >
-          {isIncome ? "+" : ""}{formatSEK(i.amount)}
+          {/* Tecken följer kind, inte tecknet i datan — bills är alltid
+              utgift, income alltid inkomst. Vissa bills från auto:
+              subscription lagrades förr negativt och skulle annars
+              visas med fel tecken. */}
+          {isIncome ? "+" : "−"}{formatSEK(Math.abs(Number(i.amount)))}
         </div>
         <button
           onClick={() => onDelete(i.id)}

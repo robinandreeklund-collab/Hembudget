@@ -396,4 +396,20 @@ def run_migrations(engine: Engine) -> list[str]:
                     f"({len(subs)} sub, {migrated} tx)"
                 )
 
+    # Normalisera UpcomingTransaction.amount till positivt. Gamla bills
+    # som skapats från Subscriptions hade negativt tecken, vilket gör
+    # att formeln (+tecken för income, -tecken för bill) inte fungerar.
+    if _table_exists(engine, "upcoming_transactions"):
+        with engine.begin() as conn:
+            result = conn.execute(text(
+                "UPDATE upcoming_transactions "
+                "SET amount = -amount "
+                "WHERE amount < 0"
+            ))
+            if result.rowcount:
+                applied.append(
+                    f"upcoming_transactions.amount normaliserad till positivt "
+                    f"({result.rowcount} rader)"
+                )
+
     return applied

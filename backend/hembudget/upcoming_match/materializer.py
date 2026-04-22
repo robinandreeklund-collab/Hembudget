@@ -149,10 +149,14 @@ class UpcomingMaterializer:
                 if key in existing_keys:
                     result.skipped_existing += 1
                 else:
+                    # Subscription.amount är signerat (negativt för utgifter)
+                    # men UpcomingTransaction.amount följer konventionen
+                    # "alltid positivt — tecken bestäms av kind (bill = dras,
+                    # income = kommer in)". Därför abs:ar vi.
                     upcoming = UpcomingTransaction(
                         kind="bill",
                         name=sub.merchant,
-                        amount=sub.amount,
+                        amount=abs(sub.amount),
                         expected_date=due,
                         debit_date=due,
                         debit_account_id=sub.account_id,
