@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from ..categorize.engine import normalize_merchant
 from ..categorize.rules import create_rule_from_correction
 from ..db.models import Account, Category, Import, Transaction
+from ..llm.client import LMStudioClient
 from ..transfers.detector import TransferDetector
-from .deps import db, require_auth
+from .deps import db, llm_client, require_auth
 from .schemas import (
     AccountIn, AccountOut, AccountUpdate,
     CategoryIn, CategoryOut, CategoryUpdate,
@@ -18,6 +19,8 @@ from .schemas import (
 )
 
 router = APIRouter(tags=["transactions"], dependencies=[Depends(require_auth)])
+
+
 
 
 @router.get("/accounts", response_model=list[AccountOut])
@@ -433,3 +436,135 @@ def reclassify(tx_id: int, session: Session = Depends(db)) -> Transaction:
     tx.normalized_merchant = normalize_merchant(tx.raw_description)
     session.flush()
     return tx
+
+
+@router.post("/transactions/{tx_id}/attach-invoice")
+async def attach_invoice_to_transaction(
+    tx_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(db),
+    llm: LMStudioClient = Depends(llm_client),
+):
+    """Bifoga en faktura till en befintlig transaktion.
+
+    - Parsar fakturan (PDF-text eller vision) via samma pipeline som
+      /upcoming/parse-invoice-image.
+    - Skapar en UpcomingTransaction direkt i 'betald'-läge (matched_transaction_id=tx_id).
+    - Kopierar ev. fakturarader till transaction_splits så budget och
+      rapporter kan fördela utgiften per kategori (t.ex. el/vatten/
+      bredband på Hjo Energi-fakturan).
+    - Sparar originalfilen under data_dir/invoices så ledger-vyn kan
+      visa PDFen senare.
+    """
+    from ..api.upcoming import (
+        _llm_parse_invoice, _save_invoice_file, _build_upcoming_from_parsed,
+    )
+    from ..llm.client import LLMUnavailable
+    from ..splits import build_lines_from_vision, apply_upcoming_lines_to_transaction
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Tom fil")
+
+    if not llm.is_alive():
+        raise HTTPException(503, "LM Studio är inte tillgänglig")
+
+    original_path = _save_invoice_file(content, file.filename)
+    try:
+        parsed = _llm_parse_invoice(content, file.content_type, llm, session)
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+    # Matcha dates: om LLM:n gav expected_date men vi vet att tx.date är
+    # den faktiska debiteringen, använd tx.date för debit_date så
+    # ledger-vyn visar rätt period.
+    u = _build_upcoming_from_parsed(
+        parsed,
+        kind="bill",
+        source=parsed.get("_source_method", "vision_ai"),
+        source_image_path=str(original_path),
+        session=session,
+    )
+    u.matched_transaction_id = tx.id
+    if u.debit_account_id is None:
+        u.debit_account_id = tx.account_id
+    plines = parsed.get("lines") or []
+    if plines:
+        u.lines.extend(build_lines_from_vision(session, plines))
+    session.add(u)
+    session.flush()
+
+    # Kopiera lines till transaction_splits så rapporter fördelar rätt
+    if u.lines:
+        apply_upcoming_lines_to_transaction(session, u, tx)
+        session.flush()
+
+    return {
+        "upcoming_id": u.id,
+        "transaction_id": tx.id,
+        "name": u.name,
+        "amount": float(u.amount),
+        "line_count": len(u.lines),
+        "method": parsed.get("_source_method"),
+        "source_file": original_path.name,
+    }
+
+
+@router.get("/transactions/invoiced-ids")
+def list_invoiced_transaction_ids(session: Session = Depends(db)) -> dict:
+    """Returnera IDs för transaktioner som har en bifogad faktura
+    (matchad UpcomingTransaction med source_image_path satt). UI:t
+    använder detta för att veta var den ska visa "Se faktura"-knappen."""
+    from ..db.models import UpcomingTransaction as _UT
+    rows = (
+        session.query(_UT.matched_transaction_id)
+        .filter(
+            _UT.matched_transaction_id.is_not(None),
+            _UT.source_image_path.is_not(None),
+        )
+        .all()
+    )
+    ids = sorted({r[0] for r in rows if r[0] is not None})
+    return {"ids": ids}
+
+
+@router.get("/transactions/{tx_id}/invoice")
+def get_transaction_invoice(
+    tx_id: int, session: Session = Depends(db),
+):
+    """Returnera bifogad faktura-PDF (eller bild) för en transaktion.
+
+    Hittar den UpcomingTransaction som är matchad mot denna tx och där
+    source_image_path är satt, och serverar filen. 404 om ingen faktura
+    är bifogad."""
+    from fastapi.responses import FileResponse
+    from pathlib import Path
+    from ..db.models import UpcomingTransaction
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+
+    u = (
+        session.query(UpcomingTransaction)
+        .filter(UpcomingTransaction.matched_transaction_id == tx_id)
+        .first()
+    )
+    if u is None or not u.source_image_path:
+        raise HTTPException(404, "Ingen faktura bifogad till denna transaktion")
+
+    p = Path(u.source_image_path)
+    if not p.exists():
+        raise HTTPException(404, "Fakturafilen finns inte längre på disk")
+    ext = p.suffix.lower()
+    media = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+    }.get(ext, "application/octet-stream")
+    return FileResponse(p, media_type=media, filename=p.name)

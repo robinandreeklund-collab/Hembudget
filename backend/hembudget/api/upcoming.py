@@ -400,45 +400,247 @@ async def parse_invoice_image(
     session: Session = Depends(db),
     llm: LMStudioClient = Depends(llm_client),
 ) -> UpcomingTransaction:
-    """Skicka en faktura (PNG/JPG/PDF) till en vision-kapabel modell i LM Studio
-    (t.ex. Qwen2.5-VL, Llava, Pixtral) för automatisk extraktion av
-    mottagare, belopp och förfallodag. PDF:er rasteriseras till PNG per sida
-    först (upp till 5 sidor) eftersom vision-modeller bara tar bilder.
+    """Skicka en faktura (PNG/JPG/PDF) till LM Studio för automatisk
+    extraktion av mottagare, belopp, förfallodag och fakturarader.
+
+    PDF:er med text-lager (de flesta bankfakturor) parsas text-först —
+    ~10× snabbare och ofta mer exakt än vision. PDF:er utan text och
+    rena bilder faller tillbaka på vision-modellen.
     """
     if not llm.is_alive():
         raise HTTPException(503, "LM Studio är inte tillgänglig")
 
-    # Spara originalfilen lokalt för audit
     content = await file.read()
     if not content:
         raise HTTPException(400, "Tom fil")
 
-    invoice_dir = settings.data_dir / "invoices"
-    invoice_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
-    original_path = invoice_dir / f"{ts}_{file.filename or 'invoice'}"
-    original_path.write_bytes(content)
-
-    # Konvertera till lista av bild-bytes (PDF → en bild per sida)
+    original_path = _save_invoice_file(content, file.filename)
     try:
-        images, img_mime = _file_to_images(content, file.content_type)
+        parsed = _llm_parse_invoice(content, file.content_type, llm, session)
+    except LLMUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
     except HTTPException:
         raise
     except Exception as exc:
-        log.exception("PDF rasterization failed")
+        log.exception("Invoice parse failed")
+        raise HTTPException(500, _vision_error_hint(exc)) from exc
+
+    u = _build_upcoming_from_parsed(
+        parsed, kind=kind,
+        source=parsed.get("_source_method", "vision_ai"),
+        source_image_path=str(original_path),
+        session=session,
+    )
+    parsed_lines = parsed.get("lines") or []
+    if parsed_lines:
+        u.lines.extend(build_lines_from_vision(session, parsed_lines))
+    session.add(u)
+    session.flush()
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([u])
+    return u
+
+
+@router.post("/bulk-parse-invoices")
+async def bulk_parse_invoices(
+    files: list[UploadFile] = File(...),
+    kind: str = Form("bill"),
+    session: Session = Depends(db),
+    llm: LMStudioClient = Depends(llm_client),
+) -> dict:
+    """Ladda upp flera fakturor i ett svep. Varje fil parsas individuellt
+    (text-först om PDF har text-lager, vision-fallback annars), en
+    UpcomingTransaction skapas per faktura med `lines`, och backfill_match
+    körs för alla på en gång så de som redan matchar en bankrad hamnar
+    direkt under 'Betalda fakturor'.
+    """
+    if not files:
+        raise HTTPException(400, "Inga filer skickades")
+    if not llm.is_alive():
+        raise HTTPException(503, "LM Studio är inte tillgänglig")
+
+    results: list[dict] = []
+    created: list[UpcomingTransaction] = []
+
+    for f in files:
+        content = await f.read()
+        if not content:
+            results.append({"filename": f.filename, "status": "skipped_empty"})
+            continue
+        try:
+            original_path = _save_invoice_file(content, f.filename)
+            parsed = _llm_parse_invoice(content, f.content_type, llm, session)
+        except LLMUnavailable as exc:
+            raise HTTPException(503, str(exc)) from exc
+        except HTTPException as exc:
+            results.append({
+                "filename": f.filename, "status": "error",
+                "error": str(exc.detail),
+            })
+            continue
+        except Exception as exc:
+            log.exception("bulk invoice parse failed for %s", f.filename)
+            results.append({
+                "filename": f.filename, "status": "error",
+                "error": str(exc),
+            })
+            continue
+
+        try:
+            u = _build_upcoming_from_parsed(
+                parsed, kind=kind,
+                source=parsed.get("_source_method", "vision_ai"),
+                source_image_path=str(original_path),
+                session=session,
+            )
+            plines = parsed.get("lines") or []
+            if plines:
+                u.lines.extend(build_lines_from_vision(session, plines))
+            session.add(u)
+            session.flush()
+            created.append(u)
+            results.append({
+                "filename": f.filename,
+                "status": "ok",
+                "upcoming_id": u.id,
+                "name": u.name,
+                "amount": float(u.amount),
+                "expected_date": u.expected_date.isoformat(),
+                "line_count": len(u.lines),
+                "method": parsed.get("_source_method"),
+            })
+        except Exception as exc:
+            log.exception("build upcoming failed for %s", f.filename)
+            results.append({
+                "filename": f.filename, "status": "error",
+                "error": str(exc),
+            })
+
+    # Kör backfill_match SAMLAT så alla upcomings testas mot samma tx-pool
+    from ..upcoming_match import UpcomingMatcher as _UM
+    matched_count = _UM(session).backfill_match(created) if created else 0
+
+    # Komplettera resultatet med match-info
+    if matched_count:
+        session.flush()
+        by_id = {r.get("upcoming_id"): r for r in results if r.get("upcoming_id")}
+        for u in created:
+            r = by_id.get(u.id)
+            if r and u.matched_transaction_id:
+                r["matched_transaction_id"] = u.matched_transaction_id
+
+    return {
+        "processed": len(files),
+        "created": len(created),
+        "matched_to_existing": matched_count,
+        "results": results,
+    }
+
+
+@router.get("/{upcoming_id}/source")
+def get_upcoming_source_file(
+    upcoming_id: int, session: Session = Depends(db),
+):
+    """Returnera originalfakturan (PDF/bild) som denna UpcomingTransaction
+    extraherades ifrån. Används av UI:t för ledger-vy ("se fakturan bakom
+    denna transaktion")."""
+    from fastapi.responses import FileResponse
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+    if not u.source_image_path:
+        raise HTTPException(404, "Ingen originalfil sparad för denna rad")
+    p = Path(u.source_image_path)
+    if not p.exists():
+        raise HTTPException(404, "Filen finns inte längre på disk")
+    # Gissa mime från filändelse
+    ext = p.suffix.lower()
+    media = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+    }.get(ext, "application/octet-stream")
+    return FileResponse(p, media_type=media, filename=p.name)
+
+
+def _save_invoice_file(content: bytes, filename: str | None) -> "Path":
+    """Spara en originalfil under data_dir/invoices/ för ledger-referens."""
+    invoice_dir = settings.data_dir / "invoices"
+    invoice_dir.mkdir(parents=True, exist_ok=True)
+    # Unikt filnamn via timestamp + kort hash — skyddar mot kollisioner
+    import hashlib as _hashlib
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    short = _hashlib.sha1(content).hexdigest()[:8]
+    safe_name = (filename or "invoice").replace("/", "_")
+    p = invoice_dir / f"{ts}_{short}_{safe_name}"
+    p.write_bytes(content)
+    return p
+
+
+def _llm_parse_invoice(
+    content: bytes,
+    content_type: str | None,
+    llm: LMStudioClient,
+    session: Session,
+) -> dict:
+    """Parsa en faktura till strukturerad JSON.
+
+    Strategi:
+    1. Om PDF med text-lager → extrahera text och skicka till LLM (text-mode)
+    2. Om PDF utan text eller ren bild → rasterisera & använd vision-modell
+
+    Returnerar parsed-dict berikad med `_source_method` så anropare kan
+    markera UpcomingTransaction.source korrekt ('pdf_text_ai' eller 'vision_ai').
+    """
+    category_names = [c.name for c in session.query(Category).all()]
+    schema = _invoice_schema(category_names)
+    sys_prompt = _vision_system_prompt(category_names)
+
+    # 1) Text-mode för PDF med text-lager
+    is_pdf = content.startswith(PDF_MAGIC) or (content_type or "").lower() == "application/pdf"
+    if is_pdf:
+        try:
+            from ..parsers.pdf_statements import extract_pdf_text_layout
+            text = extract_pdf_text_layout(content)
+        except Exception:
+            text = ""
+        if text and len(text.strip()) >= 200:
+            user_msg = (
+                "Här är texten som extraherats från en svensk faktura-PDF. "
+                "Extrahera strukturerad betalningsdata enligt schemat. "
+                "Om fakturan innehåller flera poster från olika områden "
+                "(t.ex. el + vatten + bredband), fyll i 'lines' med en rad "
+                "per post och hitta passande kategori. Annars lämna lines "
+                "tom. Returnera ENDAST giltig JSON.\n\n"
+                "--- PDF-TEXT ---\n"
+                f"{text[:12000]}"
+            )
+            parsed = llm.complete_json(
+                [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                schema=schema,
+                temperature=0.0,
+            )
+            parsed["_source_method"] = "pdf_text_ai"
+            return parsed
+
+    # 2) Vision-fallback
+    try:
+        images, img_mime = _file_to_images(content, content_type)
+    except Exception as exc:
         raise HTTPException(400, f"Kunde inte läsa filen: {exc}") from exc
 
-    # Bygg multi-image-payload till vision-modellen
     user_content: list[dict] = [
         {
             "type": "text",
             "text": (
-                "Extrahera ALLA betalningsrelaterade uppgifter du kan hitta från "
-                "denna svenska faktura. Om flera sidor visas, titta på alla och "
-                "slå samman informationen. Om något fält inte syns, använd null. "
-                "Om fakturan innehåller flera poster från olika hushållsområden "
-                "(t.ex. el + vatten + bredband) fyll i 'lines' — annars lämna "
-                "'lines' tom."
+                "Extrahera ALLA betalningsrelaterade uppgifter från denna "
+                "svenska faktura. Om flera sidor, slå samman info. Saknas "
+                "fält, använd null. Om fakturan innehåller flera poster "
+                "(t.ex. el + vatten + bredband) fyll i 'lines'."
             ),
         }
     ]
@@ -449,35 +651,16 @@ async def parse_invoice_image(
             "image_url": {"url": f"data:{img_mime};base64,{b64}"},
         })
 
-    category_names = [c.name for c in session.query(Category).all()]
-    schema = _invoice_schema(category_names)
-
-    try:
-        parsed = llm.complete_json(
-            [{"role": "system", "content": _vision_system_prompt(category_names)},
-             {"role": "user", "content": user_content}],
-            schema=schema,
-            temperature=0.0,
-        )
-    except LLMUnavailable as exc:
-        raise HTTPException(503, str(exc)) from exc
-    except Exception as exc:
-        log.exception("Vision parse failed")
-        raise HTTPException(500, _vision_error_hint(exc)) from exc
-
-    u = _build_upcoming_from_parsed(parsed, kind=kind, source="vision_ai",
-                                    source_image_path=str(original_path),
-                                    session=session)
-    # Koppla rader om vision hittade några (och endast om totalsumman
-    # stämmer överens; annars är det troligen en hallucination)
-    parsed_lines = parsed.get("lines") or []
-    if parsed_lines:
-        u.lines.extend(build_lines_from_vision(session, parsed_lines))
-    session.add(u)
-    session.flush()
-    from ..upcoming_match import UpcomingMatcher as _UM
-    _UM(session).backfill_match([u])
-    return u
+    parsed = llm.complete_json(
+        [
+            {"role": "system", "content": sys_prompt},
+            {"role": "user", "content": user_content},
+        ],
+        schema=schema,
+        temperature=0.0,
+    )
+    parsed["_source_method"] = "vision_ai"
+    return parsed
 
 
 def _invoice_schema(category_names: list[str] | None = None) -> dict:

@@ -603,6 +603,26 @@ function UpcomingRow({
                 · ✓ matchad mot transaktion #{i.matched_transaction_id}
               </span>
             )}
+            {i.source_image_path && (
+              <button
+                onClick={() => {
+                  const token = getToken();
+                  fetch(`${apiBase()}/upcoming/${i.id}/source`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  })
+                    .then((r) => {
+                      if (!r.ok) throw new Error("Filen saknas");
+                      return r.blob();
+                    })
+                    .then((b) => window.open(URL.createObjectURL(b), "_blank"))
+                    .catch((e) => alert(String(e.message ?? e)));
+                }}
+                className="text-brand-600 hover:underline"
+                title="Öppna original-fakturan i ny flik"
+              >
+                · 📎 se faktura
+              </button>
+            )}
           </div>
         </div>
         <div

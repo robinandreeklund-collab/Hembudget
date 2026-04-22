@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { ArrowLeftRight } from "lucide-react";
-import { api, formatSEK } from "@/api/client";
+import { useRef, useState } from "react";
+import { ArrowLeftRight, FileText, Paperclip } from "lucide-react";
+import { api, formatSEK, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, Category, Transaction } from "@/types/models";
+
+function apiBase(): string {
+  let explicit = (import.meta as ImportMeta).env.VITE_API_BASE;
+  if (explicit) {
+    if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
+    return explicit.replace(/\/$/, "");
+  }
+  const port = localStorage.getItem("hembudget_api_port") || "8765";
+  return `http://127.0.0.1:${port}`;
+}
 
 const NEW_CATEGORY_SENTINEL = "__new__";
 const ALL_ACCOUNTS = "__all__";
@@ -13,6 +23,70 @@ export default function Transactions() {
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
   const [hideTransfers, setHideTransfers] = useState(true);
   const [newCatFor, setNewCatFor] = useState<number | null>(null);
+  const [uploadingFor, setUploadingFor] = useState<number | null>(null);
+  const [attachMsg, setAttachMsg] = useState<{
+    txId: number; ok: boolean; text: string;
+  } | null>(null);
+  const hiddenFileRef = useRef<HTMLInputElement>(null);
+  const invoicedQ = useQuery({
+    queryKey: ["invoiced-ids"],
+    queryFn: () => api<{ ids: number[] }>("/transactions/invoiced-ids"),
+  });
+  const invoicedSet = new Set(invoicedQ.data?.ids ?? []);
+
+  async function attachInvoice(txId: number, file: File) {
+    setUploadingFor(txId);
+    setAttachMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const resp = await uploadFile<{
+        upcoming_id: number;
+        transaction_id: number;
+        name: string;
+        amount: number;
+        line_count: number;
+        method: string;
+      }>(`/transactions/${txId}/attach-invoice`, form);
+      setAttachMsg({
+        txId,
+        ok: true,
+        text: `Bifogad: ${resp.name} (${resp.line_count} rader, ${resp.method})`,
+      });
+      qc.invalidateQueries({ queryKey: ["invoiced-ids"] });
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+    } catch (e) {
+      setAttachMsg({
+        txId,
+        ok: false,
+        text: (e as Error).message || "Kunde inte ladda upp faktura",
+      });
+    } finally {
+      setUploadingFor(null);
+    }
+  }
+
+  function openInvoice(txId: number) {
+    const token = getToken();
+    const url = `${apiBase()}/transactions/${txId}/invoice${
+      token ? `?access_token=${encodeURIComponent(token)}` : ""
+    }`;
+    // Tokenen stöds inte i query-string; hämta som blob istället
+    fetch(`${apiBase()}/transactions/${txId}/invoice`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("Ingen faktura bifogad");
+        return r.blob();
+      })
+      .then((b) => {
+        const objUrl = URL.createObjectURL(b);
+        window.open(objUrl, "_blank");
+      })
+      .catch((e) => alert(String(e.message ?? e)));
+    void url; // tystar ts
+  }
   const [accountFilter, setAccountFilter] = useState<string>(
     () => localStorage.getItem("tx_account_filter") || ALL_ACCOUNTS,
   );
@@ -255,6 +329,42 @@ export default function Transactions() {
                           >
                             ↔
                           </button>
+                          {invoicedSet.has(tx.id) ? (
+                            <button
+                              onClick={() => openInvoice(tx.id)}
+                              className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-0.5"
+                              title="Visa bifogad faktura"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (hiddenFileRef.current) {
+                                  hiddenFileRef.current.dataset.txid = String(tx.id);
+                                  hiddenFileRef.current.click();
+                                }
+                              }}
+                              disabled={uploadingFor === tx.id}
+                              className="text-xs text-slate-600 hover:text-brand-600 flex items-center gap-0.5 disabled:opacity-50"
+                              title="Bifoga faktura (AI analyserar + kategoriserar)"
+                            >
+                              {uploadingFor === tx.id ? (
+                                <span>…</span>
+                              ) : (
+                                <Paperclip className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {attachMsg && attachMsg.txId === tx.id && (
+                        <div
+                          className={`mt-1 text-xs ${
+                            attachMsg.ok ? "text-emerald-700" : "text-rose-600"
+                          }`}
+                        >
+                          {attachMsg.text}
                         </div>
                       )}
                     </td>
@@ -272,6 +382,18 @@ export default function Transactions() {
         </div>
       </Card>
       <div className="text-xs text-slate-700">{(txsQ.data ?? []).length} rader. Kategorier tillgängliga: {cats.length}.</div>
+      <input
+        ref={hiddenFileRef}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          const txId = Number(hiddenFileRef.current?.dataset.txid || 0);
+          if (f && txId) attachInvoice(txId, f);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
