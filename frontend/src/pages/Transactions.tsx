@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, CheckCircle2, FileText, Link2, Paperclip, Pencil, Trash2, X } from "lucide-react";
 import { api, formatSEK, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
@@ -191,6 +191,37 @@ export default function Transactions() {
     },
   });
 
+  // Löpande saldo per rad — bara meningsfullt för ett konto i taget
+  // (kombinerar opening_balance med kumulativ summa av tx). Jämför med
+  // bankens saldo för att hitta var avvikelsen ligger (t.ex. en felimporterad
+  // rad eller fel opening_balance). Ignorerar månadsfiltret — saldot ska
+  // spegla kontots HELA historik, inte bara synliga rader.
+  const saldoByTx = useMemo(() => {
+    if (accountFilter === ALL_ACCOUNTS) return null;
+    const accId = Number(accountFilter);
+    const acc = (accountsQ.data ?? []).find((a) => a.id === accId);
+    if (!acc) return null;
+    const ob = Number(acc.opening_balance ?? 0);
+    const obDate = acc.opening_balance_date ?? null;
+    const allAsc = [...(txsQ.data ?? [])].sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return a.id - b.id;
+    });
+    const map = new Map<number, number | null>();
+    let running = ob;
+    for (const t of allAsc) {
+      if (obDate && t.date <= obDate) {
+        // Före startdatum — opening_balance "tar över" historiken, vi
+        // visar inte löpande saldo för dessa rader.
+        map.set(t.id, null);
+        continue;
+      }
+      running += Number(t.amount);
+      map.set(t.id, running);
+    }
+    return map;
+  }, [accountFilter, accountsQ.data, txsQ.data]);
+
   const createCategoryMut = useMutation({
     mutationFn: (p: { name: string; parent_id: number | null; txId: number }) =>
       api<Category>("/categories", {
@@ -343,6 +374,11 @@ export default function Transactions() {
                   )}
                   <th className="py-2 pr-4">Beskrivning</th>
                   <th className="py-2 pr-4 text-right">Belopp</th>
+                  {accountFilter !== ALL_ACCOUNTS && (
+                    <th className="py-2 pr-4 text-right" title="Löpande saldo: opening_balance + kumulativ summa av transaktioner efter startdatum. Jämför med bankens saldo för att hitta var det avviker.">
+                      Saldo
+                    </th>
+                  )}
                   <th className="py-2 pr-4">Kategori</th>
                 </tr>
               </thead>
@@ -355,7 +391,8 @@ export default function Transactions() {
                   .map((tx) => {
                     const acc = (accountsQ.data ?? []).find((a) => a.id === tx.account_id);
                     const isEditing = editFor === tx.id;
-                    const editColSpan = accountFilter === ALL_ACCOUNTS ? 5 : 4;
+                    const editColSpan = accountFilter === ALL_ACCOUNTS ? 5 : 5;
+                    const saldo = saldoByTx?.get(tx.id);
                     return (
                   <React.Fragment key={tx.id}>
                   <tr
@@ -405,6 +442,14 @@ export default function Transactions() {
                     >
                       {formatSEK(tx.amount)}
                     </td>
+                    {accountFilter !== ALL_ACCOUNTS && (
+                      <td
+                        className="py-2 pr-4 text-right text-slate-700 tabular-nums"
+                        title="Löpande saldo efter denna transaktion. Stämmer inte mot banken? Då är antingen opening_balance fel eller så saknas/dubblerats en rad."
+                      >
+                        {saldo == null ? "—" : formatSEK(saldo)}
+                      </td>
+                    )}
                     <td className="py-2 pr-4">
                       <div className="flex items-center gap-2 flex-wrap">
                         {tx.is_transfer ? (

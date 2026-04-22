@@ -1245,36 +1245,53 @@ def monthly_forecast(
     else:
         end = date(year, mon + 1, 1)
 
-    # Endast ännu-ej-matchade rader räknas — redan bokförda finns redan
-    # i transaktionshistoriken och ska inte dubbelräknas.
-    # Vi exkluderar auto:loan_schedule-materialiserade bills eftersom
+    # Endast "ännu inte fullt betalda" rader räknas — fullt betalda finns
+    # redan i transaktionshistoriken och ska inte dubbelräknas.
+    # Delbetalda räknas med sitt ÅTERSTÅENDE belopp (amount - paid_amount).
+    # Tidigare filtrerades på matched_transaction_id.is_(None) vilket inte
+    # funkar: den sätts redan vid första delbetalningen, så en 27 000 kr
+    # faktura med 2 000 kr inbetalt försvann helt ur forecasten.
+    # Vi exkluderar också auto:loan_schedule-materialiserade bills eftersom
     # loan_scheduled_total nedan räknar lånebetalningar direkt från
-    # LoanScheduleEntry. Annars skulle "Kvar efter kända" subtrahera
-    # varje lånebetalning TVÅ gånger.
-    bills = (
+    # LoanScheduleEntry.
+    from ..upcoming_match.payments import (
+        FULL_PAID_TOLERANCE as _PAID_TOL,
+        paid_amount as _paid_amount,
+    )
+
+    bill_candidates = (
         session.query(UpcomingTransaction)
         .filter(
             UpcomingTransaction.kind == "bill",
             UpcomingTransaction.expected_date >= start,
             UpcomingTransaction.expected_date < end,
-            UpcomingTransaction.matched_transaction_id.is_(None),
             UpcomingTransaction.source != "auto:loan_schedule",
         )
         .all()
     )
-    incomes = (
+    income_candidates = (
         session.query(UpcomingTransaction)
         .filter(
             UpcomingTransaction.kind == "income",
             UpcomingTransaction.expected_date >= start,
             UpcomingTransaction.expected_date < end,
-            UpcomingTransaction.matched_transaction_id.is_(None),
         )
         .all()
     )
 
-    bills_total = sum((b.amount for b in bills), Decimal("0"))
-    income_total = sum((i.amount for i in incomes), Decimal("0"))
+    def _remaining(u: UpcomingTransaction) -> Decimal:
+        paid = _paid_amount(session, u)
+        remaining = u.amount - paid
+        # Inom tolerans = fullt betald → 0
+        if abs(remaining) <= _PAID_TOL:
+            return Decimal("0")
+        # Negativt (overpaid) → 0 (kan inte "kvarstå" mer än betalt)
+        return remaining if remaining > 0 else Decimal("0")
+
+    bills = [b for b in bill_candidates if _remaining(b) > 0]
+    incomes = [i for i in income_candidates if _remaining(i) > 0]
+    bills_total = sum((_remaining(b) for b in bills), Decimal("0"))
+    income_total = sum((_remaining(i) for i in incomes), Decimal("0"))
 
     # "Övriga utgifter" = snitt av senaste 3 månadernas utgifter, MINUS
     # de transaktioner som redan matchats mot en UpcomingTransaction (de

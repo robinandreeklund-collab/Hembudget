@@ -72,9 +72,23 @@ def huvudbok(
     # import. Intentionen vid matchning är "detta är en bill-betalning",
     # inte "flytt mellan mina konton" — så vi vill att den syns som utgift
     # i resultaträkningen och inte flaggas som orphan-transfer.
+    #
+    # VIKTIGT: om matchad-tx ingår i ett transfer_pair måste vi exkludera
+    # BÅDA sidor, annars räknas ena sidan som inkomst/utgift och andra
+    # som transfer → obalans = tx:ens belopp. Annars får man en stor
+    # "Interna överföringar balanserar"-summa utan några synliga orphans.
     upcoming_matched_ids: set[int] = {
         tid for (tid,) in session.query(UpcomingPayment.transaction_id).all()
     }
+    reclassified_transfer_ids: set[int] = set(upcoming_matched_ids)
+    if upcoming_matched_ids:
+        partner_rows = (
+            session.query(Transaction.transfer_pair_id)
+            .filter(Transaction.id.in_(upcoming_matched_ids))
+            .filter(Transaction.transfer_pair_id.is_not(None))
+            .all()
+        )
+        reclassified_transfer_ids.update(pid for (pid,) in partner_rows if pid)
 
     # ---------- Balansrapport per konto ----------
     accounts = session.query(Account).order_by(Account.id).all()
@@ -105,9 +119,11 @@ def huvudbok(
         ).all()
 
         def _is_transfer(t: Transaction) -> bool:
-            # Upcoming-matchade tx räknas som vanliga utgifter/inkomster,
-            # inte transfers — även om is_transfer-flaggan råkar stå kvar.
-            return bool(t.is_transfer) and t.id not in upcoming_matched_ids
+            # Upcoming-matchade tx OCH deras pair-partner räknas som vanliga
+            # utgifter/inkomster, inte transfers — även om is_transfer-flaggan
+            # råkar stå kvar. Symmetri behövs annars får vi en obalans lika
+            # stor som den matchade delen.
+            return bool(t.is_transfer) and t.id not in reclassified_transfer_ids
 
         income_in = sum(
             (t.amount for t in tx_in_period if t.amount > 0 and not _is_transfer(t)),
@@ -178,10 +194,10 @@ def huvudbok(
             Transaction.date < period_end,
         )
     )
-    if upcoming_matched_ids:
+    if reclassified_transfer_ids:
         tx_q = tx_q.filter(
             (Transaction.is_transfer.is_(False))
-            | (Transaction.id.in_(upcoming_matched_ids))
+            | (Transaction.id.in_(reclassified_transfer_ids))
         )
     else:
         tx_q = tx_q.filter(Transaction.is_transfer.is_(False))
@@ -411,10 +427,20 @@ def check_details(
     accounts = {a.id: a for a in session.query(Account).all()}
 
     # Upcoming-matchade tx räknas inte som transfers — exkludera dem
-    # både från orphan-listan och paired-mismatch-walken.
+    # både från orphan-listan och paired-mismatch-walken. Plus deras
+    # pair-partner (symmetri — annars kvarstår obalansen).
     upcoming_matched_ids: set[int] = {
         tid for (tid,) in session.query(UpcomingPayment.transaction_id).all()
     }
+    reclassified_transfer_ids: set[int] = set(upcoming_matched_ids)
+    if upcoming_matched_ids:
+        partner_rows = (
+            session.query(Transaction.transfer_pair_id)
+            .filter(Transaction.id.in_(upcoming_matched_ids))
+            .filter(Transaction.transfer_pair_id.is_not(None))
+            .all()
+        )
+        reclassified_transfer_ids.update(pid for (pid,) in partner_rows if pid)
 
     def _tx_out(tx: Transaction) -> dict:
         acc = accounts.get(tx.account_id)
@@ -443,17 +469,18 @@ def check_details(
                 Transaction.transfer_pair_id.is_(None),
             )
         )
-        if upcoming_matched_ids:
+        if reclassified_transfer_ids:
             orphans_q = orphans_q.filter(
-                ~Transaction.id.in_(upcoming_matched_ids)
+                ~Transaction.id.in_(reclassified_transfer_ids)
             )
         orphans = orphans_q.order_by(Transaction.date.desc()).all()
         orphan_net = sum((float(t.amount) for t in orphans), 0.0)
 
         # Parade men med beloppsskillnad (öresavrundning eller större fel).
         # Walkar pairs och summerar source+destination — balanserat par
-        # ska summera till 0.
-        paired = (
+        # ska summera till 0. Pair där en sida är upcoming-matchad är
+        # redan reklassificerad till expense/income och ska inte räknas.
+        paired_q = (
             session.query(Transaction)
             .filter(
                 Transaction.date >= period_start,
@@ -461,8 +488,12 @@ def check_details(
                 Transaction.is_transfer.is_(True),
                 Transaction.transfer_pair_id.is_not(None),
             )
-            .all()
         )
+        if reclassified_transfer_ids:
+            paired_q = paired_q.filter(
+                ~Transaction.id.in_(reclassified_transfer_ids)
+            )
+        paired = paired_q.all()
         # Gruppera i par: lägsta id i paret är "source"
         seen_pair_ids: set[int] = set()
         mismatched: list[dict] = []
@@ -509,17 +540,26 @@ def check_details(
         }
 
     if check_type == "uncategorized":
-        rows = (
+        # Inkludera upcoming-matchade (som räknas som expense, inte transfer)
+        # så uncategorized-listan stämmer med resultaträkningens
+        # "Okategoriserat"-rad. Annars kan user:n se "8 transactions" i
+        # resultaträkningen men bara 1 rad i åtgärda-vyn.
+        uncat_q = (
             session.query(Transaction)
             .filter(
                 Transaction.date >= period_start,
                 Transaction.date < period_end,
                 Transaction.category_id.is_(None),
-                Transaction.is_transfer.is_(False),
             )
-            .order_by(Transaction.date.desc())
-            .all()
         )
+        if reclassified_transfer_ids:
+            uncat_q = uncat_q.filter(
+                (Transaction.is_transfer.is_(False))
+                | (Transaction.id.in_(reclassified_transfer_ids))
+            )
+        else:
+            uncat_q = uncat_q.filter(Transaction.is_transfer.is_(False))
+        rows = uncat_q.order_by(Transaction.date.desc()).all()
         return {
             "check_type": check_type,
             "count": len(rows),

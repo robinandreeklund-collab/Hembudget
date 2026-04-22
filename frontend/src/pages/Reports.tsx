@@ -532,6 +532,7 @@ function CheckRow({
       {open && clickable && check.check_type && (
         <CheckDetails
           checkType={check.check_type}
+          checkValue={check.value}
           scope={scope}
           month={month}
           year={year}
@@ -543,11 +544,13 @@ function CheckRow({
 
 function CheckDetails({
   checkType,
+  checkValue,
   scope,
   month,
   year,
 }: {
   checkType: string;
+  checkValue: number;
   scope: "month" | "year";
   month: string;
   year: number;
@@ -607,6 +610,7 @@ function CheckDetails({
         rows={dataQ.data.transactions}
         mismatchedPairs={dataQ.data.mismatched_pairs}
         mismatchedNet={dataQ.data.mismatched_net}
+        checkValue={checkValue}
         accounts={accountsQ.data ?? []}
         onDone={invalidate}
       />
@@ -694,6 +698,7 @@ function OrphanTransferList({
   rows,
   mismatchedPairs,
   mismatchedNet,
+  checkValue,
   accounts,
   onDone,
 }: {
@@ -704,6 +709,7 @@ function OrphanTransferList({
     pair_sum: number;
   }>;
   mismatchedNet?: number;
+  checkValue: number;
   accounts: Account[];
   onDone: () => void;
 }) {
@@ -734,10 +740,23 @@ function OrphanTransferList({
   return (
     <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
       {!hasOrphans && !hasMismatched && (
-        <div className="text-xs text-slate-700 bg-white rounded p-2">
-          Inga orphan-överföringar eller belopps-diff större än 1 öre.
-          Eventuellt kvarvarande summa beror på öresavrundning över
-          hela perioden och är inom tolerans.
+        <div className="text-xs text-slate-700 bg-white rounded p-2 space-y-1">
+          <div>
+            Inga orphan-överföringar eller belopps-diff större än 1 öre
+            hittade i datan.
+          </div>
+          {Math.abs(checkValue) > 2 && (
+            <div className="text-amber-700">
+              Men transfer_in − transfer_out = {formatSEK(checkValue)} —
+              detta kommer från transaktioner utanför perioden (t.ex. en
+              överföring som har sin motpart i nästa/föregående månad/år)
+              eller en pair där en sida är kopplad till en kommande
+              faktura/lön (delbetalning) som reklassificerats till utgift
+              medan motparten fortfarande står som transfer. Kolla
+              balansrapporten nedan — vilket konto har TRANSFER +/− som
+              inte matchar ett annat konto?
+            </div>
+          )}
         </div>
       )}
       {rows.map((tx) => (

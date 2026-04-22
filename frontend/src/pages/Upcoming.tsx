@@ -685,14 +685,22 @@ function MonthSection({
   initiallyOpen: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
-  const matched = items.filter((i) => i.matched_transaction_id != null).length;
+  // "Matchad" = fullt betald (payment_status === "paid"). Delbetalda
+  // räknas som omatchade eftersom det finns något kvar att göra. Detta
+  // matchar backend /upcoming/forecast-logiken så siffrorna stämmer
+  // mellan månads-prognos-kortet och denna lista.
+  const matched = items.filter((i) => i.payment_status === "paid").length;
   const unmatched = items.length - matched;
-  // OBS: amount kommer som string från Pydantic/Decimal JSON-serialisering,
-  // så vi måste Number()-casta innan summering (annars blir det
-  // strängkonkatenering "0" + "14110" + "19172" = "01411019172").
-  // Absolut belopp — månads-totalen är alltid positivt oavsett om det
-  // är bills eller incomes eller om datan har blandade tecken.
-  const total = items.reduce((s, i) => s + Math.abs(Number(i.amount)), 0);
+  // Månads-total = ÅTERSTÅENDE belopp för ej-fullt-betalda, inte gross.
+  // Så här räknar också /upcoming/forecast bills_total — en Amex-faktura
+  // på 27 000 kr där 2 000 kr redan är inbetalt visas som 25 000 kr.
+  // OBS: amount + paid_amount kommer som string från Pydantic/Decimal,
+  // så Number()-cast innan subtraktion.
+  const total = items.reduce((s, i) => {
+    if (i.payment_status === "paid") return s;
+    const remaining = Math.abs(Number(i.amount)) - Math.abs(Number(i.paid_amount ?? 0));
+    return s + Math.max(0, remaining);
+  }, 0);
   const allMatched = matched > 0 && unmatched === 0;
 
   return (
