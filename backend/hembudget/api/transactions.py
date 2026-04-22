@@ -467,6 +467,84 @@ def reclassify(tx_id: int, session: Session = Depends(db)) -> Transaction:
     return tx
 
 
+@router.delete("/transactions/{tx_id}")
+def delete_transaction(
+    tx_id: int, session: Session = Depends(db),
+) -> dict:
+    """Radera en transaktion permanent + städa upp alla referenser:
+
+    - UpcomingPayment-rader (om tx ingick i en delbetalning)
+    - LoanPayment-rader (om tx var en lånebetalning)
+    - TransactionSplits (kopior av upcoming-lines)
+    - Transfer-pair: om tx var del av ett par, koppla loss motparten
+    - matched_transaction_id på upcomings: om denna tx var primär match
+      → flytta till nästa kvarvarande payment eller null
+
+    Användsfall: dubbletter (t.ex. en lön inlagd både via upcoming-
+    materialize och via CSV-import).
+    """
+    from ..db.models import (
+        LoanPayment as _LoanPayment,
+        TransactionSplit as _Split,
+        UpcomingTransaction as _UT,
+    )
+    from ..upcoming_match.payments import remove_all_payments_for_tx
+
+    tx = session.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(404, "Transaction not found")
+
+    cleanup: dict[str, int] = {}
+
+    # 1. UpcomingPayment + matched_transaction_id-flytt
+    affected_upcomings = remove_all_payments_for_tx(session, tx_id)
+    cleanup["upcoming_payments_removed"] = len(affected_upcomings)
+
+    # 2. LoanPayment
+    lp_count = (
+        session.query(_LoanPayment)
+        .filter(_LoanPayment.transaction_id == tx_id)
+        .delete(synchronize_session=False)
+    )
+    cleanup["loan_payments_removed"] = lp_count
+
+    # 3. TransactionSplits
+    split_count = (
+        session.query(_Split)
+        .filter(_Split.transaction_id == tx_id)
+        .delete(synchronize_session=False)
+    )
+    cleanup["splits_removed"] = split_count
+
+    # 4. Transfer-pair: koppla loss motparten
+    if tx.transfer_pair_id is not None:
+        partner = session.get(Transaction, tx.transfer_pair_id)
+        if partner is not None:
+            partner.transfer_pair_id = None
+            # Behåll is_transfer på partnern så användaren kan välja
+            # om hen vill avmarkera den eller skapa ny motpart
+            cleanup["partner_unlinked"] = partner.id
+
+    # 5. Sätt eventuella loan_schedule_entries med matched_transaction_id
+    #    till null
+    from ..db.models import LoanScheduleEntry as _LSE
+    cleared = (
+        session.query(_LSE)
+        .filter(_LSE.matched_transaction_id == tx_id)
+        .update(
+            {"matched_transaction_id": None, "matched_at": None},
+            synchronize_session=False,
+        )
+    )
+    cleanup["loan_schedule_entries_unmatched"] = cleared
+
+    # 6. Slutligen: radera transaktionen
+    session.delete(tx)
+    session.flush()
+    cleanup["deleted"] = tx_id
+    return cleanup
+
+
 @router.post("/accounts/{account_id}/manual-transaction", response_model=TransactionOut)
 def create_manual_transaction(
     account_id: int, payload: dict, session: Session = Depends(db),

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { ArrowLeftRight, FileText, Link2, Paperclip, X } from "lucide-react";
+import { ArrowLeftRight, FileText, Link2, Paperclip, Trash2, X } from "lucide-react";
 import { api, formatSEK, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, Category, Transaction } from "@/types/models";
@@ -139,6 +139,21 @@ export default function Transactions() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["transactions"] });
       qc.invalidateQueries({ queryKey: ["budget"] });
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) =>
+      api(`/transactions/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transactions"] });
+      qc.invalidateQueries({ queryKey: ["budget"] });
+      qc.invalidateQueries({ queryKey: ["balances"] });
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+      qc.invalidateQueries({ queryKey: ["ytd-income"] });
+      qc.invalidateQueries({ queryKey: ["ledger"] });
+      qc.invalidateQueries({ queryKey: ["transfers-paired"] });
+      qc.invalidateQueries({ queryKey: ["transfers-unpaired"] });
     },
   });
 
@@ -432,6 +447,23 @@ export default function Transactions() {
                               )}
                             </button>
                           )}
+                          <button
+                            onClick={() => {
+                              const msg =
+                                `Radera transaktion permanent?\n\n${tx.date} · ` +
+                                `${tx.raw_description} · ${tx.amount} kr\n\n` +
+                                "Detta tar bort transaktionen + ev. " +
+                                "kopplingar (split, lånebetalning, " +
+                                "upcoming-match, transfer-pair). Kan ej " +
+                                "ångras.";
+                              if (confirm(msg)) deleteMut.mutate(tx.id);
+                            }}
+                            disabled={deleteMut.isPending}
+                            className="text-xs text-slate-600 hover:text-rose-600 disabled:opacity-50"
+                            title="Radera transaktionen (för dubbletter etc.)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       )}
                       {attachMsg && attachMsg.txId === tx.id && (
