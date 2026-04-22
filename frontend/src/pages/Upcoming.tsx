@@ -651,7 +651,10 @@ function MonthSection({
   const [open, setOpen] = useState(initiallyOpen);
   const matched = items.filter((i) => i.matched_transaction_id != null).length;
   const unmatched = items.length - matched;
-  const total = items.reduce((s, i) => s + i.amount, 0);
+  // OBS: amount kommer som string från Pydantic/Decimal JSON-serialisering,
+  // så vi måste Number()-casta innan summering (annars blir det
+  // strängkonkatenering "0" + "14110" + "19172" = "01411019172").
+  const total = items.reduce((s, i) => s + Number(i.amount), 0);
   const allMatched = matched > 0 && unmatched === 0;
 
   return (
