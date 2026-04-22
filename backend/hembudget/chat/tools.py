@@ -935,16 +935,22 @@ def ytd_income_by_person(
         ).all()
 
     by_owner: dict[str, dict] = {}
+    total_from_transactions = 0.0
     for owner_id, account_name, total, count in rows:
         key = f"user_{owner_id}" if owner_id else "gemensamt"
         bucket = by_owner.setdefault(
-            key, {"total": 0.0, "count": 0, "accounts": []}
+            key,
+            {"total": 0.0, "count": 0, "accounts": [],
+             "from_transactions": 0.0, "from_manual": 0.0},
         )
-        bucket["total"] += _d(total)
+        t = _d(total)
+        bucket["total"] += t
         bucket["count"] += int(count or 0)
+        bucket["from_transactions"] += t
         bucket["accounts"].append(
-            {"name": account_name, "amount": _d(total)}
+            {"name": account_name, "amount": t, "source": "tx"}
         )
+        total_from_transactions += t
 
     # Källa 2: manuellt inlagda upcoming incomes — kompletterar när
     # partnerns kontoutdrag inte är importerat än.
@@ -959,16 +965,22 @@ def ytd_income_by_person(
         )
         .all()
     )
+    total_from_manual = 0.0
     for up in manual_incomes:
         key = _resolve_owner_bucket_key(up.owner, user_name_to_id)
         bucket = by_owner.setdefault(
-            key, {"total": 0.0, "count": 0, "accounts": []}
+            key,
+            {"total": 0.0, "count": 0, "accounts": [],
+             "from_transactions": 0.0, "from_manual": 0.0},
         )
-        bucket["total"] += _d(up.amount)
+        a = _d(up.amount)
+        bucket["total"] += a
         bucket["count"] += 1
+        bucket["from_manual"] += a
         bucket["accounts"].append(
-            {"name": f"{up.name} (manuellt)", "amount": _d(up.amount)}
+            {"name": f"{up.name} (manuellt)", "amount": a, "source": "manual"}
         )
+        total_from_manual += a
 
     grand_total = sum(b["total"] for b in by_owner.values())
     return {
@@ -977,6 +989,11 @@ def ytd_income_by_person(
         "category_matched": not fallback_used,
         "by_owner": by_owner,
         "grand_total": round(grand_total, 2),
+        # Uppdelning per källa så UI kan visa "från kontoutdrag" vs
+        # "manuellt tillagda" och hjälpa användaren upptäcka dubletter
+        # eller felkategoriseringar.
+        "total_from_transactions": round(total_from_transactions, 2),
+        "total_from_manual": round(total_from_manual, 2),
     }
 
 

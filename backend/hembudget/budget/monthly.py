@@ -238,6 +238,26 @@ class MonthlyBudgetService:
         for cat_id, cat_name, total in split_rows:
             _accumulate(cat_id, cat_name, total)
 
+        # Inkludera omatchade upcomings för månaden — användaren kan ha
+        # lagt in partnerns lön manuellt utan CSV, eller en bill som
+        # förfaller men ännu inte bokförts. Detta speglar logiken i
+        # /budget/ytd-income och /budget/family.
+        from ..db.models import UpcomingTransaction
+        manual_ups = (
+            self.session.query(UpcomingTransaction)
+            .filter(
+                UpcomingTransaction.expected_date >= start,
+                UpcomingTransaction.expected_date < end,
+                UpcomingTransaction.matched_transaction_id.is_(None),
+            )
+            .all()
+        )
+        for up in manual_ups:
+            if up.kind == "income":
+                income += up.amount
+            elif up.kind == "bill":
+                expenses += up.amount
+
         planned_rows = (
             self.session.query(Budget, Category)
             .join(Category, Category.id == Budget.category_id)
