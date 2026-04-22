@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, Link2, Unlink2 } from "lucide-react";
+import {
+  ArrowRight, CheckCircle2, ChevronDown, ChevronRight, Link2, Unlink2,
+} from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account } from "@/types/models";
@@ -187,23 +189,7 @@ export default function Transfers() {
             olika konton inom ±5 dagars fönster.
           </div>
         ) : (
-          <div className="space-y-1">
-            {pairs.map((p) => (
-              <div key={p.source.id} className="flex items-center gap-3 border rounded p-2 text-sm bg-emerald-50/30">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <TxRow tx={p.source} />
-                <ArrowRight className="w-4 h-4 text-slate-600 shrink-0" />
-                <TxRow tx={p.destination} />
-                <button
-                  onClick={() => unlinkMut.mutate(p.source.id)}
-                  className="ml-auto shrink-0 text-slate-600 hover:text-rose-600 text-xs"
-                  title="Ta bort parningen"
-                >
-                  <Unlink2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
+          <PairsByMonth pairs={pairs} onUnlink={(id) => unlinkMut.mutate(id)} />
         )}
       </Card>
 
@@ -375,6 +361,109 @@ function BatchCounterpartSection({
           }`}
         >
           {message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SV_MONTHS = [
+  "januari", "februari", "mars", "april", "maj", "juni",
+  "juli", "augusti", "september", "oktober", "november", "december",
+];
+
+function formatMonthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return `${SV_MONTHS[m - 1]} ${y}`;
+}
+
+function PairsByMonth({
+  pairs,
+  onUnlink,
+}: {
+  pairs: Pair[];
+  onUnlink: (tx_id: number) => void;
+}) {
+  // Gruppera per YYYY-MM (baserat på source-tx:s datum)
+  const byMonth: Record<string, Pair[]> = {};
+  for (const p of pairs) {
+    const ym = p.source.date.slice(0, 7);
+    (byMonth[ym] = byMonth[ym] || []).push(p);
+  }
+  const months = Object.keys(byMonth).sort().reverse();
+  // De 2 senaste månaderna öppna som default, resten kollapsade
+  const initiallyOpen = new Set(months.slice(0, 2));
+
+  return (
+    <div className="space-y-2">
+      {months.map((ym) => (
+        <PairsMonthSection
+          key={ym}
+          month={ym}
+          pairs={byMonth[ym]}
+          initiallyOpen={initiallyOpen.has(ym)}
+          onUnlink={onUnlink}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PairsMonthSection({
+  month,
+  pairs,
+  initiallyOpen,
+  onUnlink,
+}: {
+  month: string;
+  pairs: Pair[];
+  initiallyOpen: boolean;
+  onUnlink: (tx_id: number) => void;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const total = pairs.reduce(
+    (s, p) => s + Math.abs(Number(p.source.amount)), 0,
+  );
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left"
+      >
+        {open ? (
+          <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="font-medium capitalize">{formatMonthLabel(month)}</div>
+          <div className="text-xs text-slate-700">
+            {pairs.length} par
+          </div>
+        </div>
+        <div className="text-right shrink-0 text-sm font-semibold">
+          {formatSEK(total)}
+        </div>
+      </button>
+      {open && (
+        <div className="border-t p-2 space-y-1 bg-slate-50/40">
+          {pairs.map((p) => (
+            <div key={p.source.id} className="flex items-center gap-3 border rounded p-2 text-sm bg-emerald-50/30">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <TxRow tx={p.source} />
+              <ArrowRight className="w-4 h-4 text-slate-600 shrink-0" />
+              <TxRow tx={p.destination} />
+              <button
+                onClick={() => onUnlink(p.source.id)}
+                className="ml-auto shrink-0 text-slate-600 hover:text-rose-600 text-xs"
+                title="Ta bort parningen"
+              >
+                <Unlink2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
