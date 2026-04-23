@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase, ChevronDown, ChevronRight, Plus, Trash2, X, CheckCircle2,
 } from "lucide-react";
-import { api, formatSEK } from "@/api/client";
+import { api, formatSEK, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, HouseholdUser } from "@/types/models";
 
@@ -131,11 +131,14 @@ export default function Salaries() {
     onSuccess: invalidate,
   });
   const textParseMut = useMutation({
-    mutationFn: (text: string) =>
-      api<IncomeUpcoming>("/upcoming/parse-text", {
-        method: "POST",
-        body: JSON.stringify({ text, kind: "income" }),
-      }),
+    mutationFn: (text: string) => {
+      // Endpoint kräver form-data (Form-parametrar i FastAPI), inte JSON.
+      // Använder uploadFile-wrappern som hanterar FormData korrekt.
+      const form = new FormData();
+      form.append("text", text);
+      form.append("kind", "income");
+      return uploadFile<IncomeUpcoming>("/upcoming/parse-text", form);
+    },
     onSuccess: invalidate,
   });
 

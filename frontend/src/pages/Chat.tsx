@@ -175,6 +175,14 @@ export default function Chat() {
     onSuccess: () => historyQ.refetch(),
   });
 
+  const clearMut = useMutation({
+    mutationFn: () =>
+      api<{ deleted: number }>(`/chat/history/${sessionId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => historyQ.refetch(),
+  });
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [historyQ.data, sendMut.isPending]);
@@ -185,13 +193,29 @@ export default function Chat() {
     <div className="p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">AI-chatt</h1>
-        <div className="text-sm">
-          <span
-            className={`inline-block w-2 h-2 rounded-full mr-1.5 ${
-              statusQ.data?.alive ? "bg-emerald-500" : "bg-rose-500"
-            }`}
-          />
-          LM Studio: {statusQ.data?.alive ? "aktiv" : "frånkopplad"} · {statusQ.data?.model}
+        <div className="flex items-center gap-3 text-sm">
+          {msgs.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm("Rensa hela chat-historiken? Går inte att ångra.")) {
+                  clearMut.mutate();
+                }
+              }}
+              disabled={clearMut.isPending}
+              className="px-2.5 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 text-xs disabled:opacity-50"
+              title="Ta bort alla meddelanden i denna session"
+            >
+              {clearMut.isPending ? "Rensar…" : "Rensa chatt"}
+            </button>
+          )}
+          <div>
+            <span
+              className={`inline-block w-2 h-2 rounded-full mr-1.5 ${
+                statusQ.data?.alive ? "bg-emerald-500" : "bg-rose-500"
+              }`}
+            />
+            LM Studio: {statusQ.data?.alive ? "aktiv" : "frånkopplad"} · {statusQ.data?.model}
+          </div>
         </div>
       </div>
 
