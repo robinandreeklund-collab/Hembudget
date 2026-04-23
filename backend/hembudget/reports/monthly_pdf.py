@@ -360,6 +360,11 @@ def render_pdf(data: MonthlyReportData) -> bytes:
         exp_labels, exp_values,
         title=f"Utgifter per kategori — {_format_sek(exp_total_for_title)}",
         palette=charts.DEFAULT_PALETTE,
+        # Användare klagade på att 'Övrigt 30 668 kr' var för stor
+        # (40% av totalen) — visa fler enskilda kategorier innan svansen
+        # aggregeras. 14 slices får plats i chart-legendet utan att bli
+        # oläsligt.
+        max_slices=14,
     )
     pie_inc = charts.pie_chart(
         inc_labels, inc_values,
@@ -406,6 +411,17 @@ def render_pdf(data: MonthlyReportData) -> bytes:
         )
         story.append(Spacer(1, 4))
         story.append(_transfers_table(data.transfers))
+        story.append(Spacer(1, 4))
+        story.append(
+            Paragraph(
+                "<i>Egna utgifter</i> = totalt belopp draget från personens "
+                "egna konton under månaden. Om några av de köpen var "
+                "gemensamma inköp (t.ex. Willys-handling) kan ni själva "
+                "dra av dem från överföringen. Inkognito-konton visar alltid "
+                "0 eftersom privata utgifter inte spåras där.",
+                hint,
+            )
+        )
         story.append(Spacer(1, 12))
 
     # 6. Budget vs utfall — chart
@@ -526,7 +542,18 @@ def _kpi_box(summary: MonthSummary) -> Table:
 
 
 def _transfers_table(transfers: list[TransferSuggestion]) -> Table:
-    header = ["Person", "Inkomst", "Andel", "50/50-split", "Prorata", "Redan betalt"]
+    # "Egna utgifter" = summan av utgifter dragna på personens egna konton
+    # under månaden. OBS: inte detsamma som "redan betalat till det gemen-
+    # samma" — det kan vara privata köp, Swish, eller gemensamma inköp.
+    # Användaren får själv dra av det från överföringen om det var
+    # gemensamt. Förklarande not renderas efter tabellen (se
+    # render_pdf). Inkognito-konton (t.ex. partnerns) visar 0 här
+    # eftersom vi inte spårar deras privata utgifter.
+    header = [
+        "Person", "Inkomst", "Andel",
+        "50/50-split", "Prorata",
+        "Egna utgifter",
+    ]
     rows: list[list] = [header]
     for t in transfers:
         rows.append([
