@@ -116,28 +116,6 @@ export default function Upcoming() {
     queryKey: ["categories"],
     queryFn: () => api<Category[]>("/categories"),
   });
-  const ytdIncomeQ = useQuery({
-    queryKey: ["ytd-income"],
-    queryFn: () =>
-      api<{
-        year: number;
-        category: string;
-        category_matched: boolean;
-        by_owner: Record<
-          string,
-          {
-            total: number;
-            count: number;
-            accounts: Array<{ name: string; amount: number; source?: string }>;
-            from_transactions?: number;
-            from_manual?: number;
-          }
-        >;
-        grand_total: number;
-        total_from_transactions?: number;
-        total_from_manual?: number;
-      }>("/budget/ytd-income"),
-  });
   const setLinesMut = useMutation({
     mutationFn: (p: { id: number; lines: Array<Omit<UpcomingLine, "id">> }) =>
       api<UpcomingLine[]>(`/upcoming/${p.id}/lines`, {
@@ -495,96 +473,15 @@ export default function Upcoming() {
           />
         </Card>
       )}
-      <Card title={`Kommande löner (${openIncomes.length})`}>
-        <ItemList
-          items={openIncomes}
-          accounts={accountsQ.data ?? []}
-          categories={categoriesQ.data ?? []}
-          onDelete={(id) => deleteMut.mutate(id)}
-          onUpdate={(id, data) => updateMut.mutate({ id, data })}
-          onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
-          grouped
-          defaultExpandedMonths={1}
-        />
-      </Card>
-      {(paidIncomes.length > 0 || (ytdIncomeQ.data?.grand_total ?? 0) > 0) && (
-        <Card
-          title={`Historiska löner (${
-            ytdIncomeQ.data?.year ?? new Date().getFullYear()
-          })`}
-        >
-          {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded p-3 mb-3 text-sm">
-              <div className="flex items-baseline justify-between">
-                <div className="font-medium text-emerald-800">
-                  Total lön hittills i år
-                </div>
-                <div className="text-lg font-semibold text-emerald-800">
-                  {formatSEK(ytdIncomeQ.data.grand_total)}
-                </div>
-              </div>
-              <div className="text-xs text-emerald-800 mt-1">
-                Kategori <em>{ytdIncomeQ.data.category}</em>
-                {!ytdIncomeQ.data.category_matched &&
-                  " (fallback: alla positiva rader)"}
-              </div>
-              {/* Uppdelning per källa — hjälper att upptäcka dubletter */}
-              {(ytdIncomeQ.data.total_from_transactions ?? 0) > 0 &&
-                (ytdIncomeQ.data.total_from_manual ?? 0) > 0 && (
-                  <div className="mt-2 text-xs text-emerald-900 grid grid-cols-2 gap-2">
-                    <div>
-                      Från kontoutdrag:{" "}
-                      <span className="font-medium">
-                        {formatSEK(ytdIncomeQ.data.total_from_transactions ?? 0)}
-                      </span>
-                    </div>
-                    <div>
-                      Manuellt tillagda:{" "}
-                      <span className="font-medium">
-                        {formatSEK(ytdIncomeQ.data.total_from_manual ?? 0)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              {Object.entries(ytdIncomeQ.data.by_owner).length > 0 && (
-                <div className="mt-2 space-y-0.5">
-                  {Object.entries(ytdIncomeQ.data.by_owner).map(([owner, b]) => (
-                    <div key={owner} className="flex justify-between text-xs">
-                      <span>
-                        {owner === "gemensamt" ? "Gemensamt" : owner}
-                        <span className="text-emerald-700 ml-1">
-                          · {b.count} st
-                        </span>
-                        {(b.from_manual ?? 0) > 0 && (b.from_transactions ?? 0) > 0 && (
-                          <span className="text-emerald-700 ml-1">
-                            ({formatSEK(b.from_transactions ?? 0)} CSV +{" "}
-                            {formatSEK(b.from_manual ?? 0)} manuellt)
-                          </span>
-                        )}
-                      </span>
-                      <span className="font-medium">{formatSEK(b.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {paidIncomes.length > 0 ? (
-            <ItemList
-              items={paidIncomes}
-              accounts={accountsQ.data ?? []}
-              categories={categoriesQ.data ?? []}
-              onDelete={(id) => deleteMut.mutate(id)}
-              onUpdate={(id, data) => updateMut.mutate({ id, data })}
-              onSetLines={(id, lines) => setLinesMut.mutate({ id, lines })}
-              grouped
-              defaultExpandedMonths={1}
-            />
-          ) : (
-            <div className="text-xs text-slate-700">
-              Inga planerade löneposter med passerat datum.
-            </div>
-          )}
+      {(openIncomes.length > 0 || paidIncomes.length > 0) && (
+        <Card title="Lön har flyttat">
+          <div className="text-sm text-slate-700">
+            Lönerelaterade rader visas nu på en egen sida —{" "}
+            <a href="/salaries" className="text-brand-600 underline">
+              gå till Lön
+            </a>
+            {" "}för KPI:er, breakdown per person, kommande och historik.
+          </div>
         </Card>
       )}
     </div>

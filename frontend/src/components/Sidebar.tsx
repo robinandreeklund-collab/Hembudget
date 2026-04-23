@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
+  Briefcase,
   CalendarPlus,
   CircleDollarSign,
   FileDown,
@@ -25,6 +26,7 @@ const ITEMS = [
   { to: "/transactions", label: "Transaktioner", icon: Receipt },
   { to: "/import", label: "Importera", icon: Upload },
   { to: "/budget", label: "Budget", icon: CircleDollarSign },
+  { to: "/salaries", label: "Lön", icon: Briefcase },
   { to: "/upcoming", label: "Kommande", icon: CalendarPlus },
   { to: "/transfers", label: "Överföringar", icon: Link2 },
   { to: "/chat", label: "AI-chatt", icon: MessageSquare },
