@@ -64,6 +64,27 @@ def _prev_month(month: str) -> str:
     return f"{y}-{m - 1:02d}"
 
 
+def _scaled_image(png_bytes: bytes, max_width_mm: float) -> Image:
+    """Bygg en ReportLab Image som proportionellt skalas till
+    max_width_mm. Undviker LayoutError 'Flowable too large' som händer
+    när width=180mm krockar med frame-bredden (A4-15mm-marginal ≈ 178mm
+    användbar; för säker marginal använder vi 175 som default)."""
+    buf = io.BytesIO(png_bytes)
+    # Använd Pillow (redan installerad via reportlab) för att läsa mått
+    try:
+        from PIL import Image as PILImage
+        buf.seek(0)
+        pil = PILImage.open(buf)
+        w_px, h_px = pil.size
+        buf.seek(0)
+    except Exception:
+        # Fallback 16:9 om PIL inte fungerar
+        w_px, h_px = 1280, 720
+    target_w = max_width_mm * mm
+    target_h = target_w * (h_px / w_px)
+    return Image(buf, width=target_w, height=target_h)
+
+
 @dataclass
 class TransferSuggestion:
     """Förslag på hur vardera person ska bidra till gemensamma utgifter.
@@ -377,7 +398,7 @@ def render_pdf(data: MonthlyReportData) -> bytes:
             title="Budget vs utfall per kategori",
         )
         if bar is not None:
-            story.append(Image(io.BytesIO(bar), width=180 * mm, height=None))
+            story.append(_scaled_image(bar, max_width_mm=175))
             story.append(Spacer(1, 10))
 
     # 7. Prev-month-deltas — chart
@@ -388,9 +409,7 @@ def render_pdf(data: MonthlyReportData) -> bytes:
             title=f"Största förändringar mot {_format_month_label(_prev_month(data.month))}",
         )
         if delta_chart is not None:
-            story.append(
-                Image(io.BytesIO(delta_chart), width=180 * mm, height=None)
-            )
+            story.append(_scaled_image(delta_chart, max_width_mm=175))
             story.append(Spacer(1, 10))
 
     # 8. Detaljerad kategoritabell

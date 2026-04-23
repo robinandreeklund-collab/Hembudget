@@ -236,7 +236,21 @@ def _compute_history(session: Session, y: int) -> dict:
 
 
 def _readings_summary(session: Session, y: int) -> dict:
-    """Aggregera UtilityReading per månad + meter_type för ett år."""
+    """Aggregera UtilityReading per månad + meter_type för ett år.
+
+    Viktigt för el: samma kWh fakturaeras av TVÅ parter varje månad —
+    elhandlaren (meter_role='energy', t.ex. Telinet) och nätleverantören
+    ('grid', t.ex. Hjo Elnät). De MÄTER samma sak men tar betalt för
+    olika delar. Om vi summerar rakt av dubbelräknas kWh medan kr är
+    OK (olika delar av elnotan).
+
+    Strategi:
+    - 'consumption' = kWh från 'energy'-rollen om den finns, annars 'grid',
+      annars 'total'. Detta undviker dubbelräkning.
+    - 'cost_kr' = SUM över alla roller (det är den totala elnotan).
+    - 'cost_by_role' exponerar nedbrytning ('energy': X, 'grid': Y)
+      så UI:n kan visa det transparent.
+    """
     rows = (
         session.query(UtilityReading)
         .filter(
@@ -246,19 +260,68 @@ def _readings_summary(session: Session, y: int) -> dict:
         .order_by(UtilityReading.period_start.asc())
         .all()
     )
-    by_meter: dict[str, dict[str, dict]] = {}
+    # Per meter_type → per månad → per role → aggregeringsdata
+    scratch: dict[str, dict[str, dict[str, dict]]] = {}
     for r in rows:
         m = _month_key(r.period_start)
         meter = r.meter_type
-        month_data = by_meter.setdefault(meter, {}).setdefault(
-            m, {"consumption": 0.0, "cost_kr": 0.0, "unit": r.consumption_unit},
+        role = getattr(r, "meter_role", None) or "total"
+        month_scratch = scratch.setdefault(meter, {}).setdefault(m, {})
+        bucket = month_scratch.setdefault(
+            role,
+            {
+                "consumption": 0.0,
+                "cost_kr": 0.0,
+                "unit": r.consumption_unit,
+                "supplier_names": set(),
+            },
         )
         if r.consumption is not None:
-            month_data["consumption"] += float(r.consumption)
-        month_data["cost_kr"] += float(r.cost_kr)
-        if r.consumption_unit and not month_data.get("unit"):
-            month_data["unit"] = r.consumption_unit
-    return by_meter
+            # Max inom samma roll — flera fakturor per månad (ovanligt
+            # men hände i tester) tas INTE som summa för kWh.
+            bucket["consumption"] = max(bucket["consumption"], float(r.consumption))
+        bucket["cost_kr"] += float(r.cost_kr)
+        if r.consumption_unit and not bucket.get("unit"):
+            bucket["unit"] = r.consumption_unit
+        if r.supplier:
+            bucket["supplier_names"].add(r.supplier)
+
+    # Slutfas: flata ut till månadsaggregat enligt strategin ovan.
+    out: dict[str, dict[str, dict]] = {}
+    for meter, months in scratch.items():
+        out_by_month: dict[str, dict] = {}
+        for m, roles in months.items():
+            cost_by_role: dict[str, float] = {}
+            cost_total = 0.0
+            for role, bucket in roles.items():
+                cost_by_role[role] = round(bucket["cost_kr"], 2)
+                cost_total += bucket["cost_kr"]
+
+            # Välj kWh-källa enligt prioritering
+            consumption = 0.0
+            unit = None
+            for preferred_role in ("energy", "grid", "total"):
+                if preferred_role in roles:
+                    b = roles[preferred_role]
+                    if b["consumption"] > 0 or b.get("unit"):
+                        consumption = b["consumption"]
+                        unit = b["unit"]
+                        break
+            # Samla suppliers från ALLA roller (transparens — användaren
+            # vill se både Telinet och Hjo som bidrar till månaden)
+            suppliers: set[str] = set()
+            for b in roles.values():
+                suppliers |= b["supplier_names"]
+            out_by_month[m] = {
+                "consumption": round(consumption, 3),
+                "cost_kr": round(cost_total, 2),
+                "unit": unit,
+                "cost_by_role": cost_by_role,
+                "roles": sorted(roles.keys()),
+                "suppliers": sorted(suppliers),
+            }
+        out[meter] = out_by_month
+    return out
 
 
 @router.get("/history")
@@ -723,6 +786,7 @@ def parse_from_upcoming(
     if existing:
         existing.supplier = res.supplier if res.supplier != "unknown" else existing.supplier
         existing.meter_type = res.meter_type or existing.meter_type
+        existing.meter_role = res.meter_role or existing.meter_role or "total"
         existing.period_start = res.period_start
         existing.period_end = res.period_end or res.period_start
         if res.consumption is not None:
@@ -744,6 +808,7 @@ def parse_from_upcoming(
         reading = UtilityReading(
             supplier=res.supplier,
             meter_type=res.meter_type,
+            meter_role=res.meter_role or "total",
             period_start=res.period_start,
             period_end=res.period_end or res.period_start,
             consumption=res.consumption,
@@ -795,6 +860,10 @@ def parse_from_upcoming(
             session.add(UtilityReading(
                 supplier=res.supplier,
                 meter_type="electricity",
+                # Hjo Energi-historiken visar den uppmätta förbrukningen
+                # (kWh via elmätaren) — samma för nät + energi. Vi märker
+                # som 'grid' eftersom det är Hjo:s egen mätning.
+                meter_role=res.meter_role or "grid",
                 period_start=hp_start,
                 period_end=hp_end,
                 consumption=hp.kwh,

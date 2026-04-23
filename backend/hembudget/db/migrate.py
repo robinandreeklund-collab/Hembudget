@@ -204,6 +204,16 @@ def run_migrations(engine: Engine) -> list[str]:
                 "CREATE INDEX ix_utility_readings_period_start ON utility_readings(period_start)"
             ))
         applied.append("utility_readings (table)")
+    # meter_role: skilj på 'energy' (Telinet/Tibber) vs 'grid' (Hjo Elnät)
+    # så vi slutar dubbelräkna kWh när båda fakturerar samma månad.
+    if _table_exists(engine, "utility_readings"):
+        if "meter_role" not in _columns(engine, "utility_readings"):
+            _add_column(
+                engine,
+                "utility_readings",
+                "meter_role VARCHAR(20) NOT NULL DEFAULT 'total'",
+            )
+            applied.append("utility_readings.meter_role")
 
     # loan_payments: transaction_id måste få ha två rader per transaktion
     # (ränta + amortering i en och samma bankpost). Gammal UNIQUE-constraint

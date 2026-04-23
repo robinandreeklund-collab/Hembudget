@@ -101,3 +101,20 @@ def test_history_point_dataclass():
     assert hp.year == 2026
     assert hp.month == 1
     assert hp.kwh == Decimal("1234")
+
+
+@pytest.mark.skipif(not has_telinet, reason="Telinet-PDF saknas")
+def test_telinet_meter_role_is_energy():
+    """Telinet är elhandelsbolag — rollen ska vara 'energy' så kWh
+    inte dubbelräknas mot Hjo Elnäts 'grid'-faktura."""
+    res = parse_utility_pdf(TELINET_PDF.read_bytes())
+    assert res.meter_role == "energy"
+
+
+@pytest.mark.skipif(not has_hjo, reason="Hjo Energi-PDF saknas")
+def test_hjo_energi_meter_role_is_grid():
+    """Hjo Energi fakturerar nätavgiften (Elnät Taxa NOR020) — rollen
+    ska vara 'grid' eftersom de mäter samma kWh som Telinet men tar
+    betalt för överföringen, inte energin."""
+    res = parse_utility_pdf(HJO_PDF.read_bytes())
+    assert res.meter_role == "grid"

@@ -561,6 +561,15 @@ class UtilityReading(Base):
     supplier: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
     # "electricity" | "broadband" | "water" | "heating" | "district_heating"
     meter_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    # För el finns två parallella fakturaströmmar som mäter samma kWh:
+    # 'grid' = nätleverantörens överföringsavgift (Hjo Energi/Vattenfall Elnät)
+    # 'energy' = elhandelsbolagets energikostnad (Telinet, Tibber)
+    # 'total' = en kombinerad faktura eller okänt (default, bakåtkompatibelt)
+    # Används vid aggregering: kWh räknas ENDAST från 'energy' (eller
+    # 'total' om ingen 'energy' finns), kostnader summeras över alla roller.
+    meter_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="total", server_default="total",
+    )
     period_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     period_end: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     # Förbrukning i rätt enhet för meter_type (kWh för el, GB för bredband...)

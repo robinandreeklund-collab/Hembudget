@@ -36,6 +36,10 @@ import pypdfium2 as pdfium
 class UtilityPdfResult:
     supplier: str = "unknown"
     meter_type: str = "electricity"
+    # 'grid' (nätleverantör — Hjo Elnät, Vattenfall Elnät)
+    # 'energy' (elhandel — Telinet, Tibber, E.ON, Fortum)
+    # 'total' (en kombinerad faktura, ingen separat nätdel, eller okänt)
+    meter_role: str = "total"
 
     period_start: Optional[date] = None
     period_end: Optional[date] = None
@@ -156,6 +160,7 @@ def _parse_telinet(text: str, res: UtilityPdfResult) -> UtilityPdfResult:
     - 'Totalbelopp att betala: N NNN kr'
     """
     res.meter_type = "electricity"
+    res.meter_role = "energy"  # Telinet säljer bara elhandelsdelen
 
     # Period: "Faktura 1 februari - 28 februari 2026" eller
     # "Faktura 1 februari - 29 februari 2028"
@@ -237,6 +242,11 @@ def _parse_hjo_energi(text: str, res: UtilityPdfResult) -> UtilityPdfResult:
         ...
     """
     res.meter_type = "electricity"
+    # Hjo Energi fakturerar elnätsavgiften (plus vatten + internet på
+    # samma faktura) — inte energin själv. Kostnaden (elnätsdelen) och
+    # förbrukningen (kWh) ska räknas som 'grid' så den inte dubbelräknas
+    # mot Telinets energifaktura för samma månad.
+    res.meter_role = "grid"
 
     # Period: "YYMMDD-YYMMDD" (Hjo skriver det kompakt utan århundrade)
     # Vi letar på Elöverföring-raden för att inte få VA-period.
