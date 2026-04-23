@@ -575,6 +575,8 @@ def check_details(
         # "Omatchad" = inte fullt betald. Delbetalda fakturor räknas
         # fortfarande som unmatched eftersom användaren fortfarande
         # måste åtgärda resten.
+        # OBS: variance_accepted=True räknas som paid (användaren har
+        # godkänt öresavrundning/bonus/skattejust.) och visas INTE här.
         from ..upcoming_match.payments import paid_amount as _paid_amount
         from decimal import Decimal as _D
         today = date.today()
@@ -591,6 +593,8 @@ def check_details(
         PAID_TOL = _D("2.00")
         ups = []
         for u in candidates:
+            if getattr(u, "variance_accepted", False):
+                continue
             remaining = u.amount - _paid_amount(session, u)
             if abs(remaining) > PAID_TOL:
                 ups.append((u, remaining))

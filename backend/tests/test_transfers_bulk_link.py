@@ -153,6 +153,29 @@ def test_auto_pair_uncategorized_pairs_obvious_matches(client):
     assert paired["count"] == 3
 
 
+def test_auto_pair_handles_3_days_weekend_gap(client):
+    """Real-world: en överföring fredag (avsändare) kan landa måndag
+    (mottagare) = 3 dagar isär. Ska paras."""
+    c, SL = client
+    from hembudget.db.models import Account, Transaction
+    with SL() as s:
+        chk = Account(name="Mat", bank="nordea", type="shared")
+        amex = Account(name="Amex", bank="amex", type="credit")
+        s.add_all([chk, amex]); s.flush()
+        # Fredag 20 feb -445, måndag 23 feb +445
+        s.add(Transaction(account_id=chk.id, date=date(2026,2,20),
+                          amount=Decimal("-445"), currency="SEK",
+                          raw_description="BG 5127-5477", hash="h_chk"))
+        s.add(Transaction(account_id=amex.id, date=date(2026,2,23),
+                          amount=Decimal("445"), currency="SEK",
+                          raw_description="Mottagen", hash="h_amex"))
+        s.commit()
+
+    r = c.post("/transfers/auto-pair-uncategorized", json={"month": "2026-02"})
+    body = r.json()
+    assert body["linked"] == 1, body
+
+
 def test_auto_pair_handles_date_tolerance_and_amount_eps(client):
     """Real-world: kreditkortsdraget bokförs ofta 1-2 dagar efter checking-
     sidan, och Decimal-precision i SQLite kan göra exakt == miss. Auto-

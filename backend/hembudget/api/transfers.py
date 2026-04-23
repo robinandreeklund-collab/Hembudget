@@ -198,10 +198,11 @@ def auto_pair_uncategorized(
     detector = TransferDetector(session)
 
     # SQLite kan lagra Decimal som REAL → exakt == kan missa pga float-
-    # precision. Använd ±0.01 kr-fönster + ±2 dagar för att fånga
-    # öresavrundning och autogiro-dröjsmål.
+    # precision. Använd ±0.01 kr-fönster + ±3 dagar för att fånga
+    # öresavrundning och autogiro-dröjsmål (en transfer kan ligga på
+    # fredag på avsändande sida och måndag på mottagande — 3 dagar).
     AMOUNT_EPS = Decimal("0.01")
-    DATE_EPS_DAYS = 2
+    DATE_EPS_DAYS = 3
 
     from datetime import timedelta
 

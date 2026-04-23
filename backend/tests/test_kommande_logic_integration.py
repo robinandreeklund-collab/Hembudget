@@ -298,6 +298,43 @@ def test_upcoming_list_exposes_payment_transactions_for_unmatch_ui(client):
     assert p["account_name"] == "Checking"
 
 
+def test_accept_variance_removes_from_unmatched_past_list(client):
+    """Passerade kommande-rader där användaren godkänt avvikelse ska
+    inte dyka upp i åtgärda-listan 'unmatched_past_upcomings'."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Transaction, UpcomingPayment, UpcomingTransaction,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="nordea", type="checking")
+        s.add(acc); s.flush()
+        # Lön 19 172 kr — fick 19 122 kr inbetalt (50 kr öresavrundning)
+        tx = Transaction(
+            account_id=acc.id, date=date(2026, 3, 25),
+            amount=Decimal("19122"), currency="SEK",
+            raw_description="VP Capital", hash="h_tx",
+        )
+        s.add(tx); s.flush()
+        up = UpcomingTransaction(
+            kind="income", name="VP Capital",
+            amount=Decimal("19172"),
+            expected_date=date(2026, 3, 25),
+            matched_transaction_id=tx.id,
+            variance_accepted=True,
+        )
+        s.add(up); s.flush()
+        s.add(UpcomingPayment(upcoming_id=up.id, transaction_id=tx.id))
+        s.commit()
+
+    # Passerat datum (mars) för ett år som redan startat
+    r = c.get("/ledger/check/unmatched_past_upcomings?year=2026")
+    assert r.status_code == 200
+    body = r.json()
+    # VP Capital ska inte visas eftersom variance_accepted=True
+    names = [u["name"] for u in body["upcomings"]]
+    assert "VP Capital" not in names
+
+
 def test_accept_variance_marks_partial_as_paid(client):
     """Användaren godkänner en delbetalt-avvikelse (öresavrundning eller
     bonus). Då räknas raden som 'paid' i alla downstream-vyer."""
