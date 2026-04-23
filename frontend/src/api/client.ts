@@ -67,7 +67,20 @@ export async function api<T = unknown>(
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  } catch (err) {
+    // Browser-nätverksfel (typisk "Failed to fetch"): kabelfel, backend
+    // avstängd, CORS-preflight misslyckad eller tunnel nere. Ge
+    // användaren ett tydligare meddelande som skiljer från HTTP-fel.
+    throw new ApiError(
+      0,
+      `Kunde inte nå servern (${apiBase()}). Kolla att backend är igång ` +
+        `och att nätverket fungerar. Tekniskt: ${String((err as Error).message ?? err)}`,
+      undefined,
+    );
+  }
   if (!res.ok) {
     if (res.status === 401 && token) {
       clearToken();
