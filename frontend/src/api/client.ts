@@ -27,9 +27,15 @@ function apiBase(): string {
   // 1. Runtime-override (satt av användaren via UI)
   const override = getApiBaseOverride();
   if (override) return override.replace(/\/$/, "");
-  // 2. Build-time env (Render m.fl.)
+  // 2. Build-time env (Render, Cloud Run m.fl.)
   let explicit = import.meta.env.VITE_API_BASE;
   if (explicit) {
+    // "/" eller "SAME_ORIGIN" → servera API från samma host som
+    // frontend (Cloud Run-deploy där en container har båda). Returnera
+    // tom sträng så fetch använder browserns current origin automatiskt.
+    if (explicit === "/" || explicit.toUpperCase() === "SAME_ORIGIN") {
+      return "";
+    }
     if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
     return explicit.replace(/\/$/, "");
   }

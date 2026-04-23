@@ -1,0 +1,50 @@
+# .git + lokala miljöer
+.git
+.gitignore
+.github
+
+# Python
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+backend/.venv
+backend/venv
+backend/dist
+backend/build
+backend/*.egg-info
+backend/htmlcov
+backend/.coverage
+
+# Node / Vite
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Tauri — inte relevant för server-deploy
+frontend/src-tauri/target
+frontend/src-tauri/gen
+
+# Testdata som inte behövs i produktion (håll deploy-image liten)
+data_for_test
+backend/tests
+
+# Lokala databas-filer
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Dokumentation som inte behövs i container
+docs
+*.md
+
+# Dev-skript som inte ska köras i produktion
+scripts
+run_dev.sh

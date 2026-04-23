@@ -1,0 +1,37 @@
+# .gcloudignore — berättar för `gcloud run deploy --source .` vad som INTE
+# ska uppladdas till Cloud Build. Samma innehåll som .dockerignore men för
+# gcloud-cli:n.
+.git
+.gitignore
+.github
+
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+backend/.venv
+backend/venv
+backend/dist
+backend/build
+backend/*.egg-info
+backend/htmlcov
+backend/.coverage
+
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/src-tauri/target
+frontend/src-tauri/gen
+
+data_for_test
+backend/tests
+
+*.db
+*.db-shm
+*.db-wal
+
+.vscode
+.idea
+.DS_Store

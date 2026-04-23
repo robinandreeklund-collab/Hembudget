@@ -6,19 +6,42 @@ och en krypterad SQLite-databas.
 
 ## 🚀 Prova direkt i browsern
 
+### Google Cloud Run (rekommenderas för klassrum)
+
+```bash
+./deploy.sh
+```
+
+Skriptet sköter allt automatiskt:
+1. Kontrollerar `gcloud` CLI och aktiv inloggning
+2. Frågar efter GCP-projekt-ID (eller skapar ett nytt)
+3. Aktiverar Cloud Run, Cloud Build och Artifact Registry
+4. Bygger Docker-imagen i molnet (Cloud Build — ingen lokal Docker krävs)
+5. Deployar till Cloud Run i `europe-north1` (Finland)
+6. Skriver ut den publika URL:en
+
+Efter första deployen: kör `./deploy.sh` igen för att uppdatera. Se loggar
+med `gcloud run services logs read hembudget-demo --region europe-north1`.
+
+**Arkitektur:** en enda container servar både frontend (statisk React-build)
+och backend (FastAPI) på samma port, så inga CORS-problem och en URL till
+eleverna. Demo-läget auto-seedar data från `data/`-mappen vid start.
+
+**Kostnad:** Cloud Run skalar till 0 när ingen är inne → typiskt under $1/mån
+för klassbruk. Ephemeral SQLite — data återställs när containern startar om.
+
+### Render.com (alternativ)
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/robinandreeklund-collab/Hembudget)
 
-Ett klick ovan → Render läser `render.yaml`, sätter upp backend + frontend,
-startar i **demo-mode** och auto-importerar CSV/XLSX-data från `data/`-mappen.
-Ingen inloggning, inget att installera. Efter deploy: sätt frontendens
-`VITE_API_BASE` till backendens URL och gör en re-deploy.
+Ett klick ovan → Render läser `render.yaml`, sätter upp backend + frontend
+som separata services, startar i **demo-mode** och auto-importerar CSV/XLSX
+från `data/`. Efter deploy: sätt frontendens `VITE_API_BASE` till backendens
+URL och gör en re-deploy.
 
-Efter den första deployen är kör `git pull` för att uppdatera.
-
-**Begränsningar på Render free tier:** ingen LM Studio (AI-chat och vision
-fungerar ej, men 96 % av kategoriseringen sker via regler). SQLite-databasen
-är ephemeral — återställs vid inaktivitet, men bootstrap fyller den igen
-automatiskt.
+**Begränsningar:** ingen LM Studio (AI-chat fungerar ej, men 96 % av
+kategoriseringen sker via regler). SQLite-databasen är ephemeral —
+återställs vid inaktivitet, men bootstrap fyller den igen automatiskt.
 
 ## Funktioner
 
