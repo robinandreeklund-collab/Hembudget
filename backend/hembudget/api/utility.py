@@ -358,6 +358,61 @@ def utility_breakdown(
     )
 
     accounts = {a.id: a.name for a in session.query(Account).all()}
+
+    # Kartlagg tx_id -> upcoming (om matchad) sa vi kan visa "Oppna
+    # faktura" + "Parsa om" direkt i breakdown-modalen.
+    tx_to_upcoming: dict[int, UpcomingTransaction] = {}
+    relevant_tx_ids = (
+        {tx.id for tx in tx_rows if tx.id not in tx_ids_with_splits}
+        | {tx.id for _, tx in split_rows}
+    )
+    if relevant_tx_ids:
+        ups_matched = (
+            session.query(UpcomingTransaction)
+            .filter(UpcomingTransaction.matched_transaction_id.in_(relevant_tx_ids))
+            .all()
+        )
+        for u in ups_matched:
+            if u.matched_transaction_id is not None:
+                tx_to_upcoming[u.matched_transaction_id] = u
+        # Plus de via UpcomingPayment-junction
+        from ..db.models import UpcomingPayment as _UP
+        pay_rows = (
+            session.query(_UP.transaction_id, _UP.upcoming_id)
+            .filter(_UP.transaction_id.in_(relevant_tx_ids))
+            .all()
+        )
+        up_by_id = {}
+        if pay_rows:
+            up_ids = {up_id for _, up_id in pay_rows}
+            for u in session.query(UpcomingTransaction).filter(
+                UpcomingTransaction.id.in_(up_ids),
+            ).all():
+                up_by_id[u.id] = u
+        for tid, up_id in pay_rows:
+            u = up_by_id.get(up_id)
+            if u is not None and tid not in tx_to_upcoming:
+                tx_to_upcoming[tid] = u
+
+    # Kartlagg upcoming_id -> reading_id for "Parsa om" per rad
+    ups_involved = {u.id for u in tx_to_upcoming.values()}
+    reading_by_up: dict[int, int] = {}
+    if ups_involved:
+        for rid, uid in (
+            session.query(UtilityReading.id, UtilityReading.upcoming_id)
+            .filter(UtilityReading.upcoming_id.in_(ups_involved))
+            .all()
+        ):
+            if uid is not None:
+                reading_by_up[uid] = rid
+
+    def _enrich_item(base: dict, tx_id: int) -> dict:
+        up = tx_to_upcoming.get(tx_id)
+        base["upcoming_id"] = up.id if up else None
+        base["has_invoice_pdf"] = bool(up and up.source_image_path)
+        base["reading_id"] = reading_by_up.get(up.id) if up else None
+        return base
+
     items = []
     total = 0.0
     for tx in tx_rows:
@@ -365,7 +420,7 @@ def utility_breakdown(
         if tx.id in tx_ids_with_splits:
             continue
         amt = float(abs(tx.amount))
-        items.append({
+        items.append(_enrich_item({
             "type": "transaction",
             "id": tx.id,
             "date": tx.date.isoformat(),
@@ -375,11 +430,11 @@ def utility_breakdown(
             "account_id": tx.account_id,
             "account_name": accounts.get(tx.account_id, f"#{tx.account_id}"),
             "can_move": True,
-        })
+        }, tx.id))
         total += amt
     for split, tx in split_rows:
         amt = float(abs(split.amount))
-        items.append({
+        items.append(_enrich_item({
             "type": "split",
             "id": split.id,
             "transaction_id": tx.id,
@@ -390,7 +445,7 @@ def utility_breakdown(
             "account_id": tx.account_id,
             "account_name": accounts.get(tx.account_id, f"#{tx.account_id}"),
             "can_move": False,  # splits foljer tx:ens datum
-        })
+        }, tx.id))
         total += amt
 
     items.sort(key=lambda i: i["date"])
@@ -543,6 +598,85 @@ def reparse_reading(reading_id: int, session: Session = Depends(db)) -> dict:
         "cost_kr": float(r.cost_kr),
         "detected_format": res.detected_format,
     }
+
+
+@router.post("/parse-upcoming/{upcoming_id}")
+def parse_from_upcoming(
+    upcoming_id: int, session: Session = Depends(db),
+) -> dict:
+    """Parsa PDF:en kopplad till en UpcomingTransaction och UPSERTa en
+    UtilityReading. Om det redan finns en reading for denna upcoming
+    uppdateras den. Detta ar huvudflodet fran breakdown-modalen: klicka
+    pa faktura-rad → Parsa om → reading skapas/uppdateras direkt.
+
+    Berakvit INTE tx/upcoming, bara utility-data bakom scenen.
+    """
+    from ..parsers.utility_pdfs import parse_utility_pdf
+
+    up = session.get(UpcomingTransaction, upcoming_id)
+    if up is None:
+        raise HTTPException(404, "Upcoming saknas")
+    if not up.source_image_path:
+        raise HTTPException(400, "Upcoming har ingen bifogad PDF")
+    p = Path(up.source_image_path)
+    if not p.exists():
+        raise HTTPException(
+            404, f"Filen saknas pa disk: {up.source_image_path}",
+        )
+    try:
+        res = parse_utility_pdf(p.read_bytes())
+    except Exception as exc:
+        raise HTTPException(500, f"Parse-fel: {exc}") from exc
+
+    if res.period_start is None or res.cost_kr is None:
+        raise HTTPException(
+            422,
+            "Kunde inte tolka period eller kostnad fran fakturan. "
+            f"Format: {res.detected_format}. Fel: {res.parse_errors}",
+        )
+
+    existing = (
+        session.query(UtilityReading)
+        .filter(UtilityReading.upcoming_id == up.id)
+        .first()
+    )
+    if existing:
+        existing.supplier = res.supplier if res.supplier != "unknown" else existing.supplier
+        existing.meter_type = res.meter_type or existing.meter_type
+        existing.period_start = res.period_start
+        existing.period_end = res.period_end or res.period_start
+        if res.consumption is not None:
+            existing.consumption = res.consumption
+            existing.consumption_unit = res.consumption_unit
+        existing.cost_kr = res.cost_kr
+        existing.source = "pdf_rescan"
+        existing.source_file = str(p)
+        session.flush()
+        return {
+            "action": "updated",
+            "reading_id": existing.id,
+            "detected_format": res.detected_format,
+        }
+    else:
+        reading = UtilityReading(
+            supplier=res.supplier,
+            meter_type=res.meter_type,
+            period_start=res.period_start,
+            period_end=res.period_end or res.period_start,
+            consumption=res.consumption,
+            consumption_unit=res.consumption_unit,
+            cost_kr=res.cost_kr,
+            source="pdf_rescan",
+            source_file=str(p),
+            upcoming_id=up.id,
+        )
+        session.add(reading)
+        session.flush()
+        return {
+            "action": "created",
+            "reading_id": reading.id,
+            "detected_format": res.detected_format,
+        }
 
 
 @router.get("/readings/{reading_id}/source")

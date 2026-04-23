@@ -1034,6 +1034,9 @@ interface BreakdownItem {
   account_id: number;
   account_name: string;
   can_move: boolean;
+  upcoming_id: number | null;
+  has_invoice_pdf: boolean;
+  reading_id: number | null;
 }
 
 interface BreakdownData {
@@ -1118,6 +1121,12 @@ function BreakdownModal({
                     if (txId) moveMut.mutate({ tx_id: txId, new_date: newDate });
                   }}
                   moving={moveMut.isPending}
+                  onReparsed={() => {
+                    qc.invalidateQueries({
+                      queryKey: ["utility-breakdown", category, month],
+                    });
+                    onUpdated();
+                  }}
                 />
               ))}
               {moveMut.error && (
@@ -1146,13 +1155,51 @@ function BreakdownRow({
   item,
   onMove,
   moving,
+  onReparsed,
 }: {
   item: BreakdownItem;
   onMove: (newDate: string) => void;
   moving: boolean;
+  onReparsed: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [newDate, setNewDate] = useState(item.date);
+  const [reparsing, setReparsing] = useState(false);
+
+  function openInvoice() {
+    if (!item.upcoming_id) return;
+    const token = getToken();
+    fetch(`${getApiBase()}/upcoming/${item.upcoming_id}/source`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("Filen saknas");
+        return r.blob();
+      })
+      .then((b) => window.open(URL.createObjectURL(b), "_blank"))
+      .catch((e) => alert(String(e.message ?? e)));
+  }
+
+  async function reparseInvoice() {
+    if (!item.upcoming_id) return;
+    setReparsing(true);
+    try {
+      const res = await api<{
+        action: "created" | "updated";
+        reading_id: number;
+        detected_format: string;
+      }>(`/utility/parse-upcoming/${item.upcoming_id}`, { method: "POST" });
+      alert(
+        `${res.action === "created" ? "Skapade" : "Uppdaterade"} utility-läsning #${res.reading_id}\n` +
+        `Format: ${res.detected_format}`,
+      );
+      onReparsed();
+    } catch (e) {
+      alert("Fel: " + (e as Error).message);
+    } finally {
+      setReparsing(false);
+    }
+  }
 
   return (
     <div className="border rounded p-2 bg-white">
@@ -1165,6 +1212,19 @@ function BreakdownRow({
                 split
               </span>
             )}
+            {item.has_invoice_pdf && (
+              <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+                PDF
+              </span>
+            )}
+            {item.reading_id != null && (
+              <span
+                className="text-xs bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded"
+                title={`Kopplad till utility-läsning #${item.reading_id}`}
+              >
+                utility
+              </span>
+            )}
           </div>
           <div className="text-xs text-slate-600 mt-0.5">
             {item.date} · {item.account_name}
@@ -1173,6 +1233,34 @@ function BreakdownRow({
         <div className="text-right font-semibold shrink-0">
           {formatSEK(item.amount)}
         </div>
+        {item.has_invoice_pdf && (
+          <button
+            onClick={openInvoice}
+            className="text-xs text-brand-600 hover:underline shrink-0"
+            title="Öppna original-fakturan i ny flik"
+          >
+            📎 Faktura
+          </button>
+        )}
+        {item.has_invoice_pdf && (
+          <button
+            onClick={reparseInvoice}
+            disabled={reparsing}
+            className="text-xs text-emerald-700 hover:text-emerald-900 disabled:opacity-50 shrink-0 inline-flex items-center gap-1"
+            title={
+              item.reading_id != null
+                ? "Kör parsern igen och uppdatera utility-datan (rör inte tx)"
+                : "Skapa utility-läsning från fakturan"
+            }
+          >
+            <RefreshCw className={"w-3 h-3 " + (reparsing ? "animate-spin" : "")} />
+            {reparsing
+              ? "Parsar…"
+              : item.reading_id != null
+              ? "Parsa om"
+              : "Skapa utility"}
+          </button>
+        )}
         {item.can_move ? (
           <button
             onClick={() => setEditing(!editing)}

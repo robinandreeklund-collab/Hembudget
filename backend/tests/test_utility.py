@@ -374,6 +374,58 @@ def test_history_includes_unpaid_upcoming_bills(client):
     assert body["by_category"]["Vatten/Avgift"]["2026-04"] == pytest.approx(800.0)
 
 
+def test_breakdown_includes_pdf_and_reading_info(client):
+    """Breakdown-responsen ska inkludera upcoming_id, has_invoice_pdf,
+    reading_id per item sa frontend kan visa 'Oppna faktura' och
+    'Parsa om' direkt i modalen."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Category, Transaction, UpcomingTransaction, UtilityReading,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="n", type="checking")
+        el = Category(name="El")
+        s.add_all([acc, el]); s.flush()
+        tx = Transaction(
+            account_id=acc.id, date=date(2026, 3, 15),
+            amount=Decimal("-1000"), currency="SEK",
+            raw_description="Hjo Energi", hash="h1",
+            category_id=el.id,
+        )
+        s.add(tx); s.flush()
+        # Kopplad upcoming med PDF
+        up = UpcomingTransaction(
+            kind="bill", name="Hjo Energi mars",
+            amount=Decimal("1000"),
+            expected_date=date(2026, 3, 15),
+            source="pdf",
+            source_image_path="/tmp/hjo-mars.pdf",
+            matched_transaction_id=tx.id,
+        )
+        s.add(up); s.flush()
+        # Tidigare skapad reading
+        reading = UtilityReading(
+            supplier="hjo_energi",
+            meter_type="electricity",
+            period_start=date(2026, 3, 1),
+            period_end=date(2026, 3, 31),
+            cost_kr=Decimal("1000"),
+            source="pdf",
+            source_file="/tmp/hjo-mars.pdf",
+            upcoming_id=up.id,
+        )
+        s.add(reading); s.commit()
+        reading_id = reading.id
+
+    r = c.get("/utility/breakdown?category=El&month=2026-03")
+    body = r.json()
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["upcoming_id"] is not None
+    assert item["has_invoice_pdf"] is True
+    assert item["reading_id"] == reading_id
+
+
 def test_reparse_reading_updates_fields_without_touching_source(client, tmp_path):
     """POST /utility/readings/{id}/reparse laser om PDF:en och
     uppdaterar reading:s falt. Skall inte krascha om filen saknas."""
