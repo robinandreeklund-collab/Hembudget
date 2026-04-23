@@ -914,6 +914,93 @@ async def parse_salary_pdf_endpoint(
     return u
 
 
+@router.post("/{upcoming_id}/attach-salary-pdf", response_model=UpcomingOut)
+async def attach_salary_pdf_to_existing(
+    upcoming_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(db),
+) -> UpcomingTransaction:
+    """Koppla en lönespec-PDF till en BEFINTLIG UpcomingTransaction (income).
+
+    Används från /salaries för att bifoga underlag till löner som redan
+    finns registrerade — antingen från CSV-import, manuellt tillagda
+    eller AI-parse:ade.
+
+    Parsar PDF:en (INKAB / Vättaporten / FK), sparar filen under
+    data_dir/invoices/ och länkar via source_image_path. Metadata-
+    fälten (gross, tax, extra_tax, etc.) lagras i notes som JSON så
+    skatteprognos och se-underlag-länken fungerar direkt.
+
+    Beloppet på den befintliga raden ändras INTE — man ska kunna koppla
+    en PDF även om det faktiska beloppet skiljer sig något (t.ex. ören,
+    eller om raden representerar flera utbetalningar). Om du vill
+    synka beloppet med PDF:en får du redigera raden manuellt.
+    """
+    from ..parsers.salary_pdfs import parse_salary_pdf
+    import json as _json
+
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+    if u.kind != "income":
+        raise HTTPException(
+            400,
+            "Endpoint:en gäller bara income-rader. Använd "
+            "/upcoming/parse-invoice-image för fakturor.",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Tom fil")
+
+    parsed = parse_salary_pdf(content)
+    if parsed.detected_format == "unknown":
+        raise HTTPException(
+            422,
+            "Okänt lönespec-format. Stöds: INKAB, Vättaporten AB, "
+            "Försäkringskassan.",
+        )
+
+    original_path = _save_invoice_file(content, file.filename)
+    u.source_image_path = str(original_path)
+
+    # Bevara existerande notes om de inte är JSON (frihandstext från
+    # användaren). Annars merge:a in metadata.
+    existing_meta: dict = {}
+    if u.notes:
+        try:
+            existing_meta = _json.loads(u.notes)
+            if not isinstance(existing_meta, dict):
+                existing_meta = {"user_note": u.notes}
+        except ValueError:
+            existing_meta = {"user_note": u.notes}
+
+    new_meta = {
+        **existing_meta,
+        "detected_format": parsed.detected_format,
+        "gross": float(parsed.gross) if parsed.gross is not None else None,
+        "tax": float(parsed.tax) if parsed.tax is not None else None,
+        "extra_tax": float(parsed.extra_tax) if parsed.extra_tax is not None else None,
+        "benefit": float(parsed.benefit) if parsed.benefit is not None else None,
+        "net": float(parsed.net) if parsed.net is not None else None,
+        "tax_table": parsed.tax_table,
+        "one_time_tax_percent": parsed.one_time_tax_percent,
+        "vacation_days_paid": parsed.vacation_days_paid,
+        "vacation_days_unpaid": parsed.vacation_days_unpaid,
+        "vacation_days_saved": parsed.vacation_days_saved,
+        "period_start": parsed.period_start.isoformat() if parsed.period_start else None,
+        "period_end": parsed.period_end.isoformat() if parsed.period_end else None,
+        "employee": parsed.employee,
+        "attached_from_pdf": True,
+    }
+    u.notes = _json.dumps(new_meta, ensure_ascii=False)
+    # Om source var 'manual' eller 'ai_text', uppgradera till salary_pdf
+    # så skatteprognos-endpointen inkluderar raden.
+    u.source = "salary_pdf"
+    session.flush()
+    return u
+
+
 @router.get("/salary-tax-prognosis")
 def salary_tax_prognosis(
     year: int | None = None,

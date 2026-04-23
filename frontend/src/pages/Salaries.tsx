@@ -784,7 +784,7 @@ function SalaryRow({
             {account && <span>· till {account.name}</span>}
             {item.owner && <span>· {item.owner}</span>}
             {item.source !== "manual" && <span>· {item.source}</span>}
-            {item.source_image_path && (
+            {item.source_image_path ? (
               <button
                 onClick={() => {
                   const token = getToken();
@@ -803,6 +803,8 @@ function SalaryRow({
               >
                 · 📎 se underlag
               </button>
+            ) : (
+              <AttachSalaryPdfButton upcomingId={item.id} />
             )}
             {item.payment_status === "paid" && (
               <span className="text-emerald-600 inline-flex items-center gap-1">
@@ -1223,5 +1225,54 @@ function SalaryTaxPrognosis({ users }: { users: HouseholdUser[] }) {
         })}
       </div>
     </Card>
+  );
+}
+
+function AttachSalaryPdfButton({ upcomingId }: { upcomingId: number }) {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return uploadFile<IncomeUpcoming>(
+        `/upcoming/${upcomingId}/attach-salary-pdf`,
+        form,
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["upcoming"] });
+      qc.invalidateQueries({ queryKey: ["upcoming", "income"] });
+      qc.invalidateQueries({ queryKey: ["salary-tax-prognosis"] });
+      qc.invalidateQueries({ queryKey: ["attachments"] });
+      qc.invalidateQueries({ queryKey: ["ytd-income"] });
+    },
+  });
+
+  return (
+    <label
+      className={
+        "cursor-pointer underline " +
+        (mut.isPending
+          ? "text-slate-500"
+          : mut.error
+          ? "text-rose-600"
+          : "text-slate-600 hover:text-brand-600")
+      }
+      title="Ladda upp lönespec-PDF och koppla till denna rad — INKAB, Vättaporten AB, FK"
+    >
+      · 📎 {mut.isPending ? "laddar…" : mut.error ? `fel: ${(mut.error as Error).message.slice(0, 40)}` : "ladda upp underlag"}
+      <input
+        type="file"
+        accept=".pdf,application/pdf"
+        className="hidden"
+        disabled={mut.isPending}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) mut.mutate(f);
+          // Tillåt ny uppladdning av samma fil efter fel
+          e.target.value = "";
+        }}
+      />
+    </label>
   );
 }

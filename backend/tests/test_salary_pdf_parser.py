@@ -99,3 +99,88 @@ def test_unknown_format_returns_error():
     res = parse_salary_pdf(b"not a real pdf")
     assert res.detected_format == "unknown"
     assert len(res.parse_errors) >= 1
+
+
+def test_attach_salary_pdf_to_existing_upcoming(tmp_path, monkeypatch):
+    """POST /upcoming/{id}/attach-salary-pdf ska uppdatera en befintlig
+    income-rad med source_image_path + metadata från PDF:en — utan att
+    skapa en ny rad."""
+    from decimal import Decimal
+    from datetime import date
+    import pytest
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    monkeypatch.setenv("HEMBUDGET_DEMO_MODE", "1")
+    monkeypatch.setenv("HEMBUDGET_DATA_DIR", str(tmp_path))
+
+    from hembudget.db.models import Account, Base, UpcomingTransaction
+    engine = create_engine(
+        "sqlite:///:memory:", future=True,
+        connect_args={"check_same_thread": False}, poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    SL = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    from hembudget import demo as demo_mod
+    monkeypatch.setattr(demo_mod, "bootstrap_if_empty", lambda: {"skipped": True})
+    from hembudget.api import deps as api_deps
+    from hembudget.main import build_app
+    app = build_app()
+
+    def _db():
+        s = SL()
+        try:
+            yield s; s.commit()
+        except Exception:
+            s.rollback(); raise
+        finally:
+            s.close()
+
+    app.dependency_overrides[api_deps.db] = _db
+    client = TestClient(app)
+    with client:
+        # Skapa en befintlig income-rad utan källfil
+        with SL() as s:
+            acc = Account(name="Mitt konto", bank="nordea", type="checking")
+            s.add(acc); s.flush()
+            u = UpcomingTransaction(
+                kind="income", name="Inkab (manuellt tillagd)",
+                amount=Decimal("6197"),
+                expected_date=date(2026, 1, 23),
+                owner="Robin",
+                source="manual",
+            )
+            s.add(u); s.commit()
+            up_id = u.id
+
+        # Ladda upp INKAB-PDF:en och koppla den till ovanstående rad
+        pdf = PDF_DIR / "20260123.pdf"
+        if not pdf.exists():
+            pytest.skip("INKAB test-PDF saknas")
+        with pdf.open("rb") as fh:
+            r = client.post(
+                f"/upcoming/{up_id}/attach-salary-pdf",
+                files={"file": (pdf.name, fh, "application/pdf")},
+            )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["id"] == up_id
+        assert body["source_image_path"] is not None
+        assert body["source"] == "salary_pdf"
+
+        # Verifiera att INGEN ny rad skapades
+        with SL() as s:
+            count = s.query(UpcomingTransaction).filter_by(
+                kind="income",
+            ).count()
+            assert count == 1
+
+        # Verifiera att metadata är lagrad i notes
+        import json as _json
+        meta = _json.loads(body["notes"])
+        assert meta["detected_format"] == "inkab"
+        assert meta["gross"] == 6764.60
+        assert meta["tax"] == 568.00
+        assert meta["vacation_days_paid"] == 25
