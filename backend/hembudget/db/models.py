@@ -508,6 +508,43 @@ class UpcomingPayment(Base):
     )
 
 
+class UtilityReading(Base):
+    """Förbrukningsdata från energifakturor och smart-meter-APIer.
+
+    Kompletterar Transaction-baserad kr-historik med faktisk fysisk
+    förbrukning (kWh, GB, m³) så användaren kan se om elkostnaden ökat
+    pga högre pris eller mer förbrukning. En rad per fakturaperiod.
+    """
+    __tablename__ = "utility_readings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # "hjo_energi" | "telinet" | "tibber" | "manuell"
+    supplier: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    # "electricity" | "broadband" | "water" | "heating" | "district_heating"
+    meter_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Förbrukning i rätt enhet för meter_type (kWh för el, GB för bredband...)
+    consumption: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 3), nullable=True,
+    )
+    consumption_unit: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True,
+    )
+    cost_kr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # "pdf" | "tibber_api" | "manual"
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="pdf")
+    source_file: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Koppling till UpcomingTransaction (fakturan) om den finns
+    upcoming_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("upcoming_transactions.id"), nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppSetting(Base):
     """Enkelt key/value-lager för användarinställningar.
 

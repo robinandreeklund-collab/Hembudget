@@ -145,6 +145,36 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "upcoming_transactions", col_sql)
                 applied.append(f"upcoming_transactions.{col_name}")
 
+    # utility_readings — förbrukningsdata från energifakturor + smart meter-API
+    if not _table_exists(engine, "utility_readings"):
+        with engine.begin() as conn:
+            conn.execute(text(
+                """
+                CREATE TABLE utility_readings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    supplier VARCHAR(60) NOT NULL,
+                    meter_type VARCHAR(30) NOT NULL,
+                    period_start DATE NOT NULL,
+                    period_end DATE NOT NULL,
+                    consumption NUMERIC(12, 3),
+                    consumption_unit VARCHAR(10),
+                    cost_kr NUMERIC(12, 2) NOT NULL,
+                    source VARCHAR(30) NOT NULL DEFAULT 'pdf',
+                    source_file VARCHAR(500),
+                    upcoming_id INTEGER REFERENCES upcoming_transactions(id),
+                    notes TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_utility_readings_supplier ON utility_readings(supplier)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_utility_readings_period_start ON utility_readings(period_start)"
+            ))
+        applied.append("utility_readings (table)")
+
     # loan_payments: transaction_id måste få ha två rader per transaktion
     # (ränta + amortering i en och samma bankpost). Gammal UNIQUE-constraint
     # stoppar detta — byggs om till composite unique på (transaction_id,
