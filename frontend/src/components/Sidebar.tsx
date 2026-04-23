@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
+  Activity,
   BarChart3,
   Briefcase,
   CalendarPlus,
@@ -35,6 +36,7 @@ const ITEMS = [
   { to: "/scenarios", label: "Scenarion", icon: CalculatorIcon },
   { to: "/loans", label: "Lån", icon: Landmark },
   { to: "/funds", label: "Fonder & ISK", icon: PiggyBank },
+  { to: "/utility", label: "Förbrukning", icon: Activity },
   { to: "/tax", label: "Skatt", icon: BarChart3 },
   { to: "/reports", label: "Rapporter", icon: FileDown },
   { to: "/settings", label: "Inställningar", icon: Cog },

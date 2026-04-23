@@ -17,7 +17,7 @@ faulthandler.enable()
 from .api import (
     admin, auth, backup, balances, budget, chat, elpris, funds, ledger,
     loans, reports, scenarios, settings_kv, tax, transactions, transfers,
-    upcoming, upload,
+    upcoming, upload, utility,
 )
 from .config import settings
 
@@ -95,6 +95,7 @@ def build_app() -> FastAPI:
     app.include_router(ledger.router)
     app.include_router(backup.router)
     app.include_router(settings_kv.router)
+    app.include_router(utility.router)
     app.include_router(admin.router)
 
     @app.get("/healthz")

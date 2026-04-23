@@ -18,6 +18,7 @@ import Import from "./pages/Import";
 import Funds from "./pages/Funds";
 import Salaries from "./pages/Salaries";
 import Attachments from "./pages/Attachments";
+import Utility from "./pages/Utility";
 
 export default function App() {
   const { isAuthenticated, loading, initialized, backendError } = useAuth();
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/salaries" element={<Salaries />} />
           <Route path="/attachments" element={<Attachments />} />
+          <Route path="/utility" element={<Utility />} />
           <Route path="/tax" element={<Tax />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
