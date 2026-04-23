@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from ..db.models import (
     Account,
     Category,
+    LockedPeriod,
     Loan,
     LoanPayment,
     Transaction,
@@ -457,12 +458,27 @@ def huvudbok(
 
     net_worth = total_assets - total_liabilities
 
+    # Lås-status: om period är månadsvis, returnera om den är låst
+    locked_months: list[str] = []
+    if month is not None:
+        if session.get(LockedPeriod, month) is not None:
+            locked_months.append(month)
+    else:
+        # Helt år: hämta alla låsta månader inom året
+        rows = (
+            session.query(LockedPeriod)
+            .filter(LockedPeriod.month.like(f"{period_label}-%"))
+            .all()
+        )
+        locked_months = [r.month for r in rows]
+
     return {
         "period": {
             "label": period_label,
             "start": period_start.isoformat(),
             "end": period_end.isoformat(),
         },
+        "locked_months": locked_months,
         "accounts": account_rows,
         "categories": cat_out,
         "loans": loan_rows,
@@ -915,3 +931,64 @@ def export_pdf(
             "Content-Disposition": f'attachment; filename="huvudbok_{label}.pdf"',
         },
     )
+
+
+# -------- Månads-lås --------
+
+@router.get("/locks")
+def list_locks(session: Session = Depends(db)) -> dict:
+    """Lista alla låsta månader + info."""
+    rows = session.query(LockedPeriod).order_by(LockedPeriod.month.asc()).all()
+    return {
+        "locks": [
+            {
+                "month": r.month,
+                "locked_at": r.locked_at.isoformat() if r.locked_at else None,
+                "locked_by": r.locked_by,
+                "note": r.note,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.post("/locks/{month}")
+def lock_month(
+    month: str, payload: dict | None = None, session: Session = Depends(db),
+) -> dict:
+    """Lås en månad (YYYY-MM). Efter lås: PATCH/POST på transaktioner
+    inom månaden returnerar 423 Locked. Kräver att huvudbokens avstämnings-
+    checkar passerat — annars varningsmessage (frontend kan dock forcera
+    via payload.force=true)."""
+    import re
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(400, "month måste vara YYYY-MM")
+    existing = session.get(LockedPeriod, month)
+    if existing is not None:
+        return {"month": month, "already_locked": True}
+    payload = payload or {}
+    lp = LockedPeriod(
+        month=month,
+        locked_by=payload.get("locked_by"),
+        note=payload.get("note"),
+    )
+    session.add(lp)
+    session.flush()
+    return {"month": month, "locked_at": lp.locked_at.isoformat() if lp.locked_at else None}
+
+
+@router.delete("/locks/{month}")
+def unlock_month(month: str, session: Session = Depends(db)) -> dict:
+    """Lås upp en månad — ändringar tillåts igen."""
+    lp = session.get(LockedPeriod, month)
+    if lp is None:
+        raise HTTPException(404, "Månaden är inte låst")
+    session.delete(lp)
+    session.flush()
+    return {"month": month, "unlocked": True}
+
+
+def is_month_locked(session: Session, yearmonth: str) -> bool:
+    """Helper används av andra endpoints för att blocka modifieringar
+    på låsta månader."""
+    return session.get(LockedPeriod, yearmonth) is not None

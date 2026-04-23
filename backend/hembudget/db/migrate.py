@@ -145,6 +145,21 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "upcoming_transactions", col_sql)
                 applied.append(f"upcoming_transactions.{col_name}")
 
+    # locked_periods — huvudbok-lås per månad
+    if not _table_exists(engine, "locked_periods"):
+        with engine.begin() as conn:
+            conn.execute(text(
+                """
+                CREATE TABLE locked_periods (
+                    month VARCHAR(7) PRIMARY KEY,
+                    locked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    locked_by VARCHAR(60),
+                    note TEXT
+                )
+                """
+            ))
+        applied.append("locked_periods (table)")
+
     # utility_readings — förbrukningsdata från energifakturor + smart meter-API
     if not _table_exists(engine, "utility_readings"):
         with engine.begin() as conn:

@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 from ..categorize.engine import normalize_merchant
 from ..categorize.rules import create_rule_from_correction
-from ..db.models import Account, Category, Import, Transaction, User
+from ..db.models import Account, Category, Import, LockedPeriod, Transaction, User
 from ..llm.client import LMStudioClient
 from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
@@ -442,6 +442,17 @@ def _attach_upcoming_matches(
         t.upcoming_matches = by_tx.get(t.id, [])
 
 
+def _check_not_locked(session: Session, tx_date) -> None:
+    """Kasta HTTPException 423 om tx:s månad är låst i huvudboken."""
+    ym = tx_date.strftime("%Y-%m") if hasattr(tx_date, "strftime") else str(tx_date)[:7]
+    if session.get(LockedPeriod, ym) is not None:
+        raise HTTPException(
+            status.HTTP_423_LOCKED,
+            f"Månad {ym} är låst i huvudboken. Lås upp via "
+            "/reports → Huvudbok → lås-knappen för månaden.",
+        )
+
+
 @router.patch("/transactions/{tx_id}", response_model=TransactionOut)
 def update_transaction(
     tx_id: int, payload: TransactionUpdate, session: Session = Depends(db)
@@ -449,7 +460,11 @@ def update_transaction(
     tx = session.get(Transaction, tx_id)
     if not tx:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
+    _check_not_locked(session, tx.date)
     fields = payload.model_dump(exclude_unset=True)
+    # Om user försöker flytta tx till en låst månad, blockera
+    if "date" in fields and fields["date"] is not None:
+        _check_not_locked(session, fields["date"])
     create_rule = fields.pop("create_rule", True)
 
     # Handle is_transfer toggle (clears category, unlinks pair if set)
@@ -509,6 +524,10 @@ def reclassify(tx_id: int, session: Session = Depends(db)) -> Transaction:
 def delete_transaction(
     tx_id: int, session: Session = Depends(db),
 ) -> dict:
+    # Blockera radering på låsta månader
+    _tx_preview = session.get(Transaction, tx_id)
+    if _tx_preview is not None:
+        _check_not_locked(session, _tx_preview.date)
     """Radera en transaktion permanent + städa upp alla referenser:
 
     - UpcomingPayment-rader (om tx ingick i en delbetalning)

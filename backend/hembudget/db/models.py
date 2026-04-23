@@ -508,6 +508,25 @@ class UpcomingPayment(Base):
     )
 
 
+class LockedPeriod(Base):
+    """Låst månad i huvudboken — när användaren är klar med
+    avstämningen för en månad kan de låsa den så inga transaktioner,
+    kategoriseringar eller andra ändringar kan göras retroaktivt.
+
+    Backend-endpoints som modifierar Transaction, TransactionSplit, etc.
+    kollar om tx.date tillhör en låst period och returnerar 423 Locked.
+    """
+    __tablename__ = "locked_periods"
+
+    # YYYY-MM som primärnyckel — enklare än en auto-ID + unique
+    month: Mapped[str] = mapped_column(String(7), primary_key=True)
+    locked_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    locked_by: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class UtilityReading(Base):
     """Förbrukningsdata från energifakturor och smart-meter-APIer.
 

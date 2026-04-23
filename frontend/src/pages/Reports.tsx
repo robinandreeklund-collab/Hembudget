@@ -69,6 +69,7 @@ interface LedgerCheck {
 
 interface Ledger {
   period: { label: string; start: string; end: string };
+  locked_months?: string[];
   accounts: LedgerAccount[];
   categories: LedgerCategory[];
   loans: LedgerLoan[];
@@ -203,6 +204,12 @@ export default function Reports() {
             importeras.
           </div>
         )}
+        <MonthLockBanner
+          scope={scope}
+          month={month}
+          year={year}
+          lockedMonths={ledger?.locked_months ?? []}
+        />
         <div className="flex gap-2 mb-4 text-sm">
           <button
             className="bg-slate-800 text-white px-3 py-1.5 rounded"
@@ -1065,6 +1072,89 @@ function UnmatchedPastUpcomingList({
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function MonthLockBanner({
+  scope,
+  month,
+  year,
+  lockedMonths,
+}: {
+  scope: "month" | "year";
+  month: string;
+  year: number;
+  lockedMonths: string[];
+}) {
+  const qc = useQueryClient();
+  const lockMut = useMutation({
+    mutationFn: (m: string) =>
+      api(`/ledger/locks/${m}`, { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ledger"] }),
+  });
+  const unlockMut = useMutation({
+    mutationFn: (m: string) =>
+      api(`/ledger/locks/${m}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ledger"] }),
+  });
+
+  if (scope === "year") {
+    if (lockedMonths.length === 0) {
+      return (
+        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          <strong>Inga låsta månader för {year}.</strong> Byt till månad-vy
+          och lås när du är klar med avstämningen så ändringar blockeras.
+        </div>
+      );
+    }
+    return (
+      <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <strong>{lockedMonths.length} låsta månader:</strong>{" "}
+        {lockedMonths.join(", ")}
+      </div>
+    );
+  }
+
+  const isLocked = lockedMonths.includes(month);
+  if (isLocked) {
+    return (
+      <div className="mb-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 flex items-center gap-3">
+        <div className="flex-1">
+          <strong>🔒 {month} är låst och godkänd.</strong> Inga transaktioner
+          i månaden kan ändras, flyttas eller raderas.
+        </div>
+        <button
+          onClick={() => {
+            if (confirm(`Lås upp ${month}? Ändringar tillåts igen.`)) {
+              unlockMut.mutate(month);
+            }
+          }}
+          disabled={unlockMut.isPending}
+          className="text-xs text-rose-700 hover:text-rose-900 underline disabled:opacity-50"
+        >
+          {unlockMut.isPending ? "Låser upp…" : "Lås upp"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 flex items-center gap-3">
+      <div className="flex-1">
+        Klar med avstämningen för <strong>{month}</strong>? Lås månaden så
+        blockeras retroaktiva ändringar.
+      </div>
+      <button
+        onClick={() => {
+          if (confirm(`Lås ${month}? Efter lås kan inga transaktioner i månaden ändras eller raderas. Du kan låsa upp igen senare om det behövs.`)) {
+            lockMut.mutate(month);
+          }
+        }}
+        disabled={lockMut.isPending}
+        className="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs disabled:opacity-50"
+      >
+        {lockMut.isPending ? "Låser…" : "🔒 Lås månad"}
+      </button>
     </div>
   );
 }
