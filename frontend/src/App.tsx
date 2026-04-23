@@ -19,6 +19,7 @@ import Funds from "./pages/Funds";
 import Salaries from "./pages/Salaries";
 import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
+import TibberCallback from "./pages/TibberCallback";
 
 export default function App() {
   const { isAuthenticated, loading, initialized, backendError } = useAuth();
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/tax" element={<Tax />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/Callback" element={<TibberCallback />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

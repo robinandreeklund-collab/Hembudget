@@ -1018,22 +1018,267 @@ def _get_tibber_token(session: Session) -> str | None:
     return None
 
 
+# ----- OAuth helpers -----
+
+OAUTH_CONFIG_KEY = "tibber_oauth_config"  # client_id + client_secret + redirect_uri
+OAUTH_TOKENS_KEY = "tibber_oauth"  # TibberTokenSet JSON
+OAUTH_STATE_KEY = "tibber_oauth_state"  # CSRF-state mellan start/callback
+
+
+def _get_oauth_config(session: Session) -> dict | None:
+    row = session.get(AppSetting, OAUTH_CONFIG_KEY)
+    if row and isinstance(row.value, dict):
+        if row.value.get("client_id") and row.value.get("client_secret"):
+            return row.value
+    return None
+
+
+def _save_oauth_config(session: Session, cfg: dict) -> None:
+    row = session.get(AppSetting, OAUTH_CONFIG_KEY)
+    if row is None:
+        session.add(AppSetting(key=OAUTH_CONFIG_KEY, value=cfg))
+    else:
+        row.value = cfg
+    session.flush()
+
+
+def _get_oauth_tokens(session: Session):
+    from ..utility.tibber_oauth import TibberTokenSet
+    row = session.get(AppSetting, OAUTH_TOKENS_KEY)
+    if row and isinstance(row.value, dict):
+        try:
+            return TibberTokenSet.from_dict(row.value)
+        except (KeyError, ValueError):
+            return None
+    return None
+
+
+def _save_oauth_tokens(session: Session, tokens) -> None:
+    row = session.get(AppSetting, OAUTH_TOKENS_KEY)
+    if row is None:
+        session.add(AppSetting(key=OAUTH_TOKENS_KEY, value=tokens.to_dict()))
+    else:
+        row.value = tokens.to_dict()
+    session.flush()
+
+
+def _save_oauth_state(session: Session, state: str) -> None:
+    row = session.get(AppSetting, OAUTH_STATE_KEY)
+    if row is None:
+        session.add(AppSetting(key=OAUTH_STATE_KEY, value={"state": state}))
+    else:
+        row.value = {"state": state}
+    session.flush()
+
+
+def _verify_oauth_state(session: Session, state: str) -> bool:
+    row = session.get(AppSetting, OAUTH_STATE_KEY)
+    if row is None or not isinstance(row.value, dict):
+        return False
+    return row.value.get("state") == state
+
+
+def _get_oauth_client(session: Session):
+    """Returnerar en TibberOAuthClient eller None om ingen session finns.
+    Om tokens refresha:s under klientens livstid sparas de automatiskt
+    tillbaka när `_flush_oauth_client_tokens()` kallas."""
+    from ..utility.tibber_oauth import TibberOAuthClient
+    cfg = _get_oauth_config(session)
+    tokens = _get_oauth_tokens(session)
+    if cfg is None or tokens is None:
+        return None
+    return TibberOAuthClient(tokens=tokens, client_secret=cfg["client_secret"])
+
+
+def _flush_oauth_client_tokens(session: Session, client) -> None:
+    if client is None:
+        return
+    new_tokens = getattr(client, "tokens_after", None)
+    if new_tokens is not None:
+        _save_oauth_tokens(session, new_tokens)
+
+
+@router.get("/tibber/oauth/config")
+def tibber_oauth_config_get(session: Session = Depends(db)) -> dict:
+    """Returnerar OAuth-konfiguration (client_id + redirect_uri) men
+    DÖLJER client_secret. Användaren uppdaterar via PUT."""
+    cfg = _get_oauth_config(session) or {}
+    return {
+        "client_id": cfg.get("client_id") or "",
+        "redirect_uri": cfg.get("redirect_uri") or "http://localhost:1420/Callback",
+        "has_secret": bool(cfg.get("client_secret")),
+    }
+
+
+@router.put("/tibber/oauth/config")
+def tibber_oauth_config_put(
+    payload: dict, session: Session = Depends(db)
+) -> dict:
+    """Spara client_id + client_secret + redirect_uri. Ta new OAuth-
+    tokens när dessa byts ut (annars kan man använda gamla mot ny app)."""
+    client_id = (payload.get("client_id") or "").strip()
+    client_secret = (payload.get("client_secret") or "").strip()
+    redirect_uri = (
+        payload.get("redirect_uri") or "http://localhost:1420/Callback"
+    ).strip()
+    if not client_id or not client_secret:
+        raise HTTPException(400, "client_id och client_secret krävs")
+    _save_oauth_config(session, {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+    })
+    # Om vi byter app — rensa gamla tokens
+    existing_tokens = session.get(AppSetting, OAUTH_TOKENS_KEY)
+    if existing_tokens:
+        session.delete(existing_tokens)
+        session.flush()
+    return {"ok": True, "has_secret": True}
+
+
+@router.post("/tibber/oauth/start")
+def tibber_oauth_start(session: Session = Depends(db)) -> dict:
+    """Generera authorization-URL som användaren öppnar i browser.
+    Sparar state-parametern för CSRF-skydd mellan start och callback."""
+    from ..utility.tibber_oauth import build_authorization_url
+    cfg = _get_oauth_config(session)
+    if cfg is None:
+        raise HTTPException(
+            400,
+            "Spara client_id + client_secret först via PUT /utility/tibber/oauth/config",
+        )
+    url, state = build_authorization_url(
+        client_id=cfg["client_id"],
+        redirect_uri=cfg["redirect_uri"],
+    )
+    _save_oauth_state(session, state)
+    return {"authorize_url": url, "state": state}
+
+
+@router.post("/tibber/oauth/callback")
+def tibber_oauth_callback(
+    payload: dict, session: Session = Depends(db)
+) -> dict:
+    """Byt authorization-code mot tokens. Frontend skickar hit efter
+    att ha fått code+state tillbaka från Tibber-callback."""
+    from ..utility.tibber_oauth import (
+        TibberOAuthClient, TibberOAuthError, exchange_code_for_token,
+    )
+    code = (payload.get("code") or "").strip()
+    state = (payload.get("state") or "").strip()
+    if not code:
+        raise HTTPException(400, "code saknas")
+    if not _verify_oauth_state(session, state):
+        raise HTTPException(
+            400,
+            "Ogiltig state-parameter — CSRF-skydd. Starta om OAuth-flödet.",
+        )
+    cfg = _get_oauth_config(session)
+    if cfg is None:
+        raise HTTPException(400, "Ingen OAuth-config sparad")
+    try:
+        tokens = exchange_code_for_token(
+            client_id=cfg["client_id"],
+            client_secret=cfg["client_secret"],
+            code=code,
+            redirect_uri=cfg["redirect_uri"],
+        )
+    except TibberOAuthError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    _save_oauth_tokens(session, tokens)
+    # Hämta profil för att verifiera
+    client = TibberOAuthClient(
+        tokens=tokens, client_secret=cfg["client_secret"],
+    )
+    try:
+        profile = client.viewer_profile()
+    except TibberOAuthError:
+        profile = {}
+    _flush_oauth_client_tokens(session, client)
+    return {
+        "ok": True,
+        "profile": profile,
+        "scope": tokens.scope,
+        "expires_at": tokens.expires_at.isoformat(),
+    }
+
+
+@router.get("/tibber/oauth/status")
+def tibber_oauth_status(session: Session = Depends(db)) -> dict:
+    """Snabb status för UI:t — är användaren auktoriserad?"""
+    cfg = _get_oauth_config(session)
+    tokens = _get_oauth_tokens(session)
+    return {
+        "configured": cfg is not None,
+        "authorized": tokens is not None,
+        "client_id": (cfg or {}).get("client_id", ""),
+        "redirect_uri": (cfg or {}).get(
+            "redirect_uri", "http://localhost:1420/Callback"
+        ),
+        "scope": tokens.scope if tokens else "",
+        "expires_at": tokens.expires_at.isoformat() if tokens else None,
+    }
+
+
+@router.post("/tibber/oauth/logout")
+def tibber_oauth_logout(session: Session = Depends(db)) -> dict:
+    """Ta bort sparade tokens (behåll config). Användaren måste
+    auktorisera på nytt innan API:et används igen."""
+    row = session.get(AppSetting, OAUTH_TOKENS_KEY)
+    if row is not None:
+        session.delete(row)
+        session.flush()
+    return {"ok": True}
+
+
 @router.post("/tibber/test")
 def tibber_test(session: Session = Depends(db)) -> dict:
-    """Verifiera Tibber API-token och lista användarens hem.
+    """Verifiera Tibber-auth och lista användarens hem.
 
-    Token måste vara satt via PUT /settings/tibber_api_token innan
-    endpointen funkar. Returnerar homes-listan så användaren kan välja
-    vilket hem som ska synkas.
-    """
+    Prioriterar OAuth-session om den finns (nya Data API:et), annars
+    faller tillbaka på bearer-token mot gamla v1-beta-API:et.
+    Returnerar homes-listan så användaren kan välja vilket hem som
+    ska synkas."""
+    from ..utility.tibber_oauth import TibberOAuthError
+
+    # 1. Försök OAuth-sessionen först — det är där Data API-hem finns
+    oauth_client = _get_oauth_client(session)
+    if oauth_client is not None:
+        try:
+            raw_homes = oauth_client.list_homes()
+            _flush_oauth_client_tokens(session, oauth_client)
+        except TibberOAuthError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        homes_out = []
+        for h in raw_homes:
+            addr = h.get("address") or {}
+            addr_str = ", ".join(
+                x for x in [
+                    addr.get("address1"),
+                    addr.get("postalCode"),
+                    addr.get("city"),
+                ] if x
+            ) or "Okänd adress"
+            features = h.get("features") or {}
+            homes_out.append({
+                "id": h.get("id"),
+                "address": addr_str,
+                "size": h.get("size"),
+                "main_fuse_size": h.get("mainFuseSize"),
+                "currency": "SEK",
+                "has_pulse": bool(features.get("realTimeConsumptionEnabled")),
+            })
+        return {"ok": True, "auth": "oauth", "homes": homes_out}
+
+    # 2. Fallback: legacy bearer-token
     from ..utility.tibber import TibberClient, TibberError
-
     token = _get_tibber_token(session)
     if not token:
         raise HTTPException(
             400,
-            "Ingen Tibber-token sparad. Sätt via PUT /settings/tibber_api_token "
-            "med en token från https://developer.tibber.com",
+            "Ingen Tibber-auth konfigurerad. Antingen: (a) anslut via "
+            "OAuth på /settings, eller (b) sätt en bearer-token via "
+            "PUT /settings/tibber_api_token.",
         )
     try:
         client = TibberClient(token)
@@ -1042,6 +1287,7 @@ def tibber_test(session: Session = Depends(db)) -> dict:
         raise HTTPException(502, str(exc)) from exc
     return {
         "ok": True,
+        "auth": "bearer",
         "homes": [
             {
                 "id": h.id, "address": h.address, "size": h.size,
@@ -1136,13 +1382,77 @@ def tibber_realtime(
     home_id: str | None = None,
     session: Session = Depends(db),
 ) -> dict:
-    """Senaste Pulse-mätning + dagens pris. Returnerar tomma värden om
-    Pulse inte är konfigurerad för hemmet."""
-    from ..utility.tibber import TibberClient, TibberError
+    """Senaste Pulse-mätning + dagens pris.
 
+    OAuth-session prioriteras. Fallback till legacy bearer-token om
+    OAuth inte är konfigurerat. Returnerar tom realtime om Pulse saknas
+    men hemmet finns."""
+    from ..utility.tibber_oauth import TibberOAuthError
+
+    oauth_client = _get_oauth_client(session)
+    if oauth_client is not None:
+        try:
+            homes = oauth_client.list_homes()
+            if not homes:
+                raise HTTPException(404, "Inga hem i Tibber-kontot")
+            home = homes[0]
+            if home_id:
+                match = next(
+                    (h for h in homes if h.get("id") == home_id), None,
+                )
+                if match is not None:
+                    home = match
+            hid = home.get("id")
+            measurement = oauth_client.current_measurement(hid)
+            _flush_oauth_client_tokens(session, oauth_client)
+        except TibberOAuthError as exc:
+            raise HTTPException(502, str(exc)) from exc
+
+        addr = home.get("address") or {}
+        features = home.get("features") or {}
+        has_pulse = bool(features.get("realTimeConsumptionEnabled"))
+        price_cur = (measurement or {}).get("price_current") if measurement else None
+        daily = (measurement or {}).get("daily_latest") if measurement else None
+        return {
+            "auth": "oauth",
+            "home": {
+                "id": hid,
+                "address": ", ".join(
+                    x for x in [
+                        addr.get("address1"), addr.get("postalCode"),
+                        addr.get("city"),
+                    ] if x
+                ) or "Okänd adress",
+                "has_pulse": has_pulse,
+            },
+            "realtime": {
+                "power_watts": None,  # Pulse-subscription kommer senare
+                "consumption_today_kwh": (
+                    float(daily["consumption"]) if daily and daily.get("consumption") is not None else None
+                ),
+                "cost_today_kr": (
+                    float(daily["cost"]) if daily and daily.get("cost") is not None else None
+                ),
+                "currency": (price_cur or {}).get("currency", "SEK"),
+                "timestamp": datetime.utcnow().isoformat(),
+            } if has_pulse and daily else None,
+            "prices": {
+                "current": price_cur or None,
+                # Tibber Data API inkluderar inte today/tomorrow i current-
+                # frågan; vi kan utöka schemat senare vid behov.
+                "today": [],
+                "tomorrow": [],
+            },
+        }
+
+    # Fallback: legacy bearer-token
+    from ..utility.tibber import TibberClient, TibberError
     token = _get_tibber_token(session)
     if not token:
-        raise HTTPException(400, "Ingen Tibber-token sparad")
+        raise HTTPException(
+            400,
+            "Ingen Tibber-auth. Anslut via OAuth på /settings.",
+        )
     try:
         client = TibberClient(token)
         homes = client.list_homes()
@@ -1157,6 +1467,7 @@ def tibber_realtime(
         raise HTTPException(502, str(exc)) from exc
 
     return {
+        "auth": "bearer",
         "home": {
             "id": home.id, "address": home.address, "has_pulse": home.has_pulse,
         },
