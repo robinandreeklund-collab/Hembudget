@@ -14,7 +14,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Key, RefreshCw, Trash2, Upload, X, Zap } from "lucide-react";
-import { api, formatSEK, uploadFile } from "@/api/client";
+import { api, formatSEK, getApiBase, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 
 interface UtilityHistory {
@@ -423,6 +423,35 @@ export default function Utility() {
                     );
                   }
                 }}
+                onOpen={(id) => {
+                  const token = getToken();
+                  fetch(`${getApiBase()}/utility/readings/${id}/source`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  })
+                    .then((r) => {
+                      if (!r.ok) throw new Error("Filen saknas");
+                      return r.blob();
+                    })
+                    .then((b) => window.open(URL.createObjectURL(b), "_blank"))
+                    .catch((e) => alert(String(e.message ?? e)));
+                }}
+                onReparse={(id) => {
+                  api<{ supplier: string; cost_kr: number; consumption: number | null; consumption_unit: string | null; detected_format: string }>(
+                    `/utility/readings/${id}/reparse`,
+                    { method: "POST" },
+                  )
+                    .then((res) => {
+                      alert(
+                        `Parsade om: ${res.supplier} · ${res.detected_format}\n` +
+                        `Kostnad: ${res.cost_kr} kr\n` +
+                        (res.consumption != null
+                          ? `Förbrukning: ${res.consumption} ${res.consumption_unit}`
+                          : "Ingen förbrukning extraherad"),
+                      );
+                      invalidate();
+                    })
+                    .catch((e: Error) => alert("Fel: " + e.message));
+                }}
               />
             </Card>
           )}
@@ -446,9 +475,13 @@ export default function Utility() {
 function ReadingsList({
   readings,
   onDelete,
+  onOpen,
+  onReparse,
 }: {
   readings: Reading[];
   onDelete: (id: number) => void;
+  onOpen: (id: number) => void;
+  onReparse: (id: number) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -461,7 +494,7 @@ function ReadingsList({
             <th className="py-2 pr-3 text-right">Förbrukning</th>
             <th className="py-2 pr-3 text-right">Kostnad</th>
             <th className="py-2 pr-3">Källa</th>
-            <th></th>
+            <th className="py-2 pr-3 text-right w-40">Åtgärder</th>
           </tr>
         </thead>
         <tbody>
@@ -483,14 +516,34 @@ function ReadingsList({
               <td className="py-1.5 pr-3 text-xs text-slate-600">
                 {r.source}
               </td>
-              <td>
-                <button
-                  onClick={() => onDelete(r.id)}
-                  className="text-slate-600 hover:text-rose-600"
-                  title="Ta bort"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              <td className="py-1.5 pr-3 text-right">
+                <div className="inline-flex items-center gap-2">
+                  {r.source_file && (
+                    <>
+                      <button
+                        onClick={() => onOpen(r.id)}
+                        className="text-brand-600 hover:text-brand-800 text-xs"
+                        title="Öppna original-PDF:en"
+                      >
+                        📎 Öppna
+                      </button>
+                      <button
+                        onClick={() => onReparse(r.id)}
+                        className="text-emerald-700 hover:text-emerald-900 text-xs"
+                        title="Parsa om PDF:en → uppdatera reading (rör inte tx/upcoming)"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 inline" /> Parsa om
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => onDelete(r.id)}
+                    className="text-slate-600 hover:text-rose-600"
+                    title="Ta bort"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

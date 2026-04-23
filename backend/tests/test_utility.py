@@ -330,6 +330,84 @@ def test_rescan_existing_invoices_creates_readings(client, tmp_path):
     assert body["created"] == 0
 
 
+def test_history_includes_unpaid_upcoming_bills(client):
+    """Kommande fakturor (unpaid) ska racknas med i utility-historien
+    sa vi ser upcoming april-fakturor som redan ar bestamda."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Category, UpcomingTransaction, UpcomingTransactionLine,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="n", type="checking")
+        el = Category(name="El")
+        vatten = Category(name="Vatten/Avgift")
+        s.add_all([acc, el, vatten]); s.flush()
+        # Upcoming april-faktura: Hjo Energi 4 000 kr, kategori El
+        s.add(UpcomingTransaction(
+            kind="bill", name="Hjo Energi april",
+            amount=Decimal("4000"),
+            expected_date=date(2026, 4, 28),
+            category_id=el.id,
+        ))
+        # Upcoming med lines (splits) — Hjo kombinerad faktura 2000 kr
+        combo = UpcomingTransaction(
+            kind="bill", name="Hjo kombinerad april",
+            amount=Decimal("2000"),
+            expected_date=date(2026, 4, 30),
+        )
+        s.add(combo); s.flush()
+        s.add(UpcomingTransactionLine(
+            upcoming_id=combo.id, description="El del",
+            amount=Decimal("1200"), category_id=el.id, sort_order=0,
+        ))
+        s.add(UpcomingTransactionLine(
+            upcoming_id=combo.id, description="Vatten del",
+            amount=Decimal("800"), category_id=vatten.id, sort_order=1,
+        ))
+        s.commit()
+
+    r = c.get("/utility/history?year=2026")
+    body = r.json()
+    # El i april: 4000 (Hjo Energi) + 1200 (Hjo kombinerad line) = 5200
+    assert body["by_category"]["El"]["2026-04"] == pytest.approx(5200.0)
+    # Vatten i april: 800 (combo line)
+    assert body["by_category"]["Vatten/Avgift"]["2026-04"] == pytest.approx(800.0)
+
+
+def test_reparse_reading_updates_fields_without_touching_source(client, tmp_path):
+    """POST /utility/readings/{id}/reparse laser om PDF:en och
+    uppdaterar reading:s falt. Skall inte krascha om filen saknas."""
+    c, SL = client
+    from hembudget.db.models import UtilityReading
+
+    with SL() as s:
+        r = UtilityReading(
+            supplier="manual",
+            meter_type="electricity",
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            consumption=Decimal("100"),
+            consumption_unit="kWh",
+            cost_kr=Decimal("500"),
+            source="manual",
+            source_file=None,
+        )
+        s.add(r); s.commit()
+        rid = r.id
+
+    # Ingen source_file → 400
+    r1 = c.post(f"/utility/readings/{rid}/reparse")
+    assert r1.status_code == 400
+
+    # Satt en icke-existerande fil → 404
+    with SL() as s:
+        row = s.get(UtilityReading, rid)
+        row.source_file = str(tmp_path / "missing.pdf")
+        s.commit()
+    r2 = c.post(f"/utility/readings/{rid}/reparse")
+    assert r2.status_code == 404
+
+
 def test_tibber_endpoints_require_token(client):
     """Utan token ska alla tibber-endpoints returnera 400, inte krascha."""
     c, _ = client

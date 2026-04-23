@@ -147,6 +147,56 @@ def _compute_history(session: Session, y: int) -> dict:
         key = (cat_id, month)
         agg[key] = agg.get(key, Decimal("0")) + abs(amt)
 
+    # Inkludera KOMMANDE (unpaid) upcomings som hor till utility-
+    # kategorier. Dessa ar redan bestamda fakturor (t.ex. april) som
+    # annars saknas i vyn. Vi filtrerar bort fakturor som har nagon
+    # UpcomingPayment-rad — de ar helt/delvis betalda och motsvarande
+    # Transaction-rader ar redan raknade ovan.
+    from ..db.models import UpcomingPayment, UpcomingTransaction, UpcomingTransactionLine
+    paid_up_ids = {
+        uid for (uid,) in
+        session.query(UpcomingPayment.upcoming_id).distinct().all()
+    }
+    upcomings = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "bill",
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.source != "auto:loan_schedule",
+        )
+        .all()
+    )
+    # Upcomings som har lines — anvand lines istallet for category_id
+    line_rows = (
+        session.query(UpcomingTransactionLine)
+        .filter(
+            UpcomingTransactionLine.category_id.in_(category_ids.keys()),
+        )
+        .all()
+    )
+    lines_by_up: dict[int, list] = {}
+    for ln in line_rows:
+        lines_by_up.setdefault(ln.upcoming_id, []).append(ln)
+
+    for up in upcomings:
+        if up.id in paid_up_ids:
+            continue  # redan (delvis) betald — transaktion raknas istallet
+        month = _month_key(up.expected_date)
+        up_lines = lines_by_up.get(up.id, [])
+        if up_lines:
+            # Anvand lines per kategori
+            for ln in up_lines:
+                if ln.category_id not in category_ids:
+                    continue
+                key = (ln.category_id, month)
+                agg[key] = agg.get(key, Decimal("0")) + abs(ln.amount)
+        else:
+            # Ingen uppdelning — anvand upcoming.category_id
+            if up.category_id in category_ids:
+                key = (up.category_id, month)
+                agg[key] = agg.get(key, Decimal("0")) + abs(up.amount)
+
     months = [f"{y}-{m:02d}" for m in range(1, 13)]
     used_cat_ids = sorted({k[0] for k in agg.keys()})
     out_by_category: dict[str, dict[str, float]] = {}
@@ -425,6 +475,88 @@ def delete_reading(reading_id: int, session: Session = Depends(db)) -> dict:
         raise HTTPException(404, "Reading not found")
     session.delete(r)
     return {"deleted": reading_id}
+
+
+@router.post("/readings/{reading_id}/reparse")
+def reparse_reading(reading_id: int, session: Session = Depends(db)) -> dict:
+    """Kor parse_utility_pdf igen pa reading:s source_file och
+    uppdatera fälten. Paverkar INTE den eventuellt kopplade
+    UpcomingTransaction eller dess Transaction — bara readingen.
+
+    Anvandsfall: du har forbattrat parsern eller fakturans format har
+    andrats, och vill uppdatera readingen utan att behova skapa ny.
+    """
+    from ..parsers.utility_pdfs import parse_utility_pdf
+
+    r = session.get(UtilityReading, reading_id)
+    if r is None:
+        raise HTTPException(404, "Reading not found")
+    if not r.source_file:
+        raise HTTPException(
+            400,
+            "Readingen har ingen kopplad PDF (source_file tom) — kan inte re-parsa.",
+        )
+    p = Path(r.source_file)
+    if not p.exists():
+        raise HTTPException(
+            404,
+            f"Filen finns inte langre pa disk: {r.source_file}",
+        )
+    try:
+        content = p.read_bytes()
+        res = parse_utility_pdf(content)
+    except Exception as exc:
+        raise HTTPException(500, f"Parse-fel: {exc}") from exc
+
+    if res.detected_format == "unknown" and (
+        res.period_start is None or res.cost_kr is None
+    ):
+        raise HTTPException(
+            422,
+            "Kunde inte tolka om PDF:en — varken format detekterat eller "
+            "period+kostnad extraherat.",
+        )
+
+    # Uppdatera bara fält som faktiskt parsades
+    if res.supplier != "unknown":
+        r.supplier = res.supplier
+    if res.meter_type:
+        r.meter_type = res.meter_type
+    if res.period_start:
+        r.period_start = res.period_start
+    if res.period_end:
+        r.period_end = res.period_end
+    if res.consumption is not None:
+        r.consumption = res.consumption
+        r.consumption_unit = res.consumption_unit
+    if res.cost_kr is not None:
+        r.cost_kr = res.cost_kr
+    session.flush()
+    return {
+        "id": r.id,
+        "supplier": r.supplier,
+        "meter_type": r.meter_type,
+        "period_start": r.period_start.isoformat(),
+        "period_end": r.period_end.isoformat(),
+        "consumption": float(r.consumption) if r.consumption is not None else None,
+        "consumption_unit": r.consumption_unit,
+        "cost_kr": float(r.cost_kr),
+        "detected_format": res.detected_format,
+    }
+
+
+@router.get("/readings/{reading_id}/source")
+def get_reading_source(reading_id: int, session: Session = Depends(db)):
+    """Returnera PDF-filen for en reading (om den finns)."""
+    from fastapi.responses import FileResponse
+    r = session.get(UtilityReading, reading_id)
+    if r is None or not r.source_file:
+        raise HTTPException(404, "Ingen PDF kopplad till denna reading")
+    p = Path(r.source_file)
+    if not p.exists():
+        raise HTTPException(404, "Filen saknas pa disk")
+    media = "application/pdf" if p.suffix.lower() == ".pdf" else "application/octet-stream"
+    return FileResponse(p, media_type=media, filename=p.name)
 
 
 # -------- PDF parser endpoint --------
