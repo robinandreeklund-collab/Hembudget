@@ -732,17 +732,14 @@ def parse_from_upcoming(
         existing.source = "pdf_rescan"
         existing.source_file = str(p)
         session.flush()
-        return {
-            "action": "updated",
-            "reading_id": existing.id,
-            "detected_format": res.supplier,
-            "supplier": existing.supplier,
-            "consumption": float(existing.consumption) if existing.consumption is not None else None,
-            "consumption_unit": existing.consumption_unit,
-            "cost_kr": float(existing.cost_kr),
-            "period_start": existing.period_start.isoformat(),
-            "period_end": existing.period_end.isoformat(),
-        }
+        action = "updated"
+        reading_id = existing.id
+        supplier_name = existing.supplier
+        consumption = existing.consumption
+        consumption_unit = existing.consumption_unit
+        cost_kr_val = existing.cost_kr
+        period_start = existing.period_start
+        period_end = existing.period_end
     else:
         reading = UtilityReading(
             supplier=res.supplier,
@@ -758,17 +755,71 @@ def parse_from_upcoming(
         )
         session.add(reading)
         session.flush()
-        return {
-            "action": "created",
-            "reading_id": reading.id,
-            "detected_format": res.supplier,
-            "supplier": reading.supplier,
-            "consumption": float(reading.consumption) if reading.consumption is not None else None,
-            "consumption_unit": reading.consumption_unit,
-            "cost_kr": float(reading.cost_kr),
-            "period_start": reading.period_start.isoformat(),
-            "period_end": reading.period_end.isoformat(),
-        }
+        action = "created"
+        reading_id = reading.id
+        supplier_name = reading.supplier
+        consumption = reading.consumption
+        consumption_unit = reading.consumption_unit
+        cost_kr_val = reading.cost_kr
+        period_start = reading.period_start
+        period_end = reading.period_end
+
+    # Bonus: om fakturan inkluderar en månadsvis historik-tabell (typiskt
+    # Hjo Energi — 12-13 mån bakåt) fyller vi på UtilityReading för de
+    # månader som saknas i DB. Ingen kr-data, bara kWh.
+    history_added = 0
+    history_skipped = 0
+    if res.history:
+        for hp in res.history:
+            hp_start = date(hp.year, hp.month, 1)
+            # Hoppa över fakturans egen period — den hanteras av
+            # huvud-reading:en ovan med full kr-data.
+            if hp_start == period_start:
+                continue
+            existing_hist = (
+                session.query(UtilityReading)
+                .filter(
+                    UtilityReading.supplier == res.supplier,
+                    UtilityReading.meter_type == "electricity",
+                    UtilityReading.period_start == hp_start,
+                )
+                .first()
+            )
+            if existing_hist is not None:
+                history_skipped += 1
+                continue
+            from calendar import monthrange
+            hp_end = date(
+                hp.year, hp.month, monthrange(hp.year, hp.month)[1],
+            )
+            session.add(UtilityReading(
+                supplier=res.supplier,
+                meter_type="electricity",
+                period_start=hp_start,
+                period_end=hp_end,
+                consumption=hp.kwh,
+                consumption_unit="kWh",
+                cost_kr=Decimal("0"),  # Historiken har inte kostnads-data
+                source="pdf_history",
+                source_file=str(p),
+                notes="Hämtad från Hjo Energi historik-tabell",
+            ))
+            history_added += 1
+        session.flush()
+
+    return {
+        "action": action,
+        "reading_id": reading_id,
+        "detected_format": res.supplier,
+        "supplier": supplier_name,
+        "consumption": float(consumption) if consumption is not None else None,
+        "consumption_unit": consumption_unit,
+        "cost_kr": float(cost_kr_val),
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "history_added": history_added,
+        "history_skipped": history_skipped,
+    }
 
 
 @router.get("/readings/{reading_id}/source")

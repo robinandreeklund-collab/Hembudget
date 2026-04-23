@@ -1059,15 +1059,21 @@ function BreakdownRow({
         cost_kr: number;
         period_start: string;
         period_end: string;
+        history_added?: number;
+        history_skipped?: number;
       }>(`/utility/parse-upcoming/${item.upcoming_id}`, { method: "POST" });
       const kwhStr =
         res.consumption != null
           ? `${res.consumption.toFixed(0)} ${res.consumption_unit}`
           : "ingen förbrukningsdata hittad";
+      const historyStr =
+        res.history_added && res.history_added > 0
+          ? ` · +${res.history_added} historiska månader`
+          : "";
       setLastResult({
         ok: true,
         message:
-          `✓ ${res.action === "created" ? "Skapade" : "Uppdaterade"}: ${res.supplier} ${res.period_start}→${res.period_end} · ${kwhStr} · ${formatSEK(res.cost_kr)}`,
+          `✓ ${res.action === "created" ? "Skapade" : "Uppdaterade"}: ${res.supplier} ${res.period_start}→${res.period_end} · ${kwhStr} · ${formatSEK(res.cost_kr)}${historyStr}`,
       });
       onReparsed();
     } catch (e) {
