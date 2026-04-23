@@ -846,21 +846,25 @@ def subscription_health(session: Session, stale_days: int = 60) -> dict:
 def _resolve_owner_bucket_key(
     owner_string: str | None,
     user_name_to_id: dict[str, int],
+    fallback_account_owner_id: int | None = None,
 ) -> str:
     """Mappa upcoming.owner (fritext, t.ex. 'Evelina') till en stabil
     bucket-nyckel för family/ytd-aggregering.
 
     Format-konsistens:
-      - None / tom  → 'gemensamt'
+      - None / tom + ingen fallback → 'gemensamt'
+      - None / tom + fallback_account_owner_id → 'user_{fallback_id}'
+        (typiskt: en kommande lön på Evelinas konto utan owner-fält
+         ifyllt → använd kontots owner_id istället för 'gemensamt')
       - matchar en User.name (case-insensitive) → 'user_{id}'
       - annars → raw string (t.ex. 'Evelina' om användaren inte finns
         i User-tabellen än — frontend visar namnet som det är)
     """
-    if not owner_string:
+    if not owner_string or not owner_string.strip():
+        if fallback_account_owner_id is not None:
+            return f"user_{fallback_account_owner_id}"
         return "gemensamt"
     key = owner_string.strip()
-    if not key:
-        return "gemensamt"
     for name, uid in user_name_to_id.items():
         if name.lower() == key.lower():
             return f"user_{uid}"
@@ -966,8 +970,20 @@ def ytd_income_by_person(
         .all()
     )
     total_from_manual = 0.0
+    # Cacha account-owner-id:s så vi kan falla tillbaka när upcoming.owner
+    # är tomt — typiskt för en kommande lön som lagts till på partnerns
+    # konto utan att owner-fältet fyllts i.
+    account_owner_by_id = {
+        a.id: a.owner_id for a in session.query(Account).all()
+    }
     for up in manual_incomes:
-        key = _resolve_owner_bucket_key(up.owner, user_name_to_id)
+        fallback_owner = (
+            account_owner_by_id.get(up.debit_account_id)
+            if up.debit_account_id else None
+        )
+        key = _resolve_owner_bucket_key(
+            up.owner, user_name_to_id, fallback_owner,
+        )
         bucket = by_owner.setdefault(
             key,
             {"total": 0.0, "count": 0, "accounts": [],
@@ -1072,7 +1088,17 @@ def get_family_breakdown(session: Session, month: str) -> dict:
     )
     for up in manual_ups:
         if up.kind == "income":
-            key = _resolve_owner_bucket_key(up.owner, user_name_to_id)
+            # Falla tillbaka på debit-kontots ägare när upcoming.owner
+            # är tomt — typiskt för en kommande lön på partnerns konto
+            # där fritextfältet inte fyllts i.
+            fallback_owner = None
+            if up.debit_account_id is not None:
+                acc = session.get(Account, up.debit_account_id)
+                if acc is not None:
+                    fallback_owner = acc.owner_id
+            key = _resolve_owner_bucket_key(
+                up.owner, user_name_to_id, fallback_owner,
+            )
             b = by_owner.setdefault(key, {"income": 0.0, "expenses": 0.0})
             b["income"] += _d(up.amount)
         elif up.kind == "bill":
