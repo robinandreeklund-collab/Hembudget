@@ -298,6 +298,59 @@ def test_upcoming_list_exposes_payment_transactions_for_unmatch_ui(client):
     assert p["account_name"] == "Checking"
 
 
+def test_paired_transfers_excluded_from_uncategorized(client):
+    """Parade transfers (transfer_pair_id satt) ska varken visas i
+    åtgärda-listan för 'Alla transaktioner är kategoriserade' eller
+    räknas i 'Okategoriserat'-kategori-bucketen — de balanserar redan
+    via motparten.
+
+    User-scenario: efter 'Kör om automatmatchning' parades 10+ rader
+    (credit-card-betalningar). De saknar fortfarande category_id men
+    ska INTE visas som okategoriserade eftersom de är räknade som
+    transfers."""
+    c, SL = client
+    from hembudget.db.models import Account, Transaction
+    with SL() as s:
+        chk = Account(name="Chk", bank="nordea", type="checking")
+        amex = Account(name="Amex", bank="amex", type="credit")
+        s.add_all([chk, amex]); s.flush()
+        # Parat par (båda saknar category_id)
+        a = Transaction(
+            account_id=chk.id, date=date(2026, 3, 27),
+            amount=Decimal("-13500"), currency="SEK",
+            raw_description="BG 5127-5477 American Exp", hash="h_a",
+            is_transfer=True,
+        )
+        b = Transaction(
+            account_id=amex.id, date=date(2026, 3, 27),
+            amount=Decimal("13500"), currency="SEK",
+            raw_description="Betalning Mottagen, Tack", hash="h_b",
+            is_transfer=True,
+        )
+        s.add_all([a, b]); s.flush()
+        a.transfer_pair_id = b.id
+        b.transfer_pair_id = a.id
+        # En riktig okategoriserad som SKA visas
+        s.add(Transaction(
+            account_id=chk.id, date=date(2026, 3, 28),
+            amount=Decimal("-500"), currency="SEK",
+            raw_description="Okategoriserat köp", hash="h_uncat",
+        ))
+        s.commit()
+
+    # Huvudbokens åtgärda-lista för okategoriserat ska bara innehålla
+    # den riktiga okategoriserade raden, inte de parade.
+    r = c.get("/ledger/check/uncategorized?year=2026")
+    body = r.json()
+    assert body["count"] == 1
+    assert body["transactions"][0]["description"] == "Okategoriserat köp"
+
+    # Och huvudbokens uncategorized_count ska vara 1, inte 3
+    r2 = c.get("/ledger/?year=2026")
+    body2 = r2.json()
+    assert body2["totals"]["uncategorized_count"] == 1
+
+
 def test_accept_variance_removes_from_unmatched_past_list(client):
     """Passerade kommande-rader där användaren godkänt avvikelse ska
     inte dyka upp i åtgärda-listan 'unmatched_past_upcomings'."""

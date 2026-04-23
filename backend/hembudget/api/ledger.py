@@ -119,10 +119,15 @@ def huvudbok(
         ).all()
 
         def _is_transfer(t: Transaction) -> bool:
-            # Upcoming-matchade tx OCH deras pair-partner räknas som vanliga
-            # utgifter/inkomster, inte transfers — även om is_transfer-flaggan
-            # råkar stå kvar. Symmetri behövs annars får vi en obalans lika
-            # stor som den matchade delen.
+            # Prioritetsordning:
+            # 1. Parad (transfer_pair_id satt) → alltid transfer. Parad +
+            #    motparten balanserar varandra så varken summeras som
+            #    inkomst/utgift eller visas som okategoriserat.
+            # 2. Upcoming-matchade solitärer (is_transfer=True, ingen pair)
+            #    → reklassificeras till expense/income (bill-betalning).
+            # 3. Övriga is_transfer=True → transfer.
+            if t.transfer_pair_id is not None:
+                return True
             return bool(t.is_transfer) and t.id not in reclassified_transfer_ids
 
         income_in = sum(
@@ -210,6 +215,12 @@ def huvudbok(
         is_incognito = bool(getattr(acc, "incognito", False))
         # Skippa privata utgifter på inkognito-konton helt
         if is_incognito and tx.amount < 0:
+            continue
+        # Parade transfers (transfer_pair_id satt) räknas varken som
+        # inkomst/utgift eller okategoriserat — de balanseras av
+        # motparten. Detta matchar åtgärda-listans filter så räknare
+        # är konsistenta.
+        if tx.transfer_pair_id is not None:
             continue
         cat_id = cat.id if cat else None
         cat_name = cat.name if cat else "Okategoriserat"
@@ -549,12 +560,18 @@ def check_details(
         # så uncategorized-listan stämmer med resultaträkningens
         # "Okategoriserat"-rad. Annars kan user:n se "8 transactions" i
         # resultaträkningen men bara 1 rad i åtgärda-vyn.
+        # OBS: parade transfers (transfer_pair_id satt) behöver INGEN
+        # kategori — de balanseras via sin motpart och räknas varken
+        # som utgift eller inkomst. Exkludera dem även om de är
+        # upcoming-matchade (edge case: tx på kreditkort som också
+        # råkar matcha en upcoming income).
         uncat_q = (
             session.query(Transaction)
             .filter(
                 Transaction.date >= period_start,
                 Transaction.date < period_end,
                 Transaction.category_id.is_(None),
+                Transaction.transfer_pair_id.is_(None),
             )
         )
         if reclassified_transfer_ids:
