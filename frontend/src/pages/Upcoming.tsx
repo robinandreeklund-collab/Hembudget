@@ -890,6 +890,31 @@ function UpcomingRow({
               value={i.name}
               onChange={(v) => onUpdate(i.id, { name: v })}
             />
+            <div>
+              <div className="text-xs text-slate-700 mb-1">Kategori</div>
+              <select
+                value={i.category_id ?? ""}
+                onChange={(e) =>
+                  onUpdate(i.id, {
+                    category_id: e.target.value ? Number(e.target.value) : null,
+                  } as Partial<UpcomingItem>)
+                }
+                className="border rounded px-2 py-1 w-full text-sm"
+              >
+                <option value="">— ingen kategori —</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {i.lines.length > 0 && (
+                <div className="text-xs text-slate-600 mt-1">
+                  Denna faktura har {i.lines.length} split-rader som har egna
+                  kategorier. Dessa används före fakturans kategori i rapporter.
+                </div>
+              )}
+            </div>
           </div>
 
           {hasDetails && (

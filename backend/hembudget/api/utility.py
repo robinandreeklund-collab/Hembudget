@@ -394,13 +394,47 @@ def utility_breakdown(
             if u is not None and tid not in tx_to_upcoming:
                 tx_to_upcoming[tid] = u
 
+    # Kommande, unpaid upcomings som bidrar till cellen (precis som i
+    # /utility/history). Inkludera inte om nagon betalning redan finns
+    # (da raknas transaktionen istallet).
+    from ..db.models import UpcomingPayment as _UP2, UpcomingTransactionLine as _UL
+    paid_up_ids = {
+        uid for (uid,) in
+        session.query(_UP2.upcoming_id).distinct().all()
+    }
+    ups_in_month = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "bill",
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.source != "auto:loan_schedule",
+        )
+        .all()
+    )
+    # Lines med just denna kategori
+    up_lines_for_cat = (
+        session.query(_UL, UpcomingTransaction)
+        .join(UpcomingTransaction, UpcomingTransaction.id == _UL.upcoming_id)
+        .filter(
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+            _UL.category_id == cat.id,
+        )
+        .all()
+    )
+    ups_with_lines_in_cat = {up.id for _, up in up_lines_for_cat}
+
     # Kartlagg upcoming_id -> reading_id for "Parsa om" per rad
-    ups_involved = {u.id for u in tx_to_upcoming.values()}
+    all_up_ids = set(ups_with_lines_in_cat) | {u.id for u in tx_to_upcoming.values()}
+    for u in ups_in_month:
+        if u.category_id == cat.id:
+            all_up_ids.add(u.id)
     reading_by_up: dict[int, int] = {}
-    if ups_involved:
+    if all_up_ids:
         for rid, uid in (
             session.query(UtilityReading.id, UtilityReading.upcoming_id)
-            .filter(UtilityReading.upcoming_id.in_(ups_involved))
+            .filter(UtilityReading.upcoming_id.in_(all_up_ids))
             .all()
         ):
             if uid is not None:
@@ -446,6 +480,52 @@ def utility_breakdown(
             "account_name": accounts.get(tx.account_id, f"#{tx.account_id}"),
             "can_move": False,  # splits foljer tx:ens datum
         }, tx.id))
+        total += amt
+
+    # Kommande fakturor (whole-category) som bidrar
+    for u in ups_in_month:
+        if u.id in paid_up_ids:
+            continue
+        if u.category_id != cat.id:
+            continue
+        if u.id in ups_with_lines_in_cat:
+            continue  # kommer via lines istallet
+        amt = float(abs(u.amount))
+        items.append({
+            "type": "upcoming",
+            "id": u.id,
+            "date": u.expected_date.isoformat(),
+            "amount": amt,
+            "description": u.name,
+            "normalized_merchant": None,
+            "account_id": u.debit_account_id or 0,
+            "account_name": accounts.get(u.debit_account_id, "—"),
+            "can_move": False,  # upcomings flyttas via /upcoming
+            "upcoming_id": u.id,
+            "has_invoice_pdf": bool(u.source_image_path),
+            "reading_id": reading_by_up.get(u.id),
+        })
+        total += amt
+
+    # Kommande fakturor lines (t.ex. Hjo kombinerad med splits)
+    for line, u in up_lines_for_cat:
+        if u.id in paid_up_ids:
+            continue
+        amt = float(abs(line.amount))
+        items.append({
+            "type": "upcoming_line",
+            "id": line.id,
+            "upcoming_id": u.id,
+            "date": u.expected_date.isoformat(),
+            "amount": amt,
+            "description": f"{u.name} > {line.description}",
+            "normalized_merchant": None,
+            "account_id": u.debit_account_id or 0,
+            "account_name": accounts.get(u.debit_account_id, "—"),
+            "can_move": False,
+            "has_invoice_pdf": bool(u.source_image_path),
+            "reading_id": reading_by_up.get(u.id),
+        })
         total += amt
 
     items.sort(key=lambda i: i["date"])

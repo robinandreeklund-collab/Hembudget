@@ -139,6 +139,11 @@ export default function Settings() {
         method: "POST",
       }),
   });
+  const deleteSubMut = useMutation({
+    mutationFn: (id: number) =>
+      api(`/budget/subscriptions/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["subs-health"] }),
+  });
 
   const subHealthQ = useQuery({
     queryKey: ["subs-health"],
@@ -376,6 +381,7 @@ export default function Settings() {
                   <th className="py-1.5 pr-3 text-right">Pris</th>
                   <th className="py-1.5 pr-3 text-right">Senast dragen</th>
                   <th className="py-1.5 pr-3 text-right">Per år</th>
+                  <th className="py-1.5 pr-3 text-right w-32">Åtgärd</th>
                 </tr>
               </thead>
               <tbody>
@@ -406,6 +412,25 @@ export default function Settings() {
                     </td>
                     <td className="py-1.5 pr-3 text-right font-semibold">
                       {formatSEK(s.annual_cost)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      <button
+                        onClick={() => {
+                          if (confirm(
+                            `Ta bort "${s.merchant}" som prenumeration?\n\n` +
+                            "Detta raderar prenumerations-registreringen och " +
+                            "eventuella auto-genererade kommande-rader. " +
+                            "Bakomliggande bankrader rörs inte.",
+                          )) {
+                            deleteSubMut.mutate(s.id);
+                          }
+                        }}
+                        disabled={deleteSubMut.isPending}
+                        className="text-xs text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                        title="Ta bort som prenumeration"
+                      >
+                        Ta bort
+                      </button>
                     </td>
                   </tr>
                 ))}

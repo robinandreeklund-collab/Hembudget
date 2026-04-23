@@ -139,6 +139,48 @@ def detect_subs(session: Session = Depends(db)) -> dict:
     }
 
 
+@router.post("/subscriptions/{sub_id}/deactivate")
+def deactivate_subscription(sub_id: int, session: Session = Depends(db)) -> dict:
+    """Markera en prenumeration som inaktiv — slutar dyka upp i hälso-
+    kollen och genererar inga nya kommande-rader. Bakomliggande
+    transaktioner berörs inte."""
+    from ..db.models import Subscription
+    sub = session.get(Subscription, sub_id)
+    if sub is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Subscription not found")
+    sub.active = False
+    session.flush()
+    return {"id": sub_id, "active": False}
+
+
+@router.delete("/subscriptions/{sub_id}")
+def delete_subscription(sub_id: int, session: Session = Depends(db)) -> dict:
+    """Ta bort en prenumeration helt. Auto-materialiserade kommande-
+    rader (source=auto:subscription, matched_transaction_id IS NULL)
+    raderas också så de inte stör prognosen. Bankrader rör vi inte."""
+    from ..db.models import Subscription, UpcomingTransaction
+    sub = session.get(Subscription, sub_id)
+    if sub is None:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Subscription not found")
+    # Rensa auto-genererade upcomings där name matchar merchant
+    deleted_ups = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.source == "auto:subscription",
+            UpcomingTransaction.name == sub.merchant,
+            UpcomingTransaction.matched_transaction_id.is_(None),
+        )
+        .all()
+    )
+    for u in deleted_ups:
+        session.delete(u)
+    session.delete(sub)
+    session.flush()
+    return {"deleted": sub_id, "removed_upcomings": len(deleted_ups)}
+
+
 @router.get("/{month}")
 def get_summary(month: str, session: Session = Depends(db)) -> dict:
     """Månadsöversikt. OBS: måste deklareras SIST bland GET-routes annars
