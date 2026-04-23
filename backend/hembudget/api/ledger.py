@@ -224,7 +224,11 @@ def huvudbok(
             continue
         cat_id = cat.id if cat else None
         cat_name = cat.name if cat else "Okategoriserat"
-        if cat_id is None:
+        # Upcoming-matchade räknas inte som okategoriserade — de tillhör
+        # en faktura som hanteras separat. Räkna dem ändå som expense
+        # via det upcoming:ets logik (nedan i if tx.amount > 0 / else).
+        # Detta matchar åtgärda-listans filter.
+        if cat_id is None and tx.id not in upcoming_matched_ids:
             uncategorized_count += 1
         key = (cat_id, cat_name)
         bucket = cat_agg.setdefault(
@@ -556,15 +560,13 @@ def check_details(
         }
 
     if check_type == "uncategorized":
-        # Inkludera upcoming-matchade (som räknas som expense, inte transfer)
-        # så uncategorized-listan stämmer med resultaträkningens
-        # "Okategoriserat"-rad. Annars kan user:n se "8 transactions" i
-        # resultaträkningen men bara 1 rad i åtgärda-vyn.
-        # OBS: parade transfers (transfer_pair_id satt) behöver INGEN
-        # kategori — de balanseras via sin motpart och räknas varken
-        # som utgift eller inkomst. Exkludera dem även om de är
-        # upcoming-matchade (edge case: tx på kreditkort som också
-        # råkar matcha en upcoming income).
+        # Åtgärda-listans regler:
+        # - category_id IS NULL (saknar kategori)
+        # - transfer_pair_id IS NULL (paired = balanserad, ingen kategori behövs)
+        # - is_transfer = False (vanlig tx, inte orphan-transfer)
+        # - id NOT IN upcoming_matched_ids (delbetalning av en faktura —
+        #   fakturan själv är "kategoriserad" via kind/namn; delbetalningen
+        #   behöver inte egen kategori)
         uncat_q = (
             session.query(Transaction)
             .filter(
@@ -572,15 +574,13 @@ def check_details(
                 Transaction.date < period_end,
                 Transaction.category_id.is_(None),
                 Transaction.transfer_pair_id.is_(None),
+                Transaction.is_transfer.is_(False),
             )
         )
-        if reclassified_transfer_ids:
+        if upcoming_matched_ids:
             uncat_q = uncat_q.filter(
-                (Transaction.is_transfer.is_(False))
-                | (Transaction.id.in_(reclassified_transfer_ids))
+                ~Transaction.id.in_(upcoming_matched_ids)
             )
-        else:
-            uncat_q = uncat_q.filter(Transaction.is_transfer.is_(False))
         rows = uncat_q.order_by(Transaction.date.desc()).all()
         return {
             "check_type": check_type,

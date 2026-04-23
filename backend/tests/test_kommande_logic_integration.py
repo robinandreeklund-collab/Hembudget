@@ -298,6 +298,66 @@ def test_upcoming_list_exposes_payment_transactions_for_unmatch_ui(client):
     assert p["account_name"] == "Checking"
 
 
+def test_upcoming_matched_excluded_from_uncategorized_check(client):
+    """Delbetalningar av en upcoming-faktura ska INTE visas i åtgärda-
+    listan för 'Alla transaktioner är kategoriserade'. Fakturan själv
+    hanterar kategoriseringen — delbetalningen är bara en rad som
+    matchats mot den.
+
+    User-scenario: Amex-faktura 27 180 kr delas upp i 2 betalningar
+    (-2 922 kr + -4 000 kr) som matchas mot samma upcoming. Dessa två
+    tx-rader saknar category_id men ska inte räknas som okategoriserade."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Transaction, UpcomingPayment, UpcomingTransaction,
+    )
+    with SL() as s:
+        chk = Account(name="Chk", bank="nordea", type="checking")
+        s.add(chk); s.flush()
+        # Två delbetalningar utan kategori
+        tx1 = Transaction(
+            account_id=chk.id, date=date(2026, 4, 17),
+            amount=Decimal("-2922"), currency="SEK",
+            raw_description="Betalning BG 5127-5477 American Exp",
+            hash="h1",
+        )
+        tx2 = Transaction(
+            account_id=chk.id, date=date(2026, 4, 21),
+            amount=Decimal("-4000"), currency="SEK",
+            raw_description="Betalning BG 5127-5477 American Exp",
+            hash="h2",
+        )
+        s.add_all([tx1, tx2]); s.flush()
+        up = UpcomingTransaction(
+            kind="bill", name="Amex-faktura",
+            amount=Decimal("27180"),
+            expected_date=date(2026, 4, 27),
+        )
+        s.add(up); s.flush()
+        s.add_all([
+            UpcomingPayment(upcoming_id=up.id, transaction_id=tx1.id),
+            UpcomingPayment(upcoming_id=up.id, transaction_id=tx2.id),
+        ])
+        # En riktig okategoriserad som SKA visas
+        s.add(Transaction(
+            account_id=chk.id, date=date(2026, 4, 5),
+            amount=Decimal("-200"), currency="SEK",
+            raw_description="Okänt köp", hash="h_uncat",
+        ))
+        s.commit()
+
+    # Åtgärda-listan för uncategorized
+    r = c.get("/ledger/check/uncategorized?year=2026")
+    body = r.json()
+    assert body["count"] == 1
+    assert body["transactions"][0]["description"] == "Okänt köp"
+
+    # Main-huvudbokens count stämmer
+    r2 = c.get("/ledger/?year=2026")
+    body2 = r2.json()
+    assert body2["totals"]["uncategorized_count"] == 1
+
+
 def test_paired_transfers_excluded_from_uncategorized(client):
     """Parade transfers (transfer_pair_id satt) ska varken visas i
     åtgärda-listan för 'Alla transaktioner är kategoriserade' eller

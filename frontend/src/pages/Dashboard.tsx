@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, Trash2, TrendingDown, TrendingUp, Users, Zap,
 } from "lucide-react";
@@ -125,11 +125,24 @@ export default function Dashboard() {
     queryKey: ["budget", month],
     queryFn: () => api<MonthSummary>(`/budget/${month}`),
   });
+  // Saldo per konto för den valda månaden — as_of = sista dagen
+  // i månaden (eller idag om det är innevarande månad). Matchar
+  // månadsväljaren överst i Dashboard så saldot byter med den.
+  const balancesAsOf = useMemo(() => {
+    const todayYm = currentMonth();
+    if (month === todayYm) return undefined; // default: idag
+    const [y, m] = month.split("-").map(Number);
+    // Sista dagen i månaden (nästa månads dag 0 = sista i denna)
+    const last = new Date(y, m, 0);
+    return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
+  }, [month]);
   const balancesQ = useQuery({
-    queryKey: ["balances"],
+    queryKey: ["balances", balancesAsOf ?? "today"],
     queryFn: () =>
       api<{ as_of: string; accounts: BalanceRow[]; total_balance: number }>(
-        "/balances/",
+        balancesAsOf
+          ? `/balances/?as_of=${balancesAsOf}`
+          : "/balances/",
       ),
   });
   const forecastQ = useQuery({

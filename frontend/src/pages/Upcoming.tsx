@@ -549,7 +549,20 @@ function ItemList({
   }
   // Sortera nyast först så senaste månaden syns överst
   const months = Object.keys(byMonth).sort().reverse();
-  const initiallyOpen = new Set(months.slice(0, defaultExpandedMonths));
+  // Bara aktuell (pågående) månad ska vara öppen by default. Framtida
+  // månader (maj, juni…) kollapsade så vyn inte blir överlastad med
+  // återkommande prenumerationer flera månader framåt. Om aktuell
+  // månad saknas i listan (t.ex. alla rader ligger i maj), öppna den
+  // närmaste framtida månaden istället.
+  const todayYm = new Date().toISOString().slice(0, 7);
+  const defaultOpen: string[] = [];
+  if (months.includes(todayYm)) {
+    defaultOpen.push(todayYm);
+  } else if (defaultExpandedMonths > 0) {
+    // Fallback: första N månader (gammal beteende) om aktuell månad saknas
+    defaultOpen.push(...months.slice(0, defaultExpandedMonths));
+  }
+  const initiallyOpen = new Set(defaultOpen);
 
   return (
     <div className="space-y-2">
