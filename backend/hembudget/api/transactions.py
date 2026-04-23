@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 from decimal import Decimal
 from typing import Optional
@@ -7,6 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+log = logging.getLogger(__name__)
 
 from ..categorize.engine import normalize_merchant
 from ..categorize.rules import create_rule_from_correction
@@ -638,6 +641,187 @@ def create_manual_transaction(
     session.flush()
 
     return tx
+
+
+@router.post("/accounts/{account_id}/parse-pasted-statement")
+def parse_pasted_statement(
+    account_id: int, payload: dict, session: Session = Depends(db),
+) -> dict:
+    """Tolka ett klistrat kontoutdrag (text). Returnerar förhandsvisning
+    + dedup-info mot existerande transaktioner — INGEN data sparas här.
+
+    Body: `{text: str}`. Användaren får sedan godkänna och kalla
+    /import-pasted-statement med samma rader för faktisk import.
+
+    Svar:
+    - candidates: [{date, amount, description, duplicate, dup_reason}]
+    - latest_existing_date: senaste befintliga tx på kontot (som hint)
+    - parse_errors: rader som ignorerades och varför
+    """
+    import hashlib
+    from ..parsers.paste_text import parse_pasted
+
+    acc = session.get(Account, account_id)
+    if acc is None:
+        raise HTTPException(404, "Account not found")
+    text = (payload.get("text") or "").strip()
+    if not text:
+        return {"candidates": [], "latest_existing_date": None}
+
+    rows = parse_pasted(text)
+
+    # Hämta existerande hashar + beskrivningar för dedup-detektion.
+    # Vi har två nivåer:
+    #  1. Exakt hash-match → garanterad dubblett.
+    #  2. Samma datum + samma belopp → trolig dubblett (fuzzy desc).
+    existing_hashes = {
+        h for (h,) in session.query(Transaction.hash)
+        .filter(Transaction.account_id == account_id).all()
+    }
+    by_date_amount = {}
+    for tx in (
+        session.query(Transaction)
+        .filter(Transaction.account_id == account_id).all()
+    ):
+        by_date_amount.setdefault(
+            (tx.date.isoformat(), str(tx.amount)), []
+        ).append(tx.raw_description)
+
+    def _paste_hash(account_id: int, dt, amount: Decimal, desc: str) -> str:
+        # Normalisera amount till exakt 2 decimaler så att 6400 och
+        # 6400.0 och 6400.00 alltid blir samma hash.
+        amt_str = f"{Decimal(str(amount)).quantize(Decimal('0.01')):f}"
+        key = f"paste|{account_id}|{dt.isoformat()}|{amt_str}|{desc.lower()}"
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    candidates = []
+    for r in rows:
+        h = _paste_hash(account_id, r.date, r.amount, r.description)
+        dup = h in existing_hashes
+        dup_reason = None
+        if dup:
+            dup_reason = "exakt match (samma datum, belopp och beskrivning)"
+        else:
+            # Fuzzy: samma datum + samma belopp finns redan
+            existing_descs = by_date_amount.get(
+                (r.date.isoformat(), str(r.amount)), []
+            )
+            if existing_descs:
+                dup = True
+                dup_reason = (
+                    f"samma datum + belopp finns: \"{existing_descs[0]}\""
+                )
+        candidates.append({
+            "date": r.date.isoformat(),
+            "amount": float(r.amount),
+            "description": r.description,
+            "duplicate": dup,
+            "dup_reason": dup_reason,
+        })
+
+    latest = (
+        session.query(func.max(Transaction.date))
+        .filter(Transaction.account_id == account_id).scalar()
+    )
+    return {
+        "candidates": candidates,
+        "latest_existing_date": latest.isoformat() if latest else None,
+        "parsed_count": len(rows),
+        "raw_lines": len(text.splitlines()),
+    }
+
+
+@router.post("/accounts/{account_id}/import-pasted-statement")
+def import_pasted_statement(
+    account_id: int, payload: dict, session: Session = Depends(db),
+    llm: LMStudioClient = Depends(llm_client),
+) -> dict:
+    """Importera de godkända raderna från ett klistrat kontoutdrag.
+
+    Body: `{rows: [{date, amount, description}], skip_duplicates: bool}`.
+    Skapar Transactions med proper hash + kör auto-kategorisering +
+    transfer-detektor. Hoppar över rader som redan finns (samma hash)
+    om skip_duplicates=True (default).
+    """
+    import hashlib
+    from datetime import date as _date
+    from ..categorize.engine import CategorizationEngine
+
+    acc = session.get(Account, account_id)
+    if acc is None:
+        raise HTTPException(404, "Account not found")
+    rows = payload.get("rows") or []
+    skip_dups = bool(payload.get("skip_duplicates", True))
+    if not isinstance(rows, list):
+        raise HTTPException(400, "rows måste vara en lista")
+
+    existing_hashes = {
+        h for (h,) in session.query(Transaction.hash)
+        .filter(Transaction.account_id == account_id).all()
+    }
+
+    created_txs: list[Transaction] = []
+    skipped_dups = 0
+    errors: list[dict] = []
+    for i, r in enumerate(rows):
+        try:
+            tx_date = _date.fromisoformat(r["date"])
+            amount = Decimal(str(r["amount"]))
+            description = (r.get("description") or "").strip()
+        except (KeyError, ValueError, Exception) as exc:
+            errors.append({"index": i, "error": str(exc)})
+            continue
+        if not description or amount == 0:
+            errors.append({"index": i, "error": "saknar beskrivning eller belopp = 0"})
+            continue
+        # Samma hash-format som parse-pasted-statement för dedup
+        amt_str = f"{amount.quantize(Decimal('0.01')):f}"
+        key = (
+            f"paste|{account_id}|{tx_date.isoformat()}|{amt_str}|"
+            f"{description.lower()}"
+        )
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        if h in existing_hashes:
+            if skip_dups:
+                skipped_dups += 1
+                continue
+        tx = Transaction(
+            account_id=account_id, date=tx_date, amount=amount,
+            currency=acc.currency or "SEK",
+            raw_description=description, hash=h,
+            normalized_merchant=normalize_merchant(description),
+        )
+        session.add(tx)
+        created_txs.append(tx)
+        existing_hashes.add(h)
+    session.flush()
+
+    # Kör auto-kategorisering på nyimporterade rader. Default = bara
+    # rules + history (snabbt, deterministiskt). LLM-fallback kräver
+    # explicit opt-in eftersom den kan ta tid om LM Studio är osäker.
+    use_llm = bool(payload.get("use_llm", False))
+    categorized_count = 0
+    if created_txs:
+        engine = CategorizationEngine(session, llm=llm if use_llm else None)
+        try:
+            results = engine.categorize_batch(created_txs)
+            engine.apply_results(created_txs, results)
+            categorized_count = sum(1 for tx in created_txs if tx.category_id)
+        except Exception as exc:
+            log.warning("auto-categorization failed for pasted import: %s", exc)
+        # Transfer-detektor parar interna överföringar
+        try:
+            TransferDetector(session).detect_internal_transfers()
+        except Exception as exc:
+            log.warning("transfer-detection failed: %s", exc)
+        session.flush()
+
+    return {
+        "imported": len(created_txs),
+        "skipped_duplicates": skipped_dups,
+        "categorized": categorized_count,
+        "errors": errors,
+    }
 
 
 @router.get("/transactions/{tx_id}/match-candidates")

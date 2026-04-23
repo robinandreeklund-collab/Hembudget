@@ -237,11 +237,26 @@ export default function Transactions() {
 
   const cats = catsQ.data ?? [];
 
+  const [pasteModalOpen, setPasteModalOpen] = useState(false);
+
   return (
     <div className="p-3 md:p-6 space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <h1 className="text-xl md:text-2xl font-semibold">Transaktioner</h1>
         <div className="flex flex-wrap items-center gap-3 md:gap-4 text-sm">
+          <button
+            onClick={() => {
+              if (accountFilter === ALL_ACCOUNTS) {
+                alert("Välj först ett konto i fliken nedan — klistrade transaktioner sparas mot det valda kontot.");
+                return;
+              }
+              setPasteModalOpen(true);
+            }}
+            className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-violet-700"
+            title="Klistra in raw text från internetbankens kontoutdrag"
+          >
+            Klistra in kontoutdrag
+          </button>
           <label className="flex items-center gap-2">
             Månad
             <select
@@ -687,6 +702,22 @@ export default function Transactions() {
           }}
         />
       )}
+      {pasteModalOpen && accountFilter !== ALL_ACCOUNTS && (
+        <PasteStatementModal
+          accountId={Number(accountFilter)}
+          accountName={
+            (accountsQ.data ?? []).find((a) => a.id === Number(accountFilter))?.name ?? ""
+          }
+          onClose={() => setPasteModalOpen(false)}
+          onImported={() => {
+            qc.invalidateQueries({ queryKey: ["transactions"] });
+            qc.invalidateQueries({ queryKey: ["balances"] });
+            qc.invalidateQueries({ queryKey: ["budget"] });
+            qc.invalidateQueries({ queryKey: ["budget-months"] });
+            qc.invalidateQueries({ queryKey: ["ledger"] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -952,6 +983,294 @@ function NewCategoryInline({
         </button>
       </div>
       {error && <div className="text-xs text-rose-600">{error.message}</div>}
+    </div>
+  );
+}
+
+interface ParsedCandidate {
+  date: string;
+  amount: number;
+  description: string;
+  duplicate: boolean;
+  dup_reason: string | null;
+}
+interface ParseResponse {
+  candidates: ParsedCandidate[];
+  latest_existing_date: string | null;
+  parsed_count?: number;
+  raw_lines?: number;
+}
+
+function PasteStatementModal({
+  accountId,
+  accountName,
+  onClose,
+  onImported,
+}: {
+  accountId: number;
+  accountName: string;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState<ParseResponse | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    skipped_duplicates: number;
+    categorized: number;
+  } | null>(null);
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
+
+  // Debounce: parse 400 ms efter sista keystroke
+  React.useEffect(() => {
+    if (!text.trim()) {
+      setPreview(null);
+      setParseError(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const data = await api<ParseResponse>(
+          `/accounts/${accountId}/parse-pasted-statement`,
+          { method: "POST", body: JSON.stringify({ text }) },
+        );
+        setPreview(data);
+        setParseError(null);
+        // Default: exkludera kända dubbletter automatiskt
+        const dups = new Set<number>();
+        data.candidates.forEach((c, i) => {
+          if (c.duplicate) dups.add(i);
+        });
+        setExcluded(dups);
+      } catch (e) {
+        setParseError(String((e as Error).message ?? e));
+        setPreview(null);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [text, accountId]);
+
+  const candidates = preview?.candidates ?? [];
+  const willImport = candidates.filter((_, i) => !excluded.has(i));
+  const dupsCount = candidates.filter((c) => c.duplicate).length;
+
+  async function doImport() {
+    if (willImport.length === 0) return;
+    setImporting(true);
+    try {
+      const res = await api<{
+        imported: number;
+        skipped_duplicates: number;
+        categorized: number;
+      }>(`/accounts/${accountId}/import-pasted-statement`, {
+        method: "POST",
+        body: JSON.stringify({
+          rows: willImport.map((c) => ({
+            date: c.date,
+            amount: c.amount,
+            description: c.description,
+          })),
+        }),
+      });
+      setImportResult(res);
+      onImported();
+    } catch (e) {
+      setParseError(String((e as Error).message ?? e));
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-lg font-semibold">
+            Klistra in kontoutdrag — {accountName}
+          </h2>
+          <button onClick={onClose} className="text-slate-600 hover:text-slate-900">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* 3-stegs-instruktion */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="bg-violet-50 rounded-lg p-4">
+              <div className="text-3xl font-light text-slate-700 mb-2">1</div>
+              <div className="font-semibold mb-1">Kopiera ditt kontoutdrag</div>
+              <div className="text-xs text-slate-700">
+                Logga in på din internetbank, markera transaktionsraderna och
+                kopiera (Ctrl+C / ⌘C).
+              </div>
+            </div>
+            <div className="bg-violet-50 rounded-lg p-4">
+              <div className="text-3xl font-light text-slate-700 mb-2">2</div>
+              <div className="font-semibold mb-1">Klistra in kontoutdraget</div>
+              <div className="text-xs text-slate-700">
+                Klistra in texten i rutan nedan. Granska vad som tolkas
+                och klicka Lägg till.
+              </div>
+            </div>
+            <div className="bg-violet-50 rounded-lg p-4">
+              <div className="text-3xl font-light text-slate-700 mb-2">3</div>
+              <div className="font-semibold mb-1">Dubbletter hanteras</div>
+              <div className="text-xs text-slate-700">
+                Rader som redan finns på kontot (samma datum + belopp)
+                markeras automatiskt och hoppas över.
+              </div>
+            </div>
+          </div>
+
+          {preview?.latest_existing_date && (
+            <div className="text-center text-sm text-slate-700">
+              Senaste banktransaktion registrerades{" "}
+              <strong>{preview.latest_existing_date}</strong>
+            </div>
+          )}
+
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Klistra in ditt kontoutdrag här. Exempel:\n2026-04-22\tBODIL RAPP\t6 400,00\n2026-04-21\tIMPORTERADE KONTOHÄNDELSER\t-1 076,16`}
+            className="w-full border-2 border-slate-200 rounded-lg p-3 text-sm font-mono min-h-[160px]"
+            autoFocus
+          />
+
+          {parseError && (
+            <div className="text-sm text-rose-600 bg-rose-50 rounded p-2">
+              {parseError}
+            </div>
+          )}
+
+          {importResult ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-sm">
+              <div className="font-semibold text-emerald-800">Klart!</div>
+              <div className="text-emerald-700 mt-1">
+                {importResult.imported} transaktion(er) importerad(e)
+                {importResult.skipped_duplicates > 0 &&
+                  `, ${importResult.skipped_duplicates} hoppade över (dubbletter)`}
+                {importResult.categorized > 0 &&
+                  `, ${importResult.categorized} auto-kategoriserade`}
+                .
+              </div>
+              <button
+                onClick={() => {
+                  setText("");
+                  setPreview(null);
+                  setExcluded(new Set());
+                  setImportResult(null);
+                }}
+                className="mt-2 text-xs text-emerald-700 underline"
+              >
+                Klistra in ett till utdrag
+              </button>
+            </div>
+          ) : preview && candidates.length > 0 ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-slate-50 border-b text-xs text-slate-700 flex justify-between">
+                <span>
+                  {candidates.length} rader tolkade
+                  {dupsCount > 0 && (
+                    <span className="text-amber-700">
+                      {" "}· {dupsCount} dubbletter ignoreras automatiskt
+                    </span>
+                  )}
+                </span>
+                <span>{willImport.length} st att importera</span>
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr className="text-left text-xs uppercase text-slate-700 border-b">
+                      <th className="py-2 pl-3 pr-2"></th>
+                      <th className="py-2 pr-3">Datum</th>
+                      <th className="py-2 pr-3">Beskrivning</th>
+                      <th className="py-2 pr-3 text-right">Belopp</th>
+                      <th className="py-2 pr-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((c, i) => {
+                      const isExcluded = excluded.has(i);
+                      return (
+                        <tr
+                          key={i}
+                          className={
+                            "border-b last:border-b-0 " +
+                            (isExcluded
+                              ? "bg-slate-50 opacity-60"
+                              : c.duplicate
+                              ? "bg-amber-50"
+                              : "")
+                          }
+                        >
+                          <td className="py-1.5 pl-3 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={!isExcluded}
+                              onChange={(e) => {
+                                const next = new Set(excluded);
+                                if (e.target.checked) next.delete(i);
+                                else next.add(i);
+                                setExcluded(next);
+                              }}
+                            />
+                          </td>
+                          <td className="py-1.5 pr-3 text-slate-700">{c.date}</td>
+                          <td className="py-1.5 pr-3">{c.description}</td>
+                          <td
+                            className={
+                              "py-1.5 pr-3 text-right font-medium " +
+                              (c.amount < 0 ? "text-rose-600" : "text-emerald-700")
+                            }
+                          >
+                            {formatSEK(c.amount)}
+                          </td>
+                          <td className="py-1.5 pr-3 text-xs text-amber-700">
+                            {c.duplicate && (c.dup_reason ?? "dubblett")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : preview && candidates.length === 0 ? (
+            <div className="text-sm text-slate-700 bg-amber-50 rounded p-3">
+              Inga rader kunde tolkas. Kontrollera att texten har datum +
+              beskrivning + belopp på varje rad. Format som funkar:{" "}
+              <code>2026-04-22 BODIL RAPP 6 400,00</code> (tab- eller
+              mellanslags-separerat).
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2 p-4 border-t">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded border border-slate-300 bg-white text-sm"
+          >
+            {importResult ? "Stäng" : "Avbryt"}
+          </button>
+          {!importResult && (
+            <button
+              onClick={doImport}
+              disabled={importing || willImport.length === 0}
+              className="px-4 py-2 rounded bg-violet-600 text-white text-sm disabled:opacity-50"
+            >
+              {importing
+                ? "Importerar…"
+                : willImport.length > 0
+                ? `Lägg till ${willImport.length} rader`
+                : "Lägg till"}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
