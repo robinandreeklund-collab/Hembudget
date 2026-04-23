@@ -3,16 +3,26 @@
 All rendering körs headless (Agg-backend) och returnerar bytes direkt.
 Vi använder en mjuk, professionell palette med konsistenta färger
 mellan figurerna så rapporten hänger ihop visuellt.
+
+**Graceful degradation:** om matplotlib saknas i miljön (t.ex. user
+har inte kört 'pip install matplotlib' efter pull) returnerar chart-
+funktionerna None istället för att krascha. PDF-rapporten byggs då
+utan diagram — KPI, tabeller och transfer-förslag fungerar ändå.
 """
 from __future__ import annotations
 
 import io
 from typing import Iterable
 
-import matplotlib
+HAS_MATPLOTLIB = False
+try:
+    import matplotlib
 
-matplotlib.use("Agg")  # headless — måste sättas innan pyplot-import
-import matplotlib.pyplot as plt  # noqa: E402
+    matplotlib.use("Agg")  # headless — måste sättas innan pyplot-import
+    import matplotlib.pyplot as plt  # noqa: E402
+    HAS_MATPLOTLIB = True
+except ImportError:
+    plt = None  # type: ignore[assignment]
 
 
 # Tailwind-inspirerad palette — jordnära men ändå distinkt.
@@ -51,7 +61,9 @@ def pie_chart(
     title: str,
     palette: list[str] | None = None,
     max_slices: int = 8,
-) -> bytes:
+) -> bytes | None:
+    if not HAS_MATPLOTLIB:
+        return None
     """Donut-chart för kategorifördelning. Slår ihop svansen till
     'Övrigt' om antal slices överstiger max_slices — 12 röda slices
     blir oläsligt."""
@@ -116,7 +128,9 @@ def bar_chart_budget_vs_actual(
     actual: list[float],
     *,
     title: str,
-) -> bytes:
+) -> bytes | None:
+    if not HAS_MATPLOTLIB:
+        return None
     """Horizontal bar chart: planerat vs faktiskt per kategori.
     Utgifter plottas som absolutbelopp. Röd stapel = faktiskt > planerat."""
     if not categories:
@@ -188,7 +202,9 @@ def diff_chart_prev_month(
     diffs: list[float],
     *,
     title: str,
-) -> bytes:
+) -> bytes | None:
+    if not HAS_MATPLOTLIB:
+        return None
     """Horizontell bar för förändring mot förra månaden — röd negativ,
     grön positiv. Sorteras fallande efter absolut belopp."""
     if not categories:

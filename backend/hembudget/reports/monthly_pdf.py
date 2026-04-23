@@ -302,7 +302,9 @@ def render_pdf(data: MonthlyReportData) -> bytes:
     story.append(_kpi_box(data.summary))
     story.append(Spacer(1, 14))
 
-    # 3+4. Två piecharts sida vid sida (2-col table)
+    # 3+4. Två piecharts sida vid sida (2-col table).
+    # Om matplotlib saknas returnerar charts None — vi hoppar över
+    # diagramsektionen och går vidare till tabellerna.
     exp_labels = [p[0] for p in data.expense_slices]
     exp_values = [p[1] for p in data.expense_slices]
     inc_labels = [p[0] for p in data.income_slices]
@@ -318,21 +320,32 @@ def render_pdf(data: MonthlyReportData) -> bytes:
         title="Inkomst per person",
         palette=charts.PERSON_PALETTE,
     )
-    img_exp = Image(io.BytesIO(pie_exp), width=87 * mm, height=62 * mm)
-    img_inc = Image(io.BytesIO(pie_inc), width=87 * mm, height=62 * mm)
-    pie_tbl = Table(
-        [[img_exp, img_inc]],
-        colWidths=[90 * mm, 90 * mm],
-    )
-    pie_tbl.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
-    story.append(pie_tbl)
-    story.append(Spacer(1, 12))
+    if pie_exp is not None and pie_inc is not None:
+        img_exp = Image(io.BytesIO(pie_exp), width=87 * mm, height=62 * mm)
+        img_inc = Image(io.BytesIO(pie_inc), width=87 * mm, height=62 * mm)
+        pie_tbl = Table(
+            [[img_exp, img_inc]],
+            colWidths=[90 * mm, 90 * mm],
+        )
+        pie_tbl.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        story.append(pie_tbl)
+        story.append(Spacer(1, 12))
+    elif not charts.HAS_MATPLOTLIB:
+        story.append(
+            Paragraph(
+                "Tips: installera <b>matplotlib</b> i backend-venv:en för att "
+                "få med tårtdiagram och stapeldiagram i rapporten "
+                "(<code>pip install matplotlib</code>).",
+                hint,
+            )
+        )
+        story.append(Spacer(1, 8))
 
     # 5. Transfer-förslag
     if data.transfers:
@@ -363,8 +376,9 @@ def render_pdf(data: MonthlyReportData) -> bytes:
             [abs(float(l.actual)) for l in budget_rows],
             title="Budget vs utfall per kategori",
         )
-        story.append(Image(io.BytesIO(bar), width=180 * mm, height=None))
-        story.append(Spacer(1, 10))
+        if bar is not None:
+            story.append(Image(io.BytesIO(bar), width=180 * mm, height=None))
+            story.append(Spacer(1, 10))
 
     # 7. Prev-month-deltas — chart
     if data.deltas:
@@ -373,8 +387,11 @@ def render_pdf(data: MonthlyReportData) -> bytes:
             [d[1] for d in data.deltas[:10]],
             title=f"Största förändringar mot {_format_month_label(_prev_month(data.month))}",
         )
-        story.append(Image(io.BytesIO(delta_chart), width=180 * mm, height=None))
-        story.append(Spacer(1, 10))
+        if delta_chart is not None:
+            story.append(
+                Image(io.BytesIO(delta_chart), width=180 * mm, height=None)
+            )
+            story.append(Spacer(1, 10))
 
     # 8. Detaljerad kategoritabell
     story.append(PageBreak())

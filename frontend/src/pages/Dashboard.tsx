@@ -76,6 +76,7 @@ interface BalanceRow {
   total_value?: number;
   transactions_total_all_time?: number;
   first_transaction_date?: string | null;
+  incognito?: boolean;
 }
 
 export default function Dashboard() {
@@ -315,9 +316,36 @@ export default function Dashboard() {
         <Card
           title={`Saldo per konto — ${balancesQ.data.as_of}`}
           action={
-            <span className="text-sm font-semibold">
-              Totalt {formatSEK(balancesQ.data.total_balance)}
-            </span>
+            (() => {
+              const incognitoCount = balancesQ.data.accounts.filter((a) => a.incognito).length;
+              const visibleSum = balancesQ.data.accounts.reduce(
+                (s, a) => s + (a.total_value ?? a.current_balance),
+                0,
+              );
+              const totalApi = balancesQ.data.total_balance;
+              const showNote = incognitoCount > 0 || Math.abs(visibleSum - totalApi) > 1;
+              return (
+                <div className="text-right">
+                  <div className="text-sm font-semibold" title="Total nettoförmögenhet (exkl. inkognito-konton)">
+                    Totalt {formatSEK(totalApi)}
+                  </div>
+                  {showNote && (
+                    <div
+                      className="text-[10px] text-slate-500"
+                      title={`Summa av alla rader i tabellen: ${formatSEK(visibleSum)}. ${
+                        incognitoCount > 0
+                          ? "Inkognito-konton räknas inte med i nettoförmögenheten."
+                          : ""
+                      }`}
+                    >
+                      {incognitoCount > 0
+                        ? `exkl. ${incognitoCount} inkognito-konto`
+                        : `(summa i tabell: ${formatSEK(visibleSum)})`}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
           }
         >
           <table className="w-full text-sm">

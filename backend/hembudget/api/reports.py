@@ -129,13 +129,14 @@ def pdf_report(month: str, session: Session = Depends(db)) -> Response:
     """Rik månadsrapport som PDF: KPI-ruta, piecharts, transfer-förslag,
     budget vs utfall, förändring mot förra månaden, grupperad tabell.
 
-    Graceful — returnerar 501 om reportlab eller matplotlib saknas."""
+    ReportLab är obligatoriskt. Matplotlib är optional — utan den byggs
+    PDF:en ändå, men utan diagram."""
     try:
         from ..reports.monthly_pdf import build_report_data, render_pdf
     except ImportError as exc:
         return Response(
             status_code=501,
-            content=f"PDF-rapport kräver reportlab + matplotlib: {exc}",
+            content=f"PDF-rapport kräver reportlab: {exc}",
         )
 
     data = build_report_data(session, month)

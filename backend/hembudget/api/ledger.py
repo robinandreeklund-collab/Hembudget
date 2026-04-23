@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from ..db.models import (
     Account,
     Category,
+    FundHolding,
     LockedPeriod,
     Loan,
     LoanPayment,
@@ -78,9 +79,22 @@ def huvudbok(
     # BÅDA sidor, annars räknas ena sidan som inkomst/utgift och andra
     # som transfer → obalans = tx:ens belopp. Annars får man en stor
     # "Interna överföringar balanserar"-summa utan några synliga orphans.
-    upcoming_matched_ids: set[int] = {
+    # Samla alla transaktioner som är matchade mot en upcoming. Det finns
+    # TVÅ vägar en match kan skapas:
+    # 1. UpcomingPayment-junction (nyare, stödjer delbetalningar)
+    # 2. UpcomingTransaction.matched_transaction_id (äldre, en-till-en)
+    # Båda måste kollas — vi har sett Amex-autogiro som bara använder
+    # det gamla fältet och då missar ledger-fallback:en dem helt.
+    payment_ids: set[int] = {
         tid for (tid,) in session.query(UpcomingPayment.transaction_id).all()
     }
+    legacy_match_ids: set[int] = {
+        tid
+        for (tid,) in session.query(
+            UpcomingTransaction.matched_transaction_id
+        ).filter(UpcomingTransaction.matched_transaction_id.is_not(None)).all()
+    }
+    upcoming_matched_ids: set[int] = payment_ids | legacy_match_ids
     reclassified_transfer_ids: set[int] = set(upcoming_matched_ids)
     if upcoming_matched_ids:
         partner_rows = (
@@ -97,7 +111,7 @@ def huvudbok(
     # transfer men matchad mot en Amex-faktura-upcoming). Utan detta
     # hamnar de under 'Okategoriserat' i resultaträkningen.
     upcoming_cat_by_tx: dict[int, tuple[int | None, str | None]] = {}
-    if upcoming_matched_ids:
+    if payment_ids:
         up_rows = (
             session.query(
                 UpcomingPayment.transaction_id,
@@ -117,12 +131,48 @@ def huvudbok(
             if tx_id in upcoming_cat_by_tx:
                 continue
             upcoming_cat_by_tx[tx_id] = (cat_id, cat_name)
+    # Komplement för legacy-matchade tx (matched_transaction_id direkt
+    # på UpcomingTransaction). En tx kan vara matchad via bägge, så vi
+    # överskriver bara om vi inte redan har data.
+    if legacy_match_ids:
+        legacy_rows = (
+            session.query(
+                UpcomingTransaction.matched_transaction_id,
+                UpcomingTransaction.category_id,
+                Category.name,
+            )
+            .outerjoin(
+                Category, Category.id == UpcomingTransaction.category_id
+            )
+            .filter(
+                UpcomingTransaction.matched_transaction_id.is_not(None)
+            )
+            .all()
+        )
+        for tx_id, cat_id, cat_name in legacy_rows:
+            if tx_id in upcoming_cat_by_tx:
+                continue
+            upcoming_cat_by_tx[tx_id] = (cat_id, cat_name)
 
     # ---------- Balansrapport per konto ----------
     accounts = session.query(Account).order_by(Account.id).all()
     account_rows = []
     total_assets = 0.0
     total_liabilities = 0.0
+
+    # Fond-market_value per konto (ISK). Gör att closing_balance och
+    # total_assets stämmer mot verkligt förmögenhetsvärde, inte bara
+    # cash-delen som typiskt är 0-1 kr.
+    fund_values_by_acc: dict[int, Decimal] = {}
+    for acc_id, fund_total in (
+        session.query(
+            FundHolding.account_id,
+            func.coalesce(func.sum(FundHolding.market_value), 0),
+        )
+        .group_by(FundHolding.account_id)
+        .all()
+    ):
+        fund_values_by_acc[acc_id] = Decimal(str(fund_total or 0))
 
     for acc in accounts:
         # Opening = opening_balance + rörelse FÖRE period_start
@@ -175,9 +225,14 @@ def huvudbok(
             Decimal("0"),
         )
 
-        closing = (
+        cash_closing = (
             opening_at_period + income_in - expenses_in + transfer_in - transfer_out
         )
+        # För ISK med fonder: closing_balance = cash + fond-market_value.
+        # Utan detta skulle ISK visa 1 kr i huvudboken men 66 602 kr på
+        # dashboarden → inkonsistent.
+        fund_value = fund_values_by_acc.get(acc.id, Decimal("0"))
+        closing = cash_closing + fund_value
 
         # Inkognito-konton: saldo och privata utgifter räknas inte med i
         # familjens totalekonomi. Bara lön (income) + överföringar får
@@ -209,6 +264,8 @@ def huvudbok(
             "transfer_in": float(transfer_in),
             "transfer_out": float(transfer_out),
             "closing_balance": float(closing),
+            "cash_balance": float(cash_closing),
+            "fund_value": float(fund_value),
             "transaction_count": len(tx_in_period),
         })
 
@@ -291,6 +348,14 @@ def huvudbok(
         # motparten. Detta matchar åtgärda-listans filter så räknare
         # är konsistenta.
         if tx.transfer_pair_id is not None:
+            continue
+        # Autogiro-betalningar till kreditkort (orphans: is_transfer=True
+        # men saknar pair) räknas varken som utgift eller inkomst i
+        # resultaträkningen — själva kortets köp-transaktioner står
+        # redan som utgifter. Att räkna även autogirot skulle
+        # dubbelbokföra. Dessa dyker upp på /transfers som 'Markerade
+        # som överföring utan par' så användaren kan hantera dem.
+        if tx.is_transfer and tx.transfer_pair_id is None:
             continue
 
         # Om tx har splits → använd splits per kategori, ignorera tx.category_id
