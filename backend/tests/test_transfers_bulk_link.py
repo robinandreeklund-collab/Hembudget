@@ -153,6 +153,32 @@ def test_auto_pair_uncategorized_pairs_obvious_matches(client):
     assert paired["count"] == 3
 
 
+def test_auto_pair_handles_date_tolerance_and_amount_eps(client):
+    """Real-world: kreditkortsdraget bokförs ofta 1-2 dagar efter checking-
+    sidan, och Decimal-precision i SQLite kan göra exakt == miss. Auto-
+    pair ska hantera båda."""
+    c, SL = client
+    from hembudget.db.models import Account, Transaction
+    with SL() as s:
+        chk = Account(name="Mat", bank="nordea", type="shared")
+        amex = Account(name="Amex", bank="amex", type="credit",
+                       bankgiro="5127-5477")
+        s.add_all([chk, amex]); s.flush()
+        # Mat -13500 på 27 mars, Amex +13500 på 28 mars (1 dag senare)
+        s.add(Transaction(account_id=chk.id, date=date(2026,3,27),
+                          amount=Decimal("-13500.00"), currency="SEK",
+                          raw_description="BG 5127-5477", hash="h_chk"))
+        s.add(Transaction(account_id=amex.id, date=date(2026,3,28),
+                          amount=Decimal("13500"), currency="SEK",
+                          raw_description="Mottagen", hash="h_amex"))
+        s.commit()
+
+    r = c.post("/transfers/auto-pair-uncategorized",
+               json={"month": "2026-03"})
+    body = r.json()
+    assert body["linked"] == 1, body
+
+
 def test_auto_pair_skips_ambiguous_when_multiple_partners(client):
     """Om EN negativ rad har FLERA matchande positiva (samma dag, samma
     belopp) på olika konton → ambiguous, hoppa över istället för att

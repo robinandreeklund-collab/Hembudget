@@ -651,11 +651,16 @@ function UncategorizedList({
         linked: number;
         ambiguous_count: number;
         no_match_count: number;
+        scanned: number;
       }>("/transfers/auto-pair-uncategorized", {
         method: "POST",
         body: JSON.stringify({ tx_ids: txIds }),
       }),
-    onSuccess: onDone,
+    onSuccess: (data) => {
+      // Bara invalidera om något faktiskt parades — annars stannar
+      // listan så användaren kan se feedback om varför inget hände.
+      if (data.linked > 0) onDone();
+    },
   });
 
   return (
@@ -678,12 +683,34 @@ function UncategorizedList({
         </div>
       )}
       {autoPairMut.data && (
-        <div className="text-xs bg-emerald-50 border border-emerald-200 rounded p-2 mb-2">
-          ✓ {autoPairMut.data.linked} par hopparade som överföringar.
+        <div
+          className={
+            "text-xs rounded p-2 mb-2 border " +
+            (autoPairMut.data.linked > 0
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : "bg-amber-50 border-amber-200 text-amber-800")
+          }
+        >
+          {autoPairMut.data.linked > 0 ? "✓ " : "⚠ "}
+          Scannade {autoPairMut.data.scanned} negativa rader →{" "}
+          <strong>{autoPairMut.data.linked} par hopparade</strong> som
+          överföringar.
           {autoPairMut.data.ambiguous_count > 0 &&
             ` ${autoPairMut.data.ambiguous_count} hade flera kandidater och hoppades över.`}
           {autoPairMut.data.no_match_count > 0 &&
-            ` ${autoPairMut.data.no_match_count} hade ingen motpart (= verkliga utgifter, kategorisera nedan).`}
+            ` ${autoPairMut.data.no_match_count} hade ingen motpart med samma datum + belopp på annat konto (= troliga riktiga utgifter, kategorisera nedan).`}
+          {autoPairMut.data.linked === 0 && (
+            <div className="mt-1">
+              Möjliga orsaker: motparten ligger på ett konto du inte
+              importerat, beloppen skiljer sig något, eller datumen är
+              mer än 2 dagar isär.
+            </div>
+          )}
+        </div>
+      )}
+      {autoPairMut.error && (
+        <div className="text-xs bg-rose-50 border border-rose-200 rounded p-2 mb-2 text-rose-700">
+          Fel: {(autoPairMut.error as Error).message}
         </div>
       )}
       {rows.length === 0 ? (

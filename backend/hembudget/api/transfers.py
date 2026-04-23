@@ -197,18 +197,30 @@ def auto_pair_uncategorized(
     claimed: set[int] = set()
     detector = TransferDetector(session)
 
+    # SQLite kan lagra Decimal som REAL → exakt == kan missa pga float-
+    # precision. Använd ±0.01 kr-fönster + ±2 dagar för att fånga
+    # öresavrundning och autogiro-dröjsmål.
+    AMOUNT_EPS = Decimal("0.01")
+    DATE_EPS_DAYS = 2
+
+    from datetime import timedelta
+
+    # Inkludera ALLA okategoriserade rader på alla konton som potentiella
+    # motparter — inte bara de i candidates-listan, eftersom partnern
+    # ofta finns på ett kortkonto och är felklassad som "Inkomst" (= har
+    # category_id satt). Vi söker per src bland ALLA oparade rader.
     for src in candidates:
         if src.id in claimed or src.amount >= 0:
             continue
         abs_amt = -src.amount
-        # Leta motpart: exakt samma belopp, samma datum, annat konto,
-        # är inte redan parad och inte en loan-payment.
         partners = (
             session.query(Transaction)
             .filter(
                 Transaction.account_id != src.account_id,
-                Transaction.amount == abs_amt,
-                Transaction.date == src.date,
+                Transaction.amount >= abs_amt - AMOUNT_EPS,
+                Transaction.amount <= abs_amt + AMOUNT_EPS,
+                Transaction.date >= src.date - timedelta(days=DATE_EPS_DAYS),
+                Transaction.date <= src.date + timedelta(days=DATE_EPS_DAYS),
                 Transaction.transfer_pair_id.is_(None),
                 Transaction.id != src.id,
             )
@@ -219,8 +231,13 @@ def auto_pair_uncategorized(
             no_match.append(src.id)
             continue
         if len(partners) > 1:
-            ambiguous.append(src.id)
-            continue
+            # Försök föredra exakt samma datum → kan reda ut tvetydighet
+            same_day = [p for p in partners if p.date == src.date]
+            if len(same_day) == 1:
+                partners = same_day
+            else:
+                ambiguous.append(src.id)
+                continue
         dst = partners[0]
         try:
             detector.link_manual(src.id, dst.id)
@@ -235,6 +252,7 @@ def auto_pair_uncategorized(
         "ambiguous_count": len(ambiguous),
         "ambiguous": ambiguous,
         "no_match_count": len(no_match),
+        "scanned": len(candidates),
     }
 
 
