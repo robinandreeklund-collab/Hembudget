@@ -645,9 +645,47 @@ function UncategorizedList({
       }),
     onSuccess: onDone,
   });
+  const autoPairMut = useMutation({
+    mutationFn: (txIds: number[]) =>
+      api<{
+        linked: number;
+        ambiguous_count: number;
+        no_match_count: number;
+      }>("/transfers/auto-pair-uncategorized", {
+        method: "POST",
+        body: JSON.stringify({ tx_ids: txIds }),
+      }),
+    onSuccess: onDone,
+  });
 
   return (
     <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
+      {rows.length > 1 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded p-2 mb-2 flex items-center gap-2 text-xs">
+          <span className="flex-1">
+            <strong>Tips:</strong> rader där en negativ + positiv på olika
+            konton har samma datum + exakt belopp är troligtvis interna
+            överföringar (t.ex. kreditkortsbetalningar). Para alla sådana
+            i ett klick:
+          </span>
+          <button
+            onClick={() => autoPairMut.mutate(rows.map((r) => r.id))}
+            disabled={autoPairMut.isPending}
+            className="bg-emerald-600 text-white px-3 py-1.5 rounded text-xs disabled:opacity-50"
+          >
+            {autoPairMut.isPending ? "Parar…" : "Auto-para uppenbara"}
+          </button>
+        </div>
+      )}
+      {autoPairMut.data && (
+        <div className="text-xs bg-emerald-50 border border-emerald-200 rounded p-2 mb-2">
+          ✓ {autoPairMut.data.linked} par hopparade som överföringar.
+          {autoPairMut.data.ambiguous_count > 0 &&
+            ` ${autoPairMut.data.ambiguous_count} hade flera kandidater och hoppades över.`}
+          {autoPairMut.data.no_match_count > 0 &&
+            ` ${autoPairMut.data.no_match_count} hade ingen motpart (= verkliga utgifter, kategorisera nedan).`}
+        </div>
+      )}
       {rows.length === 0 ? (
         <div className="text-xs text-slate-700">Allt åtgärdat ✓</div>
       ) : (

@@ -150,6 +150,94 @@ class BulkLinkIn(BaseModel):
     pairs: list[LinkIn]
 
 
+@router.post("/auto-pair-uncategorized")
+def auto_pair_uncategorized(
+    payload: dict, session: Session = Depends(db),
+) -> dict:
+    """Scanna alla okategoriserade + oparade rader inom en period och
+    para de som har EXAKT en motpart med samma datum + exakt belopp på
+    ett annat konto. Mer aggressiv än detect_internal_transfers som
+    har fler säkerhetsvillkor (BG-match, kontonummer i description,
+    osv.) — denna tittar bara på date+amount+olika_konto.
+
+    Body: `{"year": 2026}` eller `{"month": "2026-04"}`.
+    Body: `{"tx_ids": [...]}` för att begränsa till specifika rader
+    (t.ex. de som syns i huvudbokens åtgärda-list).
+
+    Returnerar `{"linked": N, "ambiguous": [tx_id, ...], "no_match": [...]}`.
+    """
+    from datetime import date as _date
+
+    year = payload.get("year")
+    month = payload.get("month")
+    tx_ids = payload.get("tx_ids")
+
+    q = session.query(Transaction).filter(
+        Transaction.category_id.is_(None),
+        Transaction.is_transfer.is_(False),
+        Transaction.transfer_pair_id.is_(None),
+    )
+    if tx_ids and isinstance(tx_ids, list):
+        q = q.filter(Transaction.id.in_(tx_ids))
+    elif month:
+        y, m = map(int, month.split("-"))
+        start = _date(y, m, 1)
+        end = _date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)
+        q = q.filter(Transaction.date >= start, Transaction.date < end)
+    elif year:
+        q = q.filter(
+            Transaction.date >= _date(year, 1, 1),
+            Transaction.date < _date(year + 1, 1, 1),
+        )
+
+    candidates = q.all()
+    linked = 0
+    ambiguous: list[int] = []
+    no_match: list[int] = []
+    claimed: set[int] = set()
+    detector = TransferDetector(session)
+
+    for src in candidates:
+        if src.id in claimed or src.amount >= 0:
+            continue
+        abs_amt = -src.amount
+        # Leta motpart: exakt samma belopp, samma datum, annat konto,
+        # är inte redan parad och inte en loan-payment.
+        partners = (
+            session.query(Transaction)
+            .filter(
+                Transaction.account_id != src.account_id,
+                Transaction.amount == abs_amt,
+                Transaction.date == src.date,
+                Transaction.transfer_pair_id.is_(None),
+                Transaction.id != src.id,
+            )
+            .all()
+        )
+        partners = [p for p in partners if p.id not in claimed]
+        if len(partners) == 0:
+            no_match.append(src.id)
+            continue
+        if len(partners) > 1:
+            ambiguous.append(src.id)
+            continue
+        dst = partners[0]
+        try:
+            detector.link_manual(src.id, dst.id)
+            claimed.add(src.id)
+            claimed.add(dst.id)
+            linked += 1
+        except ValueError:
+            ambiguous.append(src.id)
+
+    return {
+        "linked": linked,
+        "ambiguous_count": len(ambiguous),
+        "ambiguous": ambiguous,
+        "no_match_count": len(no_match),
+    }
+
+
 @router.post("/link-bulk")
 def link_pairs_bulk(payload: BulkLinkIn, session: Session = Depends(db)) -> dict:
     """Para ihop många par i ett svep — användsfall: alla "100 % säkra"

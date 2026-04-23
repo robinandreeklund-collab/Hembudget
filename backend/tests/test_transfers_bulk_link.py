@@ -127,3 +127,59 @@ def test_bulk_link_returns_errors_for_invalid_ids(client):
     assert body["linked"] == 1
     assert len(body["errors"]) == 1
     assert body["errors"][0]["error"] == "not_found"
+
+
+def test_auto_pair_uncategorized_pairs_obvious_matches(client):
+    """auto-pair-uncategorized scannar uncategorized + oparade rader och
+    parar de som har EXAKT en motpart med samma datum + belopp på annat
+    konto. Användsfall: kreditkortsbetalningar som detect_internal_transfers
+    missade men som är solklara från åtgärda-listan i huvudboken."""
+    c, SL = client
+    pairs = _seed_credit_card_payments(SL)
+
+    # Skicka uncategorized tx_ids — alla 6 ska finnas där
+    all_ids = [tid for pair in pairs for tid in pair]
+    r = c.post(
+        "/transfers/auto-pair-uncategorized",
+        json={"tx_ids": all_ids},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["linked"] == 3  # 3 par = 6 tx
+    assert body["ambiguous_count"] == 0
+
+    # Verifiera att alla 6 nu är parade som transfer
+    paired = c.get("/transfers/paired").json()
+    assert paired["count"] == 3
+
+
+def test_auto_pair_skips_ambiguous_when_multiple_partners(client):
+    """Om EN negativ rad har FLERA matchande positiva (samma dag, samma
+    belopp) på olika konton → ambiguous, hoppa över istället för att
+    gissa fel."""
+    c, SL = client
+    from hembudget.db.models import Account, Transaction
+    with SL() as s:
+        chk = Account(name="Chk", bank="nordea", type="checking")
+        a1 = Account(name="A1", bank="amex", type="credit")
+        a2 = Account(name="A2", bank="seb_kort", type="credit")
+        s.add_all([chk, a1, a2]); s.flush()
+        # En negativ men TVÅ positiva på samma datum + belopp
+        s.add(Transaction(account_id=chk.id, date=date(2026,4,1),
+                          amount=Decimal("-500"), currency="SEK",
+                          raw_description="X", hash="h_chk"))
+        s.add(Transaction(account_id=a1.id, date=date(2026,4,1),
+                          amount=Decimal("500"), currency="SEK",
+                          raw_description="A", hash="h_a1"))
+        s.add(Transaction(account_id=a2.id, date=date(2026,4,1),
+                          amount=Decimal("500"), currency="SEK",
+                          raw_description="B", hash="h_a2"))
+        s.commit()
+
+    r = c.post(
+        "/transfers/auto-pair-uncategorized",
+        json={"month": "2026-04"},
+    )
+    body = r.json()
+    assert body["linked"] == 0
+    assert body["ambiguous_count"] == 1
