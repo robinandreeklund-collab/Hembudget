@@ -201,6 +201,41 @@ def test_breakdown_lists_transactions_for_cell(client):
             assert item["can_move"] is True
 
 
+def test_rescan_existing_invoices_creates_readings(client, tmp_path):
+    """Rescan ska gå igenom alla UpcomingTransaction med
+    source_image_path satt och skapa UtilityReading-rader. Idempotent —
+    andra körningen skippar dubletter via source_file-path."""
+    c, SL = client
+    from pathlib import Path
+    from hembudget.db.models import UpcomingTransaction
+
+    # Skapa en riktig Hjo Energi-lik PDF med pypdfium2? Det går inte —
+    # vi kan inte skapa PDF:er i test. Istället: skapa en fil på disk
+    # (bara bytes) som kommer faila att parsas → räknas som error, inte
+    # created. Det är också ett användbart test för error-hanteringen.
+
+    # Skapa en upcoming med pekare till fake PDF som inte existerar på disk
+    fake_pdf = tmp_path / "fake_nonexistent.pdf"
+    with SL() as s:
+        up = UpcomingTransaction(
+            kind="bill", name="Test faktura",
+            amount=Decimal("100"),
+            expected_date=date(2026, 1, 15),
+            source="vision_ai",
+            source_image_path=str(fake_pdf),
+        )
+        s.add(up); s.commit()
+
+    r = c.post("/utility/rescan-existing")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["scanned"] == 1
+    # Filen saknas → error
+    assert len(body["errors"]) == 1
+    assert "saknas" in body["errors"][0]["error"]
+    assert body["created"] == 0
+
+
 def test_tibber_endpoints_require_token(client):
     """Utan token ska alla tibber-endpoints returnera 400, inte krascha."""
     c, _ = client

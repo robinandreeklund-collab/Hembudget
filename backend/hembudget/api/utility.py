@@ -38,6 +38,7 @@ from ..db.models import (
     Category,
     Transaction,
     TransactionSplit,
+    UpcomingTransaction,
     UpcomingTransactionLine,
     UtilityReading,
 )
@@ -475,6 +476,104 @@ async def parse_utility_pdf_endpoint(
         result_dict["saved_id"] = reading.id
 
     return result_dict
+
+
+# -------- Rescan av befintliga fakturor --------
+
+@router.post("/rescan-existing")
+def rescan_existing_invoices(session: Session = Depends(db)) -> dict:
+    """Gar igenom alla UpcomingTransaction med source_image_path satt
+    och forsoker extrahera utility-data fran PDF:en. Skapar
+    UtilityReading-rader for de som ar energifakturor (Hjo Energi,
+    Telinet, Vattenfall etc.) och som inte redan har en reading
+    kopplad (dedup via source_file-path).
+
+    Anvandsfall: du har redan laddat upp fakturor via /upcoming-vision-
+    parser innan /utility-parsern fanns. Denna endpoint bygger historisk
+    utility-data utan att du behover ladda upp PDF:erna igen.
+    """
+    from ..parsers.utility_pdfs import parse_utility_pdf
+
+    # Alla UpcomingTransactions med bifogad PDF (oavsett kind eftersom
+    # en del vision-parsade fakturor kan klassas som bill men innehalla
+    # elforbrukning)
+    ups = (
+        session.query(UpcomingTransaction)
+        .filter(UpcomingTransaction.source_image_path.is_not(None))
+        .all()
+    )
+
+    # Befintliga reading source-filer for dedup
+    existing_sources = {
+        r.source_file for r in session.query(UtilityReading).all()
+        if r.source_file
+    }
+
+    scanned = 0
+    parsed_ok = 0
+    created = 0
+    skipped_dup = 0
+    skipped_no_data = 0
+    errors: list[dict] = []
+
+    for up in ups:
+        scanned += 1
+        path_str = up.source_image_path
+        if not path_str:
+            continue
+        p = Path(path_str)
+        if not p.exists():
+            errors.append({"upcoming_id": up.id, "error": f"filen saknas: {path_str}"})
+            continue
+        # Skip non-PDF files (bilder parsas inte av utility-parsern)
+        if p.suffix.lower() not in (".pdf",):
+            continue
+        # Dedup via source_file — redan scannade hoppar vi over
+        if path_str in existing_sources:
+            skipped_dup += 1
+            continue
+        try:
+            content = p.read_bytes()
+            res = parse_utility_pdf(content)
+        except Exception as exc:
+            errors.append({"upcoming_id": up.id, "error": str(exc)})
+            continue
+        parsed_ok += 1
+        # Kvalitetsgate: for att skapa en reading ska vi antingen
+        # detektera formatet ELLER ha bade period + kostnad
+        if res.detected_format == "unknown" and (
+            res.period_start is None or res.cost_kr is None
+        ):
+            skipped_no_data += 1
+            continue
+        if res.cost_kr is None or res.period_start is None:
+            skipped_no_data += 1
+            continue
+        reading = UtilityReading(
+            supplier=res.supplier,
+            meter_type=res.meter_type,
+            period_start=res.period_start,
+            period_end=res.period_end or res.period_start,
+            consumption=res.consumption,
+            consumption_unit=res.consumption_unit,
+            cost_kr=res.cost_kr,
+            source="pdf_rescan",
+            source_file=path_str,
+            upcoming_id=up.id,
+        )
+        session.add(reading)
+        existing_sources.add(path_str)
+        created += 1
+
+    session.flush()
+    return {
+        "scanned": scanned,
+        "parsed_ok": parsed_ok,
+        "created": created,
+        "skipped_duplicate": skipped_dup,
+        "skipped_no_data": skipped_no_data,
+        "errors": errors,
+    }
 
 
 # -------- Tibber integration --------

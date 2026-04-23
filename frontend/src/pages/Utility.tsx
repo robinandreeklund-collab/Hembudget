@@ -134,6 +134,7 @@ export default function Utility() {
       {/* Tibber real-time widget + PDF uploader (ovanför historiken) */}
       <TibberWidget />
       <UtilityPdfUploader onDone={invalidate} />
+      <RescanExistingButton onDone={invalidate} />
       <TibberSettings onSync={invalidate} />
 
       {q.isLoading ? (
@@ -509,6 +510,66 @@ interface ParsePreview {
   cost_kr: number | null;
   saved_id?: number;
   parse_errors: string[];
+}
+
+function RescanExistingButton({ onDone }: { onDone: () => void }) {
+  const mut = useMutation({
+    mutationFn: () =>
+      api<{
+        scanned: number;
+        parsed_ok: number;
+        created: number;
+        skipped_duplicate: number;
+        skipped_no_data: number;
+        errors: Array<{ upcoming_id: number; error: string }>;
+      }>("/utility/rescan-existing", { method: "POST" }),
+    onSuccess: onDone,
+  });
+  return (
+    <Card title="Scanna befintliga fakturor">
+      <div className="text-sm text-slate-700 mb-2">
+        Gå igenom alla PDF-fakturor som redan finns i systemet (från
+        tidigare <a href="/upcoming" className="text-brand-600 underline">
+        /upcoming</a>-uppladdningar) och extrahera förbrukningsdata.
+        Idempotent — dubletter hoppas över via filsökväg. Kör när du
+        vill bygga historik utan att ladda upp PDF:erna igen.
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => mut.mutate()}
+          disabled={mut.isPending}
+          className="bg-slate-700 text-white px-4 py-2 rounded text-sm disabled:opacity-50 inline-flex items-center gap-2"
+        >
+          <RefreshCw className={"w-4 h-4 " + (mut.isPending ? "animate-spin" : "")} />
+          {mut.isPending ? "Scannar…" : "Scanna befintliga fakturor"}
+        </button>
+        {mut.data && (
+          <div className="text-xs text-slate-700">
+            Scannade <strong>{mut.data.scanned}</strong>,{" "}
+            <span className="text-emerald-700">{mut.data.created} nya läsningar skapade</span>
+            {mut.data.skipped_duplicate > 0 &&
+              `, ${mut.data.skipped_duplicate} redan scannade`}
+            {mut.data.skipped_no_data > 0 &&
+              `, ${mut.data.skipped_no_data} saknar period/kostnad`}
+            {mut.data.errors.length > 0 &&
+              `, ${mut.data.errors.length} fel`}
+          </div>
+        )}
+      </div>
+      {mut.data && mut.data.errors.length > 0 && (
+        <div className="mt-2 text-xs text-rose-600 bg-rose-50 rounded p-2 max-h-32 overflow-y-auto">
+          {mut.data.errors.slice(0, 10).map((e, i) => (
+            <div key={i}>
+              #{e.upcoming_id}: {e.error}
+            </div>
+          ))}
+          {mut.data.errors.length > 10 && (
+            <div>… och {mut.data.errors.length - 10} till</div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
 }
 
 function UtilityPdfUploader({ onDone }: { onDone: () => void }) {
