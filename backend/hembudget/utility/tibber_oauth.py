@@ -45,8 +45,12 @@ import httpx
 # https://developer.tibber.com/docs/guides/calling-api
 TIBBER_AUTHORIZE_URL = "https://thewall.tibber.com/connect/authorize"
 TIBBER_TOKEN_URL = "https://thewall.tibber.com/connect/token"
-# Nya Data API:et — GraphQL-endpoint för homes/energy-data med OAuth
-TIBBER_DATA_API_URL = "https://app.tibber.com/v4/gql"
+# GraphQL-endpoint. v1-beta stödjer både klassisk bearer-token OCH
+# OAuth-access-tokens så länge scope:en är rätt satta på dev-klienten.
+# Vi använder detta som default eftersom det har dokumenterat stabilt
+# schema; 'app.tibber.com/v4/gql' är en intern Tibber-endpoint som ofta
+# returnerar 404/502 för externa OAuth-klienter.
+TIBBER_DATA_API_URL = "https://api.tibber.com/v1-beta/gql"
 
 # Minsta scope-set vi behöver för utility-sidan. Extra scopes skadar
 # inte och kan krävas av Tibber för viss data.
@@ -262,39 +266,68 @@ class TibberOAuthClient:
                 timeout=self.timeout,
             )
         except httpx.HTTPError as exc:
-            raise TibberOAuthError(f"Nätverksfel: {exc}") from exc
+            raise TibberOAuthError(
+                f"Nätverksfel mot {TIBBER_DATA_API_URL}: {exc}"
+            ) from exc
         if resp.status_code == 401:
             raise TibberOAuthError(
-                "Tibber nekar access (401). Token kan ha återkallats — "
+                "Tibber nekar access (401). Token kan ha återkallats eller "
+                "OAuth-klienten saknar rätt scopes. Koppla från och "
                 "auktorisera på nytt."
             )
-        if resp.status_code >= 400:
+        if resp.status_code == 403:
             raise TibberOAuthError(
-                f"Tibber API svarade {resp.status_code}: {resp.text[:200]}"
+                "Tibber nekar access (403). Din OAuth-klient har inte "
+                "tillräckliga scopes för detta API. Kontrollera på "
+                "thewall.tibber.com att klienten har minst "
+                "'data-api-homes-read' och 'data-api-user-read'."
             )
-        body = resp.json()
+        if resp.status_code >= 400:
+            # Ge användaren hela svaret — schemat kan ha ändrats på Tibbers
+            # sida så vi måste se felmeddelandet för att kunna fixa querien.
+            raise TibberOAuthError(
+                f"Tibber API svarade {resp.status_code} från "
+                f"{TIBBER_DATA_API_URL}. Body: {resp.text[:400]}"
+            )
+        try:
+            body = resp.json()
+        except ValueError as exc:
+            raise TibberOAuthError(
+                f"Tibber returnerade icke-JSON: {resp.text[:200]}"
+            ) from exc
         if "errors" in body and body["errors"]:
             errs = "; ".join(
                 e.get("message", "?") for e in body["errors"]
             )
-            raise TibberOAuthError(f"GraphQL-fel: {errs}")
+            raise TibberOAuthError(
+                f"GraphQL-fel från Tibber: {errs}. "
+                f"Tips: om detta är 'Cannot query field X' har Tibber ändrat "
+                f"sitt schema — rapportera så fixar vi queryn."
+            )
         return body.get("data") or {}
 
     # ----- Queries -----
 
     def viewer_profile(self) -> dict:
         """Användarens namn + kontaktinfo. Användbart för att bekräfta
-        att OAuth-flödet lyckades efter auktoriseringen."""
+        att OAuth-flödet lyckades efter auktoriseringen.
+
+        V1-beta-schemat har bara 'name' och 'login' på viewer — 'userId'
+        finns inte, den gamla OAuth-queryn försökte hämta det och fick
+        schema-fel tillbaka."""
         q = """
-        query { viewer { name login userId } }
+        query { viewer { name login } }
         """
         data = self._post(q)
         return data.get("viewer") or {}
 
     def list_homes(self) -> list[dict]:
-        """Alla hem användaren har tillgång till i Data API:et.
-        Returnerar råa dicts så kallande kod kan plocka det den behöver
-        utan att schemat måste flyga genom en dataklass-migration."""
+        """Alla hem användaren har tillgång till.
+
+        Minimal fält-lista — bara det som är dokumenterat i v1-beta. Om
+        fler fält behövs (mainFuseSize, mätarnummer) kan vi be separat
+        och fånga schema-fel per fält istället för att riskera hela
+        queryn på fält som inte finns i OAuth-scope:en."""
         q = """
         query {
           viewer {
@@ -302,9 +335,8 @@ class TibberOAuthClient:
               id
               address { address1 postalCode city country }
               size
-              mainFuseSize
               features { realTimeConsumptionEnabled }
-              meteringPointData { consumptionEan }
+              currentSubscription { priceInfo { current { currency } } }
             }
           }
         }

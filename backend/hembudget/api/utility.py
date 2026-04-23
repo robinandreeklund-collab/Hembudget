@@ -1313,11 +1313,26 @@ def tibber_test(session: Session = Depends(db)) -> dict:
     # 1. Försök OAuth-sessionen först — det är där Data API-hem finns
     oauth_client = _get_oauth_client(session)
     if oauth_client is not None:
+        # Kör viewer-queryn först som en minimal sanity-check — om den
+        # failar är det något fel på auth/endpoint, inte hem-schemat.
+        try:
+            profile = oauth_client.viewer_profile()
+        except TibberOAuthError as exc:
+            raise HTTPException(
+                502,
+                f"Tibber viewer-query misslyckades: {exc}. Detta tyder på "
+                "fel endpoint eller att klienten saknar scope 'data-api-user-read'.",
+            ) from exc
         try:
             raw_homes = oauth_client.list_homes()
             _flush_oauth_client_tokens(session, oauth_client)
         except TibberOAuthError as exc:
-            raise HTTPException(502, str(exc)) from exc
+            raise HTTPException(
+                502,
+                f"Tibber homes-query misslyckades: {exc}. "
+                f"Viewer fungerade ({profile.get('name', '?')}) så auth är OK — "
+                "kontrollera att scope 'data-api-homes-read' är med.",
+            ) from exc
         homes_out = []
         for h in raw_homes:
             addr = h.get("address") or {}
@@ -1329,12 +1344,15 @@ def tibber_test(session: Session = Depends(db)) -> dict:
                 ] if x
             ) or "Okänd adress"
             features = h.get("features") or {}
+            sub = h.get("currentSubscription") or {}
+            price_info = sub.get("priceInfo") or {}
+            current_p = price_info.get("current") or {}
             homes_out.append({
                 "id": h.get("id"),
                 "address": addr_str,
                 "size": h.get("size"),
-                "main_fuse_size": h.get("mainFuseSize"),
-                "currency": "SEK",
+                "main_fuse_size": None,
+                "currency": current_p.get("currency") or "SEK",
                 "has_pulse": bool(features.get("realTimeConsumptionEnabled")),
             })
         return {"ok": True, "auth": "oauth", "homes": homes_out}
