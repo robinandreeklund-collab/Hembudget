@@ -31,6 +31,7 @@ interface IncomeUpcoming {
   notes: string | null;
   payment_status?: "unpaid" | "partial" | "paid" | "overpaid";
   paid_amount?: number;
+  variance_accepted?: boolean;
 }
 
 interface YtdIncome {
@@ -116,6 +117,24 @@ export default function Salaries() {
       api<IncomeUpcoming>(`/upcoming/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
+      }),
+    onSuccess: invalidate,
+  });
+  const acceptVarianceMut = useMutation({
+    mutationFn: (id: number) =>
+      api(`/upcoming/${id}/accept-variance`, { method: "POST" }),
+    onSuccess: invalidate,
+  });
+  const rejectVarianceMut = useMutation({
+    mutationFn: (id: number) =>
+      api(`/upcoming/${id}/reject-variance`, { method: "POST" }),
+    onSuccess: invalidate,
+  });
+  const textParseMut = useMutation({
+    mutationFn: (text: string) =>
+      api<IncomeUpcoming>("/upcoming/parse-text", {
+        method: "POST",
+        body: JSON.stringify({ text, kind: "income" }),
       }),
     onSuccess: invalidate,
   });
@@ -222,6 +241,14 @@ export default function Salaries() {
         </Card>
       )}
 
+      {/* AI text-snabbinmatning */}
+      <TextQuickAdd
+        busy={textParseMut.isPending}
+        error={textParseMut.error as Error | null}
+        result={textParseMut.data ?? null}
+        onSubmit={(text) => textParseMut.mutate(text)}
+      />
+
       {/* Per person breakdown */}
       {ytd && Object.keys(ytd.by_owner).length > 0 && (
         <Card title={`Lön per person — ${ytd.year}`}>
@@ -326,6 +353,8 @@ export default function Salaries() {
             accounts={accounts}
             onDelete={(id) => deleteMut.mutate(id)}
             onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onAcceptVariance={(id) => acceptVarianceMut.mutate(id)}
+            onRejectVariance={(id) => rejectVarianceMut.mutate(id)}
             startExpanded
           />
         )}
@@ -339,10 +368,72 @@ export default function Salaries() {
             accounts={accounts}
             onDelete={(id) => deleteMut.mutate(id)}
             onUpdate={(id, data) => updateMut.mutate({ id, data })}
+            onAcceptVariance={(id) => acceptVarianceMut.mutate(id)}
+            onRejectVariance={(id) => rejectVarianceMut.mutate(id)}
           />
         </Card>
       )}
     </div>
+  );
+}
+
+function TextQuickAdd({
+  busy,
+  error,
+  result,
+  onSubmit,
+}: {
+  busy: boolean;
+  error: Error | null;
+  result: IncomeUpcoming | null;
+  onSubmit: (text: string) => void;
+}) {
+  const [text, setText] = useState("");
+  return (
+    <Card title="Snabbinmatning via AI">
+      <div className="text-sm text-slate-700 mb-2">
+        Skriv fritt så tolkar LM Studio:{" "}
+        <em>"Lön Robin 42 000 kr den 25:e"</em> eller{" "}
+        <em>"Evelina lön 35 000 kr 27 mars"</em>. Funkar bra för att
+        snabbt registrera kommande löner utan att fylla i formuläret.
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="t.ex. Lön Robin 42 000 kr den 25:e varje månad"
+          className="flex-1 border rounded px-3 py-1.5"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && text.trim() && !busy) {
+              onSubmit(text);
+              setText("");
+            }
+          }}
+        />
+        <button
+          onClick={() => {
+            if (text.trim()) {
+              onSubmit(text);
+              setText("");
+            }
+          }}
+          disabled={!text.trim() || busy}
+          className="bg-brand-600 text-white px-4 py-1.5 rounded disabled:opacity-50"
+        >
+          {busy ? "Tolkar…" : "Lägg till"}
+        </button>
+      </div>
+      {error && (
+        <div className="text-xs text-rose-600 mt-2">{error.message}</div>
+      )}
+      {result && (
+        <div className="text-xs text-emerald-700 bg-emerald-50 rounded p-2 mt-2">
+          ✓ Skapade <strong>{result.name}</strong> {formatSEK(result.amount)} kr
+          för {result.expected_date}
+          {result.owner && ` (${result.owner})`}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -522,12 +613,16 @@ function SalaryMonthList({
   accounts,
   onDelete,
   onUpdate,
+  onAcceptVariance,
+  onRejectVariance,
   startExpanded = false,
 }: {
   items: IncomeUpcoming[];
   accounts: Account[];
   onDelete: (id: number) => void;
   onUpdate: (id: number, data: Partial<IncomeUpcoming>) => void;
+  onAcceptVariance: (id: number) => void;
+  onRejectVariance: (id: number) => void;
   startExpanded?: boolean;
 }) {
   // Gruppera per YYYY-MM, senaste månaden överst
@@ -559,6 +654,8 @@ function SalaryMonthList({
           startExpanded={startExpanded || idx === 0}
           onDelete={onDelete}
           onUpdate={onUpdate}
+          onAcceptVariance={onAcceptVariance}
+          onRejectVariance={onRejectVariance}
         />
       ))}
     </div>
@@ -572,6 +669,8 @@ function SalaryMonthSection({
   startExpanded,
   onDelete,
   onUpdate,
+  onAcceptVariance,
+  onRejectVariance,
 }: {
   ym: string;
   items: IncomeUpcoming[];
@@ -579,6 +678,8 @@ function SalaryMonthSection({
   startExpanded: boolean;
   onDelete: (id: number) => void;
   onUpdate: (id: number, data: Partial<IncomeUpcoming>) => void;
+  onAcceptVariance: (id: number) => void;
+  onRejectVariance: (id: number) => void;
 }) {
   const [open, setOpen] = useState(startExpanded);
   const total = items.reduce((s, i) => s + Number(i.amount), 0);
@@ -613,6 +714,8 @@ function SalaryMonthSection({
               accounts={accounts}
               onDelete={() => onDelete(i.id)}
               onUpdate={(data) => onUpdate(i.id, data)}
+              onAcceptVariance={() => onAcceptVariance(i.id)}
+              onRejectVariance={() => onRejectVariance(i.id)}
             />
           ))}
         </div>
@@ -626,11 +729,15 @@ function SalaryRow({
   accounts,
   onDelete,
   onUpdate,
+  onAcceptVariance,
+  onRejectVariance,
 }: {
   item: IncomeUpcoming;
   accounts: Account[];
   onDelete: () => void;
   onUpdate: (data: Partial<IncomeUpcoming>) => void;
+  onAcceptVariance: () => void;
+  onRejectVariance: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({
@@ -653,20 +760,66 @@ function SalaryRow({
             {item.source !== "manual" && <span>· {item.source}</span>}
             {item.payment_status === "paid" && (
               <span className="text-emerald-600 inline-flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> fullt betald
+                <CheckCircle2 className="w-3 h-3" />
+                {item.variance_accepted
+                  ? "fullt betald (avvikelse godkänd)"
+                  : "fullt betald"}
               </span>
             )}
             {item.payment_status === "partial" && (
-              <span className="text-amber-700">
+              <span className="text-amber-700 inline-flex items-center gap-1.5">
                 ⚠ delbetalt {formatSEK(item.paid_amount ?? 0)} av{" "}
                 {formatSEK(item.amount)}
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Godkänn avvikelsen ${formatSEK(item.amount - (item.paid_amount ?? 0))} kr?\n\nMarkerar denna rad som "fullt betald" — räknas inte som varning eller kvarstående belopp i prognoser och huvudbok.`,
+                      )
+                    ) {
+                      onAcceptVariance();
+                    }
+                  }}
+                  className="text-xs text-emerald-700 hover:text-emerald-900 underline"
+                  title="Godkänn avvikelsen — räknas som fullt betald"
+                >
+                  Godkänn
+                </button>
               </span>
             )}
             {item.payment_status === "overpaid" && (
-              <span className="text-rose-600">
+              <span className="text-rose-600 inline-flex items-center gap-1.5">
                 ⚠ överbetald {formatSEK(item.paid_amount ?? 0)} av{" "}
                 {formatSEK(item.amount)}
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Godkänn överbetalningen ${formatSEK((item.paid_amount ?? 0) - item.amount)} kr (t.ex. bonus eller felmatchning)?\n\nMarkerar raden som "fullt betald" — räknas inte som varning längre.`,
+                      )
+                    ) {
+                      onAcceptVariance();
+                    }
+                  }}
+                  className="text-xs text-emerald-700 hover:text-emerald-900 underline"
+                  title="Godkänn överbetalningen"
+                >
+                  Godkänn
+                </button>
               </span>
+            )}
+            {item.variance_accepted && item.payment_status === "paid" && (
+              <button
+                onClick={() => {
+                  if (confirm("Ta bort godkännandet av avvikelsen? Raden visar varning igen.")) {
+                    onRejectVariance();
+                  }
+                }}
+                className="text-xs text-slate-600 hover:text-slate-900 underline"
+                title="Återställ varningen"
+              >
+                ångra godkänd
+              </button>
             )}
           </div>
         </div>

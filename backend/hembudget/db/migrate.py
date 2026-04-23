@@ -139,6 +139,7 @@ def run_migrations(engine: Engine) -> list[str]:
             ("debit_account_id", "debit_account_id INTEGER REFERENCES accounts(id)"),
             ("debit_date", "debit_date DATE"),
             ("autogiro", "autogiro BOOLEAN NOT NULL DEFAULT 0"),
+            ("variance_accepted", "variance_accepted BOOLEAN NOT NULL DEFAULT 0"),
         ]:
             if col_name not in up_cols:
                 _add_column(engine, "upcoming_transactions", col_sql)

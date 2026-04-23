@@ -298,6 +298,48 @@ def test_upcoming_list_exposes_payment_transactions_for_unmatch_ui(client):
     assert p["account_name"] == "Checking"
 
 
+def test_accept_variance_marks_partial_as_paid(client):
+    """Användaren godkänner en delbetalt-avvikelse (öresavrundning eller
+    bonus). Då räknas raden som 'paid' i alla downstream-vyer."""
+    c, SL = client
+    ids = _seed_scenario(SL)
+
+    # Före: Amex-fakturan är 'partial' (2000 av 27000 betalt)
+    amex_before = next(
+        u for u in c.get("/upcoming/?only_future=false").json()
+        if u["id"] == ids["amex_up_id"]
+    )
+    assert amex_before["payment_status"] == "partial"
+    assert amex_before["variance_accepted"] is False
+
+    # Godkänn avvikelsen
+    r = c.post(f"/upcoming/{ids['amex_up_id']}/accept-variance")
+    assert r.status_code == 200, r.text
+    assert r.json()["variance_accepted"] is True
+
+    # Efter: status räknas som 'paid' istället för 'partial'
+    amex_after = next(
+        u for u in c.get("/upcoming/?only_future=false").json()
+        if u["id"] == ids["amex_up_id"]
+    )
+    assert amex_after["payment_status"] == "paid"
+    assert amex_after["variance_accepted"] is True
+
+    # Forecast räknar inte längre med åTERSTÅENDE 25 000 kr
+    fc = c.get("/upcoming/forecast?month=2026-04").json()
+    # Bara Vattenfall 1500 kr kvar i bills (Amex är nu 'paid')
+    assert fc["totals"]["upcoming_bills"] == pytest.approx(1500.0)
+
+    # Reject-variance ska göra raden 'partial' igen
+    r2 = c.post(f"/upcoming/{ids['amex_up_id']}/reject-variance")
+    assert r2.status_code == 200
+    amex_reverted = next(
+        u for u in c.get("/upcoming/?only_future=false").json()
+        if u["id"] == ids["amex_up_id"]
+    )
+    assert amex_reverted["payment_status"] == "partial"
+
+
 def test_unmatch_upcoming_removes_tx_from_payment_list(client):
     """Efter /transactions/{tx_id}/unmatch-upcoming ska tx:en ej längre
     räknas som delbetalning — upcomingens payment_status går tillbaka

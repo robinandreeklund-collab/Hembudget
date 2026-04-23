@@ -325,6 +325,13 @@ class UpcomingTransaction(Base):
     matched_transaction_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("transactions.id"), nullable=True, unique=True
     )
+    # När True räknas avvikelser i delbetalning (partial/overpaid) som
+    # accepterade och status presenteras som "paid". Användsfall:
+    # öresavrundning, bonus, eller skatte-justering som man inte vill
+    # se som varning.
+    variance_accepted: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     lines: Mapped[list["UpcomingTransactionLine"]] = relationship(

@@ -230,6 +230,9 @@ class UpcomingOut(BaseModel):
     payment_tx_ids: list[int] = []
     paid_amount: float = 0.0
     payment_status: str = "unpaid"  # unpaid | partial | paid | overpaid
+    # När True räknas partial/overpaid som "paid" — användaren har
+    # godkänt avvikelsen (öresavrundning, bonus, skattejust.)
+    variance_accepted: bool = False
 
 
 def _enrich_upcoming(
@@ -276,12 +279,17 @@ def _enrich_upcoming(
                 status = "partial"
             else:
                 status = "overpaid"
+        # Användaren kan ha godkänt avvikelsen — då räknas den som paid
+        # i alla downstream-vyer (forecast, kommande-listan, huvudbok).
+        if status in ("partial", "overpaid") and getattr(u, "variance_accepted", False):
+            status = "paid"
         d = {
             "id": u.id, "kind": u.kind, "name": u.name,
             "amount": float(u.amount),
             "expected_date": u.expected_date.isoformat(),
             "owner": u.owner, "category_id": u.category_id,
             "recurring_monthly": u.recurring_monthly,
+            "variance_accepted": bool(getattr(u, "variance_accepted", False)),
             "source": u.source, "source_image_path": u.source_image_path,
             "notes": u.notes, "invoice_number": u.invoice_number,
             "invoice_date": u.invoice_date.isoformat() if u.invoice_date else None,
@@ -640,6 +648,34 @@ def delete_upcoming(upcoming_id: int, session: Session = Depends(db)) -> dict:
         raise HTTPException(404, "Upcoming not found")
     session.delete(u)
     return {"deleted": upcoming_id}
+
+
+@router.post("/{upcoming_id}/accept-variance")
+def accept_variance(upcoming_id: int, session: Session = Depends(db)) -> dict:
+    """Markera avvikelse i delbetalning (partial/overpaid) som godkänd.
+
+    Användsfall: en lön är "delbetalt 19 122 kr av 19 172 kr" pga
+    öresavrundning på arbetsgivarsida, eller "överbetald 6 197 av 6 072"
+    pga bonus. Användaren godkänner att avvikelsen är OK och slipper
+    fortsatta varningar — status räknas som 'paid' i alla downstream-vyer.
+    """
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+    u.variance_accepted = True
+    session.flush()
+    return {"id": u.id, "variance_accepted": True}
+
+
+@router.post("/{upcoming_id}/reject-variance")
+def reject_variance(upcoming_id: int, session: Session = Depends(db)) -> dict:
+    """Ångra ett tidigare 'godkänn avvikelse' så raden visar varning igen."""
+    u = session.get(UpcomingTransaction, upcoming_id)
+    if u is None:
+        raise HTTPException(404, "Upcoming not found")
+    u.variance_accepted = False
+    session.flush()
+    return {"id": u.id, "variance_accepted": False}
 
 
 @router.post("/materialize")
@@ -1297,6 +1333,10 @@ def monthly_forecast(
     )
 
     def _remaining(u: UpcomingTransaction) -> Decimal:
+        # Användaren kan ha godkänt avvikelse på partial/overpaid →
+        # räknas som fullt betald i prognosen.
+        if getattr(u, "variance_accepted", False):
+            return Decimal("0")
         paid = _paid_amount(session, u)
         remaining = u.amount - paid
         # Inom tolerans = fullt betald → 0

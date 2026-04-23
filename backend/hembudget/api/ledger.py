@@ -346,6 +346,11 @@ def huvudbok(
     unmatched_sum_remaining = Decimal("0")
     matched_sum_amount = Decimal("0")
     for u in ups:
+        # variance_accepted = användaren har godkänt avvikelse, räknas som matched
+        if getattr(u, "variance_accepted", False):
+            matched_ups.append(u)
+            matched_sum_amount += u.amount
+            continue
         paid = _paid_amount(session, u)
         remaining = u.amount - paid
         if abs(remaining) <= _PAID_TOLERANCE:
