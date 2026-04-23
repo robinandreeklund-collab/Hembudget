@@ -9,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..chat import tools as chat_tools
-from ..db.models import Account, Transaction
+from ..db.models import Account, FundHolding, Transaction
 from .deps import db, require_auth
 
 router = APIRouter(prefix="/balances", tags=["balances"], dependencies=[Depends(require_auth)])
@@ -27,6 +27,20 @@ def list_balances(
     accounts = session.query(Account).order_by(Account.id).all()
     out = []
     total = Decimal("0")
+
+    # ISK-konton har ofta låg cash-saldo eftersom pengarna är placerade
+    # i fonder. Läs in fond-market_value per konto så vi kan visa
+    # "riktigt" saldo (cash + fonder).
+    fund_values_by_acc: dict[int, Decimal] = {}
+    for acc_id, total in (
+        session.query(
+            FundHolding.account_id,
+            func.coalesce(func.sum(FundHolding.market_value), 0),
+        )
+        .group_by(FundHolding.account_id)
+        .all()
+    ):
+        fund_values_by_acc[acc_id] = Decimal(str(total or 0))
 
     for acc in accounts:
         start = acc.opening_balance_date
@@ -60,11 +74,16 @@ def list_balances(
         )
 
         current = ob + movement
+        fund_value = fund_values_by_acc.get(acc.id, Decimal("0"))
+        # Riktigt saldo inkl. fondvärde (typiskt relevant för ISK)
+        total_value = current + fund_value
         is_incognito = bool(getattr(acc, "incognito", False))
         # Inkognito-konton exkluderas från total förmögenhet — de spåras
         # bara delvis (lön + överföringar) och saldo är meningslöst.
         if not is_incognito:
-            total += current
+            # Använd total_value (inkl. fondvärde) för ISK/savings så
+            # förmögenheten stämmer mot bankens faktiska saldo.
+            total += total_value if fund_value > 0 else current
         out.append({
             "id": acc.id,
             "name": acc.name,
@@ -75,6 +94,8 @@ def list_balances(
             "opening_balance_date": start.isoformat() if start else None,
             "movement_since_opening": float(movement),
             "current_balance": float(current),
+            "fund_value": float(fund_value),
+            "total_value": float(total_value),
             "transactions_total_all_time": float(total_all_time),
             "first_transaction_date": (
                 first_tx_date.isoformat() if first_tx_date else None

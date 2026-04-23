@@ -72,6 +72,8 @@ interface BalanceRow {
   account_number: string | null;
   opening_balance: number; opening_balance_date: string | null;
   movement_since_opening: number; current_balance: number;
+  fund_value?: number;
+  total_value?: number;
   transactions_total_all_time?: number;
   first_transaction_date?: string | null;
 }
@@ -81,6 +83,7 @@ export default function Dashboard() {
   const [showReset, setShowReset] = useState(false);
   const [month, setMonth] = useState<string>(currentMonth());
   const [editBalanceFor, setEditBalanceFor] = useState<number | null>(null);
+  const [breakdownMode, setBreakdownMode] = useState<"income" | "expense" | null>(null);
   const [balanceDraft, setBalanceDraft] = useState<{
     opening_balance: string;
     opening_balance_date: string;
@@ -238,11 +241,35 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <Stat label="Inkomst" value={s ? formatSEK(s.income) : "—"} tone="good" />
-        <Stat label="Utgifter" value={s ? formatSEK(s.expenses) : "—"} tone="bad" />
+        <button
+          type="button"
+          onClick={() => s && setBreakdownMode("income")}
+          disabled={!s}
+          className="text-left"
+          title="Klicka för att se alla inkomstposter"
+        >
+          <Stat label="Inkomst" value={s ? formatSEK(s.income) : "—"} tone="good" />
+        </button>
+        <button
+          type="button"
+          onClick={() => s && setBreakdownMode("expense")}
+          disabled={!s}
+          className="text-left"
+          title="Klicka för att se alla utgiftsposter"
+        >
+          <Stat label="Utgifter" value={s ? formatSEK(s.expenses) : "—"} tone="bad" />
+        </button>
         <Stat label="Sparande" value={s ? formatSEK(s.savings) : "—"} tone={s && s.savings > 0 ? "good" : "bad"} />
         <Stat label="Sparkvot" value={s ? `${(s.savings_rate * 100).toFixed(1)} %` : "—"} />
       </div>
+
+      {breakdownMode && (
+        <MonthBreakdownModal
+          month={month}
+          mode={breakdownMode}
+          onClose={() => setBreakdownMode(null)}
+        />
+      )}
 
       {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
         <Card
@@ -327,7 +354,17 @@ export default function Dashboard() {
                     {formatSEK(a.movement_since_opening)}
                   </td>
                   <td className="py-1.5 pr-3 text-right font-semibold">
-                    {formatSEK(a.current_balance)}
+                    {(a.fund_value ?? 0) > 0 ? (
+                      <div>
+                        <div>{formatSEK(a.total_value ?? a.current_balance)}</div>
+                        <div className="text-xs font-normal text-slate-600">
+                          cash {formatSEK(a.current_balance)} + fonder{" "}
+                          {formatSEK(a.fund_value ?? 0)}
+                        </div>
+                      </div>
+                    ) : (
+                      formatSEK(a.current_balance)
+                    )}
                   </td>
                   <td className="py-1.5 pr-3 text-right">
                     <button
@@ -709,6 +746,165 @@ export default function Dashboard() {
       </Card>
 
       {showReset && <ResetDialog onClose={() => setShowReset(false)} />}
+    </div>
+  );
+}
+
+interface TxForBreakdown {
+  id: number;
+  date: string;
+  amount: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+  category_id: number | null;
+  account_id: number;
+  is_transfer: boolean;
+}
+
+function MonthBreakdownModal({
+  month,
+  mode,
+  onClose,
+}: {
+  month: string;
+  mode: "income" | "expense";
+  onClose: () => void;
+}) {
+  const [y, m] = month.split("-").map(Number);
+  const from = `${month}-01`;
+  const toLast = new Date(y, m, 0).getDate();
+  const to = `${month}-${String(toLast).padStart(2, "0")}`;
+
+  const txQ = useQuery({
+    queryKey: ["dashboard-breakdown", month, mode],
+    queryFn: () =>
+      api<TxForBreakdown[]>(
+        `/transactions?from_date=${from}&to_date=${to}&limit=2000`,
+      ),
+  });
+  const catsQ = useQuery({
+    queryKey: ["categories"],
+    queryFn: () => api<Array<{ id: number; name: string }>>("/categories"),
+  });
+
+  const cats = catsQ.data ?? [];
+  const catName = (id: number | null) =>
+    id ? cats.find((c) => c.id === id)?.name ?? "?" : "Okategoriserat";
+
+  const filtered = (txQ.data ?? []).filter((t) => {
+    if (t.is_transfer) return false;
+    return mode === "income" ? t.amount > 0 : t.amount < 0;
+  });
+
+  // Gruppera per kategori
+  const byCat = new Map<string, TxForBreakdown[]>();
+  for (const tx of filtered) {
+    const name = catName(tx.category_id);
+    if (!byCat.has(name)) byCat.set(name, []);
+    byCat.get(name)!.push(tx);
+  }
+  const sortedCats = [...byCat.entries()].sort(
+    ([, a], [, b]) => {
+      const aSum = a.reduce((s, t) => s + Math.abs(t.amount), 0);
+      const bSum = b.reduce((s, t) => s + Math.abs(t.amount), 0);
+      return bSum - aSum;
+    },
+  );
+  const total = filtered.reduce((s, t) => s + Math.abs(t.amount), 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+        <div className="flex items-center justify-between p-4 border-b">
+          <div>
+            <h2 className="text-lg font-semibold">
+              {mode === "income" ? "Inkomst" : "Utgifter"} — {month}
+            </h2>
+            <div className="text-sm text-slate-700 mt-0.5">
+              {filtered.length} poster · totalt {formatSEK(total)}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-600 hover:text-slate-900">
+            <Trash2 className="w-5 h-5 hidden" />
+            ✕
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          {txQ.isLoading ? (
+            <div className="text-sm text-slate-700">Laddar…</div>
+          ) : sortedCats.length === 0 ? (
+            <div className="text-sm text-slate-700">Inga poster i denna månad.</div>
+          ) : (
+            sortedCats.map(([cat, items]) => (
+              <CategoryBreakdownGroup
+                key={cat}
+                categoryName={cat}
+                items={items}
+                total={items.reduce((s, t) => s + Math.abs(t.amount), 0)}
+              />
+            ))
+          )}
+        </div>
+        <div className="flex justify-end p-4 border-t">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded border border-slate-300 bg-white text-sm"
+          >
+            Stäng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryBreakdownGroup({
+  categoryName,
+  items,
+  total,
+}: {
+  categoryName: string;
+  items: TxForBreakdown[];
+  total: number;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border rounded">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between p-2 hover:bg-slate-50 text-left text-sm"
+      >
+        <span className="font-medium">{categoryName}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-600">{items.length} st</span>
+          <span className="font-semibold">{formatSEK(total)}</span>
+          <span className="text-slate-500 text-xs">
+            {open ? "▾" : "▸"}
+          </span>
+        </div>
+      </button>
+      {open && (
+        <div className="border-t divide-y text-xs">
+          {items
+            .sort((a, b) => (a.date < b.date ? 1 : -1))
+            .map((tx) => (
+              <div key={tx.id} className="flex items-center gap-3 p-2">
+                <span className="text-slate-700 w-20 shrink-0">{tx.date}</span>
+                <span
+                  className={
+                    "w-24 text-right shrink-0 font-medium " +
+                    (tx.amount < 0 ? "text-rose-600" : "text-emerald-700")
+                  }
+                >
+                  {formatSEK(Math.abs(tx.amount))}
+                </span>
+                <span className="flex-1 min-w-0 truncate">
+                  {tx.normalized_merchant ?? tx.raw_description}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
