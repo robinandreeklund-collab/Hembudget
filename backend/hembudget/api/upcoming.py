@@ -830,6 +830,185 @@ async def parse_invoice_image(
     return u
 
 
+@router.post("/parse-salary-pdf", response_model=UpcomingOut)
+async def parse_salary_pdf_endpoint(
+    file: UploadFile = File(...),
+    owner: str | None = Form(None),
+    debit_account_id: int | None = Form(None),
+    session: Session = Depends(db),
+) -> UpcomingTransaction:
+    """Parsa en svensk lönespec-PDF (INKAB, Vättaporten, Försäkringskassan)
+    och skapa en UpcomingTransaction (kind=income) med fullständig metadata.
+
+    Extraherar brutto, netto, skatt, extra_skatt (VP), semesterdagar,
+    tabell och engångsskatt%. PDF:en sparas under data_dir/invoices/
+    och länkas via source_image_path. Metadata lagras i notes som JSON
+    så frontend kan visa detaljer utan ytterligare API-anrop.
+
+    Om kommande-datum är passerat och kontot är incognito materialiseras
+    raden direkt som Transaction (samma logik som övriga income-upcomings).
+    """
+    from ..parsers.salary_pdfs import parse_salary_pdf
+    import json as _json
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Tom fil")
+
+    parsed = parse_salary_pdf(content)
+    if parsed.detected_format == "unknown":
+        raise HTTPException(
+            422,
+            "Okänt lönespec-format. Stöds: INKAB, Vättaporten AB, "
+            "Försäkringskassan (barnbidrag + föräldrapenning). "
+            f"Första 200 tecken i PDF:en: {parsed.raw_text[:200]}",
+        )
+    if parsed.net is None or parsed.paid_out_date is None:
+        raise HTTPException(
+            422,
+            f"Kunde inte extrahera netto-belopp eller utbetalningsdatum från "
+            f"{parsed.detected_format}-formatet. Fel: {parsed.parse_errors}",
+        )
+
+    # Spara PDF:en för ledger-referens
+    original_path = _save_invoice_file(content, file.filename)
+
+    # All strukturerad metadata in i notes som JSON så frontend kan visa
+    meta = {
+        "detected_format": parsed.detected_format,
+        "gross": float(parsed.gross) if parsed.gross is not None else None,
+        "tax": float(parsed.tax) if parsed.tax is not None else None,
+        "extra_tax": float(parsed.extra_tax) if parsed.extra_tax is not None else None,
+        "benefit": float(parsed.benefit) if parsed.benefit is not None else None,
+        "net": float(parsed.net),
+        "tax_table": parsed.tax_table,
+        "one_time_tax_percent": parsed.one_time_tax_percent,
+        "vacation_days_paid": parsed.vacation_days_paid,
+        "vacation_days_unpaid": parsed.vacation_days_unpaid,
+        "vacation_days_saved": parsed.vacation_days_saved,
+        "period_start": parsed.period_start.isoformat() if parsed.period_start else None,
+        "period_end": parsed.period_end.isoformat() if parsed.period_end else None,
+        "employee": parsed.employee,
+    }
+
+    u = UpcomingTransaction(
+        kind="income",
+        name=parsed.employer or "Lön",
+        amount=parsed.net,  # "ska läggas på kontot" = netto
+        expected_date=parsed.paid_out_date,
+        owner=owner,
+        debit_account_id=debit_account_id,
+        source="salary_pdf",
+        source_image_path=str(original_path),
+        notes=_json.dumps(meta, ensure_ascii=False),
+    )
+    session.add(u)
+    session.flush()
+
+    # Backfill-match mot befintliga transaktioner + auto-materialize
+    # till inkognito-konto om applicable (samma som övriga incomes).
+    from ..upcoming_match import UpcomingMatcher as _UM
+    _UM(session).backfill_match([u])
+    if u.matched_transaction_id is None:
+        _materialize_on_incognito_account(session, u)
+    return u
+
+
+@router.get("/salary-tax-prognosis")
+def salary_tax_prognosis(
+    year: int | None = None,
+    session: Session = Depends(db),
+) -> dict:
+    """Skatteprognos per person baserat på lönespec-PDF:er.
+
+    Summerar 'Extra skatt' och faktisk skatt per person och år.
+    'Extra skatt' är voluntary över tabell-skatten — i teorin får man
+    tillbaka det vid deklaration om årsinkomsten landar på rätt tabell.
+
+    Returnerar per-person-buckets med:
+    - total_gross, total_tax, total_extra_tax, total_net
+    - months_parsed (antal lönespecs hittade i år)
+    - projected_full_year_extra_tax (linjär extrapolering)
+    - hint-text om återbäring eller kvarskatt
+    """
+    import json as _json
+    from datetime import date as _date
+
+    y = year or _date.today().year
+    start = _date(y, 1, 1)
+    end = _date(y + 1, 1, 1)
+
+    salary_ups = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "income",
+            UpcomingTransaction.source == "salary_pdf",
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+        )
+        .all()
+    )
+
+    by_owner: dict[str, dict] = {}
+    for u in salary_ups:
+        owner = (u.owner or "gemensamt").strip() or "gemensamt"
+        bucket = by_owner.setdefault(
+            owner,
+            {
+                "total_gross": 0.0,
+                "total_tax": 0.0,
+                "total_extra_tax": 0.0,
+                "total_net": 0.0,
+                "months_parsed": 0,
+                "payslips": [],
+            },
+        )
+        try:
+            meta = _json.loads(u.notes or "{}") if u.notes else {}
+        except ValueError:
+            meta = {}
+        gross = float(meta.get("gross") or 0)
+        tax = float(meta.get("tax") or 0)
+        extra_tax = float(meta.get("extra_tax") or 0)
+        net = float(u.amount)
+        bucket["total_gross"] += gross
+        bucket["total_tax"] += tax
+        bucket["total_extra_tax"] += extra_tax
+        bucket["total_net"] += net
+        bucket["months_parsed"] += 1
+        bucket["payslips"].append({
+            "id": u.id,
+            "employer": u.name,
+            "paid_date": u.expected_date.isoformat(),
+            "gross": gross,
+            "tax": tax,
+            "extra_tax": extra_tax,
+            "net": net,
+        })
+
+    # Linjär projektion på helår baserat på antal månader parsade
+    for bucket in by_owner.values():
+        months = bucket["months_parsed"] or 1
+        scale = 12.0 / months if months < 12 else 1.0
+        bucket["projected_full_year_extra_tax"] = round(
+            bucket["total_extra_tax"] * scale, 2,
+        )
+        # Enkel hint: om extra_tax > 0, troligen återbäring vid deklaration.
+        # Detta är en grov skattning — faktisk återbäring beror på total
+        # inkomst + avdrag + tabell.
+        if bucket["total_extra_tax"] > 0:
+            bucket["hint"] = (
+                f"Du har betalt {bucket['total_extra_tax']:.0f} kr i 'Extra skatt' "
+                f"i år — troligen återbäring vid deklaration om tabellen stämmer "
+                f"med din totala inkomst. Projekterat helår: "
+                f"{bucket['projected_full_year_extra_tax']:.0f} kr."
+            )
+        else:
+            bucket["hint"] = None
+
+    return {"year": y, "by_owner": by_owner}
+
+
 @router.post("/bulk-parse-invoices")
 async def bulk_parse_invoices(
     files: list[UploadFile] = File(...),

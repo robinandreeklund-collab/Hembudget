@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase, ChevronDown, ChevronRight, Plus, Trash2, X, CheckCircle2,
 } from "lucide-react";
-import { api, formatSEK, uploadFile } from "@/api/client";
+import { api, formatSEK, getApiBase, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import type { Account, HouseholdUser } from "@/types/models";
 
@@ -28,6 +28,7 @@ interface IncomeUpcoming {
   debit_account_id: number | null;
   matched_transaction_id: number | null;
   source: string;
+  source_image_path: string | null;
   notes: string | null;
   payment_status?: "unpaid" | "partial" | "paid" | "overpaid";
   paid_amount?: number;
@@ -263,6 +264,16 @@ export default function Salaries() {
         result={textParseMut.data ?? null}
         onSubmit={(text) => textParseMut.mutate(text)}
       />
+
+      {/* PDF löneparser */}
+      <SalaryPdfUploader
+        accounts={accounts}
+        users={users}
+        onImported={invalidate}
+      />
+
+      {/* Skatteprognos */}
+      <SalaryTaxPrognosis users={users} />
 
       {/* Per person breakdown */}
       {ytd && Object.keys(ytd.by_owner).length > 0 && (
@@ -773,6 +784,26 @@ function SalaryRow({
             {account && <span>· till {account.name}</span>}
             {item.owner && <span>· {item.owner}</span>}
             {item.source !== "manual" && <span>· {item.source}</span>}
+            {item.source_image_path && (
+              <button
+                onClick={() => {
+                  const token = getToken();
+                  fetch(`${getApiBase()}/upcoming/${item.id}/source`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  })
+                    .then((r) => {
+                      if (!r.ok) throw new Error("Filen saknas");
+                      return r.blob();
+                    })
+                    .then((b) => window.open(URL.createObjectURL(b), "_blank"))
+                    .catch((e) => alert(String(e.message ?? e)));
+                }}
+                className="text-brand-600 underline"
+                title="Öppna original-PDF:en"
+              >
+                · 📎 se underlag
+              </button>
+            )}
             {item.payment_status === "paid" && (
               <span className="text-emerald-600 inline-flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
@@ -923,5 +954,274 @@ function SalaryRow({
         </div>
       )}
     </div>
+  );
+}
+
+interface SalaryPdfResult {
+  id: number;
+  name: string;
+  amount: number;
+  expected_date: string;
+  owner: string | null;
+  source_image_path: string | null;
+  notes: string | null;
+}
+
+function SalaryPdfUploader({
+  accounts,
+  users,
+  onImported,
+}: {
+  accounts: Account[];
+  users: HouseholdUser[];
+  onImported: () => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const [owner, setOwner] = useState<string>("");
+  const [accountId, setAccountId] = useState<string>("");
+  const [results, setResults] = useState<
+    Array<{ file: string; ok: boolean; data?: SalaryPdfResult; error?: string }>
+  >([]);
+  const [uploading, setUploading] = useState(false);
+
+  async function upload(files: File[]) {
+    if (files.length === 0) return;
+    setUploading(true);
+    setResults([]);
+    const newResults: typeof results = [];
+    for (const file of files) {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        if (owner) form.append("owner", owner);
+        if (accountId) form.append("debit_account_id", accountId);
+        const data = await uploadFile<SalaryPdfResult>(
+          "/upcoming/parse-salary-pdf",
+          form,
+        );
+        newResults.push({ file: file.name, ok: true, data });
+      } catch (e) {
+        newResults.push({
+          file: file.name,
+          ok: false,
+          error: String((e as Error).message ?? e),
+        });
+      }
+    }
+    setResults(newResults);
+    setUploading(false);
+    onImported();
+  }
+
+  return (
+    <Card title="Ladda upp lönespec-PDF (auto-tolkning)">
+      <div className="text-sm text-slate-700 mb-3">
+        Stöder <strong>INKAB</strong> (Nybergs Konstruktion),{" "}
+        <strong>Vättaporten AB</strong> och{" "}
+        <strong>Försäkringskassan</strong> (barnbidrag + föräldrapenning).
+        Extraherar brutto, skatt, extra skatt, förmån, netto, semester-
+        dagar och datum automatiskt. PDF:en länkas till raden så du kan
+        granska originalet senare.
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 text-sm">
+        <label className="block">
+          <div className="text-xs text-slate-700 mb-0.5">
+            Tillhör (för YTD per person)
+          </div>
+          <select
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            className="border rounded px-2 py-1.5 w-full"
+          >
+            <option value="">— härled från konto —</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.name}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <div className="text-xs text-slate-700 mb-0.5">Mottagarkonto (valfritt)</div>
+          <select
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            className="border rounded px-2 py-1.5 w-full"
+          >
+            <option value="">— ej vald —</option>
+            {accounts
+              .filter((a) => a.type !== "credit")
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const files = Array.from(e.dataTransfer.files).filter((f) =>
+            f.name.toLowerCase().endsWith(".pdf"),
+          );
+          if (files.length) upload(files);
+        }}
+        className={
+          "border-2 border-dashed rounded-lg p-6 text-center transition " +
+          (dragging
+            ? "border-emerald-500 bg-emerald-50"
+            : "border-slate-300 bg-slate-50")
+        }
+      >
+        <div className="text-sm text-slate-700">
+          Dra en eller flera PDF:er hit, eller{" "}
+          <label className="text-brand-600 cursor-pointer underline">
+            välj filer
+            <input
+              type="file"
+              multiple
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={(e) =>
+                e.target.files && upload(Array.from(e.target.files))
+              }
+            />
+          </label>
+        </div>
+        {uploading && (
+          <div className="text-xs text-slate-600 mt-2">Tolkar…</div>
+        )}
+      </div>
+      {results.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {results.map((r, i) => (
+            <div
+              key={i}
+              className={
+                "text-xs rounded p-2 border " +
+                (r.ok
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : "bg-rose-50 border-rose-200 text-rose-700")
+              }
+            >
+              {r.ok ? (
+                <>
+                  ✓ <strong>{r.file}</strong> →{" "}
+                  {r.data?.name} {formatSEK(r.data?.amount ?? 0)} kr
+                  för {r.data?.expected_date}
+                  {r.data?.owner && ` (${r.data.owner})`}
+                </>
+              ) : (
+                <>
+                  ✗ <strong>{r.file}</strong>: {r.error}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+interface TaxPrognosis {
+  year: number;
+  by_owner: Record<
+    string,
+    {
+      total_gross: number;
+      total_tax: number;
+      total_extra_tax: number;
+      total_net: number;
+      months_parsed: number;
+      projected_full_year_extra_tax: number;
+      hint: string | null;
+    }
+  >;
+}
+
+function SalaryTaxPrognosis({ users }: { users: HouseholdUser[] }) {
+  const q = useQuery({
+    queryKey: ["salary-tax-prognosis"],
+    queryFn: () => api<TaxPrognosis>("/upcoming/salary-tax-prognosis"),
+  });
+  const data = q.data;
+  if (!data || Object.keys(data.by_owner).length === 0) return null;
+
+  const totalExtra = Object.values(data.by_owner).reduce(
+    (s, b) => s + b.total_extra_tax,
+    0,
+  );
+  if (totalExtra === 0) return null;
+
+  return (
+    <Card title={`Skatteprognos ${data.year}`}>
+      <div className="text-sm text-slate-700 mb-3">
+        Baserat på tolkade lönespec-PDF:er. "Extra skatt" är voluntary
+        skatt över tabellen — i teorin återbäring vid deklaration om din
+        totala inkomst landar på samma tabell.
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {Object.entries(data.by_owner).map(([key, b]) => {
+          const userName =
+            key === "gemensamt"
+              ? "Gemensamt"
+              : users.find((u) => u.name.toLowerCase() === key.toLowerCase())?.name ?? key;
+          return (
+            <div
+              key={key}
+              className="border rounded-lg p-3 bg-amber-50/30"
+            >
+              <div className="font-medium">{userName}</div>
+              <div className="text-xs text-slate-700 mt-0.5">
+                {b.months_parsed} månad(er) parsade
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                <div>
+                  <div className="text-slate-700">Bruttolön i år</div>
+                  <div className="font-medium">{formatSEK(b.total_gross)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-700">Skatt betald</div>
+                  <div className="font-medium">{formatSEK(b.total_tax)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-700">Nettoutbetalning</div>
+                  <div className="font-medium text-emerald-700">
+                    {formatSEK(b.total_net)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-700">Extra skatt betald</div>
+                  <div
+                    className={
+                      "font-medium " +
+                      (b.total_extra_tax > 0 ? "text-amber-700" : "")
+                    }
+                  >
+                    {formatSEK(b.total_extra_tax)}
+                  </div>
+                </div>
+              </div>
+              {b.total_extra_tax > 0 && (
+                <div className="mt-3 text-xs bg-amber-100 rounded p-2 text-amber-900">
+                  <strong>Projekterat helår:</strong>{" "}
+                  {formatSEK(b.projected_full_year_extra_tax)} kr i extra
+                  skatt. Troligen återbäring vid deklaration om tabellen
+                  matchar din totala inkomst.
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
