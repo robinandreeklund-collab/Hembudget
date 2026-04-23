@@ -643,7 +643,7 @@ def reparse_reading(reading_id: int, session: Session = Depends(db)) -> dict:
     except Exception as exc:
         raise HTTPException(500, f"Parse-fel: {exc}") from exc
 
-    if res.detected_format == "unknown" and (
+    if res.supplier == "unknown" and (
         res.period_start is None or res.cost_kr is None
     ):
         raise HTTPException(
@@ -676,7 +676,7 @@ def reparse_reading(reading_id: int, session: Session = Depends(db)) -> dict:
         "consumption": float(r.consumption) if r.consumption is not None else None,
         "consumption_unit": r.consumption_unit,
         "cost_kr": float(r.cost_kr),
-        "detected_format": res.detected_format,
+        "detected_format": res.supplier,
     }
 
 
@@ -712,7 +712,7 @@ def parse_from_upcoming(
         raise HTTPException(
             422,
             "Kunde inte tolka period eller kostnad fran fakturan. "
-            f"Format: {res.detected_format}. Fel: {res.parse_errors}",
+            f"Format: {res.supplier}. Fel: {res.parse_errors}",
         )
 
     existing = (
@@ -735,7 +735,7 @@ def parse_from_upcoming(
         return {
             "action": "updated",
             "reading_id": existing.id,
-            "detected_format": res.detected_format,
+            "detected_format": res.supplier,
             "supplier": existing.supplier,
             "consumption": float(existing.consumption) if existing.consumption is not None else None,
             "consumption_unit": existing.consumption_unit,
@@ -761,7 +761,7 @@ def parse_from_upcoming(
         return {
             "action": "created",
             "reading_id": reading.id,
-            "detected_format": res.detected_format,
+            "detected_format": res.supplier,
             "supplier": reading.supplier,
             "consumption": float(reading.consumption) if reading.consumption is not None else None,
             "consumption_unit": reading.consumption_unit,
@@ -921,7 +921,7 @@ def rescan_existing_invoices(session: Session = Depends(db)) -> dict:
         parsed_ok += 1
         # Kvalitetsgate: for att skapa en reading ska vi antingen
         # detektera formatet ELLER ha bade period + kostnad
-        if res.detected_format == "unknown" and (
+        if res.supplier == "unknown" and (
             res.period_start is None or res.cost_kr is None
         ):
             skipped_no_data += 1
