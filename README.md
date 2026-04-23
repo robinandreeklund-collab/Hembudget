@@ -8,29 +8,26 @@ och en krypterad SQLite-databas.
 
 ### Google Cloud Run (rekommenderas för klassrum)
 
-[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/robinandreeklund-collab/Hembudget)
-
-Ett klick ovan → Google öppnar Cloud Shell, klonar repot och kör
-Dockerfile:n automatiskt. Du blir frågad om projekt + region, sen
-deployar den till Cloud Run. Efter deploy är klar får du en publik URL
-att skicka till eleverna.
-
-**Alternativt — kör lokalt:**
-
 ```bash
 ./deploy.sh
 ```
 
-Skriptet sköter allt automatiskt:
+Skriptet sköter allt automatiskt från din lokala klon:
 1. Kontrollerar `gcloud` CLI och aktiv inloggning
 2. Frågar efter GCP-projekt-ID (eller skapar ett nytt)
 3. Aktiverar Cloud Run, Cloud Build och Artifact Registry
-4. Bygger Docker-imagen i molnet (Cloud Build — ingen lokal Docker krävs)
-5. Deployar till Cloud Run i `europe-north1` (Finland)
-6. Skriver ut den publika URL:en
+4. Laddar upp repot till Cloud Build (inkl. `data/`-mappen för seed)
+5. Bygger Docker-imagen i molnet — **ingen lokal Docker krävs**
+6. Deployar till Cloud Run i `europe-north1` (Finland)
+7. Skriver ut den publika URL:en
 
-Efter första deployen: kör `./deploy.sh` igen för att uppdatera. Se loggar
-med `gcloud run services logs read hembudget-demo --region europe-north1`.
+Eftersom `--source .` används skickas din lokala kopia direkt upp till
+Cloud Build; ingen klona-operation från GitHub behövs, så metoden
+fungerar även om repot är privat. Efter första deployen: kör
+`./deploy.sh` igen för att uppdatera.
+
+**Loggar:** `gcloud run services logs read hembudget-demo --region europe-north1`
+**Radera:** `gcloud run services delete hembudget-demo --region europe-north1`
 
 **Arkitektur:** en enda container servar både frontend (statisk React-build)
 och backend (FastAPI) på samma port, så inga CORS-problem och en URL till
@@ -38,6 +35,16 @@ eleverna. Demo-läget auto-seedar data från `data/`-mappen vid start.
 
 **Kostnad:** Cloud Run skalar till 0 när ingen är inne → typiskt under $1/mån
 för klassbruk. Ephemeral SQLite — data återställs när containern startar om.
+
+#### Alternativ: "Run on Google Cloud"-knapp (kräver publikt repo)
+
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/robinandreeklund-collab/Hembudget)
+
+Knappen ovan använder Googles `deploy.cloud.run`-tjänst som klonar via
+HTTPS utan autentisering — **fungerar bara om repot är publikt**. Om
+repot är privat ger klick en "repo not found"-felmeddelande. Använd
+`./deploy.sh` istället, eller gör repot publikt först (Settings →
+General → Change visibility på GitHub).
 
 ### Render.com (alternativ)
 
