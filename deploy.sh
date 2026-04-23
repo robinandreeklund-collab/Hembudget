@@ -19,6 +19,9 @@ set -euo pipefail
 # ----- Konfiguration (kan åsidosättas via env) -----
 SERVICE_NAME="${SERVICE_NAME:-hembudget-demo}"
 REGION="${REGION:-europe-north1}"
+# Default-projekt — används automatiskt om ingen PROJECT_ID är satt och
+# gcloud config saknar projekt. Överstyrs via env: PROJECT_ID=xxx ./deploy.sh
+DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:-hembudget}"
 MEMORY="${MEMORY:-1Gi}"
 CPU="${CPU:-1}"
 CONCURRENCY="${CONCURRENCY:-40}"
@@ -64,27 +67,42 @@ fi
 ok "Inloggad som: $ACTIVE_ACCOUNT"
 
 # ----- 3. Project-ID -----
+# Prioritetsordning:
+#   1. PROJECT_ID via miljövariabel
+#   2. gcloud config get-value project (aktivt projekt)
+#   3. DEFAULT_PROJECT_ID ("hembudget") — verifieras att det existerar
+#   4. Om inget fungerar: interaktiv prompt (bara om stdin är tty)
 if [[ -z "${PROJECT_ID:-}" ]]; then
     PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
 fi
 if [[ -z "$PROJECT_ID" || "$PROJECT_ID" == "(unset)" ]]; then
-    echo
-    warn "Inget GCP-projekt valt."
-    echo "Tillgängliga projekt på ditt konto:"
-    gcloud projects list --format="table(projectId, name, projectNumber)" || true
-    echo
-    read -r -p "Ange PROJECT_ID (eller tryck enter för att skapa nytt): " PROJECT_ID
-    if [[ -z "$PROJECT_ID" ]]; then
-        DEFAULT_NEW="hembudget-$(date +%s | tail -c 7)"
-        read -r -p "Nytt projekt-ID [$DEFAULT_NEW]: " NEW_ID
-        PROJECT_ID="${NEW_ID:-$DEFAULT_NEW}"
-        info "Skapar projekt $PROJECT_ID…"
-        gcloud projects create "$PROJECT_ID"
+    # Försök default-projektet om det existerar på kontot
+    if gcloud projects describe "$DEFAULT_PROJECT_ID" >/dev/null 2>&1; then
+        PROJECT_ID="$DEFAULT_PROJECT_ID"
+        ok "Använder default-projekt: $PROJECT_ID"
+    elif [[ -t 0 ]]; then
         echo
-        warn "Nytt projekt skapat. Du MÅSTE koppla ett billing-konto till det"
-        warn "innan Cloud Run kan användas (gratis-tier räcker för demo):"
-        echo "  → https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
-        read -r -p "Tryck enter när billing är kopplat… "
+        warn "Inget GCP-projekt valt (default '$DEFAULT_PROJECT_ID' hittades inte)."
+        echo "Tillgängliga projekt på ditt konto:"
+        gcloud projects list --format="table(projectId, name, projectNumber)" || true
+        echo
+        read -r -p "Ange PROJECT_ID (eller tryck enter för att skapa nytt): " PROJECT_ID
+        if [[ -z "$PROJECT_ID" ]]; then
+            DEFAULT_NEW="hembudget-$(date +%s | tail -c 7)"
+            read -r -p "Nytt projekt-ID [$DEFAULT_NEW]: " NEW_ID
+            PROJECT_ID="${NEW_ID:-$DEFAULT_NEW}"
+            info "Skapar projekt $PROJECT_ID…"
+            gcloud projects create "$PROJECT_ID"
+            echo
+            warn "Nytt projekt skapat. Du MÅSTE koppla ett billing-konto till det"
+            warn "innan Cloud Run kan användas (gratis-tier räcker för demo):"
+            echo "  → https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
+            read -r -p "Tryck enter när billing är kopplat… "
+        fi
+    else
+        err "Inget projekt satt och ingen tty för interaktiv prompt."
+        err "Kör om med: PROJECT_ID=<ditt-projekt> ./deploy.sh"
+        exit 1
     fi
 fi
 
