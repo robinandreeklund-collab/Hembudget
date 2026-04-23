@@ -657,10 +657,33 @@ function UncategorizedList({
         body: JSON.stringify({ tx_ids: txIds }),
       }),
     onSuccess: (data) => {
-      // Bara invalidera om något faktiskt parades — annars stannar
-      // listan så användaren kan se feedback om varför inget hände.
       if (data.linked > 0) onDone();
     },
+  });
+  const diagnoseMut = useMutation({
+    mutationFn: (txIds: number[]) =>
+      api<{
+        rows: Array<{
+          tx_id: number;
+          date: string;
+          amount: number;
+          description: string;
+          reason: string;
+          is_transfer?: boolean;
+          transfer_pair_id?: number | null;
+          category_id?: number | null;
+          partner_candidates?: Array<{
+            tx_id: number;
+            date: string;
+            amount: number;
+            description: string;
+            account_id: number;
+          }>;
+        }>;
+      }>("/transfers/diagnose-pairing", {
+        method: "POST",
+        body: JSON.stringify({ tx_ids: txIds }),
+      }),
   });
 
   return (
@@ -692,20 +715,69 @@ function UncategorizedList({
           }
         >
           {autoPairMut.data.linked > 0 ? "✓ " : "⚠ "}
-          Scannade {autoPairMut.data.scanned} negativa rader →{" "}
+          Scannade {autoPairMut.data.scanned} rader →{" "}
           <strong>{autoPairMut.data.linked} par hopparade</strong> som
           överföringar.
           {autoPairMut.data.ambiguous_count > 0 &&
-            ` ${autoPairMut.data.ambiguous_count} hade flera kandidater och hoppades över.`}
+            ` ${autoPairMut.data.ambiguous_count} hade flera kandidater.`}
           {autoPairMut.data.no_match_count > 0 &&
-            ` ${autoPairMut.data.no_match_count} hade ingen motpart med samma datum + belopp på annat konto (= troliga riktiga utgifter, kategorisera nedan).`}
+            ` ${autoPairMut.data.no_match_count} hade ingen motpart inom ±3 dagar.`}
           {autoPairMut.data.linked === 0 && (
-            <div className="mt-1">
-              Möjliga orsaker: motparten ligger på ett konto du inte
-              importerat, beloppen skiljer sig något, eller datumen är
-              mer än 2 dagar isär.
+            <div className="mt-2 flex items-center gap-2">
+              <span>Klicka för att se exakt varför per rad:</span>
+              <button
+                onClick={() => diagnoseMut.mutate(rows.map((r) => r.id))}
+                disabled={diagnoseMut.isPending}
+                className="text-brand-600 underline"
+              >
+                {diagnoseMut.isPending ? "Diagnostiserar…" : "Diagnos"}
+              </button>
             </div>
           )}
+        </div>
+      )}
+      {diagnoseMut.data && (
+        <div className="text-xs bg-slate-50 border border-slate-200 rounded p-2 mb-2 space-y-1 max-h-80 overflow-y-auto">
+          <div className="font-medium text-slate-800 mb-1">
+            Diagnostik per rad:
+          </div>
+          {diagnoseMut.data.rows.map((r) => (
+            <div key={r.tx_id} className="bg-white rounded px-2 py-1 border border-slate-100">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-slate-700">{r.date}</span>
+                <span
+                  className={
+                    "font-medium " +
+                    (r.amount < 0 ? "text-rose-600" : "text-emerald-700")
+                  }
+                >
+                  {formatSEK(r.amount)}
+                </span>
+                <span className="flex-1 truncate">{r.description}</span>
+              </div>
+              <div className="text-slate-600 mt-0.5">→ {r.reason}</div>
+              {r.partner_candidates && r.partner_candidates.length > 0 && (
+                <div className="ml-4 mt-1 space-y-0.5">
+                  {r.partner_candidates.map((p) => (
+                    <div
+                      key={p.tx_id}
+                      className="text-xs text-slate-600 flex gap-2"
+                    >
+                      <span className="font-mono">{p.date}</span>
+                      <span
+                        className={
+                          p.amount < 0 ? "text-rose-600" : "text-emerald-700"
+                        }
+                      >
+                        {formatSEK(p.amount)}
+                      </span>
+                      <span className="truncate">{p.description}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
       {autoPairMut.error && (

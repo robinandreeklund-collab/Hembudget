@@ -150,19 +150,111 @@ class BulkLinkIn(BaseModel):
     pairs: list[LinkIn]
 
 
+@router.post("/diagnose-pairing")
+def diagnose_pairing(payload: dict, session: Session = Depends(db)) -> dict:
+    """Per tx_id: förklara exakt varför auto-pair missar den.
+
+    Body: `{"tx_ids": [...]}`. Returnerar lista av
+    `{tx_id, amount, date, reason, partner_candidates}`.
+    Används när 'Auto-para uppenbara' returnerar scanned=0 trots att
+    åtgärda-listan visar rader.
+    """
+    from datetime import timedelta
+
+    tx_ids = payload.get("tx_ids") or []
+    if not isinstance(tx_ids, list) or not tx_ids:
+        raise HTTPException(400, "tx_ids (list) krävs i body")
+
+    AMOUNT_EPS = Decimal("0.01")
+    DATE_EPS = 3
+
+    out: list[dict] = []
+    for tid in tx_ids:
+        t = session.get(Transaction, tid)
+        if t is None:
+            out.append({"tx_id": tid, "reason": "tx saknas i DB"})
+            continue
+        base = {
+            "tx_id": t.id,
+            "date": t.date.isoformat(),
+            "amount": float(t.amount),
+            "description": t.raw_description,
+            "account_id": t.account_id,
+            "category_id": t.category_id,
+            "is_transfer": t.is_transfer,
+            "transfer_pair_id": t.transfer_pair_id,
+        }
+        if t.category_id is not None:
+            out.append({**base, "reason": "redan kategoriserad"})
+            continue
+        if t.transfer_pair_id is not None:
+            out.append({**base, "reason": "redan parad (transfer_pair_id satt)"})
+            continue
+        if t.is_transfer:
+            out.append({**base, "reason": "is_transfer=True men ingen pair_id — orphan transfer"})
+            continue
+        if t.amount >= 0:
+            # Positiv — partner vi söker är någon negativ med samma belopp
+            abs_amt = t.amount
+        else:
+            abs_amt = -t.amount
+
+        partners = (
+            session.query(Transaction)
+            .filter(
+                Transaction.account_id != t.account_id,
+                Transaction.amount >= (abs_amt if t.amount < 0 else -abs_amt) - AMOUNT_EPS,
+                Transaction.amount <= (abs_amt if t.amount < 0 else -abs_amt) + AMOUNT_EPS,
+                Transaction.date >= t.date - timedelta(days=DATE_EPS),
+                Transaction.date <= t.date + timedelta(days=DATE_EPS),
+                Transaction.transfer_pair_id.is_(None),
+                Transaction.id != t.id,
+            )
+            .all()
+        )
+        # Om src är negativ ska partner vara positiv (och tvärtom)
+        if t.amount < 0:
+            partners = [p for p in partners if p.amount > 0]
+        else:
+            partners = [p for p in partners if p.amount < 0]
+        partner_info = [
+            {
+                "tx_id": p.id,
+                "account_id": p.account_id,
+                "date": p.date.isoformat(),
+                "amount": float(p.amount),
+                "description": p.raw_description,
+            }
+            for p in partners
+        ]
+        if not partners:
+            reason = "ingen motpart med samma belopp inom ±3 dagar på annat konto"
+        elif len(partners) > 1:
+            reason = f"{len(partners)} kandidater — ambigous"
+        else:
+            reason = "OK, kan paras"
+        out.append({**base, "reason": reason, "partner_candidates": partner_info})
+    return {"rows": out}
+
+
 @router.post("/auto-pair-uncategorized")
 def auto_pair_uncategorized(
     payload: dict, session: Session = Depends(db),
 ) -> dict:
-    """Scanna alla okategoriserade + oparade rader inom en period och
-    para de som har EXAKT en motpart med samma datum + exakt belopp på
-    ett annat konto. Mer aggressiv än detect_internal_transfers som
-    har fler säkerhetsvillkor (BG-match, kontonummer i description,
-    osv.) — denna tittar bara på date+amount+olika_konto.
+    """Scanna alla okategoriserade rader inom en period och para de som
+    har EXAKT en motpart med samma datum + exakt belopp på ett annat
+    konto. Mer aggressiv än detect_internal_transfers som har fler
+    säkerhetsvillkor (BG-match, kontonummer i description, osv.) —
+    denna tittar bara på date+amount+olika_konto.
 
     Body: `{"year": 2026}` eller `{"month": "2026-04"}`.
     Body: `{"tx_ids": [...]}` för att begränsa till specifika rader
     (t.ex. de som syns i huvudbokens åtgärda-list).
+
+    Mjuka filter på source-sidan: vi kräver ENDAST att raden är
+    okategoriserad. is_transfer och transfer_pair_id kollas per rad —
+    om raden redan är parad skippas den tyst (inget att göra). Så
+    källsetet matchar vad åtgärda-listan visar.
 
     Returnerar `{"linked": N, "ambiguous": [tx_id, ...], "no_match": [...]}`.
     """
@@ -174,8 +266,6 @@ def auto_pair_uncategorized(
 
     q = session.query(Transaction).filter(
         Transaction.category_id.is_(None),
-        Transaction.is_transfer.is_(False),
-        Transaction.transfer_pair_id.is_(None),
     )
     if tx_ids and isinstance(tx_ids, list):
         q = q.filter(Transaction.id.in_(tx_ids))
@@ -212,6 +302,11 @@ def auto_pair_uncategorized(
     # category_id satt). Vi söker per src bland ALLA oparade rader.
     for src in candidates:
         if src.id in claimed or src.amount >= 0:
+            continue
+        # Om raden redan har en partner eller är markerad som transfer →
+        # inget att göra, skippa tyst. Vi tar INTE bort filtret i queryn
+        # så scanned räknas rätt (matchar åtgärda-listan).
+        if src.transfer_pair_id is not None or src.is_transfer:
             continue
         abs_amt = -src.amount
         partners = (
