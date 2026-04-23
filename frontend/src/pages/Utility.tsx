@@ -1105,11 +1105,24 @@ function BreakdownModal({
             <div className="text-sm text-slate-700">Inga poster hittade.</div>
           ) : (
             <div className="space-y-2">
-              <div className="text-xs text-slate-700 mb-2">
-                Klicka <strong>"Flytta"</strong> för att byta månad på en
-                transaktion (t.ex. om betalningen gjordes i mars men avser
-                februari). Splits följer transaktionens datum — flytta
-                hela transaktionen istället.
+              <div className="text-xs text-slate-700 mb-2 bg-slate-50 border rounded p-2 space-y-1">
+                <div>
+                  <strong>📎 Visa faktura</strong> — öppnar original-PDF:en
+                  i ny flik.
+                </div>
+                <div>
+                  <strong>📊 Läs av förbrukning</strong> — parsar
+                  PDF:en och extraherar kWh/m³/GB + totalbelopp och
+                  period. Skapar en utility-läsning som syns i
+                  "Månadsvis förbrukning"-diagrammet och tabellen nedan.
+                  Rör inte bank-transaktionen eller fakturan i sig.
+                </div>
+                <div>
+                  <strong>Flytta</strong> — byter datum på transaktionen
+                  (t.ex. om betalningen gjordes i mars men avser februari).
+                  Splits följer transaktionens datum — flytta hela
+                  transaktionen istället.
+                </div>
               </div>
               {data.items.map((item) => (
                 <BreakdownRow
@@ -1165,6 +1178,10 @@ function BreakdownRow({
   const [editing, setEditing] = useState(false);
   const [newDate, setNewDate] = useState(item.date);
   const [reparsing, setReparsing] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
 
   function openInvoice() {
     if (!item.upcoming_id) return;
@@ -1183,19 +1200,34 @@ function BreakdownRow({
   async function reparseInvoice() {
     if (!item.upcoming_id) return;
     setReparsing(true);
+    setLastResult(null);
     try {
       const res = await api<{
         action: "created" | "updated";
         reading_id: number;
         detected_format: string;
+        supplier: string;
+        consumption: number | null;
+        consumption_unit: string | null;
+        cost_kr: number;
+        period_start: string;
+        period_end: string;
       }>(`/utility/parse-upcoming/${item.upcoming_id}`, { method: "POST" });
-      alert(
-        `${res.action === "created" ? "Skapade" : "Uppdaterade"} utility-läsning #${res.reading_id}\n` +
-        `Format: ${res.detected_format}`,
-      );
+      const kwhStr =
+        res.consumption != null
+          ? `${res.consumption.toFixed(0)} ${res.consumption_unit}`
+          : "ingen förbrukningsdata hittad";
+      setLastResult({
+        ok: true,
+        message:
+          `✓ ${res.action === "created" ? "Skapade" : "Uppdaterade"}: ${res.supplier} ${res.period_start}→${res.period_end} · ${kwhStr} · ${formatSEK(res.cost_kr)}`,
+      });
       onReparsed();
     } catch (e) {
-      alert("Fel: " + (e as Error).message);
+      setLastResult({
+        ok: false,
+        message: "Fel: " + (e as Error).message,
+      });
     } finally {
       setReparsing(false);
     }
@@ -1239,26 +1271,31 @@ function BreakdownRow({
             className="text-xs text-brand-600 hover:underline shrink-0"
             title="Öppna original-fakturan i ny flik"
           >
-            📎 Faktura
+            📎 Visa faktura
           </button>
         )}
         {item.has_invoice_pdf && (
           <button
             onClick={reparseInvoice}
             disabled={reparsing}
-            className="text-xs text-emerald-700 hover:text-emerald-900 disabled:opacity-50 shrink-0 inline-flex items-center gap-1"
+            className={
+              "shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium disabled:opacity-50 " +
+              (item.reading_id != null
+                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                : "bg-emerald-600 text-white hover:bg-emerald-700")
+            }
             title={
               item.reading_id != null
-                ? "Kör parsern igen och uppdatera utility-datan (rör inte tx)"
-                : "Skapa utility-läsning från fakturan"
+                ? "Kör parsern igen och uppdatera kWh-läsningen från denna faktura"
+                : "Läs av kWh + period + totalbelopp från fakturan och skapa utility-läsning"
             }
           >
             <RefreshCw className={"w-3 h-3 " + (reparsing ? "animate-spin" : "")} />
             {reparsing
-              ? "Parsar…"
+              ? "Läser av…"
               : item.reading_id != null
-              ? "Parsa om"
-              : "Skapa utility"}
+              ? "📊 Uppdatera förbrukning"
+              : "📊 Läs av förbrukning"}
           </button>
         )}
         {item.can_move ? (
@@ -1274,6 +1311,18 @@ function BreakdownRow({
           </span>
         )}
       </div>
+      {lastResult && (
+        <div
+          className={
+            "mt-2 text-xs rounded px-2 py-1.5 " +
+            (lastResult.ok
+              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+              : "bg-rose-50 text-rose-800 border border-rose-200")
+          }
+        >
+          {lastResult.message}
+        </div>
+      )}
       {editing && (
         <div className="mt-2 pt-2 border-t bg-slate-50 -mx-2 px-2 pb-2 flex items-end gap-2">
           <label className="flex-1">

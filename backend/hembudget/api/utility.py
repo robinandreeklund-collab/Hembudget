@@ -736,6 +736,12 @@ def parse_from_upcoming(
             "action": "updated",
             "reading_id": existing.id,
             "detected_format": res.detected_format,
+            "supplier": existing.supplier,
+            "consumption": float(existing.consumption) if existing.consumption is not None else None,
+            "consumption_unit": existing.consumption_unit,
+            "cost_kr": float(existing.cost_kr),
+            "period_start": existing.period_start.isoformat(),
+            "period_end": existing.period_end.isoformat(),
         }
     else:
         reading = UtilityReading(
@@ -756,6 +762,12 @@ def parse_from_upcoming(
             "action": "created",
             "reading_id": reading.id,
             "detected_format": res.detected_format,
+            "supplier": reading.supplier,
+            "consumption": float(reading.consumption) if reading.consumption is not None else None,
+            "consumption_unit": reading.consumption_unit,
+            "cost_kr": float(reading.cost_kr),
+            "period_start": reading.period_start.isoformat(),
+            "period_end": reading.period_end.isoformat(),
         }
 
 
