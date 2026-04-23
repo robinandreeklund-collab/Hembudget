@@ -67,6 +67,14 @@ export default function Transfers() {
       api("/transfers/link", { method: "POST", body: JSON.stringify(p) }),
     onSuccess: invalidate,
   });
+  const bulkLinkMut = useMutation({
+    mutationFn: (pairs: Array<{ tx_a_id: number; tx_b_id: number }>) =>
+      api<{ linked: number; skipped: number; errors: unknown[] }>(
+        "/transfers/link-bulk",
+        { method: "POST", body: JSON.stringify({ pairs }) },
+      ),
+    onSuccess: invalidate,
+  });
   const unlinkMut = useMutation({
     mutationFn: (id: number) => api(`/transfers/unlink/${id}`, { method: "POST" }),
     onSuccess: invalidate,
@@ -118,6 +126,54 @@ export default function Transfers() {
             Rader på olika konton med matchande belopp och nära datum. Klicka "Para ihop"
             för att bekräfta, eller strunta i dem om det är riktiga utgifter/inkomster.
           </div>
+          {(() => {
+            // "Säkra par" = exakt belopp + samma dag. Typiska kreditkorts-
+            // betalningar och autogiro mellan checking och kortkonto. Risk
+            // för falska positiver är minimal — om beloppet matchar på en
+            // krona och samma dag är det nästan alltid en transfer.
+            const safe = suggestions.filter(
+              (s) => s.date_diff_days === 0 && s.amount_diff === 0,
+            );
+            if (safe.length === 0) return null;
+            return (
+              <div className="mb-3 flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded p-2 text-sm">
+                <span className="flex-1">
+                  <strong>{safe.length} förslag</strong> med exakt samma
+                  belopp och samma dag — typiskt kreditkorts-betalningar.
+                  Para ihop alla med ett klick:
+                </span>
+                <button
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Para ihop alla ${safe.length} säkra förslag (samma dag + exakt belopp)?\n\nDu kan ångra dem individuellt under "Parade överföringar" om något blev fel.`,
+                      )
+                    ) {
+                      bulkLinkMut.mutate(
+                        safe.map((s) => ({
+                          tx_a_id: s.source.id,
+                          tx_b_id: s.destination.id,
+                        })),
+                      );
+                    }
+                  }}
+                  disabled={bulkLinkMut.isPending}
+                  className="bg-emerald-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+                >
+                  {bulkLinkMut.isPending
+                    ? "Parar…"
+                    : `Para alla ${safe.length} säkra`}
+                </button>
+              </div>
+            );
+          })()}
+          {bulkLinkMut.data && (
+            <div className="mb-3 text-sm text-emerald-700 bg-emerald-50 rounded p-2">
+              ✓ {bulkLinkMut.data.linked} par hopparade.
+              {bulkLinkMut.data.skipped > 0 &&
+                ` ${bulkLinkMut.data.skipped} hoppades över (redan parade).`}
+            </div>
+          )}
           <div className="space-y-2">
             {suggestions.slice(0, 50).map((s) => (
               <div key={`${s.source.id}-${s.destination.id}`}

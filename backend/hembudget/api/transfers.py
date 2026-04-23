@@ -146,6 +146,39 @@ def link_pair(payload: LinkIn, session: Session = Depends(db)) -> dict:
     return {"ok": True}
 
 
+class BulkLinkIn(BaseModel):
+    pairs: list[LinkIn]
+
+
+@router.post("/link-bulk")
+def link_pairs_bulk(payload: BulkLinkIn, session: Session = Depends(db)) -> dict:
+    """Para ihop många par i ett svep — användsfall: alla "100 % säkra"
+    förslag (samma dag + exakt belopp). Hoppar över par som redan har
+    pair_id satt (idempotent), rapporterar fel per par utan att kasta.
+    """
+    detector = TransferDetector(session)
+    linked = 0
+    skipped = 0
+    errors: list[dict] = []
+    for p in payload.pairs:
+        # Skippa om någon sida redan parad — undviker att skriva över
+        # tidigare manuella matchningar som användaren redan godkänt.
+        a = session.get(Transaction, p.tx_a_id)
+        b = session.get(Transaction, p.tx_b_id)
+        if a is None or b is None:
+            errors.append({"pair": [p.tx_a_id, p.tx_b_id], "error": "not_found"})
+            continue
+        if a.transfer_pair_id is not None or b.transfer_pair_id is not None:
+            skipped += 1
+            continue
+        try:
+            detector.link_manual(p.tx_a_id, p.tx_b_id)
+            linked += 1
+        except ValueError as exc:
+            errors.append({"pair": [p.tx_a_id, p.tx_b_id], "error": str(exc)})
+    return {"linked": linked, "skipped": skipped, "errors": errors}
+
+
 @router.post("/unlink/{tx_id}")
 def unlink(tx_id: int, session: Session = Depends(db)) -> dict:
     TransferDetector(session).unlink(tx_id)
