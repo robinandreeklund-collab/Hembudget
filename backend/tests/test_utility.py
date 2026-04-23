@@ -149,6 +149,58 @@ def test_readings_crud(client):
     assert r4.json()["readings"] == []
 
 
+def test_breakdown_lists_transactions_for_cell(client):
+    """GET /utility/breakdown?category=El&month=2026-01 listar alla
+    tx + splits som bidrar till cellen. Anvands for att felsoka
+    'varfor ar mars-el 24 443 kr?'."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Category, Transaction, TransactionSplit,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="n", type="checking")
+        el = Category(name="El")
+        s.add_all([acc, el]); s.flush()
+        # Ren el-tx
+        s.add(Transaction(
+            account_id=acc.id, date=date(2026, 1, 15),
+            amount=Decimal("-900"), currency="SEK",
+            raw_description="Hjo Energi januari", hash="e1",
+            category_id=el.id,
+        ))
+        # Split-rad pa kombinerad faktura
+        tx2 = Transaction(
+            account_id=acc.id, date=date(2026, 1, 20),
+            amount=Decimal("-1200"), currency="SEK",
+            raw_description="Hjo Energi kombinerad", hash="e2",
+        )
+        s.add(tx2); s.flush()
+        s.add(TransactionSplit(
+            transaction_id=tx2.id, description="El-del",
+            amount=Decimal("800"), category_id=el.id, sort_order=0,
+            source="manual",
+        ))
+        s.commit()
+
+    r = c.get("/utility/breakdown?category=El&month=2026-01")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["category"] == "El"
+    assert body["month"] == "2026-01"
+    # Total = 900 + 800 = 1700
+    assert body["total"] == pytest.approx(1700.0)
+    assert len(body["items"]) == 2
+    # En tx, en split
+    types = {i["type"] for i in body["items"]}
+    assert types == {"transaction", "split"}
+    # Splits kan inte flyttas via date-patch
+    for item in body["items"]:
+        if item["type"] == "split":
+            assert item["can_move"] is False
+        else:
+            assert item["can_move"] is True
+
+
 def test_tibber_endpoints_require_token(client):
     """Utan token ska alla tibber-endpoints returnera 400, inte krascha."""
     c, _ = client

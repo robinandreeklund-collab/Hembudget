@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Key, RefreshCw, Trash2, Upload, Zap } from "lucide-react";
+import { Activity, Key, RefreshCw, Trash2, Upload, X, Zap } from "lucide-react";
 import { api, formatSEK, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 
@@ -73,6 +73,10 @@ export default function Utility() {
   const qc = useQueryClient();
   const [year, setYear] = useState(new Date().getFullYear());
   const [yoy, setYoy] = useState(false);
+  const [breakdownCell, setBreakdownCell] = useState<{
+    category: string;
+    month: string;
+  } | null>(null);
   const q = useQuery({
     queryKey: ["utility", year, yoy],
     queryFn: () =>
@@ -309,8 +313,14 @@ export default function Utility() {
                             key={m}
                             className={
                               "py-1.5 px-2 text-right " +
-                              (v === 0 ? "text-slate-400" : "")
+                              (v === 0
+                                ? "text-slate-400"
+                                : "cursor-pointer hover:bg-brand-50 hover:text-brand-700")
                             }
+                            onClick={() => {
+                              if (v > 0) setBreakdownCell({ category: c, month: m });
+                            }}
+                            title={v > 0 ? "Klicka för att se vad som ingår" : undefined}
                           >
                             {v === 0 ? "—" : formatSEK(v)}
                           </td>
@@ -416,6 +426,17 @@ export default function Utility() {
             </Card>
           )}
         </>
+      )}
+      {breakdownCell && (
+        <BreakdownModal
+          category={breakdownCell.category}
+          month={breakdownCell.month}
+          onClose={() => setBreakdownCell(null)}
+          onUpdated={() => {
+            qc.invalidateQueries({ queryKey: ["utility", year, yoy] });
+            qc.invalidateQueries({ queryKey: ["utility-readings", year] });
+          }}
+        />
       )}
     </div>
   );
@@ -884,6 +905,198 @@ function StackedMonthBar({
           />
         );
       })}
+    </div>
+  );
+}
+
+interface BreakdownItem {
+  type: "transaction" | "split";
+  id: number;
+  transaction_id?: number;
+  date: string;
+  amount: number;
+  description: string;
+  normalized_merchant: string | null;
+  account_id: number;
+  account_name: string;
+  can_move: boolean;
+}
+
+interface BreakdownData {
+  category: string;
+  month: string;
+  total: number;
+  items: BreakdownItem[];
+}
+
+function BreakdownModal({
+  category,
+  month,
+  onClose,
+  onUpdated,
+}: {
+  category: string;
+  month: string;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const qc = useQueryClient();
+  const breakdownQ = useQuery({
+    queryKey: ["utility-breakdown", category, month],
+    queryFn: () =>
+      api<BreakdownData>(
+        `/utility/breakdown?category=${encodeURIComponent(category)}&month=${month}`,
+      ),
+  });
+  const moveMut = useMutation({
+    mutationFn: (p: { tx_id: number; new_date: string }) =>
+      api(`/transactions/${p.tx_id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ date: p.new_date, create_rule: false }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["utility-breakdown", category, month] });
+      onUpdated();
+    },
+  });
+
+  const data = breakdownQ.data;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-8">
+        <div className="flex items-center justify-between p-4 border-b">
+          <div>
+            <h2 className="text-lg font-semibold">
+              {category} — {month}
+            </h2>
+            {data && (
+              <div className="text-sm text-slate-700 mt-0.5">
+                {data.items.length} poster · totalt {formatSEK(data.total)}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-600 hover:text-slate-900">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {breakdownQ.isLoading ? (
+            <div className="text-sm text-slate-700">Laddar…</div>
+          ) : !data || data.items.length === 0 ? (
+            <div className="text-sm text-slate-700">Inga poster hittade.</div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs text-slate-700 mb-2">
+                Klicka <strong>"Flytta"</strong> för att byta månad på en
+                transaktion (t.ex. om betalningen gjordes i mars men avser
+                februari). Splits följer transaktionens datum — flytta
+                hela transaktionen istället.
+              </div>
+              {data.items.map((item) => (
+                <BreakdownRow
+                  key={`${item.type}-${item.id}`}
+                  item={item}
+                  onMove={(newDate) => {
+                    const txId =
+                      item.type === "transaction" ? item.id : item.transaction_id;
+                    if (txId) moveMut.mutate({ tx_id: txId, new_date: newDate });
+                  }}
+                  moving={moveMut.isPending}
+                />
+              ))}
+              {moveMut.error && (
+                <div className="text-xs text-rose-600 mt-2">
+                  Fel: {(moveMut.error as Error).message}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end p-4 border-t">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded border border-slate-300 bg-white text-sm"
+          >
+            Stäng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BreakdownRow({
+  item,
+  onMove,
+  moving,
+}: {
+  item: BreakdownItem;
+  onMove: (newDate: string) => void;
+  moving: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [newDate, setNewDate] = useState(item.date);
+
+  return (
+    <div className="border rounded p-2 bg-white">
+      <div className="flex items-start gap-3 text-sm">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium">{item.description}</span>
+            {item.type === "split" && (
+              <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                split
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-slate-600 mt-0.5">
+            {item.date} · {item.account_name}
+          </div>
+        </div>
+        <div className="text-right font-semibold shrink-0">
+          {formatSEK(item.amount)}
+        </div>
+        {item.can_move ? (
+          <button
+            onClick={() => setEditing(!editing)}
+            className="text-xs text-brand-600 hover:underline shrink-0"
+          >
+            {editing ? "Avbryt" : "Flytta"}
+          </button>
+        ) : (
+          <span className="text-xs text-slate-500 shrink-0" title="Följer transaktionens datum">
+            —
+          </span>
+        )}
+      </div>
+      {editing && (
+        <div className="mt-2 pt-2 border-t bg-slate-50 -mx-2 px-2 pb-2 flex items-end gap-2">
+          <label className="flex-1">
+            <div className="text-xs text-slate-700 mb-0.5">Nytt datum</div>
+            <input
+              type="date"
+              value={newDate}
+              onChange={(e) => setNewDate(e.target.value)}
+              className="border rounded px-2 py-1 text-sm w-full"
+            />
+          </label>
+          <button
+            onClick={() => {
+              if (newDate !== item.date) {
+                onMove(newDate);
+                setEditing(false);
+              }
+            }}
+            disabled={moving || newDate === item.date}
+            className="bg-brand-600 text-white px-3 py-1.5 rounded text-xs disabled:opacity-50"
+          >
+            {moving ? "Flyttar…" : "Spara"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -242,6 +242,93 @@ def utility_history(
     return hist
 
 
+# -------- Breakdown (vad ingar i en cell?) --------
+
+@router.get("/breakdown")
+def utility_breakdown(
+    category: str,
+    month: str,
+    session: Session = Depends(db),
+) -> dict:
+    """Lista alla transaktioner + splits som bidrar till en specifik
+    cell i /utility-tabellen (kategori x manad). Anvands for att se
+    "vad ingar har?" och for att kunna flytta fel-datade rader."""
+    from hembudget.db.models import Account
+
+    cat = session.query(Category).filter(Category.name == category).first()
+    if cat is None:
+        return {"items": [], "category": category, "month": month, "total": 0}
+
+    y, m = map(int, month.split("-"))
+    start = date(y, m, 1)
+    end = date(y, m + 1, 1) if m < 12 else date(y + 1, 1, 1)
+
+    # Fullstandiga Transaction-rader med den har kategorin
+    tx_rows = (
+        session.query(Transaction)
+        .filter(
+            Transaction.date >= start,
+            Transaction.date < end,
+            Transaction.category_id == cat.id,
+            Transaction.amount < 0,
+        )
+        .all()
+    )
+
+    # Splits med den har kategorin (tx.date styr manaden)
+    split_rows = (
+        session.query(TransactionSplit, Transaction)
+        .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+        .filter(
+            Transaction.date >= start,
+            Transaction.date < end,
+            TransactionSplit.category_id == cat.id,
+        )
+        .all()
+    )
+
+    accounts = {a.id: a.name for a in session.query(Account).all()}
+    items = []
+    total = 0.0
+    for tx in tx_rows:
+        amt = float(abs(tx.amount))
+        items.append({
+            "type": "transaction",
+            "id": tx.id,
+            "date": tx.date.isoformat(),
+            "amount": amt,
+            "description": tx.raw_description,
+            "normalized_merchant": tx.normalized_merchant,
+            "account_id": tx.account_id,
+            "account_name": accounts.get(tx.account_id, f"#{tx.account_id}"),
+            "can_move": True,
+        })
+        total += amt
+    for split, tx in split_rows:
+        amt = float(abs(split.amount))
+        items.append({
+            "type": "split",
+            "id": split.id,
+            "transaction_id": tx.id,
+            "date": tx.date.isoformat(),
+            "amount": amt,
+            "description": f"{tx.raw_description} > {split.description}",
+            "normalized_merchant": tx.normalized_merchant,
+            "account_id": tx.account_id,
+            "account_name": accounts.get(tx.account_id, f"#{tx.account_id}"),
+            "can_move": False,  # splits foljer tx:ens datum
+        })
+        total += amt
+
+    items.sort(key=lambda i: i["date"])
+    return {
+        "category": category,
+        "month": month,
+        "total": round(total, 2),
+        "items": items,
+    }
+
+
 # -------- UtilityReading CRUD --------
 
 @router.get("/readings")
