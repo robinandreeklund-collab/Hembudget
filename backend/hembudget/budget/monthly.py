@@ -19,6 +19,39 @@ class CategoryLine:
     planned: Decimal
     actual: Decimal
     diff: Decimal
+    # Nya fält för v2-UI:n. Bakåtkompatibla — äldre kod som bara läser
+    # (category_id, category, planned, actual, diff) fortsätter fungera.
+    kind: str = "expense"  # "income" | "expense"
+    group_id: int | None = None  # parent_id om kategorin är under en grupp
+    group: str | None = None  # parent.name
+    progress_pct: float = 0.0  # |actual| / |planned|, 0.0 om planned=0
+    trend_median: Decimal = Decimal("0")  # median utfall senaste 3 mån
+
+
+@dataclass
+class GroupSummary:
+    """Aggregat per kategorigrupp (parent). 'Utan grupp' samlar
+    kategorier utan parent."""
+    group_id: int | None
+    group: str
+    planned: Decimal
+    actual: Decimal
+    diff: Decimal
+    progress_pct: float
+    category_ids: list[int] = field(default_factory=list)
+
+
+@dataclass
+class AutoFillSuggestion:
+    """En förslags-rad för auto-fyll-modalen. Användaren kan bocka i vilka
+    som ska sparas — allt eller inget är fel UX."""
+    category_id: int
+    category: str
+    group: str | None
+    suggested: Decimal  # median av utfall senaste N månader
+    current_planned: Decimal | None  # nuvarande budget för target_month
+    months_with_data: int
+    kind: str  # "income" | "expense"
 
 
 @dataclass
@@ -29,6 +62,7 @@ class MonthSummary:
     savings: Decimal
     savings_rate: float
     lines: list[CategoryLine] = field(default_factory=list)
+    groups: list[GroupSummary] = field(default_factory=list)
 
 
 def _month_bounds(month: str) -> tuple[date, date]:
@@ -279,23 +313,69 @@ class MonthlyBudgetService:
             .filter(Budget.month == month)
             .all()
         )
+
+        # Förladda kategori-träd så vi kan gruppera per parent utan N+1.
+        all_cats = self.session.query(Category).all()
+        cat_by_id: dict[int, Category] = {c.id: c for c in all_cats}
+
+        def _parent_info(cat_id: int) -> tuple[int | None, str | None]:
+            c = cat_by_id.get(cat_id)
+            if c is None or c.parent_id is None:
+                return None, None
+            parent = cat_by_id.get(c.parent_id)
+            if parent is None:
+                return None, None
+            return parent.id, parent.name
+
+        # Trend: median absolut utfall per kategori över de 3 senaste
+        # månaderna (exklusive innevarande). Används som hint i UI:n.
+        trend_start = _shift_months(start, -3)
+        trend_by_cat = self._history_median_abs(trend_start, start)
+
         lines: list[CategoryLine] = []
         seen: set[int] = set()
+
+        def _kind_of(planned: Decimal, actual: Decimal) -> str:
+            """Kategoriklassning: om någon av planerad eller utfall är
+            positiv kallar vi den 'income'. Utgiftskategorier har typiskt
+            negativa utfall (pengar UT från kontot) — planned_amount sparas
+            också negativt via auto_budget."""
+            if actual > 0 or planned > 0:
+                return "income"
+            return "expense"
+
+        def _progress(planned: Decimal, actual: Decimal) -> float:
+            if planned == 0:
+                return 0.0
+            # Jämför absoluta belopp för att hantera negativa utgifter
+            # konsistent. Returnera procent (0-200 är typiska värden).
+            return round(float(abs(actual) / abs(planned) * 100), 1)
+
         for b, c in planned_rows:
-            actual_name, actual = actual_by_cat.get(c.id, (c.name, Decimal("0")))
+            _, actual = actual_by_cat.get(c.id, (c.name, Decimal("0")))
+            planned_v = b.planned_amount
+            kind = _kind_of(planned_v, actual)
+            g_id, g_name = _parent_info(c.id)
             lines.append(
                 CategoryLine(
                     category_id=c.id,
                     category=c.name,
-                    planned=b.planned_amount,
+                    planned=planned_v,
                     actual=actual,
-                    diff=b.planned_amount - (-actual if actual < 0 else actual),
+                    diff=planned_v - (-actual if actual < 0 else actual),
+                    kind=kind,
+                    group_id=g_id,
+                    group=g_name,
+                    progress_pct=_progress(planned_v, actual),
+                    trend_median=trend_by_cat.get(c.id, Decimal("0")),
                 )
             )
             seen.add(c.id)
         for cat_id, (name, actual) in actual_by_cat.items():
             if cat_id in seen:
                 continue
+            kind = _kind_of(Decimal("0"), actual)
+            g_id, g_name = _parent_info(cat_id)
             lines.append(
                 CategoryLine(
                     category_id=cat_id,
@@ -303,12 +383,63 @@ class MonthlyBudgetService:
                     planned=Decimal("0"),
                     actual=actual,
                     diff=Decimal("0") - (-actual if actual < 0 else actual),
+                    kind=kind,
+                    group_id=g_id,
+                    group=g_name,
+                    progress_pct=0.0,
+                    trend_median=trend_by_cat.get(cat_id, Decimal("0")),
                 )
             )
 
         savings = income - expenses
         rate = float(savings / income) if income > 0 else 0.0
-        lines.sort(key=lambda l: l.actual)
+        # Sortera utgifter efter hur nära/över budget man är (mest röd
+        # överst), inkomster separat underst. Ger en naturlig "fokusera på
+        # det som sticker ut"-vy.
+        lines.sort(
+            key=lambda l: (
+                l.kind == "income",  # False (expenses) först
+                -l.progress_pct,
+                float(l.actual),
+            )
+        )
+
+        # Gruppaggregat — används av UI:n för collapsible-grupper.
+        groups_map: dict[tuple[int | None, str], GroupSummary] = {}
+        for l in lines:
+            # Inkomster hamnar i sin egen bucket "Inkomster" så det blir
+            # tydligt — annars skulle de slåss med utgifter i samma grupp.
+            if l.kind == "income":
+                key = (None, "Inkomster")
+                label = "Inkomster"
+                gid = None
+            else:
+                key = (l.group_id, l.group or "Övrigt")
+                label = l.group or "Övrigt"
+                gid = l.group_id
+            g = groups_map.get(key)
+            if g is None:
+                g = GroupSummary(
+                    group_id=gid,
+                    group=label,
+                    planned=Decimal("0"),
+                    actual=Decimal("0"),
+                    diff=Decimal("0"),
+                    progress_pct=0.0,
+                )
+                groups_map[key] = g
+            g.planned += l.planned
+            g.actual += l.actual
+            g.diff += l.diff
+            g.category_ids.append(l.category_id)
+        for g in groups_map.values():
+            g.progress_pct = _progress(g.planned, g.actual)
+
+        groups = list(groups_map.values())
+        groups.sort(
+            key=lambda g: (g.group == "Inkomster", -g.progress_pct, g.group)
+        )
+
         return MonthSummary(
             month=month,
             income=income,
@@ -316,4 +447,170 @@ class MonthlyBudgetService:
             savings=savings,
             savings_rate=round(rate, 4),
             lines=lines,
+            groups=groups,
         )
+
+    def _history_median_abs(
+        self, start: date, end: date
+    ) -> dict[int, Decimal]:
+        """Median absolut utfall per kategori i perioden [start, end).
+        Används av UI:n för att visa 'snitt senaste 3 mån' bredvid budget.
+        Inkluderar både plain tx och splits."""
+        split_tx_ids: set[int] = {
+            row[0]
+            for row in self.session.execute(
+                select(TransactionSplit.transaction_id).distinct()
+            ).all()
+        }
+        plain_q = (
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("m"),
+                Transaction.category_id,
+                func.sum(Transaction.amount).label("total"),
+            )
+            .where(
+                Transaction.date >= start,
+                Transaction.date < end,
+                Transaction.is_transfer.is_(False),
+                Transaction.category_id.is_not(None),
+            )
+            .group_by("m", Transaction.category_id)
+        )
+        if split_tx_ids:
+            plain_q = plain_q.where(Transaction.id.not_in(split_tx_ids))
+        plain_rows = self.session.execute(plain_q).all()
+
+        split_rows = self.session.execute(
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("m"),
+                TransactionSplit.category_id,
+                func.sum(TransactionSplit.amount).label("total"),
+            )
+            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+            .where(
+                Transaction.date >= start,
+                Transaction.date < end,
+                Transaction.is_transfer.is_(False),
+                TransactionSplit.category_id.is_not(None),
+            )
+            .group_by("m", TransactionSplit.category_id)
+        ).all()
+
+        per_cat: dict[int, dict[str, float]] = {}
+        for m, cat_id, total in list(plain_rows) + list(split_rows):
+            if cat_id is None:
+                continue
+            per_cat.setdefault(int(cat_id), {})
+            per_cat[int(cat_id)][m] = per_cat[int(cat_id)].get(m, 0.0) + float(total or 0)
+        out: dict[int, Decimal] = {}
+        for cat_id, series in per_cat.items():
+            values = [abs(v) for v in series.values()]
+            if not values:
+                continue
+            out[cat_id] = Decimal(str(round(median(values), 2)))
+        return out
+
+    def auto_fill_suggestions(
+        self, target_month: str, lookback_months: int = 6
+    ) -> list[AutoFillSuggestion]:
+        """Förbered auto-fyll-förslag per kategori utan att spara. Används
+        av /budget/{month}/auto-fill-preview så användaren kan markera
+        vilka rader som ska sparas via /budget/bulk-set."""
+        target_start, _ = _month_bounds(target_month)
+        lookback_start = _shift_months(target_start, -lookback_months)
+
+        split_tx_ids: set[int] = {
+            row[0]
+            for row in self.session.execute(
+                select(TransactionSplit.transaction_id).distinct()
+            ).all()
+        }
+        plain_q = (
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("m"),
+                Transaction.category_id,
+                func.sum(Transaction.amount).label("total"),
+            )
+            .where(
+                Transaction.date >= lookback_start,
+                Transaction.date < target_start,
+                Transaction.is_transfer.is_(False),
+                Transaction.category_id.is_not(None),
+            )
+            .group_by("m", Transaction.category_id)
+        )
+        if split_tx_ids:
+            plain_q = plain_q.where(Transaction.id.not_in(split_tx_ids))
+        plain_rows = self.session.execute(plain_q).all()
+        split_rows = self.session.execute(
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("m"),
+                TransactionSplit.category_id,
+                func.sum(TransactionSplit.amount).label("total"),
+            )
+            .join(Transaction, Transaction.id == TransactionSplit.transaction_id)
+            .where(
+                Transaction.date >= lookback_start,
+                Transaction.date < target_start,
+                Transaction.is_transfer.is_(False),
+                TransactionSplit.category_id.is_not(None),
+            )
+            .group_by("m", TransactionSplit.category_id)
+        ).all()
+
+        per_cat: dict[int, dict[str, float]] = {}
+        for m, cat_id, total in list(plain_rows) + list(split_rows):
+            if cat_id is None:
+                continue
+            per_cat.setdefault(int(cat_id), {})
+            per_cat[int(cat_id)][m] = per_cat[int(cat_id)].get(m, 0.0) + float(total or 0)
+
+        existing = {
+            b.category_id: b
+            for b in self.session.query(Budget).filter(Budget.month == target_month).all()
+        }
+        all_cats = {c.id: c for c in self.session.query(Category).all()}
+
+        out: list[AutoFillSuggestion] = []
+        for cat_id, series in per_cat.items():
+            values = list(series.values())
+            if not values:
+                continue
+            med = Decimal(str(round(median(values), 2)))
+            if abs(med) < Decimal("50"):
+                continue
+            c = all_cats.get(cat_id)
+            if c is None:
+                continue
+            parent = all_cats.get(c.parent_id) if c.parent_id else None
+            kind = "income" if med > 0 else "expense"
+            out.append(
+                AutoFillSuggestion(
+                    category_id=cat_id,
+                    category=c.name,
+                    group=parent.name if parent else None,
+                    suggested=med,
+                    current_planned=(
+                        existing[cat_id].planned_amount
+                        if cat_id in existing
+                        else None
+                    ),
+                    months_with_data=len(values),
+                    kind=kind,
+                )
+            )
+        # Sortera: utgifter först (störst absolut belopp överst), sen inkomster.
+        out.sort(
+            key=lambda s: (s.kind == "income", -abs(float(s.suggested)))
+        )
+        return out
+
+    def bulk_set(
+        self, month: str, rows: list[tuple[int, Decimal]]
+    ) -> list[Budget]:
+        """Sätt budget för flera kategorier i ett svep. Används av
+        auto-fyll-modalen där användaren valt specifika förslag."""
+        out: list[Budget] = []
+        for cat_id, amount in rows:
+            out.append(self.set_budget(month, cat_id, amount))
+        return out

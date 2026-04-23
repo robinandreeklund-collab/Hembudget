@@ -12,7 +12,7 @@ from ..chat import tools as chat_tools
 from ..db.models import Transaction
 from ..subscriptions.detector import SubscriptionDetector
 from .deps import db, require_auth
-from .schemas import BudgetIn
+from .schemas import BudgetBulkIn, BudgetIn
 
 router = APIRouter(prefix="/budget", tags=["budget"], dependencies=[Depends(require_auth)])
 
@@ -49,7 +49,11 @@ def auto_budget(
 ) -> dict:
     """Fyll i planerad budget automatiskt från medianen av senaste
     `lookback_months` månader. Default: ändrar bara kategorier som saknar
-    budget för given månad — sätt overwrite=true för att ersätta allt."""
+    budget för given månad — sätt overwrite=true för att ersätta allt.
+
+    OBS: denna endpoint är legacy. Nya UI:n använder
+    /budget/{month}/auto-fill-preview + /budget/bulk-set istället, där
+    användaren markerar vilka rader som ska sparas."""
     svc = MonthlyBudgetService(session)
     created = svc.auto_budget(month, lookback_months=lookback_months, overwrite=overwrite)
     return {
@@ -62,6 +66,60 @@ def auto_budget(
                 "planned_amount": float(b.planned_amount),
             }
             for b in created
+        ],
+    }
+
+
+@router.get("/{month}/auto-fill-preview")
+def auto_fill_preview(
+    month: str,
+    lookback_months: int = 6,
+    session: Session = Depends(db),
+) -> dict:
+    """Förhandsvisa auto-fyll-förslag utan att spara något. UI:n visar
+    en lista där användaren bockar i vilka kategorier som ska fyllas —
+    sen skickas valen till POST /budget/bulk-set."""
+    import re
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Invalid month format: {month}")
+    svc = MonthlyBudgetService(session)
+    suggestions = svc.auto_fill_suggestions(month, lookback_months=lookback_months)
+    return {
+        "month": month,
+        "lookback_months": lookback_months,
+        "suggestions": [
+            {
+                "category_id": s.category_id,
+                "category": s.category,
+                "group": s.group,
+                "suggested": float(s.suggested),
+                "current_planned": (
+                    float(s.current_planned) if s.current_planned is not None else None
+                ),
+                "months_with_data": s.months_with_data,
+                "kind": s.kind,
+            }
+            for s in suggestions
+        ],
+    }
+
+
+@router.post("/bulk-set")
+def bulk_set_budget(payload: BudgetBulkIn, session: Session = Depends(db)) -> dict:
+    """Sätt budget för flera kategorier samtidigt. Används när användaren
+    godkänt ett urval från auto-fyll-modalen."""
+    svc = MonthlyBudgetService(session)
+    saved = svc.bulk_set(
+        payload.month,
+        [(r.category_id, r.planned_amount) for r in payload.rows],
+    )
+    return {
+        "month": payload.month,
+        "saved": len(saved),
+        "budgets": [
+            {"category_id": b.category_id, "planned_amount": float(b.planned_amount)}
+            for b in saved
         ],
     }
 
@@ -204,7 +262,24 @@ def get_summary(month: str, session: Session = Depends(db)) -> dict:
                 "planned": float(l.planned),
                 "actual": float(l.actual),
                 "diff": float(l.diff),
+                "kind": l.kind,
+                "group_id": l.group_id,
+                "group": l.group,
+                "progress_pct": l.progress_pct,
+                "trend_median": float(l.trend_median),
             }
             for l in s.lines
+        ],
+        "groups": [
+            {
+                "group_id": g.group_id,
+                "group": g.group,
+                "planned": float(g.planned),
+                "actual": float(g.actual),
+                "diff": float(g.diff),
+                "progress_pct": g.progress_pct,
+                "category_ids": g.category_ids,
+            }
+            for g in s.groups
         ],
     }

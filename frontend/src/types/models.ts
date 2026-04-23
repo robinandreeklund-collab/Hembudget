@@ -54,19 +54,47 @@ export interface Transaction {
   upcoming_matches?: UpcomingMatch[];
 }
 
+export interface BudgetLine {
+  category_id: number;
+  category: string;
+  planned: number;
+  actual: number;
+  diff: number;
+  kind?: "income" | "expense";
+  group_id?: number | null;
+  group?: string | null;
+  progress_pct?: number;
+  trend_median?: number;
+}
+
+export interface BudgetGroup {
+  group_id: number | null;
+  group: string;
+  planned: number;
+  actual: number;
+  diff: number;
+  progress_pct: number;
+  category_ids: number[];
+}
+
 export interface MonthSummary {
   month: string;
   income: number;
   expenses: number;
   savings: number;
   savings_rate: number;
-  lines: Array<{
-    category_id: number;
-    category: string;
-    planned: number;
-    actual: number;
-    diff: number;
-  }>;
+  lines: BudgetLine[];
+  groups?: BudgetGroup[];
+}
+
+export interface AutoFillSuggestion {
+  category_id: number;
+  category: string;
+  group: string | null;
+  suggested: number;
+  current_planned: number | null;
+  months_with_data: number;
+  kind: "income" | "expense";
 }
 
 export interface ForecastPoint {

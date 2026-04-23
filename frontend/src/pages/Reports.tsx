@@ -127,7 +127,15 @@ export default function Reports() {
       <h1 className="text-2xl font-semibold">Rapporter</h1>
 
       <Card title="Månadsrapport (export)">
-        <div className="flex items-end gap-3">
+        <div className="text-sm text-slate-700 mb-3">
+          En visuell månadsöversikt som går att dela med din partner. PDF:en
+          innehåller KPI-ruta (inkomst, utgifter, sparat, sparkvot),{" "}
+          <strong>tårtdiagram</strong> över utgifter per kategori och inkomst
+          per person, <strong>förslag på överföringar</strong> till gemensamt
+          konto (50/50 + prorata på inkomst), staplar med budget vs utfall samt
+          en jämförelse mot föregående månad.
+        </div>
+        <div className="flex items-end gap-3 flex-wrap">
           <label className="text-sm">
             <div className="text-slate-700">Månad</div>
             <input
@@ -138,16 +146,18 @@ export default function Reports() {
             />
           </label>
           <button
-            className="bg-slate-800 text-white px-3 py-1.5 rounded"
-            onClick={() => download(`/reports/month/${month}/excel`, `hembudget-${month}.xlsx`)}
+            className="bg-brand-600 text-white px-3 py-1.5 rounded hover:bg-brand-700"
+            onClick={() => download(`/reports/month/${month}/pdf`, `hembudget-${month}.pdf`)}
+            title="Visuell PDF med diagram och överföringsförslag"
           >
-            Ladda ner Excel
+            📄 Ladda ner PDF
           </button>
           <button
-            className="bg-brand-600 text-white px-3 py-1.5 rounded"
-            onClick={() => download(`/reports/month/${month}/pdf`, `hembudget-${month}.pdf`)}
+            className="bg-slate-700 text-white px-3 py-1.5 rounded hover:bg-slate-800"
+            onClick={() => download(`/reports/month/${month}/excel`, `hembudget-${month}.xlsx`)}
+            title="Tre flikar: Budget, Överföringar, Förändring mot förra månaden"
           >
-            Ladda ner PDF
+            📊 Ladda ner Excel
           </button>
         </div>
       </Card>

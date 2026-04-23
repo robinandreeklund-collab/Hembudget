@@ -146,6 +146,18 @@ class BudgetIn(BaseModel):
     planned_amount: Decimal
 
 
+class BudgetBulkRow(BaseModel):
+    category_id: int
+    planned_amount: Decimal
+
+
+class BudgetBulkIn(BaseModel):
+    """Body till POST /budget/bulk-set — listan av kategorier med
+    planerat belopp som användaren godkänt i auto-fyll-modalen."""
+    month: str
+    rows: list[BudgetBulkRow]
+
+
 class ChatMessageIn(BaseModel):
     session_id: str
     content: str
