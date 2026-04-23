@@ -527,6 +527,26 @@ class LockedPeriod(Base):
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class DismissedTransferSuggestion(Base):
+    """Användaren har klickat bort ett föreslaget transfer-par — ska
+    inte föreslås igen. Primary key är (lower_tx_id, higher_tx_id) för
+    att para oberoende av ordning.
+    """
+    __tablename__ = "dismissed_transfer_suggestions"
+
+    tx_a_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tx_b_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class UtilityReading(Base):
     """Förbrukningsdata från energifakturor och smart-meter-APIer.
 

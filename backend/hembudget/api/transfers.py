@@ -8,9 +8,14 @@ from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..db.models import Account, Transaction
+from ..db.models import Account, DismissedTransferSuggestion, Transaction
 from ..transfers.detector import TransferDetector
 from .deps import db, require_auth
+
+
+def _dismissal_key(a: int, b: int) -> tuple[int, int]:
+    """Par-nyckel oberoende av ordning — tabellen lagrar (min, max)."""
+    return (a, b) if a < b else (b, a)
 
 router = APIRouter(prefix="/transfers", tags=["transfers"], dependencies=[Depends(require_auth)])
 
@@ -102,6 +107,11 @@ def list_suggestions(
     tol = Decimal(str(amount_tolerance))
     suggestions = []
     seen: set[tuple[int, int]] = set()
+    # Användaren har klickat bort vissa par — de ska inte dyka upp igen.
+    dismissed: set[tuple[int, int]] = {
+        (r.tx_a_id, r.tx_b_id)
+        for r in session.query(DismissedTransferSuggestion).all()
+    }
 
     for src in unpaired:
         if src.amount >= 0:
@@ -119,6 +129,8 @@ def list_suggestions(
             key = tuple(sorted((src.id, dst.id)))
             if key in seen:
                 continue
+            if _dismissal_key(src.id, dst.id) in dismissed:
+                continue
             seen.add(key)
             suggestions.append({
                 "source": _tx_out(src, accounts),
@@ -135,6 +147,27 @@ def list_suggestions(
 class LinkIn(BaseModel):
     tx_a_id: int
     tx_b_id: int
+
+
+class DismissIn(BaseModel):
+    src_id: int
+    dst_id: int
+
+
+@router.post("/suggestions/dismiss")
+def dismiss_suggestion(payload: DismissIn, session: Session = Depends(db)) -> dict:
+    """Ta bort ett föreslaget transfer-par så det inte dyker upp igen.
+    Lagrar (min_id, max_id) så ordning spelar ingen roll."""
+    a, b = _dismissal_key(payload.src_id, payload.dst_id)
+    existing = (
+        session.query(DismissedTransferSuggestion)
+        .filter_by(tx_a_id=a, tx_b_id=b)
+        .first()
+    )
+    if existing is None:
+        session.add(DismissedTransferSuggestion(tx_a_id=a, tx_b_id=b))
+        session.flush()
+    return {"dismissed": True, "tx_a_id": a, "tx_b_id": b}
 
 
 @router.post("/link")

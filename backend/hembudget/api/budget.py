@@ -70,6 +70,111 @@ def auto_budget(
     }
 
 
+@router.get("/{month}/breakdown")
+def month_breakdown(
+    month: str,
+    kind: str = "income",
+    session: Session = Depends(db),
+) -> dict:
+    """Platt lista med poster (transaktioner + omatchade upcomings) för
+    månaden, filtrerat på income/expense. Summan stämmer med
+    MonthlyBudgetService.summary(month).income/expenses så KPI-kortet
+    och breakdown-modalen visar samma siffra.
+
+    Matchar exakt samma exkluderingsregler som summary:
+    - Inga transfers
+    - Inga privata utgifter på incognito-konton (men inkomster räknas)
+    - Omatchade upcomings med expected_date i månaden tas med
+    """
+    import re
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Invalid month format: {month}")
+    if kind not in ("income", "expense"):
+        from fastapi import HTTPException
+        raise HTTPException(400, "kind måste vara 'income' eller 'expense'")
+
+    from ..db.models import Account, Category, UpcomingTransaction
+    from ..budget.monthly import _month_bounds
+    start, end = _month_bounds(month)
+
+    items: list[dict] = []
+
+    # 1. Transaktioner — inklusive splits-aware filtrering. För vår
+    #    modal räcker det att visa raw-transaktioner — splits visas bara
+    #    som tooltip-hint via category_id.
+    q = (
+        session.query(Transaction, Account, Category)
+        .join(Account, Account.id == Transaction.account_id)
+        .outerjoin(Category, Category.id == Transaction.category_id)
+        .filter(
+            Transaction.date >= start,
+            Transaction.date < end,
+            Transaction.is_transfer.is_(False),
+        )
+    )
+    if kind == "income":
+        q = q.filter(Transaction.amount > 0)
+    else:
+        q = q.filter(Transaction.amount < 0)
+        # Privata utgifter på inkognito-konton räknas inte i summary,
+        # så vi ska inte visa dem i modalen heller.
+        q = q.filter(Account.incognito.is_(False))
+
+    for tx, acc, cat in q.all():
+        items.append({
+            "id": tx.id,
+            "date": tx.date.isoformat(),
+            "description": tx.raw_description,
+            "amount": float(tx.amount),
+            "category_id": tx.category_id,
+            "category": cat.name if cat else None,
+            "account": acc.name,
+            "source": "transaction",
+        })
+
+    # 2. Omatchade upcomings inom månaden — samma logik som
+    #    MonthlyBudgetService.summary() använder när den räknar in
+    #    manuellt dokumenterade löner och bills.
+    target_kind = "income" if kind == "income" else "bill"
+    ups = (
+        session.query(UpcomingTransaction, Category)
+        .outerjoin(Category, Category.id == UpcomingTransaction.category_id)
+        .filter(
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+            UpcomingTransaction.matched_transaction_id.is_(None),
+            UpcomingTransaction.kind == target_kind,
+        )
+        .all()
+    )
+    for up, cat in ups:
+        # Summary lägger på amount direkt (positivt för income, positivt
+        # för bill → expense). För modalen normaliserar vi till samma
+        # sign-konvention som transactions: income +, expense -.
+        amt = float(up.amount)
+        if kind == "expense":
+            amt = -abs(amt)
+        items.append({
+            "id": f"upcoming_{up.id}",
+            "date": up.expected_date.isoformat(),
+            "description": up.name,
+            "amount": amt,
+            "category_id": up.category_id,
+            "category": cat.name if cat else None,
+            "account": None,
+            "source": "upcoming",
+        })
+
+    items.sort(key=lambda i: i["date"])
+    return {
+        "month": month,
+        "kind": kind,
+        "items": items,
+        "total": sum(i["amount"] for i in items),
+    }
+
+
 @router.get("/{month}/auto-fill-preview")
 def auto_fill_preview(
     month: str,

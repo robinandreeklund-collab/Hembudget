@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
+import TibberSettings from "@/components/TibberSettings";
 import { useAuth } from "@/hooks/useAuth";
 import type { Account, HouseholdUser } from "@/types/models";
 
@@ -150,6 +151,9 @@ export default function Settings() {
     queryFn: () =>
       api<SubHealthResp>("/budget/subscriptions/health?stale_days=60"),
   });
+  // Hälsokollstabellen kan vara lång — börja minimerad. Summan visas
+  // alltid på kort-headern så man ser totalen utan att fälla ut.
+  const [subsOpen, setSubsOpen] = useState(false);
 
   const scanTransfersMut = useMutation({
     mutationFn: () =>
@@ -352,14 +356,33 @@ export default function Settings() {
       <Card
         title="Prenumerationer — hälsokoll"
         action={
-          subHealthQ.data && (
-            <span className="text-xs text-slate-700">
-              Totalt {formatSEK(subHealthQ.data.total_annual_cost)}/år
-            </span>
-          )
+          <div className="flex items-center gap-3">
+            {subHealthQ.data && (
+              <span className="text-xs text-slate-700">
+                Totalt {formatSEK(subHealthQ.data.total_annual_cost)}/år
+                {subHealthQ.data.stale_annual_cost > 0 && (
+                  <span className="ml-2 text-amber-700">
+                    · {formatSEK(subHealthQ.data.stale_annual_cost)}/år att granska
+                  </span>
+                )}
+              </span>
+            )}
+            <button
+              onClick={() => setSubsOpen((v) => !v)}
+              className="text-xs text-slate-700 hover:text-slate-900 border rounded px-2 py-0.5"
+            >
+              {subsOpen ? "Dölj" : "Visa"}
+            </button>
+          </div>
         }
       >
-        {subHealthQ.isLoading ? (
+        {!subsOpen ? (
+          <div className="text-sm text-slate-700">
+            {subHealthQ.data?.subscriptions?.length
+              ? `${subHealthQ.data.subscriptions.length} aktiva prenumerationer. Klicka "Visa" för detaljer.`
+              : "Inga aktiva prenumerationer registrerade."}
+          </div>
+        ) : subHealthQ.isLoading ? (
           <div className="text-sm text-slate-700">Analyserar…</div>
         ) : !subHealthQ.data || subHealthQ.data.subscriptions.length === 0 ? (
           <div className="text-sm text-slate-700">
@@ -507,6 +530,8 @@ export default function Settings() {
           </div>
         </div>
       </Card>
+
+      <TibberSettings />
 
       <Card title="Session">
         <button className="bg-rose-600 text-white px-4 py-2 rounded" onClick={logout}>

@@ -91,6 +91,33 @@ def huvudbok(
         )
         reclassified_transfer_ids.update(pid for (pid,) in partner_rows if pid)
 
+    # Bygg lookup: tx_id → (category_id, category_name) från matchade
+    # upcomings. Används för att kategorisera bill-betalningar som saknar
+    # egen category_id (t.ex. Amex-autogiro som är markerad som
+    # transfer men matchad mot en Amex-faktura-upcoming). Utan detta
+    # hamnar de under 'Okategoriserat' i resultaträkningen.
+    upcoming_cat_by_tx: dict[int, tuple[int | None, str | None]] = {}
+    if upcoming_matched_ids:
+        up_rows = (
+            session.query(
+                UpcomingPayment.transaction_id,
+                UpcomingTransaction.category_id,
+                Category.name,
+            )
+            .join(
+                UpcomingTransaction,
+                UpcomingTransaction.id == UpcomingPayment.upcoming_id,
+            )
+            .outerjoin(
+                Category, Category.id == UpcomingTransaction.category_id
+            )
+            .all()
+        )
+        for tx_id, cat_id, cat_name in up_rows:
+            if tx_id in upcoming_cat_by_tx:
+                continue
+            upcoming_cat_by_tx[tx_id] = (cat_id, cat_name)
+
     # ---------- Balansrapport per konto ----------
     accounts = session.query(Account).order_by(Account.id).all()
     account_rows = []
@@ -270,19 +297,39 @@ def huvudbok(
         if tx.id in tx_ids_with_splits:
             splits = splits_by_tx.get(tx.id, [])
             sign = 1 if tx.amount > 0 else -1
+            # Upcoming-matchad tx utan egen split-kategori får falla
+            # tillbaka på upcomings kategori (samma regel som för
+            # transaktioner utan splits).
+            fallback_cat: tuple[int | None, str | None] = (None, None)
+            if tx.id in upcoming_cat_by_tx:
+                fallback_cat = upcoming_cat_by_tx[tx.id]
             for s in splits:
                 s_cat = _cat_by_id.get(s.category_id) if s.category_id else None
                 s_cat_id = s_cat.id if s_cat else None
-                s_cat_name = s_cat.name if s_cat else "Okategoriserat"
+                s_cat_name = s_cat.name if s_cat else None
+                if s_cat_id is None and fallback_cat[0] is not None:
+                    s_cat_id = fallback_cat[0]
+                    s_cat_name = fallback_cat[1]
+                if s_cat_name is None:
+                    s_cat_name = "Okategoriserat"
                 if s_cat_id is None and tx.id not in upcoming_matched_ids:
                     uncategorized_count += 1
                 # Split-amount är alltid positivt i schemat — applicera tx:s sign
                 _add_to_cat(s_cat_id, s_cat_name, sign * abs(s.amount))
             continue  # Hoppa över tx:s egen kategorisering
 
-        # Inga splits → använd tx:s egen category_id som innan
+        # Inga splits → använd tx:s egen category_id som innan, men
+        # med fallback till upcoming:ens kategori om tx är bill-match
+        # utan egen kategori.
         cat_id = cat.id if cat else None
-        cat_name = cat.name if cat else "Okategoriserat"
+        cat_name = cat.name if cat else None
+        if cat_id is None and tx.id in upcoming_cat_by_tx:
+            up_cat_id, up_cat_name = upcoming_cat_by_tx[tx.id]
+            if up_cat_id is not None:
+                cat_id = up_cat_id
+                cat_name = up_cat_name
+        if cat_name is None:
+            cat_name = "Okategoriserat"
         if cat_id is None and tx.id not in upcoming_matched_ids:
             uncategorized_count += 1
         key = (cat_id, cat_name)

@@ -145,6 +145,21 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "upcoming_transactions", col_sql)
                 applied.append(f"upcoming_transactions.{col_name}")
 
+    # dismissed_transfer_suggestions — bortklickade förslag
+    if not _table_exists(engine, "dismissed_transfer_suggestions"):
+        with engine.begin() as conn:
+            conn.execute(text(
+                """
+                CREATE TABLE dismissed_transfer_suggestions (
+                    tx_a_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                    tx_b_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                    dismissed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (tx_a_id, tx_b_id)
+                )
+                """
+            ))
+        applied.append("dismissed_transfer_suggestions (table)")
+
     # locked_periods — huvudbok-lås per månad
     if not _table_exists(engine, "locked_periods"):
         with engine.begin() as conn:

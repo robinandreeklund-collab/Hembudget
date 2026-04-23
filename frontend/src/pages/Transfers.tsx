@@ -79,6 +79,14 @@ export default function Transfers() {
     mutationFn: (id: number) => api(`/transfers/unlink/${id}`, { method: "POST" }),
     onSuccess: invalidate,
   });
+  const dismissMut = useMutation({
+    mutationFn: (p: { src_id: number; dst_id: number }) =>
+      api("/transfers/suggestions/dismiss", {
+        method: "POST",
+        body: JSON.stringify(p),
+      }),
+    onSuccess: invalidate,
+  });
 
   const pairs = pairsQ.data?.pairs ?? [];
   const unpaired = unpairedQ.data?.transactions ?? [];
@@ -191,6 +199,15 @@ export default function Transfers() {
                 >
                   Para ihop
                 </button>
+                <button
+                  onClick={() =>
+                    dismissMut.mutate({ src_id: s.source.id, dst_id: s.destination.id })
+                  }
+                  className="shrink-0 text-xs text-slate-700 hover:text-rose-700 px-2 py-1 rounded hover:bg-rose-50"
+                  title="Dölj förslaget — är ingen transfer"
+                >
+                  Avfärda
+                </button>
               </div>
             ))}
           </div>
@@ -237,17 +254,10 @@ export default function Transfers() {
         </Card>
       )}
 
-      <Card title={`Parade överföringar (${pairs.length})`}>
-        {pairs.length === 0 ? (
-          <div className="text-sm text-slate-700">
-            Inga överföringar parade ännu. Importera alla dina konton och klicka
-            "Kör om automatmatchning" — då söker systemet efter matchande belopp på
-            olika konton inom ±5 dagars fönster.
-          </div>
-        ) : (
-          <PairsByMonth pairs={pairs} onUnlink={(id) => unlinkMut.mutate(id)} />
-        )}
-      </Card>
+      <PairedTransfersCollapsible
+        pairs={pairs}
+        onUnlink={(id) => unlinkMut.mutate(id)}
+      />
 
       <Card title="Så här fungerar matchningen">
         <ul className="text-sm text-slate-600 space-y-1.5 list-disc pl-5">
@@ -260,6 +270,45 @@ export default function Transfers() {
     </div>
   );
 }
+
+function PairedTransfersCollapsible({
+  pairs, onUnlink,
+}: {
+  pairs: Pair[];
+  onUnlink: (id: number) => void;
+}) {
+  // Minimerad default — listan kan bli 50-100 rader lång och skymmer
+  // åtgärds-sektionerna högre upp på sidan.
+  const [open, setOpen] = useState(false);
+  return (
+    <Card
+      title={`Parade överföringar (${pairs.length})`}
+      action={
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="text-xs text-slate-700 hover:text-slate-900 border rounded px-2 py-0.5"
+        >
+          {open ? "Dölj" : "Visa"}
+        </button>
+      }
+    >
+      {pairs.length === 0 ? (
+        <div className="text-sm text-slate-700">
+          Inga överföringar parade ännu. Importera alla dina konton och klicka
+          "Kör om automatmatchning" — då söker systemet efter matchande belopp på
+          olika konton inom ±5 dagars fönster.
+        </div>
+      ) : open ? (
+        <PairsByMonth pairs={pairs} onUnlink={onUnlink} />
+      ) : (
+        <div className="text-sm text-slate-700">
+          {pairs.length} par parade. Klicka "Visa" för att se listan.
+        </div>
+      )}
+    </Card>
+  );
+}
+
 
 function TxRow({ tx }: { tx: TxView }) {
   const isNegative = tx.amount < 0;

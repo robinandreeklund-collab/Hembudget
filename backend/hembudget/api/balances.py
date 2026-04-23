@@ -31,8 +31,11 @@ def list_balances(
     # ISK-konton har ofta låg cash-saldo eftersom pengarna är placerade
     # i fonder. Läs in fond-market_value per konto så vi kan visa
     # "riktigt" saldo (cash + fonder).
+    # OBS: loop-variabeln MÅSTE heta något annat än 'total' — det är
+    # ackumulatorn för total_balance ovan, och tidigare version råkade
+    # skugga den med fondvärdet, vilket gav ~66k för mycket i summan.
     fund_values_by_acc: dict[int, Decimal] = {}
-    for acc_id, total in (
+    for acc_id, fund_total in (
         session.query(
             FundHolding.account_id,
             func.coalesce(func.sum(FundHolding.market_value), 0),
@@ -40,7 +43,7 @@ def list_balances(
         .group_by(FundHolding.account_id)
         .all()
     ):
-        fund_values_by_acc[acc_id] = Decimal(str(total or 0))
+        fund_values_by_acc[acc_id] = Decimal(str(fund_total or 0))
 
     for acc in accounts:
         start = acc.opening_balance_date

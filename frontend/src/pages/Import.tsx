@@ -349,6 +349,10 @@ function AccountSetupRow({
     account.credit_limit != null ? String(account.credit_limit) : "",
   );
   const [bg, setBg] = useState(account.bankgiro ?? "");
+  // Listan på /import blir snabbt enormt lång när alla konton är
+  // utfällda — default stäng alla, användaren expanderar det konto
+  // de vill redigera.
+  const [expanded, setExpanded] = useState(false);
 
   const isCredit = account.type === "credit";
 
@@ -387,7 +391,17 @@ function AccountSetupRow({
   return (
     <div className="border rounded p-2 text-sm space-y-2">
       <div className="flex items-start gap-2">
-        <div className="flex-1">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-slate-500 hover:text-slate-800 shrink-0 pt-0.5"
+          title={expanded ? "Dölj detaljer" : "Visa detaljer"}
+        >
+          {expanded ? "▾" : "▸"}
+        </button>
+        <div
+          className="flex-1 cursor-pointer"
+          onClick={() => setExpanded((v) => !v)}
+        >
           <div className="font-medium truncate flex items-center gap-2">
             {account.name}
             {account.incognito && (
@@ -399,7 +413,14 @@ function AccountSetupRow({
               </span>
             )}
           </div>
-          <div className="text-xs text-slate-700">{account.bank} · {account.type}</div>
+          <div className="text-xs text-slate-700">
+            {account.bank} · {account.type}
+            {account.account_number && (
+              <span className="ml-2 font-mono text-slate-500">
+                {account.account_number}
+              </span>
+            )}
+          </div>
         </div>
         <label className="text-xs flex items-center gap-1 pt-4">
           <input
@@ -442,6 +463,8 @@ function AccountSetupRow({
           Radera
         </button>
       </div>
+      {expanded && (
+      <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <label>
           <div className="text-xs text-slate-700">Kontonummer</div>
@@ -519,6 +542,8 @@ function AccountSetupRow({
         )}
       </div>
       <ManualTxForm account={account} />
+      </>
+      )}
     </div>
   );
 }

@@ -750,17 +750,6 @@ export default function Dashboard() {
   );
 }
 
-interface TxForBreakdown {
-  id: number;
-  date: string;
-  amount: number;
-  raw_description: string;
-  normalized_merchant: string | null;
-  category_id: number | null;
-  account_id: number;
-  is_transfer: boolean;
-}
-
 function MonthBreakdownModal({
   month,
   mode,
@@ -770,38 +759,37 @@ function MonthBreakdownModal({
   mode: "income" | "expense";
   onClose: () => void;
 }) {
-  const [y, m] = month.split("-").map(Number);
-  const from = `${month}-01`;
-  const toLast = new Date(y, m, 0).getDate();
-  const to = `${month}-${String(toLast).padStart(2, "0")}`;
+  // Använd backend-endpointen som matchar EXAKT samma regler som
+  // KPI-kortets summa: inga transfers, inga privata incognito-utgifter,
+  // och inkluderar omatchade UpcomingTransaction (partnerlöner etc).
+  type BreakdownItem = {
+    id: number | string;
+    date: string;
+    description: string;
+    amount: number;
+    category_id: number | null;
+    category: string | null;
+    account: string | null;
+    source: "transaction" | "upcoming";
+  };
 
-  const txQ = useQuery({
+  const brQ = useQuery({
     queryKey: ["dashboard-breakdown", month, mode],
     queryFn: () =>
-      api<TxForBreakdown[]>(
-        `/transactions?from_date=${from}&to_date=${to}&limit=2000`,
+      api<{ items: BreakdownItem[]; total: number }>(
+        `/budget/${month}/breakdown?kind=${mode}`,
       ),
   });
-  const catsQ = useQuery({
-    queryKey: ["categories"],
-    queryFn: () => api<Array<{ id: number; name: string }>>("/categories"),
-  });
 
-  const cats = catsQ.data ?? [];
-  const catName = (id: number | null) =>
-    id ? cats.find((c) => c.id === id)?.name ?? "?" : "Okategoriserat";
-
-  const filtered = (txQ.data ?? []).filter((t) => {
-    if (t.is_transfer) return false;
-    return mode === "income" ? t.amount > 0 : t.amount < 0;
-  });
+  const items = brQ.data?.items ?? [];
+  const filtered = items;
 
   // Gruppera per kategori
-  const byCat = new Map<string, TxForBreakdown[]>();
-  for (const tx of filtered) {
-    const name = catName(tx.category_id);
+  const byCat = new Map<string, BreakdownItem[]>();
+  for (const it of filtered) {
+    const name = it.category || "Okategoriserat";
     if (!byCat.has(name)) byCat.set(name, []);
-    byCat.get(name)!.push(tx);
+    byCat.get(name)!.push(it);
   }
   const sortedCats = [...byCat.entries()].sort(
     ([, a], [, b]) => {
@@ -830,7 +818,7 @@ function MonthBreakdownModal({
           </button>
         </div>
         <div className="p-4 space-y-3">
-          {txQ.isLoading ? (
+          {brQ.isLoading ? (
             <div className="text-sm text-slate-700">Laddar…</div>
           ) : sortedCats.length === 0 ? (
             <div className="text-sm text-slate-700">Inga poster i denna månad.</div>
@@ -858,13 +846,22 @@ function MonthBreakdownModal({
   );
 }
 
+type BreakdownRow = {
+  id: number | string;
+  date: string;
+  description: string;
+  amount: number;
+  account: string | null;
+  source: "transaction" | "upcoming";
+};
+
 function CategoryBreakdownGroup({
   categoryName,
   items,
   total,
 }: {
   categoryName: string;
-  items: TxForBreakdown[];
+  items: BreakdownRow[];
   total: number;
 }) {
   const [open, setOpen] = useState(false);
@@ -899,7 +896,12 @@ function CategoryBreakdownGroup({
                   {formatSEK(Math.abs(tx.amount))}
                 </span>
                 <span className="flex-1 min-w-0 truncate">
-                  {tx.normalized_merchant ?? tx.raw_description}
+                  {tx.description}
+                  {tx.source === "upcoming" && (
+                    <span className="ml-2 inline-block text-[10px] bg-sky-100 text-sky-800 px-1 rounded">
+                      planerat
+                    </span>
+                  )}
                 </span>
               </div>
             ))}
