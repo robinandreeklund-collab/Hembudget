@@ -146,3 +146,33 @@ def pdf_report(month: str, session: Session = Depends(db)) -> Response:
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="hembudget-{month}.pdf"'},
     )
+
+
+@router.get("/upcoming/{month}/pdf")
+def upcoming_pdf_report(month: str, session: Session = Depends(db)) -> Response:
+    """Framåtriktad 'Överföringsplan' PDF för en kommande månad.
+
+    Skickas ut till partnern så hon ser förväntad lön, kända kommande
+    fakturor + lån, och hur mycket hon ska flytta till gemensamma
+    kontot. Återanvänder /upcoming/forecast-datan så siffrorna matchar
+    UI:n på /upcoming."""
+    try:
+        from ..reports.upcoming_pdf import (
+            build_upcoming_data, render_upcoming_pdf,
+        )
+    except ImportError as exc:
+        return Response(
+            status_code=501,
+            content=f"Överföringsplan kräver reportlab: {exc}",
+        )
+
+    data = build_upcoming_data(session, month)
+    pdf_bytes = render_upcoming_pdf(data)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="overforingsplan-{month}.pdf"',
+        },
+    )

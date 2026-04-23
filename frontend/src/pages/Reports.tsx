@@ -162,6 +162,38 @@ export default function Reports() {
         </div>
       </Card>
 
+      <Card title="Överföringsplan (kommande månad)">
+        <div className="text-sm text-slate-700 mb-3">
+          En framåtriktad PDF för att skicka till din partner — visar{" "}
+          <strong>förväntad lön</strong> per person, kommande{" "}
+          <strong>gemensamma fakturor</strong> + <strong>lån</strong>, och
+          tydligt <strong>hur mycket hon ska flytta</strong> till gemensamma
+          kontot (både 50/50- och prorata-förslag). Inga bakåtblickande siffror,
+          ingen förvirrande kolumn för privata utgifter.
+        </div>
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="text-sm">
+            <div className="text-slate-700">Månad</div>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="border rounded px-2 py-1"
+            />
+          </label>
+          <button
+            className="bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700"
+            onClick={() => download(
+              `/reports/upcoming/${month}/pdf`,
+              `overforingsplan-${month}.pdf`,
+            )}
+            title="Skicka till partnern"
+          >
+            📧 Ladda ner överföringsplan
+          </button>
+        </div>
+      </Card>
+
       <Card
         title="Huvudbok — avstämning av ekonomin"
         action={
