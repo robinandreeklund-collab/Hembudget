@@ -207,10 +207,52 @@ def huvudbok(
     else:
         tx_q = tx_q.filter(Transaction.is_transfer.is_(False))
     all_tx = tx_q.all()
+
+    # Tx:er som har splits — beloppet fördelas via splits per kategori
+    # istället för tx:s egen category_id. Annars skulle en Hjo Energi-
+    # faktura som är kategoriserad som "El" men har splits för
+    # El/Vatten/Mobil få hela beloppet på "El".
+    from ..db.models import TransactionSplit as _TS
+    tx_ids_with_splits = {
+        tid for (tid,) in
+        session.query(_TS.transaction_id).distinct().all()
+    }
+    splits_by_tx: dict[int, list[_TS]] = {}
+    if tx_ids_with_splits:
+        all_splits = (
+            session.query(_TS)
+            .filter(_TS.transaction_id.in_(tx_ids_with_splits))
+            .all()
+        )
+        for s in all_splits:
+            splits_by_tx.setdefault(s.transaction_id, []).append(s)
+    # Cache alla kategori-namn så vi kan lookups på split.category_id
+    _cat_by_id = {c.id: c for c in session.query(Category).all()}
+
     cat_agg: dict[tuple[int | None, str], dict] = {}
     income_total = Decimal("0")
     expense_total = Decimal("0")
     uncategorized_count = 0
+
+    def _add_to_cat(cat_id, cat_name, amount_signed):
+        """Hjälpare: lägger rätt amount i rätt bucket + totals."""
+        nonlocal income_total, expense_total
+        key = (cat_id, cat_name)
+        bucket = cat_agg.setdefault(
+            key,
+            {
+                "category_id": cat_id, "category": cat_name,
+                "income": Decimal("0"), "expenses": Decimal("0"), "count": 0,
+            },
+        )
+        if amount_signed > 0:
+            bucket["income"] += amount_signed
+            income_total += amount_signed
+        else:
+            bucket["expenses"] += abs(amount_signed)
+            expense_total += abs(amount_signed)
+        bucket["count"] += 1
+
     for tx, cat, acc in all_tx:
         is_incognito = bool(getattr(acc, "incognito", False))
         # Skippa privata utgifter på inkognito-konton helt
@@ -222,12 +264,24 @@ def huvudbok(
         # är konsistenta.
         if tx.transfer_pair_id is not None:
             continue
+
+        # Om tx har splits → använd splits per kategori, ignorera tx.category_id
+        if tx.id in tx_ids_with_splits:
+            splits = splits_by_tx.get(tx.id, [])
+            sign = 1 if tx.amount > 0 else -1
+            for s in splits:
+                s_cat = _cat_by_id.get(s.category_id) if s.category_id else None
+                s_cat_id = s_cat.id if s_cat else None
+                s_cat_name = s_cat.name if s_cat else "Okategoriserat"
+                if s_cat_id is None and tx.id not in upcoming_matched_ids:
+                    uncategorized_count += 1
+                # Split-amount är alltid positivt i schemat — applicera tx:s sign
+                _add_to_cat(s_cat_id, s_cat_name, sign * abs(s.amount))
+            continue  # Hoppa över tx:s egen kategorisering
+
+        # Inga splits → använd tx:s egen category_id som innan
         cat_id = cat.id if cat else None
         cat_name = cat.name if cat else "Okategoriserat"
-        # Upcoming-matchade räknas inte som okategoriserade — de tillhör
-        # en faktura som hanteras separat. Räkna dem ändå som expense
-        # via det upcoming:ets logik (nedan i if tx.amount > 0 / else).
-        # Detta matchar åtgärda-listans filter.
         if cat_id is None and tx.id not in upcoming_matched_ids:
             uncategorized_count += 1
         key = (cat_id, cat_name)

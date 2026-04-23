@@ -149,6 +149,100 @@ def test_readings_crud(client):
     assert r4.json()["readings"] == []
 
 
+def test_history_no_split_double_count(client):
+    """En tx med splits ska inte dubbelraknas: om tx har
+    category_id=El OCH en split pa El, ska bara split:s belopp raknas.
+    Summan ska bli split-beloppet, inte tx.amount + split."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Category, Transaction, TransactionSplit,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="n", type="checking")
+        el = Category(name="El")
+        vatten = Category(name="Vatten/Avgift")
+        s.add_all([acc, el, vatten]); s.flush()
+        # Hjo Energi-faktura 3 797 kr: tx kategoriserad som El,
+        # men med splits El 2000, Vatten 1797
+        tx = Transaction(
+            account_id=acc.id, date=date(2026, 3, 15),
+            amount=Decimal("-3797"), currency="SEK",
+            raw_description="Hjo Energi", hash="h1",
+            category_id=el.id,
+        )
+        s.add(tx); s.flush()
+        s.add(TransactionSplit(
+            transaction_id=tx.id, description="El",
+            amount=Decimal("2000"), category_id=el.id, sort_order=0,
+            source="manual",
+        ))
+        s.add(TransactionSplit(
+            transaction_id=tx.id, description="Vatten",
+            amount=Decimal("1797"), category_id=vatten.id, sort_order=1,
+            source="manual",
+        ))
+        s.commit()
+
+    # /utility ska fordela splits korrekt
+    r = c.get("/utility/history?year=2026")
+    body = r.json()
+    # El: bara split-belopp (2000), inte 3797 + 2000 = 5797
+    assert body["by_category"]["El"]["2026-03"] == pytest.approx(2000.0)
+    assert body["by_category"]["Vatten/Avgift"]["2026-03"] == pytest.approx(1797.0)
+
+    # Totalt = 3797 (inte 3797 + 2000 + 1797 = 7594 som gammal bugg)
+    assert body["summary"]["year_total"] == pytest.approx(3797.0)
+
+
+def test_ledger_uses_splits_per_category(client):
+    """Huvudbokens resultatrakning ska anvanda splits istallet for
+    tx.category_id nar tx har splits. Annars gar Vatten- och Mobil-
+    delarna av en Hjo Energi-faktura forlorade (kategoriserad som El)."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, Category, Transaction, TransactionSplit,
+    )
+    with SL() as s:
+        acc = Account(name="A", bank="n", type="checking")
+        el = Category(name="El")
+        vatten = Category(name="Vatten/Avgift")
+        mobil = Category(name="Mobil")
+        s.add_all([acc, el, vatten, mobil]); s.flush()
+        tx = Transaction(
+            account_id=acc.id, date=date(2026, 3, 15),
+            amount=Decimal("-5000"), currency="SEK",
+            raw_description="Hjo Energi kombinerad", hash="h1",
+            category_id=el.id,
+        )
+        s.add(tx); s.flush()
+        s.add(TransactionSplit(
+            transaction_id=tx.id, description="El",
+            amount=Decimal("2500"), category_id=el.id, sort_order=0,
+            source="manual",
+        ))
+        s.add(TransactionSplit(
+            transaction_id=tx.id, description="Vatten",
+            amount=Decimal("1500"), category_id=vatten.id, sort_order=1,
+            source="manual",
+        ))
+        s.add(TransactionSplit(
+            transaction_id=tx.id, description="Mobil",
+            amount=Decimal("1000"), category_id=mobil.id, sort_order=2,
+            source="manual",
+        ))
+        s.commit()
+
+    r = c.get("/ledger/?year=2026")
+    body = r.json()
+    cats = {c["category"]: c for c in body["categories"]}
+    # Alla tre kategorier ska finnas representerade
+    assert cats["El"]["expenses"] == pytest.approx(2500.0)
+    assert cats["Vatten/Avgift"]["expenses"] == pytest.approx(1500.0)
+    assert cats["Mobil"]["expenses"] == pytest.approx(1000.0)
+    # Totala expenses = tx-amount (5000), inte bara El
+    assert body["totals"]["expenses"] == pytest.approx(5000.0)
+
+
 def test_breakdown_lists_transactions_for_cell(client):
     """GET /utility/breakdown?category=El&month=2026-01 listar alla
     tx + splits som bidrar till cellen. Anvands for att felsoka

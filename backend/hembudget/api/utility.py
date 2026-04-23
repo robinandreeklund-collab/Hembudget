@@ -96,8 +96,17 @@ def _compute_history(session: Session, y: int) -> dict:
             },
         }
 
+    # Tx:er som HAR splits — deras egen category_id ska ignoreras
+    # eftersom splits fordelar beloppet per kategori. Annars raknas
+    # samma faktura 2 ganger: en som raw tx + en som split.
+    tx_ids_with_splits = {
+        tid for (tid,) in
+        session.query(TransactionSplit.transaction_id).distinct().all()
+    }
+
     tx_rows = (
         session.query(
+            Transaction.id,
             Transaction.category_id,
             Transaction.date,
             Transaction.amount,
@@ -126,7 +135,10 @@ def _compute_history(session: Session, y: int) -> dict:
     )
 
     agg: dict[tuple[int, str], Decimal] = {}
-    for cat_id, d, amt in tx_rows:
+    for tx_id, cat_id, d, amt in tx_rows:
+        # Skippa tx:er som har splits — deras belopp raknas via split_rows
+        if tx_id in tx_ids_with_splits:
+            continue
         month = _month_key(d)
         key = (cat_id, month)
         agg[key] = agg.get(key, Decimal("0")) + abs(amt)
@@ -264,6 +276,13 @@ def utility_breakdown(
     start = date(y, m, 1)
     end = date(y, m + 1, 1) if m < 12 else date(y + 1, 1, 1)
 
+    # Tx:er som HAR splits — hoppas over eftersom splits redan fordelar
+    # beloppet. Annars raknas samma rad 2 ganger i totalen.
+    tx_ids_with_splits = {
+        tid for (tid,) in
+        session.query(TransactionSplit.transaction_id).distinct().all()
+    }
+
     # Fullstandiga Transaction-rader med den har kategorin
     tx_rows = (
         session.query(Transaction)
@@ -292,6 +311,9 @@ def utility_breakdown(
     items = []
     total = 0.0
     for tx in tx_rows:
+        # Skippa om tx har splits — dess bidrag kommer via split_rows
+        if tx.id in tx_ids_with_splits:
+            continue
         amt = float(abs(tx.amount))
         items.append({
             "type": "transaction",
