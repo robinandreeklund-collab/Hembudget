@@ -702,7 +702,17 @@ def set_upcoming_lines(
 ) -> list[UpcomingTransactionLine]:
     """Ersätt alla rader på en planerad faktura. Totalsumman på
     UpcomingTransaction.amount justeras INTE automatiskt — användaren kan
-    välja att behålla fakturasumman som presenterad av leverantören."""
+    välja att behålla fakturasumman som presenterad av leverantören.
+
+    Om upcomingen är matchad mot en Transaction synkas ändringarna även
+    till tx:ens splits (TransactionSplit) så huvudbokens resultat-
+    räkning återspeglar de nya kategorierna. Annars skulle man kunna
+    ändra lines men splits på den realiserade transaktionen behåller
+    gamla kategorier = förvirrande.
+    """
+    from ..db.models import TransactionSplit
+    from decimal import Decimal as _D
+
     u = session.get(UpcomingTransaction, upcoming_id)
     if u is None:
         raise HTTPException(404, "Upcoming not found")
@@ -722,6 +732,60 @@ def set_upcoming_lines(
         session.add(line)
         new_lines.append(line)
     session.flush()
+
+    # Synka till TransactionSplit om upcomingen är matchad. Vi tar bort
+    # gamla splits med source='upcoming' och skapar nya från de nya
+    # lines-raderna. User-manuellt-skapade splits (source='manual')
+    # behåller vi oförändrade så de inte raderas av misstag.
+    tx_id_to_sync = None
+    if u.matched_transaction_id is not None:
+        tx_id_to_sync = u.matched_transaction_id
+    else:
+        # Kolla UpcomingPayment-junction (delbetalningar)
+        from ..db.models import UpcomingPayment as _UP
+        first_pay = (
+            session.query(_UP)
+            .filter(_UP.upcoming_id == u.id)
+            .order_by(_UP.id.asc())
+            .first()
+        )
+        if first_pay:
+            tx_id_to_sync = first_pay.transaction_id
+
+    if tx_id_to_sync and new_lines:
+        tx = session.get(Transaction, tx_id_to_sync)
+        if tx is not None:
+            # Ta bort tidigare upcoming-genererade splits
+            session.query(TransactionSplit).filter(
+                TransactionSplit.transaction_id == tx.id,
+                TransactionSplit.source == "upcoming",
+            ).delete(synchronize_session=False)
+            session.flush()
+            # Skapa nya splits från de uppdaterade lines
+            sign = _D("-1") if u.kind == "bill" else _D("1")
+            created: list[TransactionSplit] = []
+            for line in new_lines:
+                created.append(TransactionSplit(
+                    transaction_id=tx.id,
+                    description=line.description,
+                    amount=(line.amount * sign).quantize(_D("0.01")),
+                    category_id=line.category_id,
+                    sort_order=line.sort_order,
+                    source="upcoming",
+                ))
+            # Justera residual på sista raden så sum(splits) ≈ tx.amount
+            from ..splits import SPLIT_TOLERANCE as _SPLIT_TOL
+            residual = tx.amount - sum(
+                (s.amount for s in created), _D("0"),
+            )
+            if created and abs(residual) <= _SPLIT_TOL and residual != 0:
+                created[-1].amount = (
+                    created[-1].amount + residual
+                ).quantize(_D("0.01"))
+            for s in created:
+                session.add(s)
+            session.flush()
+
     return new_lines
 
 
