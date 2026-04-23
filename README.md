@@ -8,6 +8,15 @@ och en krypterad SQLite-databas.
 
 ### Google Cloud Run (rekommenderas för klassrum)
 
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/robinandreeklund-collab/Hembudget)
+
+Ett klick ovan → Google öppnar Cloud Shell, klonar repot och kör
+Dockerfile:n automatiskt. Du blir frågad om projekt + region, sen
+deployar den till Cloud Run. Efter deploy är klar får du en publik URL
+att skicka till eleverna.
+
+**Alternativt — kör lokalt:**
+
 ```bash
 ./deploy.sh
 ```

@@ -1,0 +1,40 @@
+{
+  "name": "Hembudget — demo",
+  "description": "Svensk familjeekonomi-app i demo-läge. Alla elever delar samma ephemeral databas med förseedad data från Nordea- och SEB-filer. Inga lösenord, inga externa API:er — körs helt som en enda Cloud Run-container.",
+  "env": {
+    "HEMBUDGET_DEMO_MODE": {
+      "description": "1 = demo-läge (ingen inloggning, öppna endpoints, CORS wildcard, plain SQLite, auto-seed från data/).",
+      "value": "1"
+    },
+    "HEMBUDGET_SERVE_STATIC": {
+      "description": "1 = servera frontend (React Vite) från samma FastAPI-container. Ingen CORS behövs.",
+      "value": "1"
+    },
+    "HEMBUDGET_HOST": {
+      "description": "Bind-adress för uvicorn. Cloud Run kräver 0.0.0.0.",
+      "value": "0.0.0.0"
+    },
+    "HEMBUDGET_DATA_DIR": {
+      "description": "Katalog för SQLite-databasen. /tmp är ephemeral på Cloud Run (OK för demo) — data återställs vid cold start.",
+      "value": "/tmp/hembudget"
+    },
+    "HEMBUDGET_LM_STUDIO_BASE_URL": {
+      "description": "LLM-endpoint. Pekas mot en icke-existerande host → AI-chat failar tyst utan att blockera start. Regelbaserad kategorisering fungerar.",
+      "value": "http://disabled.invalid:1234/v1"
+    }
+  },
+  "options": {
+    "allow-unauthenticated": true,
+    "memory": "1Gi",
+    "cpu": "1",
+    "concurrency": 40,
+    "max-instances": 5
+  },
+  "hooks": {
+    "postcreate": {
+      "commands": [
+        "echo 'Deploy klart! Dela URL:en med eleverna — ingen inloggning behövs.'"
+      ]
+    }
+  }
+}
