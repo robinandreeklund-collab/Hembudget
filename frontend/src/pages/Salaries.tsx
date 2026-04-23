@@ -150,11 +150,17 @@ export default function Salaries() {
   // KPIs
   const ytd = ytdQ.data;
   const thisMonthYm = todayIso().slice(0, 7);
-  const thisMonthTotal = past
+  // "Denna månad" = ALL inkomst för aktuell månad (kommande + historik) —
+  // april är en löne-månad även om utbetalningen inte hänt än.
+  const allInPeriod = [...past, ...open];
+  const thisMonthTotal = allInPeriod
     .filter((i) => i.expected_date.startsWith(thisMonthYm))
     .reduce((s, i) => s + Number(i.amount), 0);
+  // Snitt per månad = total / antal unika månader som HAR inkomst,
+  // inkl. den aktuella om kommande löner ligger där. Annars blir snittet
+  // missvisande lågt på första dagen i månaden innan lönen kommit.
   const monthsWithIncome = new Set(
-    past.map((i) => i.expected_date.slice(0, 7)),
+    allInPeriod.map((i) => i.expected_date.slice(0, 7)),
   ).size;
   const avgPerMonth =
     monthsWithIncome > 0 && ytd
@@ -204,10 +210,16 @@ export default function Salaries() {
           label={`Total i år ${ytd?.year ?? new Date().getFullYear()}`}
           value={ytd ? formatSEK(ytd.grand_total) : "—"}
           tone="good"
+          hint="Realiserade + kommande"
         />
         <Kpi
           label={`Denna månad (${fmtMonth(thisMonthYm)})`}
           value={formatSEK(thisMonthTotal)}
+          hint={
+            thisMonthTotal === 0
+              ? "Ingen lön planerad denna månad"
+              : "Inkluderar kommande"
+          }
         />
         <Kpi
           label="Snitt per månad"
