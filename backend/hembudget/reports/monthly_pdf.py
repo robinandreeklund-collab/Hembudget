@@ -129,14 +129,27 @@ def build_report_data(session: Session, month: str) -> MonthlyReportData:
     family = chat_tools.get_family_breakdown(session, month)
     by_owner: dict = family.get("by_owner", {})
 
-    # Utgifter per kategori — abs(actual) för endast expense-raderna
+    # Utgifter per kategori — baseras på summary.lines så pie-chart
+    # summerar EXAKT till summary.expenses (samma siffra som dashboard:n).
+    # Tidigare använde vi bara lines med kind != "income" vilket missade
+    # utgiftsposter som av misstag klassats som income (t.ex. återbetalad
+    # skatt på en Lön-kategori). Vi använder absolut negativt-utfall för
+    # att matcha hur summary.expenses beräknas.
     expense_slices: list[tuple[str, float]] = []
     for l in summary.lines:
-        if l.kind != "income":
-            v = abs(float(l.actual))
-            if v > 0:
-                expense_slices.append((l.category, v))
+        actual = float(l.actual)
+        if actual < 0:
+            expense_slices.append((l.category, abs(actual)))
     expense_slices.sort(key=lambda p: -p[1])
+    # Konsistens-check: om slices-summan inte matchar summary.expenses
+    # (t.ex. pga omatchade upcoming bills som bara syns i summary, inte
+    # i line-aggregatet), lägg till 'Planerade fakturor' för diffen.
+    slice_sum = sum(v for _, v in expense_slices)
+    expenses_total = float(summary.expenses)
+    if expenses_total - slice_sum > 1:
+        expense_slices.append(
+            ("Planerade fakturor", expenses_total - slice_sum)
+        )
 
     # Inkomst per person — använd user-ID-mapping när möjligt
     users_by_id = {u.id: u.name for u in session.query(User).all()}
@@ -148,6 +161,16 @@ def build_report_data(session: Session, month: str) -> MonthlyReportData:
         label = _pretty_owner_key(key, users_by_id)
         income_slices.append((label, income))
     income_slices.sort(key=lambda p: -p[1])
+    # Konsistens-check: skala income_slices om de inte summerar till
+    # summary.income. family_breakdown och summary kan ha små skillnader
+    # (incognito-filter). Vi föredrar summary.income eftersom det är
+    # samma siffra som dashboard visar.
+    income_slice_sum = sum(v for _, v in income_slices)
+    income_total = float(summary.income)
+    if income_total - income_slice_sum > 1:
+        income_slices.append(
+            ("Okategoriserad inkomst", income_total - income_slice_sum)
+        )
 
     # Transfer-förslag: fokusera på "gemensamt"-kostnaden (shared expenses)
     transfers = _compute_transfer_suggestions(by_owner, users_by_id)
@@ -331,14 +354,16 @@ def render_pdf(data: MonthlyReportData) -> bytes:
     inc_labels = [p[0] for p in data.income_slices]
     inc_values = [p[1] for p in data.income_slices]
 
+    exp_total_for_title = float(data.summary.expenses)
+    inc_total_for_title = float(data.summary.income)
     pie_exp = charts.pie_chart(
         exp_labels, exp_values,
-        title="Utgifter per kategori",
+        title=f"Utgifter per kategori — {_format_sek(exp_total_for_title)}",
         palette=charts.DEFAULT_PALETTE,
     )
     pie_inc = charts.pie_chart(
         inc_labels, inc_values,
-        title="Inkomst per person",
+        title=f"Inkomst per person — {_format_sek(inc_total_for_title)}",
         palette=charts.PERSON_PALETTE,
     )
     if pie_exp is not None and pie_inc is not None:

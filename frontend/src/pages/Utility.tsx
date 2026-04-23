@@ -730,11 +730,14 @@ interface RealtimeResponse {
     power_watts: number | null;
     consumption_today_kwh: number | null;
     cost_today_kr: number | null;
+    hourly_latest_kwh?: number | null;
+    hourly_latest_ts?: string | null;
     currency: string;
     timestamp: string | null;
+    source?: "pulse" | "hourly";
   } | null;
   prices: {
-    current?: { total: number; level: string; currency: string };
+    current?: { total: number; level: string; currency: string } | null;
     today?: Array<{ startsAt: string; total: number; level: string }>;
     tomorrow?: Array<{ startsAt: string; total: number; level: string }>;
   };
@@ -750,15 +753,18 @@ function TibberWidget() {
   if (q.isError || !q.data) return null;
   const d = q.data;
   const cur = d.prices?.current;
+  const rt = d.realtime;
+  const hourlyKwh = rt?.hourly_latest_kwh ?? null;
+  const source = rt?.source ?? "hourly";
   return (
-    <Card title={`Tibber realtid — ${d.home.address}`}>
+    <Card title={`Tibber — ${d.home.address}`}>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         <div>
           <div className="text-xs uppercase text-slate-700">Pris just nu</div>
           <div className="text-xl font-semibold">
             {cur ? `${cur.total.toFixed(2)} ${cur.currency}/kWh` : "—"}
           </div>
-          {cur && (
+          {cur ? (
             <div
               className={
                 "text-xs mt-0.5 " +
@@ -771,35 +777,60 @@ function TibberWidget() {
             >
               {cur.level}
             </div>
+          ) : (
+            <div className="text-xs text-slate-500 mt-0.5">
+              (kräver elavtal hos Tibber)
+            </div>
           )}
         </div>
         <div>
           <div className="text-xs uppercase text-slate-700">Förbr. idag</div>
           <div className="text-xl font-semibold">
-            {d.realtime?.consumption_today_kwh != null
-              ? `${d.realtime.consumption_today_kwh.toFixed(1)} kWh`
+            {rt?.consumption_today_kwh != null
+              ? `${rt.consumption_today_kwh.toFixed(1)} kWh`
               : "—"}
           </div>
+          {hourlyKwh != null && (
+            <div
+              className="text-xs text-slate-500 mt-0.5"
+              title="Senaste timmens förbrukning"
+            >
+              Senaste timmen: {hourlyKwh.toFixed(2)} kWh
+            </div>
+          )}
         </div>
         <div>
           <div className="text-xs uppercase text-slate-700">Kostnad idag</div>
           <div className="text-xl font-semibold">
-            {d.realtime?.cost_today_kr != null
-              ? formatSEK(d.realtime.cost_today_kr)
-              : "—"}
+            {rt?.cost_today_kr != null ? formatSEK(rt.cost_today_kr) : "—"}
           </div>
         </div>
         <div>
-          <div className="text-xs uppercase text-slate-700">Pulse</div>
+          <div className="text-xs uppercase text-slate-700">
+            {source === "pulse" ? "Pulse (realtid)" : "Mätning"}
+          </div>
           <div className="text-xl font-semibold flex items-center gap-1.5">
             <Zap
               className={
                 "w-5 h-5 " +
-                (d.home.has_pulse ? "text-emerald-600" : "text-slate-400")
+                (d.home.has_pulse
+                  ? "text-emerald-600"
+                  : rt
+                  ? "text-sky-600"
+                  : "text-slate-400")
               }
             />
-            {d.home.has_pulse ? "Ansluten" : "Ej ansluten"}
+            {d.home.has_pulse
+              ? "Pulse aktiv"
+              : rt
+              ? "Timvis"
+              : "Ingen data"}
           </div>
+          {!d.home.has_pulse && (
+            <div className="text-xs text-slate-500 mt-0.5">
+              Installera Pulse för sekund-realtid
+            </div>
+          )}
         </div>
       </div>
     </Card>

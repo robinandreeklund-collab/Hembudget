@@ -1496,10 +1496,48 @@ def tibber_realtime(
             raise HTTPException(502, str(exc)) from exc
 
         addr = home.get("address") or {}
-        features = home.get("features") or {}
-        has_pulse = bool(features.get("realTimeConsumptionEnabled"))
-        price_cur = (measurement or {}).get("price_current") if measurement else None
-        daily = (measurement or {}).get("daily_latest") if measurement else None
+        has_pulse = measurement.get("has_pulse", False)
+        price_cur = measurement.get("price_current")
+        daily = measurement.get("daily_latest")
+        hourly_latest = measurement.get("hourly_latest")
+
+        # Returnera realtime-block om vi har ANY data — inte bara när
+        # Pulse är på. Dagsvärde räcker för att visa Förbr. idag /
+        # Kostnad idag i UIt. 'power_watts' kräver Pulse och lämnas
+        # None utan den.
+        realtime_block = None
+        if daily or hourly_latest:
+            daily_kwh = (
+                float(daily["consumption"])
+                if daily and daily.get("consumption") is not None
+                else None
+            )
+            daily_cost = (
+                float(daily["cost"])
+                if daily and daily.get("cost") is not None
+                else None
+            )
+            hourly_kwh = (
+                float(hourly_latest["consumption"])
+                if hourly_latest and hourly_latest.get("consumption") is not None
+                else None
+            )
+            # Approximera power_watts från senaste timmens kWh
+            # (kWh × 1000 = Wh per timme = avg-watt). Kräver inte Pulse.
+            power_watts = int(hourly_kwh * 1000) if hourly_kwh is not None else None
+            realtime_block = {
+                "power_watts": power_watts,
+                "consumption_today_kwh": daily_kwh,
+                "cost_today_kr": daily_cost,
+                "hourly_latest_kwh": hourly_kwh,
+                "hourly_latest_ts": (
+                    hourly_latest.get("from") if hourly_latest else None
+                ),
+                "currency": (price_cur or {}).get("currency", "SEK"),
+                "timestamp": datetime.utcnow().isoformat(),
+                "source": "pulse" if has_pulse else "hourly",
+            }
+
         return {
             "auth": "oauth",
             "home": {
@@ -1512,23 +1550,11 @@ def tibber_realtime(
                 ) or "Okänd adress",
                 "has_pulse": has_pulse,
             },
-            "realtime": {
-                "power_watts": None,  # Pulse-subscription kommer senare
-                "consumption_today_kwh": (
-                    float(daily["consumption"]) if daily and daily.get("consumption") is not None else None
-                ),
-                "cost_today_kr": (
-                    float(daily["cost"]) if daily and daily.get("cost") is not None else None
-                ),
-                "currency": (price_cur or {}).get("currency", "SEK"),
-                "timestamp": datetime.utcnow().isoformat(),
-            } if has_pulse and daily else None,
+            "realtime": realtime_block,
             "prices": {
-                "current": price_cur or None,
-                # Tibber Data API inkluderar inte today/tomorrow i current-
-                # frågan; vi kan utöka schemat senare vid behov.
-                "today": [],
-                "tomorrow": [],
+                "current": price_cur,
+                "today": measurement.get("today_price_hours") or [],
+                "tomorrow": measurement.get("tomorrow_price_hours") or [],
             },
         }
 

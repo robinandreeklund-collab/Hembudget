@@ -372,18 +372,37 @@ class TibberOAuthClient:
         cons = home.get("consumption") or {}
         return cons.get("nodes") or []
 
-    def current_measurement(self, home_id: str) -> dict | None:
-        """Pulse realtime snapshot. Returnerar None om Pulse saknas."""
+    def current_measurement(self, home_id: str) -> dict:
+        """Aktuell status för ett hem. Returnerar ALLTID en dict (aldrig
+        None) — olika fält är None om motsvarande data saknas.
+
+        Fält:
+        - has_pulse: True om realTimeConsumptionEnabled
+        - price_current: dagens aktuella pris (eller None utan elavtal)
+        - daily_latest: senaste dagens konsumption+cost
+        - hourly_latest: senaste timmens konsumption+cost (proxy för
+          realtid när Pulse saknas)
+        - today_hours: alla timmar idag (för minidiagram/analys)
+        - today_price_hours: timpriser idag
+        - tomorrow_price_hours: imorgon om publicerat
+        """
         q = """
         query Current($homeId: ID!) {
           viewer {
             home(id: $homeId) {
               features { realTimeConsumptionEnabled }
               currentSubscription {
-                priceInfo { current { total energy tax startsAt level currency } }
+                priceInfo {
+                  current { total energy tax startsAt level currency }
+                  today { startsAt total level }
+                  tomorrow { startsAt total level }
+                }
               }
               daily: consumption(resolution: DAILY, last: 1) {
-                nodes { from to consumption cost }
+                nodes { from to consumption cost unitPrice }
+              }
+              hourly: consumption(resolution: HOURLY, last: 24) {
+                nodes { from to consumption cost unitPrice }
               }
             }
           }
@@ -393,14 +412,26 @@ class TibberOAuthClient:
         viewer = data.get("viewer") or {}
         home = viewer.get("home") or {}
         features = home.get("features") or {}
-        if not features.get("realTimeConsumptionEnabled"):
-            return None
-        daily = home.get("daily") or {}
-        nodes = daily.get("nodes") or []
         sub = home.get("currentSubscription") or {}
         price_info = sub.get("priceInfo") or {}
         current_p = price_info.get("current") or {}
+        daily = home.get("daily") or {}
+        hourly = home.get("hourly") or {}
+        daily_nodes = daily.get("nodes") or []
+        hourly_nodes = hourly.get("nodes") or []
+        # Senaste timme med faktisk konsumption (Tibber kan ha med
+        # framtida timmar med consumption=null i hourly-listan)
+        latest_hour = None
+        for node in reversed(hourly_nodes):
+            if node.get("consumption") is not None:
+                latest_hour = node
+                break
         return {
-            "price_current": current_p,
-            "daily_latest": nodes[0] if nodes else None,
+            "has_pulse": bool(features.get("realTimeConsumptionEnabled")),
+            "price_current": current_p or None,
+            "daily_latest": daily_nodes[0] if daily_nodes else None,
+            "hourly_latest": latest_hour,
+            "today_hours": hourly_nodes,
+            "today_price_hours": price_info.get("today") or [],
+            "tomorrow_price_hours": price_info.get("tomorrow") or [],
         }
