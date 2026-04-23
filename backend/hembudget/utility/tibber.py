@@ -124,7 +124,8 @@ class TibberClient:
         """
         data = self._post(q)
         homes = []
-        for h in data.get("viewer", {}).get("homes", []) or []:
+        viewer = data.get("viewer") or {}
+        for h in viewer.get("homes") or []:
             addr = h.get("address") or {}
             addr_str = ", ".join(
                 x for x in [
@@ -133,13 +134,12 @@ class TibberClient:
                     addr.get("city"),
                 ] if x
             )
-            currency = (
-                (h.get("currentSubscription") or {})
-                .get("priceInfo", {}).get("current", {}).get("currency", "SEK")
-            )
-            has_pulse = bool(
-                (h.get("features") or {}).get("realTimeConsumptionEnabled")
-            )
+            sub = h.get("currentSubscription") or {}
+            price_info = sub.get("priceInfo") or {}
+            current_p = price_info.get("current") or {}
+            currency = current_p.get("currency") or "SEK"
+            features = h.get("features") or {}
+            has_pulse = bool(features.get("realTimeConsumptionEnabled"))
             homes.append(TibberHome(
                 id=h["id"],
                 address=addr_str or "Okänd adress",
@@ -168,13 +168,15 @@ class TibberClient:
         }
         """
         data = self._post(q, {"homeId": home_id})
-        pi = (
-            data.get("viewer", {})
-            .get("home", {})
-            .get("currentSubscription", {})
-            .get("priceInfo", {})
-        )
-        return pi or {}
+        # OBS: varje steg kan returnera None (inte avsaknad nyckel) om
+        # hemmet saknar Tibber-elavtal — då finns currentSubscription=null.
+        # dict.get("k", {}) returnerar None om värdet är null, inte
+        # default. Använd 'or {}' efter varje nivå.
+        viewer = data.get("viewer") or {}
+        home = viewer.get("home") or {}
+        sub = home.get("currentSubscription") or {}
+        pi = sub.get("priceInfo") or {}
+        return pi
 
     def consumption(
         self,
@@ -198,12 +200,10 @@ class TibberClient:
             "resolution": resolution,
             "last": last,
         })
-        nodes = (
-            data.get("viewer", {})
-            .get("home", {})
-            .get("consumption", {})
-            .get("nodes", [])
-        ) or []
+        viewer = data.get("viewer") or {}
+        home = viewer.get("home") or {}
+        cons = home.get("consumption") or {}
+        nodes = cons.get("nodes") or []
         out = []
         for n in nodes:
             out.append(TibberConsumptionPoint(
@@ -236,18 +236,21 @@ class TibberClient:
         }
         """
         data = self._post(q, {"homeId": home_id})
-        home = data.get("viewer", {}).get("home", {}) or {}
-        if not (home.get("features") or {}).get("realTimeConsumptionEnabled"):
+        viewer = data.get("viewer") or {}
+        home = viewer.get("home") or {}
+        features = home.get("features") or {}
+        if not features.get("realTimeConsumptionEnabled"):
             return None
         # Vi använder senaste DAILY-noden som proxy för "sedan midnatt"
-        nodes = (home.get("daily") or {}).get("nodes") or []
+        daily = home.get("daily") or {}
+        nodes = daily.get("nodes") or []
         if not nodes:
             return None
         n = nodes[0]
-        currency = (
-            (home.get("currentSubscription") or {})
-            .get("priceInfo", {}).get("current", {}).get("currency", "SEK")
-        )
+        sub = home.get("currentSubscription") or {}
+        price_info = sub.get("priceInfo") or {}
+        current_p = price_info.get("current") or {}
+        currency = current_p.get("currency") or "SEK"
         try:
             kwh_today = float(n.get("consumption") or 0)
             cost_today = float(n.get("cost") or 0)
