@@ -298,6 +298,59 @@ def test_upcoming_list_exposes_payment_transactions_for_unmatch_ui(client):
     assert p["account_name"] == "Checking"
 
 
+def test_forecast_uses_salary_cycle_window(client):
+    """Fakturor som förfaller 1 maj ska ingå i april-budget om användaren
+    satt salary_cycle_start_day=25. Då täcker april-lönen (kommer 25 apr)
+    alla utgifter t.o.m. 24 maj."""
+    c, SL = client
+    from hembudget.db.models import (
+        Account, AppSetting, UpcomingTransaction,
+    )
+    with SL() as s:
+        s.add(Account(name="Chk", bank="nordea", type="checking"))
+        # Faktura som förfaller 1 maj
+        s.add(UpcomingTransaction(
+            kind="bill", name="IF Skadeförs",
+            amount=Decimal("1160"),
+            expected_date=date(2026, 5, 1),
+        ))
+        # Faktura 15 maj (innan cycle_day 25) — tillhör april
+        s.add(UpcomingTransaction(
+            kind="bill", name="Hyra",
+            amount=Decimal("10000"),
+            expected_date=date(2026, 5, 15),
+        ))
+        # Faktura 28 maj (efter cycle_day 25) — tillhör maj
+        s.add(UpcomingTransaction(
+            kind="bill", name="Juni-hyra förskott",
+            amount=Decimal("500"),
+            expected_date=date(2026, 5, 28),
+        ))
+        s.commit()
+
+    # Default (cycle_day=1) — alla tre i maj
+    r = c.get("/upcoming/forecast?month=2026-05").json()
+    assert r["upcoming_bills"] == pytest.approx(11660.0) or r[
+        "totals"
+    ]["upcoming_bills"] == pytest.approx(11660.0)
+
+    # Sätt cycle_day=25
+    with SL() as s:
+        row = AppSetting(key="salary_cycle_start_day", value={"v": 25})
+        s.add(row); s.commit()
+
+    # April-budget = 25 apr - 24 maj → inkluderar 1 maj + 15 maj = 11 160
+    r_april = c.get("/upcoming/forecast?month=2026-04").json()
+    assert r_april["salary_cycle_start_day"] == 25
+    assert r_april["period_start"] == "2026-04-25"
+    assert r_april["period_end"] == "2026-05-25"
+    assert r_april["totals"]["upcoming_bills"] == pytest.approx(11160.0)
+
+    # Maj-budget = 25 maj - 24 juni → bara 28 maj-fakturan
+    r_may = c.get("/upcoming/forecast?month=2026-05").json()
+    assert r_may["totals"]["upcoming_bills"] == pytest.approx(500.0)
+
+
 def test_upcoming_matched_excluded_from_uncategorized_check(client):
     """Delbetalningar av en upcoming-faktura ska INTE visas i åtgärda-
     listan för 'Alla transaktioner är kategoriserade'. Fakturan själv

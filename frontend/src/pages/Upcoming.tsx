@@ -55,6 +55,9 @@ interface UpcomingItem {
 
 interface Forecast {
   month: string;
+  salary_cycle_start_day?: number;
+  period_start?: string;
+  period_end?: string;
   upcoming_incomes: Array<{ id: number; name: string; amount: number; expected_date: string; owner: string | null }>;
   upcoming_bills: Array<{ id: number; name: string; amount: number; expected_date: string }>;
   totals: {
@@ -248,8 +251,17 @@ export default function Upcoming() {
         />
       </div>
 
+      <SalaryCycleSetting month={month} />
+
       {forecastQ.data && (
-        <Card title={`Månadsprognos — ${month}`}>
+        <Card
+          title={
+            forecastQ.data.salary_cycle_start_day &&
+            forecastQ.data.salary_cycle_start_day > 1
+              ? `Månadsprognos — ${month} (${forecastQ.data.period_start?.slice(5)} – ${forecastQ.data.period_end?.slice(5)})`
+              : `Månadsprognos — ${month}`
+          }
+        >
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <Stat
               icon={<TrendingUp className="w-4 h-4 text-emerald-600" />}
@@ -1837,6 +1849,82 @@ function FindBankTxModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SalaryCycleSetting({ month: _ }: { month: string }) {
+  const qc = useQueryClient();
+  const settingQ = useQuery({
+    queryKey: ["setting", "salary_cycle_start_day"],
+    queryFn: async () => {
+      try {
+        const r = await api<{ value: number | null }>(
+          "/settings/salary_cycle_start_day",
+        );
+        return r.value ?? 1;
+      } catch {
+        return 1;
+      }
+    },
+  });
+  const setMut = useMutation({
+    mutationFn: (value: number) =>
+      api(`/settings/salary_cycle_start_day`, {
+        method: "PUT",
+        body: JSON.stringify({ value }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["setting", "salary_cycle_start_day"] });
+      qc.invalidateQueries({ queryKey: ["forecast"] });
+    },
+  });
+
+  const cycleDay = settingQ.data ?? 1;
+  return (
+    <div className="border rounded-lg bg-indigo-50/40 p-3 text-sm flex items-center gap-3">
+      <div className="flex-1">
+        <div className="font-medium text-slate-800">
+          Lönecykel för budget
+          {cycleDay > 1 && (
+            <span className="ml-2 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
+              Aktiv: dag {cycleDay}
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-slate-700 mt-0.5">
+          {cycleDay === 1 ? (
+            <>
+              Just nu räknar prognosen på kalendermånader (1:a till 30:e).
+              Om din lön kommer en annan dag (t.ex. 25:e) och fakturor i
+              början av nästa månad täcks av föregående månads lön — sätt
+              lönecykel-dagen så flyttar prognosen gränsen.
+            </>
+          ) : (
+            <>
+              Budget-månaden går från dag {cycleDay} till dag {cycleDay} i
+              nästa månad. Fakturor i början av nästa kalendermånad
+              räknas till föregående månads budget eftersom de täcks av
+              lönen som kommer den {cycleDay}:e.
+            </>
+          )}
+        </div>
+      </div>
+      <label className="flex items-center gap-1.5 text-xs">
+        Lön kommer dag
+        <input
+          type="number"
+          min={1}
+          max={28}
+          value={cycleDay}
+          onChange={(e) => {
+            const v = Math.max(1, Math.min(28, Number(e.target.value) || 1));
+            setMut.mutate(v);
+          }}
+          className="border rounded px-2 py-1 w-16 text-right"
+          disabled={setMut.isPending}
+        />
+      </label>
     </div>
   );
 }

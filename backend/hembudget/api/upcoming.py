@@ -1558,11 +1558,30 @@ def monthly_forecast(
         today = date.today()
         month = f"{today.year}-{today.month:02d}"
     year, mon = map(int, month.split("-"))
-    start = date(year, mon, 1)
-    if mon == 12:
-        end = date(year + 1, 1, 1)
+
+    # Lönecykel-baserad budgetering: om användaren satt
+    # salary_cycle_start_day till t.ex. 25 så räknar vi en "budget-
+    # månad" från 25:e till 25:e nästa månad. Fakturor med expected_date
+    # 1-24 maj tillhör april-budget (täcks av april-lönen som kommer 25
+    # april). Default cycle_day=1 = kalendermånad (gammalt beteende).
+    from ..db.models import AppSetting as _AppSetting
+    cycle_row = session.get(_AppSetting, "salary_cycle_start_day")
+    cycle_day = 1
+    if cycle_row and isinstance(cycle_row.value, dict):
+        v = cycle_row.value.get("v")
+        if isinstance(v, int) and 1 <= v <= 28:
+            cycle_day = v
+
+    if cycle_day == 1:
+        start = date(year, mon, 1)
+        end = (date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1))
     else:
-        end = date(year, mon + 1, 1)
+        start = date(year, mon, cycle_day)
+        end = (
+            date(year + 1, 1, cycle_day)
+            if mon == 12
+            else date(year, mon + 1, cycle_day)
+        )
 
     # Endast "ännu inte fullt betalda" rader räknas — fullt betalda finns
     # redan i transaktionshistoriken och ska inte dubbelräknas.
@@ -1729,6 +1748,9 @@ def monthly_forecast(
 
     return {
         "month": month,
+        "salary_cycle_start_day": cycle_day,
+        "period_start": start.isoformat(),
+        "period_end": end.isoformat(),
         "upcoming_incomes": [
             {
                 "id": i.id, "name": i.name, "amount": float(i.amount),
