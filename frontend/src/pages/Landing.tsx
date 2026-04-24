@@ -21,6 +21,7 @@ export default function Landing() {
       <DemoSection />
       <FlowSection />
       <CtaSection />
+      <ContactSection />
       <Footer />
     </div>
   );
@@ -97,6 +98,9 @@ function Header() {
           <Link to="/docs" className="text-slate-700 hover:text-brand-600">
             Dokumentation
           </Link>
+          <a href="#kontakt" className="text-slate-700 hover:text-brand-600">
+            Kontakt
+          </a>
           <Link
             to="/login"
             className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2"
@@ -417,15 +421,98 @@ function CtaSection() {
   );
 }
 
+function ContactSection() {
+  return (
+    <section id="kontakt" className="bg-slate-50 border-y border-slate-200 py-16">
+      <div className="max-w-3xl mx-auto px-6 text-center">
+        <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
+          <MessageCircle className="w-4 h-4" /> Kontakta oss
+        </div>
+        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+          Frågor, förslag eller samarbeten?
+        </h2>
+        <p className="text-slate-600 mb-6">
+          Vi hjälper gärna till om du vill komma igång i din klass, har
+          önskemål om nya funktioner, eller vill utforska samarbeten med
+          skolor, kommuner eller lärarorganisationer.
+        </p>
+        <a
+          href="mailto:info@ekonomilabbet.org"
+          className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
+        >
+          <MessageCircle className="w-5 h-5" />
+          info@ekonomilabbet.org
+        </a>
+        <p className="text-xs text-slate-500 mt-4">
+          Vi svarar oftast inom ett par arbetsdagar.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+
 function Footer() {
   return (
-    <footer className="border-t border-slate-200 bg-white py-8 mt-16">
-      <div className="max-w-6xl mx-auto px-6 text-center text-sm text-slate-500">
-        <div className="font-semibold text-slate-700 mb-1">Ekonomilabbet</div>
+    <footer className="border-t border-slate-200 bg-white py-10 mt-0">
+      <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-8 text-sm">
         <div>
-          En öppen utbildningsplattform för privatekonomi. Byggd med ❤ för
-          svenska skolor.
+          <div className="flex items-center gap-2 text-brand-600 font-bold mb-2">
+            <Sparkles className="w-5 h-5" /> Ekonomilabbet
+          </div>
+          <p className="text-slate-600">
+            En öppen utbildningsplattform för privatekonomi. Byggd med ❤
+            för svenska skolor.
+          </p>
         </div>
+        <div>
+          <div className="font-semibold text-slate-700 mb-2">Länkar</div>
+          <ul className="space-y-1 text-slate-600">
+            <li>
+              <Link to="/docs" className="hover:text-brand-600">
+                Dokumentation
+              </Link>
+            </li>
+            <li>
+              <Link to="/demo" className="hover:text-brand-600">
+                Prova demo
+              </Link>
+            </li>
+            <li>
+              <a href="#kontakt" className="hover:text-brand-600">
+                Kontakt
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://github.com/robinandreeklund-collab/Hembudget"
+                target="_blank" rel="noreferrer"
+                className="hover:text-brand-600"
+              >
+                GitHub
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <div className="font-semibold text-slate-700 mb-2">Kontakt</div>
+          <ul className="space-y-1 text-slate-600">
+            <li>
+              <a
+                href="mailto:info@ekonomilabbet.org"
+                className="hover:text-brand-600"
+              >
+                info@ekonomilabbet.org
+              </a>
+            </li>
+            <li className="text-slate-500">
+              ekonomilabbet.org
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div className="max-w-6xl mx-auto px-6 mt-8 pt-6 border-t border-slate-200 text-xs text-slate-500 text-center">
+        © {new Date().getFullYear()} Ekonomilabbet · Öppen källkod
       </div>
     </footer>
   );
