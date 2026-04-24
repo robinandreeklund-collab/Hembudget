@@ -66,13 +66,13 @@ function Hero() {
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-3 animate-fadeup delay-200">
         <Link
-          to="/login"
+          to="/login/teacher"
           className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
         >
           Kom igång som lärare
         </Link>
         <Link
-          to="/login"
+          to="/login/student"
           className="bg-white border-2 border-slate-300 hover:border-brand-500 text-slate-700 rounded-lg px-6 py-3 font-medium"
         >
           Jag är elev
@@ -323,13 +323,13 @@ function CtaSection() {
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <Link
-            to="/login"
+            to="/login/teacher"
             className="bg-white hover:bg-slate-50 text-brand-700 rounded-lg px-8 py-3 font-semibold shadow-lg hover:shadow-xl transition-all"
           >
             Skapa lärarkonto
           </Link>
           <Link
-            to="/login"
+            to="/login/student"
             className="bg-brand-800 hover:bg-brand-900 text-white rounded-lg px-8 py-3 font-semibold border-2 border-brand-400"
           >
             Elev-inloggning

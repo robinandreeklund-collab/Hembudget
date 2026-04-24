@@ -31,6 +31,9 @@ import AssignmentMatrix from "./pages/AssignmentMatrix";
 import MortgageDecision from "./pages/MortgageDecision";
 import Messages from "./pages/Messages";
 import Landing from "./pages/Landing";
+import LoginChoice from "./pages/LoginChoice";
+import TeacherLogin from "./pages/TeacherLogin";
+import StudentLogin from "./pages/StudentLogin";
 
 export default function App() {
   const {
@@ -42,9 +45,13 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/login/*" element={<Login />} />
         <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<LoginChoice />} />
+        <Route path="/login/teacher" element={<TeacherLogin />} />
+        <Route path="/login/student" element={<StudentLogin />} />
+        {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
+            backup i fall något djuplänkar dit */}
+        <Route path="/login/legacy" element={<Login />} />
         <Route path="*" element={<Landing />} />
       </Routes>
     );
