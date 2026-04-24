@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle, BarChart3, Briefcase, GraduationCap,
+  AlertTriangle, ArrowRight, BarChart3, Briefcase, GraduationCap,
   Home, Lightbulb, MessageCircle, PiggyBank, Receipt, Sparkles,
-  TrendingUp, Users,
+  TrendingUp, Users, Zap,
 } from "lucide-react";
 import DashboardPreview from "@/components/landing/DashboardPreview";
 import BudgetDemo from "@/components/landing/BudgetDemo";
@@ -18,10 +18,64 @@ export default function Landing() {
       <Hero />
       <WhySection />
       <FeaturesSection />
+      <DemoSection />
       <FlowSection />
       <CtaSection />
       <Footer />
     </div>
+  );
+}
+
+function DemoSection() {
+  return (
+    <section className="py-16">
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="relative bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 rounded-3xl p-10 md:p-14 shadow-xl overflow-hidden">
+          {/* Dekorativa cirklar */}
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
+
+          <div className="relative grid md:grid-cols-[1fr_auto] gap-8 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur text-white rounded-full px-3 py-1 text-xs font-medium mb-4">
+                <Zap className="w-3.5 h-3.5" /> Ingen registrering krävs
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
+                Prova plattformen direkt
+              </h2>
+              <p className="text-white/90 max-w-xl">
+                En färdig klass med 5 elever väntar i demo-miljön. Logga in
+                som lärare och utforska flödena, eller testa som elev och
+                se hur dashboard och budget funkar. Datan återställs var
+                10:e minut — spring-fri sandlåda.
+              </p>
+              <ul className="mt-5 text-white/90 text-sm space-y-1.5">
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                  3 månaders genererad data redan importerad
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                  Olika elev-profiler: sparsam, blandad, slösaktig
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                  Pågående uppdrag och en levande meddelandetråd
+                </li>
+              </ul>
+            </div>
+            <Link
+              to="/demo"
+              className="group bg-white hover:bg-slate-50 text-orange-600 rounded-2xl px-8 py-5 font-semibold shadow-xl hover:shadow-2xl transition-all inline-flex items-center gap-3 whitespace-nowrap"
+            >
+              <Zap className="w-5 h-5" />
+              Starta demo
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -74,12 +128,6 @@ function Hero() {
           sig budgetera, spara och förstå när livet inte går som planerat.
         </p>
         <div className="mt-8 flex flex-wrap gap-3 animate-fadeup delay-200">
-          <Link
-            to="/demo"
-            className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
-          >
-            ⚡ Prova demo direkt
-          </Link>
           <Link
             to="/login/teacher"
             className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
