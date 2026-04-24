@@ -2823,6 +2823,43 @@ def school_status() -> dict:
     return info
 
 
+@router.get("/public/stats")
+def public_stats() -> dict:
+    """Aggregerade, icke-PII-siffror för landningssidan. Fallback till
+    0 om school-läget inte är aktiverat så anropet alltid är säkert."""
+    if not school_enabled():
+        return {
+            "teachers": 0, "students": 0,
+            "modules_completed": 0, "reflections_written": 0,
+        }
+    with master_session() as s:
+        from ..school.models import (
+            StudentModule as _SM,
+            StudentStepProgress as _P,
+            ModuleStep as _Step,
+        )
+        teachers = s.query(Teacher).filter(
+            Teacher.is_demo.is_(False),
+            Teacher.active.is_(True),
+        ).count()
+        students = s.query(Student).filter(Student.active.is_(True)).count()
+        modules_completed = s.query(_SM).filter(
+            _SM.completed_at.isnot(None)
+        ).count()
+        reflections_written = (
+            s.query(_P).join(_Step, _P.step_id == _Step.id).filter(
+                _Step.kind == "reflect",
+                _P.completed_at.isnot(None),
+            ).count()
+        )
+    return {
+        "teachers": teachers,
+        "students": students,
+        "modules_completed": modules_completed,
+        "reflections_written": reflections_written,
+    }
+
+
 @router.get("/teacher/me", response_model=TeacherAuthOut)
 def teacher_me(info: TokenInfo = Depends(require_teacher)) -> TeacherAuthOut:
     _require_school_mode()

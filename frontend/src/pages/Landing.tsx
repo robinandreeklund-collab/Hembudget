@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle, ArrowRight, BarChart3, Briefcase, GraduationCap,
-  Home, Lightbulb, MessageCircle, PiggyBank, Quote, Receipt, Sparkles,
-  TrendingUp, Users, Zap,
+  AlertTriangle, ArrowRight, BarChart3, Briefcase, Check, ChevronDown,
+  GraduationCap, Home, Lightbulb, MessageCircle, PiggyBank, Quote,
+  Receipt, School, Sparkles, TrendingUp, Users, Zap,
 } from "lucide-react";
+import { api } from "@/api/client";
 import DashboardPreview from "@/components/landing/DashboardPreview";
 import BudgetDemo from "@/components/landing/BudgetDemo";
 import PdfImportDemo from "@/components/landing/PdfImportDemo";
@@ -16,10 +18,15 @@ export default function Landing() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-brand-50">
       <Header />
       <Hero />
+      <StatsTicker />
+      <SocialProof />
       <WhySection />
       <FeaturesSection />
+      <ScreenshotGallery />
       <DemoSection />
       <FlowSection />
+      <PricingSection />
+      <FaqSection />
       <FounderNote />
       <CtaSection />
       <ContactSection />
@@ -93,13 +100,19 @@ function Header() {
           <a href="#funktioner" className="text-slate-700 hover:text-brand-600">
             Funktioner
           </a>
-          <a href="#sa-funkar-det" className="text-slate-700 hover:text-brand-600">
+          <a href="#sa-funkar-det" className="text-slate-700 hover:text-brand-600 hidden md:inline">
             Så funkar det
           </a>
-          <Link to="/docs" className="text-slate-700 hover:text-brand-600">
+          <a href="#pricing" className="text-slate-700 hover:text-brand-600 hidden md:inline">
+            Pris
+          </a>
+          <a href="#faq" className="text-slate-700 hover:text-brand-600 hidden md:inline">
+            FAQ
+          </a>
+          <Link to="/docs" className="text-slate-700 hover:text-brand-600 hidden md:inline">
             Dokumentation
           </Link>
-          <a href="#kontakt" className="text-slate-700 hover:text-brand-600">
+          <a href="#kontakt" className="text-slate-700 hover:text-brand-600 hidden md:inline">
             Kontakt
           </a>
           <Link
@@ -468,6 +481,309 @@ function ContactSection() {
   );
 }
 
+
+function StatsTicker() {
+  const [stats, setStats] = useState<{
+    teachers: number; students: number;
+    modules_completed: number; reflections_written: number;
+  } | null>(null);
+  useEffect(() => {
+    api<typeof stats>("/public/stats")
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, []);
+  if (!stats) return null;
+  const items = [
+    { label: "Lärare", value: stats.teachers },
+    { label: "Elever", value: stats.students },
+    { label: "Avklarade moduler", value: stats.modules_completed },
+    { label: "Reflektioner skickade", value: stats.reflections_written },
+  ];
+  return (
+    <section className="bg-white border-y border-slate-200 py-8">
+      <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6">
+        {items.map((x) => (
+          <div key={x.label} className="text-center">
+            <div className="text-3xl md:text-4xl font-bold text-brand-700">
+              {x.value.toLocaleString("sv-SE")}
+            </div>
+            <div className="text-xs uppercase tracking-wider text-slate-500 mt-1">
+              {x.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SocialProof() {
+  // Pilotprojekt — bara platshållare tills vi har riktiga skolor att
+  // visa upp. Tona ned med opacitet så det inte upplevs oärligt.
+  const schools = [
+    "Exempelskolan", "Ekonomilinjen Malmö",
+    "Linnéskolan", "Musikgymnasiet", "Fjällgymnasiet",
+  ];
+  return (
+    <section className="py-10 bg-slate-50">
+      <div className="max-w-6xl mx-auto px-6 text-center">
+        <p className="text-xs uppercase tracking-widest text-slate-500 mb-4">
+          I pilotprojekt tillsammans med
+        </p>
+        <ul className="flex flex-wrap justify-center gap-x-8 gap-y-3 opacity-50">
+          {schools.map((s) => (
+            <li
+              key={s}
+              className="text-slate-700 font-serif text-lg flex items-center gap-2"
+            >
+              <School className="w-4 h-4" /> {s}
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-slate-400 mt-3">
+          Vi lägger till riktiga logotyper när pilotfasen är klar.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ScreenshotGallery() {
+  const shots = [
+    {
+      title: "Lärarens dashboard",
+      body: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm.",
+      icon: <Users className="w-5 h-5" />,
+      tint: "from-brand-100 to-sky-100",
+    },
+    {
+      title: "Elevens kursplan",
+      body: "Moduler med steg för steg: läs, reflektera, quiz och uppdrag.",
+      icon: <GraduationCap className="w-5 h-5" />,
+      tint: "from-emerald-100 to-teal-100",
+    },
+    {
+      title: "Mastery-grafen",
+      body: "Per-kompetens mastery, milstolpar och nästa-steg-hint.",
+      icon: <BarChart3 className="w-5 h-5" />,
+      tint: "from-amber-100 to-orange-100",
+    },
+    {
+      title: "Portfolio-PDF",
+      body: "Exporteras per elev eller som ZIP för hela klassen.",
+      icon: <Receipt className="w-5 h-5" />,
+      tint: "from-rose-100 to-pink-100",
+    },
+    {
+      title: "Fråga Ekon",
+      body: "Multi-turn AI-coach som anpassar svaren till elevens nivå.",
+      icon: <Sparkles className="w-5 h-5" />,
+      tint: "from-purple-100 to-fuchsia-100",
+    },
+    {
+      title: "Time-on-task",
+      body: "Se vilka steg som fastnar för eleverna i din klass.",
+      icon: <TrendingUp className="w-5 h-5" />,
+      tint: "from-indigo-100 to-blue-100",
+    },
+  ];
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
+            Se plattformen i bruk
+          </h2>
+          <p className="text-slate-600">
+            Sex vyer som täcker det mesta lärare och elever rör sig i dagligen.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {shots.map((s) => (
+            <div
+              key={s.title}
+              className={`rounded-xl bg-gradient-to-br ${s.tint} border border-white aspect-[4/3] p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow`}
+            >
+              <div className="inline-flex items-center justify-center w-9 h-9 bg-white/80 rounded-lg text-slate-700">
+                {s.icon}
+              </div>
+              <div>
+                <div className="font-semibold text-slate-900">{s.title}</div>
+                <p className="text-sm text-slate-700 mt-1">{s.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PricingSection() {
+  return (
+    <section id="pricing" className="py-20 bg-slate-50 border-y border-slate-200">
+      <div className="max-w-4xl mx-auto px-6 text-center">
+        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
+          Enkel prismodell
+        </h2>
+        <p className="text-slate-600 max-w-xl mx-auto">
+          Gratis under pilotåret 2026. Ingen bindningstid, inga dolda kostnader.
+          Från 2027 blir det en enkel per-elev-kostnad — beslut tas i
+          dialog med pilotskolorna.
+        </p>
+        <div className="mt-10 grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+          <div className="bg-white border-2 border-brand-600 rounded-2xl p-6 text-left shadow-sm">
+            <div className="inline-flex items-center gap-1 bg-brand-600 text-white text-xs font-medium rounded-full px-2.5 py-0.5">
+              Pilot 2026
+            </div>
+            <div className="text-3xl font-bold text-slate-900 mt-3">0 kr</div>
+            <div className="text-sm text-slate-600 mb-4">
+              Hela plattformen, utan tak.
+            </div>
+            <ul className="text-sm space-y-2">
+              {[
+                "Obegränsat antal elever",
+                "AI-funktioner (Claude Sonnet)",
+                "Portfolio-PDF + ZIP-export",
+                "Support via mail",
+              ].map((x) => (
+                <li key={x} className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 mt-0.5" /> {x}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-left">
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              Från 2027
+            </div>
+            <div className="text-3xl font-bold text-slate-900 mt-3">
+              Per-elev
+            </div>
+            <div className="text-sm text-slate-600 mb-4">
+              Exakt nivå sätts tillsammans med pilotskolorna — troligen
+              mellan 50–150 kr/elev/läsår.
+            </div>
+            <ul className="text-sm space-y-2">
+              {[
+                "Samma plattform, ingen funktionsnedskärning",
+                "Tak för AI-användning",
+                "Dedikerad support",
+              ].map((x) => (
+                <li key={x} className="flex items-start gap-2">
+                  <Check className="w-4 h-4 text-emerald-600 mt-0.5" /> {x}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqSection() {
+  const items = [
+    {
+      q: "Vad kostar Ekonomilabbet?",
+      a:
+        "Gratis under pilotåret 2026. Inga dolda kostnader. Från 2027 tas en " +
+        "per-elev-avgift ut, nivån bestäms tillsammans med pilotskolorna.",
+    },
+    {
+      q: "Är det GDPR-säkert?",
+      a:
+        "Ja. All elevdata sparas i svensk molntjänst (Google Cloud Run, " +
+        "europe-north1). Vi delar inga personuppgifter med tredje part. " +
+        "AI-anropen anonymiseras — Claude ser aldrig elevers namn eller " +
+        "personnummer.",
+    },
+    {
+      q: "Vad behöver vi installera?",
+      a:
+        "Inget. Ekonomilabbet är en webbapp. Läraren skapar konto, lägger " +
+        "in eleverna och eleverna loggar in med en 6-teckenskod eller QR-" +
+        "kod. Ingen installation, ingen app-store.",
+    },
+    {
+      q: "Går det att använda utan AI?",
+      a:
+        "Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, " +
+        "rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion " +
+        "som kan aktiveras per lärare.",
+    },
+    {
+      q: "Kan elever komma åt varandras data?",
+      a:
+        "Nej. Varje elev har en egen krypterad SQLite-DB på servern, " +
+        "ingen cross-access även om de råkar i samma klass. Läraren ser " +
+        "alla sina elever men aldrig någon annan lärares.",
+    },
+    {
+      q: "Vad händer med elevernas data när året är slut?",
+      a:
+        "Ingenting tvångsmässigt — datan är kvar tills läraren tar bort " +
+        "kontot. Vi exporterar gärna hela klassen till ZIP så du har en " +
+        "kopia innan du raderar.",
+    },
+    {
+      q: "Vilken AI-modell används?",
+      a:
+        "Claude Haiku 4.5 för snabba uppgifter (kategori-check, feedback-" +
+        "förslag) och Claude Sonnet 4.6 för djupare uppgifter (rubric, " +
+        "elev-Q&A, modul-generering). Prompt-caching används för " +
+        "kostnadskontroll.",
+    },
+    {
+      q: "Kan jag importera befintliga moduler från andra system?",
+      a:
+        "Inte som automatisk import än. Moduler skapas i plattformen " +
+        "eller klonas från systemmallar/andra lärares delade moduler. " +
+        "Säg till oss vad ni använder — vi bygger importen om det finns " +
+        "efterfrågan.",
+    },
+  ];
+  return (
+    <section id="faq" className="py-20">
+      <div className="max-w-3xl mx-auto px-6">
+        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-10">
+          Vanliga frågor
+        </h2>
+        <ul className="space-y-2">
+          {items.map((it, i) => (
+            <FaqItem key={i} q={it.q} a={it.a} />
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between text-left px-4 py-3 hover:bg-slate-50"
+      >
+        <span className="font-medium text-slate-900">{q}</span>
+        <ChevronDown
+          className={`w-5 h-5 text-slate-500 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 text-slate-700 text-sm leading-relaxed">
+          {a}
+        </div>
+      )}
+    </li>
+  );
+}
 
 function Footer() {
   return (
