@@ -240,6 +240,12 @@ export default function Teacher() {
             ✍️ Reflektioner
           </Link>
           <Link
+            to="/teacher/rubrics"
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            📋 Rubric-mallar
+          </Link>
+          <Link
             to="/docs"
             className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
           >

@@ -15,8 +15,8 @@ from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
 from ..school.models import (
     Competency, Module, ModuleStep, ModuleStepCompetency,
-    PeerFeedback, Student, StudentModule, StudentProfile,
-    StudentStepProgress,
+    PeerFeedback, RubricTemplate, Student, StudentModule, StudentProfile,
+    StudentStepProgress, Teacher,
 )
 from .deps import TokenInfo, require_teacher, require_token
 
@@ -1666,3 +1666,192 @@ def student_complete_step(
             "data": data,
             "new_achievements": [i for i in new_items if i],
         }
+
+
+# ---------- Rubric-mallar ----------
+
+class RubricCriterion(BaseModel):
+    key: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1, max_length=160)
+    levels: list[str] = Field(min_length=2, max_length=6)
+
+
+class RubricTemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    description: Optional[str] = None
+    criteria: list[RubricCriterion] = Field(min_length=1, max_length=20)
+    is_shared: bool = False
+
+
+class RubricTemplateOut(BaseModel):
+    id: int
+    teacher_id: Optional[int]
+    owner_name: Optional[str]
+    name: str
+    description: Optional[str]
+    criteria: list[dict]
+    is_shared: bool
+    is_mine: bool
+    created_at: datetime
+
+
+def _rubric_to_out(
+    rt: RubricTemplate, teacher_id: Optional[int], owner_name: Optional[str],
+) -> RubricTemplateOut:
+    return RubricTemplateOut(
+        id=rt.id,
+        teacher_id=rt.teacher_id,
+        owner_name=owner_name,
+        name=rt.name,
+        description=rt.description,
+        criteria=list(rt.criteria or []),
+        is_shared=rt.is_shared,
+        is_mine=(teacher_id is not None and rt.teacher_id == teacher_id),
+        created_at=rt.created_at,
+    )
+
+
+@router.get("/teacher/rubric-templates", response_model=list[RubricTemplateOut])
+def list_rubric_templates(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[RubricTemplateOut]:
+    """Egna mallar + delade från andra lärare + systemmallar (teacher_id=NULL)."""
+    _require_school_mode()
+    out: list[RubricTemplateOut] = []
+    with master_session() as s:
+        # Hämta teacher-namn i ett svep för alla som äger mallar vi visar
+        rows = (
+            s.query(RubricTemplate)
+            .filter(
+                (RubricTemplate.teacher_id == info.teacher_id)
+                | (RubricTemplate.is_shared.is_(True))
+                | (RubricTemplate.teacher_id.is_(None))
+            )
+            .order_by(RubricTemplate.name)
+            .all()
+        )
+        owner_ids = {r.teacher_id for r in rows if r.teacher_id}
+        owners = {
+            t.id: t.name for t in s.query(Teacher).filter(
+                Teacher.id.in_(owner_ids) if owner_ids else False,
+            ).all()
+        } if owner_ids else {}
+        for r in rows:
+            owner = owners.get(r.teacher_id) if r.teacher_id else None
+            out.append(_rubric_to_out(r, info.teacher_id, owner))
+    return out
+
+
+@router.post("/teacher/rubric-templates", response_model=RubricTemplateOut)
+def create_rubric_template(
+    payload: RubricTemplateIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> RubricTemplateOut:
+    _require_school_mode()
+    with master_session() as s:
+        rt = RubricTemplate(
+            teacher_id=info.teacher_id,
+            name=payload.name.strip(),
+            description=(payload.description or "").strip() or None,
+            criteria=[c.model_dump() for c in payload.criteria],
+            is_shared=payload.is_shared,
+        )
+        s.add(rt)
+        s.flush()
+        owner = (
+            s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        )
+        return _rubric_to_out(
+            rt, info.teacher_id, owner.name if owner else None,
+        )
+
+
+@router.patch(
+    "/teacher/rubric-templates/{template_id}",
+    response_model=RubricTemplateOut,
+)
+def update_rubric_template(
+    template_id: int,
+    payload: RubricTemplateIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> RubricTemplateOut:
+    _require_school_mode()
+    with master_session() as s:
+        rt = s.query(RubricTemplate).filter(
+            RubricTemplate.id == template_id,
+        ).first()
+        if not rt:
+            raise HTTPException(404, "Mall finns ej")
+        if rt.teacher_id != info.teacher_id:
+            raise HTTPException(
+                403, "Du kan bara redigera egna mallar (klona om du vill ändra).",
+            )
+        rt.name = payload.name.strip()
+        rt.description = (payload.description or "").strip() or None
+        rt.criteria = [c.model_dump() for c in payload.criteria]
+        rt.is_shared = payload.is_shared
+        owner = (
+            s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        )
+        return _rubric_to_out(
+            rt, info.teacher_id, owner.name if owner else None,
+        )
+
+
+@router.delete("/teacher/rubric-templates/{template_id}")
+def delete_rubric_template(
+    template_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        rt = s.query(RubricTemplate).filter(
+            RubricTemplate.id == template_id,
+        ).first()
+        if not rt:
+            raise HTTPException(404, "Mall finns ej")
+        if rt.teacher_id != info.teacher_id:
+            raise HTTPException(403, "Bara ägaren kan radera sin mall")
+        s.delete(rt)
+    return {"ok": True}
+
+
+@router.post(
+    "/teacher/rubric-templates/{template_id}/clone",
+    response_model=RubricTemplateOut,
+)
+def clone_rubric_template(
+    template_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> RubricTemplateOut:
+    """Kopiera en delad/systemmall till en privat version eleven äger
+    och kan redigera utan att påverka originalet."""
+    _require_school_mode()
+    with master_session() as s:
+        src = s.query(RubricTemplate).filter(
+            RubricTemplate.id == template_id,
+        ).first()
+        if not src:
+            raise HTTPException(404, "Mall finns ej")
+        # Kloning är tillåten för egen, delad, eller systemmall
+        if (
+            src.teacher_id is not None
+            and src.teacher_id != info.teacher_id
+            and not src.is_shared
+        ):
+            raise HTTPException(403, "Mallen är inte delad")
+        new_rt = RubricTemplate(
+            teacher_id=info.teacher_id,
+            name=f"{src.name} (kopia)",
+            description=src.description,
+            criteria=list(src.criteria or []),
+            is_shared=False,
+        )
+        s.add(new_rt)
+        s.flush()
+        owner = (
+            s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        )
+        return _rubric_to_out(
+            new_rt, info.teacher_id, owner.name if owner else None,
+        )

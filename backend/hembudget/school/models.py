@@ -671,6 +671,35 @@ class ModuleStepCompetency(MasterBase):
     weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
 
 
+class RubricTemplate(MasterBase):
+    """Återanvändbar rubric-mall som en lärare kan koppla på valfritt
+    reflect-steg istället för att sätta om kriterier manuellt.
+
+    criteria lagras som lista av {key, name, levels:[...]} — samma format
+    som ModuleStep.params.rubric.
+
+    teacher_id=NULL + is_shared=True = systemmall, visas för alla lärare.
+    """
+    __tablename__ = "rubric_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Lista av {"key": "...", "name": "...", "levels": ["...", ...]}
+    criteria: Mapped[list] = mapped_column(JSON, nullable=False)
+    # Om True syns mallen för andra lärare (via /teacher/rubric-templates)
+    is_shared: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppConfig(MasterBase):
     """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
     Key-value-form så vi slipper migrera schemat vid varje nytt fält.
