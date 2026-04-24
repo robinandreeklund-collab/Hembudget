@@ -2482,101 +2482,22 @@ def import_all_endpoint(
     return {"results": results}
 
 
-# ---------- Teacher: datagenerering ----------
+# ---------- Teacher: datagenerering (GAMMAL endpoint — borttagen) ----------
+# /teacher/generate tidigare direkt-genererade transaktioner i scope-DB:n.
+# Den är borttagen eftersom nya batch-flödet (/teacher/batches) ersätter
+# den fullt ut. Om den kördes parallellt med batch-importen skulle eleven
+# få dubbelt data. Returnera 410 Gone med instruktion.
 
-@router.post("/teacher/generate", response_model=list[GenerateResultRow])
-def generate_month(
-    payload: GenerateIn,
+
+@router.post("/teacher/generate")
+def generate_month_deprecated(
     info: TokenInfo = Depends(require_teacher),
-) -> list[GenerateResultRow]:
-    _require_school_mode()
-    from ..teacher.generator import MonthlyDataGenerator
-
-    with master_session() as s:
-        q = s.query(Student).filter(
-            Student.teacher_id == info.teacher_id,
-            Student.active.is_(True),
-        )
-        if payload.student_ids:
-            q = q.filter(Student.id.in_(payload.student_ids))
-        students = q.all()
-        student_list = [
-            (st.id, st.display_name, scope_for_student(st)) for st in students
-        ]
-
-    results: list[GenerateResultRow] = []
-    for sid, name, scope_key in student_list:
-        seed = abs(hash((sid, payload.year_month))) & 0xFFFFFFFF
-        with master_session() as s:
-            existing = (
-                s.query(StudentDataGenerationRun)
-                .filter(
-                    StudentDataGenerationRun.student_id == sid,
-                    StudentDataGenerationRun.year_month == payload.year_month,
-                )
-                .first()
-            )
-            if existing and not payload.overwrite:
-                results.append(
-                    GenerateResultRow(
-                        student_id=sid, display_name=name,
-                        year_month=payload.year_month,
-                        status="skipped", seed=existing.seed,
-                        stats=existing.stats,
-                    )
-                )
-                continue
-
-        try:
-            # Öppna scope-DB + kör generatorn
-            get_scope_engine(scope_key)
-            with scope_context(scope_key):
-                gen = MonthlyDataGenerator(
-                    student_id=sid,
-                    year_month=payload.year_month,
-                    seed=seed,
-                )
-                stats = gen.generate(overwrite=payload.overwrite)
-            with master_session() as s:
-                existing = (
-                    s.query(StudentDataGenerationRun)
-                    .filter(
-                        StudentDataGenerationRun.student_id == sid,
-                        StudentDataGenerationRun.year_month == payload.year_month,
-                    )
-                    .first()
-                )
-                if existing:
-                    existing.seed = seed
-                    existing.stats = stats
-                    existing.generated_at = datetime.utcnow()
-                    status_out = "overwritten"
-                else:
-                    s.add(StudentDataGenerationRun(
-                        student_id=sid,
-                        year_month=payload.year_month,
-                        seed=seed,
-                        stats=stats,
-                    ))
-                    status_out = "created"
-            results.append(
-                GenerateResultRow(
-                    student_id=sid, display_name=name,
-                    year_month=payload.year_month,
-                    status=status_out, seed=seed, stats=stats,
-                )
-            )
-        except Exception as e:
-            log.exception("Generation failed for student %d", sid)
-            results.append(
-                GenerateResultRow(
-                    student_id=sid, display_name=name,
-                    year_month=payload.year_month,
-                    status="error", error=str(e),
-                )
-            )
-
-    return results
+) -> dict:
+    raise HTTPException(
+        status.HTTP_410_GONE,
+        "Denna endpoint är ersatt av /teacher/batches som skapar PDF:er "
+        "som eleverna importerar själva. Uppdatera klienten.",
+    )
 
 
 # ---------- Student login ----------

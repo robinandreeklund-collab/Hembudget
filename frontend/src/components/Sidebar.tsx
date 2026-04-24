@@ -100,11 +100,15 @@ function NavItems({ onClick }: { onClick?: () => void }) {
 }
 
 function Brand() {
-  const { role } = useAuth();
+  const { role, schoolMode } = useAuth();
   const isStudent = role === "student";
-  const title = isStudent ? "Ekonomilabbet" : "Hembudget";
+  // I school-mode = Ekonomilabbet för alla (elev + lärare).
+  // I desktop-mode = Hembudget.
+  const title = schoolMode || isStudent ? "Ekonomilabbet" : "Hembudget";
   const subtitle = isStudent
     ? "Övning – inte riktiga pengar"
+    : schoolMode
+    ? "Lärarpanel"
     : "Lokalt • Nemotron Nano 3";
   return (
     <div className="p-4">
@@ -112,7 +116,7 @@ function Brand() {
         to={isStudent ? "/my-batches" : "/dashboard"}
         className="flex items-center gap-2 text-brand-600 font-semibold text-lg"
       >
-        {isStudent ? (
+        {isStudent || schoolMode ? (
           <GraduationCap className="w-5 h-5" />
         ) : (
           <LineChart className="w-5 h-5" />
@@ -139,7 +143,7 @@ export function Sidebar() {
 export function MobileTopBar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
-  const { role } = useAuth();
+  const { role, schoolMode } = useAuth();
   const isStudent = role === "student";
   const currentItem = ALL_ITEMS.find((i) =>
     location.pathname.startsWith(i.to),
@@ -159,12 +163,12 @@ export function MobileTopBar() {
           to={isStudent ? "/my-batches" : "/dashboard"}
           className="font-semibold text-brand-600 flex items-center gap-1.5"
         >
-          {isStudent ? (
+          {isStudent || schoolMode ? (
             <GraduationCap className="w-4 h-4" />
           ) : (
             <LineChart className="w-4 h-4" />
           )}
-          {isStudent ? "Ekonomilabbet" : "Hembudget"}
+          {isStudent || schoolMode ? "Ekonomilabbet" : "Hembudget"}
         </Link>
         {currentItem && (
           <span className="ml-auto text-sm text-slate-700">{currentItem.label}</span>
