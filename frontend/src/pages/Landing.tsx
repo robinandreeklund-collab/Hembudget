@@ -72,6 +72,12 @@ function Hero() {
         </p>
         <div className="mt-8 flex flex-wrap gap-3 animate-fadeup delay-200">
           <Link
+            to="/demo"
+            className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
+          >
+            ⚡ Prova demo direkt
+          </Link>
+          <Link
             to="/login/teacher"
             className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
           >

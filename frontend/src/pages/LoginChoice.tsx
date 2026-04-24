@@ -16,6 +16,16 @@ export default function LoginChoice() {
           <p className="text-slate-600 mt-2">Är du lärare eller elev?</p>
         </div>
 
+        <Link
+          to="/demo"
+          className="block bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl p-5 text-center mb-4 shadow-lg hover:shadow-xl transition-all"
+        >
+          <div className="font-semibold">⚡ Prova demoläge direkt</div>
+          <div className="text-sm opacity-90 mt-0.5">
+            Logga in utan konto — färdig klass att utforska
+          </div>
+        </Link>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
             to="/login/teacher"

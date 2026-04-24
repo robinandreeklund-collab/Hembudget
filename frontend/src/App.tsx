@@ -34,6 +34,8 @@ import Landing from "./pages/Landing";
 import LoginChoice from "./pages/LoginChoice";
 import TeacherLogin from "./pages/TeacherLogin";
 import StudentLogin from "./pages/StudentLogin";
+import DemoChoice from "./pages/DemoChoice";
+import { DemoBanner } from "./components/DemoBanner";
 
 export default function App() {
   const {
@@ -49,6 +51,7 @@ export default function App() {
         <Route path="/login" element={<LoginChoice />} />
         <Route path="/login/teacher" element={<TeacherLogin />} />
         <Route path="/login/student" element={<StudentLogin />} />
+        <Route path="/demo" element={<DemoChoice />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
         <Route path="/login/legacy" element={<Login />} />
@@ -61,14 +64,21 @@ export default function App() {
   if (
     role === "student" && studentMeta && !studentMeta.onboarding_completed
   ) {
-    return <Onboarding />;
+    return (
+      <>
+        <DemoBanner />
+        <Onboarding />
+      </>
+    );
   }
 
   // Lärare utan vald elev → bara lärarpanelen syns (ingen sidebar mot elevdata)
   const teacherRootOnly = role === "teacher" && !asStudent;
 
   return (
-    <div className="h-full flex flex-col md:flex-row">
+    <div className="h-full flex flex-col">
+      <DemoBanner />
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
       {!teacherRootOnly && <Sidebar />}
       <main className="flex-1 overflow-y-auto">
         {!teacherRootOnly && <MobileTopBar />}
@@ -119,6 +129,7 @@ export default function App() {
           )}
         </Routes>
       </main>
+      </div>
     </div>
   );
 }

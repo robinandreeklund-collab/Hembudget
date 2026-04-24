@@ -142,6 +142,33 @@ export function useAuth() {
     return res.token;
   }
 
+  async function demoTeacherLogin() {
+    const res = await api<{ token: string }>("/demo/teacher", {
+      method: "POST",
+    });
+    setToken(res.token);
+    setTokenState(res.token);
+    setRole("teacher");
+    setRoleState("teacher");
+    setAsStudent(null);
+    setAsStudentState(null);
+    return res.token;
+  }
+
+  async function demoStudentLogin(code: string = "DEMO01") {
+    const res = await api<{ token: string }>(
+      `/demo/student?code=${encodeURIComponent(code)}`,
+      { method: "POST" },
+    );
+    setToken(res.token);
+    setTokenState(res.token);
+    setRole("student");
+    setRoleState("student");
+    setAsStudent(null);
+    setAsStudentState(null);
+    return res.token;
+  }
+
   async function studentLogin(login_code: string) {
     const res = await api<{ token: string }>("/student/login", {
       method: "POST",
@@ -204,6 +231,8 @@ export function useAuth() {
     teacherLogin,
     teacherBootstrap,
     studentLogin,
+    demoTeacherLogin,
+    demoStudentLogin,
     impersonate,
     logout,
   };
