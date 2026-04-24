@@ -5,6 +5,9 @@ import {
   TrendingUp, Users,
 } from "lucide-react";
 import DashboardPreview from "@/components/landing/DashboardPreview";
+import BudgetDemo from "@/components/landing/BudgetDemo";
+import PdfImportDemo from "@/components/landing/PdfImportDemo";
+import TeacherDemo from "@/components/landing/TeacherDemo";
 
 export default function Landing() {
   return (
@@ -251,62 +254,71 @@ function FeatureCard({
   );
 }
 function FlowSection() {
-  const steps = [
+  const blocks = [
     {
-      num: 1,
-      title: "Lärare skapar klass",
-      body: "Lägg till elever. Varje får en unik profil — yrke, lön, bostad — automatiskt genererad.",
+      num: "01",
+      title: "Eleven får en egen vardag",
+      body: "Yrke, lön, bostad, lån — allt slumpas unikt per elev. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid.",
       color: "bg-brand-500",
+      demo: <DashboardPreview />,
     },
     {
-      num: 2,
-      title: "Eleven loggar in",
-      body: "Med en 6-teckens kod. Onboarding förklarar yrket, lönen, skatten — och ber eleven sätta en budget.",
+      num: "02",
+      title: "Verkliga dokument att jobba med",
+      body: "Läraren trycker 'generera' — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv.",
       color: "bg-emerald-500",
+      demo: <PdfImportDemo />,
     },
     {
-      num: 3,
-      title: "Månadens dokument",
-      body: "Läraren skickar ut PDF:er. Eleven laddar ner, tittar, och importerar — precis som i riktiga livet.",
+      num: "03",
+      title: "Budget möter verklighet",
+      body: "Eleven sätter en månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt.",
       color: "bg-amber-500",
+      demo: <BudgetDemo />,
     },
     {
-      num: 4,
-      title: "Lärare ser framstegen",
-      body: "Klassöversikten visar status för varje uppdrag. Feedback sker via chatten.",
+      num: "04",
+      title: "Läraren ser hela klassen",
+      body: "Matris över alla elever och uppdrag. Kategoriseringsfacit per tx. Chatt för feedback. Allt du behöver för att följa upp.",
       color: "bg-rose-500",
+      demo: <TeacherDemo />,
     },
   ];
 
   return (
-    <section id="sa-funkar-det" className="bg-slate-900 text-white py-16">
+    <section id="sa-funkar-det" className="bg-slate-900 text-white py-20">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-12">
+        <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 text-brand-300 text-sm font-medium mb-2">
             <Sparkles className="w-4 h-4" /> Så funkar det
           </div>
           <h2 className="text-3xl md:text-4xl font-bold">
-            Från start till lärande på 4 steg
+            Se plattformen i rörelse
           </h2>
+          <p className="text-slate-400 mt-3 max-w-xl mx-auto">
+            Fyra nyckel-ögonblick i Ekonomilabbet — precis så elever och
+            lärare faktiskt använder det.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
-          {/* Animated connector line (only visible on md+) */}
-          <div className="hidden md:block absolute top-8 left-[12%] right-[12%] h-0.5 bg-gradient-to-r from-brand-500 via-emerald-500 to-rose-500 opacity-30" />
-          {steps.map((s, i) => (
+        <div className="space-y-20">
+          {blocks.map((b, i) => (
             <div
-              key={s.num}
-              className="relative bg-slate-800/50 border border-slate-700 rounded-xl p-5 hover:border-brand-500 transition-colors"
-              style={{ animation: `fadeup 0.6s ${i * 0.15}s both` }}
+              key={b.num}
+              className={`grid md:grid-cols-2 gap-10 items-center ${
+                i % 2 === 1 ? "md:[&>div:first-child]:order-2" : ""
+              }`}
             >
-              <div
-                className={`${s.color} w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mb-3 shadow-lg animate-float`}
-                style={{ animationDelay: `${i * 0.5}s` }}
-              >
-                {s.num}
+              <div>
+                <div
+                  className={`${b.color} inline-flex w-14 h-14 rounded-full items-center justify-center text-xl font-bold mb-4 shadow-lg`}
+                >
+                  {b.num}
+                </div>
+                <h3 className="text-2xl font-bold mb-3">{b.title}</h3>
+                <p className="text-slate-300 leading-relaxed">{b.body}</p>
               </div>
-              <h3 className="font-semibold text-lg mb-1">{s.title}</h3>
-              <p className="text-sm text-slate-300">{s.body}</p>
+              <div>{b.demo}</div>
             </div>
           ))}
         </div>
