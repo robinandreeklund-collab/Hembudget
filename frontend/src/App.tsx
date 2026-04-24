@@ -40,6 +40,7 @@ import MyModules from "./pages/MyModules";
 import ModuleView from "./pages/ModuleView";
 import TeacherModules from "./pages/TeacherModules";
 import TeacherModuleEdit from "./pages/TeacherModuleEdit";
+import TeacherReflections from "./pages/TeacherReflections";
 import { DemoBanner } from "./components/DemoBanner";
 
 export default function App() {
@@ -97,6 +98,7 @@ export default function App() {
               <Route path="/teacher/all-batches" element={<AllBatches />} />
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
+              <Route path="/teacher/reflections" element={<TeacherReflections />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/docs" element={<Docs />} />
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
@@ -118,6 +120,7 @@ export default function App() {
               <Route path="/modules/:moduleId" element={<ModuleView />} />
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
+              <Route path="/teacher/reflections" element={<TeacherReflections />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route
                 path="/dashboard"

@@ -367,6 +367,117 @@ def unassign_module(
     return {"removed": removed}
 
 
+# ---------- Lärarens reflektionsinbox ----------
+
+class ReflectionOut(BaseModel):
+    progress_id: int
+    student_id: int
+    student_name: str
+    class_label: Optional[str]
+    module_id: int
+    module_title: str
+    step_id: int
+    step_title: str
+    step_question: Optional[str]  # step.content
+    reflection: str
+    completed_at: Optional[datetime]
+    teacher_feedback: Optional[str]
+    feedback_at: Optional[datetime]
+
+
+class FeedbackIn(BaseModel):
+    feedback: str = Field(min_length=1, max_length=4000)
+
+
+@router.get("/teacher/reflections", response_model=list[ReflectionOut])
+def list_reflections(
+    needs_feedback: bool = False,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[ReflectionOut]:
+    """Alla reflektioner från mina elever.
+    needs_feedback=true filtrerar till bara de utan feedback."""
+    _require_school_mode()
+    out: list[ReflectionOut] = []
+    with master_session() as s:
+        # Alla progress-rader för reflect-steg från mina elever
+        rows = (
+            s.query(StudentStepProgress, ModuleStep, Student)
+            .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
+            .join(Student, StudentStepProgress.student_id == Student.id)
+            .filter(
+                Student.teacher_id == info.teacher_id,
+                ModuleStep.kind == "reflect",
+                StudentStepProgress.completed_at.isnot(None),
+            )
+            .order_by(StudentStepProgress.completed_at.desc())
+            .all()
+        )
+        for prog, step, stu in rows:
+            if needs_feedback and prog.teacher_feedback:
+                continue
+            reflection = ""
+            if prog.data and isinstance(prog.data, dict):
+                reflection = str(prog.data.get("reflection", ""))
+            module = s.query(Module).filter(Module.id == step.module_id).first()
+            out.append(ReflectionOut(
+                progress_id=prog.id,
+                student_id=stu.id, student_name=stu.display_name,
+                class_label=stu.class_label,
+                module_id=step.module_id,
+                module_title=module.title if module else "—",
+                step_id=step.id, step_title=step.title,
+                step_question=step.content,
+                reflection=reflection,
+                completed_at=prog.completed_at,
+                teacher_feedback=prog.teacher_feedback,
+                feedback_at=prog.feedback_at,
+            ))
+    return out
+
+
+@router.post("/teacher/reflections/{progress_id}/feedback")
+def give_feedback(
+    progress_id: int,
+    payload: FeedbackIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        prog = s.query(StudentStepProgress).filter(
+            StudentStepProgress.id == progress_id
+        ).first()
+        if not prog:
+            raise HTTPException(404, "Progress not found")
+        # Säkerställ att det är lärarens elev
+        stu = s.query(Student).filter(Student.id == prog.student_id).first()
+        if not stu or stu.teacher_id != info.teacher_id:
+            raise HTTPException(403, "Inte din elev")
+        prog.teacher_feedback = payload.feedback.strip()
+        prog.feedback_at = datetime.utcnow()
+    return {"ok": True}
+
+
+@router.get("/teacher/reflections/unread-count")
+def reflections_unread_count(
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        n = (
+            s.query(StudentStepProgress)
+            .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
+            .join(Student, StudentStepProgress.student_id == Student.id)
+            .filter(
+                Student.teacher_id == info.teacher_id,
+                ModuleStep.kind == "reflect",
+                StudentStepProgress.completed_at.isnot(None),
+                StudentStepProgress.teacher_feedback.is_(None),
+            )
+            .count()
+        )
+    return {"unread": n}
+
+
 # ---------- Elevens kursplan ----------
 
 @router.get("/student/modules", response_model=list[StudentModuleOut])

@@ -227,6 +227,12 @@ export default function Teacher() {
             🎓 Kursmoduler
           </Link>
           <Link
+            to="/teacher/reflections"
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            ✍️ Reflektioner
+          </Link>
+          <Link
             to="/docs"
             className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
           >
