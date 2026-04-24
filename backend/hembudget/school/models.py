@@ -304,6 +304,62 @@ class Assignment(MasterBase):
     )
 
 
+class InterestRateSeries(MasterBase):
+    """Historiska + aktuella räntor för bolåne-scenariot.
+
+    rate_type: "policy" (Riksbankens styrränta), "stibor3m",
+               "bolan_rorlig", "bolan_3ar", "bolan_5ar"
+    year_month: "YYYY-MM" (månadsslut-värde)
+    rate: decimalränta, t.ex. 0.0325 för 3,25%
+    """
+    __tablename__ = "interest_rate_series"
+    __table_args__ = (
+        UniqueConstraint(
+            "rate_type", "year_month",
+            name="uq_rate_series",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rate_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    year_month: Mapped[str] = mapped_column(String(7), nullable=False)
+    rate: Mapped[float] = mapped_column(nullable=False)
+    source: Mapped[str] = mapped_column(String(40), default="static")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class MortgageDecision(MasterBase):
+    """Elevens bolåne-val i samband med ett mortgage_decision-uppdrag.
+
+    När uppdraget skapas fryses räntan som var aktuell vid beslutsmånaden.
+    När horisonten passerat räknar vi kostnad rörlig vs bunden via
+    InterestRateSeries och rapporterar vilket val som blev billigast.
+    """
+    __tablename__ = "mortgage_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(
+        ForeignKey("assignments.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # "rorlig" | "3ar" | "5ar"
+    chosen: Mapped[str] = mapped_column(String(20), nullable=False)
+    decision_month: Mapped[str] = mapped_column(String(7), nullable=False)
+    horizon_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    principal: Mapped[float] = mapped_column(nullable=False)  # kvarvarande lån vid beslutet
+    # Räntan som fryses om eleven väljer bunden
+    locked_rate: Mapped[Optional[float]] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppConfig(MasterBase):
     """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
     Key-value-form så vi slipper migrera schemat vid varje nytt fält.

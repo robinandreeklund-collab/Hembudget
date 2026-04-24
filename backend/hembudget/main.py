@@ -228,14 +228,15 @@ def _demo_bootstrap() -> None:
 @app.on_event("startup")
 def _school_bootstrap() -> None:
     """Vid school-mode: initiera master-DB + skapa första läraren från
-    env-vars om de är satta och inga lärare finns."""
+    env-vars om de är satta och inga lärare finns + seed räntor."""
     import os as _os
     try:
         from .school import is_enabled
         if not is_enabled():
             return
         from .school.engines import init_master_engine, master_session
-        from .school.models import Teacher
+        from .school.models import InterestRateSeries, Teacher
+        from .school.rates import seed_static_series
         from .security.crypto import hash_password
 
         init_master_engine()
@@ -243,17 +244,22 @@ def _school_bootstrap() -> None:
         email = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_EMAIL")
         password = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_PASSWORD")
         name = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_NAME", "Lärare")
-        if email and password:
-            with master_session() as s:
-                if s.query(Teacher).count() == 0:
-                    s.add(Teacher(
-                        email=email.lower(),
-                        name=name,
-                        password_hash=hash_password(password),
-                    ))
-                    logging.getLogger(__name__).info(
-                        "school: created bootstrap teacher %s", email,
-                    )
+        with master_session() as s:
+            if email and password and s.query(Teacher).count() == 0:
+                s.add(Teacher(
+                    email=email.lower(),
+                    name=name,
+                    password_hash=hash_password(password),
+                ))
+                logging.getLogger(__name__).info(
+                    "school: created bootstrap teacher %s", email,
+                )
+            # Seed räntor om InterestRateSeries är tom
+            if s.query(InterestRateSeries).count() == 0:
+                n = seed_static_series(s)
+                logging.getLogger(__name__).info(
+                    "school: seeded %d interest rate rows (static)", n,
+                )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 

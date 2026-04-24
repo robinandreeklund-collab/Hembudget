@@ -58,6 +58,8 @@ def evaluate(assignment, student) -> CheckResult:
                 return _check_categorize_all(s, assignment)
             if kind == "save_amount":
                 return _check_save_amount(s, assignment)
+            if kind == "mortgage_decision":
+                return _check_mortgage_decision(assignment, student)
             # free_text: bara manuellt — läraren klickar "Klarmarkera"
             # i UI:n så sätts manually_completed_at.
             return CheckResult(
@@ -176,6 +178,39 @@ def _check_categorize_all(s: Session, assignment) -> CheckResult:
         "in_progress",
         f"{total - uncategorized}/{total} kategoriserade",
     )
+
+
+def _check_mortgage_decision(assignment, student) -> CheckResult:
+    """Kolla om eleven har gjort sitt val + om horisonten passerat
+    (så vi kan visa facit). Status-logik:
+    - Inget val: not_started
+    - Val gjort men horisont ej klar: in_progress ('Väntar på facit')
+    - Horisont klar: completed med kostnadsdiff rapporterad
+    """
+    from ..school.engines import master_session
+    from ..school.models import MortgageDecision
+    from datetime import date as _date
+    with master_session() as ms:
+        mc = ms.query(MortgageDecision).filter(
+            MortgageDecision.assignment_id == assignment.id
+        ).first()
+        if not mc:
+            return CheckResult("not_started", "Du har inte valt ännu")
+        y, m = map(int, mc.decision_month.split("-"))
+        end_m = m + mc.horizon_months
+        end_y = y + end_m // 12
+        end_m = end_m % 12 + 1
+        end_ym = f"{end_y:04d}-{end_m:02d}"
+        today = _date.today().strftime("%Y-%m")
+        if today < end_ym:
+            return CheckResult(
+                "in_progress",
+                f"Du valde {mc.chosen} — facit visas efter {end_ym}",
+            )
+        return CheckResult(
+            "completed",
+            f"Du valde {mc.chosen}. Se facit i uppdraget.",
+        )
 
 
 def _check_save_amount(s: Session, assignment) -> CheckResult:

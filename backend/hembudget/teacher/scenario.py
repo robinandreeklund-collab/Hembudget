@@ -67,6 +67,18 @@ class SalaryEvent:
     note: str = ""
 
 
+def _lookup_mortgage_rate(year_month: str) -> float | None:
+    """Hämta bolån-rörlig-räntan för given månad från master-DB. Returnerar
+    None om ingen data finns (t.ex. vid test utan master-DB)."""
+    try:
+        from ..school.engines import master_session
+        from ..school.rates import get_rate_for_month
+        with master_session() as s:
+            return get_rate_for_month(s, year_month, "bolan_rorlig")
+    except Exception:
+        return None
+
+
 @dataclass
 class MonthScenario:
     year_month: str
@@ -384,7 +396,11 @@ def build_scenario(
     # ---------- Lån ----------
     if profile.has_mortgage:
         loan_amount = id_rng.randint(1_500_000, 3_500_000)
-        rate = round(id_rng.uniform(0.038, 0.048), 4)
+        # Använd aktuell månadsränta från InterestRateSeries när tillgängligt,
+        # annars fall tillbaka till profilen-baserat slumpat värde
+        rate = _lookup_mortgage_rate(year_month) or round(
+            id_rng.uniform(0.038, 0.048), 4
+        )
         # Förenklat: ~10 år in i amorteringen
         remaining = Decimal(int(loan_amount * 0.78))
         amort = Decimal(round(loan_amount * 0.013 / 12))

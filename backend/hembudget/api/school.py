@@ -40,6 +40,8 @@ from ..school.models import (
     Assignment,
     BatchArtifact,
     Family,
+    InterestRateSeries,
+    MortgageDecision,
     ScenarioBatch,
     Student,
     StudentDataGenerationRun,
@@ -1880,6 +1882,195 @@ def put_tax_settings(
         else:
             row.value = payload.model_dump()
     return TaxSettingsOut(**payload.model_dump(), is_default=False)
+
+
+# ---------- Räntor + bolåne-beslut ----------
+
+class RatePoint(BaseModel):
+    year_month: str
+    rate: float
+
+
+class RateSeriesOut(BaseModel):
+    rate_type: str
+    points: list[RatePoint]
+
+
+@router.get("/school/rates/{rate_type}", response_model=RateSeriesOut)
+def get_rate_series(rate_type: str) -> RateSeriesOut:
+    """Offentlig — används för ränte-graf i UI."""
+    _require_school_mode()
+    with master_session() as s:
+        rows = (
+            s.query(InterestRateSeries)
+            .filter(InterestRateSeries.rate_type == rate_type)
+            .order_by(InterestRateSeries.year_month)
+            .all()
+        )
+        return RateSeriesOut(
+            rate_type=rate_type,
+            points=[RatePoint(year_month=r.year_month, rate=r.rate) for r in rows],
+        )
+
+
+@router.post("/teacher/rates/refresh")
+def refresh_rates(info: TokenInfo = Depends(require_teacher)) -> dict:
+    """Hämta senaste policy-räntor från Riksbanken och fyll InterestRateSeries.
+    Oförändrat i fall API:et inte svarar — statisk data ligger kvar."""
+    from ..school.rates import refresh_from_riksbank
+    _require_school_mode()
+    with master_session() as s:
+        return refresh_from_riksbank(s)
+
+
+class MortgageChoiceIn(BaseModel):
+    assignment_id: int
+    chosen: str  # "rorlig" | "3ar" | "5ar"
+
+
+class MortgageOutcomeOut(BaseModel):
+    chosen: str
+    decision_month: str
+    horizon_months: int
+    principal: float
+    locked_rate: Optional[float]
+    # Faktisk kostnad enligt räntekurvan under horisonten
+    cost_rorlig: float
+    cost_3ar: float
+    cost_5ar: float
+    cost_chosen: float
+    best_choice: str
+    diff_vs_best: float
+    horizon_completed: bool
+
+
+@router.post("/student/mortgage/choose")
+def submit_mortgage_choice(
+    payload: MortgageChoiceIn,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Elev gör sitt val i ett mortgage_decision-uppdrag. Valet lockas."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    if payload.chosen not in ("rorlig", "3ar", "5ar"):
+        raise HTTPException(400, "chosen must be rorlig/3ar/5ar")
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == payload.assignment_id,
+            Assignment.student_id == info.student_id,
+            Assignment.kind == "mortgage_decision",
+        ).first()
+        if not a:
+            raise HTTPException(404, "Uppdrag inte hittat")
+        existing = s.query(MortgageDecision).filter(
+            MortgageDecision.assignment_id == a.id
+        ).first()
+        if existing:
+            raise HTTPException(400, "Du har redan gjort ditt val")
+        params = a.params or {}
+        dm = params.get("decision_month") or a.target_year_month
+        if not dm:
+            raise HTTPException(400, "Uppdraget saknar decision_month")
+        horizon = int(params.get("horizon_months", 36))
+        principal = float(params.get("principal", 2_000_000))
+        locked: float | None = None
+        if payload.chosen in ("3ar", "5ar"):
+            from ..school.rates import get_rate_for_month
+            locked = get_rate_for_month(
+                s, dm,
+                "bolan_3ar" if payload.chosen == "3ar" else "bolan_5ar",
+            )
+        s.add(MortgageDecision(
+            assignment_id=a.id,
+            student_id=info.student_id,
+            chosen=payload.chosen,
+            decision_month=dm,
+            horizon_months=horizon,
+            principal=principal,
+            locked_rate=locked,
+        ))
+    return {"ok": True}
+
+
+@router.get("/student/mortgage/{assignment_id}/outcome",
+            response_model=MortgageOutcomeOut)
+def mortgage_outcome(
+    assignment_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> MortgageOutcomeOut:
+    """Facit: jämför kostnaden av elevens val vs de andra alternativen
+    över horisonten. Rörlig använder månadens aktuella ränta; bunden
+    använder den låsta räntan. Räntekostnad i kronor = principal * rate / 12
+    per månad (förenklat — ignorerar amortering)."""
+    _require_school_mode()
+    from ..school.rates import get_rate_for_month
+    from datetime import date as _date
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == assignment_id
+        ).first()
+        if not a:
+            raise HTTPException(404, "Uppdrag inte hittat")
+        mc = s.query(MortgageDecision).filter(
+            MortgageDecision.assignment_id == assignment_id
+        ).first()
+        if not mc:
+            raise HTTPException(404, "Inget val gjort ännu")
+        # Iterera månader i horisonten
+        y, m = map(int, mc.decision_month.split("-"))
+        months: list[str] = []
+        for i in range(mc.horizon_months):
+            mm = m + i
+            yy = y + mm // 12
+            mm = mm % 12 + 1
+            months.append(f"{yy:04d}-{mm:02d}")
+        today = _date.today().strftime("%Y-%m")
+        # Vilka månader har räntedata (historia + nutid)?
+        available = [m for m in months if m <= today]
+        horizon_completed = len(available) == mc.horizon_months
+
+        def cost_for(rate_type_for_var: str, fixed_rate: float | None) -> float:
+            total = 0.0
+            for mo in available:
+                if fixed_rate is not None:
+                    r = fixed_rate
+                else:
+                    r = get_rate_for_month(s, mo, rate_type_for_var) or 0.0
+                total += mc.principal * r / 12
+            return total
+
+        rate_3ar = mc.locked_rate if mc.chosen == "3ar" else (
+            get_rate_for_month(s, mc.decision_month, "bolan_3ar") or 0.0
+        )
+        rate_5ar = mc.locked_rate if mc.chosen == "5ar" else (
+            get_rate_for_month(s, mc.decision_month, "bolan_5ar") or 0.0
+        )
+
+        cost_r = cost_for("bolan_rorlig", None)
+        cost_3 = cost_for("bolan_rorlig", rate_3ar)
+        cost_5 = cost_for("bolan_rorlig", rate_5ar)
+
+        # Vilken var billigast?
+        options = {"rorlig": cost_r, "3ar": cost_3, "5ar": cost_5}
+        best = min(options, key=options.get)
+        chosen_cost = options[mc.chosen]
+        diff = chosen_cost - options[best]
+
+        return MortgageOutcomeOut(
+            chosen=mc.chosen,
+            decision_month=mc.decision_month,
+            horizon_months=mc.horizon_months,
+            principal=mc.principal,
+            locked_rate=mc.locked_rate,
+            cost_rorlig=round(cost_r),
+            cost_3ar=round(cost_3),
+            cost_5ar=round(cost_5),
+            cost_chosen=round(chosen_cost),
+            best_choice=best,
+            diff_vs_best=round(diff),
+            horizon_completed=horizon_completed,
+        )
 
 
 @router.get("/teacher/batches/months",
