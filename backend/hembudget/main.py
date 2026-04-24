@@ -297,9 +297,15 @@ def _school_bootstrap() -> None:
         password = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_PASSWORD")
         name = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_NAME", "Lärare")
         with master_session() as s:
-            if email and password and s.query(Teacher).count() == 0:
-                # Första läraren blir auto super-admin (kan toggla AI
-                # för övriga lärare).
+            # Ignorera demo-lärare vid denna check — demo-läraren
+            # återskapas vid varje startup och ska inte blockera att
+            # env-var-bootstrap skapar den första riktiga admin.
+            real_count = s.query(Teacher).filter(
+                Teacher.is_demo.is_(False),
+            ).count()
+            if email and password and real_count == 0:
+                # Första riktiga läraren blir auto super-admin (kan toggla
+                # AI för övriga lärare).
                 s.add(Teacher(
                     email=email.lower(),
                     name=name,

@@ -319,7 +319,10 @@ def bootstrap_teacher(
                 status.HTTP_401_UNAUTHORIZED, "Invalid bootstrap secret",
             )
     with master_session() as s:
-        if s.query(Teacher).count() > 0:
+        # Demo-lärare räknas INTE som "riktig" lärare — de skapas på
+        # startup via demo_seed och ska inte blockera bootstrap av den
+        # första skarpa admin-läraren. Bara icke-demo-lärare tittar vi på.
+        if s.query(Teacher).filter(Teacher.is_demo.is_(False)).count() > 0:
             raise HTTPException(
                 status.HTTP_410_GONE, "Teachers already exist",
             )
@@ -2721,11 +2724,15 @@ def school_status() -> dict:
     info: dict = {"school_mode": enabled}
     if enabled:
         with master_session() as s:
-            info["teacher_count"] = s.query(Teacher).count()
-            # bootstrap_ready = ingen lärare finns ännu (första besökaren
-            # kan skapa). requires_secret styr om UI ska visa fältet för
-            # HEMBUDGET_BOOTSTRAP_SECRET eller ej.
-            info["bootstrap_ready"] = info["teacher_count"] == 0
+            total = s.query(Teacher).count()
+            real = s.query(Teacher).filter(Teacher.is_demo.is_(False)).count()
+            # teacher_count exponerar bara riktiga (icke-demo) lärare för
+            # frontend — demo-kontot är en intern teknisk detalj.
+            info["teacher_count"] = real
+            info["demo_teacher_count"] = total - real
+            # bootstrap_ready = ingen RIKTIG lärare finns ännu; demo-
+            # läraren (återskapas vid varje start) blockerar inte.
+            info["bootstrap_ready"] = real == 0
             info["bootstrap_requires_secret"] = bool(
                 os.environ.get("HEMBUDGET_BOOTSTRAP_SECRET")
             )
