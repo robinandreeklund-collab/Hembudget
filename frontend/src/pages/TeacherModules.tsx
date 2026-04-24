@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, BookOpen, ChevronRight, Edit2, Library, Plus, Trash2,
+  ArrowLeft, BookOpen, ChevronRight, Copy, Edit2, Library, Plus, Trash2,
 } from "lucide-react";
 import { api } from "@/api/client";
 
@@ -23,12 +23,22 @@ export default function TeacherModules() {
   const [newSummary, setNewSummary] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
+  const [templates, setTemplates] = useState<Module[]>([]);
+
   async function load() {
     try {
       setMods(await api<Module[]>("/teacher/modules"));
+      const lib = await api<Module[]>("/library/modules");
+      // Bara system-mallar (teacher_id=null), inte dina egna
+      setTemplates(lib.filter((m) => m.teacher_id == null));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  async function clone(id: number) {
+    await api(`/teacher/modules/${id}/clone`, { method: "POST" });
+    await load();
   }
 
   useEffect(() => {
@@ -80,9 +90,42 @@ export default function TeacherModules() {
         </div>
       )}
 
+      {templates.length > 0 && (
+        <section className="bg-slate-100 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <Library className="w-4 h-4" /> Bibliotek — färdiga mallar
+          </div>
+          <ul className="space-y-2">
+            {templates.map((t) => (
+              <li
+                key={t.id}
+                className="bg-white border rounded-lg p-3 flex items-center gap-3"
+              >
+                <BookOpen className="w-5 h-5 text-brand-600 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-800">{t.title}</div>
+                  {t.summary && (
+                    <div className="text-xs text-slate-600 truncate">{t.summary}</div>
+                  )}
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {t.step_count} steg
+                  </div>
+                </div>
+                <button
+                  onClick={() => clone(t.id)}
+                  className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm flex items-center gap-1"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Använd mall
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {mods.length === 0 ? (
         <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded p-4 text-sm">
-          Inga moduler än. Skapa din första för att börja bygga en kursplan.
+          Inga egna moduler än. Skapa din första eller använd en mall ovan.
         </div>
       ) : (
         <ul className="space-y-2">

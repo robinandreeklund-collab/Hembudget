@@ -299,6 +299,100 @@ def delete_step(
     return {"ok": True}
 
 
+@router.get("/library/modules", response_model=list[ModuleOut])
+def library_modules() -> list[ModuleOut]:
+    """Publika mallar — inga auth krav. Används både för
+    lärarens bibliotek och landningssidan om vi vill visa exempel."""
+    _require_school_mode()
+    with master_session() as s:
+        rows = (
+            s.query(Module)
+            .filter(Module.is_template.is_(True))
+            .order_by(Module.title)
+            .all()
+        )
+        return [_module_to_out(m) for m in rows]
+
+
+@router.get("/library/modules/{module_id}", response_model=ModuleDetailOut)
+def library_module_detail(module_id: int) -> ModuleDetailOut:
+    _require_school_mode()
+    with master_session() as s:
+        m = s.query(Module).filter(
+            Module.id == module_id,
+            Module.is_template.is_(True),
+        ).first()
+        if not m:
+            raise HTTPException(404, "Template not found")
+        base = _module_to_out(m)
+        return ModuleDetailOut(
+            **base.model_dump(),
+            steps=[_step_to_out(st) for st in m.steps],
+        )
+
+
+@router.post("/teacher/modules/{module_id}/clone", response_model=ModuleOut)
+def clone_module(
+    module_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> ModuleOut:
+    """Duplicera en befintlig modul (systemmall eller lärarens egen) till
+    en ny modul som ägs av aktuell lärare. Steg kopieras inklusive params.
+    Ny modul sätts som is_template=False."""
+    _require_school_mode()
+    from ..school.models import ModuleStepCompetency
+    with master_session() as s:
+        original = s.query(Module).filter(Module.id == module_id).first()
+        if not original:
+            raise HTTPException(404, "Module not found")
+        # Tillåtet att klona: egen modul, eller template (system eller från
+        # annan lärare)
+        if (
+            original.teacher_id not in (None, info.teacher_id)
+            and not original.is_template
+        ):
+            raise HTTPException(403, "Kan inte klona denna modul")
+
+        max_so = (
+            s.query(Module.sort_order)
+            .filter(Module.teacher_id == info.teacher_id)
+            .order_by(Module.sort_order.desc())
+            .first()
+        )
+        next_so = (max_so[0] + 10) if max_so else 0
+        new_mod = Module(
+            teacher_id=info.teacher_id,
+            title=f"{original.title} (kopia)",
+            summary=original.summary,
+            is_template=False,
+            sort_order=next_so,
+        )
+        s.add(new_mod)
+        s.flush()
+        # Kopiera steg
+        for st in original.steps:
+            new_step = ModuleStep(
+                module_id=new_mod.id,
+                sort_order=st.sort_order,
+                kind=st.kind,
+                title=st.title,
+                content=st.content,
+                params=dict(st.params) if st.params else None,
+            )
+            s.add(new_step)
+            s.flush()
+            # Kopiera competency-kopplingar
+            for msc in s.query(ModuleStepCompetency).filter(
+                ModuleStepCompetency.step_id == st.id
+            ).all():
+                s.add(ModuleStepCompetency(
+                    step_id=new_step.id,
+                    competency_id=msc.competency_id,
+                    weight=msc.weight,
+                ))
+        return _module_to_out(new_mod)
+
+
 @router.post("/teacher/modules/{module_id}/assign")
 def assign_module(
     module_id: int,

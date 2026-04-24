@@ -317,6 +317,13 @@ def _school_bootstrap() -> None:
                 logging.getLogger(__name__).info(
                     "school: seeded %d system competencies", n,
                 )
+            # Seed systemmall-moduler
+            from .school.module_seed import seed_system_modules
+            nm = seed_system_modules(s)
+            if nm > 0:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d system modules", nm,
+                )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 
