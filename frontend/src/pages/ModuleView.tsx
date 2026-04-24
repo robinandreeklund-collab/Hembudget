@@ -74,6 +74,27 @@ export default function ModuleView() {
     loadAll();
   }, [mid]);
 
+  // Heartbeat-pings medan eleven har steget öppet. Backend upserts
+  // StudentStepHeartbeat-raden så lärarstatistiken får data även för
+  // steg eleven fastnar på.
+  useEffect(() => {
+    if (activeStepId == null) return;
+    let cancelled = false;
+    const send = () => {
+      if (cancelled) return;
+      api("/student/step-heartbeat", {
+        method: "POST",
+        body: JSON.stringify({ step_id: activeStepId }),
+      }).catch(() => undefined);
+    };
+    send();
+    const iv = window.setInterval(send, 20000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(iv);
+    };
+  }, [activeStepId]);
+
   if (err) {
     return (
       <div className="p-6">

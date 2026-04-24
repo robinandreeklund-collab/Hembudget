@@ -246,6 +246,38 @@ export default function Teacher() {
             📋 Rubric-mallar
           </Link>
           <Link
+            to="/teacher/time-on-task"
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            ⏱ Time on task
+          </Link>
+          <button
+            onClick={async () => {
+              const { getApiBase, getToken } = await import("@/api/client");
+              const res = await fetch(
+                `${getApiBase()}/teacher/portfolio-bundle.zip`,
+                {
+                  headers: getToken()
+                    ? { Authorization: `Bearer ${getToken()}` }
+                    : undefined,
+                },
+              );
+              if (!res.ok) {
+                alert("Kunde inte skapa ZIP");
+                return;
+              }
+              const blob = await res.blob();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = "klass_portfolio.zip";
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }}
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            📦 Klass-portfolio (ZIP)
+          </button>
+          <Link
             to="/docs"
             className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
           >

@@ -5,18 +5,21 @@ och elever (gå igenom moduler steg för steg).
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+log = logging.getLogger(__name__)
+
 from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
 from ..school.models import (
     Competency, Module, ModuleStep, ModuleStepCompetency,
     PeerFeedback, RubricTemplate, Student, StudentModule, StudentProfile,
-    StudentStepProgress, Teacher,
+    StudentStepHeartbeat, StudentStepProgress, Teacher,
 )
 from .deps import TokenInfo, require_teacher, require_token
 
@@ -1855,3 +1858,199 @@ def clone_rubric_template(
         return _rubric_to_out(
             new_rt, info.teacher_id, owner.name if owner else None,
         )
+
+
+# ---------- Time-on-task ----------
+
+class HeartbeatIn(BaseModel):
+    step_id: int
+
+
+@router.post("/student/step-heartbeat")
+def step_heartbeat(
+    payload: HeartbeatIn,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Frontend pingar var 20:e sekund medan eleven är på ett steg. Skapar
+    en rad första gången (opened_at = nu) och uppdaterar last_heartbeat_at
+    vid efterföljande anrop. Kostar nära ingenting och ger lärar-UI
+    data för att se vilka steg som fastnar."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        # Validera att steget ingår i en modul eleven är tilldelad
+        step = s.query(ModuleStep).filter(ModuleStep.id == payload.step_id).first()
+        if not step:
+            raise HTTPException(404, "Step not found")
+        sm = s.query(StudentModule).filter(
+            StudentModule.student_id == info.student_id,
+            StudentModule.module_id == step.module_id,
+        ).first()
+        if not sm:
+            raise HTTPException(403, "Modulen är inte tilldelad dig")
+
+        hb = s.query(StudentStepHeartbeat).filter(
+            StudentStepHeartbeat.student_id == info.student_id,
+            StudentStepHeartbeat.step_id == payload.step_id,
+        ).first()
+        now = datetime.utcnow()
+        if hb is None:
+            s.add(StudentStepHeartbeat(
+                student_id=info.student_id,
+                step_id=payload.step_id,
+                opened_at=now,
+                last_heartbeat_at=now,
+            ))
+        else:
+            hb.last_heartbeat_at = now
+    return {"ok": True}
+
+
+class TimeOnStepRow(BaseModel):
+    step_id: int
+    step_title: str
+    module_id: int
+    module_title: str
+    n_completed: int
+    median_minutes: Optional[float]
+    n_stuck: int  # elever med heartbeat men ingen completion
+
+
+@router.get(
+    "/teacher/time-on-task",
+    response_model=list[TimeOnStepRow],
+)
+def teacher_time_on_task(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[TimeOnStepRow]:
+    """Median-tid per steg över alla elever. Grund för lärar-vy:n som
+    visar vilka steg som fastnar."""
+    _require_school_mode()
+    out: list[TimeOnStepRow] = []
+    with master_session() as s:
+        # Hämta alla elever till läraren
+        stu_ids = [
+            r[0] for r in s.query(Student.id).filter(
+                Student.teacher_id == info.teacher_id,
+            ).all()
+        ]
+        if not stu_ids:
+            return out
+        # Alla moduler + steg som lärarens elever är tilldelade
+        mod_ids = {
+            r[0] for r in s.query(StudentModule.module_id).filter(
+                StudentModule.student_id.in_(stu_ids)
+            ).all()
+        }
+        if not mod_ids:
+            return out
+        steps = s.query(ModuleStep).filter(
+            ModuleStep.module_id.in_(mod_ids),
+        ).all()
+        modules = {
+            m.id: m for m in s.query(Module).filter(
+                Module.id.in_(mod_ids)
+            ).all()
+        }
+        # Heartbeats + completions
+        hbs = s.query(StudentStepHeartbeat).filter(
+            StudentStepHeartbeat.student_id.in_(stu_ids),
+        ).all()
+        progs = s.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id.in_(stu_ids),
+            StudentStepProgress.completed_at.isnot(None),
+        ).all()
+        hb_by_key = {(h.student_id, h.step_id): h for h in hbs}
+        prog_by_key = {(p.student_id, p.step_id): p for p in progs}
+
+        for step in steps:
+            durations_min: list[float] = []
+            n_stuck = 0
+            for sid in stu_ids:
+                hb = hb_by_key.get((sid, step.id))
+                prog = prog_by_key.get((sid, step.id))
+                if hb and prog and prog.completed_at:
+                    dt = (prog.completed_at - hb.opened_at).total_seconds() / 60
+                    if 0.1 < dt < 24 * 60:  # ignorera sopor-data
+                        durations_min.append(dt)
+                elif hb and not prog:
+                    # Heartbeat finns, men ingen completion = stuck
+                    n_stuck += 1
+            durations_min.sort()
+            median = None
+            if durations_min:
+                n = len(durations_min)
+                mid = n // 2
+                median = (
+                    durations_min[mid]
+                    if n % 2 == 1
+                    else (durations_min[mid - 1] + durations_min[mid]) / 2
+                )
+            mod = modules.get(step.module_id)
+            out.append(TimeOnStepRow(
+                step_id=step.id,
+                step_title=step.title,
+                module_id=step.module_id,
+                module_title=mod.title if mod else "—",
+                n_completed=len(durations_min),
+                median_minutes=round(median, 1) if median else None,
+                n_stuck=n_stuck,
+            ))
+    # Sortera: fastnade elever först (det lärare bryr sig om)
+    out.sort(key=lambda r: (-r.n_stuck, -(r.median_minutes or 0)))
+    return out
+
+
+# ---------- Bulk-portfolio (klass-ZIP) ----------
+
+@router.get("/teacher/portfolio-bundle.zip")
+def teacher_portfolio_bundle(
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Bygger en ZIP med en portfolio-PDF per elev som tillhör läraren.
+    Tar ett litet tag med många elever, men all PDF-generering är
+    synkron och sekventiell — inga trådar behövs."""
+    _require_school_mode()
+    from fastapi.responses import Response
+    from ..teacher.portfolio_pdf import build_portfolio_pdf
+    import io
+    import zipfile
+    with master_session() as s:
+        students = s.query(Student).filter(
+            Student.teacher_id == info.teacher_id,
+            Student.active.is_(True),
+        ).all()
+        if not students:
+            raise HTTPException(404, "Inga elever")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(
+            buf, mode="w", compression=zipfile.ZIP_DEFLATED,
+        ) as zf:
+            for stu in students:
+                try:
+                    data = _collect_portfolio(s, stu.id)
+                    if not data or not data.get("profile"):
+                        continue
+                    pdf = build_portfolio_pdf(**data)
+                    # Filnamn: "portfolio_12_Anna_Andersson.pdf"
+                    safe = "".join(
+                        c if c.isalnum() or c in "-_" else "_"
+                        for c in stu.display_name
+                    )
+                    zf.writestr(
+                        f"portfolio_{stu.id}_{safe}.pdf", pdf,
+                    )
+                except Exception:
+                    log.exception(
+                        "portfolio-bundle: elev %s misslyckades", stu.id,
+                    )
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition":
+                'attachment; filename="klass_portfolio.zip"',
+        },
+    )

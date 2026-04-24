@@ -538,6 +538,39 @@ class StudentModule(MasterBase):
     )
 
 
+class StudentStepHeartbeat(MasterBase):
+    """Spårar när eleven är aktiv på ett steg. opened_at = första heartbeaten,
+    last_heartbeat_at = senaste. Duration (last - opened) används av lärar-UI
+    för att se vilka steg som fastnar.
+
+    Separat tabell från StudentStepProgress för att kunna logga även steg
+    där eleven aldrig klickade "klar" (fastnade/gav upp).
+    """
+    __tablename__ = "student_step_heartbeats"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "step_id",
+            name="uq_student_step_heartbeat",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    step_id: Mapped[int] = mapped_column(
+        ForeignKey("module_steps.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+
+
 class StudentStepProgress(MasterBase):
     """Elevens framsteg på ett enskilt steg. data lagrar svar/reflektion."""
     __tablename__ = "student_step_progress"
