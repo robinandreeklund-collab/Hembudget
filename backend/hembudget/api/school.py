@@ -145,6 +145,8 @@ class StudentProfileOut(BaseModel):
     has_car_loan: bool
     has_student_loan: bool
     has_credit_card: bool
+    children_ages: list[int] = []
+    partner_age: Optional[int] = None
     backstory: Optional[str]
 
 
@@ -245,6 +247,8 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
         has_student_loan=gen.has_student_loan,
         has_credit_card=gen.has_credit_card,
         backstory=gen.backstory,
+        children_ages=gen.children_ages,
+        partner_age=gen.partner_age,
     )
     session.add(profile)
     session.flush()
@@ -269,6 +273,8 @@ def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
         has_car_loan=p.has_car_loan,
         has_student_loan=p.has_student_loan,
         has_credit_card=p.has_credit_card,
+        children_ages=p.children_ages or [],
+        partner_age=p.partner_age,
         backstory=p.backstory,
     )
 
@@ -706,6 +712,118 @@ def tax_breakdown(gross_monthly: int) -> TaxBreakdownOut:
         effective_rate=t.effective_rate,
         explanation=t.explanation,
     )
+
+
+# ---------- Konsumentverket-referens + budget-rekommendation ----------
+
+class BudgetSuggestionOut(BaseModel):
+    """En rekommenderad startbudget per kategori, baserad på
+    Konsumentverkets 2026-värden + elevens profil."""
+    mat: int
+    individuellt_ovrigt: int
+    boende: int
+    el: int
+    bredband_mobil: int
+    medietjanster: int
+    forbrukningsvaror: int
+    hemutrustning: int
+    vatten_avlopp: int
+    hemforsakring: int
+    transport: int
+    lan_amortering_ranta: int
+    sparande: int
+    nojen_marginal: int
+    total: int
+    persons_in_household: int
+    source_url: str
+    source_title: str
+    note: str
+
+
+@router.get("/school/konsumentverket")
+def konsumentverket_info() -> dict:
+    """Info-text + länk till Konsumentverkets sida om hushållskostnader.
+    Visas i budget-setup-vyn och som "Vill veta mer?"-länk."""
+    from ..school.konsumentverket import (
+        SOURCE_TITLE, SOURCE_URL, GEMENSAMT_PER_PERSONER,
+        MAT_HEMMA_PER_AGE, INDIVID_OVRIGT_PER_AGE,
+    )
+    return {
+        "title": SOURCE_TITLE,
+        "url": SOURCE_URL,
+        "intro": (
+            "Konsumentverket räknar varje år ut vad ett vanligt svenskt "
+            "hushåll kan behöva lägga på olika utgifter. Siffrorna är "
+            "uppskattningar och bygger på en fyraveckors matsedel + "
+            "schablonkostnader för kläder, hygien, hemutrustning m.m. "
+            "Använd dem som stöd när du sätter din egen budget."
+        ),
+        "mat_per_age": [
+            {"from": r.start, "to": r.stop - 1, "kr_per_month": v}
+            for r, v in MAT_HEMMA_PER_AGE
+        ],
+        "ovrigt_per_age": [
+            {"from": r.start, "to": r.stop - 1, "kr_per_month": v}
+            for r, v in INDIVID_OVRIGT_PER_AGE
+        ],
+        "gemensamt_per_persons": GEMENSAMT_PER_PERSONER,
+    }
+
+
+@router.get("/student/budget/suggested", response_model=BudgetSuggestionOut)
+def suggested_budget(
+    info: TokenInfo = Depends(require_token),
+) -> BudgetSuggestionOut:
+    """Returnera en rekommenderad startbudget för eleven, baserad på
+    deras profil (lön, boende, familj, lån) och Konsumentverkets
+    2026-värden. Eleven justerar i UI:n och POST:ar sedan till
+    /budget eller liknande."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    from ..school.konsumentverket import suggest_budget, SOURCE_URL, SOURCE_TITLE
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if not student.profile:
+            _create_profile_for_student(s, student)
+        p = student.profile
+        sug = suggest_budget(
+            adult_age=p.age,
+            partner_age=p.partner_age,
+            children_ages=p.children_ages or [],
+            housing_type=p.housing_type,
+            housing_monthly=p.housing_monthly,
+            has_mortgage=p.has_mortgage,
+            has_car_loan=p.has_car_loan,
+            has_student_loan=p.has_student_loan,
+            net_salary_monthly=p.net_salary_monthly,
+        )
+        persons = (
+            1 + (1 if p.partner_age else 0) + len(p.children_ages or [])
+        )
+        note = (
+            "Denna budget är ett FÖRSLAG baserat på Konsumentverkets "
+            "siffror för 2026. Justera värdena så de passar din "
+            "personlighet och dina vanor — du kan alltid ändra senare."
+        )
+        if sug.nojen_marginal == 0:
+            note = (
+                "OBS: Med denna profils fasta utgifter blir det inget "
+                "kvar till nöjen. Du måste dra ner någonstans — eller "
+                "tänka på att höja inkomsten. Detta är pedagogiskt: "
+                "verkligheten är inte alltid balanserad!"
+            )
+        return BudgetSuggestionOut(
+            **sug.to_dict(),
+            persons_in_household=persons,
+            source_url=SOURCE_URL,
+            source_title=SOURCE_TITLE,
+            note=note,
+        )
 
 
 # ---------- Onboarding ----------

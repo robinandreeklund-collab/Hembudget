@@ -140,6 +140,8 @@ class GeneratedProfile:
     has_credit_card: bool
     personality: str
     backstory: str
+    children_ages: list[int]
+    partner_age: int | None
 
 
 def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
@@ -195,9 +197,26 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
 
     personality = rng.choice(PERSONALITIES)
 
+    # Partner — om sambo eller familj_med_barn
+    partner_age: int | None = None
+    if family_status in ("sambo", "familj_med_barn"):
+        partner_age = age + rng.randint(-4, 4)
+        partner_age = max(20, min(60, partner_age))
+
+    # Barn — endast om family_med_barn
+    children_ages: list[int] = []
+    if family_status == "familj_med_barn":
+        n_kids = rng.choices([1, 2, 3], weights=[0.45, 0.45, 0.10])[0]
+        # Yngsta förälder bestämmer max barnålder (rimlighetstest)
+        youngest_parent = min(age, partner_age or age)
+        max_child_age = max(0, youngest_parent - 22)
+        for _ in range(n_kids):
+            children_ages.append(rng.randint(0, max_child_age or 12))
+        children_ages.sort()
+
     backstory = _build_backstory(
         display_name, prof.title, employer, age, city,
-        family_status, housing_type, personality,
+        family_status, housing_type, personality, children_ages,
     )
 
     return GeneratedProfile(
@@ -215,24 +234,37 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
         has_credit_card=has_credit_card,
         personality=personality,
         backstory=backstory,
+        children_ages=children_ages,
+        partner_age=partner_age,
     )
 
 
 def _build_backstory(
     name: str, profession: str, employer: str, age: int, city: str,
     family_status: str, housing_type: str, personality: str,
+    children_ages: list[int],
 ) -> str:
-    family_text = {
-        "ensam": "bor ensam",
-        "sambo": "bor med din sambo",
-        "familj_med_barn": "bor med din familj (sambo + barn)",
-    }[family_status]
+    if family_status == "ensam":
+        family_text = "bor ensam"
+    elif family_status == "sambo":
+        family_text = "bor med din sambo"
+    else:
+        n = len(children_ages)
+        if n == 1:
+            kids = f"ett barn på {children_ages[0]} år"
+        elif n == 2:
+            kids = (
+                f"två barn ({children_ages[0]} och {children_ages[1]} år)"
+            )
+        else:
+            kids = f"{n} barn ({', '.join(str(a) for a in children_ages)} år)"
+        family_text = f"bor med din sambo och {kids}"
 
-    housing_text = {
-        "hyresratt": "i en hyresrätt",
-        "bostadsratt": "i en bostadsrätt",
-        "villa": "i en villa",
-    }[housing_type]
+    housing_text = (
+        " i en hyresrätt" if housing_type == "hyresratt"
+        else " i en bostadsrätt" if housing_type == "bostadsratt"
+        else " i en villa"
+    )
 
     personality_text = {
         "sparsam": (
@@ -252,7 +284,7 @@ def _build_backstory(
 
     return (
         f"Du är {age} år gammal och jobbar som {profession.lower()} på "
-        f"{employer} i {city}. Du {family_text} {housing_text}. "
+        f"{employer} i {city}. Du {family_text}{housing_text}. "
         f"{personality_text}"
     )
 

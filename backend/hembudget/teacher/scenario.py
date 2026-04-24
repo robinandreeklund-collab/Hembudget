@@ -164,6 +164,48 @@ def build_scenario(
         card_account_no=card_no,
     )
 
+    # ---------- Månadsspecifika "händelser" (overshoot-logik) ----------
+    # Varje månad slumpas det fram 0-2 händelser som gör att eleven får
+    # se att olika saker påverkar budgeten. Pedagogiskt syfte.
+    # Exempel: tandläkarbesök, vinterel, semester, bilreparation.
+    EVENTS = [
+        ("tandläkare",      ("HÄLSA TANDLÄKARE", 1500, 4500)),
+        ("oplanerad_bilrep",("BILVERKSTAD VOLVO", 2500, 8000)),
+        ("hög_elräkning",   ("ELRÄKNING EXTRA HÖG", 1200, 2800)),
+        ("födelsedag",      ("PRESENTSHOP", 400, 1500)),
+        ("storshopping",    ("IKEA", 2200, 6500)),
+        ("kläder",          ("H&M STORHANDEL", 800, 2400)),
+        ("medicin",         ("APOTEKET HJÄRTAT", 350, 1200)),
+        ("vänner_middag",   ("RESTAURANG OPERAKÄLLAREN", 850, 2200)),
+        ("hemförsäkring_höjning", ("IF FÖRSÄKRING ÅRSAVI", 1200, 3500)),
+        ("oplanerad_resa",  ("SJ RESA TILL STOCKHOLM", 700, 2900)),
+    ]
+    # Personlighet styr sannolikhet
+    n_events = {
+        "sparsam": rng.choices([0, 1, 2], weights=[0.5, 0.4, 0.1])[0],
+        "blandad": rng.choices([0, 1, 2], weights=[0.3, 0.5, 0.2])[0],
+        "slosaktig": rng.choices([1, 2, 3], weights=[0.3, 0.5, 0.2])[0],
+    }[profile.personality]
+    selected_events = rng.sample(EVENTS, min(n_events, len(EVENTS)))
+    overshoot_events: list[tuple[str, str, int]] = []
+    for ev_kind, (desc, lo, hi) in selected_events:
+        amount = rng.randint(lo, hi)
+        day = rng.randint(1, last_day)
+        ev_date = date(year, month, day)
+        # ~50% chans att hamna på kort, annars konto
+        on_card = rng.random() < 0.4 and profile.has_credit_card
+        ev = (CardEvent if on_card else TxEvent)(
+            date=ev_date,
+            description=desc,
+            amount=Decimal(amount) if on_card else -Decimal(amount),
+            category_hint=ev_kind,
+        )
+        if on_card:
+            scenario.card_events.append(ev)
+        else:
+            scenario.transactions.append(ev)
+        overshoot_events.append((ev_kind, desc, amount))
+
     # ---------- Lön ----------
     pay_day = id_rng.choice([25, 26, 27])
     pay_date = date(year, month, min(pay_day, last_day))
@@ -232,6 +274,45 @@ def build_scenario(
         amount=-Decimal(id_rng.randint(199, 449)),
         category_hint="Mobil",
     ))
+
+    # ---------- Barn (om profilen har barn) ----------
+    children_ages = list(getattr(profile, "children_ages", None) or [])
+    for c_age in children_ages:
+        if 1 <= c_age <= 5:
+            # Förskola
+            scenario.transactions.append(TxEvent(
+                date=date(year, month, min(5, last_day)),
+                description=f"FÖRSKOLEAVGIFT KOMMUN",
+                amount=-Decimal(rng.randint(950, 1700)),
+                category_hint="Barn",
+            ))
+        elif 6 <= c_age <= 12:
+            # Fritids
+            scenario.transactions.append(TxEvent(
+                date=date(year, month, min(5, last_day)),
+                description=f"FRITIDSAVGIFT KOMMUN",
+                amount=-Decimal(rng.randint(450, 1100)),
+                category_hint="Barn",
+            ))
+        if c_age >= 6 and rng.random() < 0.5:
+            # Aktivitet (fotboll, dans osv)
+            scenario.transactions.append(TxEvent(
+                date=date(year, month, min(rng.randint(1, last_day), last_day)),
+                description=id_rng.choice([
+                    "FOTBOLLSKLUBB MEDLEMSAVG", "DANSSKOLA AVGIFT",
+                    "MUSIKSKOLA AVGIFT", "SCOUT KÅR AVGIFT",
+                ]),
+                amount=-Decimal(rng.randint(250, 1200)),
+                category_hint="Barn",
+            ))
+        if c_age <= 1 and rng.random() < 0.4:
+            # Blöjor / barnutrustning
+            scenario.transactions.append(TxEvent(
+                date=date(year, month, rng.randint(1, last_day)),
+                description="BARN APOTEKET HJÄRTAT",
+                amount=-Decimal(rng.randint(450, 1200)),
+                category_hint="Barn",
+            ))
 
     # Försäkring
     if rng.random() < 0.7:
@@ -304,10 +385,19 @@ def build_scenario(
     # ---------- Konsumtion (personlighetsdriven) ----------
     cp = CONSUMPTION_PROFILES[profile.personality]
 
-    # Mat — varje vecka
+    # Mat — varje vecka. Skala upp för fler personer i hushållet enligt
+    # Konsumentverkets siffror (ungefär +800 kr/månad per extra person).
+    persons = (
+        1 + (1 if getattr(profile, "partner_age", None) else 0)
+        + len(children_ages)
+    )
+    grocery_low, grocery_high = cp["groceries_per_week"]
+    person_factor = 1.0 + (persons - 1) * 0.45
+    grocery_low = int(grocery_low * person_factor)
+    grocery_high = int(grocery_high * person_factor)
     for week in range(4):
         day = rng.randint(1, last_day)
-        amount = rng.randint(*cp["groceries_per_week"])
+        amount = rng.randint(grocery_low, grocery_high)
         merchant = rng.choice(MERCHANTS_GROCERY)
         on_card = rng.random() < cp["card_usage"]
         ev = (CardEvent if on_card else TxEvent)(

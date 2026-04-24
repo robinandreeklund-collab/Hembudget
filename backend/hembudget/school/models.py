@@ -145,6 +145,14 @@ class StudentProfile(MasterBase):
     has_student_loan: Mapped[bool] = mapped_column(Boolean, default=False)
     has_credit_card: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Barnens åldrar (lista av ints) — endast meningsfullt om
+    # family_status == "familj_med_barn", annars tom lista.
+    # Används för att räkna ut Konsumentverkets matkostnad per barn.
+    children_ages: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    # Partnerns ålder (för 2-vuxen-hushåll). None om family_status == "ensam".
+    partner_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
