@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { GraduationCap, Lock, Users } from "lucide-react";
 
@@ -15,12 +15,21 @@ export default function Login() {
     teacherBootstrap,
     studentLogin,
   } = useAuth();
-  const [mode, setMode] = useState<Mode>(() => {
+  const [mode, setMode] = useState<Mode>("master");
+
+  // schoolMode/schoolStatus laddas asynkront i useAuth — när vi vet att
+  // skol-läget är på, växla bort från master-flödet (som inte gäller där)
+  // och peka rätt: bootstrap om ingen lärare finns, annars teacher-login.
+  useEffect(() => {
     if (schoolMode) {
-      return schoolStatus?.bootstrap_ready ? "teacher_bootstrap" : "student";
+      setMode((prev) => {
+        if (prev === "master") {
+          return schoolStatus?.bootstrap_ready ? "teacher_bootstrap" : "teacher";
+        }
+        return prev;
+      });
     }
-    return "master";
-  });
+  }, [schoolMode, schoolStatus?.bootstrap_ready]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [bootstrapSecret, setBootstrapSecret] = useState("");
@@ -30,14 +39,22 @@ export default function Login() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const needsInit = initialized === false;
+  // I school-mode finns ingen master-DB-init — det är desktop-läge.
+  // needsInit ska bara trigga master-flödet utanför school-mode.
+  const needsInit = !schoolMode && initialized === false;
+  // Sanity: säkerställ att vi aldrig hamnar i master-mode i school-mode
+  // (det räddar t.ex. fall där sessionStorage från en gammal lokal
+  // session får mode:n att hänga sig kvar).
+  const effectiveMode: Mode = schoolMode && mode === "master"
+    ? (schoolStatus?.bootstrap_ready ? "teacher_bootstrap" : "teacher")
+    : mode;
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setBusy(true);
     try {
-      if (mode === "master") {
+      if (effectiveMode === "master") {
         if (needsInit) {
           if (password.length < 8) throw new Error("Lösenord måste vara minst 8 tecken.");
           if (password !== confirm) throw new Error("Lösenorden matchar inte.");
@@ -45,9 +62,9 @@ export default function Login() {
         } else {
           await login(password);
         }
-      } else if (mode === "teacher") {
+      } else if (effectiveMode === "teacher") {
         await teacherLogin(email, password);
-      } else if (mode === "teacher_bootstrap") {
+      } else if (effectiveMode === "teacher_bootstrap") {
         if (password.length < 8) throw new Error("Lösenord måste vara minst 8 tecken.");
         if (password !== confirm) throw new Error("Lösenorden matchar inte.");
         await teacherBootstrap(bootstrapSecret, email, password, name || "Lärare");
@@ -69,9 +86,9 @@ export default function Login() {
         className="bg-white rounded-2xl shadow-lg p-8 w-[26rem] space-y-4 border border-slate-200"
       >
         <div className="flex items-center gap-2 text-brand-600">
-          {mode === "student" ? (
+          {effectiveMode === "student" ? (
             <GraduationCap className="w-5 h-5" />
-          ) : mode.startsWith("teacher") ? (
+          ) : effectiveMode.startsWith("teacher") ? (
             <Users className="w-5 h-5" />
           ) : (
             <Lock className="w-5 h-5" />
@@ -87,7 +104,7 @@ export default function Login() {
                 setMode(schoolStatus?.bootstrap_ready ? "teacher_bootstrap" : "teacher")
               }
               className={`flex-1 py-1.5 rounded ${
-                mode.startsWith("teacher")
+                effectiveMode.startsWith("teacher")
                   ? "bg-white shadow text-brand-700 font-medium"
                   : "text-slate-600"
               }`}
@@ -98,7 +115,7 @@ export default function Login() {
               type="button"
               onClick={() => setMode("student")}
               className={`flex-1 py-1.5 rounded ${
-                mode === "student"
+                effectiveMode === "student"
                   ? "bg-white shadow text-brand-700 font-medium"
                   : "text-slate-600"
               }`}
@@ -108,30 +125,30 @@ export default function Login() {
           </div>
         )}
 
-        {mode === "master" && (
+        {effectiveMode === "master" && (
           <p className="text-sm text-slate-700">
             {needsInit
               ? "Välj ett master-lösenord. Det används för att kryptera din databas — det kan inte återställas."
               : "Logga in med ditt master-lösenord."}
           </p>
         )}
-        {mode === "teacher_bootstrap" && (
+        {effectiveMode === "teacher_bootstrap" && (
           <p className="text-sm text-amber-700 bg-amber-50 rounded p-2 border border-amber-200">
             {schoolStatus?.bootstrap_requires_secret
               ? "Första gången — skapa lärarkonto. Ange bootstrap-koden som satts i deployens env-vars."
               : "Välkommen! Skapa ditt lärarkonto. Du blir administratör för alla elever på denna instans."}
           </p>
         )}
-        {mode === "teacher" && (
+        {effectiveMode === "teacher" && (
           <p className="text-sm text-slate-700">Logga in som lärare.</p>
         )}
-        {mode === "student" && (
+        {effectiveMode === "student" && (
           <p className="text-sm text-slate-700">
             Ange den 6-tecken kod du fått av din lärare.
           </p>
         )}
 
-        {mode === "teacher_bootstrap" &&
+        {effectiveMode === "teacher_bootstrap" &&
           schoolStatus?.bootstrap_requires_secret && (
             <input
               type="text"
@@ -141,7 +158,7 @@ export default function Login() {
               className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none"
             />
           )}
-        {(mode === "teacher" || mode === "teacher_bootstrap") && (
+        {(effectiveMode === "teacher" || effectiveMode === "teacher_bootstrap") && (
           <>
             <input
               type="email"
@@ -151,7 +168,7 @@ export default function Login() {
               autoFocus
               className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none"
             />
-            {mode === "teacher_bootstrap" && (
+            {effectiveMode === "teacher_bootstrap" && (
               <input
                 type="text"
                 value={name}
@@ -162,7 +179,7 @@ export default function Login() {
             )}
           </>
         )}
-        {mode === "student" && (
+        {effectiveMode === "student" && (
           <input
             type="text"
             value={loginCode}
@@ -173,17 +190,17 @@ export default function Login() {
             className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none font-mono tracking-widest text-center text-lg"
           />
         )}
-        {(mode === "master" || mode === "teacher" || mode === "teacher_bootstrap") && (
+        {(effectiveMode === "master" || effectiveMode === "teacher" || effectiveMode === "teacher_bootstrap") && (
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Lösenord"
-            autoFocus={mode === "master"}
+            autoFocus={effectiveMode === "master"}
             className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none"
           />
         )}
-        {(needsInit && mode === "master") || mode === "teacher_bootstrap" ? (
+        {(needsInit && effectiveMode === "master") || effectiveMode === "teacher_bootstrap" ? (
           <input
             type="password"
             value={confirm}
@@ -200,11 +217,11 @@ export default function Login() {
         >
           {busy
             ? "Arbetar…"
-            : mode === "teacher_bootstrap"
+            : effectiveMode === "teacher_bootstrap"
             ? "Skapa lärarkonto"
-            : mode === "student"
+            : effectiveMode === "student"
             ? "Logga in"
-            : needsInit && mode === "master"
+            : needsInit && effectiveMode === "master"
             ? "Skapa och logga in"
             : "Logga in"}
         </button>

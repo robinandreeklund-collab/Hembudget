@@ -86,6 +86,13 @@ export function useAuth() {
       method: "POST",
       body: JSON.stringify({ password }),
     });
+    // Master-login är desktop-läge — ingen "teacher"/"student"-roll.
+    // Rensa ev. kvarliggande role från en tidigare school-session så
+    // App.tsx inte tror vi är lärare och routear till /teacher.
+    clearRole();
+    setRoleState(null);
+    setAsStudent(null);
+    setAsStudentState(null);
     setToken(res.token);
     setTokenState(res.token);
     return res.token;
@@ -96,6 +103,10 @@ export function useAuth() {
       method: "POST",
       body: JSON.stringify({ password }),
     });
+    clearRole();
+    setRoleState(null);
+    setAsStudent(null);
+    setAsStudentState(null);
     setToken(res.token);
     setTokenState(res.token);
     setInitialized(true);

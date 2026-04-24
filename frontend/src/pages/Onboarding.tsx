@@ -110,13 +110,18 @@ export default function Onboarding() {
   async function finish() {
     setBusy(true);
     try {
-      // Spara budgeten månad-för-månad i appens budget-API. För enkelhet
-      // sparar vi bara totalsumman som notering — full kategorisering
-      // kommer i en framtida iteration.
-      // (Här skulle vi ha en /budget/bulk-set-anslutning men det
-      // kräver att vi kategori-mappar elevens valda fält till app-
-      // ens kategorier. Skippas tills vidare.)
-      await api("/student/onboarding/complete", { method: "POST" });
+      // Skicka budget-värdena till backend som mappar dem till
+      // riktiga Budget-rader i elevens scope-DB:s aktuella månad.
+      // Server skapar saknade kategorier och svarar med antal rader sparade.
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      await api("/student/onboarding/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          year_month: ym,
+          values: edited,
+        }),
+      });
       window.location.href = "/dashboard";
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

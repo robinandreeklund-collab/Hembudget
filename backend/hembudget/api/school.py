@@ -867,13 +867,46 @@ class OnboardingCompleteIn(BaseModel):
     pass
 
 
+# Mappning från onboarding-fältnamn → app-kategorinamn. Vi sparar
+# budgeten till elevens scope-DB:s Budget-tabell. Om kategorin saknas
+# skapas den, så elevens budget alltid landar någonstans.
+ONBOARDING_TO_CATEGORY: dict[str, str] = {
+    "mat": "Mat",
+    "individuellt_ovrigt": "Kläder & Skor",
+    "boende": "Hyra",  # justeras nedan beroende på housing_type
+    "el": "El",
+    "bredband_mobil": "Internet",
+    "medietjanster": "Streaming",
+    "forbrukningsvaror": "Hem & Hushåll",
+    "hemutrustning": "Hemelektronik",
+    "vatten_avlopp": "Vatten/Avgift",
+    "hemforsakring": "Hemförsäkring",
+    "transport": "Transport",
+    "lan_amortering_ranta": "Bolåneränta",
+    "sparande": "Sparande/Investering",
+    "nojen_marginal": "Nöje",
+}
+
+
+class OnboardingBudgetIn(BaseModel):
+    """Eleven skickar in den justerade budgeten från sista
+    onboarding-steget. Nycklarna ska matcha BudgetSuggestionOut-fälten.
+    Sparas i elevens scope-DB:s Budget-tabell för innevarande månad."""
+    year_month: Optional[str] = Field(
+        default=None, pattern=r"^\d{4}-\d{2}$",
+    )
+    values: dict[str, int]
+
+
 @router.post("/student/onboarding/complete")
 def complete_onboarding(
+    payload: OnboardingBudgetIn | None = None,
     info: TokenInfo = Depends(require_token),
 ) -> dict:
     _require_school_mode()
     if info.role != "student":
         raise HTTPException(403, "Not a student token")
+    saved_count = 0
     with master_session() as s:
         student = s.query(Student).filter(
             Student.id == info.student_id
@@ -881,8 +914,69 @@ def complete_onboarding(
         if not student:
             raise HTTPException(404, "Student not found")
         student.onboarding_completed = True
-        # Default-uppdrag: sätt en budget
-        if s.query(Assignment).filter(
+        scope_key = scope_for_student(student)
+        housing_type = student.profile.housing_type if student.profile else None
+
+    # Spara budgeten till elevens scope-DB om vi fick värden
+    if payload and payload.values:
+        from datetime import date as _date
+        from decimal import Decimal as _Dec
+        from ..db.base import session_scope as _ss
+        from ..db.models import Budget, Category
+
+        # Innevarande månad om inget angavs
+        target_month = payload.year_month or _date.today().strftime("%Y-%m")
+
+        # Justera boende-mappingen efter elevens boendetyp
+        mapping = dict(ONBOARDING_TO_CATEGORY)
+        if housing_type == "bostadsratt":
+            mapping["boende"] = "Boende"  # ej Hyra för BRF/villa
+        elif housing_type == "villa":
+            mapping["boende"] = "Boende"
+
+        with scope_context(scope_key):
+            with _ss() as scope_s:
+                cat_by_name = {
+                    c.name: c for c in scope_s.query(Category).all()
+                }
+                for field_key, amount in payload.values.items():
+                    if amount <= 0:
+                        continue
+                    cat_name = mapping.get(field_key)
+                    if not cat_name:
+                        continue
+                    cat = cat_by_name.get(cat_name)
+                    if not cat:
+                        # Skapa kategorin om den saknas
+                        cat = Category(name=cat_name)
+                        scope_s.add(cat)
+                        scope_s.flush()
+                        cat_by_name[cat_name] = cat
+                    # Upsert: en post per (month, category_id)
+                    existing = (
+                        scope_s.query(Budget)
+                        .filter(
+                            Budget.month == target_month,
+                            Budget.category_id == cat.id,
+                        )
+                        .first()
+                    )
+                    if existing:
+                        existing.planned_amount = _Dec(amount)
+                    else:
+                        scope_s.add(Budget(
+                            month=target_month,
+                            category_id=cat.id,
+                            planned_amount=_Dec(amount),
+                        ))
+                    saved_count += 1
+
+    # Default-uppdrag: "Sätt din första budget" — skapa om saknas
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if student and s.query(Assignment).filter(
             Assignment.student_id == student.id,
             Assignment.kind == "set_budget",
         ).count() == 0:
@@ -895,7 +989,7 @@ def complete_onboarding(
                     description=spec["description"],
                     kind=spec["kind"],
                 ))
-    return {"ok": True}
+    return {"ok": True, "budget_rows_saved": saved_count}
 
 
 # ---------- Assignments / uppdrag ----------
