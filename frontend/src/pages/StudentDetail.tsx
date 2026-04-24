@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, BookOpenCheck, Briefcase, CheckCircle2, Eye, FileText,
-  ListChecks, Plus, Sparkles, Target, Users, XCircle,
+  ArrowLeft, BookOpenCheck, Brain, Briefcase, CheckCircle2, Eye, FileText,
+  ListChecks, Loader2, Plus, Sparkles, Target, Users, XCircle,
 } from "lucide-react";
-import { api, getApiBase, getToken } from "@/api/client";
+import { api, ApiError, getApiBase, getToken } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AssignmentList } from "@/components/AssignmentList";
 import { MasteryChart } from "@/components/MasteryChart";
@@ -77,6 +77,42 @@ export default function StudentDetail() {
   const [newMortgagePrincipal, setNewMortgagePrincipal] = useState("2000000");
   const [newMortgageHorizon, setNewMortgageHorizon] = useState("36");
   const [reloadKey, setReloadKey] = useState(0);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiChecks, setAiChecks] = useState<Record<number, {
+    is_match: boolean; confidence: number; explanation: string;
+  }>>({});
+  const [aiBusyRow, setAiBusyRow] = useState<number | null>(null);
+
+  useEffect(() => {
+    api<{ ai_enabled: boolean }>("/admin/ai/me")
+      .then((r) => setAiEnabled(Boolean(r.ai_enabled)))
+      .catch(() => setAiEnabled(false));
+  }, []);
+
+  async function recheckRow(r: FacitRow) {
+    if (!r.actual_category || !r.expected_category) return;
+    setAiBusyRow(r.tx_id);
+    try {
+      const res = await api<{
+        is_match: boolean; confidence: number; explanation: string;
+      }>("/ai/category/check", {
+        method: "POST",
+        body: JSON.stringify({
+          merchant: r.description,
+          amount: r.amount,
+          student_category: r.actual_category,
+          facit_category: r.expected_category,
+        }),
+      });
+      setAiChecks((prev) => ({ ...prev, [r.tx_id]: res }));
+    } catch (e) {
+      if (e instanceof ApiError && e.status !== 503) {
+        console.error(e);
+      }
+    } finally {
+      setAiBusyRow(null);
+    }
+  }
 
   async function reload() {
     const p = await api<Profile>(`/teacher/students/${sid}/profile`);
@@ -433,31 +469,66 @@ export default function StudentDetail() {
                       <th>Facit</th>
                       <th>Elevens val</th>
                       <th></th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {facit.rows.map((r) => (
-                      <tr key={r.tx_id} className="border-t">
-                        <td className="py-1 text-slate-500">{r.date}</td>
-                        <td>{r.description}</td>
-                        <td className="font-medium">{r.expected_category}</td>
-                        <td className={
-                          r.is_correct ? "text-emerald-700" :
-                          r.is_uncategorized ? "text-slate-400" : "text-rose-600"
-                        }>
-                          {r.actual_category ?? "—"}
-                        </td>
-                        <td>
-                          {r.is_correct ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          ) : r.is_uncategorized ? (
-                            <span className="text-slate-400">?</span>
-                          ) : (
-                            <XCircle className="w-4 h-4 text-rose-500" />
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {facit.rows.map((r) => {
+                      const ai = aiChecks[r.tx_id];
+                      const canRecheck =
+                        aiEnabled && !r.is_correct && !r.is_uncategorized;
+                      return (
+                        <tr key={r.tx_id} className="border-t align-top">
+                          <td className="py-1 text-slate-500">{r.date}</td>
+                          <td>{r.description}</td>
+                          <td className="font-medium">{r.expected_category}</td>
+                          <td className={
+                            r.is_correct || ai?.is_match
+                              ? "text-emerald-700"
+                              : r.is_uncategorized
+                              ? "text-slate-400"
+                              : "text-rose-600"
+                          }>
+                            {r.actual_category ?? "—"}
+                            {ai && (
+                              <div className="text-[10px] mt-0.5 text-slate-600 italic leading-tight">
+                                AI: {ai.is_match ? "godkänt" : "inte samma"}
+                                {" "}({Math.round(ai.confidence * 100)}%)
+                                {ai.explanation && <> — {ai.explanation}</>}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {r.is_correct ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            ) : r.is_uncategorized ? (
+                              <span className="text-slate-400">?</span>
+                            ) : ai?.is_match ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-rose-500" />
+                            )}
+                          </td>
+                          <td>
+                            {canRecheck && !ai && (
+                              <button
+                                onClick={() => recheckRow(r)}
+                                disabled={aiBusyRow === r.tx_id}
+                                className="text-[10px] text-purple-600 hover:text-purple-800 flex items-center gap-0.5 disabled:opacity-50"
+                                title="Fråga AI om synonymerna stämmer"
+                              >
+                                {aiBusyRow === r.tx_id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Brain className="w-3 h-3" />
+                                )}
+                                AI
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </details>

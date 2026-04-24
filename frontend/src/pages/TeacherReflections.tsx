@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, Filter, MessageSquare, User } from "lucide-react";
-import { api } from "@/api/client";
+import {
+  ArrowLeft, Check, Filter, Loader2, MessageSquare, Sparkles, User,
+} from "lucide-react";
+import { api, ApiError } from "@/api/client";
 
 type RubricCriterion = { key: string; name: string; levels: string[] };
 type Reflection = {
@@ -30,6 +32,15 @@ export default function TeacherReflections() {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiBusy, setAiBusy] = useState<"feedback" | "rubric" | null>(null);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ ai_enabled: boolean }>("/admin/ai/me")
+      .then((r) => setAiEnabled(Boolean(r.ai_enabled)))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   async function load() {
     try {
@@ -55,6 +66,71 @@ export default function TeacherReflections() {
       setScores(active.rubric_scores ?? {});
     }
   }, [active?.progress_id]);
+
+  async function askFeedbackSuggestion() {
+    if (!active) return;
+    setAiBusy("feedback");
+    setAiNote(null);
+    try {
+      const res = await api<{ suggestion: string }>(
+        `/ai/reflection/${active.progress_id}/feedback-suggestion`,
+        { method: "POST" },
+      );
+      setFeedback(res.suggestion);
+      setAiNote("AI-förslag infogat — läs igenom och redigera innan du skickar.");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        setAiNote("AI-funktioner är inte aktiverade på ditt konto.");
+      } else {
+        setAiNote(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function askRubricSuggestion() {
+    if (!active || !active.rubric) return;
+    setAiBusy("rubric");
+    setAiNote(null);
+    try {
+      type Parsed = {
+        scores?: Array<{ criterion_id?: string; score?: number; rationale?: string }>;
+        overall_comment?: string;
+      };
+      const res = await api<{ parsed: Parsed | null; raw: string }>(
+        `/ai/reflection/${active.progress_id}/rubric-suggestion`,
+        { method: "POST" },
+      );
+      if (!res.parsed?.scores) {
+        setAiNote("AI-svaret kunde inte tolkas. Rå: " + res.raw.slice(0, 200));
+        return;
+      }
+      const nextScores: Record<string, number> = { ...scores };
+      const rationales: string[] = [];
+      for (const s of res.parsed.scores) {
+        if (s.criterion_id && typeof s.score === "number") {
+          nextScores[s.criterion_id] = s.score;
+          if (s.rationale) rationales.push(`• ${s.criterion_id}: ${s.rationale}`);
+        }
+      }
+      setScores(nextScores);
+      const overall = res.parsed.overall_comment || "";
+      const combined = [overall, rationales.join("\n")].filter(Boolean).join("\n\n");
+      if (combined && !feedback.trim()) {
+        setFeedback(combined);
+      }
+      setAiNote("AI-bedömning infogad — läs igenom och justera innan du sparar.");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        setAiNote("AI-funktioner är inte aktiverade på ditt konto.");
+      } else {
+        setAiNote(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setAiBusy(null);
+    }
+  }
 
   async function save() {
     if (!active || !feedback.trim()) return;
@@ -212,9 +288,48 @@ export default function TeacherReflections() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      Din feedback:
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-slate-700">
+                        Din feedback:
+                      </label>
+                      {aiEnabled && (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={askFeedbackSuggestion}
+                            disabled={aiBusy !== null || !active.reflection}
+                            className="text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded px-2.5 py-1 flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {aiBusy === "feedback" ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3 h-3" />
+                            )}
+                            AI-förslag
+                          </button>
+                          {active.rubric && active.rubric.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={askRubricSuggestion}
+                              disabled={aiBusy !== null || !active.reflection}
+                              className="text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded px-2.5 py-1 flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {aiBusy === "rubric" ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="w-3 h-3" />
+                              )}
+                              AI-rubric
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {aiNote && (
+                      <div className="text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded p-2">
+                        {aiNote}
+                      </div>
+                    )}
                     <textarea
                       value={feedback}
                       onChange={(e) => setFeedback(e.target.value)}

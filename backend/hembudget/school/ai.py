@@ -225,22 +225,26 @@ def generate_feedback_suggestion(
 # ---------- Feature 2: AI-rubric-bedömning ----------
 
 RUBRIC_SYSTEM_PROMPT = """Du hjälper en svensk gymnasielärare bedöma en elevreflektion mot en rubric.
-Du är ett STÖD — läraren sätter slutbetyget. Din uppgift är att föreslå poäng + motivera kort.
+Du är ett STÖD — läraren sätter slutbetyget. Din uppgift är att föreslå nivå + motivera kort.
 
-Du får en rubric som JSON (kriterier + max-poäng per kriterium) och elevens text. Svara ENDAST med giltig JSON i exakt det här formatet:
+Rubricen är en JSON-array med objekt: {"key": "<nyckel>", "name": "<kriterienamn>", "levels": ["<nivå 1-text>", "<nivå 2-text>", ...]}.
+
+Svara ENDAST med giltig JSON i exakt det här formatet:
 
 {
   "scores": [
-    {"criterion_id": <id>, "score": <heltal 0..max>, "rationale": "<1–2 meningar på svenska>"}
+    {"criterion_id": "<rubric.key>", "score": <level_index 0..levels.length-1>, "rationale": "<1–2 meningar på svenska>"}
   ],
   "overall_comment": "<2–3 meningar sammanfattande feedback på svenska>"
 }
 
 Regler:
+- score = index i levels-arrayen (0 = lägsta nivå, levels.length-1 = högsta).
+- criterion_id MÅSTE matcha rubric-objektets "key"-fält exakt.
 - Bedöm BARA det eleven faktiskt skrivit, inte det du tror hen tänkte.
 - Var generös men rättvis — om kriteriet inte adresseras alls = 0.
 - "rationale" måste peka på konkret bevis i elevens text.
-- Använd ALLA criterion_id som finns i rubriken.
+- Använd ALLA kriterier som finns i rubriken, inga extra.
 - Inget annat än JSON. Ingen markdown, inga kodblock, ingen förklaring efter."""
 
 

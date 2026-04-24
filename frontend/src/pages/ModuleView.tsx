@@ -5,6 +5,7 @@ import {
   PlayCircle, Send,
 } from "lucide-react";
 import { api } from "@/api/client";
+import { AskAI } from "@/components/AskAI";
 
 type Step = {
   id: number;
@@ -152,6 +153,17 @@ export default function ModuleView() {
           )}
         </main>
       </div>
+      <AskAI
+        moduleId={mid}
+        stepId={activeStepId ?? undefined}
+        contextLabel={
+          activeStepId
+            ? `Du jobbar med: ${
+                mod.steps.find((s) => s.id === activeStepId)?.title ?? ""
+              }`
+            : `Modul: ${mod.title}`
+        }
+      />
     </div>
   );
 }
