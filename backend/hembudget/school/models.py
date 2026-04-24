@@ -511,6 +511,35 @@ class StudentStepProgress(MasterBase):
     )
 
 
+class PeerFeedback(MasterBase):
+    """Anonym feedback från en elev till en annan på en reflektion.
+
+    reviewer och target är båda Student-id inom samma lärare. Visas
+    anonymt för target-eleven; läraren ser båda i moderations-vyn.
+    """
+    __tablename__ = "peer_feedback"
+    __table_args__ = (
+        UniqueConstraint(
+            "reviewer_student_id", "target_progress_id",
+            name="uq_peer_feedback_pair",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reviewer_student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    target_progress_id: Mapped[int] = mapped_column(
+        ForeignKey("student_step_progress.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class Competency(MasterBase):
     """En inlärningsfärdighet, t.ex. 'läsa lönespec', 'förstå skatteavdrag'.
 

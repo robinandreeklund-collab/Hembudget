@@ -15,7 +15,8 @@ from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
 from ..school.models import (
     Competency, Module, ModuleStep, ModuleStepCompetency,
-    Student, StudentModule, StudentProfile, StudentStepProgress,
+    PeerFeedback, Student, StudentModule, StudentProfile,
+    StudentStepProgress,
 )
 from .deps import TokenInfo, require_teacher, require_token
 
@@ -823,6 +824,156 @@ def reflections_unread_count(
             .count()
         )
     return {"unread": n}
+
+
+# ---------- Peer-review ----------
+
+class PeerReviewTarget(BaseModel):
+    progress_id: int
+    module_title: str
+    step_title: str
+    step_question: Optional[str]
+    reflection: str
+
+
+class PeerFeedbackIn(BaseModel):
+    progress_id: int
+    body: str = Field(min_length=10, max_length=2000)
+
+
+class PeerFeedbackReceived(BaseModel):
+    id: int
+    body: str
+    created_at: datetime
+    module_title: str
+    step_title: str
+
+
+@router.get("/student/peer-review/next",
+            response_model=Optional[PeerReviewTarget])
+def peer_review_next(
+    info: TokenInfo = Depends(require_token),
+) -> Optional[PeerReviewTarget]:
+    """Hämta nästa reflektion att peer-review:a. Slumpas anonymt från
+    samma modul, andra elever hos samma lärare, och endast för steg
+    där läraren aktiverat peer_review=true i params."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    import random
+    with master_session() as s:
+        me = s.query(Student).filter(Student.id == info.student_id).first()
+        if not me:
+            raise HTTPException(404, "Student not found")
+        # Hitta progress-rader från andra elever hos samma lärare, på
+        # reflect-steg där peer_review är enabled och jag inte redan reviewat.
+        candidates = (
+            s.query(StudentStepProgress, ModuleStep)
+            .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
+            .join(Student, StudentStepProgress.student_id == Student.id)
+            .filter(
+                Student.teacher_id == me.teacher_id,
+                Student.id != me.id,
+                ModuleStep.kind == "reflect",
+                StudentStepProgress.completed_at.isnot(None),
+            )
+            .all()
+        )
+        # Filtrera på peer_review + redan reviewade
+        already = {
+            pf.target_progress_id
+            for pf in s.query(PeerFeedback).filter(
+                PeerFeedback.reviewer_student_id == me.id
+            ).all()
+        }
+        pool: list = []
+        for prog, step in candidates:
+            if prog.id in already:
+                continue
+            if not (step.params or {}).get("peer_review"):
+                continue
+            pool.append((prog, step))
+        if not pool:
+            return None
+        prog, step = random.choice(pool)
+        module = s.query(Module).filter(Module.id == step.module_id).first()
+        return PeerReviewTarget(
+            progress_id=prog.id,
+            module_title=module.title if module else "—",
+            step_title=step.title,
+            step_question=step.content,
+            reflection=(prog.data or {}).get("reflection", ""),
+        )
+
+
+@router.post("/student/peer-review")
+def peer_review_submit(
+    payload: PeerFeedbackIn,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        target = s.query(StudentStepProgress).filter(
+            StudentStepProgress.id == payload.progress_id
+        ).first()
+        if not target:
+            raise HTTPException(404, "Inte hittat")
+        if target.student_id == info.student_id:
+            raise HTTPException(400, "Du kan inte review:a din egen reflektion")
+        # Samma lärare?
+        me = s.query(Student).filter(Student.id == info.student_id).first()
+        target_stu = s.query(Student).filter(Student.id == target.student_id).first()
+        if not me or not target_stu or me.teacher_id != target_stu.teacher_id:
+            raise HTTPException(403, "Ej samma klass")
+        existing = s.query(PeerFeedback).filter(
+            PeerFeedback.reviewer_student_id == info.student_id,
+            PeerFeedback.target_progress_id == payload.progress_id,
+        ).first()
+        if existing:
+            raise HTTPException(400, "Du har redan gett feedback")
+        s.add(PeerFeedback(
+            reviewer_student_id=info.student_id,
+            target_progress_id=payload.progress_id,
+            body=payload.body.strip(),
+        ))
+    return {"ok": True}
+
+
+@router.get(
+    "/student/peer-review/received",
+    response_model=list[PeerFeedbackReceived],
+)
+def peer_review_received(
+    info: TokenInfo = Depends(require_token),
+) -> list[PeerFeedbackReceived]:
+    """Peer-feedback jag fått från andra elever — anonymt (inget
+    reviewer-namn visas)."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    out: list[PeerFeedbackReceived] = []
+    with master_session() as s:
+        rows = (
+            s.query(PeerFeedback, StudentStepProgress, ModuleStep)
+            .join(
+                StudentStepProgress,
+                PeerFeedback.target_progress_id == StudentStepProgress.id,
+            )
+            .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
+            .filter(StudentStepProgress.student_id == info.student_id)
+            .order_by(PeerFeedback.created_at.desc())
+            .all()
+        )
+        for pf, prog, step in rows:
+            mod = s.query(Module).filter(Module.id == step.module_id).first()
+            out.append(PeerFeedbackReceived(
+                id=pf.id, body=pf.body, created_at=pf.created_at,
+                module_title=mod.title if mod else "—",
+                step_title=step.title,
+            ))
+    return out
 
 
 # ---------- Portfolio PDF ----------

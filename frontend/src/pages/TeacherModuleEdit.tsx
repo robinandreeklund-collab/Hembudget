@@ -287,7 +287,28 @@ function StepEditor({
           />
         </label>
       )}
-      {local.kind === "reflect" && <RubricEditor local={local} setLocal={setLocal} />}
+      {local.kind === "reflect" && (
+        <>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!local.params?.peer_review}
+              onChange={(e) =>
+                setLocal({
+                  ...local,
+                  params: {
+                    ...(local.params ?? {}),
+                    peer_review: e.target.checked,
+                  },
+                })
+              }
+            />
+            Aktivera kamratrespons för detta steg (eleverna får läsa och
+            kommentera varandras reflektioner anonymt)
+          </label>
+          <RubricEditor local={local} setLocal={setLocal} />
+        </>
+      )}
 
       {local.kind === "watch" && (
         <>

@@ -13,6 +13,7 @@ import {
   MessageCircle,
   BookOpen,
   GitBranch,
+  MessagesSquare,
   Landmark,
   Link2,
   LineChart,
@@ -66,6 +67,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
       { to: "/modules", label: "Din kursplan", icon: GitBranch },
       { to: "/my-batches", label: "Dina dokument", icon: Inbox },
       { to: "/messages", label: "Meddelanden", icon: MessageCircle },
+      { to: "/peer-review", label: "Kamratrespons", icon: MessagesSquare },
       ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),
       { to: "/docs", label: "Hjälp & guide", icon: BookOpen },
     ];
