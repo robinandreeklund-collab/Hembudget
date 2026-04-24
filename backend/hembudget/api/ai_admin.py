@@ -10,16 +10,23 @@ Endpoints:
 - GET  /admin/ai/teachers           — lista lärare + deras ai_enabled-flagga
 - POST /admin/ai/teachers/{id}/ai   — toggla ai_enabled för en lärare
 - POST /admin/ai/teachers/{id}/super — toggla is_super_admin för en lärare
+- GET  /admin/ai/api-key            — visa källa + sista-4 av aktiv nyckel
+- POST /admin/ai/api-key            — sätt eller uppdatera nyckel (DB)
+- DELETE /admin/ai/api-key          — rensa DB-nyckeln (faller ev. tillbaka
+                                       till env-var)
 """
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..school import is_enabled as school_enabled
+from ..school import ai as ai_core
 from ..school.ai import is_available as ai_available
 from ..school.engines import master_session
-from ..school.models import Teacher
+from ..school.models import AppConfig, Teacher
 from .deps import TokenInfo, require_teacher
 
 router = APIRouter(prefix="/admin/ai", tags=["admin-ai"])
@@ -142,6 +149,85 @@ def toggle_super(
             ai_input_tokens=t.ai_input_tokens,
             ai_output_tokens=t.ai_output_tokens,
         )
+
+
+# ---------- API-nyckel-hantering ----------
+
+class ApiKeyStatusOut(BaseModel):
+    configured: bool
+    """True om det finns en nyckel (DB eller env) som klienten kan använda."""
+    source: str
+    """'db' (satt via UI), 'env' (fallback till miljövar) eller '' (ingen)."""
+    preview: str
+    """Sista 4 tecknen, t.ex. '…fG8w'. Tom om ingen nyckel."""
+    client_available: bool
+    """True om anthropic-klienten kunde initieras med nuvarande nyckel."""
+
+
+class ApiKeyIn(BaseModel):
+    key: str = Field(min_length=20, max_length=500)
+    """Hela nyckeln från Anthropic. Valideras bara på längd — riktig
+    verifiering sker vid första anrop."""
+
+
+@router.get("/api-key", response_model=ApiKeyStatusOut)
+def api_key_status(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> ApiKeyStatusOut:
+    return ApiKeyStatusOut(
+        configured=ai_core.has_key_configured(),
+        source=ai_core.key_source(),
+        preview=ai_core.key_preview(),
+        client_available=ai_available(),
+    )
+
+
+@router.post("/api-key", response_model=ApiKeyStatusOut)
+def set_api_key(
+    payload: ApiKeyIn,
+    _: TokenInfo = Depends(_require_super_admin),
+) -> ApiKeyStatusOut:
+    """Spara (eller ersätta) API-nyckeln i master-DB:n. Skriver över
+    ev. env-var eftersom DB vinner."""
+    key = payload.key.strip()
+    if not key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tom nyckel")
+    with master_session() as s:
+        cfg = s.get(AppConfig, ai_core.AI_KEY_CONFIG_KEY)
+        if cfg is None:
+            cfg = AppConfig(key=ai_core.AI_KEY_CONFIG_KEY, value={"key": key})
+            s.add(cfg)
+        else:
+            cfg.value = {"key": key}
+            cfg.updated_at = datetime.utcnow()
+    ai_core.invalidate_client()
+    # Tvinga omedelbar re-init så "client_available" i responsen är korrekt
+    ai_core.is_available()
+    return ApiKeyStatusOut(
+        configured=ai_core.has_key_configured(),
+        source=ai_core.key_source(),
+        preview=ai_core.key_preview(),
+        client_available=ai_available(),
+    )
+
+
+@router.delete("/api-key", response_model=ApiKeyStatusOut)
+def delete_api_key(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> ApiKeyStatusOut:
+    """Rensa DB-nyckeln. Om ANTHROPIC_API_KEY finns i env faller vi
+    tillbaka till den; annars blir AI inaktiverat."""
+    with master_session() as s:
+        cfg = s.get(AppConfig, ai_core.AI_KEY_CONFIG_KEY)
+        if cfg is not None:
+            s.delete(cfg)
+    ai_core.invalidate_client()
+    return ApiKeyStatusOut(
+        configured=ai_core.has_key_configured(),
+        source=ai_core.key_source(),
+        preview=ai_core.key_preview(),
+        client_available=ai_available(),
+    )
 
 
 @router.get("/me")

@@ -27,7 +27,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ..school.models import Teacher
+from ..school.models import AppConfig, Teacher
 from ..school.engines import master_session
 
 log = logging.getLogger(__name__)
@@ -47,21 +47,47 @@ MAX_TOKENS_QA = 800
 MAX_TOKENS_MODULE = 2500
 MAX_TOKENS_CATEGORY = 200
 
+# app_config-nyckel där DB-nyckeln lagras. Super-admin kan sätta,
+# uppdatera och rensa den via UI. Fallback är ANTHROPIC_API_KEY-env-
+# varen för befintliga deployer som redan satt den där.
+AI_KEY_CONFIG_KEY = "ai_api_key"
+
 
 _client: Any = None
-_client_loaded = False
+_client_signature: str = ""
+
+
+def _read_api_key() -> str:
+    """Läser API-nyckel. DB-värdet (satt via /admin/ai/api-key) vinner
+    över env-varen, så super-admin kan byta nyckel utan att redeploya."""
+    try:
+        with master_session() as s:
+            cfg = s.get(AppConfig, AI_KEY_CONFIG_KEY)
+            if cfg and cfg.value and isinstance(cfg.value, dict):
+                key = str(cfg.value.get("key", "")).strip()
+                if key:
+                    return key
+    except Exception:
+        # DB kan vara oläsbar under startup eller migration — falla
+        # tillbaka till env tyst.
+        log.exception("ai: kunde inte läsa API-nyckel från DB")
+    return os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
 
 def _get_client() -> Any:
-    """Lazy-init Anthropic-klienten. Returnerar None om API-nyckel saknas
-    eller om paketet inte är installerat."""
-    global _client, _client_loaded
-    if _client_loaded:
+    """Lazy-init + revalidering av Anthropic-klienten. Vi sparar en
+    'signature' (nyckelns hash-prefix) så att om super-admin byter
+    nyckel via UI plockar vi upp den nya vid nästa anrop utan att
+    tjänsten behöver startas om."""
+    global _client, _client_signature
+    api_key = _read_api_key()
+    signature = api_key[:12] if api_key else ""
+    if _client is not None and signature == _client_signature:
         return _client
-    _client_loaded = True
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    # Nyckeln har ändrats eller klient saknas — rebuilda.
+    _client = None
+    _client_signature = signature
     if not api_key:
-        log.info("ai: ANTHROPIC_API_KEY saknas — AI-funktioner inaktiva")
         return None
     try:
         from anthropic import Anthropic
@@ -71,6 +97,43 @@ def _get_client() -> Any:
         log.exception("ai: kunde inte initiera Anthropic-klient")
         _client = None
     return _client
+
+
+def invalidate_client() -> None:
+    """Rensa klient-cachen så nästa anrop återskapar med ny nyckel."""
+    global _client, _client_signature
+    _client = None
+    _client_signature = ""
+
+
+def has_key_configured() -> bool:
+    """True om det finns en nyckel (i DB eller env)."""
+    return bool(_read_api_key())
+
+
+def key_source() -> str:
+    """"db" om super-admin satt en via UI, "env" om bara env-varen
+    finns, "" om ingen alls. Används av admin-UI för att visa källan."""
+    try:
+        with master_session() as s:
+            cfg = s.get(AppConfig, AI_KEY_CONFIG_KEY)
+            if cfg and cfg.value and isinstance(cfg.value, dict):
+                key = str(cfg.value.get("key", "")).strip()
+                if key:
+                    return "db"
+    except Exception:
+        pass
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        return "env"
+    return ""
+
+
+def key_preview() -> str:
+    """Visar bara sista 4 tecknen av aktiv nyckel för admin-UI."""
+    k = _read_api_key()
+    if not k:
+        return ""
+    return f"…{k[-4:]}" if len(k) >= 4 else ""
 
 
 def is_available() -> bool:

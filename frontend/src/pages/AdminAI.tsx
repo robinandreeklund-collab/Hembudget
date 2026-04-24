@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Brain, Check, Loader2, ShieldCheck, X, Zap,
+  ArrowLeft, Brain, Check, Key, Loader2, ShieldCheck, Trash2, X, Zap,
 } from "lucide-react";
 import { api, ApiError } from "@/api/client";
 
@@ -20,23 +20,36 @@ type TeacherRow = {
 
 type Status = { client_available: boolean };
 
+type ApiKeyStatus = {
+  configured: boolean;
+  source: string; // "db" | "env" | ""
+  preview: string;
+  client_available: boolean;
+};
+
 export default function AdminAI() {
   const [status, setStatus] = useState<Status | null>(null);
   const [rows, setRows] = useState<TeacherRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<ApiKeyStatus | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyMsg, setKeyMsg] = useState<string | null>(null);
 
   async function reload() {
     setLoading(true);
     setErr(null);
     try {
-      const [st, list] = await Promise.all([
+      const [st, list, key] = await Promise.all([
         api<Status>("/admin/ai/status"),
         api<TeacherRow[]>("/admin/ai/teachers"),
+        api<ApiKeyStatus>("/admin/ai/api-key"),
       ]);
       setStatus(st);
       setRows(list);
+      setApiKey(key);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
         setErr("Endast super-admin kan se denna sida.");
@@ -45,6 +58,58 @@ export default function AdminAI() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveKey() {
+    if (!newKey.trim() || newKey.trim().length < 20) {
+      setKeyMsg("Nyckeln ser för kort ut. Klistra in hela sk-ant-…");
+      return;
+    }
+    setKeyBusy(true);
+    setKeyMsg(null);
+    try {
+      const res = await api<ApiKeyStatus>("/admin/ai/api-key", {
+        method: "POST",
+        body: JSON.stringify({ key: newKey.trim() }),
+      });
+      setApiKey(res);
+      setNewKey("");
+      setKeyMsg(
+        res.client_available
+          ? "Nyckeln är sparad och klienten är uppkopplad."
+          : "Sparad — men klienten kunde inte initieras. Kontrollera att nyckeln är giltig.",
+      );
+      // Uppdatera toggle-sektionens status också
+      const st = await api<Status>("/admin/ai/status");
+      setStatus(st);
+    } catch (e) {
+      setKeyMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function deleteKey() {
+    if (!confirm(
+      "Radera den sparade nyckeln? AI-funktionerna stängs av för alla " +
+      "lärare tills en ny nyckel läggs in (eller ANTHROPIC_API_KEY är " +
+      "satt i Cloud Run-env).",
+    )) return;
+    setKeyBusy(true);
+    setKeyMsg(null);
+    try {
+      const res = await api<ApiKeyStatus>("/admin/ai/api-key", {
+        method: "DELETE",
+      });
+      setApiKey(res);
+      setKeyMsg("Nyckeln raderad.");
+      const st = await api<Status>("/admin/ai/status");
+      setStatus(st);
+    } catch (e) {
+      setKeyMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setKeyBusy(false);
     }
   }
 
@@ -152,11 +217,88 @@ export default function AdminAI() {
           </>
         ) : (
           <>
-            ⚠ Ingen ANTHROPIC_API_KEY satt på servern. Inga AI-anrop kan
-            göras oavsett togglar.
+            ⚠ Ingen giltig API-nyckel — klienten kan inte starta. Lägg in
+            en nyckel nedan.
           </>
         )}
       </div>
+
+      {/* API-nyckel-sektion */}
+      <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Key className="w-5 h-5 text-brand-600" />
+          <h2 className="font-medium">Anthropic API-nyckel</h2>
+        </div>
+        <div className="text-sm text-slate-700 space-y-1">
+          <div>
+            Status:{" "}
+            {apiKey?.configured ? (
+              <span className="font-medium text-emerald-700">
+                Konfigurerad {apiKey.preview && `(${apiKey.preview})`}
+              </span>
+            ) : (
+              <span className="font-medium text-amber-700">Saknas</span>
+            )}
+          </div>
+          {apiKey?.source && (
+            <div className="text-xs text-slate-500">
+              Källa:{" "}
+              {apiKey.source === "db"
+                ? "sparad via detta formulär"
+                : "HEMBUDGET_API_KEY (miljövariabel)"}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <label className="block text-xs font-medium text-slate-600">
+            {apiKey?.configured ? "Byt nyckel" : "Lägg in nyckel"}
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              placeholder="sk-ant-api03-…"
+              className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm font-mono"
+              disabled={keyBusy}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              onClick={saveKey}
+              disabled={keyBusy || !newKey.trim()}
+              className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+            >
+              {keyBusy ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Check className="w-4 h-4" />
+              )}
+              Spara
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">
+            Nyckeln lagras i master-DB:n och används direkt av alla
+            AI-endpoints. Den skrivs inte till loggar och visas aldrig
+            i klartext efter att du sparat den.
+          </p>
+          {apiKey?.source === "db" && (
+            <button
+              onClick={deleteKey}
+              disabled={keyBusy}
+              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 disabled:opacity-50"
+            >
+              <Trash2 className="w-3 h-3" />
+              Radera sparad nyckel
+            </button>
+          )}
+          {keyMsg && (
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded p-2 text-slate-700">
+              {keyMsg}
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Totalt antal anrop" value={totalReq.toLocaleString("sv-SE")} />
