@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import {
   AlertTriangle, ArrowRight, BarChart3, Briefcase, GraduationCap,
-  Home, Lightbulb, MessageCircle, PiggyBank, Receipt, Sparkles,
+  Home, Lightbulb, MessageCircle, PiggyBank, Quote, Receipt, Sparkles,
   TrendingUp, Users, Zap,
 } from "lucide-react";
 import DashboardPreview from "@/components/landing/DashboardPreview";
@@ -20,6 +20,7 @@ export default function Landing() {
       <FeaturesSection />
       <DemoSection />
       <FlowSection />
+      <FounderNote />
       <CtaSection />
       <ContactSection />
       <Footer />
@@ -390,6 +391,22 @@ function FlowSection() {
     </section>
   );
 }
+function FounderNote() {
+  return (
+    <section className="max-w-3xl mx-auto px-6 py-16">
+      <div className="relative bg-white border border-slate-200 rounded-2xl p-8 md:p-10 shadow-sm">
+        <Quote className="absolute -top-3 -left-3 w-8 h-8 text-brand-500 bg-white p-1 rounded-full border border-slate-200" />
+        <p className="text-lg md:text-xl text-slate-800 leading-relaxed italic">
+          Ekonomilabbet började som ett verktyg för min egen ekonomi. Nu kan
+          det också hjälpa unga att förstå pengar, beslut och vardagsekonomi
+          på riktigt — på ett sätt som känns konkret och användbart.
+        </p>
+        <div className="mt-4 text-sm text-slate-500">— Grundaren</div>
+      </div>
+    </section>
+  );
+}
+
 function CtaSection() {
   return (
     <section className="max-w-4xl mx-auto px-6 py-20 text-center">
