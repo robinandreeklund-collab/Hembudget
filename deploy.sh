@@ -212,7 +212,10 @@ DEPLOY_ARGS=(
     --memory "$MEMORY" --cpu "$CPU"
     --concurrency "$CONCURRENCY" --timeout "$TIMEOUT"
     --max-instances "$MAX_INSTANCES" --min-instances "$MIN_INSTANCES"
-    --set-env-vars "$ENV_VARS"
+    # --update-env-vars (inte --set-env-vars) — bevarar manuellt satta
+    # variabler som ANTHROPIC_API_KEY och TURNSTILE_SECRET över deploys.
+    # --set hade raderat allt som inte står i $ENV_VARS.
+    --update-env-vars "$ENV_VARS"
     --port 8080
     --quiet
 )
