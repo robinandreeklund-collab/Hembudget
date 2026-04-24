@@ -2373,6 +2373,101 @@ def mortgage_outcome(
         )
 
 
+# ---------- Demo-konto ----------
+
+class DemoLoginOut(BaseModel):
+    token: str
+    role: str
+    display_name: str
+    next_reset_at: Optional[datetime] = None
+
+
+@router.post("/demo/teacher", response_model=DemoLoginOut)
+def demo_teacher_login() -> DemoLoginOut:
+    """Logga in som demo-lärare direkt utan lösen. Miljön är publik och
+    resetas var 10 min."""
+    _require_school_mode()
+    from ..school.demo_seed import DEMO_TEACHER_EMAIL
+    with master_session() as s:
+        t = s.query(Teacher).filter(
+            Teacher.email == DEMO_TEACHER_EMAIL,
+            Teacher.is_demo.is_(True),
+        ).first()
+        if not t:
+            raise HTTPException(503, "Demo ej initialiserad än — försök igen")
+        token = random_token()
+        register_token(token, role="teacher", teacher_id=t.id)
+        return DemoLoginOut(
+            token=token, role="teacher",
+            display_name=t.name,
+            next_reset_at=_next_demo_reset(),
+        )
+
+
+@router.post("/demo/student", response_model=DemoLoginOut)
+def demo_student_login(code: Optional[str] = None) -> DemoLoginOut:
+    """Logga in som en förvald demo-elev. Om 'code' anges, använd den;
+    annars första demo-eleven (DEMO01)."""
+    _require_school_mode()
+    target_code = (code or "DEMO01").upper()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.login_code == target_code
+        ).first()
+        if not stu:
+            raise HTTPException(503, "Demo ej initialiserad än — försök igen")
+        # Verifiera att eleven tillhör en demo-lärare
+        t = s.query(Teacher).filter(Teacher.id == stu.teacher_id).first()
+        if not t or not t.is_demo:
+            raise HTTPException(403, "Koden tillhör inte demomiljön")
+        stu.last_login_at = datetime.utcnow()
+        token = random_token()
+        register_token(token, role="student", student_id=stu.id)
+        return DemoLoginOut(
+            token=token, role="student",
+            display_name=stu.display_name,
+            next_reset_at=_next_demo_reset(),
+        )
+
+
+@router.get("/demo/status")
+def demo_status() -> dict:
+    """Publikt info-endpoint: listar demo-konton + nästa reset."""
+    if not school_enabled():
+        return {"demo_available": False}
+    with master_session() as s:
+        t = s.query(Teacher).filter(Teacher.is_demo.is_(True)).first()
+        if not t:
+            return {"demo_available": False, "reason": "ej seedat än"}
+        students = s.query(Student).filter(Student.teacher_id == t.id).all()
+        return {
+            "demo_available": True,
+            "teacher_email": t.email,
+            "student_codes": [
+                {"name": st.display_name, "code": st.login_code, "class": st.class_label}
+                for st in students
+            ],
+            "next_reset_at": _next_demo_reset().isoformat() if _next_demo_reset() else None,
+        }
+
+
+@router.get("/demo/is-demo")
+def am_i_in_demo(info: TokenInfo = Depends(require_token)) -> dict:
+    """Används av frontend för att visa demobanner ovanför allt UI."""
+    from ..school.demo_seed import is_demo_token
+    return {
+        "is_demo": is_demo_token(info),
+        "next_reset_at": _next_demo_reset().isoformat() if _next_demo_reset() else None,
+    }
+
+
+def _next_demo_reset() -> Optional[datetime]:
+    """Returnerar när nästa reset förväntas köra, om vi har schemat
+    startat. Om ingen schemaläggare: None."""
+    from ..main import next_demo_reset_at
+    return next_demo_reset_at
+
+
 @router.get("/teacher/batches/months",
             response_model=list[str])
 def list_all_batch_months(

@@ -37,6 +37,9 @@ class Teacher(MasterBase):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Markerar en "demo"-lärare + alla dennes elever/familjer/batcher.
+    # Demo-data rensas automatiskt var 10 min och återskapas från kod.
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

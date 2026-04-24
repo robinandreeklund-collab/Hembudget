@@ -212,6 +212,12 @@ def _mount_frontend_static(app: FastAPI) -> None:
 
 app = build_app()
 
+# Global: när nästa demo-reset körs. Publik via /demo/status.
+next_demo_reset_at = None
+
+
+DEMO_RESET_INTERVAL_SECONDS = 600  # 10 min
+
 
 @app.on_event("startup")
 def _demo_bootstrap() -> None:
@@ -223,6 +229,49 @@ def _demo_bootstrap() -> None:
             logging.getLogger(__name__).info("demo bootstrap: %s", result)
     except Exception:
         logging.getLogger(__name__).exception("demo bootstrap failed")
+
+
+@app.on_event("startup")
+async def _demo_seed_and_scheduler() -> None:
+    """School-mode: bygg upp demo-läraren + starta 10-min-reset-loop.
+    Skippas tyst om school-mode inte är aktivt eller om init misslyckas."""
+    import os as _os
+    import asyncio
+    from datetime import datetime, timedelta
+    global next_demo_reset_at
+
+    try:
+        from .school import is_enabled
+        if not is_enabled():
+            return
+        from .school.engines import init_master_engine
+        from .school.demo_seed import build_demo
+        init_master_engine()
+        # Första build
+        stats = build_demo()
+        next_demo_reset_at = datetime.utcnow() + timedelta(
+            seconds=DEMO_RESET_INTERVAL_SECONDS,
+        )
+        logging.getLogger(__name__).info("demo seed: %s", stats)
+
+        async def _reset_loop():
+            global next_demo_reset_at
+            while True:
+                try:
+                    await asyncio.sleep(DEMO_RESET_INTERVAL_SECONDS)
+                    s = build_demo()
+                    next_demo_reset_at = datetime.utcnow() + timedelta(
+                        seconds=DEMO_RESET_INTERVAL_SECONDS,
+                    )
+                    logging.getLogger(__name__).info("demo reset: %s", s)
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    logging.getLogger(__name__).exception("demo reset misslyckades")
+
+        asyncio.create_task(_reset_loop())
+    except Exception:
+        logging.getLogger(__name__).exception("demo seed misslyckades")
 
 
 @app.on_event("startup")
