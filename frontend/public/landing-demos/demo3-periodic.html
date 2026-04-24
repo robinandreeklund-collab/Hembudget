@@ -44,6 +44,36 @@
   .elem:hover .tooltip{opacity:1;}
   .tooltip:after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
     border:5px solid transparent;border-top-color:var(--ink);}
+  .elem:focus{outline:2px solid var(--ink);outline-offset:2px;}
+  /* Heatmap-lager ovanpå cellerna — styr via CSS-variabeln --h (0-1) */
+  .elem .heatmap{
+    position:absolute;inset:0;background:#10b981;opacity:0;
+    transition:opacity .3s;pointer-events:none;mix-blend-mode:multiply;
+  }
+  body.heatmap-on .elem .heatmap{opacity:calc(var(--h, 0) * 0.45);}
+  /* Partikelsystem bakom hero */
+  .particle{position:absolute;width:4px;height:4px;border-radius:50%;
+    background:var(--ink);opacity:.15;pointer-events:none;}
+  @keyframes drift{
+    0%{transform:translate(0,0);}
+    100%{transform:translate(var(--dx),var(--dy));}
+  }
+  .drifting{animation:drift var(--dur,8s) linear infinite alternate;}
+  /* Mini-modal */
+  .cellmodal{
+    position:fixed;inset:0;background:rgba(17,18,23,.55);display:none;
+    align-items:center;justify-content:center;z-index:40;padding:16px;
+  }
+  .cellmodal.open{display:flex;}
+  .cellmodal .card{
+    background:#fff;border-radius:12px;padding:24px 28px;max-width:440px;width:100%;
+    box-shadow:0 20px 40px rgba(0,0,0,.2);
+  }
+  /* prefers-reduced-motion slår av drift + blinking */
+  @media (prefers-reduced-motion: reduce){
+    .drifting{animation:none;}
+    .blink{animation:none;}
+  }
 </style>
 </head>
 <body>
@@ -80,6 +110,11 @@
     <div class="mt-8 flex flex-wrap gap-3">
       <a class="px-5 py-3 bg-[var(--ink)] text-white rounded-md font-semibold">Prova experimentet</a>
       <a class="px-5 py-3 border rule rounded-md font-semibold">Ladda ner läroplans­matrisen (PDF)</a>
+      <button id="heatmap-toggle" type="button"
+        class="px-5 py-3 border rule rounded-md font-semibold"
+        aria-pressed="false">
+        Lägg på klassens värmekarta
+      </button>
     </div>
 
     <div class="mt-10 text-sm space-y-3">
@@ -94,20 +129,22 @@
 
   <!-- Periodic grid -->
   <div class="relative">
-    <!-- Prof peeking top right -->
-    <svg viewBox="0 0 120 120" class="absolute -top-6 -right-4 w-28 h-28 z-10">
+    <!-- Prof peeking top right — ögonen följer musen -->
+    <svg id="prof-svg" viewBox="0 0 120 120" class="absolute -top-6 -right-4 w-28 h-28 z-10" aria-hidden="true">
       <g>
         <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" stroke-width="3"/>
         <path d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z" fill="#fff" stroke="#111" stroke-width="3"/>
         <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
         <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
-        <circle cx="48" cy="68" r="3" fill="#111"/><circle cx="72" cy="68" r="3" fill="#111"/>
+        <circle id="eye-l" cx="48" cy="68" r="3" fill="#111"/>
+        <circle id="eye-r" cx="72" cy="68" r="3" fill="#111"/>
         <path d="M48 88 Q60 96 72 88" stroke="#111" stroke-width="2.5" fill="none"/>
         <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" stroke-width="2.5"/>
       </g>
     </svg>
 
-    <div class="grid grid-cols-8 gap-1.5">
+    <div id="grid" class="grid grid-cols-8 gap-1.5" role="grid"
+         aria-label="Periodiska systemet för pengar — 32 begrepp">
       <!-- Row 1: first 8 -->
       <div class="elem grund"><span class="num">1</span><div><div class="sym">Lö</div><div class="name">Lön</div></div><div class="val">brutto · netto</div>
         <div class="tooltip">Lön = bruttolön minus skatt = det du faktiskt får</div>
@@ -218,6 +255,158 @@
   <div>© 2026 Ekonomilabbet · Utvecklad i samarbete med lärare</div>
   <div class="flex gap-4"><a>Integritet</a><a>Tillgänglighet</a><a>info@ekonomilabbet.org</a></div>
 </footer>
+
+<!-- Mini-modal som visas när en cell klickas -->
+<div id="cellmodal" class="cellmodal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="card">
+    <div id="m-sym" class="serif text-4xl"></div>
+    <div id="m-name" class="text-lg font-semibold mt-1"></div>
+    <div id="m-val" class="text-sm text-[#666] mt-0.5"></div>
+    <p id="m-tip" class="mt-3 text-[#333]"></p>
+    <div id="m-module" class="mt-4 text-xs text-[#888]"></div>
+    <button id="m-close" class="mt-5 px-4 py-2 bg-[var(--ink)] text-white rounded text-sm">Stäng</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* --- Aria + tangentbordsnav + klick på celler --- */
+  const grid = document.getElementById('grid');
+  const elems = grid ? Array.from(grid.querySelectorAll('.elem')) : [];
+  // Deterministiska heatmap-värden per cell-position (0..1) så klassens
+  // "värmekarta" alltid ser likadan ut — demo utan backend.
+  const heat = [
+    .92,.74,.88,.82,.71,.66,.54,.48,
+    .38,.32,.64,.58,.22,.18,.41,.36,
+    .52,.46,.42,.28,.26,.14,.50,.71,
+    .67,.55,.34,.12,.08,.44,.62,.58,
+  ];
+  elems.forEach((el, i) => {
+    el.setAttribute('role', 'gridcell');
+    el.setAttribute('tabindex', '0');
+    const nameEl = el.querySelector('.name');
+    const valEl = el.querySelector('.val');
+    const tip = el.querySelector('.tooltip');
+    const label =
+      (nameEl ? nameEl.textContent : '') +
+      (valEl ? ', ' + valEl.textContent : '') +
+      (tip ? '. ' + tip.textContent : '');
+    el.setAttribute('aria-label', label.trim());
+    // Heatmap-overlay (tom div per cell, opacitet styrs av CSS-variabel)
+    const h = document.createElement('span');
+    h.className = 'heatmap';
+    el.appendChild(h);
+    el.style.setProperty('--h', heat[i] ?? 0);
+  });
+  // Enter/mellanslag = öppna modal; pil = flytta fokus
+  grid && grid.addEventListener('keydown', (e) => {
+    const cur = document.activeElement;
+    const idx = elems.indexOf(cur);
+    if (idx < 0) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openModal(elems[idx]);
+    } else if (['ArrowRight','ArrowLeft','ArrowUp','ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      const dy = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+      const next = idx + dx + dy * 8;
+      if (elems[next]) elems[next].focus();
+    }
+  });
+  elems.forEach(el => el.addEventListener('click', () => openModal(el)));
+
+  /* --- Modal --- */
+  const modal = document.getElementById('cellmodal');
+  const mSym = document.getElementById('m-sym');
+  const mName = document.getElementById('m-name');
+  const mVal = document.getElementById('m-val');
+  const mTip = document.getElementById('m-tip');
+  const mModule = document.getElementById('m-module');
+  document.getElementById('m-close').onclick = closeModal;
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+  function openModal(el){
+    const sym = el.querySelector('.sym');
+    const name = el.querySelector('.name');
+    const val = el.querySelector('.val');
+    const tip = el.querySelector('.tooltip');
+    mSym.textContent = sym ? sym.textContent : '';
+    mName.textContent = name ? name.textContent : '';
+    mVal.textContent = val ? val.textContent : '';
+    mTip.textContent = tip ? tip.textContent : '';
+    mModule.textContent = 'Tränas i modulen "Din första månad" · steg 1–7';
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+  function closeModal(){
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  /* --- Heatmap-toggle --- */
+  const ht = document.getElementById('heatmap-toggle');
+  ht && ht.addEventListener('click', () => {
+    const on = document.body.classList.toggle('heatmap-on');
+    ht.setAttribute('aria-pressed', on ? 'true' : 'false');
+    ht.textContent = on
+      ? 'Ta bort klassens värmekarta'
+      : 'Lägg på klassens värmekarta';
+  });
+
+  /* --- Professor: ögonen följer musen --- */
+  const svg = document.getElementById('prof-svg');
+  const el = document.getElementById('eye-l');
+  const er = document.getElementById('eye-r');
+  if (svg && el && er && !reduce) {
+    window.addEventListener('mousemove', (e) => {
+      const r = svg.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / 200));
+      const dy = Math.max(-1, Math.min(1, (e.clientY - cy) / 200));
+      el.setAttribute('cx', String(48 + dx * 2));
+      el.setAttribute('cy', String(68 + dy * 2));
+      er.setAttribute('cx', String(72 + dx * 2));
+      er.setAttribute('cy', String(68 + dy * 2));
+    });
+  }
+
+  /* --- Drivande partiklar bakom hero (egen wrapper för att inte
+         klippa tooltip-popovers på cellerna) --- */
+  if (!reduce) {
+    const hero = document.querySelector('section');
+    if (hero) {
+      hero.style.position = 'relative';
+      const layer = document.createElement('div');
+      layer.style.cssText =
+        'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;';
+      hero.prepend(layer);
+      for (let i = 0; i < 18; i++) {
+        const p = document.createElement('span');
+        p.className = 'particle drifting';
+        const top = Math.random() * 100;
+        const left = Math.random() * 100;
+        const dx = (Math.random() - 0.5) * 120;
+        const dy = (Math.random() - 0.5) * 120;
+        const dur = 6 + Math.random() * 8;
+        p.style.top = top + '%';
+        p.style.left = left + '%';
+        p.style.setProperty('--dx', dx + 'px');
+        p.style.setProperty('--dy', dy + 'px');
+        p.style.setProperty('--dur', dur + 's');
+        layer.appendChild(p);
+      }
+    }
+  }
+})();
+</script>
 
 </body>
 </html>
