@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ekonomilabbet · Demo 2 — Cartoon Professor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#fff7e6; --yolk:#ffd05a; --tomato:#ff6b57; --leaf:#3bb273; --ink:#1f2230; --plum:#6d5bd2;
+  }
+  html,body{background:var(--cream);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
+  .display{font-family:'Fredoka',system-ui,sans-serif;font-weight:600;letter-spacing:-.01em;}
+  .paper{background:
+    radial-gradient(circle at 15% 20%,rgba(109,91,210,.08),transparent 40%),
+    radial-gradient(circle at 85% 70%,rgba(255,107,87,.08),transparent 45%),
+    var(--cream);
+  }
+  .doodle{position:absolute;opacity:.9;pointer-events:none;}
+  .pill{border:2px solid var(--ink);border-radius:9999px;box-shadow:3px 3px 0 var(--ink);}
+  .card{border:2px solid var(--ink);border-radius:22px;box-shadow:6px 6px 0 var(--ink);background:#fff;}
+  .btn-primary{background:var(--tomato);color:#fff;border:2px solid var(--ink);border-radius:14px;box-shadow:5px 5px 0 var(--ink);font-weight:700;transition:transform .1s;}
+  .btn-primary:hover{transform:translate(1px,1px);box-shadow:4px 4px 0 var(--ink);}
+  .btn-secondary{background:#fff;border:2px solid var(--ink);border-radius:14px;box-shadow:5px 5px 0 var(--ink);font-weight:700;}
+  .btn-secondary:hover{transform:translate(1px,1px);box-shadow:4px 4px 0 var(--ink);}
+  @keyframes float-y{0%,100%{transform:translateY(0) rotate(var(--r,0deg));}50%{transform:translateY(-14px) rotate(var(--r,0deg));}}
+  .float{animation:float-y 4s ease-in-out infinite;}
+  @keyframes wobble{0%,100%{transform:rotate(-2deg);}50%{transform:rotate(3deg);}}
+  .wobble{animation:wobble 3s ease-in-out infinite;}
+  @keyframes spin-s{from{transform:rotate(0);}to{transform:rotate(360deg);}}
+  .spin{animation:spin-s 18s linear infinite;}
+  @keyframes pop{0%{transform:scale(.6);opacity:0;}60%{transform:scale(1.1);opacity:1;}100%{transform:scale(1);opacity:1;}}
+  .pop{animation:pop .7s cubic-bezier(.17,.67,.5,1.32) both;}
+  @keyframes fly-num{
+    0%{transform:translate(0,0) rotate(0) scale(.5);opacity:0;}
+    10%{opacity:1;}
+    100%{transform:translate(var(--dx,0),var(--dy,-120px)) rotate(var(--rot,30deg)) scale(1);opacity:0;}
+  }
+  .fly-num{animation:fly-num 3s ease-out infinite;}
+  .dashed-arrow{stroke-dasharray:6 6;}
+  .tag{background:var(--yolk);border:2px solid var(--ink);border-radius:8px;padding:2px 8px;font-weight:700;display:inline-block;transform:rotate(-2deg);}
+</style>
+</head>
+<body class="paper overflow-x-hidden">
+
+<!-- NAV -->
+<header class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between relative z-10">
+  <a href="index.html" class="flex items-center gap-3">
+    <div class="w-11 h-11 rounded-xl bg-[var(--yolk)] border-2 border-[var(--ink)] grid place-items-center shadow-[3px_3px_0_var(--ink)]">
+      <span class="display text-xl">E</span>
+    </div>
+    <div class="display text-2xl">Ekonomi<span class="text-[var(--tomato)]">labbet</span></div>
+  </a>
+  <nav class="hidden md:flex items-center gap-8 text-sm font-semibold">
+    <a>Hur det funkar</a><a>Moduler</a><a>För lärare</a><a>Priser</a>
+  </nav>
+  <div class="flex gap-2">
+    <a class="btn-secondary px-4 py-2 text-sm">Elev</a>
+    <a class="btn-primary px-4 py-2 text-sm">Lärare →</a>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="relative max-w-7xl mx-auto px-6 pt-10 pb-20 grid md:grid-cols-[1.1fr_1fr] gap-10 items-center">
+  <!-- doodles -->
+  <svg class="doodle" style="top:40px;right:40%;" width="80" height="80" viewBox="0 0 80 80"><path d="M10 40 Q40 10 70 40 Q40 70 10 40" fill="none" stroke="#1f2230" stroke-width="2" class="dashed-arrow"/></svg>
+  <svg class="doodle" style="bottom:-20px;left:30%;" width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="20" fill="none" stroke="#6d5bd2" stroke-width="2" class="dashed-arrow"/></svg>
+
+  <!-- LEFT copy -->
+  <div class="relative">
+    <div class="pill inline-flex items-center gap-2 px-4 py-1.5 bg-white text-sm font-semibold mb-6">
+      <span class="w-2 h-2 rounded-full bg-[var(--leaf)]"></span>
+      Professor Ekon är hemma och håller i rören
+    </div>
+    <h1 class="display text-5xl md:text-6xl leading-[1.02]">
+      En <span class="tag">galen</span> kemist<br/>
+      lär dina elever<br/>
+      <span class="relative inline-block">
+        hantera pengar
+        <svg class="absolute -bottom-2 left-0" width="100%" height="12" viewBox="0 0 400 12" preserveAspectRatio="none"><path d="M2 8 Q100 0 200 6 T398 4" stroke="#ff6b57" stroke-width="5" fill="none" stroke-linecap="round"/></svg>
+      </span>.
+    </h1>
+    <p class="mt-6 text-lg text-[var(--ink)]/75 max-w-xl">
+      12 kompetenser. 9 moduler. En professor som får siffror att puttra som laboratoriemosaik.
+      Eleverna rör i grytan — du rättar i lugn och ro med AI:n bredvid.
+    </p>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a class="btn-primary px-6 py-3.5">Starta labbet gratis</a>
+      <a class="btn-secondary px-6 py-3.5">Se 90-sekunders-demo ▶</a>
+    </div>
+    <div class="mt-10 flex items-center gap-6 text-sm">
+      <div class="flex -space-x-3">
+        <div class="w-10 h-10 rounded-full bg-[var(--leaf)] border-2 border-[var(--ink)]"></div>
+        <div class="w-10 h-10 rounded-full bg-[var(--yolk)] border-2 border-[var(--ink)]"></div>
+        <div class="w-10 h-10 rounded-full bg-[var(--plum)] border-2 border-[var(--ink)]"></div>
+        <div class="w-10 h-10 rounded-full bg-white border-2 border-[var(--ink)] grid place-items-center text-xs font-bold">+42</div>
+      </div>
+      <div><span class="font-bold">1 280 elever</span> i labbet just nu</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: professor -->
+  <div class="relative h-[540px]">
+    <!-- floating numbers -->
+    <div class="absolute text-2xl display text-[var(--tomato)] fly-num" style="--dx:60px;--dy:-160px;--rot:20deg;top:60%;left:50%;animation-delay:0s;">+1 250 kr</div>
+    <div class="absolute text-xl display text-[var(--plum)] fly-num" style="--dx:-80px;--dy:-140px;--rot:-15deg;top:55%;left:48%;animation-delay:-1s;">Skatt 30%</div>
+    <div class="absolute text-xl display text-[var(--leaf)] fly-num" style="--dx:110px;--dy:-100px;--rot:15deg;top:50%;left:52%;animation-delay:-2s;">Sparat!</div>
+    <div class="absolute text-2xl display text-[var(--yolk)] fly-num" style="--dx:-140px;--dy:-120px;--rot:-25deg;top:58%;left:45%;animation-delay:-1.5s;text-shadow:2px 2px 0 #1f2230;">Räntan↑</div>
+    <div class="absolute text-lg display fly-num" style="--dx:40px;--dy:-200px;top:55%;left:50%;animation-delay:-0.5s;">24 300 kr</div>
+
+    <!-- chunky professor SVG -->
+    <svg viewBox="0 0 480 540" class="w-full h-full relative z-10">
+      <defs>
+        <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
+          <feGaussianBlur stdDeviation=".3"/>
+        </filter>
+      </defs>
+
+      <!-- big beaker -->
+      <g transform="translate(180 260)">
+        <path d="M-60 0 L-60 60 L-100 180 Q-110 220 -70 220 L70 220 Q110 220 100 180 L60 60 L60 0 Z"
+              fill="#ffd05a" stroke="#1f2230" stroke-width="5"/>
+        <!-- liquid -->
+        <path d="M-96 180 Q-110 220 -70 220 L70 220 Q110 220 96 180 L88 130 Q0 160 -88 130 Z"
+              fill="#ff6b57" stroke="#1f2230" stroke-width="4"/>
+        <!-- bubbles inside -->
+        <circle cx="-30" cy="150" r="8" fill="#fff" opacity=".85" class="float"/>
+        <circle cx="10" cy="180" r="5" fill="#fff" opacity=".85" class="float" style="animation-delay:-1s"/>
+        <circle cx="40" cy="150" r="7" fill="#fff" opacity=".85" class="float" style="animation-delay:-2s"/>
+        <!-- lip -->
+        <rect x="-65" y="-8" width="130" height="10" rx="4" fill="#ffe391" stroke="#1f2230" stroke-width="4"/>
+      </g>
+
+      <!-- steam / swirl above beaker -->
+      <g class="spin" transform-origin="240 180">
+        <path d="M180 150 Q240 90 300 150" fill="none" stroke="#6d5bd2" stroke-width="4" class="dashed-arrow"/>
+      </g>
+
+      <!-- professor body (wobble) -->
+      <g class="wobble" transform-origin="340 420">
+        <!-- coat -->
+        <path d="M260 520 L250 380 Q260 340 300 330 L380 330 Q420 340 430 380 L420 520 Z"
+              fill="#fff" stroke="#1f2230" stroke-width="5"/>
+        <!-- tie -->
+        <path d="M338 340 L350 370 L338 400 L326 370 Z" fill="#ff6b57" stroke="#1f2230" stroke-width="3"/>
+        <!-- arms -->
+        <path d="M250 380 Q200 340 160 280" stroke="#fff" stroke-width="26" fill="none" stroke-linecap="round"/>
+        <path d="M250 380 Q200 340 160 280" stroke="#1f2230" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <path d="M430 380 Q470 340 480 310" stroke="#fff" stroke-width="26" fill="none" stroke-linecap="round"/>
+        <path d="M430 380 Q470 340 480 310" stroke="#1f2230" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <!-- hand on beaker (left) -->
+        <circle cx="160" cy="270" r="16" fill="#ffcc9a" stroke="#1f2230" stroke-width="4"/>
+        <!-- raised hand (right) -->
+        <circle cx="480" cy="305" r="16" fill="#ffcc9a" stroke="#1f2230" stroke-width="4"/>
+
+        <!-- neck -->
+        <rect x="326" y="300" width="28" height="30" fill="#ffcc9a" stroke="#1f2230" stroke-width="4"/>
+        <!-- head -->
+        <ellipse cx="340" cy="260" rx="60" ry="64" fill="#ffcc9a" stroke="#1f2230" stroke-width="5"/>
+
+        <!-- crazy hair -->
+        <path d="M280 220 Q260 150 300 170 Q280 120 320 150 Q320 100 340 140 Q360 100 360 150 Q400 120 380 170 Q420 150 400 220 Q410 250 380 240 L300 240 Q270 250 280 220Z"
+              fill="#fff" stroke="#1f2230" stroke-width="5"/>
+        <path d="M270 210 L245 195 M405 210 L430 200 M325 150 L315 120"
+              stroke="#1f2230" stroke-width="5" stroke-linecap="round" fill="none"/>
+
+        <!-- goggles -->
+        <circle cx="318" cy="262" r="20" fill="#fff" stroke="#1f2230" stroke-width="5"/>
+        <circle cx="362" cy="262" r="20" fill="#fff" stroke="#1f2230" stroke-width="5"/>
+        <line x1="338" y1="262" x2="342" y2="262" stroke="#1f2230" stroke-width="5"/>
+        <path d="M298 262 Q290 240 300 230 M382 262 Q390 240 380 230"
+              stroke="#1f2230" stroke-width="4" fill="none"/>
+        <!-- eyes -->
+        <circle cx="318" cy="262" r="7" fill="#1f2230"/>
+        <circle cx="362" cy="262" r="7" fill="#1f2230"/>
+        <circle cx="320" cy="260" r="2.5" fill="#fff"/>
+        <circle cx="364" cy="260" r="2.5" fill="#fff"/>
+        <!-- grin -->
+        <path d="M315 300 Q340 320 365 300" stroke="#1f2230" stroke-width="5" fill="#ff6b57" stroke-linecap="round"/>
+        <line x1="325" y1="305" x2="325" y2="313" stroke="#1f2230" stroke-width="2"/>
+        <line x1="340" y1="307" x2="340" y2="315" stroke="#1f2230" stroke-width="2"/>
+        <line x1="355" y1="305" x2="355" y2="313" stroke="#1f2230" stroke-width="2"/>
+        <!-- mustache -->
+        <path d="M308 295 Q320 288 330 292 Q340 296 340 292 Q340 296 350 292 Q360 288 372 295"
+              stroke="#1f2230" stroke-width="4" fill="#1f2230" stroke-linecap="round"/>
+      </g>
+
+      <!-- badge -->
+      <g transform="translate(70 100)" class="float" style="--r:-8deg;">
+        <circle cx="0" cy="0" r="50" fill="#3bb273" stroke="#1f2230" stroke-width="5"/>
+        <text x="0" y="-5" text-anchor="middle" font-family="Fredoka" font-size="14" font-weight="700" fill="#fff">NIVÅ</text>
+        <text x="0" y="18" text-anchor="middle" font-family="Fredoka" font-size="28" font-weight="700" fill="#fff">3</text>
+      </g>
+
+      <!-- coin -->
+      <g transform="translate(420 120)" class="float" style="--r:12deg;animation-delay:-1.5s">
+        <circle cx="0" cy="0" r="34" fill="#ffd05a" stroke="#1f2230" stroke-width="5"/>
+        <text x="0" y="8" text-anchor="middle" font-family="Fredoka" font-size="24" font-weight="700" fill="#1f2230">kr</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- 3 STEPS -->
+<section class="relative max-w-7xl mx-auto px-6 py-16">
+  <div class="text-center max-w-2xl mx-auto mb-14">
+    <div class="pill inline-flex px-4 py-1.5 bg-white text-sm font-semibold mb-5">Så funkar experimentet</div>
+    <h2 class="display text-4xl md:text-5xl">Tre steg. Ingen professor-disputation krävs.</h2>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-6">
+    <div class="card p-7 relative pop">
+      <div class="absolute -top-5 -left-5 w-12 h-12 rounded-full bg-[var(--tomato)] border-2 border-[var(--ink)] grid place-items-center display text-xl text-white shadow-[3px_3px_0_var(--ink)]">1</div>
+      <div class="display text-2xl">Lärare skapar klass</div>
+      <p class="mt-3 text-[var(--ink)]/70">En knapp. Eleverna får 6-teckenskoder du kan printa som QR-lappar.</p>
+      <div class="mt-5 bg-[var(--yolk)]/40 rounded-xl p-3 font-mono text-sm border-2 border-[var(--ink)]/10">
+        ABC123 · LION99 · KR7X2M · ...
+      </div>
+    </div>
+    <div class="card p-7 relative pop" style="animation-delay:.15s">
+      <div class="absolute -top-5 -left-5 w-12 h-12 rounded-full bg-[var(--plum)] border-2 border-[var(--ink)] grid place-items-center display text-xl text-white shadow-[3px_3px_0_var(--ink)]">2</div>
+      <div class="display text-2xl">Eleven får sina papper</div>
+      <p class="mt-3 text-[var(--ink)]/70">Realistiska lönespecar, kontoutdrag, lånebrev — skräddarsydda per elev och månad.</p>
+      <div class="mt-5 flex gap-2 flex-wrap">
+        <span class="tag">lönespec</span>
+        <span class="tag" style="background:#c6e7d7">kontoutdrag</span>
+        <span class="tag" style="background:#e3ddf6">lån</span>
+        <span class="tag" style="background:#ffd4ce">kreditkort</span>
+      </div>
+    </div>
+    <div class="card p-7 relative pop" style="animation-delay:.3s">
+      <div class="absolute -top-5 -left-5 w-12 h-12 rounded-full bg-[var(--leaf)] border-2 border-[var(--ink)] grid place-items-center display text-xl text-white shadow-[3px_3px_0_var(--ink)]">3</div>
+      <div class="display text-2xl">Professor Ekon coachar</div>
+      <p class="mt-3 text-[var(--ink)]/70">Claude-AI svarar på frågor, rättar reflektioner och ger dig feedback-förslag.</p>
+      <div class="mt-5 bg-[var(--ink)] text-[var(--cream)] rounded-xl p-3 text-sm">
+        <span class="text-[var(--yolk)]">Ekon:</span> Bra reflektion! Men vad hände med amorteringen?
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="max-w-7xl mx-auto px-6 py-16">
+  <div class="card p-10 md:p-14 text-center bg-gradient-to-br from-[var(--yolk)] to-[var(--tomato)]">
+    <h3 class="display text-4xl md:text-5xl">Öppna labbet. Sätt på rockarna.</h3>
+    <p class="mt-3 text-lg max-w-xl mx-auto">Din klass är inloggad innan kaffet kallnar.</p>
+    <div class="mt-7 flex justify-center gap-3 flex-wrap">
+      <a class="btn-primary px-7 py-4 bg-[var(--ink)] text-white">Skapa lärarkonto →</a>
+      <a class="btn-secondary px-7 py-4">Prova demo-läget</a>
+    </div>
+  </div>
+</section>
+
+<footer class="max-w-7xl mx-auto px-6 py-10 text-sm text-[var(--ink)]/60 flex flex-wrap justify-between gap-4">
+  <div>© 2026 Ekonomilabbet</div>
+  <div class="flex gap-4"><a>Integritet</a><a>Tillgänglighet</a><a>info@ekonomilabbet.org</a></div>
+</footer>
+
+</body>
+</html>

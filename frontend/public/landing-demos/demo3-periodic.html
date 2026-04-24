@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ekonomilabbet · Demo 3 — Periodiska systemet för pengar</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111217; --paper:#fbfaf6; --rule:#e7e3d7;
+    --grund:#5b8def; --fordj:#f2994a; --expert:#9b51e0; --konto:#27ae60; --risk:#eb5757;
+  }
+  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
+  .serif{font-family:'Spectral',Georgia,serif;font-weight:800;letter-spacing:-.01em;}
+  .rule{border-color:var(--rule);}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee3;border:1px solid var(--rule);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .elem{
+    position:relative;aspect-ratio:1/1;border:1.5px solid var(--ink);background:#fff;
+    display:flex;flex-direction:column;justify-content:space-between;padding:6px 7px;cursor:pointer;
+    transition:transform .15s,box-shadow .15s,background .15s;
+  }
+  .elem:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.1);background:#fffef5;}
+  .elem .num{font-size:10px;color:#666;}
+  .elem .sym{font-family:'Spectral',serif;font-weight:800;font-size:22px;line-height:1;margin-top:4px;}
+  .elem .name{font-size:9.5px;color:#444;text-transform:uppercase;letter-spacing:.04em;}
+  .elem .val{font-size:9px;color:#888;}
+  .elem.grund{background:#eef3ff;}
+  .elem.fordj{background:#fff3e6;}
+  .elem.expert{background:#f3eaff;}
+  .elem.konto{background:#e8f7ef;}
+  .elem.risk{background:#fdecec;}
+  .elem.special{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .elem.special .num,.elem.special .name,.elem.special .val{color:#d8d5c6;}
+  .legend-dot{width:10px;height:10px;border:1px solid var(--ink);display:inline-block;}
+  @keyframes blink{50%{opacity:.2;}}
+  .blink{animation:blink 1.4s steps(2) infinite;}
+  .tooltip{
+    position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:10px 12px;border-radius:8px;font-size:12px;
+    white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:30;
+  }
+  .elem:hover .tooltip{opacity:1;}
+  .tooltip:after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    border:5px solid transparent;border-top-color:var(--ink);}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<header class="border-b rule">
+  <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-3">
+      <svg width="28" height="28" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="#111217" stroke-width="2"/><text x="20" y="26" text-anchor="middle" font-family="Spectral" font-weight="800" font-size="18">Ek</text></svg>
+      <span class="serif text-xl">Ekonomilabbet</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-7 text-sm">
+      <a>Kursplan</a><a>Läroplan</a><a>Forskning</a><a>För lärare</a><a>För skolor</a>
+    </nav>
+    <div class="flex gap-2">
+      <a class="text-sm px-4 py-2 border rule rounded-md">Elevlogin</a>
+      <a class="text-sm px-4 py-2 bg-[var(--ink)] text-white rounded-md">Lärarkonto</a>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="max-w-7xl mx-auto px-6 pt-16 pb-12 grid md:grid-cols-[1fr_1.4fr] gap-12 items-start">
+  <div>
+    <div class="text-xs uppercase tracking-[0.2em] text-[#888] mb-5">Ekonomilabbet · utgåva 2026</div>
+    <h1 class="serif text-5xl md:text-6xl leading-[1.02]">
+      Det periodiska<br/>systemet för pengar.
+    </h1>
+    <p class="mt-6 text-lg text-[#333] max-w-md">
+      Från <span class="kbd">Lö</span> (lön) till <span class="kbd">Rb</span> (räntebindning) —
+      32 grundbegrepp som en 16-åring behöver för att inte krocka med vuxenlivet.
+      Hovra över en cell. Klassen ser resten.
+    </p>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a class="px-5 py-3 bg-[var(--ink)] text-white rounded-md font-semibold">Prova experimentet</a>
+      <a class="px-5 py-3 border rule rounded-md font-semibold">Ladda ner läroplans­matrisen (PDF)</a>
+    </div>
+
+    <div class="mt-10 text-sm space-y-3">
+      <div class="flex items-center gap-3"><span class="legend-dot" style="background:#eef3ff"></span>Grundkompetens (5)</div>
+      <div class="flex items-center gap-3"><span class="legend-dot" style="background:#fff3e6"></span>Fördjupning (5)</div>
+      <div class="flex items-center gap-3"><span class="legend-dot" style="background:#f3eaff"></span>Expert (2)</div>
+      <div class="flex items-center gap-3"><span class="legend-dot" style="background:#e8f7ef"></span>Konto &amp; flöde</div>
+      <div class="flex items-center gap-3"><span class="legend-dot" style="background:#fdecec"></span>Riskgrupp</div>
+      <div class="flex items-center gap-3"><span class="legend-dot" style="background:#111217"></span>Professorns tillskott</div>
+    </div>
+  </div>
+
+  <!-- Periodic grid -->
+  <div class="relative">
+    <!-- Prof peeking top right -->
+    <svg viewBox="0 0 120 120" class="absolute -top-6 -right-4 w-28 h-28 z-10">
+      <g>
+        <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" stroke-width="3"/>
+        <path d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z" fill="#fff" stroke="#111" stroke-width="3"/>
+        <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
+        <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
+        <circle cx="48" cy="68" r="3" fill="#111"/><circle cx="72" cy="68" r="3" fill="#111"/>
+        <path d="M48 88 Q60 96 72 88" stroke="#111" stroke-width="2.5" fill="none"/>
+        <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" stroke-width="2.5"/>
+      </g>
+    </svg>
+
+    <div class="grid grid-cols-8 gap-1.5">
+      <!-- Row 1: first 8 -->
+      <div class="elem grund"><span class="num">1</span><div><div class="sym">Lö</div><div class="name">Lön</div></div><div class="val">brutto · netto</div>
+        <div class="tooltip">Lön = bruttolön minus skatt = det du faktiskt får</div>
+      </div>
+      <div class="elem grund"><span class="num">2</span><div><div class="sym">Sk</div><div class="name">Skatt</div></div><div class="val">kommun · stat</div>
+        <div class="tooltip">Skatt = din andel av samhället</div>
+      </div>
+      <div class="elem grund"><span class="num">3</span><div><div class="sym">Bu</div><div class="name">Budget</div></div><div class="val">in − ut</div>
+        <div class="tooltip">Budget = planen innan pengarna försvinner</div>
+      </div>
+      <div class="elem konto"><span class="num">4</span><div><div class="sym">Ku</div><div class="name">Kontoutdrag</div></div><div class="val">rörelser</div>
+        <div class="tooltip">Kontoutdrag = bankens dagbok över dig</div>
+      </div>
+      <div class="elem grund"><span class="num">5</span><div><div class="sym">Ka</div><div class="name">Kategori</div></div><div class="val">mat · hyra</div>
+        <div class="tooltip">Kategorisering = första steget till förståelse</div>
+      </div>
+      <div class="elem konto"><span class="num">6</span><div><div class="sym">Sa</div><div class="name">Saldo</div></div><div class="val">kontot nu</div>
+        <div class="tooltip">Saldo = sanningen just nu</div>
+      </div>
+      <div class="elem fordj"><span class="num">7</span><div><div class="sym">Sp</div><div class="name">Sparande</div></div><div class="val">buffert</div>
+        <div class="tooltip">Sparande = framtida du tackar nuvarande du</div>
+      </div>
+      <div class="elem fordj"><span class="num">8</span><div><div class="sym">Hu</div><div class="name">Hushållskost.</div></div><div class="val">Konsumentv.</div>
+        <div class="tooltip">Hushållskostnader = vad det faktiskt kostar att leva</div>
+      </div>
+
+      <!-- Row 2 -->
+      <div class="elem fordj"><span class="num">9</span><div><div class="sym">Bl</div><div class="name">Bolån</div></div><div class="val">räntebärande</div>
+        <div class="tooltip">Bolån = ditt största ekonomiska beslut</div>
+      </div>
+      <div class="elem fordj"><span class="num">10</span><div><div class="sym">Am</div><div class="name">Amortering</div></div><div class="val">betala av</div>
+        <div class="tooltip">Amortering = att krympa skulden, inte bara räntan</div>
+      </div>
+      <div class="elem risk"><span class="num">11</span><div><div class="sym">Ov</div><div class="name">Oväntat</div></div><div class="val">buffert</div>
+        <div class="tooltip">Oväntat = tandläkare, kyl som går sönder, en tisdag</div>
+      </div>
+      <div class="elem risk"><span class="num">12</span><div><div class="sym">Kk</div><div class="name">Kreditkort</div></div><div class="val">kostar om...</div>
+        <div class="tooltip">Kreditkort = bra verktyg, dålig vana</div>
+      </div>
+      <div class="elem expert"><span class="num">13</span><div><div class="sym">Lp</div><div class="name">Långsiktig plan</div></div><div class="val">3–5 år</div>
+        <div class="tooltip">Långsiktig plan = du vet vart du är på väg</div>
+      </div>
+      <div class="elem expert"><span class="num">14</span><div><div class="sym">Rb</div><div class="name">Räntebindning</div></div><div class="val">rörlig/bunden</div>
+        <div class="tooltip">Räntebindning = risk vs. förutsägbarhet</div>
+      </div>
+      <div class="elem special"><span class="num">15</span><div><div class="sym">AI</div><div class="name">Fråga Ekon</div></div><div class="val">Claude Sonnet</div>
+        <div class="tooltip">AI-coach som kan hela kursplanen</div>
+      </div>
+      <div class="elem special"><span class="num">16</span><div><div class="sym">Pf</div><div class="name">Portfolio</div></div><div class="val">PDF-export</div>
+        <div class="tooltip">Portfolio-PDF = lärarens betygsunderlag</div>
+      </div>
+
+      <!-- Row 3 - extras + risk + konto -->
+      <div class="elem konto"><span class="num">17</span><div><div class="sym">In</div><div class="name">Inkomst</div></div><div class="val">lön · bidrag</div></div>
+      <div class="elem konto"><span class="num">18</span><div><div class="sym">Ut</div><div class="name">Utgift</div></div><div class="val">fast · rörlig</div></div>
+      <div class="elem konto"><span class="num">19</span><div><div class="sym">Öv</div><div class="name">Överskott</div></div><div class="val">sparat</div></div>
+      <div class="elem risk"><span class="num">20</span><div><div class="sym">Un</div><div class="name">Underskott</div></div><div class="val">varning</div></div>
+      <div class="elem fordj"><span class="num">21</span><div><div class="sym">Rä</div><div class="name">Ränta</div></div><div class="val">% per år</div></div>
+      <div class="elem fordj"><span class="num">22</span><div><div class="sym">Ef</div><div class="name">Effektiv ränta</div></div><div class="val">verkligt</div></div>
+      <div class="elem special"><span class="num">23</span><div><div class="sym">Rp</div><div class="name">Rubric</div></div><div class="val">bedömning</div></div>
+      <div class="elem special"><span class="num">24</span><div><div class="sym">Qr</div><div class="name">QR-kod</div></div><div class="val">login</div></div>
+
+      <!-- Row 4 -->
+      <div class="elem grund"><span class="num">25</span><div><div class="sym">Pe</div><div class="name">Pension</div></div><div class="val">premie</div></div>
+      <div class="elem grund"><span class="num">26</span><div><div class="sym">Fs</div><div class="name">Försäkring</div></div><div class="val">trygghet</div></div>
+      <div class="elem fordj"><span class="num">27</span><div><div class="sym">Fo</div><div class="name">Fondspar.</div></div><div class="val">index</div></div>
+      <div class="elem expert"><span class="num">28</span><div><div class="sym">Ak</div><div class="name">Aktie</div></div><div class="val">ägarskap</div></div>
+      <div class="elem risk"><span class="num">29</span><div><div class="sym">Sn</div><div class="name">SMS-lån</div></div><div class="val">undvik</div></div>
+      <div class="elem konto"><span class="num">30</span><div><div class="sym">Bg</div><div class="name">Bankgiro</div></div><div class="val">fakturor</div></div>
+      <div class="elem special"><span class="num">31</span><div><div class="sym">Ba</div><div class="name">Batch-PDF</div></div><div class="val">scenarier</div></div>
+      <div class="elem special"><span class="num">32</span><div><div class="sym">Mo</div><div class="name">Modul</div></div><div class="val">7 steg</div></div>
+    </div>
+
+    <!-- caption -->
+    <div class="mt-4 text-xs text-[#777] italic">Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.</div>
+  </div>
+</section>
+
+<!-- DETAIL STRIP -->
+<section class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-10">
+    <div>
+      <div class="serif text-xl">En cell, en kompetens.</div>
+      <p class="mt-2 text-[#444]">Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.</p>
+    </div>
+    <div>
+      <div class="serif text-xl">Lärare rättar i rader.</div>
+      <p class="mt-2 text-[#444]">Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.</p>
+    </div>
+    <div>
+      <div class="serif text-xl">Hela klassen i en bild.</div>
+      <p class="mt-2 text-[#444]">Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="max-w-7xl mx-auto px-6 py-20 text-center">
+  <h2 class="serif text-4xl md:text-5xl">Kursplanen din kemi­lärare aldrig fick.</h2>
+  <p class="mt-4 text-[#555] max-w-xl mx-auto">Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir super-admin.</p>
+  <div class="mt-7 flex justify-center gap-3 flex-wrap">
+    <a class="px-6 py-3.5 bg-[var(--ink)] text-white rounded-md font-semibold">Starta labbet</a>
+    <a class="px-6 py-3.5 border rule rounded-md font-semibold">Boka introduktion</a>
+  </div>
+</section>
+
+<footer class="border-t rule max-w-7xl mx-auto px-6 py-10 text-sm text-[#777] flex flex-wrap justify-between gap-4">
+  <div>© 2026 Ekonomilabbet · Utvecklad i samarbete med lärare</div>
+  <div class="flex gap-4"><a>Integritet</a><a>Tillgänglighet</a><a>info@ekonomilabbet.org</a></div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ekonomilabbet · Demo 1 — Neon Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#07070f; --neon:#5eff9e; --cyan:#62f0ff; --magenta:#ff5cf7; --gold:#ffcf5e;
+  }
+  html,body{background:var(--bg);color:#e7ecff;font-family:'Space Grotesk',system-ui,sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .grid-bg{
+    background-image:
+      linear-gradient(rgba(94,255,158,.06) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(98,240,255,.06) 1px,transparent 1px);
+    background-size:40px 40px;
+  }
+  .noise:after{
+    content:"";position:fixed;inset:0;pointer-events:none;opacity:.04;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence baseFrequency='.9' type='fractalNoise'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/></svg>");
+  }
+  .glow{text-shadow:0 0 18px rgba(94,255,158,.6),0 0 38px rgba(94,255,158,.35);}
+  .glow-cyan{text-shadow:0 0 18px rgba(98,240,255,.6);}
+  .glow-mag{text-shadow:0 0 18px rgba(255,92,247,.6);}
+  .chip{background:rgba(94,255,158,.08);border:1px solid rgba(94,255,158,.35);}
+  .btn-neon{
+    background:linear-gradient(180deg,#5eff9e 0%,#2ee07a 100%);color:#04120a;font-weight:700;
+    box-shadow:0 0 0 1px rgba(94,255,158,.6),0 0 28px rgba(94,255,158,.45),inset 0 1px 0 rgba(255,255,255,.45);
+  }
+  .btn-ghost{border:1px solid rgba(98,240,255,.45);color:#cfefff;}
+  .btn-ghost:hover{background:rgba(98,240,255,.08);}
+  @keyframes bubbleUp{0%{transform:translateY(40px) scale(.6);opacity:0;}15%{opacity:1;}100%{transform:translateY(-320px) scale(1.05);opacity:0;}}
+  .bubble{position:absolute;bottom:48px;left:50%;border-radius:9999px;border:1px solid rgba(94,255,158,.55);background:radial-gradient(circle at 30% 30%,rgba(94,255,158,.35),rgba(94,255,158,.02));animation:bubbleUp 5s linear infinite;}
+  @keyframes shake{0%,100%{transform:rotate(-3deg);}50%{transform:rotate(6deg);}}
+  .flask{animation:shake 1.6s ease-in-out infinite;transform-origin:50% 95%;}
+  @keyframes drift{from{transform:translateY(0) translateX(0);opacity:0;}15%{opacity:1;}to{transform:translateY(-60vh) translateX(20px);opacity:0;}}
+  .drift{position:absolute;animation:drift 14s linear infinite;}
+  @keyframes tick{from{content:"0";}to{content:"1"}}
+  .dash{border:1px solid rgba(98,240,255,.25);background:linear-gradient(180deg,rgba(98,240,255,.05),transparent);}
+  .ring-neon{box-shadow:inset 0 0 0 1px rgba(94,255,158,.4),0 0 40px rgba(94,255,158,.18);}
+  @keyframes pulseLine{0%,100%{opacity:.2;}50%{opacity:.9;}}
+  .pulse-line{animation:pulseLine 2.4s ease-in-out infinite;}
+  .scanlines:before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(180deg,rgba(255,255,255,.03) 0 1px,transparent 1px 3px);
+  }
+</style>
+</head>
+<body class="noise">
+
+<!-- NAV -->
+<header class="sticky top-0 z-30 backdrop-blur-md bg-[#07070f]/70 border-b border-white/5">
+  <nav class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-md bg-gradient-to-br from-[#5eff9e] to-[#62f0ff] grid place-items-center">
+        <svg viewBox="0 0 24 24" class="w-5 h-5 text-black"><path fill="currentColor" d="M7 2h10v5l3 12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3L7 7V2z" opacity=".85"/></svg>
+      </div>
+      <span class="font-bold tracking-tight">EKONOMI<span class="text-[#5eff9e] glow">LABBET</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-7 text-sm text-white/70">
+      <a class="hover:text-white">Experiment</a>
+      <a class="hover:text-white">Kurs­plan</a>
+      <a class="hover:text-white">Dokumentation</a>
+      <a class="hover:text-white">Priser</a>
+    </div>
+    <div class="flex gap-2">
+      <a class="btn-ghost px-3 py-1.5 rounded-md text-sm">Elev-login</a>
+      <a class="btn-neon px-3 py-1.5 rounded-md text-sm">Lärar­portal</a>
+    </div>
+  </nav>
+</header>
+
+<!-- HERO -->
+<section class="relative grid-bg overflow-hidden">
+  <!-- drifting formulas -->
+  <div class="drift mono text-[#5eff9e]/40 text-sm" style="left:8%;animation-delay:-2s">Lön − Skatt = Netto</div>
+  <div class="drift mono text-[#62f0ff]/40 text-sm" style="left:22%;animation-delay:-7s">Σ utgifter ≤ Budget</div>
+  <div class="drift mono text-[#ff5cf7]/40 text-sm" style="left:68%;animation-delay:-4s">Ränta · tid² = oväntad smärta</div>
+  <div class="drift mono text-[#5eff9e]/40 text-sm" style="left:82%;animation-delay:-10s">d(sparande)/dt &gt; 0</div>
+  <div class="drift mono text-[#ffcf5e]/40 text-sm" style="left:52%;animation-delay:-12s">kr + kr = frihet</div>
+
+  <div class="relative max-w-7xl mx-auto px-6 pt-20 pb-28 grid md:grid-cols-2 gap-12 items-center">
+    <!-- left copy -->
+    <div>
+      <div class="chip inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs text-[#5eff9e] mono tracking-wider mb-6">
+        <span class="w-1.5 h-1.5 rounded-full bg-[#5eff9e] pulse-line"></span>
+        EXPERIMENT 004 · LIVE
+      </div>
+      <h1 class="text-5xl md:text-6xl font-bold leading-[1.05] tracking-tight">
+        Vi blandar <span class="text-[#5eff9e] glow">siffror</span><br/>
+        som andra blandar <span class="text-[#62f0ff] glow-cyan">syror</span>.
+      </h1>
+      <p class="mt-6 text-white/70 text-lg max-w-lg">
+        Professor Ekon har låst in sig i labbet och vägrar komma ut förrän varje 16-åring
+        i Sverige förstår lönespec, bolån och budget. Du är välkommen att titta in — på egen risk.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a class="btn-neon px-5 py-3 rounded-md">Starta experimentet →</a>
+        <a class="btn-ghost px-5 py-3 rounded-md">Läs labbrapporten</a>
+      </div>
+      <div class="mt-10 grid grid-cols-3 gap-6 max-w-md">
+        <div><div class="mono text-2xl text-[#5eff9e] glow">12</div><div class="text-xs text-white/50 mt-1">kompetenser</div></div>
+        <div><div class="mono text-2xl text-[#62f0ff] glow-cyan">7</div><div class="text-xs text-white/50 mt-1">steg i första modulen</div></div>
+        <div><div class="mono text-2xl text-[#ff5cf7] glow-mag">∞</div><div class="text-xs text-white/50 mt-1">scenarier via batch-PDF</div></div>
+      </div>
+    </div>
+
+    <!-- right: professor with flask -->
+    <div class="relative h-[520px]">
+      <div class="absolute inset-0 ring-neon rounded-3xl scanlines"></div>
+      <!-- bubbles -->
+      <div class="bubble" style="width:14px;height:14px;animation-delay:-0.3s;left:48%"></div>
+      <div class="bubble" style="width:10px;height:10px;animation-delay:-1.2s;left:52%"></div>
+      <div class="bubble" style="width:22px;height:22px;animation-delay:-2.1s;left:46%"></div>
+      <div class="bubble" style="width:8px;height:8px;animation-delay:-3.3s;left:54%"></div>
+      <div class="bubble" style="width:18px;height:18px;animation-delay:-4.2s;left:49%"></div>
+
+      <svg viewBox="0 0 400 520" class="absolute inset-0 w-full h-full">
+        <defs>
+          <linearGradient id="liq" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#5eff9e"/>
+            <stop offset="1" stop-color="#2ee07a"/>
+          </linearGradient>
+          <radialGradient id="coat" cx=".5" cy=".3">
+            <stop offset="0" stop-color="#e9f2ff"/>
+            <stop offset="1" stop-color="#7a86a3"/>
+          </radialGradient>
+          <filter id="blur"><feGaussianBlur stdDeviation="12"/></filter>
+        </defs>
+        <!-- glow behind prof -->
+        <ellipse cx="200" cy="260" rx="160" ry="180" fill="#5eff9e" opacity=".15" filter="url(#blur)"/>
+
+        <!-- professor body -->
+        <g transform="translate(200 290)">
+          <!-- coat -->
+          <path d="M-70 110 L-90 20 Q-70 -30 -30 -40 L30 -40 Q70 -30 90 20 L70 110 Z" fill="url(#coat)" stroke="#0a0a1a" stroke-width="2"/>
+          <!-- neck -->
+          <rect x="-12" y="-50" width="24" height="18" fill="#ffd6b0"/>
+          <!-- head -->
+          <circle cx="0" cy="-80" r="44" fill="#ffd6b0" stroke="#0a0a1a" stroke-width="2"/>
+          <!-- wild hair -->
+          <path d="M-48 -100 Q-60 -140 -30 -130 Q-40 -160 -10 -145 Q0 -170 20 -145 Q40 -160 30 -130 Q60 -140 48 -100 Q50 -80 40 -80 L-40 -80 Q-50 -80 -48 -100Z" fill="#e7ecff"/>
+          <path d="M-55 -90 L-70 -70 M55 -90 L70 -70 M-60 -110 L-78 -118" stroke="#e7ecff" stroke-width="6" stroke-linecap="round"/>
+          <!-- goggles -->
+          <circle cx="-14" cy="-82" r="13" fill="#07070f" stroke="#5eff9e" stroke-width="2"/>
+          <circle cx="14" cy="-82" r="13" fill="#07070f" stroke="#5eff9e" stroke-width="2"/>
+          <line x1="-1" y1="-82" x2="1" y2="-82" stroke="#5eff9e" stroke-width="3"/>
+          <circle cx="-14" cy="-82" r="3" fill="#5eff9e"/>
+          <circle cx="14" cy="-82" r="3" fill="#5eff9e"/>
+          <!-- mustache + grin -->
+          <path d="M-14 -66 Q0 -58 14 -66" stroke="#2a2a2a" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <path d="M-10 -55 Q0 -48 10 -55" stroke="#2a2a2a" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <!-- arm holding flask -->
+          <path d="M60 -10 Q120 -30 150 -80" stroke="#e9f2ff" stroke-width="22" fill="none" stroke-linecap="round"/>
+          <path d="M60 -10 Q120 -30 150 -80" stroke="#0a0a1a" stroke-width="2" fill="none" stroke-linecap="round" opacity=".4"/>
+        </g>
+
+        <!-- flask (shaking) -->
+        <g class="flask" transform="translate(340 200)">
+          <path d="M-14 -40 L-14 -10 L-34 40 Q-38 60 -20 60 L20 60 Q38 60 34 40 L14 -10 L14 -40 Z"
+                fill="url(#liq)" opacity=".85" stroke="#5eff9e" stroke-width="2"/>
+          <!-- shine -->
+          <path d="M-10 -35 L-10 -5" stroke="#fff" stroke-width="2" opacity=".5"/>
+          <!-- neck cap -->
+          <rect x="-16" y="-48" width="32" height="10" rx="2" fill="#cfefff"/>
+          <!-- number floating above -->
+        </g>
+
+        <!-- floating krona symbols -->
+        <g font-family="JetBrains Mono" font-size="16" fill="#ffcf5e" opacity=".9">
+          <text x="320" y="120" class="drift" style="animation-duration:6s">+1 250 kr</text>
+          <text x="300" y="80" class="drift" style="animation-duration:7s;animation-delay:-2s">− 480 kr</text>
+        </g>
+      </svg>
+
+      <!-- small live panel -->
+      <div class="absolute bottom-4 left-4 dash rounded-xl p-4 w-[240px]">
+        <div class="flex items-center justify-between text-xs text-white/50 mono">
+          <span>LIVE FEED</span>
+          <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-[#5eff9e] pulse-line"></span>OK</span>
+        </div>
+        <div class="mt-3 space-y-1.5 mono text-sm">
+          <div class="flex justify-between"><span class="text-white/60">Lön in</span><span class="text-[#5eff9e]">+24 300</span></div>
+          <div class="flex justify-between"><span class="text-white/60">Hyra</span><span class="text-[#ff5cf7]">−8 900</span></div>
+          <div class="flex justify-between"><span class="text-white/60">Mat</span><span class="text-[#ff5cf7]">−3 420</span></div>
+          <div class="flex justify-between border-t border-white/10 pt-1.5 mt-1.5"><span class="text-white/80">Kvar</span><span class="text-[#5eff9e] glow">+11 980</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- EXPERIMENT LOG -->
+<section class="relative max-w-7xl mx-auto px-6 py-24">
+  <div class="flex items-end justify-between mb-10">
+    <div>
+      <div class="mono text-xs text-[#62f0ff] tracking-widest mb-2">// LABORATORIEJOURNAL</div>
+      <h2 class="text-3xl md:text-4xl font-bold">Tre experiment som redan snurrar i klassrummen</h2>
+    </div>
+    <a class="btn-ghost hidden md:inline-flex px-4 py-2 rounded-md text-sm">Se alla 9 moduler</a>
+  </div>
+
+  <div class="grid md:grid-cols-3 gap-5">
+    <!-- card -->
+    <div class="dash rounded-2xl p-6 hover:border-[#5eff9e]/60 transition">
+      <div class="flex items-center justify-between">
+        <div class="mono text-xs text-[#5eff9e]">EXP-001</div>
+        <div class="text-xs text-white/40 mono">Grund</div>
+      </div>
+      <h3 class="mt-3 text-xl font-bold">Din första månad</h3>
+      <p class="mt-2 text-sm text-white/60">Lönespec, kontoutdrag, budget — eleven landar i vuxenlivet på en vecka.</p>
+      <div class="mt-5 flex items-center gap-2 text-xs mono">
+        <span class="chip px-2 py-0.5 rounded">7 steg</span>
+        <span class="chip px-2 py-0.5 rounded">3 kompetenser</span>
+      </div>
+    </div>
+    <div class="dash rounded-2xl p-6 hover:border-[#62f0ff]/60 transition" style="background:linear-gradient(180deg,rgba(98,240,255,.06),transparent)">
+      <div class="flex items-center justify-between">
+        <div class="mono text-xs text-[#62f0ff]">EXP-004</div>
+        <div class="text-xs text-white/40 mono">Fördjupning</div>
+      </div>
+      <h3 class="mt-3 text-xl font-bold">Bolåne-reaktionen</h3>
+      <p class="mt-2 text-sm text-white/60">Amortering vs ränta vs tid. Eleven simulerar 30 år på 30 sekunder.</p>
+      <div class="mt-5 flex items-center gap-2 text-xs mono">
+        <span class="chip px-2 py-0.5 rounded" style="border-color:rgba(98,240,255,.4);color:#62f0ff">5 steg</span>
+        <span class="chip px-2 py-0.5 rounded" style="border-color:rgba(98,240,255,.4);color:#62f0ff">2 kompetenser</span>
+      </div>
+    </div>
+    <div class="dash rounded-2xl p-6 hover:border-[#ff5cf7]/60 transition" style="background:linear-gradient(180deg,rgba(255,92,247,.06),transparent)">
+      <div class="flex items-center justify-between">
+        <div class="mono text-xs text-[#ff5cf7]">EXP-009</div>
+        <div class="text-xs text-white/40 mono">Expert</div>
+      </div>
+      <h3 class="mt-3 text-xl font-bold">Räntebindnings-experimentet</h3>
+      <p class="mt-2 text-sm text-white/60">Tre familjer, tre strategier, ett avgörande: rörlig eller bunden?</p>
+      <div class="mt-5 flex items-center gap-2 text-xs mono">
+        <span class="chip px-2 py-0.5 rounded" style="border-color:rgba(255,92,247,.4);color:#ff5cf7">6 steg</span>
+        <span class="chip px-2 py-0.5 rounded" style="border-color:rgba(255,92,247,.4);color:#ff5cf7">4 kompetenser</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA strip -->
+<section class="relative border-t border-white/5 bg-gradient-to-r from-[#07070f] via-[#0a1a12] to-[#07070f]">
+  <div class="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-[1fr_auto] items-center gap-8">
+    <div>
+      <h3 class="text-2xl md:text-3xl font-bold">Aktivera labbet för din klass.</h3>
+      <p class="text-white/60 mt-2">Bootstrap-lärare blir super-admin. Elever får 6-teckenskoder. AI slås på när du vill.</p>
+    </div>
+    <div class="flex gap-3">
+      <a class="btn-neon px-6 py-3 rounded-md">Skapa lärarkonto</a>
+      <a class="btn-ghost px-6 py-3 rounded-md">Boka demo</a>
+    </div>
+  </div>
+</section>
+
+<footer class="max-w-7xl mx-auto px-6 py-10 text-xs text-white/40 mono flex flex-wrap justify-between gap-4">
+  <div>© 2026 Ekonomilabbet · Cloud Run · <span class="text-[#5eff9e]">europe-north1</span></div>
+  <div class="flex gap-4"><a>Integritet</a><a>Tillgänglighet</a><a>info@ekonomilabbet.org</a></div>
+</footer>
+
+</body>
+</html>

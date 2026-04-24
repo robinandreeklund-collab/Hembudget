@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ekonomilabbet · Demo 4 — Split Screen Reaction</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b0b10; --paper:#ffffff; --line:#e6e6ec; --accent:#0066ff; --up:#00b368; --down:#ff3b3b;
+  }
+  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
+  .serif{font-family:'Instrument Serif',Georgia,serif;font-weight:400;letter-spacing:-.01em;}
+  .italic-serif{font-family:'Instrument Serif',serif;font-style:italic;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+  .rule{border-color:var(--line);}
+  @keyframes shake-flask{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(7deg)}}
+  .shake{animation:shake-flask 1.3s ease-in-out infinite;transform-origin:50% 90%;}
+  @keyframes bubble{0%{transform:translateY(30px) scale(.5);opacity:0;}10%{opacity:1;}100%{transform:translateY(-260px) scale(1);opacity:0;}}
+  .bubble{position:absolute;border-radius:9999px;background:radial-gradient(circle at 30% 30%,rgba(0,102,255,.55),rgba(0,102,255,.05));animation:bubble 4.5s ease-in infinite;}
+  @keyframes tick-up{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+  .tick{animation:tick-up 1.3s ease-in-out infinite;}
+  @keyframes bar-grow{from{height:0}to{height:var(--h)}}
+  .bar{animation:bar-grow 1.8s cubic-bezier(.3,1,.5,1) forwards;}
+  @keyframes pulse-ring{
+    0%{transform:scale(.9);opacity:.6}
+    100%{transform:scale(2.2);opacity:0}
+  }
+  .ring{position:absolute;inset:0;border-radius:9999px;border:2px solid #0066ff;animation:pulse-ring 2.2s ease-out infinite;}
+  @keyframes count{0%{opacity:.4}100%{opacity:1}}
+  .count{animation:count .4s ease-out;}
+  .gridline{background-image:linear-gradient(90deg,transparent 1px,rgba(0,0,0,.04) 1px),linear-gradient(180deg,transparent 1px,rgba(0,0,0,.04) 1px);background-size:40px 40px;}
+  .accent{color:var(--accent);}
+  .chip{border:1px solid var(--line);border-radius:9999px;padding:4px 10px;font-size:11px;}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- NAV -->
+<header class="border-b rule">
+  <nav class="max-w-[1400px] mx-auto px-8 h-16 flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-3">
+      <svg width="22" height="22" viewBox="0 0 22 22"><rect x="1" y="1" width="20" height="20" rx="4" fill="#0b0b10"/><circle cx="11" cy="11" r="5" fill="none" stroke="#0066ff" stroke-width="2"/></svg>
+      <span class="serif text-xl">Ekonomilabbet</span>
+    </a>
+    <div class="hidden md:flex gap-8 text-sm text-[#555]">
+      <a class="hover:text-black">Produkt</a><a class="hover:text-black">Kursplan</a>
+      <a class="hover:text-black">Priser</a><a class="hover:text-black">Logga in</a>
+    </div>
+    <a class="text-sm px-4 py-2 bg-[var(--ink)] text-white rounded-md">Starta gratis →</a>
+  </nav>
+</header>
+
+<!-- HERO SPLIT -->
+<section class="grid md:grid-cols-2 min-h-[calc(100vh-4rem)]">
+
+  <!-- LEFT: professor shaking flask -->
+  <div class="relative border-r rule gridline flex items-center justify-center overflow-hidden">
+    <!-- corner label -->
+    <div class="absolute top-6 left-6 text-xs mono text-[#999] tracking-widest">01 · REAKTORN</div>
+    <div class="absolute top-6 right-6 text-xs mono text-[#999]">09:42:17</div>
+
+    <div class="relative w-[420px] h-[520px]">
+      <!-- bubbles rising above flask -->
+      <div class="bubble" style="width:18px;height:18px;left:48%;bottom:260px;animation-delay:-.2s"></div>
+      <div class="bubble" style="width:10px;height:10px;left:52%;bottom:260px;animation-delay:-1.3s"></div>
+      <div class="bubble" style="width:24px;height:24px;left:46%;bottom:260px;animation-delay:-2.4s"></div>
+      <div class="bubble" style="width:12px;height:12px;left:54%;bottom:260px;animation-delay:-3.3s"></div>
+
+      <svg viewBox="0 0 420 520" class="absolute inset-0 w-full h-full">
+        <defs>
+          <linearGradient id="liq2" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#0066ff" stop-opacity=".95"/>
+            <stop offset="1" stop-color="#0044cc" stop-opacity=".95"/>
+          </linearGradient>
+        </defs>
+
+        <!-- table -->
+        <line x1="40" y1="470" x2="380" y2="470" stroke="#0b0b10" stroke-width="1.5"/>
+        <line x1="40" y1="470" x2="20" y2="510" stroke="#0b0b10" stroke-width="1"/>
+        <line x1="380" y1="470" x2="400" y2="510" stroke="#0b0b10" stroke-width="1"/>
+
+        <!-- professor body -->
+        <g transform="translate(130 250)">
+          <path d="M-60 220 L-70 80 Q-60 40 -25 30 L30 30 Q60 40 70 80 L55 220 Z" fill="#fff" stroke="#0b0b10" stroke-width="2"/>
+          <!-- tie -->
+          <path d="M0 40 L10 70 L0 100 L-10 70Z" fill="#0066ff" stroke="#0b0b10" stroke-width="1.5"/>
+          <!-- neck -->
+          <rect x="-14" y="8" width="28" height="26" fill="#ffd0a8" stroke="#0b0b10" stroke-width="2"/>
+          <!-- head -->
+          <ellipse cx="0" cy="-30" rx="50" ry="54" fill="#ffd0a8" stroke="#0b0b10" stroke-width="2"/>
+          <!-- hair -->
+          <path d="M-52 -50 Q-60 -120 -20 -100 Q-30 -140 0 -110 Q30 -140 20 -100 Q60 -120 52 -50 Q55 -30 35 -35 L-35 -35 Q-55 -30 -52 -50Z"
+                fill="#e8e8ee" stroke="#0b0b10" stroke-width="2"/>
+          <path d="M-55 -60 L-75 -55 M55 -60 L75 -55 M-30 -115 L-40 -135" stroke="#0b0b10" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <!-- goggles -->
+          <circle cx="-14" cy="-30" r="15" fill="#fff" stroke="#0b0b10" stroke-width="2"/>
+          <circle cx="14" cy="-30" r="15" fill="#fff" stroke="#0b0b10" stroke-width="2"/>
+          <line x1="1" y1="-30" x2="-1" y2="-30" stroke="#0b0b10" stroke-width="2"/>
+          <circle cx="-14" cy="-30" r="4" fill="#0b0b10"/><circle cx="14" cy="-30" r="4" fill="#0b0b10"/>
+          <!-- mustache -->
+          <path d="M-14 -5 Q-4 2 0 -3 Q4 2 14 -5" stroke="#0b0b10" stroke-width="2.5" fill="#0b0b10" stroke-linecap="round"/>
+          <!-- arm holding flask -->
+          <path d="M55 120 Q120 80 160 40" stroke="#fff" stroke-width="22" fill="none" stroke-linecap="round"/>
+          <path d="M55 120 Q120 80 160 40" stroke="#0b0b10" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <circle cx="160" cy="40" r="14" fill="#ffd0a8" stroke="#0b0b10" stroke-width="2"/>
+        </g>
+
+        <!-- flask held (shaking) -->
+        <g class="shake" transform="translate(290 260)" style="transform-origin:0 40px">
+          <rect x="-14" y="-40" width="28" height="12" rx="2" fill="#e6eefc" stroke="#0b0b10" stroke-width="2"/>
+          <path d="M-12 -28 L-12 0 L-40 70 Q-46 95 -18 95 L18 95 Q46 95 40 70 L12 0 L12 -28 Z"
+                fill="url(#liq2)" stroke="#0b0b10" stroke-width="2"/>
+          <path d="M-10 -25 L-10 -5" stroke="#fff" stroke-width="2" opacity=".6"/>
+          <!-- bubbles inside -->
+          <circle cx="-10" cy="60" r="3" fill="#fff" opacity=".8"/>
+          <circle cx="10" cy="45" r="4" fill="#fff" opacity=".8"/>
+          <circle cx="0" cy="75" r="3" fill="#fff" opacity=".8"/>
+        </g>
+
+        <!-- floating numbers near flask -->
+        <g font-family="ui-monospace" font-size="12" fill="#0066ff">
+          <text x="340" y="180" class="tick">+1 240</text>
+          <text x="335" y="200" opacity=".6">−480</text>
+          <text x="350" y="220" opacity=".4">+200</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- caption -->
+    <div class="absolute bottom-8 left-8 right-8 flex justify-between items-end text-xs mono text-[#888]">
+      <div>
+        <div class="serif italic-serif text-2xl text-[#0b0b10] not-italic">Experiment #004</div>
+        <div class="mt-1">Budget-reaktion · amplitud 0.73</div>
+      </div>
+      <div class="chip bg-white">Live · <span class="accent">stabil</span></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: reactive dashboard -->
+  <div class="relative p-10 md:p-14 flex flex-col justify-center">
+    <div class="max-w-md">
+      <div class="text-xs mono text-[#999] tracking-widest mb-4">02 · DATA</div>
+      <h1 class="serif text-[72px] md:text-[96px] leading-[.95] tracking-tight">
+        Varje skakning<br/>blir en <span class="italic-serif accent">siffra</span>.
+      </h1>
+      <p class="mt-6 text-[#555] text-lg max-w-sm">
+        Professorns kolv är elevernas uppdrag. När de löser ett moment dyker data upp till höger —
+        i din klass-panel, i realtid.
+      </p>
+      <div class="mt-8 flex gap-3">
+        <a class="px-5 py-3 bg-[var(--ink)] text-white rounded-md font-semibold">Se reaktionen</a>
+        <a class="px-5 py-3 border rule rounded-md font-semibold">Läs mer</a>
+      </div>
+    </div>
+
+    <!-- live mini dashboard -->
+    <div class="mt-12 border rule rounded-xl p-6 max-w-md bg-white shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2"><span class="relative flex h-2 w-2"><span class="ring"></span><span class="absolute inset-0 rounded-full bg-[var(--accent)]"></span></span>
+          <span class="text-xs mono">Klass 9B · 24 elever</span>
+        </div>
+        <span class="chip">Nu</span>
+      </div>
+
+      <div class="flex items-end gap-2 h-28">
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full bg-[#eaf1ff] rounded-sm bar" style="--h:45%;"></div>
+          <span class="text-[10px] mono text-[#888]">mån</span>
+        </div>
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full bg-[#eaf1ff] rounded-sm bar" style="--h:60%;animation-delay:.1s"></div>
+          <span class="text-[10px] mono text-[#888]">tis</span>
+        </div>
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full bg-[#0066ff] rounded-sm bar" style="--h:85%;animation-delay:.2s"></div>
+          <span class="text-[10px] mono text-[#888]">ons</span>
+        </div>
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full bg-[#eaf1ff] rounded-sm bar" style="--h:70%;animation-delay:.3s"></div>
+          <span class="text-[10px] mono text-[#888]">tors</span>
+        </div>
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full bg-[#eaf1ff] rounded-sm bar" style="--h:95%;animation-delay:.4s"></div>
+          <span class="text-[10px] mono text-[#888]">fre</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 mt-5 text-xs">
+        <div>
+          <div class="text-[#888] mono">Avklarat</div>
+          <div class="serif text-2xl mt-0.5"><span class="count">142</span></div>
+        </div>
+        <div>
+          <div class="text-[#888] mono">Reflektioner</div>
+          <div class="serif text-2xl mt-0.5"><span class="count">37</span></div>
+        </div>
+        <div>
+          <div class="text-[#888] mono">Att rätta</div>
+          <div class="serif text-2xl mt-0.5 accent">6</div>
+        </div>
+      </div>
+
+      <div class="mt-5 flex items-center justify-between border-t rule pt-4">
+        <div class="text-xs mono text-[#666]">Mastery snitt</div>
+        <div class="flex items-center gap-2">
+          <span class="serif text-xl">68 %</span>
+          <span class="text-xs text-[var(--up)] mono">↑ 4</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON STRIP -->
+<section class="border-t rule">
+  <div class="max-w-[1400px] mx-auto px-8 py-20 grid md:grid-cols-[1fr_2fr] gap-12">
+    <div>
+      <div class="text-xs mono text-[#999] tracking-widest mb-4">03 · SÅ SKILJER SIG EKONOMILABBET</div>
+      <h2 class="serif text-5xl leading-[1.02]">Inte en <span class="italic-serif">lärobok.</span><br/>Ett labb.</h2>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div>
+        <div class="serif text-3xl">01</div>
+        <div class="mt-2 font-semibold">Realistiska papper</div>
+        <p class="text-sm text-[#666] mt-1">Lönespec, lånebrev, kontoutdrag — genererade per elev.</p>
+      </div>
+      <div>
+        <div class="serif text-3xl">02</div>
+        <div class="mt-2 font-semibold">AI som coach, inte facit</div>
+        <p class="text-sm text-[#666] mt-1">Claude frågar tillbaka istället för att ge svar.</p>
+      </div>
+      <div>
+        <div class="serif text-3xl">03</div>
+        <div class="mt-2 font-semibold">Mastery, inte prov</div>
+        <p class="text-sm text-[#666] mt-1">12 kompetenser, inte 12 frågor.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="border-t rule">
+  <div class="max-w-[1400px] mx-auto px-8 py-8 flex flex-wrap justify-between gap-4 text-sm text-[#888]">
+    <div>© 2026 Ekonomilabbet</div>
+    <div class="flex gap-6"><a>Integritet</a><a>Tillgänglighet</a><a>info@ekonomilabbet.org</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
