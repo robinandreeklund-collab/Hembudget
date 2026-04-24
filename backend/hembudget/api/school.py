@@ -25,13 +25,29 @@ from pydantic import BaseModel, EmailStr, Field
 
 from ..school import is_enabled as school_enabled
 from ..school.engines import (
+    drop_scope_db,
     drop_student_db,
+    get_scope_engine,
     get_student_engine,
     master_session,
+    reset_scope_db,
     reset_student_db,
+    scope_context,
+    scope_for_student,
     student_scope,
 )
-from ..school.models import Student, StudentDataGenerationRun, Teacher
+from ..school.models import (
+    Assignment,
+    BatchArtifact,
+    Family,
+    ScenarioBatch,
+    Student,
+    StudentDataGenerationRun,
+    StudentProfile,
+    Teacher,
+)
+from ..school.profile_fixtures import generate_profile
+from ..school.tax import compute_net_salary
 from ..security.crypto import hash_password, random_token, verify_password
 from .deps import (
     TokenInfo,
@@ -72,6 +88,14 @@ class TeacherAuthOut(BaseModel):
 class StudentIn(BaseModel):
     display_name: str
     class_label: Optional[str] = None
+    family_id: Optional[int] = None
+
+
+class StudentUpdate(BaseModel):
+    display_name: Optional[str] = None
+    class_label: Optional[str] = None
+    family_id: Optional[int] = None  # null = ta ur familj
+    active: Optional[bool] = None
 
 
 class StudentOut(BaseModel):
@@ -80,12 +104,78 @@ class StudentOut(BaseModel):
     class_label: Optional[str]
     login_code: str
     active: bool
+    onboarding_completed: bool
+    family_id: Optional[int] = None
+    family_name: Optional[str] = None
+    profession: Optional[str] = None
+    personality: Optional[str] = None
     last_login_at: Optional[datetime]
     created_at: datetime
 
 
 class StudentWithRunsOut(StudentOut):
     months_generated: list[str]
+
+
+class FamilyIn(BaseModel):
+    name: str
+
+
+class FamilyOut(BaseModel):
+    id: int
+    name: str
+    member_count: int
+    created_at: datetime
+
+
+class StudentProfileOut(BaseModel):
+    student_id: int
+    profession: str
+    employer: str
+    gross_salary_monthly: int
+    net_salary_monthly: int
+    tax_rate_effective: float
+    personality: str
+    age: int
+    city: str
+    family_status: str
+    housing_type: str
+    housing_monthly: int
+    has_mortgage: bool
+    has_car_loan: bool
+    has_student_loan: bool
+    has_credit_card: bool
+    backstory: Optional[str]
+
+
+class StudentProfileUpdate(BaseModel):
+    """Lärarens override-fält. Allt valfritt — sätt bara det du vill ändra."""
+    profession: Optional[str] = None
+    employer: Optional[str] = None
+    gross_salary_monthly: Optional[int] = None
+    personality: Optional[str] = None
+    age: Optional[int] = None
+    city: Optional[str] = None
+    family_status: Optional[str] = None
+    housing_type: Optional[str] = None
+    housing_monthly: Optional[int] = None
+    has_mortgage: Optional[bool] = None
+    has_car_loan: Optional[bool] = None
+    has_student_loan: Optional[bool] = None
+    has_credit_card: Optional[bool] = None
+    backstory: Optional[str] = None
+
+
+class TaxBreakdownOut(BaseModel):
+    gross_monthly: int
+    grundavdrag: int
+    taxable: int
+    kommunal_tax: int
+    statlig_tax: int
+    total_tax: int
+    net_monthly: int
+    effective_rate: float
+    explanation: str
 
 
 class StudentLoginIn(BaseModel):
@@ -97,6 +187,8 @@ class StudentAuthOut(BaseModel):
     student_id: int
     display_name: str
     class_label: Optional[str]
+    onboarding_completed: bool = False
+    family_id: Optional[int] = None
 
 
 class GenerateIn(BaseModel):
@@ -129,6 +221,56 @@ def _gen_login_code() -> str:
     """6-tecken kod, enkel att läsa (inga 0/O/1/I)."""
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(random.choice(alphabet) for _ in range(6))
+
+
+def _create_profile_for_student(session, student: Student) -> StudentProfile:
+    """Slumpa fram en deterministisk profil + cache:a netto-lön."""
+    gen = generate_profile(student.id, student.display_name)
+    tax = compute_net_salary(gen.gross_salary_monthly)
+    profile = StudentProfile(
+        student_id=student.id,
+        profession=gen.profession,
+        employer=gen.employer,
+        gross_salary_monthly=gen.gross_salary_monthly,
+        net_salary_monthly=tax.net_monthly,
+        tax_rate_effective=tax.effective_rate,
+        personality=gen.personality,
+        age=gen.age,
+        city=gen.city,
+        family_status=gen.family_status,
+        housing_type=gen.housing_type,
+        housing_monthly=gen.housing_monthly,
+        has_mortgage=gen.has_mortgage,
+        has_car_loan=gen.has_car_loan,
+        has_student_loan=gen.has_student_loan,
+        has_credit_card=gen.has_credit_card,
+        backstory=gen.backstory,
+    )
+    session.add(profile)
+    session.flush()
+    return profile
+
+
+def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
+    return StudentProfileOut(
+        student_id=p.student_id,
+        profession=p.profession,
+        employer=p.employer,
+        gross_salary_monthly=p.gross_salary_monthly,
+        net_salary_monthly=p.net_salary_monthly,
+        tax_rate_effective=p.tax_rate_effective,
+        personality=p.personality,
+        age=p.age,
+        city=p.city,
+        family_status=p.family_status,
+        housing_type=p.housing_type,
+        housing_monthly=p.housing_monthly,
+        has_mortgage=p.has_mortgage,
+        has_car_loan=p.has_car_loan,
+        has_student_loan=p.has_student_loan,
+        has_credit_card=p.has_credit_card,
+        backstory=p.backstory,
+    )
 
 
 # ---------- Teacher: bootstrap + login ----------
@@ -212,6 +354,11 @@ def _student_to_out(s: Student) -> StudentOut:
         class_label=s.class_label,
         login_code=s.login_code,
         active=s.active,
+        onboarding_completed=s.onboarding_completed,
+        family_id=s.family_id,
+        family_name=s.family.name if s.family else None,
+        profession=s.profile.profession if s.profile else None,
+        personality=s.profile.personality if s.profile else None,
         last_login_at=s.last_login_at,
         created_at=s.created_at,
     )
@@ -237,15 +384,10 @@ def list_students(
                 .order_by(StudentDataGenerationRun.year_month)
                 .all()
             )
+            base = _student_to_out(st)
             out.append(
                 StudentWithRunsOut(
-                    id=st.id,
-                    display_name=st.display_name,
-                    class_label=st.class_label,
-                    login_code=st.login_code,
-                    active=st.active,
-                    last_login_at=st.last_login_at,
-                    created_at=st.created_at,
+                    **base.model_dump(),
                     months_generated=[r[0] for r in runs],
                 )
             )
@@ -259,6 +401,15 @@ def create_student(
 ) -> StudentOut:
     _require_school_mode()
     with master_session() as s:
+        # Validera familj
+        if payload.family_id is not None:
+            fam = s.query(Family).filter(
+                Family.id == payload.family_id,
+                Family.teacher_id == info.teacher_id,
+            ).first()
+            if not fam:
+                raise HTTPException(404, "Family not found")
+
         # Generera unik login_code (max 5 försök)
         code = None
         for _ in range(5):
@@ -270,14 +421,59 @@ def create_student(
             raise HTTPException(500, "Could not generate login code")
         student = Student(
             teacher_id=info.teacher_id,
+            family_id=payload.family_id,
             display_name=payload.display_name,
             class_label=payload.class_label,
             login_code=code,
         )
         s.add(student)
         s.flush()
-        # Skapa elevens DB direkt så kategorier seeds
-        get_student_engine(student.id)
+        # Skapa profil deterministiskt på student_id
+        _create_profile_for_student(s, student)
+        # Skapa scope-DB direkt så kategorier seeds
+        get_scope_engine(scope_for_student(student))
+        s.refresh(student)
+        return _student_to_out(student)
+
+
+@router.patch("/teacher/students/{student_id}", response_model=StudentOut)
+def update_student(
+    student_id: int,
+    payload: StudentUpdate,
+    info: TokenInfo = Depends(require_teacher),
+) -> StudentOut:
+    _require_school_mode()
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if payload.display_name is not None:
+            student.display_name = payload.display_name
+        if payload.class_label is not None:
+            student.class_label = payload.class_label or None
+        if payload.active is not None:
+            student.active = payload.active
+        # Familjehantering: byte av familj betyder byte av scope-DB!
+        # Vi kopierar INTE data mellan DB:erna — eleven börjar från noll
+        # i den nya scopen. Detta är ett medvetet pedagogiskt val:
+        # familjen delar ekonomi från och med "nu".
+        if payload.family_id is not None or "family_id" in payload.model_fields_set:
+            new_family_id = payload.family_id  # kan vara None
+            if new_family_id is not None:
+                fam = s.query(Family).filter(
+                    Family.id == new_family_id,
+                    Family.teacher_id == info.teacher_id,
+                ).first()
+                if not fam:
+                    raise HTTPException(404, "Family not found")
+            student.family_id = new_family_id
+            s.flush()
+            # Säkerställ att nya scope-DB:n finns
+            get_scope_engine(scope_for_student(student))
+        s.refresh(student)
         return _student_to_out(student)
 
 
@@ -295,9 +491,22 @@ def delete_student(
         )
         if not student:
             raise HTTPException(404, "Student not found")
-        # generation_runs raderas via cascade
-        s.delete(student)
-    drop_student_db(student_id)
+        # OBS: om eleven är solo (inte i familj), radera även scope-DB.
+        # Familjemedlemmar delar DB — radera den bara om hen var den
+        # sista i familjen.
+        scope_to_drop = None
+        if not student.family_id:
+            scope_to_drop = scope_for_student(student)
+        else:
+            siblings = s.query(Student).filter(
+                Student.family_id == student.family_id,
+                Student.id != student.id,
+            ).count()
+            if siblings == 0:
+                scope_to_drop = scope_for_student(student)
+        s.delete(student)  # cascade → profile, generation_runs
+    if scope_to_drop:
+        drop_scope_db(scope_to_drop)
     return {"ok": True}
 
 
@@ -306,6 +515,9 @@ def reset_student(
     student_id: int,
     info: TokenInfo = Depends(require_teacher),
 ) -> dict:
+    """Nollställ all transaktionsdata + onboarding-status. Behåll
+    profilen (samma identitet, samma lön). Familje-DB nollställs för
+    alla medlemmar samtidigt — det är meningen."""
     _require_school_mode()
     with master_session() as s:
         student = (
@@ -315,13 +527,208 @@ def reset_student(
         )
         if not student:
             raise HTTPException(404, "Student not found")
-        # Rensa generation-runs så de kan regenereras
+        scope_key = scope_for_student(student)
+        # Rensa generation-runs och onboarding-flagga för alla
+        # familjemedlemmar (eller bara denna elev om solo)
+        if student.family_id:
+            family_member_ids = [
+                m.id for m in s.query(Student).filter(
+                    Student.family_id == student.family_id
+                ).all()
+            ]
+        else:
+            family_member_ids = [student.id]
         s.query(StudentDataGenerationRun).filter(
-            StudentDataGenerationRun.student_id == student_id
-        ).delete()
-    reset_student_db(student_id)
+            StudentDataGenerationRun.student_id.in_(family_member_ids)
+        ).delete(synchronize_session=False)
+        for sid in family_member_ids:
+            m = s.query(Student).filter(Student.id == sid).first()
+            if m:
+                m.onboarding_completed = False
+    reset_scope_db(scope_key)
     # Skapa ny DB + seed kategorier
-    get_student_engine(student_id)
+    get_scope_engine(scope_key)
+    return {"ok": True}
+
+
+# ---------- Familjer ----------
+
+@router.get("/teacher/families", response_model=list[FamilyOut])
+def list_families(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[FamilyOut]:
+    _require_school_mode()
+    with master_session() as s:
+        fams = s.query(Family).filter(
+            Family.teacher_id == info.teacher_id
+        ).order_by(Family.name).all()
+        return [
+            FamilyOut(
+                id=f.id, name=f.name,
+                member_count=len(f.members),
+                created_at=f.created_at,
+            )
+            for f in fams
+        ]
+
+
+@router.post("/teacher/families", response_model=FamilyOut)
+def create_family(
+    payload: FamilyIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> FamilyOut:
+    _require_school_mode()
+    with master_session() as s:
+        fam = Family(teacher_id=info.teacher_id, name=payload.name)
+        s.add(fam)
+        s.flush()
+        return FamilyOut(
+            id=fam.id, name=fam.name, member_count=0,
+            created_at=fam.created_at,
+        )
+
+
+@router.delete("/teacher/families/{family_id}")
+def delete_family(
+    family_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        fam = s.query(Family).filter(
+            Family.id == family_id,
+            Family.teacher_id == info.teacher_id,
+        ).first()
+        if not fam:
+            raise HTTPException(404, "Family not found")
+        # Lös upp familjebanden men behåll eleverna (de blir solo igen
+        # och får sina egna scope-DB:er)
+        for member in list(fam.members):
+            member.family_id = None
+        s.flush()
+        # Radera familje-scope-DB:n
+        drop_scope_db(f"f_{family_id}")
+        s.delete(fam)
+    return {"ok": True}
+
+
+# ---------- Profile ----------
+
+@router.get(
+    "/teacher/students/{student_id}/profile",
+    response_model=StudentProfileOut,
+)
+def get_student_profile(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> StudentProfileOut:
+    _require_school_mode()
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if not student.profile:
+            # Backward-compat för elever skapade innan profile fanns
+            _create_profile_for_student(s, student)
+        return _profile_to_out(student.profile)
+
+
+@router.patch(
+    "/teacher/students/{student_id}/profile",
+    response_model=StudentProfileOut,
+)
+def update_student_profile(
+    student_id: int,
+    payload: StudentProfileUpdate,
+    info: TokenInfo = Depends(require_teacher),
+) -> StudentProfileOut:
+    _require_school_mode()
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if not student.profile:
+            _create_profile_for_student(s, student)
+        prof = student.profile
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(prof, field, value)
+        # Räkna om netto om bruttolönen ändrades
+        if "gross_salary_monthly" in payload.model_fields_set:
+            tax = compute_net_salary(prof.gross_salary_monthly)
+            prof.net_salary_monthly = tax.net_monthly
+            prof.tax_rate_effective = tax.effective_rate
+        s.flush()
+        return _profile_to_out(prof)
+
+
+@router.get("/student/profile", response_model=StudentProfileOut)
+def student_get_own_profile(
+    info: TokenInfo = Depends(require_token),
+) -> StudentProfileOut:
+    """Eleven läser sin egen profil (för onboarding och info-vy)."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if not student.profile:
+            _create_profile_for_student(s, student)
+        return _profile_to_out(student.profile)
+
+
+# ---------- Tax-helper ----------
+
+@router.get("/school/tax/breakdown", response_model=TaxBreakdownOut)
+def tax_breakdown(gross_monthly: int) -> TaxBreakdownOut:
+    """Räkna ut nettolön + skattefördelning + förklaring för en bruttolön.
+    Används av onboarding-stegen och budget-setup."""
+    if gross_monthly <= 0 or gross_monthly > 1_000_000:
+        raise HTTPException(400, "gross_monthly out of range")
+    t = compute_net_salary(gross_monthly)
+    return TaxBreakdownOut(
+        gross_monthly=t.gross_monthly,
+        grundavdrag=t.grundavdrag,
+        taxable=t.taxable,
+        kommunal_tax=t.kommunal_tax,
+        statlig_tax=t.statlig_tax,
+        total_tax=t.total_tax,
+        net_monthly=t.net_monthly,
+        effective_rate=t.effective_rate,
+        explanation=t.explanation,
+    )
+
+
+# ---------- Onboarding ----------
+
+class OnboardingCompleteIn(BaseModel):
+    """Marker att eleven har gått igenom hela onboarding-flödet."""
+    pass
+
+
+@router.post("/student/onboarding/complete")
+def complete_onboarding(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        student.onboarding_completed = True
     return {"ok": True}
 
 
@@ -344,11 +751,11 @@ def generate_month(
             q = q.filter(Student.id.in_(payload.student_ids))
         students = q.all()
         student_list = [
-            (st.id, st.display_name) for st in students
+            (st.id, st.display_name, scope_for_student(st)) for st in students
         ]
 
     results: list[GenerateResultRow] = []
-    for sid, name in student_list:
+    for sid, name, scope_key in student_list:
         seed = abs(hash((sid, payload.year_month))) & 0xFFFFFFFF
         with master_session() as s:
             existing = (
@@ -371,9 +778,9 @@ def generate_month(
                 continue
 
         try:
-            # Öppna elevens DB + kör generatorn
-            get_student_engine(sid)
-            with student_scope(sid):
+            # Öppna scope-DB + kör generatorn
+            get_scope_engine(scope_key)
+            with scope_context(scope_key):
                 gen = MonthlyDataGenerator(
                     student_id=sid,
                     year_month=payload.year_month,
@@ -434,17 +841,24 @@ def student_login(payload: StudentLoginIn) -> StudentAuthOut:
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, "Invalid code",
             )
+        # Säkerställ profil (för elever skapade innan profile fanns)
+        if not student.profile:
+            _create_profile_for_student(s, student)
         student.last_login_at = datetime.utcnow()
         sid = student.id
         name = student.display_name
         cls = student.class_label
-    # Säkerställ att elevens DB finns (med seed)
-    get_student_engine(sid)
+        onb = student.onboarding_completed
+        fam_id = student.family_id
+        scope_key = scope_for_student(student)
+    # Säkerställ att scope-DB:n finns (med seed)
+    get_scope_engine(scope_key)
     token = random_token()
     register_token(token, role="student", student_id=sid)
     return StudentAuthOut(
         token=token, student_id=sid,
         display_name=name, class_label=cls,
+        onboarding_completed=onb, family_id=fam_id,
     )
 
 
@@ -497,4 +911,6 @@ def student_me(info: TokenInfo = Depends(require_token)) -> StudentAuthOut:
         return StudentAuthOut(
             token=info.token, student_id=st.id,
             display_name=st.display_name, class_label=st.class_label,
+            onboarding_completed=st.onboarding_completed,
+            family_id=st.family_id,
         )

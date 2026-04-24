@@ -78,14 +78,14 @@ def get_engine() -> Engine:
 
 @contextmanager
 def session_scope() -> Iterator[Session]:
-    # School-mode: om aktuell request har en current_student_id i context,
-    # öppna elevens egna SQLite-fil i stället för den globala.
+    # School-mode: om aktuell request har en scope-nyckel i context,
+    # öppna scope-DB:n (elev eller familj) i stället för den globala.
     from ..school import is_enabled as _school_enabled
     if _school_enabled():
-        from ..school.engines import get_current_student, get_student_session
-        sid = get_current_student()
-        if sid is not None:
-            maker = get_student_session(sid)
+        from ..school.engines import get_current_scope, get_scope_session
+        scope_key = get_current_scope()
+        if scope_key:
+            maker = get_scope_session(scope_key)
             session = maker()
             try:
                 yield session
