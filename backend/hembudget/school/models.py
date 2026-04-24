@@ -704,6 +704,52 @@ class ModuleStepCompetency(MasterBase):
     weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
 
 
+class AskAiThread(MasterBase):
+    """En AskAI-chattråd mellan en elev/lärare och Claude. Varje tråd
+    har flera meddelanden — möjliggör multi-turn där modellen "minns"
+    tidigare frågor i samma session."""
+    __tablename__ = "ask_ai_threads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # student_id är primärt ägare-fält; lärare kan ha egna trådar med
+    # teacher_id istället.
+    student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    title: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    module_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("modules.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class AskAiMessage(MasterBase):
+    """Ett meddelande i en AskAI-tråd. role = "user" eller "assistant"."""
+    __tablename__ = "ask_ai_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[int] = mapped_column(
+        ForeignKey("ask_ai_threads.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class RubricTemplate(MasterBase):
     """Återanvändbar rubric-mall som en lärare kan koppla på valfritt
     reflect-steg istället för att sätta om kriterier manuellt.

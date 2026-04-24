@@ -30,7 +30,8 @@ from ..school import is_enabled as school_enabled
 from ..school import ai as ai_core
 from ..school.engines import master_session
 from ..school.models import (
-    Module, ModuleStep, Student, StudentStepProgress, Teacher,
+    AskAiMessage, AskAiThread, Module, ModuleStep, Student,
+    StudentStepProgress, Teacher,
 )
 from ..security.rate_limit import RULES_STUDENT_ASK, check_rate_limit
 from .deps import TokenInfo, require_teacher, require_token
@@ -513,4 +514,302 @@ def check_category(
         model=ai_core.MODEL_HAIKU,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
+    )
+
+
+# ---------- Multi-turn AskAI-trådar ----------
+
+class ThreadSummary(BaseModel):
+    id: int
+    title: Optional[str]
+    module_id: Optional[int]
+    created_at: str
+    updated_at: str
+    message_count: int
+
+
+class ThreadMessage(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: str
+
+
+class ThreadDetail(ThreadSummary):
+    messages: list[ThreadMessage]
+
+
+def _owner_filter(info: TokenInfo):
+    """(clause, write_context) — vem äger trådar för detta token?"""
+    if info.role == "student":
+        return AskAiThread.student_id == info.student_id, {
+            "student_id": info.student_id,
+        }
+    if info.role == "teacher":
+        # Lärares egna trådar (skilda från deras elevers)
+        return (
+            (AskAiThread.teacher_id == info.teacher_id)
+            & (AskAiThread.student_id.is_(None))
+        ), {"teacher_id": info.teacher_id}
+    return None, None
+
+
+@router.get("/student/threads", response_model=list[ThreadSummary])
+def list_threads(
+    info: TokenInfo = Depends(require_token),
+) -> list[ThreadSummary]:
+    _require_school()
+    clause, _ = _owner_filter(info)
+    if clause is None:
+        raise HTTPException(403, "Okänd roll")
+    with master_session() as s:
+        threads = (
+            s.query(AskAiThread)
+            .filter(clause)
+            .order_by(AskAiThread.updated_at.desc())
+            .limit(50)
+            .all()
+        )
+        out: list[ThreadSummary] = []
+        for t in threads:
+            n = (
+                s.query(AskAiMessage)
+                .filter(AskAiMessage.thread_id == t.id)
+                .count()
+            )
+            out.append(ThreadSummary(
+                id=t.id, title=t.title, module_id=t.module_id,
+                created_at=t.created_at.isoformat(),
+                updated_at=t.updated_at.isoformat(),
+                message_count=n,
+            ))
+        return out
+
+
+@router.get("/student/threads/{thread_id}", response_model=ThreadDetail)
+def get_thread(
+    thread_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> ThreadDetail:
+    _require_school()
+    clause, _ = _owner_filter(info)
+    if clause is None:
+        raise HTTPException(403, "Okänd roll")
+    with master_session() as s:
+        t = s.query(AskAiThread).filter(
+            AskAiThread.id == thread_id,
+        ).filter(clause).first()
+        if not t:
+            raise HTTPException(404, "Tråd finns ej")
+        msgs = (
+            s.query(AskAiMessage)
+            .filter(AskAiMessage.thread_id == thread_id)
+            .order_by(AskAiMessage.created_at.asc())
+            .all()
+        )
+        return ThreadDetail(
+            id=t.id, title=t.title, module_id=t.module_id,
+            created_at=t.created_at.isoformat(),
+            updated_at=t.updated_at.isoformat(),
+            message_count=len(msgs),
+            messages=[
+                ThreadMessage(
+                    id=m.id, role=m.role, content=m.content,
+                    created_at=m.created_at.isoformat(),
+                ) for m in msgs
+            ],
+        )
+
+
+@router.delete("/student/threads/{thread_id}")
+def delete_thread(
+    thread_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    _require_school()
+    clause, _ = _owner_filter(info)
+    if clause is None:
+        raise HTTPException(403, "Okänd roll")
+    with master_session() as s:
+        t = s.query(AskAiThread).filter(
+            AskAiThread.id == thread_id,
+        ).filter(clause).first()
+        if not t:
+            raise HTTPException(404, "Tråd finns ej")
+        s.delete(t)
+    return {"ok": True}
+
+
+class AskThreadIn(BaseModel):
+    question: str = Field(min_length=3, max_length=1000)
+    thread_id: Optional[int] = None
+    module_id: Optional[int] = None
+    step_id: Optional[int] = None
+
+
+def _adaptive_system_prompt(teacher_id: int, student_id: Optional[int]) -> str:
+    """Bygger systempromprompten. Om elev: lägger till mastery-summery
+    så Sonnet kan anpassa språknivå (låg mastery → mer Socrates, högre
+    mastery → direkt svar)."""
+    base = ai_core.QA_SYSTEM_PROMPT
+    if student_id is None:
+        return base
+    try:
+        from .modules import _compute_mastery_for_student
+        with master_session() as s:
+            mastery = _compute_mastery_for_student(s, student_id)
+            if not mastery:
+                return base
+            # 3 högst mastery-kompetenser + 3 lägst
+            ranked = sorted(
+                mastery.items(), key=lambda kv: -kv[1][0],
+            )
+            top = ranked[:3]
+            bottom = [x for x in ranked if x[1][0] < 0.25][-3:]
+            from ..school.models import Competency as _C
+            comp_names = {
+                c.id: c.name for c in s.query(_C).filter(
+                    _C.id.in_([k for k, _ in ranked])
+                ).all()
+            }
+            sections: list[str] = []
+            if top:
+                strong = ", ".join(
+                    f"{comp_names.get(k, '?')} ({round(v[0]*100)}%)"
+                    for k, v in top
+                )
+                sections.append(f"Elevens starka områden: {strong}.")
+            if bottom:
+                weak = ", ".join(
+                    f"{comp_names.get(k, '?')}"
+                    for k, v in bottom
+                )
+                sections.append(
+                    f"Behöver mer grund i: {weak}. Ställ hellre en "
+                    "följdfråga än ge komplett svar direkt på dessa."
+                )
+            if sections:
+                return base + "\n\n" + "\n".join(sections)
+    except Exception:
+        pass
+    return base
+
+
+@router.post("/student/threads/message/stream")
+def thread_message_stream(
+    payload: AskThreadIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+):
+    """Skicka ett nytt user-meddelande till en tråd (eller skapa en ny
+    tråd om thread_id saknas). Persisterar user-meddelandet direkt, och
+    streamar Claudes svar. När strömmen stänger persisteras assistant-
+    meddelandet också.
+
+    Format: samma SSE som /ai/student/ask/stream, plus ett första event
+    `{"type": "thread", "thread_id": N}` innan deltas börjar strömma.
+    """
+    _require_school()
+    check_rate_limit(request, "ai-ask", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+
+    # Hitta eller skapa tråd + persistera user-message, plocka ut historiken
+    with master_session() as s:
+        thread: Optional[AskAiThread] = None
+        if payload.thread_id is not None:
+            clause, _ = _owner_filter(info)
+            thread = s.query(AskAiThread).filter(
+                AskAiThread.id == payload.thread_id,
+            ).filter(clause).first()
+            if not thread:
+                raise HTTPException(404, "Tråd finns ej")
+        if thread is None:
+            thread = AskAiThread(
+                student_id=info.student_id if info.role == "student" else None,
+                teacher_id=info.teacher_id if info.role == "teacher" else None,
+                title=payload.question[:80],
+                module_id=payload.module_id,
+            )
+            s.add(thread); s.flush()
+
+        # Spara user-meddelande direkt
+        s.add(AskAiMessage(
+            thread_id=thread.id,
+            role="user",
+            content=payload.question,
+        ))
+        s.flush()
+        thread_id = thread.id
+
+        # Bygg full historik för Claude
+        history = [
+            {"role": m.role, "content": m.content}
+            for m in s.query(AskAiMessage).filter(
+                AskAiMessage.thread_id == thread_id,
+            ).order_by(AskAiMessage.created_at.asc()).all()
+        ]
+
+    # Module/step-kontext blir första user-meddelandets kontext
+    module_title = "Allmän ekonomi"
+    module_summary: Optional[str] = None
+    step_prompt: Optional[str] = None
+    with master_session() as s:
+        if payload.module_id:
+            m = s.get(Module, payload.module_id)
+            if m:
+                module_title = m.title
+                module_summary = m.summary
+        if payload.step_id:
+            st = s.get(ModuleStep, payload.step_id)
+            if st:
+                step_prompt = st.content or st.title
+
+    system_prompt = _adaptive_system_prompt(
+        teacher_id,
+        info.student_id if info.role == "student" else None,
+    )
+    # Prefixa sista user-meddelandet med kontext så Sonnet ser var
+    # eleven är i kursplanen.
+    if history and (module_title or step_prompt):
+        ctx = [f"Modul eleven jobbar med: {module_title}"]
+        if module_summary:
+            ctx.append(f"Modulens syfte: {module_summary}")
+        if step_prompt:
+            ctx.append(f"Aktuellt steg: {step_prompt}")
+        original_last = history[-1]["content"]
+        history[-1] = {
+            "role": "user",
+            "content": "\n".join(ctx) + "\n\nFråga:\n" + original_last,
+        }
+
+    def gen():
+        yield f"data: {json.dumps({'type': 'thread', 'thread_id': thread_id})}\n\n"
+        text_parts: list[str] = []
+        for chunk in ai_core.stream_claude(
+            model=ai_core.MODEL_SONNET,
+            system=system_prompt,
+            messages=history,
+            max_tokens=ai_core.MAX_TOKENS_QA,
+            use_thinking=False,
+            teacher_id=teacher_id,
+        ):
+            if chunk.get("type") == "delta":
+                text_parts.append(chunk.get("text", ""))
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        # Persistera assistant-svar när strömmen är klar
+        final = "".join(text_parts).strip()
+        if final:
+            with master_session() as s:
+                s.add(AskAiMessage(
+                    thread_id=thread_id, role="assistant", content=final,
+                ))
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

@@ -355,7 +355,8 @@ def stream_claude(
     *,
     model: str,
     system: str,
-    user_prompt: str,
+    user_prompt: str | None = None,
+    messages: list[dict] | None = None,
     max_tokens: int,
     use_thinking: bool = False,
     teacher_id: int | None = None,
@@ -365,6 +366,10 @@ def stream_claude(
     `{"type": "done", "input_tokens": N, "output_tokens": M}`.
     Vid fel: `{"type": "error", "message": "..."}`.
 
+    Antingen `user_prompt` (enkel enradig fråga) eller `messages`
+    (fullt meddelandelista för multi-turn) krävs — båda samtidigt
+    kombineras inte.
+
     Sätt use_thinking=False för rena UI-chattar — thinking fördröjer
     första token:en med flera sekunder.
     """
@@ -372,6 +377,12 @@ def stream_claude(
     if client is None:
         yield {"type": "error", "message": "AI-klient saknas"}
         return
+
+    if messages is None:
+        if user_prompt is None:
+            yield {"type": "error", "message": "stream_claude saknar input"}
+            return
+        messages = [{"role": "user", "content": user_prompt}]
 
     in_tok = out_tok = cr = cc = 0
     try:
@@ -385,9 +396,7 @@ def stream_claude(
                     "cache_control": {"type": "ephemeral"},
                 },
             ],
-            "messages": [
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": messages,
         }
         if use_thinking:
             params["thinking"] = {"type": "adaptive"}
