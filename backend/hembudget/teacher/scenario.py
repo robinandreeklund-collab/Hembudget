@@ -168,17 +168,19 @@ def build_scenario(
     # Varje månad slumpas det fram 0-2 händelser som gör att eleven får
     # se att olika saker påverkar budgeten. Pedagogiskt syfte.
     # Exempel: tandläkarbesök, vinterel, semester, bilreparation.
+    # Tupel: (facit-kategori, (beskrivning, min, max))
+    # Facit-kategorin MÅSTE vara en riktig app-kategori som eleven kan välja
     EVENTS = [
-        ("tandläkare",      ("HÄLSA TANDLÄKARE", 1500, 4500)),
-        ("oplanerad_bilrep",("BILVERKSTAD VOLVO", 2500, 8000)),
-        ("hög_elräkning",   ("ELRÄKNING EXTRA HÖG", 1200, 2800)),
-        ("födelsedag",      ("PRESENTSHOP", 400, 1500)),
-        ("storshopping",    ("IKEA", 2200, 6500)),
-        ("kläder",          ("H&M STORHANDEL", 800, 2400)),
-        ("medicin",         ("APOTEKET HJÄRTAT", 350, 1200)),
-        ("vänner_middag",   ("RESTAURANG OPERAKÄLLAREN", 850, 2200)),
-        ("hemförsäkring_höjning", ("IF FÖRSÄKRING ÅRSAVI", 1200, 3500)),
-        ("oplanerad_resa",  ("SJ RESA TILL STOCKHOLM", 700, 2900)),
+        ("Hälsa",       ("HÄLSA TANDLÄKARE", 1500, 4500)),
+        ("Transport",   ("BILVERKSTAD VOLVO", 2500, 8000)),
+        ("El",          ("ELRÄKNING EXTRA HÖG", 1200, 2800)),
+        ("Presenter",   ("PRESENTSHOP", 400, 1500)),
+        ("Shopping",    ("IKEA", 2200, 6500)),
+        ("Shopping",    ("H&M STORHANDEL", 800, 2400)),
+        ("Hälsa",       ("APOTEKET HJÄRTAT", 350, 1200)),
+        ("Restaurang",  ("RESTAURANG OPERAKÄLLAREN", 850, 2200)),
+        ("Försäkring",  ("IF FÖRSÄKRING ÅRSAVI", 1200, 3500)),
+        ("Resor",       ("SJ RESA TILL STOCKHOLM", 700, 2900)),
     ]
     # Personlighet styr sannolikhet
     n_events = {

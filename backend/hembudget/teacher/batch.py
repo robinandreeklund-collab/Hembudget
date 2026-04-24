@@ -19,6 +19,8 @@ from ..db.models import (
     Loan,
     LoanPayment,
     Transaction,
+    UpcomingTransaction,
+    UpcomingTransactionLine,
 )
 from ..parsers.ekonomilabbet import (
     EkonomilabbetParseResult,
@@ -79,13 +81,111 @@ def create_batch_for_student(
         seed=seed,
     )
 
+    # Spara facit för kategorisering-check (tx-beskrivning + datum +
+    # belopp → elevens "rätt" kategori). Läraren använder detta för
+    # att betygsätta elevens kategoriseringar.
+    category_hints = []
+    for t in scenario.transactions:
+        if t.category_hint:
+            category_hints.append({
+                "description": t.description,
+                "date": t.date.isoformat(),
+                "amount": float(t.amount),
+                "hint": t.category_hint,
+            })
+    for ce in scenario.card_events:
+        if ce.category_hint:
+            category_hints.append({
+                "description": ce.description,
+                "date": ce.date.isoformat(),
+                "amount": -float(ce.amount),  # negativt pga kortköp
+                "hint": ce.category_hint,
+            })
+
     batch = ScenarioBatch(
         student_id=student.id,
         year_month=year_month,
         seed=seed,
+        meta={"category_hints": category_hints},
     )
     master_session.add(batch)
     master_session.flush()
+
+    # Skapa UpcomingTransaction för lön + återkommande fakturor i
+    # elevens scope-DB — så att /upcoming visar "kommande poster" innan
+    # eleven importerar bank-PDF:n. Dessa matchas sedan automatiskt mot
+    # motsvarande bank-tx vid import.
+    from ..school.engines import scope_context, scope_for_student
+    scope_key = scope_for_student(student)
+    BILL_DESCRIPTIONS_TO_UPCOMING = {
+        "HYRA", "BRF AVGIFT", "DRIFT VILLA",
+        "VATTENFALL", "FORTUM", "ELLEVIO", "TIBBER",
+        "TELIA", "BAHNHOF", "COM HEM", "TELE2",
+        "TELENOR ABONNEMANG", "TELIA MOBIL", "TRE",
+        "IF FORSAKRING", "TRYGG HANSA", "FOLKSAM", "LANSFORSAKRINGAR",
+        "BOLÅN", "BILLÅN", "CSN",
+    }
+    with scope_context(scope_key):
+        with session_scope() as s:
+            # Säkerställ lönekonto finns (för debit_account_id)
+            lonekonto = s.query(Account).filter(
+                Account.name == "Lönekonto"
+            ).first()
+            if not lonekonto:
+                from decimal import Decimal as _Dec
+                lonekonto = Account(
+                    name="Lönekonto", bank="ekonomilabbet",
+                    type="checking", currency="SEK",
+                    opening_balance=_Dec("0"),
+                )
+                s.add(lonekonto)
+                s.flush()
+
+            # Lön som planerad "income"
+            if scenario.salary:
+                sal = scenario.salary
+                if not s.query(UpcomingTransaction).filter(
+                    UpcomingTransaction.kind == "income",
+                    UpcomingTransaction.expected_date == sal.pay_date,
+                    UpcomingTransaction.amount == sal.net,
+                ).first():
+                    s.add(UpcomingTransaction(
+                        kind="income",
+                        name=f"Lön {sal.employer}",
+                        amount=sal.net,
+                        expected_date=sal.pay_date,
+                        recurring_monthly=True,
+                        source="scenario",
+                        debit_account_id=lonekonto.id,
+                        debit_date=sal.pay_date,
+                    ))
+
+            # Bills — identifiera via description-prefix
+            for t in scenario.transactions:
+                desc_u = t.description.upper()
+                if not any(k in desc_u for k in BILL_DESCRIPTIONS_TO_UPCOMING):
+                    continue
+                if t.amount >= 0:
+                    continue
+                amount_pos = abs(t.amount)
+                # Idempotens: skippa om redan finns
+                if s.query(UpcomingTransaction).filter(
+                    UpcomingTransaction.name == t.description,
+                    UpcomingTransaction.expected_date == t.date,
+                    UpcomingTransaction.amount == amount_pos,
+                ).first():
+                    continue
+                s.add(UpcomingTransaction(
+                    kind="bill",
+                    name=t.description,
+                    amount=amount_pos,
+                    expected_date=t.date,
+                    recurring_monthly=True,
+                    source="scenario",
+                    debit_account_id=lonekonto.id,
+                    debit_date=t.date,
+                    autogiro=True,
+                ))
 
     sort_order = 0
 
@@ -181,6 +281,14 @@ def import_artifact(
 
     scope_key = scope_for_student(student)
 
+    # Facit-mappning för kategorisering: {(description, date, amount) → hint}
+    facit: dict[tuple, str] = {}
+    batch = artifact.batch
+    if batch and batch.meta:
+        for h in batch.meta.get("category_hints", []):
+            key = (h["description"], h["date"], float(h["amount"]))
+            facit[key] = h["hint"]
+
     stats: dict = {
         "kind": parsed.kind,
         "imported_tx": 0,
@@ -190,16 +298,71 @@ def import_artifact(
     with scope_context(scope_key):
         with session_scope() as s:
             if parsed.kind == "kontoutdrag":
-                _import_kontoutdrag(s, parsed, stats)
+                _import_kontoutdrag(s, parsed, stats, facit)
+                _auto_match_upcoming(s)
             elif parsed.kind == "lonespec":
                 _import_lonespec(s, parsed, stats, artifact)
             elif parsed.kind == "lan_besked":
                 _import_lan(s, parsed, stats, artifact)
             elif parsed.kind == "kreditkort_faktura":
-                _import_kreditkort(s, parsed, stats, artifact)
+                _import_kreditkort(s, parsed, stats, artifact, facit)
+                _create_credit_invoice_upcoming(s, parsed, artifact)
 
     artifact.imported_at = datetime.utcnow()
     return {"ok": True, **stats}
+
+
+def _auto_match_upcoming(s: Session) -> None:
+    """Matcha alla obetalda UpcomingTransactions mot bank-tx via den
+    befintliga matchern. Körs efter import av kontoutdrag så elevens
+    /upcoming-vy visar korrekt status."""
+    try:
+        from ..upcoming_match import UpcomingMatcher
+        UpcomingMatcher(s).auto_match_all()
+    except Exception:
+        pass
+
+
+def _create_credit_invoice_upcoming(
+    s: Session, parsed: EkonomilabbetParseResult, artifact: BatchArtifact,
+) -> None:
+    """Skapa en UpcomingTransaction för kreditkortsfakturan så eleven
+    ser förfallodagen i /upcoming. Beloppet = totalsumman."""
+    if not parsed.total_amount or parsed.total_amount <= 0:
+        return
+    # Hitta kort-kontot
+    card = s.query(Account).filter(Account.type == "credit").first()
+    lonekonto = s.query(Account).filter(Account.type == "checking").first()
+    if not lonekonto:
+        return
+    # Förfallodag ~28:e följande månad (standard för kort)
+    if parsed.period:
+        y, m = map(int, parsed.period.split("-"))
+        import calendar
+        from datetime import date as _date
+        due_m = m + 1 if m < 12 else 1
+        due_y = y if m < 12 else y + 1
+        last = calendar.monthrange(due_y, due_m)[1]
+        due = _date(due_y, due_m, min(28, last))
+    else:
+        from datetime import date as _date, timedelta
+        due = _date.today() + timedelta(days=20)
+    name = f"Kreditkortsfaktura {parsed.period or ''}".strip()
+    if s.query(UpcomingTransaction).filter(
+        UpcomingTransaction.name == name,
+        UpcomingTransaction.expected_date == due,
+    ).first():
+        return
+    s.add(UpcomingTransaction(
+        kind="bill",
+        name=name,
+        amount=parsed.total_amount,
+        expected_date=due,
+        source="scenario",
+        debit_account_id=lonekonto.id,
+        debit_date=due,
+        autogiro=True,
+    ))
 
 
 def _ensure_account(
@@ -223,6 +386,7 @@ def _ensure_account(
 
 def _import_kontoutdrag(
     s: Session, parsed: EkonomilabbetParseResult, stats: dict,
+    facit: dict | None = None,
 ) -> None:
     acc = _ensure_account(
         s, "Lönekonto", "checking",
@@ -241,6 +405,12 @@ def _import_kontoutdrag(
             stats["skipped_tx"] += 1
             continue
         existing_hashes.add(h)
+        # Facit: hint-kategori lagras som "[FACIT:XXX]" i notes så
+        # den inte krockar med elevens egna anteckningar.
+        facit_hint = None
+        if facit:
+            key = (raw.description, raw.date.isoformat(), float(raw.amount))
+            facit_hint = facit.get(key)
         s.add(Transaction(
             account_id=acc.id,
             date=raw.date,
@@ -251,6 +421,7 @@ def _import_kontoutdrag(
                 if raw.description else None,
             hash=h,
             user_verified=False,
+            notes=f"[FACIT:{facit_hint}]" if facit_hint else None,
         ))
         stats["imported_tx"] += 1
 
@@ -361,6 +532,7 @@ def _import_lan(
 def _import_kreditkort(
     s: Session, parsed: EkonomilabbetParseResult,
     stats: dict, artifact: BatchArtifact,
+    facit: dict | None = None,
 ) -> None:
     card_no = parsed.account_no or "Ekonomilabbet Kort"
     acc = _ensure_account(
@@ -382,6 +554,10 @@ def _import_kreditkort(
             stats["skipped_tx"] += 1
             continue
         existing_hashes.add(h)
+        facit_hint = None
+        if facit:
+            key = (raw.description, raw.date.isoformat(), float(raw.amount))
+            facit_hint = facit.get(key)
         s.add(Transaction(
             account_id=acc.id,
             date=raw.date,
@@ -392,5 +568,6 @@ def _import_kreditkort(
                 if raw.description else None,
             hash=h,
             user_verified=False,
+            notes=f"[FACIT:{facit_hint}]" if facit_hint else None,
         ))
         stats["imported_tx"] += 1

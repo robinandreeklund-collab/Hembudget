@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  CheckCircle2, CircleDashed, ListTodo, Trash2, Hourglass,
+  CheckCircle2, Check, CircleDashed, ListTodo, Trash2, Hourglass,
 } from "lucide-react";
 import { api } from "@/api/client";
 
@@ -96,13 +96,29 @@ export function AssignmentList({
             </div>
           </div>
           {asTeacher && (
-            <button
-              onClick={() => remove(a.id)}
-              className="p-1 text-slate-400 hover:text-rose-600"
-              title="Ta bort"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <div className="flex gap-1">
+              {a.status !== "completed" && (
+                <button
+                  onClick={async () => {
+                    await api(`/teacher/assignments/${a.id}/complete`, {
+                      method: "POST",
+                    });
+                    reload();
+                  }}
+                  className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                  title="Markera som klar"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={() => remove(a.id)}
+                className="p-1 text-slate-400 hover:text-rose-600"
+                title="Ta bort"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           )}
         </li>
       ))}

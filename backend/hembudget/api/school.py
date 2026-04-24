@@ -1570,6 +1570,220 @@ def list_all_batches_for_month(
         return out
 
 
+# ---------- Facit-check för elevens kategoriseringar ----------
+
+class CategoryCheckRow(BaseModel):
+    tx_id: int
+    date: str
+    description: str
+    amount: float
+    expected_category: str
+    actual_category: Optional[str]
+    is_correct: bool
+    is_uncategorized: bool
+
+
+class CategoryCheckOut(BaseModel):
+    student_id: int
+    display_name: str
+    year_month: str
+    total: int
+    correct: int
+    incorrect: int
+    uncategorized: int
+    rows: list[CategoryCheckRow]
+
+
+@router.get(
+    "/teacher/students/{student_id}/facit/{year_month}",
+    response_model=CategoryCheckOut,
+)
+def category_facit(
+    student_id: int, year_month: str,
+    info: TokenInfo = Depends(require_teacher),
+) -> CategoryCheckOut:
+    """Jämför elevens valda kategori mot scenario-facit som lagrats i
+    tx.notes ("[FACIT:Xxx]"). Returnerar antal rätt/fel per tx."""
+    _require_school_mode()
+    from datetime import date as _date
+    from ..db.base import session_scope as _ss
+    from ..db.models import Transaction, Category as _Cat
+    import re
+
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        scope_key = scope_for_student(student)
+        name = student.display_name
+
+    y, m = map(int, year_month.split("-"))
+    start = _date(y, m, 1)
+    end = _date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)
+    rows: list[CategoryCheckRow] = []
+    total = correct = incorrect = uncat = 0
+    facit_re = re.compile(r"\[FACIT:([^\]]+)\]")
+    with scope_context(scope_key):
+        with _ss() as scope_s:
+            cats = {c.id: c.name for c in scope_s.query(_Cat).all()}
+            txs = (
+                scope_s.query(Transaction)
+                .filter(Transaction.date >= start, Transaction.date < end)
+                .order_by(Transaction.date)
+                .all()
+            )
+            for t in txs:
+                notes = t.notes or ""
+                m2 = facit_re.search(notes)
+                if not m2:
+                    continue  # ingen facit = hoppa
+                expected = m2.group(1)
+                actual = cats.get(t.category_id) if t.category_id else None
+                is_cat = actual is not None
+                is_correct = is_cat and (
+                    actual == expected or
+                    # Föräldrakategori räknas också som rätt (t.ex. "Mat"
+                    # som facit och eleven valt "Livsmedel" vars parent
+                    # är "Mat")
+                    _is_parent(cats, t.category_id, expected, scope_s)
+                )
+                total += 1
+                if not is_cat:
+                    uncat += 1
+                elif is_correct:
+                    correct += 1
+                else:
+                    incorrect += 1
+                rows.append(CategoryCheckRow(
+                    tx_id=t.id,
+                    date=t.date.isoformat(),
+                    description=t.raw_description,
+                    amount=float(t.amount),
+                    expected_category=expected,
+                    actual_category=actual,
+                    is_correct=is_correct,
+                    is_uncategorized=not is_cat,
+                ))
+    return CategoryCheckOut(
+        student_id=student_id, display_name=name, year_month=year_month,
+        total=total, correct=correct, incorrect=incorrect,
+        uncategorized=uncat, rows=rows,
+    )
+
+
+def _is_parent(cats_by_id: dict, category_id, expected_name: str, s) -> bool:
+    """Kolla om facit-kategori är förälder till elevens val."""
+    from ..db.models import Category as _C
+    row = s.query(_C).filter(_C.id == category_id).first()
+    if not row or row.parent_id is None:
+        return False
+    return cats_by_id.get(row.parent_id) == expected_name
+
+
+# ---------- Manual complete för free_text-uppdrag ----------
+
+@router.post("/teacher/assignments/{assignment_id}/complete")
+def manually_complete_assignment(
+    assignment_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Manuell "klar"-markering av ett uppdrag. Används främst för
+    kind="free_text" där automatisk utvärdering inte går."""
+    _require_school_mode()
+    from datetime import datetime as _dt
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == info.teacher_id,
+        ).first()
+        if not a:
+            raise HTTPException(404, "Assignment not found")
+        a.manually_completed_at = _dt.utcnow()
+    return {"ok": True}
+
+
+@router.post("/teacher/assignments/{assignment_id}/uncomplete")
+def uncomplete_assignment(
+    assignment_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == info.teacher_id,
+        ).first()
+        if not a:
+            raise HTTPException(404, "Assignment not found")
+        a.manually_completed_at = None
+    return {"ok": True}
+
+
+# ---------- Skattesatser som settings ----------
+
+class TaxSettingsIn(BaseModel):
+    kommunal: float = Field(ge=0.10, le=0.45)
+    statlig: float = Field(ge=0.10, le=0.30)
+    brytpunkt: int = Field(ge=30_000, le=100_000)
+    grundavdrag: int = Field(ge=0, le=5_000)
+
+
+class TaxSettingsOut(TaxSettingsIn):
+    is_default: bool
+    updated_at: Optional[datetime] = None
+
+
+@router.get("/teacher/settings/tax", response_model=TaxSettingsOut)
+def get_tax_settings(
+    info: TokenInfo = Depends(require_teacher),
+) -> TaxSettingsOut:
+    _require_school_mode()
+    from ..school.models import AppConfig
+    from ..school.tax import (
+        DEFAULT_KOMMUNALSKATT, DEFAULT_STATLIG_SKATT,
+        DEFAULT_BRYTPUNKT_MANATLIG, DEFAULT_GRUNDAVDRAG_MANATLIG,
+    )
+    with master_session() as s:
+        row = s.query(AppConfig).filter(AppConfig.key == "tax").first()
+        if row and row.value:
+            v = row.value
+            return TaxSettingsOut(
+                kommunal=v.get("kommunal", DEFAULT_KOMMUNALSKATT),
+                statlig=v.get("statlig", DEFAULT_STATLIG_SKATT),
+                brytpunkt=v.get("brytpunkt", DEFAULT_BRYTPUNKT_MANATLIG),
+                grundavdrag=v.get("grundavdrag", DEFAULT_GRUNDAVDRAG_MANATLIG),
+                is_default=False,
+                updated_at=row.updated_at,
+            )
+    return TaxSettingsOut(
+        kommunal=DEFAULT_KOMMUNALSKATT,
+        statlig=DEFAULT_STATLIG_SKATT,
+        brytpunkt=DEFAULT_BRYTPUNKT_MANATLIG,
+        grundavdrag=DEFAULT_GRUNDAVDRAG_MANATLIG,
+        is_default=True,
+    )
+
+
+@router.put("/teacher/settings/tax", response_model=TaxSettingsOut)
+def put_tax_settings(
+    payload: TaxSettingsIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> TaxSettingsOut:
+    _require_school_mode()
+    from ..school.models import AppConfig
+    with master_session() as s:
+        row = s.query(AppConfig).filter(AppConfig.key == "tax").first()
+        if not row:
+            row = AppConfig(key="tax", value=payload.model_dump())
+            s.add(row)
+        else:
+            row.value = payload.model_dump()
+    return TaxSettingsOut(**payload.model_dump(), is_default=False)
+
+
 @router.get("/teacher/batches/months",
             response_model=list[str])
 def list_all_batch_months(

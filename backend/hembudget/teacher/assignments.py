@@ -36,6 +36,12 @@ class CheckResult:
 
 def evaluate(assignment, student) -> CheckResult:
     """Kör rätt checker baserat på assignment.kind."""
+    # Manuell "klar"-markering vinner alltid över automatiska checkers.
+    if getattr(assignment, "manually_completed_at", None):
+        return CheckResult(
+            "completed",
+            f"Klarmarkerad av lärare {assignment.manually_completed_at:%Y-%m-%d}",
+        )
     scope_key = scope_for_student(student)
     with scope_context(scope_key):
         with session_scope() as s:
@@ -52,9 +58,12 @@ def evaluate(assignment, student) -> CheckResult:
                 return _check_categorize_all(s, assignment)
             if kind == "save_amount":
                 return _check_save_amount(s, assignment)
-            # free_text: bara manuellt — alltid "in_progress" tills läraren
-            # markerar i UI:n. För nu returnerar vi "in_progress".
-            return CheckResult("in_progress", "Bedöms manuellt av läraren")
+            # free_text: bara manuellt — läraren klickar "Klarmarkera"
+            # i UI:n så sätts manually_completed_at.
+            return CheckResult(
+                "in_progress",
+                "Bedöms manuellt — läraren klarmarkerar",
+            )
 
 
 def _check_set_budget(s: Session, assignment) -> CheckResult:

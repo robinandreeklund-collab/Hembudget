@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, BookOpenCheck, Briefcase, Eye, FileText,
-  Plus, Users,
+  ArrowLeft, BookOpenCheck, Briefcase, CheckCircle2, Eye, FileText,
+  ListChecks, Plus, Users, XCircle,
 } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +23,17 @@ type BatchSummary = {
   artifact_count: number; imported_count: number;
 };
 
+type FacitRow = {
+  tx_id: number; date: string; description: string; amount: number;
+  expected_category: string; actual_category: string | null;
+  is_correct: boolean; is_uncategorized: boolean;
+};
+
+type FacitOut = {
+  total: number; correct: number; incorrect: number; uncategorized: number;
+  year_month: string; rows: FacitRow[];
+};
+
 const ASSIGNMENT_KINDS = [
   { value: "set_budget", label: "Sätt budget" },
   { value: "import_batch", label: "Importera månadens dokument" },
@@ -41,6 +52,8 @@ export default function StudentDetail() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [batches, setBatches] = useState<BatchSummary[]>([]);
+  const [facitMonth, setFacitMonth] = useState("");
+  const [facit, setFacit] = useState<FacitOut | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newKind, setNewKind] = useState("free_text");
   const [newTitle, setNewTitle] = useState("");
@@ -54,11 +67,29 @@ export default function StudentDetail() {
     setProfile(p);
     const b = await api<BatchSummary[]>(`/teacher/students/${sid}/batches`);
     setBatches(b);
+    if (b.length > 0 && !facitMonth) {
+      setFacitMonth(b[0].year_month);
+    }
+  }
+
+  async function loadFacit(ym: string) {
+    try {
+      const f = await api<FacitOut>(
+        `/teacher/students/${sid}/facit/${ym}`,
+      );
+      setFacit(f);
+    } catch {
+      setFacit(null);
+    }
   }
 
   useEffect(() => {
     reload();
   }, [sid]);
+
+  useEffect(() => {
+    if (facitMonth) loadFacit(facitMonth);
+  }, [facitMonth]);
 
   async function createAssignment() {
     if (!newTitle.trim()) return;
@@ -210,6 +241,98 @@ export default function StudentDetail() {
           </div>
         )}
         <AssignmentList key={reloadKey} studentId={sid} asTeacher />
+      </section>
+
+      {/* Facit för kategorisering */}
+      <section className="bg-white border rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <ListChecks className="w-5 h-5 text-brand-600" /> Kategori-facit
+          </h2>
+          {batches.length > 0 && (
+            <select
+              value={facitMonth}
+              onChange={(e) => setFacitMonth(e.target.value)}
+              className="text-sm border rounded px-2 py-1"
+            >
+              {batches.map((b) => (
+                <option key={b.year_month} value={b.year_month}>
+                  {b.year_month}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {!facit ? (
+          <div className="text-sm text-slate-500">
+            Inga transaktioner att kontrollera ännu.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="bg-emerald-50 rounded p-2">
+                <div className="text-xs text-slate-600">Rätt</div>
+                <div className="text-xl font-bold text-emerald-700">
+                  {facit.correct} / {facit.total}
+                </div>
+              </div>
+              <div className="bg-rose-50 rounded p-2">
+                <div className="text-xs text-slate-600">Fel</div>
+                <div className="text-xl font-bold text-rose-700">
+                  {facit.incorrect}
+                </div>
+              </div>
+              <div className="bg-slate-100 rounded p-2">
+                <div className="text-xs text-slate-600">Okategoriserade</div>
+                <div className="text-xl font-bold text-slate-600">
+                  {facit.uncategorized}
+                </div>
+              </div>
+            </div>
+            {facit.rows.length > 0 && (
+              <details className="text-sm">
+                <summary className="cursor-pointer text-slate-600 hover:text-brand-700">
+                  Visa alla ({facit.rows.length} transaktioner)
+                </summary>
+                <table className="w-full mt-2 text-xs">
+                  <thead>
+                    <tr className="text-slate-500 text-left">
+                      <th className="py-1">Datum</th>
+                      <th>Transaktion</th>
+                      <th>Facit</th>
+                      <th>Elevens val</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {facit.rows.map((r) => (
+                      <tr key={r.tx_id} className="border-t">
+                        <td className="py-1 text-slate-500">{r.date}</td>
+                        <td>{r.description}</td>
+                        <td className="font-medium">{r.expected_category}</td>
+                        <td className={
+                          r.is_correct ? "text-emerald-700" :
+                          r.is_uncategorized ? "text-slate-400" : "text-rose-600"
+                        }>
+                          {r.actual_category ?? "—"}
+                        </td>
+                        <td>
+                          {r.is_correct ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          ) : r.is_uncategorized ? (
+                            <span className="text-slate-400">?</span>
+                          ) : (
+                            <XCircle className="w-4 h-4 text-rose-500" />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            )}
+          </>
+        )}
       </section>
 
       {/* Batches */}

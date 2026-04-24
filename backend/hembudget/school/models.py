@@ -198,6 +198,10 @@ class ScenarioBatch(MasterBase):
     skapar batchen ett antal BatchArtifacts (PDF:er) som eleven själv
     måste ladda ned + importera via /upload. Pedagogiskt: eleven lär
     sig flödet bank-PDF → import → kategorisering.
+
+    meta kan bl.a. innehålla "category_hints": [{description, date,
+    amount, hint}] som används av facit-kontrollen när läraren ska
+    utvärdera elevens kategoriseringar.
     """
     __tablename__ = "scenario_batches"
     __table_args__ = (
@@ -215,6 +219,7 @@ class ScenarioBatch(MasterBase):
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)
     seed: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
@@ -288,6 +293,25 @@ class Assignment(MasterBase):
     due_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Manuell "klar"-markering — används främst för kind="free_text"
+    # där servern inte kan avgöra status automatiskt. När satt
+    # returneras status="completed" oavsett vad checkern säger.
+    manually_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
+    )
+
+
+class AppConfig(MasterBase):
+    """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
+    Key-value-form så vi slipper migrera schemat vid varje nytt fält.
+    """
+    __tablename__ = "app_config"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
     )
