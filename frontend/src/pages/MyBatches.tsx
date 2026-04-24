@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  BookOpenCheck,
   CheckCircle2,
   Download,
   FileText,
@@ -8,6 +9,7 @@ import {
   Upload,
 } from "lucide-react";
 import { api, getApiBase, getToken } from "@/api/client";
+import { AssignmentList } from "@/components/AssignmentList";
 
 type Artifact = {
   id: number;
@@ -128,6 +130,15 @@ export default function MyBatches() {
         Här samlas dokumenten som din lärare skickat ut. Ladda ner och titta
         på dem, och importera dem sedan i appen så syns de i din ekonomi.
       </p>
+
+      {/* Uppdrag */}
+      <div className="bg-white border rounded-lg p-4">
+        <h2 className="font-semibold flex items-center gap-2 mb-2">
+          <BookOpenCheck className="w-5 h-5 text-brand-600" />
+          Dina uppdrag
+        </h2>
+        <AssignmentList />
+      </div>
 
       {err && (
         <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { AssignmentSummary } from "@/components/AssignmentList";
 import {
   Eye,
   Loader2,
@@ -120,11 +122,26 @@ export default function Teacher() {
         student_ids: selected.size > 0 ? [...selected] : null,
         overwrite,
       };
-      const res = await api<GenerateRow[]>("/teacher/generate", {
+      // Använder /teacher/batches (PDF-utskick) istället för det gamla
+      // direkt-data-flödet — PDF:erna hamnar i /student/batches och
+      // eleven importerar själv.
+      const res = await api<{
+        student_id: number; display_name: string; year_month: string;
+        status: string; batch_id?: number; artifact_count?: number;
+        error?: string;
+      }[]>("/teacher/batches", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setLastRun(res);
+      setLastRun(res.map((r) => ({
+        student_id: r.student_id,
+        display_name: r.display_name,
+        year_month: r.year_month,
+        status: r.status,
+        stats: r.artifact_count
+          ? { artifacts_created: r.artifact_count }
+          : undefined,
+      })));
       reload();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -281,7 +298,17 @@ export default function Teacher() {
                       onChange={() => toggleSelect(s.id)}
                     />
                   </td>
-                  <td className="p-3 font-medium">{s.display_name}</td>
+                  <td className="p-3 font-medium">
+                    <Link
+                      to={`/teacher/students/${s.id}`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {s.display_name}
+                    </Link>
+                    <div className="mt-1">
+                      <AssignmentSummary studentId={s.id} />
+                    </div>
+                  </td>
                   <td className="p-3 text-slate-600">{s.class_label || "—"}</td>
                   <td className="p-3 font-mono text-brand-600 bg-brand-50 inline-block px-2 rounded">
                     {s.login_code}

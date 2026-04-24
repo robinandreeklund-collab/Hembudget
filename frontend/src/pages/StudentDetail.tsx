@@ -1,0 +1,254 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeft, BookOpenCheck, Briefcase, Eye, FileText,
+  Plus, Users,
+} from "lucide-react";
+import { api } from "@/api/client";
+import { useAuth } from "@/hooks/useAuth";
+import { AssignmentList } from "@/components/AssignmentList";
+
+type Profile = {
+  profession: string; employer: string;
+  gross_salary_monthly: number; net_salary_monthly: number;
+  personality: string; age: number; city: string;
+  family_status: string; housing_type: string; housing_monthly: number;
+  has_mortgage: boolean; has_car_loan: boolean; has_student_loan: boolean;
+  children_ages: number[]; partner_age: number | null;
+  backstory: string | null;
+};
+
+type BatchSummary = {
+  id: number; year_month: string;
+  artifact_count: number; imported_count: number;
+};
+
+const ASSIGNMENT_KINDS = [
+  { value: "set_budget", label: "Sätt budget" },
+  { value: "import_batch", label: "Importera månadens dokument" },
+  { value: "balance_month", label: "Balansera månaden (positivt resultat)" },
+  { value: "review_loan", label: "Granska lån" },
+  { value: "categorize_all", label: "Kategorisera alla transaktioner" },
+  { value: "save_amount", label: "Spara X kr" },
+  { value: "free_text", label: "Annan uppgift (manuell)" },
+];
+
+export default function StudentDetail() {
+  const { studentId } = useParams<{ studentId: string }>();
+  const navigate = useNavigate();
+  const { impersonate } = useAuth();
+  const sid = parseInt(studentId || "0", 10);
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [batches, setBatches] = useState<BatchSummary[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newKind, setNewKind] = useState("free_text");
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newMonth, setNewMonth] = useState("");
+  const [newAmount, setNewAmount] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  async function reload() {
+    const p = await api<Profile>(`/teacher/students/${sid}/profile`);
+    setProfile(p);
+    const b = await api<BatchSummary[]>(`/teacher/students/${sid}/batches`);
+    setBatches(b);
+  }
+
+  useEffect(() => {
+    reload();
+  }, [sid]);
+
+  async function createAssignment() {
+    if (!newTitle.trim()) return;
+    await api("/teacher/assignments", {
+      method: "POST",
+      body: JSON.stringify({
+        title: newTitle, description: newDesc || newTitle,
+        kind: newKind, student_id: sid,
+        target_year_month: newMonth || null,
+        params: newKind === "save_amount" && newAmount
+          ? { amount: parseInt(newAmount, 10) }
+          : null,
+      }),
+    });
+    setNewTitle(""); setNewDesc(""); setNewMonth(""); setNewAmount("");
+    setShowCreate(false);
+    setReloadKey(reloadKey + 1);
+  }
+
+  function viewAs() {
+    impersonate(sid);
+    window.location.href = "/dashboard";
+  }
+
+  if (!profile) {
+    return <div className="p-6">Laddar elev…</div>;
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <button
+        onClick={() => navigate("/teacher")}
+        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+      >
+        <ArrowLeft className="w-4 h-4" /> Tillbaka till elevlistan
+      </button>
+
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Users className="w-6 h-6 text-brand-600" />
+          Elev #{sid}
+        </h1>
+        <button
+          onClick={viewAs}
+          className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2"
+        >
+          <Eye className="w-4 h-4" /> Titta som denna elev
+        </button>
+      </div>
+
+      {/* Profil */}
+      <section className="bg-white border rounded-xl p-4 space-y-3">
+        <h2 className="font-semibold text-lg flex items-center gap-2">
+          <Briefcase className="w-5 h-5 text-brand-600" /> Profil
+        </h2>
+        <div className="text-sm text-slate-700 italic">{profile.backstory}</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+          <Stat label="Yrke" value={profile.profession} />
+          <Stat label="Arbetsgivare" value={profile.employer} />
+          <Stat label="Personlighet" value={profile.personality} />
+          <Stat label="Ålder" value={`${profile.age} år`} />
+          <Stat label="Bruttolön" value={`${profile.gross_salary_monthly.toLocaleString("sv-SE")} kr`} />
+          <Stat label="Nettolön" value={`${profile.net_salary_monthly.toLocaleString("sv-SE")} kr`} />
+          <Stat
+            label="Familj"
+            value={
+              profile.family_status === "ensam" ? "Ensam"
+              : profile.family_status === "sambo" ? "Sambo"
+              : `Barn (${profile.children_ages.join(", ")} år)`
+            }
+          />
+          <Stat label="Stad" value={profile.city} />
+          <Stat
+            label="Boende"
+            value={`${profile.housing_type} – ${profile.housing_monthly.toLocaleString("sv-SE")} kr`}
+          />
+        </div>
+      </section>
+
+      {/* Uppdrag */}
+      <section className="bg-white border rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <BookOpenCheck className="w-5 h-5 text-brand-600" /> Uppdrag
+          </h2>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="text-sm bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> Nytt uppdrag
+          </button>
+        </div>
+        {showCreate && (
+          <div className="bg-slate-50 rounded p-3 space-y-2 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={newKind}
+                onChange={(e) => setNewKind(e.target.value)}
+                className="border rounded px-2 py-1.5"
+              >
+                {ASSIGNMENT_KINDS.map((k) => (
+                  <option key={k.value} value={k.value}>{k.label}</option>
+                ))}
+              </select>
+              <input
+                type="month"
+                value={newMonth}
+                onChange={(e) => setNewMonth(e.target.value)}
+                placeholder="Månad (valfri)"
+                className="border rounded px-2 py-1.5"
+              />
+            </div>
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Titel"
+              className="w-full border rounded px-2 py-1.5"
+            />
+            <textarea
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              placeholder="Beskrivning"
+              className="w-full border rounded px-2 py-1.5"
+              rows={2}
+            />
+            {newKind === "save_amount" && (
+              <input
+                type="number"
+                value={newAmount}
+                onChange={(e) => setNewAmount(e.target.value)}
+                placeholder="Belopp att spara (kr)"
+                className="w-full border rounded px-2 py-1.5"
+              />
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowCreate(false)}
+                className="text-slate-600 hover:bg-slate-200 rounded px-3 py-1.5"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={createAssignment}
+                className="bg-brand-600 text-white rounded px-3 py-1.5"
+              >
+                Skapa
+              </button>
+            </div>
+          </div>
+        )}
+        <AssignmentList key={reloadKey} studentId={sid} asTeacher />
+      </section>
+
+      {/* Batches */}
+      <section className="bg-white border rounded-xl p-4 space-y-3">
+        <h2 className="font-semibold text-lg flex items-center gap-2">
+          <FileText className="w-5 h-5 text-brand-600" /> Utskickade dokument
+        </h2>
+        {batches.length === 0 ? (
+          <div className="text-sm text-slate-500">
+            Inga batches utdelade än. Gå tillbaka till lärarpanelen och tryck
+            "Generera" för att skapa månadens dokument.
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-200">
+            {batches.map((b) => (
+              <li
+                key={b.id}
+                className="py-2 flex items-center justify-between text-sm"
+              >
+                <span>
+                  <strong>{b.year_month}</strong> – {b.artifact_count} dokument
+                </span>
+                <span className="text-xs text-slate-500">
+                  {b.imported_count}/{b.artifact_count} importerade
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="font-medium">{value}</div>
+    </div>
+  );
+}

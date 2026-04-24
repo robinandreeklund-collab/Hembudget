@@ -22,6 +22,7 @@ import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
 import TibberCallback from "./pages/TibberCallback";
 import Teacher from "./pages/Teacher";
+import StudentDetail from "./pages/StudentDetail";
 import Onboarding from "./pages/Onboarding";
 import MyBatches from "./pages/MyBatches";
 
@@ -54,12 +55,14 @@ export default function App() {
           {teacherRootOnly ? (
             <>
               <Route path="/teacher" element={<Teacher />} />
+              <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
               <Route path="*" element={<Navigate to="/teacher" replace />} />
             </>
           ) : (
             <>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/teacher" element={<Teacher />} />
+              <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/transactions" element={<Transactions />} />

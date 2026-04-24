@@ -847,7 +847,205 @@ def complete_onboarding(
         if not student:
             raise HTTPException(404, "Student not found")
         student.onboarding_completed = True
+        # Default-uppdrag: sätt en budget
+        if s.query(Assignment).filter(
+            Assignment.student_id == student.id,
+            Assignment.kind == "set_budget",
+        ).count() == 0:
+            from ..teacher.assignments import DEFAULT_ASSIGNMENTS_FOR_NEW_STUDENT
+            for spec in DEFAULT_ASSIGNMENTS_FOR_NEW_STUDENT:
+                s.add(Assignment(
+                    teacher_id=student.teacher_id,
+                    student_id=student.id,
+                    title=spec["title"],
+                    description=spec["description"],
+                    kind=spec["kind"],
+                ))
     return {"ok": True}
+
+
+# ---------- Assignments / uppdrag ----------
+
+class AssignmentIn(BaseModel):
+    title: str
+    description: str
+    kind: str  # "set_budget" | "import_batch" | "balance_month" | ...
+    student_id: Optional[int] = None  # None = bulk till alla mina elever
+    target_year_month: Optional[str] = Field(
+        default=None, pattern=r"^\d{4}-\d{2}$",
+    )
+    params: Optional[dict] = None
+
+
+class AssignmentOut(BaseModel):
+    id: int
+    teacher_id: int
+    student_id: Optional[int]
+    title: str
+    description: str
+    kind: str
+    target_year_month: Optional[str]
+    params: Optional[dict]
+    created_at: datetime
+
+
+class AssignmentStatusOut(AssignmentOut):
+    status: str  # "not_started" | "in_progress" | "completed"
+    progress: str
+    detail: Optional[dict] = None
+
+
+def _assignment_to_out(a: Assignment) -> AssignmentOut:
+    return AssignmentOut(
+        id=a.id, teacher_id=a.teacher_id, student_id=a.student_id,
+        title=a.title, description=a.description, kind=a.kind,
+        target_year_month=a.target_year_month, params=a.params,
+        created_at=a.created_at,
+    )
+
+
+@router.post("/teacher/assignments", response_model=list[AssignmentOut])
+def create_assignment(
+    payload: AssignmentIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[AssignmentOut]:
+    """Skapa ett uppdrag för en specifik elev eller alla mina elever
+    (om student_id=None). Returnerar lista — en post per elev när bulk."""
+    _require_school_mode()
+    out: list[AssignmentOut] = []
+    with master_session() as s:
+        if payload.student_id is not None:
+            # Validera ägarskap
+            stu = s.query(Student).filter(
+                Student.id == payload.student_id,
+                Student.teacher_id == info.teacher_id,
+            ).first()
+            if not stu:
+                raise HTTPException(404, "Student not found")
+            target_ids = [payload.student_id]
+        else:
+            target_ids = [
+                st.id for st in s.query(Student).filter(
+                    Student.teacher_id == info.teacher_id,
+                    Student.active.is_(True),
+                ).all()
+            ]
+        for sid in target_ids:
+            a = Assignment(
+                teacher_id=info.teacher_id,
+                student_id=sid,
+                title=payload.title,
+                description=payload.description,
+                kind=payload.kind,
+                target_year_month=payload.target_year_month,
+                params=payload.params,
+            )
+            s.add(a)
+            s.flush()
+            out.append(_assignment_to_out(a))
+    return out
+
+
+@router.get(
+    "/teacher/assignments",
+    response_model=list[AssignmentStatusOut],
+)
+def list_assignments(
+    student_id: Optional[int] = None,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[AssignmentStatusOut]:
+    """Lista alla uppdrag (eller för en specifik elev) med live-status."""
+    _require_school_mode()
+    from ..teacher.assignments import evaluate
+    with master_session() as s:
+        q = s.query(Assignment).filter(
+            Assignment.teacher_id == info.teacher_id,
+        )
+        if student_id is not None:
+            q = q.filter(Assignment.student_id == student_id)
+        assignments = q.order_by(Assignment.created_at.desc()).all()
+        out: list[AssignmentStatusOut] = []
+        for a in assignments:
+            student = (
+                s.query(Student).filter(Student.id == a.student_id).first()
+                if a.student_id else None
+            )
+            if student:
+                try:
+                    res = evaluate(a, student)
+                    status_val = res.status
+                    progress = res.progress
+                    detail = res.detail
+                except Exception as e:
+                    log.exception("Assignment eval failed for %d", a.id)
+                    status_val = "in_progress"
+                    progress = f"Fel vid utvärdering: {e}"
+                    detail = None
+            else:
+                status_val = "in_progress"
+                progress = "Bulk-uppdrag (ingen specifik elev)"
+                detail = None
+            base = _assignment_to_out(a)
+            out.append(AssignmentStatusOut(
+                **base.model_dump(),
+                status=status_val,
+                progress=progress,
+                detail=detail,
+            ))
+        return out
+
+
+@router.delete("/teacher/assignments/{assignment_id}")
+def delete_assignment(
+    assignment_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == info.teacher_id,
+        ).first()
+        if not a:
+            raise HTTPException(404, "Assignment not found")
+        s.delete(a)
+    return {"ok": True}
+
+
+@router.get("/student/assignments", response_model=list[AssignmentStatusOut])
+def student_my_assignments(
+    info: TokenInfo = Depends(require_token),
+) -> list[AssignmentStatusOut]:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    from ..teacher.assignments import evaluate
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        assignments = s.query(Assignment).filter(
+            Assignment.student_id == student.id,
+        ).order_by(Assignment.created_at.desc()).all()
+        out: list[AssignmentStatusOut] = []
+        for a in assignments:
+            try:
+                res = evaluate(a, student)
+            except Exception as e:
+                log.exception("Assignment eval failed")
+                res = type("R", (), {
+                    "status": "in_progress",
+                    "progress": str(e),
+                    "detail": None,
+                })()
+            base = _assignment_to_out(a)
+            out.append(AssignmentStatusOut(
+                **base.model_dump(),
+                status=res.status, progress=res.progress, detail=res.detail,
+            ))
+        return out
 
 
 # ---------- Scenario-batches (PDF-utskick + import) ----------
@@ -960,6 +1158,28 @@ def create_batches(
                     overwrite=payload.overwrite,
                 )
                 s.flush()
+                # Auto-skapa import-uppdrag för månaden om det inte finns
+                from ..teacher.assignments import (
+                    DEFAULT_ASSIGNMENT_FOR_NEW_BATCH,
+                )
+                exists_a = s.query(Assignment).filter(
+                    Assignment.student_id == student.id,
+                    Assignment.kind == "import_batch",
+                    Assignment.target_year_month == payload.year_month,
+                ).first()
+                if not exists_a:
+                    s.add(Assignment(
+                        teacher_id=info.teacher_id,
+                        student_id=student.id,
+                        title=(
+                            f"Importera dokument för {payload.year_month}"
+                        ),
+                        description=DEFAULT_ASSIGNMENT_FOR_NEW_BATCH[
+                            "description"
+                        ],
+                        kind="import_batch",
+                        target_year_month=payload.year_month,
+                    ))
                 results.append(CreateBatchResultRow(
                     student_id=student.id,
                     display_name=student.display_name,
