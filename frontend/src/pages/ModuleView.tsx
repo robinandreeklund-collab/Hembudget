@@ -340,26 +340,57 @@ function QuizPanel({
 }: { step: Step; progress: StepProgress | null; onDone: () => void }) {
   const p = step.params ?? {};
   const options = (p.options as string[]) ?? [];
-  const correctIdx = (p.correct_index as number) ?? -1;
+  const correctIdx = (p.correct_index as number | undefined);
+  const correctIndices = (p.correct_indices as number[] | undefined);
+  const isMulti = Array.isArray(correctIndices);
   const explanation = p.explanation as string | undefined;
-  const [selected, setSelected] = useState<number | null>(
-    progress?.data?.answer != null ? (progress.data.answer as number) : null,
+
+  // Flerval: Set, enkel: null | index
+  const [multiSelected, setMultiSelected] = useState<Set<number>>(
+    new Set(
+      isMulti && Array.isArray(progress?.data?.answers)
+        ? (progress?.data?.answers as number[])
+        : [],
+    ),
   );
-  const [submitted, setSubmitted] = useState(!!progress?.completed_at);
+  const [singleSelected, setSingleSelected] = useState<number | null>(
+    !isMulti && progress?.data?.answer != null
+      ? (progress?.data?.answer as number)
+      : null,
+  );
+  const [lastSubmittedCorrect, setLastSubmittedCorrect] = useState<boolean | null>(
+    progress?.data?.correct != null ? (progress.data.correct as boolean) : null,
+  );
+  const [showResult, setShowResult] = useState(!!progress?.completed_at);
+  const [attempts, setAttempts] = useState<number>(
+    (progress?.data?.attempts as number) ?? 0,
+  );
   const [busy, setBusy] = useState(false);
 
+  const firstCorrect = (progress?.data?.first_correct as boolean | undefined);
+
   async function submit() {
-    if (selected == null) return;
     setBusy(true);
     try {
-      await api(`/student/steps/${step.id}/complete`, {
-        method: "POST",
-        body: JSON.stringify({ data: { answer: selected } }),
-      });
-      setSubmitted(true);
+      const body = isMulti
+        ? { data: { answers: [...multiSelected].sort((a, b) => a - b) } }
+        : { data: { answer: singleSelected } };
+      const res = await api<{ data: Record<string, unknown> }>(
+        `/student/steps/${step.id}/complete`,
+        { method: "POST", body: JSON.stringify(body) },
+      );
+      setLastSubmittedCorrect(!!res.data.correct);
+      setAttempts((res.data.attempts as number) ?? attempts + 1);
+      setShowResult(true);
     } finally {
       setBusy(false);
     }
+  }
+
+  function retry() {
+    setShowResult(false);
+    setSingleSelected(null);
+    setMultiSelected(new Set());
   }
 
   return (
@@ -367,16 +398,35 @@ function QuizPanel({
       {!!p.question && (
         <div className="font-medium text-slate-800">{String(p.question)}</div>
       )}
+      {isMulti && !showResult && (
+        <div className="text-xs text-slate-500">
+          (Flera svar kan vara rätt — bocka alla du tror)
+        </div>
+      )}
       <div className="space-y-2">
         {options.map((opt, i) => {
-          const isSelected = selected === i;
-          const showCorrect = submitted && correctIdx === i;
-          const showWrong = submitted && isSelected && correctIdx !== i;
+          const isSelected = isMulti
+            ? multiSelected.has(i)
+            : singleSelected === i;
+          const isCorrectAnswer = isMulti
+            ? (correctIndices ?? []).includes(i)
+            : correctIdx === i;
+          const showCorrect = showResult && isCorrectAnswer;
+          const showWrong = showResult && isSelected && !isCorrectAnswer;
           return (
             <button
               key={i}
-              onClick={() => !submitted && setSelected(i)}
-              disabled={submitted}
+              onClick={() => {
+                if (showResult) return;
+                if (isMulti) {
+                  const n = new Set(multiSelected);
+                  if (n.has(i)) n.delete(i); else n.add(i);
+                  setMultiSelected(n);
+                } else {
+                  setSingleSelected(i);
+                }
+              }}
+              disabled={showResult}
               className={`w-full text-left rounded-lg border-2 p-3 text-sm transition ${
                 showCorrect
                   ? "border-emerald-500 bg-emerald-50"
@@ -387,6 +437,11 @@ function QuizPanel({
                   : "border-slate-200 bg-white hover:border-slate-300"
               }`}
             >
+              {isMulti && !showResult && (
+                <span className="inline-block w-4 h-4 border border-slate-400 rounded mr-2 align-middle">
+                  {isSelected ? "✓" : ""}
+                </span>
+              )}
               {opt}
               {showCorrect && <span className="ml-2 text-emerald-600">✓ rätt</span>}
               {showWrong && <span className="ml-2 text-rose-600">✗ fel</span>}
@@ -394,27 +449,64 @@ function QuizPanel({
           );
         })}
       </div>
-      {!submitted ? (
+
+      {!showResult ? (
         <button
           onClick={submit}
-          disabled={selected == null || busy}
+          disabled={
+            busy ||
+            (isMulti ? multiSelected.size === 0 : singleSelected == null)
+          }
           className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-50"
         >
           Svara
         </button>
       ) : (
         <>
-          {explanation && (
-            <div className="bg-slate-50 border-l-4 border-slate-400 rounded p-3 text-sm text-slate-700">
-              <strong>Förklaring:</strong> {explanation}
-            </div>
-          )}
-          <button
-            onClick={onDone}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium"
+          <div
+            className={`rounded p-3 text-sm ${
+              lastSubmittedCorrect
+                ? "bg-emerald-50 border-l-4 border-emerald-500 text-emerald-900"
+                : "bg-amber-50 border-l-4 border-amber-500 text-amber-900"
+            }`}
           >
-            Nästa steg →
-          </button>
+            <strong>
+              {lastSubmittedCorrect
+                ? "Rätt!"
+                : "Inte riktigt — titta på förklaringen och prova igen."}
+            </strong>
+            {explanation && (
+              <div className="mt-1 text-slate-800">
+                <em>Förklaring:</em> {explanation}
+              </div>
+            )}
+            {attempts > 1 && (
+              <div className="text-xs text-slate-500 mt-1">
+                Försök #{attempts}
+                {firstCorrect === false && (
+                  <span className="ml-2 text-slate-600">
+                    (mastery räknar första försöket)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {!lastSubmittedCorrect && (
+              <button
+                onClick={retry}
+                className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-5 py-2 font-medium"
+              >
+                Prova igen
+              </button>
+            )}
+            <button
+              onClick={onDone}
+              className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium"
+            >
+              Nästa steg →
+            </button>
+          </div>
         </>
       )}
     </div>

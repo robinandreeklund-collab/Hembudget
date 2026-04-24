@@ -523,7 +523,10 @@ def _compute_mastery_for_student(
         if prog and prog.completed_at:
             success = 1.0
             if step.kind == "quiz":
-                success = 1.0 if (prog.data or {}).get("correct") else 0.0
+                # Mastery baseras på första försöket så eleven inte kan
+                # "trappa upp" sin mastery genom att svara om tills rätt.
+                d = prog.data or {}
+                success = 1.0 if d.get("first_correct", d.get("correct")) else 0.0
             bucket["earned_weight"] += msc.weight * success
             bucket["count"] += 1
             if not bucket["latest"] or prog.completed_at > bucket["latest"]:
@@ -854,12 +857,38 @@ def student_complete_step(
                 )
             data["reflection"] = text
         elif st.kind == "quiz":
-            answer = data.get("answer")
-            if not isinstance(answer, int):
-                raise HTTPException(400, "Saknar 'answer' (int)")
-            correct_index = (st.params or {}).get("correct_index")
-            data["correct"] = (answer == correct_index)
-            data["correct_index"] = correct_index
+            # Två format stöds:
+            # - Enkel: params.correct_index (int), data.answer (int)
+            # - Multi: params.correct_indices (list[int]), data.answers (list[int])
+            params = st.params or {}
+            multi = "correct_indices" in params
+            if multi:
+                answers = data.get("answers")
+                if not isinstance(answers, list):
+                    raise HTTPException(400, "Saknar 'answers' (lista)")
+                correct = set(params.get("correct_indices") or [])
+                chosen = set(a for a in answers if isinstance(a, int))
+                data["correct"] = (chosen == correct)
+                data["correct_indices"] = list(correct)
+            else:
+                answer = data.get("answer")
+                if not isinstance(answer, int):
+                    raise HTTPException(400, "Saknar 'answer' (int)")
+                correct_index = params.get("correct_index")
+                data["correct"] = (answer == correct_index)
+                data["correct_index"] = correct_index
+            # Bevara första svaret för mastery-räkning: mastery räknar
+            # första försöket, oavsett om eleven svarar rätt senare.
+            prev = s.query(StudentStepProgress).filter(
+                StudentStepProgress.student_id == info.student_id,
+                StudentStepProgress.step_id == step_id,
+            ).first()
+            if prev and prev.data and "first_correct" in prev.data:
+                data["first_correct"] = prev.data["first_correct"]
+                data["attempts"] = (prev.data.get("attempts") or 1) + 1
+            else:
+                data["first_correct"] = data["correct"]
+                data["attempts"] = 1
 
         prog = s.query(StudentStepProgress).filter(
             StudentStepProgress.student_id == info.student_id,

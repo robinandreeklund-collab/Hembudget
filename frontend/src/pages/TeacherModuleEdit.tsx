@@ -347,7 +347,23 @@ function QuizEditor({
 }: { local: Step; setLocal: (s: Step) => void }) {
   const params = local.params ?? {};
   const options = ((params.options as string[]) ?? []).slice();
+  const isMulti = Array.isArray(params.correct_indices);
   const correct = (params.correct_index as number) ?? 0;
+  const correctSet = new Set((params.correct_indices as number[]) ?? []);
+
+  function setMode(multi: boolean) {
+    if (multi) {
+      const next = { ...params };
+      next.correct_indices = correct != null ? [correct] : [];
+      delete next.correct_index;
+      setLocal({ ...local, params: next });
+    } else {
+      const next = { ...params };
+      next.correct_index = correctSet.size > 0 ? Math.min(...correctSet) : 0;
+      delete next.correct_indices;
+      setLocal({ ...local, params: next });
+    }
+  }
 
   return (
     <div className="space-y-2">
@@ -364,20 +380,57 @@ function QuizEditor({
           className="w-full border rounded px-2 py-1.5 mt-1"
         />
       </label>
+
+      <div className="flex gap-1 text-xs bg-slate-100 rounded p-1">
+        <button
+          onClick={() => setMode(false)}
+          className={`flex-1 rounded py-1 ${
+            !isMulti ? "bg-white shadow text-brand-700 font-medium" : "text-slate-600"
+          }`}
+        >
+          Ett rätt svar
+        </button>
+        <button
+          onClick={() => setMode(true)}
+          className={`flex-1 rounded py-1 ${
+            isMulti ? "bg-white shadow text-brand-700 font-medium" : "text-slate-600"
+          }`}
+        >
+          Flera rätt svar
+        </button>
+      </div>
+
       <div className="space-y-1">
-        <div className="text-xs text-slate-500">Svarsalternativ (markera rätt)</div>
+        <div className="text-xs text-slate-500">
+          Svarsalternativ ({isMulti ? "bocka ALLA rätta" : "välj det rätta"})
+        </div>
         {options.map((opt, i) => (
           <div key={i} className="flex items-center gap-2">
-            <input
-              type="radio"
-              checked={correct === i}
-              onChange={() =>
-                setLocal({
-                  ...local,
-                  params: { ...params, correct_index: i },
-                })
-              }
-            />
+            {isMulti ? (
+              <input
+                type="checkbox"
+                checked={correctSet.has(i)}
+                onChange={(e) => {
+                  const next = new Set(correctSet);
+                  if (e.target.checked) next.add(i); else next.delete(i);
+                  setLocal({
+                    ...local,
+                    params: { ...params, correct_indices: [...next].sort() },
+                  });
+                }}
+              />
+            ) : (
+              <input
+                type="radio"
+                checked={correct === i}
+                onChange={() =>
+                  setLocal({
+                    ...local,
+                    params: { ...params, correct_index: i },
+                  })
+                }
+              />
+            )}
             <input
               value={opt}
               onChange={(e) => {
@@ -390,14 +443,17 @@ function QuizEditor({
             <button
               onClick={() => {
                 const next = options.filter((_, j) => j !== i);
-                setLocal({
-                  ...local,
-                  params: {
-                    ...params,
-                    options: next,
-                    correct_index: Math.min(correct, next.length - 1),
-                  },
-                });
+                const nextParams: Record<string, unknown> = {
+                  ...params, options: next,
+                };
+                if (isMulti) {
+                  nextParams.correct_indices = [...correctSet]
+                    .filter((c) => c !== i)
+                    .map((c) => (c > i ? c - 1 : c));
+                } else {
+                  nextParams.correct_index = Math.min(correct, next.length - 1);
+                }
+                setLocal({ ...local, params: nextParams });
               }}
               className="text-rose-500 hover:text-rose-700 text-xs"
             >
