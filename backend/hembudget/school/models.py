@@ -360,6 +360,40 @@ class MortgageDecision(MasterBase):
     )
 
 
+class Message(MasterBase):
+    """Meddelande mellan elev och deras lärare.
+
+    Konversationen är 1-till-1 (elev↔lärare), ingen broadcast. Varje
+    meddelande har en sender_role som avgör om det kom från elev
+    eller lärare. Olästa räknas per mottagare.
+    """
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id"), nullable=False, index=True,
+    )
+    # "student" | "teacher"
+    sender_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Valfri referens till en transaktion eller uppdrag för tråd-koppling
+    # (vi använder bara som kontext/etikett — ingen FK cross-DB)
+    context_type: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    read_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+
+
 class AppConfig(MasterBase):
     """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
     Key-value-form så vi slipper migrera schemat vid varje nytt fält.

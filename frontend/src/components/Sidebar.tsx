@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Home,
   Inbox,
+  MessageCircle,
   Landmark,
   Link2,
   LineChart,
@@ -61,6 +62,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   if (isStudent) {
     items = [
       { to: "/my-batches", label: "Dina dokument", icon: Inbox },
+      { to: "/messages", label: "Meddelanden", icon: MessageCircle },
       ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),
     ];
   } else if (isTeacherViewing) {

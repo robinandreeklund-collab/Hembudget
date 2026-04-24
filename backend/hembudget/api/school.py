@@ -41,6 +41,7 @@ from ..school.models import (
     BatchArtifact,
     Family,
     InterestRateSeries,
+    Message,
     MortgageDecision,
     ScenarioBatch,
     Student,
@@ -1882,6 +1883,257 @@ def put_tax_settings(
         else:
             row.value = payload.model_dump()
     return TaxSettingsOut(**payload.model_dump(), is_default=False)
+
+
+# ---------- Meddelanden (elev ↔ lärare) ----------
+
+class MessageIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    context_type: Optional[str] = None
+    context_id: Optional[int] = None
+
+
+class MessageOut(BaseModel):
+    id: int
+    student_id: int
+    teacher_id: int
+    sender_role: str
+    body: str
+    context_type: Optional[str]
+    context_id: Optional[int]
+    read_at: Optional[datetime]
+    created_at: datetime
+
+
+class ThreadSummaryOut(BaseModel):
+    student_id: int
+    display_name: str
+    class_label: Optional[str]
+    last_message_at: Optional[datetime]
+    last_message_preview: Optional[str]
+    unread_count: int
+
+
+def _msg_out(m: Message) -> MessageOut:
+    return MessageOut(
+        id=m.id, student_id=m.student_id, teacher_id=m.teacher_id,
+        sender_role=m.sender_role, body=m.body,
+        context_type=m.context_type, context_id=m.context_id,
+        read_at=m.read_at, created_at=m.created_at,
+    )
+
+
+@router.post("/student/messages", response_model=MessageOut)
+def student_send_message(
+    payload: MessageIn,
+    info: TokenInfo = Depends(require_token),
+) -> MessageOut:
+    """Eleven skickar meddelande till sin lärare."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        msg = Message(
+            student_id=student.id,
+            teacher_id=student.teacher_id,
+            sender_role="student",
+            body=payload.body.strip(),
+            context_type=payload.context_type,
+            context_id=payload.context_id,
+        )
+        s.add(msg)
+        s.flush()
+        return _msg_out(msg)
+
+
+@router.get("/student/messages", response_model=list[MessageOut])
+def student_list_messages(
+    info: TokenInfo = Depends(require_token),
+) -> list[MessageOut]:
+    """Elevens meddelandetråd (båda riktningarna, kronologiskt).
+    Markerar samtidigt lärarens meddelanden som lästa."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    from datetime import datetime as _dt
+    with master_session() as s:
+        msgs = (
+            s.query(Message)
+            .filter(Message.student_id == info.student_id)
+            .order_by(Message.created_at)
+            .all()
+        )
+        # Markera lärare-meddelanden som lästa
+        for m in msgs:
+            if m.sender_role == "teacher" and m.read_at is None:
+                m.read_at = _dt.utcnow()
+        return [_msg_out(m) for m in msgs]
+
+
+@router.get("/student/messages/unread-count")
+def student_unread_count(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    _require_school_mode()
+    if info.role != "student":
+        return {"unread": 0}
+    with master_session() as s:
+        n = (
+            s.query(Message)
+            .filter(
+                Message.student_id == info.student_id,
+                Message.sender_role == "teacher",
+                Message.read_at.is_(None),
+            )
+            .count()
+        )
+        return {"unread": n}
+
+
+@router.get("/teacher/messages/threads",
+            response_model=list[ThreadSummaryOut])
+def teacher_list_threads(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[ThreadSummaryOut]:
+    """Översikt av alla trådar: en per elev. Visar senaste meddelande +
+    oläst-räknare."""
+    _require_school_mode()
+    out: list[ThreadSummaryOut] = []
+    with master_session() as s:
+        students = (
+            s.query(Student)
+            .filter(Student.teacher_id == info.teacher_id)
+            .order_by(Student.display_name)
+            .all()
+        )
+        for st in students:
+            last = (
+                s.query(Message)
+                .filter(Message.student_id == st.id)
+                .order_by(Message.created_at.desc())
+                .first()
+            )
+            unread = (
+                s.query(Message)
+                .filter(
+                    Message.student_id == st.id,
+                    Message.sender_role == "student",
+                    Message.read_at.is_(None),
+                )
+                .count()
+            )
+            out.append(ThreadSummaryOut(
+                student_id=st.id,
+                display_name=st.display_name,
+                class_label=st.class_label,
+                last_message_at=last.created_at if last else None,
+                last_message_preview=(
+                    (last.body[:80] + ("…" if len(last.body) > 80 else ""))
+                    if last else None
+                ),
+                unread_count=unread,
+            ))
+    # Sortera: olästa först, sedan senaste meddelande
+    out.sort(
+        key=lambda t: (
+            -t.unread_count,
+            t.last_message_at.isoformat() if t.last_message_at else "",
+        ),
+        reverse=False,
+    )
+    # Ovan sort ger olästa först (negativ unread=lägre) men senaste
+    # meddelande hamnar stigande — fix:
+    out.sort(
+        key=lambda t: (
+            0 if t.unread_count > 0 else 1,
+            -(
+                t.last_message_at.timestamp()
+                if t.last_message_at else 0
+            ),
+        ),
+    )
+    return out
+
+
+@router.get("/teacher/messages/threads/{student_id}",
+            response_model=list[MessageOut])
+def teacher_list_thread(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[MessageOut]:
+    """Hämta hela tråden för en specifik elev + markera elev-msg som
+    lästa."""
+    _require_school_mode()
+    from datetime import datetime as _dt
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        msgs = (
+            s.query(Message)
+            .filter(Message.student_id == student_id)
+            .order_by(Message.created_at)
+            .all()
+        )
+        for m in msgs:
+            if m.sender_role == "student" and m.read_at is None:
+                m.read_at = _dt.utcnow()
+        return [_msg_out(m) for m in msgs]
+
+
+@router.post("/teacher/messages/threads/{student_id}",
+             response_model=MessageOut)
+def teacher_send_message(
+    student_id: int,
+    payload: MessageIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> MessageOut:
+    _require_school_mode()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        msg = Message(
+            student_id=student_id,
+            teacher_id=info.teacher_id,
+            sender_role="teacher",
+            body=payload.body.strip(),
+            context_type=payload.context_type,
+            context_id=payload.context_id,
+        )
+        s.add(msg)
+        s.flush()
+        return _msg_out(msg)
+
+
+@router.get("/teacher/messages/unread-count")
+def teacher_unread_count(
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        n = (
+            s.query(Message)
+            .join(Student, Message.student_id == Student.id)
+            .filter(
+                Student.teacher_id == info.teacher_id,
+                Message.sender_role == "student",
+                Message.read_at.is_(None),
+            )
+            .count()
+        )
+        return {"unread": n}
 
 
 # ---------- Räntor + bolåne-beslut ----------

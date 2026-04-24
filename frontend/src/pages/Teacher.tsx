@@ -219,7 +219,13 @@ export default function Teacher() {
           <Users className="w-6 h-6 text-brand-600" />
           <h1 className="text-2xl font-semibold">Lärarpanel</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Link
+            to="/messages"
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            💬 Meddelanden
+          </Link>
           <Link
             to="/teacher/matrix"
             className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"

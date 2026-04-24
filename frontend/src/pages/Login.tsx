@@ -93,7 +93,9 @@ export default function Login() {
           ) : (
             <Lock className="w-5 h-5" />
           )}
-          <h1 className="text-xl font-semibold">Hembudget</h1>
+          <h1 className="text-xl font-semibold">
+            {schoolMode ? "Ekonomilabbet" : "Hembudget"}
+          </h1>
         </div>
 
         {schoolMode && (
@@ -136,7 +138,7 @@ export default function Login() {
           <p className="text-sm text-amber-700 bg-amber-50 rounded p-2 border border-amber-200">
             {schoolStatus?.bootstrap_requires_secret
               ? "Första gången — skapa lärarkonto. Ange bootstrap-koden som satts i deployens env-vars."
-              : "Välkommen! Skapa ditt lärarkonto. Du blir administratör för alla elever på denna instans."}
+              : "Välkommen till Ekonomilabbet! Skapa ditt lärarkonto. Du blir administratör för alla dina elever."}
           </p>
         )}
         {effectiveMode === "teacher" && (

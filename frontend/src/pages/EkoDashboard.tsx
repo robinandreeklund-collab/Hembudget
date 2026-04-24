@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "@/api/client";
 import { AssignmentList } from "@/components/AssignmentList";
+import { HelpIcon, InfoBanner } from "@/components/Tooltip";
 
 type DashboardRow = { category: string; budget: number; spent: number; pct: number };
 type Overshoot = {
@@ -95,6 +96,13 @@ export default function EkoDashboard() {
         </select>
       </div>
 
+      {data.assignments_total > 0 && data.assignments_done === 0 && (
+        <InfoBanner title="Kom igång">
+          Du har {data.assignments_total} uppdrag att jobba med. Kolla
+          längst ner på sidan — där ser du allt du behöver göra.
+        </InfoBanner>
+      )}
+
       {/* Toppkort */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <KpiCard
@@ -102,12 +110,14 @@ export default function EkoDashboard() {
           label="Nettolön"
           value={formatKr(data.net_income)}
           bgClass="bg-emerald-50"
+          help="Så mycket pengar landar på ditt konto efter skatt. Det här är vad du har att röra dig med varje månad."
         />
         <KpiCard
           icon={<Wallet className="w-5 h-5 text-slate-600" />}
           label="Utgifter"
           value={formatKr(data.total_spent)}
           bgClass="bg-slate-50"
+          help="Summan av allt du spenderat denna månad — mat, nöjen, räkningar. Inräknar INTE sparande."
         />
         <KpiCard
           icon={<PiggyBank className="w-5 h-5 text-brand-600" />}
@@ -118,6 +128,7 @@ export default function EkoDashboard() {
               : formatKr(data.savings_done)
           }
           bgClass="bg-brand-50"
+          help="Överföringar till sparkonto. Om du har ett sparmål visas det också — försök nå dit!"
         />
         <KpiCard
           icon={
@@ -130,6 +141,11 @@ export default function EkoDashboard() {
           label={data.balance >= 0 ? "Överskott" : "Underskott"}
           value={formatKr(Math.abs(data.balance))}
           bgClass={data.balance >= 0 ? "bg-emerald-50" : "bg-rose-50"}
+          help={
+            data.balance >= 0
+              ? "Grymt! Du har pengar kvar — fundera på om du kan spara ännu mer."
+              : "Du har spenderat mer än du tjänat. Något måste du dra ner på. Titta i budgeten vilka kategorier som sticker ut."
+          }
         />
       </div>
 
@@ -223,12 +239,19 @@ export default function EkoDashboard() {
 }
 
 function KpiCard({
-  icon, label, value, bgClass,
-}: { icon: React.ReactNode; label: string; value: string; bgClass: string }) {
+  icon, label, value, bgClass, help,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  bgClass: string;
+  help?: string;
+}) {
   return (
     <div className={`${bgClass} rounded-lg p-4`}>
       <div className="flex items-center gap-2 text-xs text-slate-600 mb-1">
         {icon} {label}
+        {help && <HelpIcon content={help} />}
       </div>
       <div className="text-xl font-bold text-slate-800">{value}</div>
     </div>

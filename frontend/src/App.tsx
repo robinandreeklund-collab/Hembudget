@@ -29,6 +29,7 @@ import AllBatches from "./pages/AllBatches";
 import EkoDashboard from "./pages/EkoDashboard";
 import AssignmentMatrix from "./pages/AssignmentMatrix";
 import MortgageDecision from "./pages/MortgageDecision";
+import Messages from "./pages/Messages";
 
 export default function App() {
   const {
@@ -63,6 +64,7 @@ export default function App() {
               <Route path="/teacher/all-batches" element={<AllBatches />} />
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
               <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
+              <Route path="/messages" element={<Messages />} />
               <Route path="*" element={<Navigate to="/teacher" replace />} />
             </>
           ) : (
@@ -73,6 +75,7 @@ export default function App() {
               <Route path="/teacher/all-batches" element={<AllBatches />} />
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
               <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
+              <Route path="/messages" element={<Messages />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route
                 path="/dashboard"

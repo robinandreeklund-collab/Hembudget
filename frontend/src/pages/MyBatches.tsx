@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { api, getApiBase, getToken } from "@/api/client";
 import { AssignmentList } from "@/components/AssignmentList";
+import { InfoBanner } from "@/components/Tooltip";
 
 type Artifact = {
   id: number;
@@ -130,6 +131,24 @@ export default function MyBatches() {
         Här samlas dokumenten som din lärare skickat ut. Ladda ner och titta
         på dem, och importera dem sedan i appen så syns de i din ekonomi.
       </p>
+      <InfoBanner title="Så här gör du">
+        <ol className="list-decimal ml-5 space-y-1">
+          <li>Välj vilken månad du vill jobba med (till vänster).</li>
+          <li>
+            Klicka på pilen <strong>⬇</strong> för att ladda ner PDF:en och
+            titta på den — precis som du skulle gjort med en riktig faktura
+            eller lönespec.
+          </li>
+          <li>
+            Klicka på pilen <strong>⬆</strong> för att importera dokumentet i
+            appen — då hamnar siffrorna på rätt plats i din ekonomi.
+          </li>
+          <li>
+            Tips: Klicka <strong>Importera alla</strong> om du vill göra det i
+            ett svep.
+          </li>
+        </ol>
+      </InfoBanner>
 
       {/* Uppdrag */}
       <div className="bg-white border rounded-lg p-4">
