@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpenCheck, Briefcase, CheckCircle2, Eye, FileText,
-  ListChecks, Plus, Target, Users, XCircle,
+  ListChecks, Plus, Sparkles, Target, Users, XCircle,
 } from "lucide-react";
 import { api, getApiBase, getToken } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -61,6 +61,13 @@ export default function StudentDetail() {
     mastery: number;
     evidence_count: number;
   }>>([]);
+  const [recommendations, setRecommendations] = useState<Array<{
+    module_id: number;
+    title: string;
+    summary: string | null;
+    reason: string;
+    step_count: number;
+  }>>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newKind, setNewKind] = useState("free_text");
   const [newTitle, setNewTitle] = useState("");
@@ -97,7 +104,20 @@ export default function StudentDetail() {
     api<typeof mastery>(`/teacher/students/${sid}/mastery`)
       .then((m) => setMastery(m.filter((r) => r.evidence_count > 0)))
       .catch(() => setMastery([]));
+    api<typeof recommendations>(`/teacher/students/${sid}/recommendations`)
+      .then(setRecommendations)
+      .catch(() => setRecommendations([]));
   }, [sid]);
+
+  async function assignRec(moduleId: number) {
+    await api(`/teacher/modules/${moduleId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ student_ids: [sid] }),
+    });
+    api<typeof recommendations>(`/teacher/students/${sid}/recommendations`)
+      .then(setRecommendations)
+      .catch(() => setRecommendations([]));
+  }
 
   useEffect(() => {
     if (facitMonth) loadFacit(facitMonth);
@@ -213,6 +233,40 @@ export default function StudentDetail() {
           />
         </div>
       </section>
+
+      {/* Rekommendationer */}
+      {recommendations.length > 0 && (
+        <section className="bg-gradient-to-br from-brand-50 to-white border border-brand-200 rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-brand-600" /> Rekommenderade moduler
+          </h2>
+          <p className="text-sm text-slate-600">
+            Baserat på elevens mastery — dessa moduler tränar svagaste områdena.
+          </p>
+          <ul className="space-y-2">
+            {recommendations.slice(0, 3).map((r) => (
+              <li
+                key={r.module_id}
+                className="bg-white border rounded p-3 flex items-center gap-3"
+              >
+                <div className="flex-1">
+                  <div className="font-medium">{r.title}</div>
+                  {r.summary && (
+                    <div className="text-sm text-slate-600">{r.summary}</div>
+                  )}
+                  <div className="text-xs text-brand-700 mt-1">💡 {r.reason}</div>
+                </div>
+                <button
+                  onClick={() => assignRec(r.module_id)}
+                  className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm"
+                >
+                  Tilldela
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Mastery */}
       {mastery.length > 0 && (

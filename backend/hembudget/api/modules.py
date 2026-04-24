@@ -826,6 +826,148 @@ def reflections_unread_count(
     return {"unread": n}
 
 
+# ---------- Adaptiva rekommendationer ----------
+
+class RecommendationOut(BaseModel):
+    module_id: int
+    title: str
+    summary: Optional[str]
+    step_count: int
+    reason: str  # mänskligt läsbar förklaring
+    weak_competencies: list[str]  # kompetens-namn som modulen tränar
+    score: float  # rangordning (högre = bättre rek)
+
+
+def _recommend_modules_for_student(
+    s, student_id: int, limit: int = 5,
+) -> list[RecommendationOut]:
+    """Ge rekommenderade moduler baserat på elevens mastery.
+
+    Logik:
+    1. Räkna mastery per kompetens. Identifiera "svaga" kompetenser —
+       mastery < 0.5 (eller 0 bevis = helt outforskade).
+    2. Hämta alla moduler som är:
+       - Template (systemmall), ELLER ägda av elevens lärare
+       - INTE redan tilldelade eleven
+    3. Poängsätt varje modul: summan av svaga kompetensers bidrag.
+       En modul får poäng om något av dess steg är kopplat till en
+       svag kompetens.
+    4. Returnera topp-N med förklaring.
+    """
+    me = s.query(Student).filter(Student.id == student_id).first()
+    if not me:
+        return []
+
+    mastery_map = _compute_mastery_for_student(s, student_id)
+    comps = {c.id: c for c in s.query(Competency).all()}
+
+    # Svaga kompetenser: mastery < 0.5 (räknar också helt outforskade
+    # som svaga men ger dem något lägre vikt)
+    weakness: dict[int, float] = {}
+    for cid, c in comps.items():
+        m = mastery_map.get(cid)
+        if m is None:
+            # Ingen koppling än — mindre prioriterat
+            weakness[cid] = 0.3
+        elif m[0] < 0.5:
+            # Ju lägre mastery desto högre prioritet
+            weakness[cid] = 1.0 - m[0]
+    if not weakness:
+        return []
+
+    # Redan tilldelade moduler
+    assigned_module_ids = {
+        sm.module_id for sm in s.query(StudentModule).filter(
+            StudentModule.student_id == student_id
+        ).all()
+    }
+
+    # Alla relevanta moduler
+    candidate_modules = (
+        s.query(Module)
+        .filter(
+            ((Module.teacher_id == me.teacher_id) | Module.is_template.is_(True)),
+        )
+        .all()
+    )
+
+    ranked: list[tuple[Module, float, set[int]]] = []
+    for m in candidate_modules:
+        if m.id in assigned_module_ids:
+            continue
+        if not m.steps:
+            continue
+        # Hämta alla kompetenser som denna moduls steg tränar
+        step_ids = [st.id for st in m.steps]
+        mscs = (
+            s.query(ModuleStepCompetency).filter(
+                ModuleStepCompetency.step_id.in_(step_ids)
+            ).all()
+        )
+        comp_ids = {msc.competency_id for msc in mscs}
+        if not comp_ids:
+            continue
+        # Poäng = summan av svaga kompetensers vikt bland modulens
+        score = sum(weakness.get(cid, 0) for cid in comp_ids)
+        if score <= 0:
+            continue
+        ranked.append((m, score, comp_ids))
+
+    ranked.sort(key=lambda t: -t[1])
+
+    out: list[RecommendationOut] = []
+    for m, score, comp_ids in ranked[:limit]:
+        weak_names = [
+            comps[cid].name for cid in comp_ids
+            if cid in weakness and cid in comps
+        ][:3]
+        if weak_names:
+            reason = (
+                "Tränar svaga områden: " + ", ".join(weak_names)
+            )
+        else:
+            reason = "Passar din utvecklingsnivå"
+        out.append(RecommendationOut(
+            module_id=m.id, title=m.title, summary=m.summary,
+            step_count=len(m.steps), reason=reason,
+            weak_competencies=weak_names, score=round(score, 2),
+        ))
+    return out
+
+
+@router.get(
+    "/student/recommendations",
+    response_model=list[RecommendationOut],
+)
+def student_recommendations(
+    info: TokenInfo = Depends(require_token),
+) -> list[RecommendationOut]:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        return _recommend_modules_for_student(s, info.student_id)
+
+
+@router.get(
+    "/teacher/students/{student_id}/recommendations",
+    response_model=list[RecommendationOut],
+)
+def teacher_student_recommendations(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[RecommendationOut]:
+    _require_school_mode()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        return _recommend_modules_for_student(s, student_id)
+
+
 # ---------- Peer-review ----------
 
 class PeerReviewTarget(BaseModel):

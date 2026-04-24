@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  BookOpen, CheckCircle2, ChevronRight, GraduationCap, Play,
+  BookOpen, CheckCircle2, ChevronRight, GraduationCap, Play, Sparkles,
 } from "lucide-react";
 import { api } from "@/api/client";
 
@@ -17,8 +17,18 @@ type Mod = {
   completed_step_count: number;
 };
 
+type Recommendation = {
+  module_id: number;
+  title: string;
+  summary: string | null;
+  step_count: number;
+  reason: string;
+  weak_competencies: string[];
+};
+
 export default function MyModules() {
   const [mods, setMods] = useState<Mod[]>([]);
+  const [recs, setRecs] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -27,6 +37,9 @@ export default function MyModules() {
       .then(setMods)
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+    api<Recommendation[]>("/student/recommendations")
+      .then(setRecs)
+      .catch(() => setRecs([]));
   }, []);
 
   return (
@@ -44,6 +57,39 @@ export default function MyModules() {
           {err}
         </div>
       )}
+      {recs.length > 0 && (
+        <section className="bg-gradient-to-br from-brand-50 to-white border border-brand-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-brand-600" />
+            <h2 className="font-semibold text-slate-900">
+              Rekommenderat för dig
+            </h2>
+          </div>
+          <p className="text-sm text-slate-600">
+            Baserat på dina färdigheter — be din lärare att tilldela dig
+            dessa moduler.
+          </p>
+          <ul className="space-y-2">
+            {recs.slice(0, 3).map((r) => (
+              <li
+                key={r.module_id}
+                className="bg-white border border-slate-200 rounded p-3"
+              >
+                <div className="font-medium text-slate-900">{r.title}</div>
+                {r.summary && (
+                  <div className="text-sm text-slate-600 mt-0.5">
+                    {r.summary}
+                  </div>
+                )}
+                <div className="text-xs text-brand-700 mt-1">
+                  💡 {r.reason}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {loading ? (
         <div className="text-slate-500">Laddar…</div>
       ) : mods.length === 0 ? (
