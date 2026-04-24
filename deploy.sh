@@ -120,9 +120,10 @@ gcloud services enable \
 ok "API:er aktiva"
 
 # ----- 5. Deploy -----
-# MODE: "demo" (default, öppet demo-läge) eller "school" (lärare/elev-läge
-# med multi-tenant-DB:er). Styrs via env-var MODE=school ./deploy.sh.
-MODE="${MODE:-demo}"
+# MODE: "school" (default, lärare/elev-läge med multi-tenant-DB:er) eller
+# "demo" (öppet demo-läge utan inloggning). Styrs via env-var
+# MODE=demo ./deploy.sh om du vill tillbaka till öppet demoläge.
+MODE="${MODE:-school}"
 
 if [[ "$MODE" == "school" ]]; then
     # Skol-läge kräver:

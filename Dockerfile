@@ -47,6 +47,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "alembic>=1.13" \
         "pydantic>=2.6" \
         "pydantic-settings>=2.2" \
+        "email-validator>=2.0" \
         "openai>=1.30" \
         "pandas>=2.2" \
         "python-multipart>=0.0.9" \
@@ -63,6 +64,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # OBS: sqlcipher3-binary hoppas över i demo — backend faller tillbaka på
 # plain SQLite automatiskt. pytesseract/tesseract skippas också eftersom
 # vision-import inte används i demo.
+# email-validator krävs av pydantic.EmailStr (används av school-routerns
+# lärar-login-schemas).
 
 # Kopiera backend-källkoden
 COPY backend/ /app/backend/
@@ -74,12 +77,16 @@ COPY --from=frontend-build /frontend/dist /app/frontend/dist
 COPY data/ /app/data/
 
 # Cloud Run sätter PORT-env vid start. Vi bindar på 0.0.0.0 och inaktiverar
-# SQLCipher (ingen master-password i demo) + pekar LM Studio till en
+# SQLCipher (ingen master-password i skol-läge) + pekar LM Studio till en
 # icke-existerande host så AI-features failar tyst utan att blockera start.
+# DEFAULT = school-mode (lärare/elev). För öppet demo istället: sätt
+# HEMBUDGET_DEMO_MODE=1 + HEMBUDGET_SCHOOL_MODE=0 som Cloud Run-env.
+# Bootstrap-secret + bootstrap-teacher sätts som Cloud Run-env via
+# deploy.sh så första läraren skapas automatiskt vid start.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/backend \
     HEMBUDGET_HOST=0.0.0.0 \
-    HEMBUDGET_DEMO_MODE=1 \
+    HEMBUDGET_SCHOOL_MODE=1 \
     HEMBUDGET_SERVE_STATIC=1 \
     HEMBUDGET_DATA_DIR=/tmp/hembudget \
     HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1
