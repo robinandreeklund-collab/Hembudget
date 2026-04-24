@@ -30,6 +30,7 @@ import EkoDashboard from "./pages/EkoDashboard";
 import AssignmentMatrix from "./pages/AssignmentMatrix";
 import MortgageDecision from "./pages/MortgageDecision";
 import Messages from "./pages/Messages";
+import Landing from "./pages/Landing";
 
 export default function App() {
   const {
@@ -38,7 +39,16 @@ export default function App() {
   } = useAuth();
   if (loading) return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
   if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
-  if (!isAuthenticated) return <Login />;
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/login/*" element={<Login />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="*" element={<Landing />} />
+      </Routes>
+    );
+  }
 
   // Elev som inte är klar med onboarding → tvingas dit
   if (
