@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  CalendarClock, CheckCircle2, Home, Image as ImageIcon, Loader2,
+  CalendarClock, CheckCircle2, ChevronDown, ChevronRight,
+  Home, Image as ImageIcon, Loader2,
   Pencil, Sparkles, Trash2, Plus, X,
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
@@ -35,6 +36,8 @@ interface LoanSummary {
   outstanding_balance: number;
   amortization_paid: number;
   interest_paid: number;
+  interest_paid_year: number;
+  interest_year: number;
   interest_rate: number;
   binding_type: string;
   binding_end_date: string | null;
@@ -48,6 +51,7 @@ interface Loan {
   lender: string;
   loan_number: string | null;
   principal_amount: number;
+  current_balance_at_creation: number | null;
   start_date: string;
   interest_rate: number;
   binding_type: string;
@@ -57,6 +61,7 @@ interface Loan {
   match_pattern: string | null;
   notes: string | null;
   active: boolean;
+  category_id: number | null;
 }
 
 interface LoanIn {
@@ -64,6 +69,7 @@ interface LoanIn {
   lender: string;
   loan_number?: string | null;
   principal_amount: number;
+  current_balance_at_creation?: number | null;
   start_date: string;
   interest_rate: number;
   binding_type: string;
@@ -72,6 +78,7 @@ interface LoanIn {
   property_value?: number | null;
   match_pattern?: string | null;
   notes?: string | null;
+  category_id?: number | null;
 }
 
 export default function Loans() {
@@ -85,6 +92,14 @@ export default function Loans() {
   const [uploadJobs, setUploadJobs] = useState<
     { file: File; status: "uploading" | "done" | "error"; message?: string }[]
   >([]);
+  const [expandedLoans, setExpandedLoans] = useState<Set<number>>(new Set());
+  const toggleExpanded = (id: number) =>
+    setExpandedLoans((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const summariesQ = useQuery({
     queryKey: ["loan-summaries"],
@@ -93,6 +108,11 @@ export default function Loans() {
   const loansQ = useQuery({
     queryKey: ["loans"],
     queryFn: () => api<Loan[]>("/loans/"),
+  });
+  const categoriesQ = useQuery({
+    queryKey: ["categories"],
+    queryFn: () =>
+      api<Array<{ id: number; name: string }>>("/categories"),
   });
 
   const invalidate = () => {
@@ -131,6 +151,8 @@ export default function Loans() {
   const loans = loansQ.data ?? [];
   const totalDebt = summaries.reduce((s, l) => s + Number(l.outstanding_balance), 0);
   const totalInterest = summaries.reduce((s, l) => s + Number(l.interest_paid), 0);
+  const totalInterestYtd = summaries.reduce((s, l) => s + Number(l.interest_paid_year ?? 0), 0);
+  const interestYear = summaries[0]?.interest_year ?? new Date().getFullYear();
   const totalAmortized = summaries.reduce((s, l) => s + Number(l.amortization_paid), 0);
 
   return (
@@ -189,17 +211,24 @@ export default function Loans() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
-          <div className="text-xs uppercase text-slate-500">Total skuld</div>
+          <div className="text-xs uppercase text-slate-700">Total skuld</div>
           <div className="text-2xl font-semibold text-rose-600">{formatSEK(totalDebt)}</div>
         </Card>
         <Card>
-          <div className="text-xs uppercase text-slate-500">Betald ränta (total)</div>
+          <div className="text-xs uppercase text-slate-700">
+            Betald ränta i år
+          </div>
+          <div className="text-2xl font-semibold">{formatSEK(totalInterestYtd)}</div>
+          <div className="text-xs text-slate-600 mt-1">{interestYear}</div>
+        </Card>
+        <Card>
+          <div className="text-xs uppercase text-slate-700">Betald ränta (total)</div>
           <div className="text-2xl font-semibold">{formatSEK(totalInterest)}</div>
         </Card>
         <Card>
-          <div className="text-xs uppercase text-slate-500">Amorterat</div>
+          <div className="text-xs uppercase text-slate-700">Amorterat</div>
           <div className="text-2xl font-semibold text-emerald-600">{formatSEK(totalAmortized)}</div>
         </Card>
       </div>
@@ -207,6 +236,7 @@ export default function Loans() {
       {mode.kind === "create" && (
         <LoanForm
           title="Nytt lån"
+          categories={categoriesQ.data ?? []}
           onSubmit={(data) => createMut.mutate(data)}
           onCancel={() => setMode({ kind: "idle" })}
           busy={createMut.isPending}
@@ -216,11 +246,13 @@ export default function Loans() {
       {mode.kind === "edit" && (
         <LoanForm
           title={`Redigera "${mode.loan.name}"`}
+          categories={categoriesQ.data ?? []}
           initial={{
             name: mode.loan.name,
             lender: mode.loan.lender,
             loan_number: mode.loan.loan_number,
             principal_amount: mode.loan.principal_amount,
+            current_balance_at_creation: mode.loan.current_balance_at_creation,
             start_date: mode.loan.start_date,
             interest_rate: mode.loan.interest_rate,
             binding_type: mode.loan.binding_type,
@@ -229,6 +261,7 @@ export default function Loans() {
             property_value: mode.loan.property_value,
             match_pattern: mode.loan.match_pattern,
             notes: mode.loan.notes,
+            category_id: mode.loan.category_id,
           }}
           submitLabel="Spara ändringar"
           onSubmit={(data) => updateMut.mutate({ id: mode.loan.id, data })}
@@ -240,7 +273,7 @@ export default function Loans() {
 
       <Card title="Registrerade lån">
         {summaries.length === 0 ? (
-          <div className="text-sm text-slate-500">
+          <div className="text-sm text-slate-700">
             Inga lån registrerade. Lägg till ett så kopplar systemet dina
             betalningar automatiskt och räknar ned skulden per amortering.
           </div>
@@ -248,48 +281,87 @@ export default function Loans() {
           <div className="space-y-3">
             {summaries.map((s) => {
               const full = loans.find((l) => l.id === s.id);
+              const expanded = expandedLoans.has(s.id);
               return (
-                <div key={s.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-semibold">{s.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {s.lender} · {s.binding_type} · {(s.interest_rate * 100).toFixed(2)} %
-                        {full?.match_pattern ? ` · matchar "${full.match_pattern}"` : ""}
+                <div key={s.id} className="border rounded-lg">
+                  {/* Alltid synlig kompakt header — klick för att expandera */}
+                  <button
+                    onClick={() => toggleExpanded(s.id)}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left"
+                  >
+                    {expanded ? (
+                      <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{s.name}</div>
+                      <div className="text-xs text-slate-700 truncate">
+                        {s.lender} · {(s.interest_rate * 100).toFixed(2)} % · {s.payments_count} betalningar
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => full && setMode({ kind: "edit", loan: full })}
-                        disabled={!full}
-                        className="p-1.5 text-slate-400 hover:text-brand-600 disabled:opacity-40"
-                        title="Redigera"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Ta bort lånet '${s.name}'?`)) deleteMut.mutate(s.id);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600"
-                        title="Ta bort"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div className="hidden md:flex gap-6 text-sm shrink-0">
+                      <div className="text-right">
+                        <div className="text-xs text-slate-600">Kvar</div>
+                        <div className="font-semibold">{formatSEK(s.outstanding_balance)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-slate-600">Ränta {s.interest_year ?? ""}</div>
+                        <div>{formatSEK(s.interest_paid_year ?? 0)}</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-3 text-sm">
-                    <Stat label="Ursprung" value={formatSEK(s.principal_amount)} />
-                    <Stat label="Kvarvarande" value={formatSEK(s.outstanding_balance)} strong />
-                    <Stat label="Amorterat" value={formatSEK(s.amortization_paid)} />
-                    <Stat label="Betald ränta" value={formatSEK(s.interest_paid)} />
-                  </div>
-                  <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                    <span>{s.payments_count} betalningar länkade</span>
-                    {s.ltv !== null && <span>LTV {(s.ltv * 100).toFixed(1)} %</span>}
-                    {s.binding_end_date && <span>Bindning slut {s.binding_end_date}</span>}
-                  </div>
-                  <LoanSchedule loanId={s.id} />
+                    <div className="md:hidden text-right shrink-0">
+                      <div className="font-semibold">{formatSEK(s.outstanding_balance)}</div>
+                      <div className="text-xs text-slate-700">kvar</div>
+                    </div>
+                  </button>
+
+                  {expanded && (
+                    <div className="border-t px-4 pt-3 pb-4">
+                      <div className="flex justify-between items-start">
+                        <div className="text-xs text-slate-700">
+                          {s.binding_type}
+                          {full?.match_pattern ? ` · matchar "${full.match_pattern}"` : ""}
+                          {s.ltv !== null && ` · LTV ${(s.ltv * 100).toFixed(1)} %`}
+                          {s.binding_end_date && ` · bindning slut ${s.binding_end_date}`}
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (full) setMode({ kind: "edit", loan: full });
+                            }}
+                            disabled={!full}
+                            className="p-1.5 text-slate-600 hover:text-brand-600 disabled:opacity-40"
+                            title="Redigera"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Ta bort lånet '${s.name}'?`)) deleteMut.mutate(s.id);
+                            }}
+                            className="p-1.5 text-slate-600 hover:text-rose-600"
+                            title="Ta bort"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mt-3 text-sm">
+                        <Stat label="Ursprung" value={formatSEK(s.principal_amount)} />
+                        <Stat label="Kvarvarande" value={formatSEK(s.outstanding_balance)} strong />
+                        <Stat label="Amorterat" value={formatSEK(s.amortization_paid)} />
+                        <Stat
+                          label={`Ränta ${s.interest_year ?? ""}`}
+                          value={formatSEK(s.interest_paid_year ?? 0)}
+                        />
+                        <Stat label="Ränta (total)" value={formatSEK(s.interest_paid)} />
+                      </div>
+                      <LoanSchedule loanId={s.id} />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -303,7 +375,7 @@ export default function Loans() {
 function Stat({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div>
-      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-xs text-slate-700">{label}</div>
       <div className={strong ? "font-semibold" : ""}>{value}</div>
     </div>
   );
@@ -313,6 +385,7 @@ const DEFAULT_FORM: LoanIn = {
   name: "",
   lender: "",
   principal_amount: 2500000,
+  current_balance_at_creation: null,
   start_date: new Date().toISOString().slice(0, 10),
   interest_rate: 0.042,
   binding_type: "rörlig",
@@ -327,6 +400,7 @@ function LoanForm({
   onCancel,
   busy,
   error,
+  categories,
 }: {
   title: string;
   initial?: LoanIn;
@@ -335,6 +409,7 @@ function LoanForm({
   onCancel: () => void;
   busy: boolean;
   error: Error | null;
+  categories: Array<{ id: number; name: string }>;
 }) {
   const [f, setF] = useState<LoanIn>(initial ?? DEFAULT_FORM);
   return (
@@ -352,6 +427,21 @@ function LoanForm({
         <Field label="Originalbelopp (kr)">
           <input type="number" value={f.principal_amount} onChange={(e) => setF({ ...f, principal_amount: Number(e.target.value) })} className="input" />
         </Field>
+        <Field label="Kvarvarande skuld nu (kr, valfritt)">
+          <input
+            type="number"
+            value={f.current_balance_at_creation ?? ""}
+            onChange={(e) =>
+              setF({
+                ...f,
+                current_balance_at_creation: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+            className="input"
+            placeholder="Ex. 39081 för billån med 39k kvar"
+            title="Används för billån/lån där originalbelopp redan är delvis amorterat — gamla amorteringar subtraheras inte, bara nya efter startdatum"
+          />
+        </Field>
         <Field label="Startdatum">
           <input type="date" value={f.start_date} onChange={(e) => setF({ ...f, start_date: e.target.value })} className="input" />
         </Field>
@@ -366,6 +456,25 @@ function LoanForm({
             <option value="3år">3 år</option>
             <option value="5år">5 år</option>
             <option value="10år">10 år</option>
+          </select>
+        </Field>
+        <Field label="Budgetkategori">
+          <select
+            value={f.category_id ?? ""}
+            onChange={(e) =>
+              setF({
+                ...f,
+                category_id: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+            className="input"
+          >
+            <option value="">— ingen (använder Bolåneränta/Amortering)</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Bindning slut">
@@ -413,9 +522,9 @@ function Field({
 }) {
   return (
     <label className={full ? "col-span-2 block" : "block"}>
-      <div className="text-slate-500 text-xs mb-0.5">{label}</div>
+      <div className="text-slate-700 text-xs mb-0.5">{label}</div>
       {children}
-      {hint && <div className="text-xs text-slate-400 mt-0.5">{hint}</div>}
+      {hint && <div className="text-xs text-slate-600 mt-0.5">{hint}</div>}
     </label>
   );
 }
@@ -468,6 +577,15 @@ function LoanSchedule({ loanId }: { loanId: number }) {
     onSuccess: invalidate,
   });
 
+  const pruneMut = useMutation({
+    mutationFn: () =>
+      api<{ deleted: number; cutoff: string }>(
+        `/loans/${loanId}/schedule/prune-history`,
+        { method: "POST" },
+      ),
+    onSuccess: invalidate,
+  });
+
   const entries = scheduleQ.data ?? [];
 
   return (
@@ -487,6 +605,25 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           </button>
           <span className="text-slate-300">·</span>
           <button
+            onClick={() => {
+              if (
+                confirm(
+                  "Radera alla omatchade planerade betalningar från innan " +
+                    "du började importera transaktioner? De kan ändå aldrig " +
+                    "matchas.",
+                )
+              ) {
+                pruneMut.mutate();
+              }
+            }}
+            disabled={pruneMut.isPending}
+            className="text-rose-600 hover:underline"
+            title="Rensa historiska rader som aldrig kan matchas"
+          >
+            {pruneMut.isPending ? "Rensar…" : "Rensa historik"}
+          </button>
+          <span className="text-slate-300">·</span>
+          <button
             onClick={() => setAdding((a) => !a)}
             className="text-brand-600 hover:underline flex items-center gap-1"
           >
@@ -495,10 +632,16 @@ function LoanSchedule({ loanId }: { loanId: number }) {
         </div>
       </div>
 
+      {pruneMut.data && (
+        <div className="text-xs text-emerald-700 mb-2">
+          Raderade {pruneMut.data.deleted} rader före {pruneMut.data.cutoff}.
+        </div>
+      )}
+
       {adding && (
         <div className="bg-slate-50 rounded p-2 mb-2 flex items-end gap-2 text-xs">
           <label className="flex-1">
-            <div className="text-slate-500">Förväntat datum</div>
+            <div className="text-slate-700">Förväntat datum</div>
             <input
               type="date"
               value={newEntry.due_date}
@@ -507,7 +650,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
             />
           </label>
           <label className="w-28">
-            <div className="text-slate-500">Belopp (kr)</div>
+            <div className="text-slate-700">Belopp (kr)</div>
             <input
               type="number"
               value={newEntry.amount || ""}
@@ -517,7 +660,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
             />
           </label>
           <label className="w-36">
-            <div className="text-slate-500">Typ</div>
+            <div className="text-slate-700">Typ</div>
             <select
               value={newEntry.payment_type}
               onChange={(e) =>
@@ -538,7 +681,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           </button>
           <button
             onClick={() => setAdding(false)}
-            className="text-slate-400"
+            className="text-slate-600"
           >
             <X className="w-4 h-4" />
           </button>
@@ -546,7 +689,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
       )}
 
       {entries.length === 0 ? (
-        <div className="text-xs text-slate-400 italic">
+        <div className="text-xs text-slate-600 italic">
           Inga planerade betalningar. Klicka "Generera 3 mån" så skapas ränta +
           amortering automatiskt från lånevillkoren — då matchas kommande
           transaktioner på exakt belopp + datum.
@@ -558,7 +701,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
               key={e.id}
               className="flex items-center gap-2 text-xs border rounded px-2 py-1.5 bg-white"
             >
-              <div className="w-24 text-slate-500">{e.due_date}</div>
+              <div className="w-24 text-slate-700">{e.due_date}</div>
               <div className="w-20 font-medium">{formatSEK(e.amount)}</div>
               <div className="w-24 text-slate-600">
                 {e.payment_type === "interest" ? "Ränta" : "Amortering"}
@@ -637,7 +780,7 @@ function LoanFromImagesUploader({
     <Card
       title="Skapa lån automatiskt från bankbilder"
       action={
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+        <button onClick={onClose} className="text-slate-600 hover:text-slate-700">
           <X className="w-4 h-4" />
         </button>
       }
@@ -668,7 +811,7 @@ function LoanFromImagesUploader({
           isDragging ? "border-emerald-500 bg-emerald-50" : "border-slate-300 bg-slate-50"
         }`}
       >
-        <ImageIcon className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+        <ImageIcon className="w-10 h-10 mx-auto text-slate-600 mb-2" />
         <div className="text-sm text-slate-600">
           Dra flera bilder hit, eller{" "}
           <label className="text-emerald-700 cursor-pointer underline">

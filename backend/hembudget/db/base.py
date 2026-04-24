@@ -8,6 +8,7 @@ from typing import Iterator
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from ..config import settings
 
@@ -27,7 +28,13 @@ def _build_engine(db_path: Path, key: str | None) -> Engine:
         import sqlcipher3  # type: ignore
 
         url = f"sqlite+pysqlcipher://:{key or ''}@/{db_path.as_posix()}"
-        engine = create_engine(url, module=sqlcipher3, future=True)
+        # NullPool: öppna ny connection per checkout, stäng rent när vi är
+        # klara. QueuePool (default) återanvänder anslutningar och har gett
+        # segfaults med sqlcipher3 i WSL. NullPool är lite långsammare men
+        # stabilt. Desktop-app med få parallella requests — OK trade-off.
+        engine = create_engine(
+            url, module=sqlcipher3, future=True, poolclass=NullPool,
+        )
 
         @event.listens_for(engine, "connect")
         def _set_cipher_pragmas(dbapi_conn, _):

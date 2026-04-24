@@ -1,26 +1,27 @@
+"""Chat-agent som orkestrerar LM Studio med tool-use.
+
+Verktygsimplementationerna ligger i chat/tools.py — den här modulen
+binder bara ihop dem med LLM:en och chat-historiken i DB."""
 from __future__ import annotations
 
 import json
 import logging
-from datetime import date
-from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..budget.forecast import CashflowForecaster
-from ..budget.monthly import MonthlyBudgetService
-from ..db.models import Category, ChatMessage, Subscription, Transaction
+from ..db.models import ChatMessage
 from ..llm.client import LLMUnavailable, LMStudioClient
-from ..llm.prompts import CHAT_SYSTEM
-from ..scenarios.engine import ScenarioEngine
-from ..subscriptions.detector import SubscriptionDetector
+from ..llm.prompts import build_chat_system
+from . import tools
 
 log = logging.getLogger(__name__)
 
 
+# JSON-schema-definitioner för varje verktyg. LM Studio får hela listan
+# och får själva välja vilka att anropa.
 TOOLS: list[dict[str, Any]] = [
+    # -- Befintliga --
     {
         "type": "function",
         "function": {
@@ -37,7 +38,10 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "query_transactions",
-            "description": "Sök transaktioner på kategori, datumintervall eller merchant.",
+            "description": (
+                "Sök transaktioner efter kategori, datumintervall, merchant, belopp "
+                "eller konto. Returnerar även splits per transaktion."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -47,7 +51,9 @@ TOOLS: list[dict[str, Any]] = [
                     "to_date": {"type": "string"},
                     "min_amount": {"type": "number"},
                     "max_amount": {"type": "number"},
+                    "account_id": {"type": "integer"},
                     "limit": {"type": "integer", "default": 50},
+                    "include_transfers": {"type": "boolean", "default": False},
                 },
             },
         },
@@ -56,7 +62,11 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "top_categories",
-            "description": "Lista topp N kategorier (per utgiftsbelopp) under ett intervall.",
+            "description": (
+                "Topp N utgiftskategorier över ett intervall. Honorerar "
+                "transaktionsuppdelningar så en faktura splittad på el/vatten/bredband "
+                "syns som separata rader."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -80,7 +90,7 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "forecast_cashflow",
-            "description": "Projicera kassaflöde framåt baserat på historiskt snitt.",
+            "description": "Projicera kassaflöde N månader framåt från historiskt snitt.",
             "parameters": {
                 "type": "object",
                 "properties": {"months": {"type": "integer", "default": 6}},
@@ -91,162 +101,364 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "calculate_scenario",
-            "description": "Beräkna bolåne-, sparmåls- eller flyttscenario.",
+            "description": (
+                "Beräkna bolåne-, sparmåls- eller flyttscenario. "
+                "kind ∈ {mortgage, savings_goal, move}."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "kind": {"type": "string", "enum": ["mortgage", "savings_goal", "move"]},
+                    "kind": {
+                        "type": "string",
+                        "enum": ["mortgage", "savings_goal", "move"],
+                    },
                     "params": {"type": "object"},
                 },
                 "required": ["kind", "params"],
             },
         },
     },
+    # -- Nya: kontostatus & balansgrafer --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_accounts",
+            "description": "Lista alla konton med typ, bank och nuvarande saldo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "as_of": {
+                        "type": "string",
+                        "description": "YYYY-MM-DD; default idag",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_account_balance",
+            "description": "Saldo på ett specifikt konto vid en tidpunkt.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_id": {"type": "integer"},
+                    "as_of": {"type": "string"},
+                },
+                "required": ["account_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_balance_history",
+            "description": "Månadsvisa slutsaldon för ett eller alla konton.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_id": {"type": "integer"},
+                    "months": {"type": "integer", "default": 6},
+                },
+            },
+        },
+    },
+    # -- Nya: planerade poster --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_upcoming",
+            "description": (
+                "Lista planerade fakturor (bill) eller löner (income) med eventuella "
+                "fakturarader (el/vatten/bredband-splits)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["bill", "income"]},
+                    "from_date": {"type": "string"},
+                    "to_date": {"type": "string"},
+                    "only_unmatched": {"type": "boolean", "default": True},
+                    "owner": {"type": "string"},
+                },
+            },
+        },
+    },
+    # -- Nya: lån --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_loans",
+            "description": (
+                "Lista lån med aktuellt saldo, betalad amortering, ränta totalt, "
+                "LTV (om bostadsvärde finns) och antal betalningar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "active_only": {"type": "boolean", "default": True}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_loan_schedule",
+            "description": "Kommande schemalagda lånebetalningar (ränta + amortering).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "loan_id": {"type": "integer"},
+                    "months": {"type": "integer", "default": 12},
+                },
+            },
+        },
+    },
+    # -- Nya: sparande, scenarion, skatt --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_goals",
+            "description": "Sparmål med progress (current/target + progress_ratio).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_scenarios",
+            "description": "Sparade scenarion (bolån/sparmål/flytt) med deras input och resultat.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tax_events",
+            "description": (
+                "Skatterelaterade händelser (ISK-insättning, K4-vinst, ROT, RUT, "
+                "bolåneräntor). Summerar per typ."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {"type": "integer"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["isk_deposit", "k4_sale", "rot", "rut", "interest"],
+                    },
+                },
+            },
+        },
+    },
+    # -- Nya: kategorier & regler --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_categories",
+            "description": "Alla kategorier med månadsbudget (om satt).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_rules",
+            "description": "Kategoriseringsregler — valfritt filtrerat på kategorinamn.",
+            "parameters": {
+                "type": "object",
+                "properties": {"category": {"type": "string"}},
+            },
+        },
+    },
+    # -- Nya: trender & jämförelser --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_budget_history",
+            "description": "Budget + utfall över flera månader för trendanalys.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "from_month": {"type": "string", "description": "YYYY-MM"},
+                    "to_month": {"type": "string", "description": "YYYY-MM"},
+                },
+                "required": ["from_month", "to_month"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_months",
+            "description": (
+                "Jämför två månader: total inkomst/utgift/sparande + per-kategori-diff, "
+                "sorterat på absolutvärde."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month_a": {"type": "string"},
+                    "month_b": {"type": "string"},
+                },
+                "required": ["month_a", "month_b"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "detect_anomalies",
+            "description": (
+                "Statistiska avvikelser denna månad jämfört mot historiskt snitt "
+                "(z-score över 6 månaders lookback)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string"},
+                    "threshold_sigma": {"type": "number", "default": 2.0},
+                },
+                "required": ["month"],
+            },
+        },
+    },
+    # -- Nya: familj --
+    {
+        "type": "function",
+        "function": {
+            "name": "get_elpris",
+            "description": (
+                "Svenska spotelpriser per timme från elprisetjustnu.se. "
+                "Returnerar dagens/morgondagens snittpris inkl. moms, de 3 "
+                "billigaste timmarna och den dyraste timmen."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day": {
+                        "type": "string",
+                        "description": "'today', 'tomorrow' eller YYYY-MM-DD",
+                    },
+                    "zone": {
+                        "type": "string",
+                        "enum": ["SE1", "SE2", "SE3", "SE4"],
+                        "description": "SE3 är default (Stockholm/mellan).",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "subscription_health",
+            "description": (
+                "Hälsokoll för prenumerationer: hitta de som inte dragits "
+                "senaste `stale_days` dagarna. Summerar stale årskostnad — "
+                "bra för att föreslå uppsägningar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stale_days": {"type": "integer", "default": 60}
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ytd_income_by_person",
+            "description": (
+                "Total lön/inkomst i år (eller angivet år) per kontoägare. "
+                "Filtrerar på kategori (default 'Lön'), faller tillbaka till "
+                "alla positiva non-transfer om kategorin inte gett träff."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {"type": "integer"},
+                    "category_name": {"type": "string", "default": "Lön"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_family_breakdown",
+            "description": (
+                "Vem-betalade-vad per kontoägare (owner_id) och per konto under "
+                "en månad. Inkomst och utgift separat."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"month": {"type": "string"}},
+                "required": ["month"],
+            },
+        },
+    },
 ]
 
 
-def _d(x) -> float:
-    try:
-        return float(x)
-    except Exception:
-        return 0.0
+# Dispatcher: namn → implementation. Hålls i sync med TOOLS ovan.
+_DISPATCH = {
+    "get_month_summary": tools.get_month_summary,
+    "query_transactions": tools.query_transactions,
+    "top_categories": tools.top_categories,
+    "find_subscriptions": tools.find_subscriptions,
+    "forecast_cashflow": tools.forecast_cashflow,
+    "calculate_scenario": tools.calculate_scenario,
+    "get_accounts": tools.get_accounts,
+    "get_account_balance": tools.get_account_balance,
+    "get_balance_history": tools.get_balance_history,
+    "get_upcoming": tools.get_upcoming,
+    "get_loans": tools.get_loans,
+    "get_loan_schedule": tools.get_loan_schedule,
+    "get_goals": tools.get_goals,
+    "get_scenarios": tools.get_scenarios,
+    "get_tax_events": tools.get_tax_events,
+    "get_categories": tools.get_categories,
+    "get_rules": tools.get_rules,
+    "get_budget_history": tools.get_budget_history,
+    "compare_months": tools.compare_months,
+    "detect_anomalies": tools.detect_anomalies,
+    "get_family_breakdown": tools.get_family_breakdown,
+    "subscription_health": tools.subscription_health,
+    "get_elpris": tools.get_elpris,
+    "ytd_income_by_person": tools.ytd_income_by_person,
+}
 
 
 class ChatAgent:
     """Tool-using agent som läser ur DB och räknar deterministiskt via backend."""
 
-    def __init__(self, session: Session, llm: LMStudioClient, max_tool_iters: int = 5):
+    def __init__(
+        self,
+        session: Session,
+        llm: LMStudioClient,
+        max_tool_iters: int = 8,
+    ):
         self.session = session
         self.llm = llm
         self.max_tool_iters = max_tool_iters
 
-    # --- Tool implementations ---
-
-    def _tool_get_month_summary(self, month: str) -> dict:
-        s = MonthlyBudgetService(self.session).summary(month)
-        return {
-            "month": s.month,
-            "income": _d(s.income),
-            "expenses": _d(s.expenses),
-            "savings": _d(s.savings),
-            "savings_rate": s.savings_rate,
-            "lines": [
-                {"category": l.category, "planned": _d(l.planned), "actual": _d(l.actual), "diff": _d(l.diff)}
-                for l in s.lines
-            ],
-        }
-
-    def _tool_query_transactions(self, **kw) -> dict:
-        q = self.session.query(Transaction)
-        if not kw.get("include_transfers"):
-            q = q.filter(Transaction.is_transfer.is_(False))
-        if kw.get("category"):
-            q = q.join(Category, Category.id == Transaction.category_id).filter(
-                Category.name == kw["category"]
-            )
-        if kw.get("merchant"):
-            q = q.filter(Transaction.normalized_merchant.ilike(f"%{kw['merchant'].upper()}%"))
-        if kw.get("from_date"):
-            q = q.filter(Transaction.date >= date.fromisoformat(kw["from_date"]))
-        if kw.get("to_date"):
-            q = q.filter(Transaction.date <= date.fromisoformat(kw["to_date"]))
-        if kw.get("min_amount") is not None:
-            q = q.filter(Transaction.amount >= Decimal(str(kw["min_amount"])))
-        if kw.get("max_amount") is not None:
-            q = q.filter(Transaction.amount <= Decimal(str(kw["max_amount"])))
-        rows = q.order_by(Transaction.date.desc()).limit(int(kw.get("limit", 50))).all()
-        return {
-            "transactions": [
-                {
-                    "date": t.date.isoformat(),
-                    "amount": _d(t.amount),
-                    "description": t.raw_description,
-                    "merchant": t.normalized_merchant,
-                    "category": t.category.name if t.category else None,
-                }
-                for t in rows
-            ]
-        }
-
-    def _tool_top_categories(self, from_date: str, to_date: str, limit: int = 10) -> dict:
-        rows = self.session.execute(
-            select(Category.name, func.sum(Transaction.amount).label("total"))
-            .join(Category, Category.id == Transaction.category_id, isouter=True)
-            .where(
-                Transaction.date >= date.fromisoformat(from_date),
-                Transaction.date <= date.fromisoformat(to_date),
-                Transaction.amount < 0,
-                Transaction.is_transfer.is_(False),
-            )
-            .group_by(Category.name)
-            .order_by(func.sum(Transaction.amount).asc())
-            .limit(limit)
-        ).all()
-        return {"top": [{"category": n or "Okategoriserat", "total": _d(t)} for n, t in rows]}
-
-    def _tool_find_subscriptions(self) -> dict:
-        # First return already-persisted, fall back to live detection
-        subs = self.session.query(Subscription).filter(Subscription.active.is_(True)).all()
-        if not subs:
-            subs_live = SubscriptionDetector(self.session).detect()
-            return {
-                "subscriptions": [
-                    {
-                        "merchant": s.merchant,
-                        "amount": _d(s.amount),
-                        "interval_days": s.interval_days,
-                        "next_expected_date": s.next_expected_date.isoformat(),
-                    }
-                    for s in subs_live
-                ]
-            }
-        return {
-            "subscriptions": [
-                {
-                    "merchant": s.merchant,
-                    "amount": _d(s.amount),
-                    "interval_days": s.interval_days,
-                    "next_expected_date": s.next_expected_date.isoformat() if s.next_expected_date else None,
-                }
-                for s in subs
-            ]
-        }
-
-    def _tool_forecast_cashflow(self, months: int = 6) -> dict:
-        f = CashflowForecaster(self.session).project(horizon_months=months)
-        return {
-            "forecast": [
-                {
-                    "month": m.month,
-                    "income": _d(m.projected_income),
-                    "expenses": _d(m.projected_expenses),
-                    "net": _d(m.projected_net),
-                }
-                for m in f
-            ]
-        }
-
-    def _tool_calculate_scenario(self, kind: str, params: dict) -> dict:
-        return ScenarioEngine().run(kind, params)
-
     def _dispatch(self, name: str, args: dict) -> dict:
-        fn = {
-            "get_month_summary": self._tool_get_month_summary,
-            "query_transactions": self._tool_query_transactions,
-            "top_categories": self._tool_top_categories,
-            "find_subscriptions": self._tool_find_subscriptions,
-            "forecast_cashflow": self._tool_forecast_cashflow,
-            "calculate_scenario": self._tool_calculate_scenario,
-        }.get(name)
+        fn = _DISPATCH.get(name)
         if fn is None:
             return {"error": f"unknown_tool:{name}"}
         try:
-            return fn(**args)
+            return fn(self.session, **args)
+        except TypeError as exc:
+            # Argumentnamn som inte finns i funktionen → hjälpsamt fel
+            log.warning("tool %s got bad args %s: %s", name, args, exc)
+            return {"error": f"bad_arguments:{exc}"}
         except Exception as exc:
             log.exception("tool %s failed", name)
             return {"error": str(exc)}
-
-    # --- Main loop ---
 
     def ask(self, session_id: str, user_message: str) -> str:
         history_rows = (
@@ -255,15 +467,25 @@ class ChatAgent:
             .order_by(ChatMessage.id.asc())
             .all()
         )
-        messages: list[dict[str, Any]] = [{"role": "system", "content": CHAT_SYSTEM}]
+        # VIKTIGT: bygg system-prompten vid ANROPSTID så dagens datum är
+        # med. Annars tror LLM:en att det är 2024 (träningsdatum).
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": build_chat_system()},
+        ]
         for m in history_rows:
             entry: dict[str, Any] = {"role": m.role, "content": m.content}
             if m.tool_calls:
-                entry["tool_calls"] = m.tool_calls.get("tool_calls") if isinstance(m.tool_calls, dict) else None
+                entry["tool_calls"] = (
+                    m.tool_calls.get("tool_calls")
+                    if isinstance(m.tool_calls, dict)
+                    else None
+                )
             messages.append(entry)
         messages.append({"role": "user", "content": user_message})
 
-        self.session.add(ChatMessage(session_id=session_id, role="user", content=user_message))
+        self.session.add(
+            ChatMessage(session_id=session_id, role="user", content=user_message)
+        )
         self.session.flush()
 
         final_text: str = ""
@@ -276,12 +498,23 @@ class ChatAgent:
             choice = resp.choices[0].message
             tool_calls = getattr(choice, "tool_calls", None)
             if tool_calls:
+                serialized_calls = [tc.model_dump() for tc in tool_calls]
                 messages.append(
                     {
                         "role": "assistant",
                         "content": choice.content or "",
-                        "tool_calls": [tc.model_dump() for tc in tool_calls],
+                        "tool_calls": serialized_calls,
                     }
+                )
+                # Spara assistant-steget med tool_calls i DB så frontend kan
+                # rendera "anropade verktyg X"-chips i chat-historiken.
+                self.session.add(
+                    ChatMessage(
+                        session_id=session_id,
+                        role="assistant",
+                        content=choice.content or "",
+                        tool_calls={"tool_calls": serialized_calls},
+                    )
                 )
                 for tc in tool_calls:
                     name = tc.function.name
@@ -290,13 +523,30 @@ class ChatAgent:
                     except json.JSONDecodeError:
                         args = {}
                     result = self._dispatch(name, args)
+                    result_json = json.dumps(
+                        result, ensure_ascii=False, default=str
+                    )
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tc.id,
-                            "content": json.dumps(result, ensure_ascii=False, default=str),
+                            "content": result_json,
                         }
                     )
+                    # Spara även tool-svaret med vilket verktyg som anropades.
+                    self.session.add(
+                        ChatMessage(
+                            session_id=session_id,
+                            role="tool",
+                            content=result_json,
+                            tool_calls={
+                                "name": name,
+                                "arguments": args,
+                                "tool_call_id": tc.id,
+                            },
+                        )
+                    )
+                self.session.flush()
                 continue
             final_text = choice.content or ""
             break

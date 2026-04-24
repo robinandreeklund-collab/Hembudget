@@ -142,7 +142,17 @@ class LoanMatcher:
         category_interest: int | None,
         category_amort: int | None,
     ) -> int:
-        """Para transaktioner med planerade schema-rader (exakt belopp + datum)."""
+        """Para transaktioner med planerade schema-rader.
+
+        Två nivåer:
+        a) Enskild rad: exakt belopp + datum (traditionellt).
+        b) **Kombinerad betalning:** om en bankrad matchar SUMMAN av flera
+           schema-rader för samma (loan_id, due_date) — typ Nordeas
+           "Omsättning lån" som dras i ETT svep om 4 662 kr men schemat
+           har amortering 2 700 + ränta 1 962 = 4 662. Då parar vi
+           bankraden mot ALLA schema-raderna och skapar en LoanPayment
+           per typ.
+        """
         open_entries: list[LoanScheduleEntry] = (
             self.session.query(LoanScheduleEntry)
             .filter(LoanScheduleEntry.matched_transaction_id.is_(None))
@@ -153,45 +163,115 @@ class LoanMatcher:
 
         matched = 0
         for tx in transactions:
-            if tx.amount >= 0 or tx.is_transfer:
+            # OBS: is_transfer-flaggan ignoreras här med flit — LoanMatcher
+            # körs före transfer-detektorn så flaggan är inte satt än, och
+            # en rad som matchas mot lånet ska inte senare bli transfer.
+            if tx.amount >= 0:
                 continue
             if self._already_linked(tx.id):
                 continue
             abs_amount = -tx.amount
-            # Hitta unik kandidat: exakt belopp (±1 kr) + datum inom ±N dagar
-            candidates = [
+
+            # a) Enskild rad
+            singles = [
                 e for e in open_entries
                 if e.matched_transaction_id is None
                 and abs(e.amount - abs_amount) <= self.SCHEDULE_AMOUNT_TOLERANCE
                 and abs((e.due_date - tx.date).days) <= self.SCHEDULE_DATE_TOLERANCE_DAYS
             ]
-            if not candidates:
-                continue
-            # Välj närmast i tid om flera
-            candidates.sort(key=lambda e: abs((e.due_date - tx.date).days))
-            entry = candidates[0]
-
-            entry.matched_transaction_id = tx.id
-            entry.matched_at = datetime.utcnow()
-
-            self.session.add(
-                LoanPayment(
-                    loan_id=entry.loan_id,
-                    transaction_id=tx.id,
-                    date=tx.date,
-                    amount=abs_amount,
-                    payment_type=entry.payment_type,
+            if singles:
+                singles.sort(key=lambda e: abs((e.due_date - tx.date).days))
+                entry = singles[0]
+                self._link_schedule_entry(
+                    entry, tx, abs_amount, category_interest, category_amort,
                 )
-            )
-            if entry.payment_type == "interest" and category_interest is not None:
-                tx.category_id = category_interest
-            elif entry.payment_type == "amortization" and category_amort is not None:
-                tx.category_id = category_amort
-            matched += 1
+                matched += 1
+                continue
+
+            # b) Kombinerad betalning: hitta (loan_id, due_date)-grupp vars
+            #    summa matchar abs_amount inom toleransen
+            buckets: dict[tuple[int, "date"], list[LoanScheduleEntry]] = {}
+            for e in open_entries:
+                if e.matched_transaction_id is not None:
+                    continue
+                if abs((e.due_date - tx.date).days) > self.SCHEDULE_DATE_TOLERANCE_DAYS:
+                    continue
+                buckets.setdefault((e.loan_id, e.due_date), []).append(e)
+
+            best_bucket = None
+            best_key = None
+            for key, entries in buckets.items():
+                if len(entries) < 2:
+                    continue
+                total = sum((e.amount for e in entries), Decimal("0"))
+                if abs(total - abs_amount) <= self.SCHEDULE_AMOUNT_TOLERANCE:
+                    # Välj det bucket vars due_date ligger närmast tx.date
+                    due_date = key[1]
+                    score = abs((due_date - tx.date).days)
+                    if best_bucket is None or score < abs(
+                        (best_key[1] - tx.date).days
+                    ):
+                        best_bucket = entries
+                        best_key = key
+
+            if best_bucket is not None:
+                for entry in best_bucket:
+                    self._link_schedule_entry(
+                        entry, tx, entry.amount,
+                        category_interest, category_amort,
+                    )
+                # Kategorin på själva transaktionen. Loanets category_id
+                # (Huslån/Billån) vinner över generiska Bolåneränta/Amort.
+                loan = self.session.get(Loan, best_bucket[0].loan_id)
+                types = {e.payment_type for e in best_bucket}
+                if loan is not None and loan.category_id is not None:
+                    tx.category_id = loan.category_id
+                elif "amortization" in types and category_amort is not None:
+                    tx.category_id = category_amort
+                elif "interest" in types and category_interest is not None:
+                    tx.category_id = category_interest
+                matched += 1
 
         if matched:
             self.session.flush()
         return matched
+
+    def _link_schedule_entry(
+        self,
+        entry: LoanScheduleEntry,
+        tx: Transaction,
+        pay_amount: Decimal,
+        category_interest: int | None,
+        category_amort: int | None,
+    ) -> None:
+        """Koppla en schema-rad till en transaktion + skapa LoanPayment."""
+        entry.matched_transaction_id = tx.id
+        entry.matched_at = datetime.utcnow()
+        self.session.add(
+            LoanPayment(
+                loan_id=entry.loan_id,
+                transaction_id=tx.id,
+                date=tx.date,
+                amount=pay_amount,
+                payment_type=entry.payment_type,
+            )
+        )
+        # Sätt kategori: lånets egen category_id vinner över den generiska
+        # Bolåneränta/Amortering (anpassar t.ex. "Huslån" vs "Billån"
+        # beroende på vilket lån det var).
+        loan_cat = None
+        loan = self.session.get(Loan, entry.loan_id)
+        if loan is not None and loan.category_id is not None:
+            loan_cat = loan.category_id
+        # Sätt kategori endast om det är en single-row-match (kombo-fallet
+        # hanteras av anroparen efter att alla raderna länkats)
+        if tx.category_id is None:
+            if loan_cat is not None:
+                tx.category_id = loan_cat
+            elif entry.payment_type == "interest" and category_interest is not None:
+                tx.category_id = category_interest
+            elif entry.payment_type == "amortization" and category_amort is not None:
+                tx.category_id = category_amort
 
     def generate_schedule(
         self,
@@ -240,29 +320,128 @@ class LoanMatcher:
         return entries
 
     def outstanding_balance(self, loan: Loan) -> Decimal:
-        """Current = principal − summa amorteringar."""
-        rows = (
-            self.session.query(LoanPayment)
-            .filter(
-                LoanPayment.loan_id == loan.id,
-                LoanPayment.payment_type == "amortization",
-                LoanPayment.date >= loan.start_date,
+        """Aktuellt lånesaldo.
+
+        Om current_balance_at_creation är satt (från bankens egna siffra via
+        vision) används det som utgångspunkt och endast amorteringar EFTER
+        det datumet dras av. Annars fallback till principal − alla
+        matchade amorteringar (bakåtkompatibelt).
+        """
+        if loan.current_balance_at_creation is not None:
+            base = loan.current_balance_at_creation
+            cutoff = loan.created_at.date() if loan.created_at else loan.start_date
+            rows = (
+                self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date > cutoff,
+                )
+                .all()
             )
-            .all()
-        )
+        else:
+            base = loan.principal_amount
+            rows = (
+                self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "amortization",
+                    LoanPayment.date >= loan.start_date,
+                )
+                .all()
+            )
         amortized = sum((p.amount for p in rows), Decimal("0"))
-        return (loan.principal_amount - amortized).quantize(Decimal("0.01"))
+        return (base - amortized).quantize(Decimal("0.01"))
+
+    def interest_paid_year(self, loan: Loan, year: int) -> Decimal:
+        """Betald ränta under specifikt år — används för skattedeklaration
+        (ränteavdrag) och YTD-visning på lånesidan.
+
+        Samma logik som total_interest_paid men med datumfilter. Räknar
+        både LoanPayment (matchade) och omatchade historiska
+        LoanScheduleEntry med due_date inom året.
+        """
+        from datetime import date as _date
+        year_start = _date(year, 1, 1)
+        year_end = _date(year + 1, 1, 1)
+        today = _date.today()
+
+        # Matchade bankbetalningar inom året
+        from_payments: Decimal = sum(
+            (
+                p.amount
+                for p in self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "interest",
+                    LoanPayment.date >= year_start,
+                    LoanPayment.date < year_end,
+                )
+                .all()
+            ),
+            Decimal("0"),
+        )
+
+        # Historiska schema-rader i året (bank bekräftat, ej matchat bank-CSV)
+        from_schedule: Decimal = sum(
+            (
+                e.amount
+                for e in self.session.query(LoanScheduleEntry)
+                .filter(
+                    LoanScheduleEntry.loan_id == loan.id,
+                    LoanScheduleEntry.payment_type == "interest",
+                    LoanScheduleEntry.due_date >= year_start,
+                    LoanScheduleEntry.due_date < year_end,
+                    LoanScheduleEntry.due_date < today,
+                    LoanScheduleEntry.matched_transaction_id.is_(None),
+                )
+                .all()
+            ),
+            Decimal("0"),
+        )
+        return (from_payments + from_schedule).quantize(Decimal("0.01"))
 
     def total_interest_paid(self, loan: Loan) -> Decimal:
-        rows = (
-            self.session.query(LoanPayment)
-            .filter(
-                LoanPayment.loan_id == loan.id,
-                LoanPayment.payment_type == "interest",
-            )
-            .all()
+        """Total betald ränta från två källor:
+        1. Matchade bankbetalningar (LoanPayment) — säkraste signalen.
+        2. Historiska, omatchade schemaposter i förflutet — representerar
+           betalningar som banken bekräftat genom sin Transaktioner-vy men
+           som användaren ännu inte importerat CSV för. När CSV:n kommer
+           och matchern paras ihop får schemaposten matched_transaction_id
+           satt och utesluts ur denna summering (medan en ny LoanPayment
+           tas med istället — ingen dubbelräkning).
+        """
+        from datetime import date as _date
+
+        from_payments: Decimal = sum(
+            (
+                p.amount
+                for p in self.session.query(LoanPayment)
+                .filter(
+                    LoanPayment.loan_id == loan.id,
+                    LoanPayment.payment_type == "interest",
+                )
+                .all()
+            ),
+            Decimal("0"),
         )
-        return sum((p.amount for p in rows), Decimal("0")).quantize(Decimal("0.01"))
+
+        today = _date.today()
+        from_schedule: Decimal = sum(
+            (
+                e.amount
+                for e in self.session.query(LoanScheduleEntry)
+                .filter(
+                    LoanScheduleEntry.loan_id == loan.id,
+                    LoanScheduleEntry.payment_type == "interest",
+                    LoanScheduleEntry.due_date < today,
+                    LoanScheduleEntry.matched_transaction_id.is_(None),
+                )
+                .all()
+            ),
+            Decimal("0"),
+        )
+        return (from_payments + from_schedule).quantize(Decimal("0.01"))
 
     def _category_id(self, name: str) -> int | None:
         c = self.session.query(Category).filter(Category.name == name).first()

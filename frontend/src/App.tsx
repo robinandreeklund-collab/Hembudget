@@ -15,10 +15,15 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Import from "./pages/Import";
+import Funds from "./pages/Funds";
+import Salaries from "./pages/Salaries";
+import Attachments from "./pages/Attachments";
+import Utility from "./pages/Utility";
+import TibberCallback from "./pages/TibberCallback";
 
 export default function App() {
   const { isAuthenticated, loading, initialized, backendError } = useAuth();
-  if (loading) return <div className="h-full grid place-items-center text-slate-500">Laddar…</div>;
+  if (loading) return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
   // Om /status inte gick att nå alls → backend-URL behöver konfigureras
   if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
   if (!isAuthenticated) return <Login />;
@@ -37,11 +42,16 @@ export default function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/loans" element={<Loans />} />
+          <Route path="/funds" element={<Funds />} />
           <Route path="/transfers" element={<Transfers />} />
           <Route path="/upcoming" element={<Upcoming />} />
+          <Route path="/salaries" element={<Salaries />} />
+          <Route path="/attachments" element={<Attachments />} />
+          <Route path="/utility" element={<Utility />} />
           <Route path="/tax" element={<Tax />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/Callback" element={<TibberCallback />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

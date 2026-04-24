@@ -14,23 +14,106 @@ router = APIRouter(prefix="/reports", tags=["reports"], dependencies=[Depends(re
 
 @router.get("/month/{month}/excel")
 def excel_report(month: str, session: Session = Depends(db)) -> Response:
+    """Excel-export med flera flikar: Budget, Överföringar, Förra månaden.
+
+    Graceful — returnerar 501 om openpyxl saknas."""
     try:
         from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
     except ImportError:
         return Response(status_code=501, content="openpyxl ej installerat")
 
-    summary = MonthlyBudgetService(session).summary(month)
+    from ..reports.monthly_pdf import build_report_data, _format_month_label
+    data = build_report_data(session, month)
+    summary = data.summary
+
     wb = Workbook()
+
+    # --- Budget-fliken (förvald) ---
     ws = wb.active
     ws.title = f"Budget {month}"
-    ws.append(["Kategori", "Budgeterat", "Faktiskt", "Diff"])
+    bold = Font(bold=True)
+    header_fill = PatternFill("solid", fgColor="1F2937")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    ws["A1"] = f"Hembudget — Månadsrapport {_format_month_label(month)}"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws.merge_cells("A1:E1")
+    ws["A3"] = "Inkomst"
+    ws["B3"] = float(summary.income)
+    ws["A4"] = "Utgifter"
+    ws["B4"] = float(summary.expenses)
+    ws["A5"] = "Sparat"
+    ws["B5"] = float(summary.savings)
+    ws["A6"] = "Sparkvot"
+    ws["B6"] = summary.savings_rate
+    for r in range(3, 7):
+        ws[f"A{r}"].font = bold
+
+    # Tabellen börjar på rad 8
+    header_row = 8
+    ws.cell(row=header_row, column=1, value="Grupp")
+    ws.cell(row=header_row, column=2, value="Kategori")
+    ws.cell(row=header_row, column=3, value="Budgeterat")
+    ws.cell(row=header_row, column=4, value="Faktiskt")
+    ws.cell(row=header_row, column=5, value="Diff")
+    ws.cell(row=header_row, column=6, value="Progress %")
+    for col in range(1, 7):
+        cell = ws.cell(row=header_row, column=col)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    r = header_row + 1
+    lines_by_group: dict[str, list] = {}
     for l in summary.lines:
-        ws.append([l.category, float(l.planned), float(l.actual), float(l.diff)])
-    ws.append([])
-    ws.append(["Inkomst", "", float(summary.income), ""])
-    ws.append(["Utgifter", "", float(summary.expenses), ""])
-    ws.append(["Sparande", "", float(summary.savings), ""])
-    ws.append(["Sparkvot", "", summary.savings_rate, ""])
+        key = "Inkomster" if l.kind == "income" else (l.group or "Övrigt")
+        lines_by_group.setdefault(key, []).append(l)
+    for group, group_lines in sorted(
+        lines_by_group.items(), key=lambda kv: (kv[0] == "Inkomster", kv[0])
+    ):
+        for l in group_lines:
+            ws.cell(row=r, column=1, value=group)
+            ws.cell(row=r, column=2, value=l.category)
+            ws.cell(row=r, column=3, value=float(l.planned))
+            ws.cell(row=r, column=4, value=float(l.actual))
+            ws.cell(row=r, column=5, value=float(l.diff))
+            ws.cell(
+                row=r, column=6,
+                value=(l.progress_pct / 100 if l.planned != 0 else None),
+            )
+            ws.cell(row=r, column=6).number_format = "0 %"
+            r += 1
+
+    # --- Överföringar ---
+    if data.transfers:
+        ws2 = wb.create_sheet("Överföringar")
+        headers = [
+            "Person", "Inkomst", "Andel", "50/50-split",
+            "Prorata", "Redan betalt",
+        ]
+        for i, h in enumerate(headers, start=1):
+            c = ws2.cell(row=1, column=i, value=h)
+            c.font = header_font
+            c.fill = header_fill
+        for i, t in enumerate(data.transfers, start=2):
+            ws2.cell(row=i, column=1, value=t.person_name)
+            ws2.cell(row=i, column=2, value=t.income)
+            ws2.cell(row=i, column=3, value=t.income_share_pct / 100).number_format = "0 %"
+            ws2.cell(row=i, column=4, value=t.fair_equal)
+            ws2.cell(row=i, column=5, value=t.fair_prorata)
+            ws2.cell(row=i, column=6, value=t.already_paid)
+
+    # --- Förändring mot föregående månad ---
+    if data.deltas:
+        ws3 = wb.create_sheet("Förändring mot förra")
+        ws3.cell(row=1, column=1, value="Kategori").font = header_font
+        ws3.cell(row=1, column=1).fill = header_fill
+        ws3.cell(row=1, column=2, value="Diff").font = header_font
+        ws3.cell(row=1, column=2).fill = header_fill
+        for i, (name, d) in enumerate(data.deltas, start=2):
+            ws3.cell(row=i, column=1, value=name)
+            ws3.cell(row=i, column=2, value=d)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -43,43 +126,53 @@ def excel_report(month: str, session: Session = Depends(db)) -> Response:
 
 @router.get("/month/{month}/pdf")
 def pdf_report(month: str, session: Session = Depends(db)) -> Response:
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib import colors
-    except ImportError:
-        return Response(status_code=501, content="reportlab ej installerat")
+    """Rik månadsrapport som PDF: KPI-ruta, piecharts, transfer-förslag,
+    budget vs utfall, förändring mot förra månaden, grupperad tabell.
 
-    summary = MonthlyBudgetService(session).summary(month)
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4)
-    styles = getSampleStyleSheet()
-    story = [
-        Paragraph(f"Hembudget — {month}", styles["Title"]),
-        Spacer(1, 12),
-        Paragraph(
-            f"Inkomst: {float(summary.income):,.0f} kr | Utgifter: {float(summary.expenses):,.0f} kr"
-            f" | Sparande: {float(summary.savings):,.0f} kr ({summary.savings_rate*100:.1f} %)",
-            styles["Normal"],
-        ),
-        Spacer(1, 12),
-    ]
-    data = [["Kategori", "Budget", "Faktiskt", "Diff"]]
-    for l in summary.lines:
-        data.append([l.category, f"{float(l.planned):,.0f}", f"{float(l.actual):,.0f}",
-                     f"{float(l.diff):,.0f}"])
-    t = Table(data, hAlign="LEFT")
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-    ]))
-    story.append(t)
-    doc.build(story)
+    ReportLab är obligatoriskt. Matplotlib är optional — utan den byggs
+    PDF:en ändå, men utan diagram."""
+    try:
+        from ..reports.monthly_pdf import build_report_data, render_pdf
+    except ImportError as exc:
+        return Response(
+            status_code=501,
+            content=f"PDF-rapport kräver reportlab: {exc}",
+        )
+
+    data = build_report_data(session, month)
+    pdf_bytes = render_pdf(data)
     return Response(
-        content=buf.getvalue(),
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="hembudget-{month}.pdf"'},
+    )
+
+
+@router.get("/upcoming/{month}/pdf")
+def upcoming_pdf_report(month: str, session: Session = Depends(db)) -> Response:
+    """Framåtriktad 'Överföringsplan' PDF för en kommande månad.
+
+    Skickas ut till partnern så hon ser förväntad lön, kända kommande
+    fakturor + lån, och hur mycket hon ska flytta till gemensamma
+    kontot. Återanvänder /upcoming/forecast-datan så siffrorna matchar
+    UI:n på /upcoming."""
+    try:
+        from ..reports.upcoming_pdf import (
+            build_upcoming_data, render_upcoming_pdf,
+        )
+    except ImportError as exc:
+        return Response(
+            status_code=501,
+            content=f"Överföringsplan kräver reportlab: {exc}",
+        )
+
+    data = build_upcoming_data(session, month)
+    pdf_bytes = render_upcoming_pdf(data)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="overforingsplan-{month}.pdf"',
+        },
     )

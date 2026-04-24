@@ -14,6 +14,7 @@ räknas som utgifter (detaljerna finns ju i kreditkortsraderna).
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -21,9 +22,48 @@ from decimal import Decimal
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..db.models import Account, Transaction
+from ..db.models import Account, LoanPayment, Transaction
 
 log = logging.getLogger(__name__)
+
+
+def _normalize_number(s: str | None) -> str:
+    """Endast siffror — t.ex. '1722 20 34439' → '17222034439'."""
+    return re.sub(r"[^0-9]", "", s or "")
+
+
+def _build_account_number_index(
+    session: Session,
+) -> dict[str, Account]:
+    """Returnera map normaliserat_kontonummer → Account. Endast konton med
+    minst 6 siffror räknas (undviker kortnummer/kundnummer)."""
+    out: dict[str, Account] = {}
+    for acc in session.query(Account).filter(Account.account_number.is_not(None)).all():
+        num = _normalize_number(acc.account_number)
+        if len(num) >= 6:
+            out[num] = acc
+    return out
+
+
+def _find_account_in_description(
+    description: str,
+    index: dict[str, Account],
+) -> Account | None:
+    """Returnera Account vars normaliserade kontonummer förekommer i
+    beskrivningen (efter att alla icke-siffror strippats). Om flera matchar,
+    välj det längsta (mest specifika)."""
+    if not index:
+        return None
+    compacted = _normalize_number(description)
+    if not compacted:
+        return None
+    best: Account | None = None
+    best_len = 0
+    for num, acc in index.items():
+        if num in compacted and len(num) > best_len:
+            best = acc
+            best_len = len(num)
+    return best
 
 
 # Merchant-substring → bank-id. Matchas case-insensitivt.
@@ -52,9 +92,11 @@ GENERIC_TRANSFER_PATTERNS: list[str] = [
     "isk insättning",
     "sparkonto",
     "nordea liv",         # pensionsöverföring (visas ofta som egen rad)
-    "omsättning lån",     # bolåne-ränteperiod swap, inte en riktig utgift
     "mastercard lån",     # Nordea-interna kreditkortsrörelser
     "mastercard fröjd",   # personnamn-versionen av samma
+    # OBS: "omsättning lån" borttaget — Nordea visar alla lånebetalningar
+    # (ränta + amort) som "Omsättning lån NNNN NN NNNNN" och de ska
+    # klassificeras av LoanMatcher, inte markeras som transfer.
 ]
 
 
@@ -84,20 +126,43 @@ class TransferDetector:
 
     def detect_and_link(self, new_transactions: list[Transaction]) -> TransferLinkResult:
         """Kör efter import. Markerar credit-card-payments från transaktionerna
-        och försöker para ihop med motsvarande rad på kreditkortskontot."""
+        och försöker para ihop med motsvarande rad på kreditkortskontot.
+
+        Tre nivåer av matchning mot kreditkort:
+        1. Bankgiro på kortkontot matchar BG-nummer i transaktionens
+           beskrivning → starkaste signal.
+        2. Textmönster (t.ex. "AMEX AUTOGIRO", "SEB KORT BANK").
+        3. Generiska transfer-mönster ("Överföring", etc.).
+        """
         if not new_transactions:
             return TransferLinkResult(0, 0)
 
         # Karta bank → credit-konto
         credit_by_bank: dict[str, Account] = {}
+        # Karta normaliserat bankgiro → credit-konto (för BG-match)
+        credit_by_bg: dict[str, Account] = {}
         for acc in self.session.query(Account).filter(Account.type == "credit").all():
             credit_by_bank[acc.bank] = acc
+            if acc.bankgiro:
+                # Normalisera: ta bort bindestreck/mellanslag
+                bg_norm = re.sub(r"[\s\-]", "", acc.bankgiro)
+                if bg_norm:
+                    credit_by_bg[bg_norm] = acc
 
         marked = 0
         paired = 0
 
+        # Slå upp vilka transaktioner som redan är länkade till lån —
+        # dem ska vi inte röra.
+        loan_tx_ids: set[int] = {
+            row[0]
+            for row in self.session.query(LoanPayment.transaction_id).distinct().all()
+        }
+
         for tx in new_transactions:
             if tx.is_transfer:
+                continue
+            if tx.id in loan_tx_ids:
                 continue
 
             desc = (tx.raw_description or "").lower()
@@ -117,18 +182,29 @@ class TransferDetector:
                 # klassificering (t.ex. Lön, Swish in).
                 continue
 
-            # 2. Match mot explicit kreditkortsbetalning
-            matched_bank: str | None = None
-            for bank, patterns in CREDIT_CARD_PAYMENT_PATTERNS.items():
-                if any(p in desc for p in patterns):
-                    matched_bank = bank
+            # 1a. BG-match: om beskrivningen innehåller en bankgiro som
+            #     tillhör ett registrerat kortkonto → starkaste signal.
+            #     Fungerar även när kortmärket inte är uppenbart i texten.
+            desc_digits = re.sub(r"[^\d]", "", desc)
+            cc_via_bg: Account | None = None
+            for bg_norm, acc in credit_by_bg.items():
+                if bg_norm and bg_norm in desc_digits:
+                    cc_via_bg = acc
                     break
 
-            if matched_bank:
+            # 1b/2. Eller matcha via textmönster (AMEX AUTOGIRO, SEB KORT)
+            matched_bank: str | None = None
+            if cc_via_bg is None:
+                for bank, patterns in CREDIT_CARD_PAYMENT_PATTERNS.items():
+                    if any(p in desc for p in patterns):
+                        matched_bank = bank
+                        break
+
+            if cc_via_bg is not None or matched_bank:
                 tx.is_transfer = True
                 tx.category_id = None  # inte en utgift
                 marked += 1
-                credit_acc = credit_by_bank.get(matched_bank)
+                credit_acc = cc_via_bg or credit_by_bank.get(matched_bank or "")
                 if credit_acc:
                     repayment = self._find_repayment_on_credit(tx, credit_acc.id)
                     if repayment is not None:
@@ -178,7 +254,10 @@ class TransferDetector:
     ) -> InternalScanResult:
         """Para ihop överföringar mellan egna konton baserat på datum + belopp.
 
-        Tre nivåer:
+        Fyra nivåer (prioritetsordning):
+        0. **Kontonummer i beskrivning:** om src eller dst innehåller den
+           andres kontonummer i sin text, och belopp+datum matchar → para.
+           Starkast signal, tålig mot belopps-avvikelser.
         1. **Unik kandidat:** exakt en positiv rad matchar → paras direkt.
         2. **1:1 bland identiska:** om N negativa och N positiva rader med
            exakt samma belopp finns på samma datum (eller inom fönstret),
@@ -190,6 +269,58 @@ class TransferDetector:
         account_ids = [a.id for a in self.session.query(Account).all()]
         if len(account_ids) < 2:
             return InternalScanResult(0, 0, [])
+
+        account_num_index = _build_account_number_index(self.session)
+
+        # Nivå 0.5: BG-match mot kortkonto för ALLA omarkerade/omatchade
+        # negativa rader (retro-fix — ibland körs detta efter att PDF-
+        # import satt bankgiro på kortkontot). Klassar som transfer och
+        # försöker para med motsvarande positiv rad på kortkontot.
+        credit_by_bg: dict[str, Account] = {}
+        for acc in self.session.query(Account).filter(Account.type == "credit").all():
+            if acc.bankgiro:
+                bg_norm = re.sub(r"[\s\-]", "", acc.bankgiro)
+                if bg_norm:
+                    credit_by_bg[bg_norm] = acc
+
+        bg_marked = 0
+        bg_paired = 0
+        if credit_by_bg:
+            for tx in (
+                self.session.query(Transaction)
+                .filter(Transaction.transfer_pair_id.is_(None))
+                .all()
+            ):
+                if tx.amount >= 0:
+                    continue
+                desc_digits = re.sub(r"[^\d]", "", tx.raw_description or "")
+                if not desc_digits:
+                    continue
+                matched_cc: Account | None = None
+                for bg_norm, acc in credit_by_bg.items():
+                    if bg_norm in desc_digits and acc.id != tx.account_id:
+                        matched_cc = acc
+                        break
+                if matched_cc is None:
+                    continue
+                # Säkerställ att inte raden redan är kopplad till ett lån
+                from ..db.models import LoanPayment as _LP
+                if self.session.query(_LP).filter(
+                    _LP.transaction_id == tx.id
+                ).first():
+                    continue
+                tx.is_transfer = True
+                tx.category_id = None
+                bg_marked += 1
+                repayment = self._find_repayment_on_credit(tx, matched_cc.id)
+                if repayment is not None:
+                    tx.transfer_pair_id = repayment.id
+                    repayment.is_transfer = True
+                    repayment.transfer_pair_id = tx.id
+                    repayment.category_id = None
+                    bg_paired += 1
+            if bg_marked:
+                self.session.flush()
 
         # Include rows already flagged as transfer but not yet paired — that
         # happens when the generic-pattern pass marks an "Överföring"-row
@@ -229,7 +360,43 @@ class TransferDetector:
                 and abs((t.date - src.date).days) <= date_tolerance_days
             ]
 
+            # Steg 0: kontonummer-signal (starkast). Kollar båda hållen —
+            # src kan nämna destkontot, eller dst kan nämna src-kontot.
+            src_mentions = _find_account_in_description(
+                src.raw_description, account_num_index
+            )
             dst: Transaction | None = None
+            if src_mentions and src_mentions.id != src.account_id:
+                for c in candidates:
+                    if c.account_id == src_mentions.id:
+                        dst = c
+                        break
+            if dst is None:
+                # Omvänt: hitta en kandidat vars beskrivning nämner src-kontot
+                src_account = self.session.get(Account, src.account_id)
+                src_account_num = (
+                    _normalize_number(src_account.account_number)
+                    if src_account and src_account.account_number
+                    else ""
+                )
+                if src_account_num and len(src_account_num) >= 6:
+                    for c in candidates:
+                        if src_account_num in _normalize_number(c.raw_description):
+                            dst = c
+                            break
+
+            if dst is not None:
+                src.is_transfer = True
+                src.transfer_pair_id = dst.id
+                src.category_id = None
+                dst.is_transfer = True
+                dst.transfer_pair_id = src.id
+                dst.category_id = None
+                claimed.add(src.id)
+                claimed.add(dst.id)
+                pairs.append((src.id, dst.id))
+                continue
+
             if len(candidates) == 1:
                 dst = candidates[0]
             elif len(candidates) > 1:
@@ -284,7 +451,9 @@ class TransferDetector:
 
         if pairs:
             self.session.flush()
-        return InternalScanResult(pairs=len(pairs), ambiguous=ambiguous, details=pairs)
+        # Räkna även BG-paringar i det totala pair-antalet så UI:t visar det.
+        total_pairs = len(pairs) + bg_paired
+        return InternalScanResult(pairs=total_pairs, ambiguous=ambiguous, details=pairs)
 
     def link_manual(self, tx_a_id: int, tx_b_id: int) -> None:
         """Manuellt para ihop två transaktioner som en överföring."""

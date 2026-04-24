@@ -32,7 +32,7 @@ export default function Scenarios() {
   function numInput(key: string, label: string, step = "1") {
     return (
       <label className="block text-sm">
-        <div className="text-slate-500">{label}</div>
+        <div className="text-slate-700">{label}</div>
         <input
           type="number"
           step={step}
@@ -126,7 +126,7 @@ export default function Scenarios() {
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between border-b py-1.5 last:border-0">
-      <span className="text-slate-500">{k}</span>
+      <span className="text-slate-700">{k}</span>
       <span className="font-medium">{v}</span>
     </div>
   );
@@ -145,7 +145,7 @@ function ScenarioResult({ kind, result }: { kind: Kind; result: Record<string, u
         <Row k="Fastighetsavgift/mån" v={formatSEK(result.monthly_property_tax as number)} />
         <Row k="BRF-avgift/mån" v={formatSEK(result.monthly_fee as number)} />
         <Row k="Summa netto/mån" v={formatSEK(result.monthly_total_net as number)} />
-        <div className="mt-3 text-xs text-slate-500">
+        <div className="mt-3 text-xs text-slate-700">
           Antaganden: {(result.assumptions as string[]).join("; ")}
         </div>
       </Card>

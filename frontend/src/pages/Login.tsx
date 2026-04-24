@@ -36,7 +36,7 @@ export default function Login() {
           <Lock className="w-5 h-5" />
           <h1 className="text-xl font-semibold">Hembudget</h1>
         </div>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-700">
           {needsInit
             ? "Välj ett master-lösenord. Det används för att kryptera din databas — det kan inte återställas."
             : "Logga in med ditt master-lösenord."}

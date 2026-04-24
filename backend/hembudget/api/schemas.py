@@ -1,10 +1,30 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as date_type, date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
+
+
+class TransactionSplitOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    description: str
+    amount: Decimal
+    category_id: Optional[int]
+    sort_order: int
+    source: str
+
+
+class UpcomingMatchOut(BaseModel):
+    """Kort sammanfattning av en upcoming som en Transaction är matchad
+    mot — visas som badge i /transactions så användaren ser bekräftelsen."""
+    upcoming_id: int
+    name: str
+    kind: str
+    amount: Decimal
 
 
 class TransactionOut(BaseModel):
@@ -24,6 +44,9 @@ class TransactionOut(BaseModel):
     user_verified: bool
     is_transfer: bool = False
     transfer_pair_id: Optional[int] = None
+    cardholder: Optional[str] = None
+    splits: list[TransactionSplitOut] = []
+    upcoming_matches: list[UpcomingMatchOut] = []
 
 
 class TransactionUpdate(BaseModel):
@@ -33,6 +56,14 @@ class TransactionUpdate(BaseModel):
     user_verified: Optional[bool] = None
     create_rule: bool = True
     is_transfer: Optional[bool] = None
+    # Gör det möjligt att korrigera belopp/datum/beskrivning manuellt —
+    # t.ex. när en lönematerialisering från /upcoming fick fel summa.
+    # OBS: fältnamnet "date" kolliderar med `from datetime import date`
+    # när `from __future__ import annotations` är på — därför använder
+    # vi `date_type`-aliaset för att typa fältet korrekt.
+    amount: Optional[Decimal] = None
+    date: Optional[date_type] = None
+    raw_description: Optional[str] = None
 
 
 class TransferLinkIn(BaseModel):
@@ -48,7 +79,13 @@ class AccountIn(BaseModel):
     account_number: Optional[str] = None
     opening_balance: Optional[Decimal] = None
     opening_balance_date: Optional[date] = None
+    credit_limit: Optional[Decimal] = None
+    bankgiro: Optional[str] = None
+    card_last_digits: Optional[str] = None
+    parent_account_id: Optional[int] = None
     pays_credit_account_id: Optional[int] = None
+    owner_id: Optional[int] = None
+    incognito: bool = False
 
 
 class AccountOut(AccountIn):
@@ -61,7 +98,21 @@ class AccountUpdate(BaseModel):
     account_number: Optional[str] = None
     opening_balance: Optional[Decimal] = None
     opening_balance_date: Optional[date] = None
+    credit_limit: Optional[Decimal] = None
+    bankgiro: Optional[str] = None
     pays_credit_account_id: Optional[int] = None
+    owner_id: Optional[int] = None
+    incognito: Optional[bool] = None
+
+
+class UserIn(BaseModel):
+    name: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
 
 
 class CategoryOut(BaseModel):
@@ -93,6 +144,18 @@ class BudgetIn(BaseModel):
     month: str
     category_id: int
     planned_amount: Decimal
+
+
+class BudgetBulkRow(BaseModel):
+    category_id: int
+    planned_amount: Decimal
+
+
+class BudgetBulkIn(BaseModel):
+    """Body till POST /budget/bulk-set — listan av kategorier med
+    planerat belopp som användaren godkänt i auto-fyll-modalen."""
+    month: str
+    rows: list[BudgetBulkRow]
 
 
 class ChatMessageIn(BaseModel):

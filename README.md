@@ -6,19 +6,58 @@ och en krypterad SQLite-databas.
 
 ## 🚀 Prova direkt i browsern
 
+### Google Cloud Run (rekommenderas för klassrum)
+
+```bash
+./deploy.sh
+```
+
+Skriptet sköter allt automatiskt från din lokala klon:
+1. Kontrollerar `gcloud` CLI och aktiv inloggning
+2. Frågar efter GCP-projekt-ID (eller skapar ett nytt)
+3. Aktiverar Cloud Run, Cloud Build och Artifact Registry
+4. Laddar upp repot till Cloud Build (inkl. `data/`-mappen för seed)
+5. Bygger Docker-imagen i molnet — **ingen lokal Docker krävs**
+6. Deployar till Cloud Run i `europe-north1` (Finland)
+7. Skriver ut den publika URL:en
+
+Eftersom `--source .` används skickas din lokala kopia direkt upp till
+Cloud Build; ingen klona-operation från GitHub behövs, så metoden
+fungerar även om repot är privat. Efter första deployen: kör
+`./deploy.sh` igen för att uppdatera.
+
+**Loggar:** `gcloud run services logs read hembudget-demo --region europe-north1`
+**Radera:** `gcloud run services delete hembudget-demo --region europe-north1`
+
+**Arkitektur:** en enda container servar både frontend (statisk React-build)
+och backend (FastAPI) på samma port, så inga CORS-problem och en URL till
+eleverna. Demo-läget auto-seedar data från `data/`-mappen vid start.
+
+**Kostnad:** Cloud Run skalar till 0 när ingen är inne → typiskt under $1/mån
+för klassbruk. Ephemeral SQLite — data återställs när containern startar om.
+
+#### Alternativ: "Run on Google Cloud"-knapp (kräver publikt repo)
+
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/robinandreeklund-collab/Hembudget)
+
+Knappen ovan använder Googles `deploy.cloud.run`-tjänst som klonar via
+HTTPS utan autentisering — **fungerar bara om repot är publikt**. Om
+repot är privat ger klick en "repo not found"-felmeddelande. Använd
+`./deploy.sh` istället, eller gör repot publikt först (Settings →
+General → Change visibility på GitHub).
+
+### Render.com (alternativ)
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/robinandreeklund-collab/Hembudget)
 
-Ett klick ovan → Render läser `render.yaml`, sätter upp backend + frontend,
-startar i **demo-mode** och auto-importerar CSV/XLSX-data från `data/`-mappen.
-Ingen inloggning, inget att installera. Efter deploy: sätt frontendens
-`VITE_API_BASE` till backendens URL och gör en re-deploy.
+Ett klick ovan → Render läser `render.yaml`, sätter upp backend + frontend
+som separata services, startar i **demo-mode** och auto-importerar CSV/XLSX
+från `data/`. Efter deploy: sätt frontendens `VITE_API_BASE` till backendens
+URL och gör en re-deploy.
 
-Efter den första deployen är kör `git pull` för att uppdatera.
-
-**Begränsningar på Render free tier:** ingen LM Studio (AI-chat och vision
-fungerar ej, men 96 % av kategoriseringen sker via regler). SQLite-databasen
-är ephemeral — återställs vid inaktivitet, men bootstrap fyller den igen
-automatiskt.
+**Begränsningar:** ingen LM Studio (AI-chat fungerar ej, men 96 % av
+kategoriseringen sker via regler). SQLite-databasen är ephemeral —
+återställs vid inaktivitet, men bootstrap fyller den igen automatiskt.
 
 ## Funktioner
 

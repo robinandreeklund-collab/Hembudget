@@ -27,15 +27,27 @@ function apiBase(): string {
   // 1. Runtime-override (satt av användaren via UI)
   const override = getApiBaseOverride();
   if (override) return override.replace(/\/$/, "");
-  // 2. Build-time env (Render m.fl.)
+  // 2. Build-time env (Render, Cloud Run m.fl.)
   let explicit = import.meta.env.VITE_API_BASE;
   if (explicit) {
+    // "/" eller "SAME_ORIGIN" → servera API från samma host som
+    // frontend (Cloud Run-deploy där en container har båda). Returnera
+    // tom sträng så fetch använder browserns current origin automatiskt.
+    if (explicit === "/" || explicit.toUpperCase() === "SAME_ORIGIN") {
+      return "";
+    }
     if (!/^https?:\/\//i.test(explicit)) explicit = `https://${explicit}`;
     return explicit.replace(/\/$/, "");
   }
-  // 3. Tauri/lokal dev
+  // 3. Tauri/lokal dev — använd current hostname så att om frontend öppnas
+  // från ett annat LAN-device (http://192.168.1.x:1420) pekar API till
+  // samma maskin (http://192.168.1.x:8765), inte klienternas 127.0.0.1.
   const port = localStorage.getItem(PORT_KEY) || import.meta.env.VITE_API_PORT || "8765";
-  return `http://127.0.0.1:${port}`;
+  const hostname =
+    typeof window !== "undefined" && window.location.hostname
+      ? window.location.hostname
+      : "127.0.0.1";
+  return `http://${hostname}:${port}`;
 }
 
 export function getApiBase(): string {
@@ -61,7 +73,20 @@ export async function api<T = unknown>(
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+  } catch (err) {
+    // Browser-nätverksfel (typisk "Failed to fetch"): kabelfel, backend
+    // avstängd, CORS-preflight misslyckad eller tunnel nere. Ge
+    // användaren ett tydligare meddelande som skiljer från HTTP-fel.
+    throw new ApiError(
+      0,
+      `Kunde inte nå servern (${apiBase()}). Kolla att backend är igång ` +
+        `och att nätverket fungerar. Tekniskt: ${String((err as Error).message ?? err)}`,
+      undefined,
+    );
+  }
   if (!res.ok) {
     if (res.status === 401 && token) {
       clearToken();

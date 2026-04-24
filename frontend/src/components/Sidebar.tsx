@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
+  Activity,
   BarChart3,
+  Briefcase,
   CalendarPlus,
   CircleDollarSign,
   FileDown,
@@ -11,10 +13,12 @@ import {
   LineChart,
   Menu,
   MessageSquare,
+  Paperclip,
   Settings as Cog,
   Upload,
   Receipt,
   CalculatorIcon,
+  PiggyBank,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -24,11 +28,15 @@ const ITEMS = [
   { to: "/transactions", label: "Transaktioner", icon: Receipt },
   { to: "/import", label: "Importera", icon: Upload },
   { to: "/budget", label: "Budget", icon: CircleDollarSign },
+  { to: "/salaries", label: "Lön", icon: Briefcase },
   { to: "/upcoming", label: "Kommande", icon: CalendarPlus },
+  { to: "/attachments", label: "Bildunderlag", icon: Paperclip },
   { to: "/transfers", label: "Överföringar", icon: Link2 },
   { to: "/chat", label: "AI-chatt", icon: MessageSquare },
   { to: "/scenarios", label: "Scenarion", icon: CalculatorIcon },
   { to: "/loans", label: "Lån", icon: Landmark },
+  { to: "/funds", label: "Fonder & ISK", icon: PiggyBank },
+  { to: "/utility", label: "Förbrukning", icon: Activity },
   { to: "/tax", label: "Skatt", icon: BarChart3 },
   { to: "/reports", label: "Rapporter", icon: FileDown },
   { to: "/settings", label: "Inställningar", icon: Cog },
@@ -66,7 +74,7 @@ function Brand() {
         <LineChart className="w-5 h-5" />
         Hembudget
       </Link>
-      <div className="text-xs text-slate-400 mt-0.5">Lokalt • Nemotron Nano 3</div>
+      <div className="text-xs text-slate-600 mt-0.5">Lokalt • Nemotron Nano 3</div>
     </div>
   );
 }
@@ -103,7 +111,7 @@ export function MobileTopBar() {
           Hembudget
         </Link>
         {currentItem && (
-          <span className="ml-auto text-sm text-slate-500">{currentItem.label}</span>
+          <span className="ml-auto text-sm text-slate-700">{currentItem.label}</span>
         )}
       </div>
 
@@ -120,7 +128,7 @@ export function MobileTopBar() {
               <Brand />
               <button
                 onClick={() => setOpen(false)}
-                className="p-2 text-slate-400"
+                className="p-2 text-slate-600"
                 aria-label="Stäng"
               >
                 <X className="w-5 h-5" />

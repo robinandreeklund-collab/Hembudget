@@ -41,10 +41,31 @@ class Account(Base):
     account_number: Mapped[Optional[str]] = mapped_column(String(40), nullable=True, index=True)
     opening_balance: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
     opening_balance_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Kreditgräns — sätts bara för credit-kort. Används för att visa
+    # kvar att utnyttja ("kredit kvar") och varna vid nära-gräns.
+    credit_limit: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    # För kreditkort: bankgiro som används för att betala fakturan.
+    # Används för att para autogiro-transaktioner från lönekontot mot
+    # rätt kortkonto ("Betalning BG 5127-5477 American Exp" → Amex-kort).
+    bankgiro: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
+    # Sista 4 siffror på kortnumret. Används för att skilja på sub-konton
+    # för olika kortinnehavare (huvudkort + extrakort på samma faktura).
+    card_last_digits: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    # Parent-kort-konto: när vi delar upp en MC-faktura per kortinnehavare
+    # pekar sub-kontona på parent som håller fakturasumman + betalningen.
+    parent_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     pays_credit_account_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("accounts.id"), nullable=True
     )
+    # Inkognito-läge: partner-/privat-konto där vi BARA spårar inkomster och
+    # överföringar till gemensamma konton, inte saldo eller privata utgifter.
+    # Exkluderas från total förmögenhet, nettoförmögenhet i huvudbok och
+    # månadsutgifter. Transfer-detektorn använder dock ändå kontot för att
+    # para ihop överföringar (hennes -10 000 → vårt gemensamma +10 000).
+    incognito: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
@@ -84,10 +105,21 @@ class Transaction(Base):
     transfer_pair_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("transactions.id"), nullable=True
     )
+    # För kreditkort: vilken kortinnehavare köpet gjordes med. Endast
+    # en fördelnings-etikett — inte ett separat konto. Hela fakturan
+    # betalas från parent-kontot.
+    cardholder: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="transactions")
     category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
+    splits: Mapped[list["TransactionSplit"]] = relationship(
+        back_populates=None,
+        primaryjoin="Transaction.id == TransactionSplit.transaction_id",
+        foreign_keys="[TransactionSplit.transaction_id]",
+        cascade="all, delete-orphan",
+        order_by="TransactionSplit.sort_order",
+    )
 
 
 class Rule(Base):
@@ -181,6 +213,14 @@ class Loan(Base):
     loan_number: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
     principal_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # "Aktuellt lånebelopp" när lånet registrerades (från bankens vy via vision).
+    # Om satt används detta som bas i outstanding_balance i stället för
+    # principal_amount — så gamla amorteringar före vi började tracka inte
+    # behöver matchas för att saldot ska stämma. Nya amorteringar drar detta
+    # belopp på vanligt sätt.
+    current_balance_at_creation: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     interest_rate: Mapped[float] = mapped_column(nullable=False)         # nominell, t.ex. 0.042
@@ -192,18 +232,35 @@ class Loan(Base):
 
     match_pattern: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Budgetkategori — "Huslån", "Billån", "Studielån" etc. Ränta och
+    # amortering från detta lån kategoriseras automatiskt som den här
+    # kategorin när matchern länkar bankbetalningen.
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class LoanPayment(Base):
-    """Koppling transaktion → lån, klassificerad som ränta eller amortering."""
+    """Koppling transaktion → lån, klassificerad som ränta eller amortering.
+
+    EJ unique på transaction_id — en bankrad kan splitta i både ränta och
+    amortering (t.ex. Nordeas "Omsättning lån 4662 kr" = amort 2700 + ränta
+    1962). Unikheten upprätthålls i stället av (transaction_id, payment_type)
+    så vi inte dubblar samma typ.
+    """
     __tablename__ = "loan_payments"
+    __table_args__ = (
+        UniqueConstraint(
+            "transaction_id", "payment_type", name="uq_loan_payment_tx_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     loan_id: Mapped[int] = mapped_column(ForeignKey("loans.id"), nullable=False, index=True)
     transaction_id: Mapped[int] = mapped_column(
-        ForeignKey("transactions.id"), nullable=False, unique=True
+        ForeignKey("transactions.id"), nullable=False, index=True
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # alltid positivt
@@ -223,8 +280,10 @@ class LoanScheduleEntry(Base):
     due_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     payment_type: Mapped[str] = mapped_column(String(20), nullable=False)  # interest | amortization
+    # Ej unique — samma bankpost kan täcka två schedule-rader
+    # (ränta + amortering) i ett svep, t.ex. Nordeas "Omsättning lån".
     matched_transaction_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("transactions.id"), nullable=True, unique=True
+        ForeignKey("transactions.id"), nullable=True, index=True
     )
     matched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -266,7 +325,82 @@ class UpcomingTransaction(Base):
     matched_transaction_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("transactions.id"), nullable=True, unique=True
     )
+    # När True räknas avvikelser i delbetalning (partial/overpaid) som
+    # accepterade och status presenteras som "paid". Användsfall:
+    # öresavrundning, bonus, eller skatte-justering som man inte vill
+    # se som varning.
+    variance_accepted: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    lines: Mapped[list["UpcomingTransactionLine"]] = relationship(
+        back_populates="upcoming",
+        cascade="all, delete-orphan",
+        order_by="UpcomingTransactionLine.sort_order",
+    )
+
+
+class UpcomingTransactionLine(Base):
+    """Enskild post på en planerad faktura.
+
+    Exempel: en faktura från Hjo Energi kan innehålla rader för el,
+    vatten och bredband. Totalsumman på fakturan = sum(lines.amount)
+    (alla positiva). När fakturan matchas mot en riktig bankrad kopieras
+    raderna till transaction_splits med tecken enligt UpcomingTransaction.kind.
+    """
+
+    __tablename__ = "upcoming_transaction_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # positivt
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    upcoming: Mapped[UpcomingTransaction] = relationship(back_populates="lines")
+    category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
+
+
+class TransactionSplit(Base):
+    """Uppdelning av en faktisk transaktion i flera budgetposter.
+
+    När en UpcomingTransaction med lines matchas mot en bankrad kopieras
+    lines hit — varje split har tecken enligt transaktionen (negativt för
+    utgifter, positivt för inkomster). Budget/rapporter ska använda splits
+    om de finns, annars falla tillbaka på transactions.category_id + amount.
+
+    Invariant: sum(splits.amount) == transactions.amount (toleranstestas i
+    apply-lagret men DB-constraint är inte möjlig i sqlite).
+    """
+
+    __tablename__ = "transaction_splits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)  # tecken bevaras
+    category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="upcoming")
+    # "upcoming" (kopierad från UpcomingTransactionLine), "manual", "llm"
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
 
 
 class TaxEvent(Base):
@@ -278,6 +412,201 @@ class TaxEvent(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
     transaction_id: Mapped[Optional[int]] = mapped_column(ForeignKey("transactions.id"), nullable=True)
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+
+class FundHolding(Base):
+    """Aktuell fondposition per konto — fond + antal andelar + värde.
+
+    Uppdateras en gång per månad från bankens vy (t.ex. Nordea ISK) via
+    vision-AI som extraherar raderna ur en skärmdump. Unik per (account,
+    fund_name) så samma fond alltid mappar mot samma rad.
+    """
+    __tablename__ = "fund_holdings"
+    __table_args__ = (
+        UniqueConstraint("account_id", "fund_name", name="uq_fund_acc_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    fund_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    units: Mapped[Optional[Decimal]] = mapped_column(Numeric(16, 4), nullable=True)
+    market_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    last_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
+    # Totalavkastning på positionen sedan den köptes — bankens "Värdeförändring".
+    change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    change_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    # Dagsförändring (kurs), från raden "+0,67% ▲".
+    day_change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="SEK")
+    last_update_date: Mapped[date] = mapped_column(Date, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class FundHoldingSnapshot(Base):
+    """Historik över månadsvisa fondinnehav — ger utveckling över tid per fond.
+
+    Skapas varje gång användaren importerar en ny skärmdump. En rad per fond
+    per uppdatering, med (account, fund, snapshot_date) som logisk nyckel så
+    två uppdateringar samma dag inte dubblerar.
+    """
+    __tablename__ = "fund_holding_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id", "fund_name", "snapshot_date",
+            name="uq_fund_snap_acc_name_date",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    fund_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    units: Mapped[Optional[Decimal]] = mapped_column(Numeric(16, 4), nullable=True)
+    market_value: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    last_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
+    change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    change_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    day_change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), default="SEK")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class UpcomingPayment(Base):
+    """Junction-table för att koppla flera Transactions mot en
+    UpcomingTransaction — t.ex. när en Amex-faktura på 13 445 kr betalas
+    i två delar (5 000 + 8 445).
+
+    UpcomingTransaction.matched_transaction_id fortsätter vara 'primär
+    match' (första betalningen) för bakåtkompatibilitet, men riktiga
+    summeringar (är fakturan helt betald?) räknas från denna tabell.
+    """
+    __tablename__ = "upcoming_payments"
+    __table_args__ = (
+        UniqueConstraint(
+            "upcoming_id", "transaction_id",
+            name="uq_upcoming_payment",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class LockedPeriod(Base):
+    """Låst månad i huvudboken — när användaren är klar med
+    avstämningen för en månad kan de låsa den så inga transaktioner,
+    kategoriseringar eller andra ändringar kan göras retroaktivt.
+
+    Backend-endpoints som modifierar Transaction, TransactionSplit, etc.
+    kollar om tx.date tillhör en låst period och returnerar 423 Locked.
+    """
+    __tablename__ = "locked_periods"
+
+    # YYYY-MM som primärnyckel — enklare än en auto-ID + unique
+    month: Mapped[str] = mapped_column(String(7), primary_key=True)
+    locked_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    locked_by: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class DismissedTransferSuggestion(Base):
+    """Användaren har klickat bort ett föreslaget transfer-par — ska
+    inte föreslås igen. Primary key är (lower_tx_id, higher_tx_id) för
+    att para oberoende av ordning.
+    """
+    __tablename__ = "dismissed_transfer_suggestions"
+
+    tx_a_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tx_b_id: Mapped[int] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class UtilityReading(Base):
+    """Förbrukningsdata från energifakturor och smart-meter-APIer.
+
+    Kompletterar Transaction-baserad kr-historik med faktisk fysisk
+    förbrukning (kWh, GB, m³) så användaren kan se om elkostnaden ökat
+    pga högre pris eller mer förbrukning. En rad per fakturaperiod.
+    """
+    __tablename__ = "utility_readings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # "hjo_energi" | "telinet" | "tibber" | "manuell"
+    supplier: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    # "electricity" | "broadband" | "water" | "heating" | "district_heating"
+    meter_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    # För el finns två parallella fakturaströmmar som mäter samma kWh:
+    # 'grid' = nätleverantörens överföringsavgift (Hjo Energi/Vattenfall Elnät)
+    # 'energy' = elhandelsbolagets energikostnad (Telinet, Tibber)
+    # 'total' = en kombinerad faktura eller okänt (default, bakåtkompatibelt)
+    # Används vid aggregering: kWh räknas ENDAST från 'energy' (eller
+    # 'total' om ingen 'energy' finns), kostnader summeras över alla roller.
+    meter_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="total", server_default="total",
+    )
+    period_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Förbrukning i rätt enhet för meter_type (kWh för el, GB för bredband...)
+    consumption: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 3), nullable=True,
+    )
+    consumption_unit: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True,
+    )
+    cost_kr: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # "pdf" | "tibber_api" | "manual"
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="pdf")
+    source_file: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Koppling till UpcomingTransaction (fakturan) om den finns
+    upcoming_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("upcoming_transactions.id"), nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class AppSetting(Base):
+    """Enkelt key/value-lager för användarinställningar.
+
+    Användsfall: default_debit_account_id (kontot som föreslås för nya
+    upcoming bills), default_currency, osv. Värde lagras som JSON så vi
+    slipper migrera när datatyper ändras.
+    """
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
 
 
 class AuditLog(Base):

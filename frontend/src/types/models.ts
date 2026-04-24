@@ -7,7 +7,16 @@ export interface Account {
   account_number?: string | null;
   opening_balance?: number | null;
   opening_balance_date?: string | null;
+  credit_limit?: number | null;
+  bankgiro?: string | null;
   pays_credit_account_id?: number | null;
+  owner_id?: number | null;
+  incognito?: boolean;
+}
+
+export interface HouseholdUser {
+  id: number;
+  name: string;
 }
 
 export interface Category {
@@ -17,6 +26,13 @@ export interface Category {
   budget_monthly: string | null;
   color: string | null;
   icon: string | null;
+}
+
+export interface UpcomingMatch {
+  upcoming_id: number;
+  name: string;
+  kind: string;
+  amount: number | string;
 }
 
 export interface Transaction {
@@ -34,6 +50,31 @@ export interface Transaction {
   user_verified: boolean;
   is_transfer: boolean;
   transfer_pair_id: number | null;
+  cardholder?: string | null;
+  upcoming_matches?: UpcomingMatch[];
+}
+
+export interface BudgetLine {
+  category_id: number;
+  category: string;
+  planned: number;
+  actual: number;
+  diff: number;
+  kind?: "income" | "expense";
+  group_id?: number | null;
+  group?: string | null;
+  progress_pct?: number;
+  trend_median?: number;
+}
+
+export interface BudgetGroup {
+  group_id: number | null;
+  group: string;
+  planned: number;
+  actual: number;
+  diff: number;
+  progress_pct: number;
+  category_ids: number[];
 }
 
 export interface MonthSummary {
@@ -42,13 +83,18 @@ export interface MonthSummary {
   expenses: number;
   savings: number;
   savings_rate: number;
-  lines: Array<{
-    category_id: number;
-    category: string;
-    planned: number;
-    actual: number;
-    diff: number;
-  }>;
+  lines: BudgetLine[];
+  groups?: BudgetGroup[];
+}
+
+export interface AutoFillSuggestion {
+  category_id: number;
+  category: string;
+  group: string | null;
+  suggested: number;
+  current_planned: number | null;
+  months_with_data: number;
+  kind: "income" | "expense";
 }
 
 export interface ForecastPoint {

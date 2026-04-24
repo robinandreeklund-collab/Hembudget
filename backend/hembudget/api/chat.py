@@ -43,3 +43,15 @@ def history(session_id: str, session: Session = Depends(db)) -> dict:
 @router.get("/lm-studio-status")
 def lm_status(llm: LMStudioClient = Depends(llm_client)) -> dict:
     return {"alive": llm.is_alive(), "base_url": llm.base_url, "model": llm.model}
+
+
+@router.delete("/history/{session_id}")
+def clear_history(session_id: str, session: Session = Depends(db)) -> dict:
+    """Radera all chat-historik för session_id. Används av 'Rensa chatt'-
+    knappen i UI så användaren kan starta om en konversation från början."""
+    deleted = (
+        session.query(ChatMessage)
+        .filter(ChatMessage.session_id == session_id)
+        .delete(synchronize_session=False)
+    )
+    return {"session_id": session_id, "deleted": deleted}

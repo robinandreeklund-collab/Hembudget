@@ -7,13 +7,132 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..db.models import TaxEvent, Transaction
+from ..db.models import TaxEvent, Transaction, UpcomingTransaction
 from ..tax.isk import ISKCalculator, ISKQuarterValue, ISKYearData
 from ..tax.k4 import K4Calculator, Trade
 from ..tax.rotrut import RotRutService
 from .deps import db, require_auth
 
 router = APIRouter(prefix="/tax", tags=["tax"], dependencies=[Depends(require_auth)])
+
+
+@router.get("/salary-summary")
+def salary_tax_summary(
+    year: int | None = None,
+    session: Session = Depends(db),
+) -> dict:
+    """Samlad skatteöversikt från uppladdade lönespec-PDFer.
+
+    Läser UpcomingTransaction.notes (JSON från salary_pdf-parsern) och
+    aggregerar per person: total brutto, skatt, extra_skatt, förmåner,
+    netto. Ger sedan en enkel skatteprognos: om extra_skatt > 0 så är
+    det överdragen skatt som borde komma tillbaka vid deklaration.
+    """
+    import json as _json
+    from datetime import date as _date
+
+    y = year or _date.today().year
+    start = _date(y, 1, 1)
+    end = _date(y + 1, 1, 1)
+
+    salary_ups = (
+        session.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "income",
+            UpcomingTransaction.source == "salary_pdf",
+            UpcomingTransaction.expected_date >= start,
+            UpcomingTransaction.expected_date < end,
+        )
+        .all()
+    )
+
+    by_owner: dict[str, dict] = {}
+    overall = {
+        "gross": 0.0, "tax": 0.0, "extra_tax": 0.0,
+        "benefit": 0.0, "net": 0.0, "count": 0,
+    }
+
+    for u in salary_ups:
+        owner = (u.owner or "gemensamt").strip() or "gemensamt"
+        bucket = by_owner.setdefault(
+            owner,
+            {
+                "gross": 0.0, "tax": 0.0, "extra_tax": 0.0,
+                "benefit": 0.0, "net": 0.0, "count": 0,
+                "payslips": [],
+                "suppliers": set(),
+            },
+        )
+        try:
+            meta = _json.loads(u.notes or "{}") if u.notes else {}
+        except ValueError:
+            meta = {}
+        gross = float(meta.get("gross") or 0)
+        tax = float(meta.get("tax") or 0)
+        extra_tax = float(meta.get("extra_tax") or 0)
+        benefit = float(meta.get("benefit") or 0)
+        net = float(u.amount)
+
+        bucket["gross"] += gross
+        bucket["tax"] += tax
+        bucket["extra_tax"] += extra_tax
+        bucket["benefit"] += benefit
+        bucket["net"] += net
+        bucket["count"] += 1
+        bucket["suppliers"].add(u.name)
+        bucket["payslips"].append({
+            "upcoming_id": u.id,
+            "employer": u.name,
+            "paid_date": u.expected_date.isoformat(),
+            "gross": gross,
+            "tax": tax,
+            "extra_tax": extra_tax,
+            "benefit": benefit,
+            "net": net,
+            "tax_table": meta.get("tax_table"),
+            "vacation_days_paid": meta.get("vacation_days_paid"),
+            "vacation_days_saved": meta.get("vacation_days_saved"),
+        })
+
+        overall["gross"] += gross
+        overall["tax"] += tax
+        overall["extra_tax"] += extra_tax
+        overall["benefit"] += benefit
+        overall["net"] += net
+        overall["count"] += 1
+
+    # Konvertera set → list för JSON
+    for bucket in by_owner.values():
+        bucket["suppliers"] = sorted(bucket["suppliers"])
+        # Projektering linjär på årsbasis
+        months = bucket["count"] or 1
+        scale = 12.0 / months if months < 12 else 1.0
+        bucket["projected_annual_gross"] = round(bucket["gross"] * scale, 2)
+        bucket["projected_annual_tax"] = round(bucket["tax"] * scale, 2)
+        bucket["projected_annual_extra_tax"] = round(bucket["extra_tax"] * scale, 2)
+        # Enkel effektiv skattesats (inkl. extra skatt)
+        bucket["effective_tax_rate"] = (
+            round(bucket["tax"] / bucket["gross"], 4)
+            if bucket["gross"] > 0 else 0.0
+        )
+        if bucket["extra_tax"] > 0:
+            bucket["hint"] = (
+                f"Extra skatt betald: {bucket['extra_tax']:.0f} kr. "
+                f"Projekterat helår: {bucket['projected_annual_extra_tax']:.0f} kr. "
+                "Troligen återbäring vid deklaration om tabellen stämmer."
+            )
+        else:
+            bucket["hint"] = None
+
+    # Runda overall
+    for k in ("gross", "tax", "extra_tax", "benefit", "net"):
+        overall[k] = round(overall[k], 2)
+
+    return {
+        "year": y,
+        "by_owner": by_owner,
+        "overall": overall,
+    }
 
 
 class ISKIn(BaseModel):
