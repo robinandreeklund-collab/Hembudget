@@ -35,6 +35,7 @@ import LoginChoice from "./pages/LoginChoice";
 import TeacherLogin from "./pages/TeacherLogin";
 import StudentLogin from "./pages/StudentLogin";
 import DemoChoice from "./pages/DemoChoice";
+import Docs from "./pages/Docs";
 import { DemoBanner } from "./components/DemoBanner";
 
 export default function App() {
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/login/teacher" element={<TeacherLogin />} />
         <Route path="/login/student" element={<StudentLogin />} />
         <Route path="/demo" element={<DemoChoice />} />
+        <Route path="/docs" element={<Docs />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
         <Route path="/login/legacy" element={<Login />} />
@@ -103,6 +105,7 @@ export default function App() {
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
               <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
               <Route path="/messages" element={<Messages />} />
+              <Route path="/docs" element={<Docs />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route
                 path="/dashboard"

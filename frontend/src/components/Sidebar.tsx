@@ -11,6 +11,7 @@ import {
   Home,
   Inbox,
   MessageCircle,
+  BookOpen,
   Landmark,
   Link2,
   LineChart,
@@ -64,6 +65,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
       { to: "/my-batches", label: "Dina dokument", icon: Inbox },
       { to: "/messages", label: "Meddelanden", icon: MessageCircle },
       ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),
+      { to: "/docs", label: "Hjälp & guide", icon: BookOpen },
     ];
   } else if (isTeacherViewing) {
     items = [

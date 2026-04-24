@@ -40,6 +40,9 @@ function Header() {
           <a href="#sa-funkar-det" className="text-slate-700 hover:text-brand-600">
             Så funkar det
           </a>
+          <Link to="/docs" className="text-slate-700 hover:text-brand-600">
+            Dokumentation
+          </Link>
           <Link
             to="/login"
             className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2"
