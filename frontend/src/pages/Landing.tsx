@@ -8,6 +8,7 @@ import DashboardPreview from "@/components/landing/DashboardPreview";
 import BudgetDemo from "@/components/landing/BudgetDemo";
 import PdfImportDemo from "@/components/landing/PdfImportDemo";
 import TeacherDemo from "@/components/landing/TeacherDemo";
+import MortgageDemo from "@/components/landing/MortgageDemo";
 
 export default function Landing() {
   return (
@@ -278,6 +279,13 @@ function FlowSection() {
     },
     {
       num: "04",
+      title: "Verklig fostring i ekonomiska val",
+      body: "Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser gjort synliga.",
+      color: "bg-purple-500",
+      demo: <MortgageDemo />,
+    },
+    {
+      num: "05",
       title: "Läraren ser hela klassen",
       body: "Matris över alla elever och uppdrag. Kategoriseringsfacit per tx. Chatt för feedback. Allt du behöver för att följa upp.",
       color: "bg-rose-500",
