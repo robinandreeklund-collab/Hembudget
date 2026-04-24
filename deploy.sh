@@ -116,6 +116,7 @@ gcloud services enable \
     run.googleapis.com \
     cloudbuild.googleapis.com \
     artifactregistry.googleapis.com \
+    storage.googleapis.com \
     --quiet
 ok "API:er aktiva"
 
@@ -135,10 +136,42 @@ if [[ "$MODE" == "school" ]]; then
     TEACHER_PASSWORD="${TEACHER_PASSWORD:-}"
     TEACHER_NAME="${TEACHER_NAME:-Lärare}"
 
+    # PERSIST: "gcs" (default — montera GCS-bucket via Fuse, persistent)
+    #          "ephemeral" (gammalt beteende, /tmp resetas vid restart)
+    PERSIST="${PERSIST:-gcs}"
+
+    if [[ "$PERSIST" == "gcs" ]]; then
+        BUCKET_NAME="${BUCKET_NAME:-hembudget-school-${PROJECT_ID}}"
+        DATA_DIR="/mnt/school-data"
+
+        info "Persistens: GCS-fuse → bucket gs://$BUCKET_NAME"
+        # Skapa bucket om den inte finns
+        if ! gsutil ls -b "gs://$BUCKET_NAME" >/dev/null 2>&1; then
+            info "Bucket finns inte — skapar gs://$BUCKET_NAME i $REGION"
+            gsutil mb -l "$REGION" -p "$PROJECT_ID" "gs://$BUCKET_NAME" \
+                || warn "Kunde inte skapa bucket — kontrollera GCS-API"
+        else
+            ok "Bucket gs://$BUCKET_NAME finns"
+        fi
+
+        # Säkerställ att Cloud Run-tjänstens default-SA har storage.objectAdmin
+        SA_EMAIL=$(gcloud iam service-accounts list \
+            --filter="displayName:Default compute service account" \
+            --format='value(email)' 2>/dev/null | head -1)
+        if [[ -n "$SA_EMAIL" ]]; then
+            gsutil iam ch "serviceAccount:${SA_EMAIL}:roles/storage.objectAdmin" \
+                "gs://$BUCKET_NAME" 2>/dev/null \
+                || warn "Kunde inte sätta IAM på bucket"
+        fi
+    else
+        DATA_DIR="/tmp/hembudget"
+        warn "Persistens: ephemeral — data försvinner vid container-restart!"
+    fi
+
     ENV_VARS="HEMBUDGET_SCHOOL_MODE=1"
     ENV_VARS+=",HEMBUDGET_SERVE_STATIC=1"
     ENV_VARS+=",HEMBUDGET_HOST=0.0.0.0"
-    ENV_VARS+=",HEMBUDGET_DATA_DIR=/tmp/hembudget"
+    ENV_VARS+=",HEMBUDGET_DATA_DIR=${DATA_DIR}"
     ENV_VARS+=",HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1"
     ENV_VARS+=",HEMBUDGET_BOOTSTRAP_SECRET=$BOOTSTRAP_SECRET"
     if [[ -n "$TEACHER_EMAIL" && -n "$TEACHER_PASSWORD" ]]; then
@@ -147,7 +180,7 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge låser till 1 instans — per-elev-SQLite delas inte över instanser
+    # Skol-läge låser till 1 instans — SQLite-filer delas inte över instanser
     MAX_INSTANCES=1
     MIN_INSTANCES=1
 
@@ -173,20 +206,27 @@ info "  Minne   : $MEMORY   CPU: $CPU"
 info "  Instans : $MIN_INSTANCES - $MAX_INSTANCES  (auto-skalning)"
 echo
 
-gcloud run deploy "$SERVICE_NAME" \
-    --source . \
-    --region "$REGION" \
-    --platform managed \
-    --allow-unauthenticated \
-    --memory "$MEMORY" \
-    --cpu "$CPU" \
-    --concurrency "$CONCURRENCY" \
-    --timeout "$TIMEOUT" \
-    --max-instances "$MAX_INSTANCES" \
-    --min-instances "$MIN_INSTANCES" \
-    --set-env-vars "$ENV_VARS" \
-    --port 8080 \
+DEPLOY_ARGS=(
+    --source . --region "$REGION" --platform managed
+    --allow-unauthenticated
+    --memory "$MEMORY" --cpu "$CPU"
+    --concurrency "$CONCURRENCY" --timeout "$TIMEOUT"
+    --max-instances "$MAX_INSTANCES" --min-instances "$MIN_INSTANCES"
+    --set-env-vars "$ENV_VARS"
+    --port 8080
     --quiet
+)
+
+# GCS-fuse-volym (kräver Cloud Run gen2 exec env, annars failar deployen)
+if [[ "$MODE" == "school" && "$PERSIST" == "gcs" ]]; then
+    DEPLOY_ARGS+=(
+        --execution-environment=gen2
+        --add-volume="name=school-data,type=cloud-storage,bucket=$BUCKET_NAME"
+        --add-volume-mount="volume=school-data,mount-path=$DATA_DIR"
+    )
+fi
+
+gcloud run deploy "$SERVICE_NAME" "${DEPLOY_ARGS[@]}"
 
 # ----- 6. Visa URL -----
 echo
@@ -198,11 +238,15 @@ echo
 if [[ "$MODE" == "school" ]]; then
     echo "Skol-läge aktivt. Logga in som lärare på URL:en ovan."
     echo "Bootstrap-kod (för första lärarregistrering): $BOOTSTRAP_SECRET"
+    if [[ "$PERSIST" == "gcs" ]]; then
+        echo "Persistens: gs://$BUCKET_NAME (data överlever container-restart)"
+    else
+        echo "Persistens: ephemeral (/tmp) — data resetas vid restart"
+    fi
 else
     echo "Dela med eleverna. Appen är i demo-läge (ingen inloggning, öppet)."
+    echo "OBS: /tmp/hembudget är ephemeral — data resetas när instansen startar om."
 fi
-echo "OBS: /tmp/hembudget är ephemeral — data resetas när instansen startar om."
-echo "För persistens i skolläge: montera Cloud Storage-volym (se README)."
 echo
 echo "Uppdatera:        ./deploy.sh"
 echo "Se loggar:        gcloud run services logs read $SERVICE_NAME --region $REGION --limit 50"
