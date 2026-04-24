@@ -4,7 +4,7 @@ import {
   ArrowLeft, BookOpenCheck, Briefcase, CheckCircle2, Eye, FileText,
   ListChecks, Plus, Target, Users, XCircle,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { api, getApiBase, getToken } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AssignmentList } from "@/components/AssignmentList";
 import { MasteryChart } from "@/components/MasteryChart";
@@ -132,6 +132,25 @@ export default function StudentDetail() {
     window.location.href = "/dashboard";
   }
 
+  async function downloadPortfolio() {
+    const tok = getToken();
+    const res = await fetch(
+      `${getApiBase()}/teacher/students/${sid}/portfolio.pdf`,
+      { headers: tok ? { Authorization: `Bearer ${tok}` } : undefined },
+    );
+    if (!res.ok) {
+      setMastery((v) => v);
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `portfolio_${sid}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   if (!profile) {
     return <div className="p-6">Laddar elev…</div>;
   }
@@ -150,12 +169,20 @@ export default function StudentDetail() {
           <Users className="w-6 h-6 text-brand-600" />
           Elev #{sid}
         </h1>
-        <button
-          onClick={viewAs}
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2"
-        >
-          <Eye className="w-4 h-4" /> Titta som denna elev
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={downloadPortfolio}
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            📄 Portfolio PDF
+          </button>
+          <button
+            onClick={viewAs}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2"
+          >
+            <Eye className="w-4 h-4" /> Titta som denna elev
+          </button>
+        </div>
       </div>
 
       {/* Profil */}

@@ -3,13 +3,14 @@ import {
   AlertTriangle,
   BookOpenCheck,
   Coins,
+  Download,
   Flame,
   PiggyBank,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { api, getApiBase, getToken } from "@/api/client";
 import { AssignmentList } from "@/components/AssignmentList";
 import { HelpIcon, InfoBanner } from "@/components/Tooltip";
 import { MasteryChart } from "@/components/MasteryChart";
@@ -69,6 +70,24 @@ export default function EkoDashboard() {
       .then((m) => setMastery(m.filter((r) => r.evidence_count > 0)))
       .catch(() => setMastery([]));
   }, []);
+
+  async function downloadPortfolio() {
+    const tok = getToken();
+    const res = await fetch(`${getApiBase()}/student/portfolio.pdf`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
+    });
+    if (!res.ok) {
+      setErr("Kunde inte ladda ner PDF");
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `portfolio.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 
   if (err) {
     return (
@@ -252,7 +271,16 @@ export default function EkoDashboard() {
       {/* Mastery */}
       {mastery.length > 0 && (
         <section className="bg-white rounded-xl border p-4 space-y-3">
-          <h2 className="font-semibold text-lg">Dina färdigheter</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-lg">Dina färdigheter</h2>
+            <button
+              onClick={downloadPortfolio}
+              className="text-sm bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 flex items-center gap-1"
+              title="Ladda ner din portfolio som PDF"
+            >
+              <Download className="w-4 h-4" /> Portfolio PDF
+            </button>
+          </div>
           <p className="text-sm text-slate-600">
             Baserat på dina svar i modulerna. Ju fler bevis, desto
             säkrare bedömning.

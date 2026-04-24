@@ -15,7 +15,7 @@ from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
 from ..school.models import (
     Competency, Module, ModuleStep, ModuleStepCompetency,
-    Student, StudentModule, StudentStepProgress,
+    Student, StudentModule, StudentProfile, StudentStepProgress,
 )
 from .deps import TokenInfo, require_teacher, require_token
 
@@ -823,6 +823,150 @@ def reflections_unread_count(
             .count()
         )
     return {"unread": n}
+
+
+# ---------- Portfolio PDF ----------
+
+def _collect_portfolio(s, student_id: int) -> dict:
+    """Samla ihop all data som behövs för portfolio-PDF:en."""
+    student = s.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        return {}
+    profile = s.query(StudentProfile).filter(
+        StudentProfile.student_id == student_id
+    ).first()
+
+    # Mastery (bara de med evidens)
+    from .modules import _compute_mastery_for_student
+    mastery_map = _compute_mastery_for_student(s, student_id)
+    comps = s.query(Competency).all()
+    mastery_rows = []
+    for c in comps:
+        m = mastery_map.get(c.id)
+        if not m or m[1] == 0:
+            continue
+        mastery_rows.append({
+            "competency": {"name": c.name, "level": c.level},
+            "mastery": m[0],
+            "evidence_count": m[1],
+        })
+    mastery_rows.sort(key=lambda r: -r["mastery"])
+
+    # Reflektioner
+    refs_raw = (
+        s.query(StudentStepProgress, ModuleStep)
+        .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
+        .filter(
+            StudentStepProgress.student_id == student_id,
+            ModuleStep.kind == "reflect",
+            StudentStepProgress.completed_at.isnot(None),
+        )
+        .order_by(StudentStepProgress.completed_at)
+        .all()
+    )
+    reflections: list[dict] = []
+    for prog, step in refs_raw:
+        mod = s.query(Module).filter(Module.id == step.module_id).first()
+        rubric = None
+        if step.params and isinstance(step.params.get("rubric"), list):
+            rubric = step.params["rubric"]
+        reflections.append({
+            "module_title": mod.title if mod else "—",
+            "step_title": step.title,
+            "step_question": step.content,
+            "reflection": (prog.data or {}).get("reflection", ""),
+            "teacher_feedback": prog.teacher_feedback,
+            "rubric": rubric,
+            "rubric_scores": prog.rubric_scores,
+            "completed_at": (
+                prog.completed_at.strftime("%Y-%m-%d %H:%M")
+                if prog.completed_at else ""
+            ),
+        })
+
+    # Modul-progress
+    modules_progress: list[dict] = []
+    for sm in (
+        s.query(StudentModule)
+        .filter(StudentModule.student_id == student_id)
+        .order_by(StudentModule.sort_order)
+        .all()
+    ):
+        mod = s.query(Module).filter(Module.id == sm.module_id).first()
+        if not mod:
+            continue
+        step_ids = [st.id for st in mod.steps]
+        completed = 0
+        if step_ids:
+            completed = s.query(StudentStepProgress).filter(
+                StudentStepProgress.student_id == student_id,
+                StudentStepProgress.step_id.in_(step_ids),
+                StudentStepProgress.completed_at.isnot(None),
+            ).count()
+        modules_progress.append({
+            "title": mod.title,
+            "completed": completed,
+            "total": len(step_ids),
+        })
+
+    return {
+        "student": student,
+        "profile": profile,
+        "mastery_rows": mastery_rows,
+        "reflections": reflections,
+        "modules_progress": modules_progress,
+    }
+
+
+@router.get("/student/portfolio.pdf")
+def student_portfolio_pdf(info: TokenInfo = Depends(require_token)):
+    from fastapi.responses import Response
+    from ..teacher.portfolio_pdf import build_portfolio_pdf
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        data = _collect_portfolio(s, info.student_id)
+    if not data or not data.get("profile"):
+        raise HTTPException(404, "Elev eller profil saknas")
+    pdf = build_portfolio_pdf(**data)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="portfolio_{data["student"].id}.pdf"',
+        },
+    )
+
+
+@router.get("/teacher/students/{student_id}/portfolio.pdf")
+def teacher_portfolio_pdf(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+):
+    from fastapi.responses import Response
+    from ..teacher.portfolio_pdf import build_portfolio_pdf
+    _require_school_mode()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        data = _collect_portfolio(s, student_id)
+    if not data or not data.get("profile"):
+        raise HTTPException(404, "Profil saknas")
+    pdf = build_portfolio_pdf(**data)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="portfolio_{student_id}.pdf"',
+        },
+    )
 
 
 # ---------- Elevens kursplan ----------
