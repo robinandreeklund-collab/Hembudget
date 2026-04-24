@@ -1302,6 +1302,104 @@ def list_assignments(
         return out
 
 
+class MatrixAssignment(BaseModel):
+    title: str
+    kind: str
+    target_year_month: Optional[str] = None
+
+
+class MatrixCell(BaseModel):
+    assignment_id: Optional[int] = None  # null = eleven saknar uppdraget
+    status: str  # "not_started" | "in_progress" | "completed" | "missing"
+    progress: Optional[str] = None
+
+
+class MatrixStudent(BaseModel):
+    student_id: int
+    display_name: str
+    class_label: Optional[str] = None
+    cells: list[MatrixCell]
+
+
+class AssignmentMatrixOut(BaseModel):
+    columns: list[MatrixAssignment]
+    rows: list[MatrixStudent]
+
+
+@router.get("/teacher/assignments/matrix",
+            response_model=AssignmentMatrixOut)
+def assignment_matrix(
+    info: TokenInfo = Depends(require_teacher),
+) -> AssignmentMatrixOut:
+    """Klassöversikt: alla lärarens elever (rader) × alla unika uppdrag
+    (kolumner). Varje cell visar elevens status för det uppdraget eller
+    "missing" om eleven inte har det."""
+    _require_school_mode()
+    from ..teacher.assignments import evaluate
+    with master_session() as s:
+        students = (
+            s.query(Student)
+            .filter(Student.teacher_id == info.teacher_id)
+            .order_by(Student.class_label, Student.display_name)
+            .all()
+        )
+        # Alla uppdrag grupperade på (title, kind, target_year_month)
+        all_assignments = (
+            s.query(Assignment)
+            .filter(Assignment.teacher_id == info.teacher_id)
+            .order_by(Assignment.created_at)
+            .all()
+        )
+        unique_keys: list[tuple] = []
+        seen: set[tuple] = set()
+        for a in all_assignments:
+            key = (a.title, a.kind, a.target_year_month)
+            if key not in seen:
+                seen.add(key)
+                unique_keys.append(key)
+
+        columns = [
+            MatrixAssignment(
+                title=k[0], kind=k[1], target_year_month=k[2],
+            )
+            for k in unique_keys
+        ]
+
+        rows: list[MatrixStudent] = []
+        for st in students:
+            student_assignments = {
+                (a.title, a.kind, a.target_year_month): a
+                for a in all_assignments
+                if a.student_id == st.id
+            }
+            cells: list[MatrixCell] = []
+            for key in unique_keys:
+                a = student_assignments.get(key)
+                if not a:
+                    cells.append(MatrixCell(status="missing"))
+                    continue
+                try:
+                    res = evaluate(a, st)
+                    cells.append(MatrixCell(
+                        assignment_id=a.id,
+                        status=res.status,
+                        progress=res.progress,
+                    ))
+                except Exception as e:
+                    cells.append(MatrixCell(
+                        assignment_id=a.id,
+                        status="in_progress",
+                        progress=str(e),
+                    ))
+            rows.append(MatrixStudent(
+                student_id=st.id,
+                display_name=st.display_name,
+                class_label=st.class_label,
+                cells=cells,
+            ))
+        return AssignmentMatrixOut(columns=columns, rows=rows)
+
+
 @router.delete("/teacher/assignments/{assignment_id}")
 def delete_assignment(
     assignment_id: int,

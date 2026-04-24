@@ -221,6 +221,12 @@ export default function Teacher() {
         </div>
         <div className="flex gap-2">
           <Link
+            to="/teacher/matrix"
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            📊 Klassöversikt
+          </Link>
+          <Link
             to="/teacher/all-batches"
             className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
           >
