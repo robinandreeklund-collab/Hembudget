@@ -41,6 +41,7 @@ const ASSIGNMENT_KINDS = [
   { value: "review_loan", label: "Granska lån" },
   { value: "categorize_all", label: "Kategorisera alla transaktioner" },
   { value: "save_amount", label: "Spara X kr" },
+  { value: "mortgage_decision", label: "Bolåne-beslut (rörlig vs bunden)" },
   { value: "free_text", label: "Annan uppgift (manuell)" },
 ];
 
@@ -60,6 +61,8 @@ export default function StudentDetail() {
   const [newDesc, setNewDesc] = useState("");
   const [newMonth, setNewMonth] = useState("");
   const [newAmount, setNewAmount] = useState("");
+  const [newMortgagePrincipal, setNewMortgagePrincipal] = useState("2000000");
+  const [newMortgageHorizon, setNewMortgageHorizon] = useState("36");
   const [reloadKey, setReloadKey] = useState(0);
 
   async function reload() {
@@ -101,6 +104,12 @@ export default function StudentDetail() {
         target_year_month: newMonth || null,
         params: newKind === "save_amount" && newAmount
           ? { amount: parseInt(newAmount, 10) }
+          : newKind === "mortgage_decision"
+          ? {
+              decision_month: newMonth,
+              principal: parseInt(newMortgagePrincipal, 10),
+              horizon_months: parseInt(newMortgageHorizon, 10),
+            }
           : null,
       }),
     });
@@ -223,6 +232,28 @@ export default function StudentDetail() {
                 placeholder="Belopp att spara (kr)"
                 className="w-full border rounded px-2 py-1.5"
               />
+            )}
+            {newKind === "mortgage_decision" && (
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="number"
+                  value={newMortgagePrincipal}
+                  onChange={(e) => setNewMortgagePrincipal(e.target.value)}
+                  placeholder="Lånebelopp (kr)"
+                  className="border rounded px-2 py-1.5"
+                />
+                <input
+                  type="number"
+                  value={newMortgageHorizon}
+                  onChange={(e) => setNewMortgageHorizon(e.target.value)}
+                  placeholder="Horisont (månader)"
+                  className="border rounded px-2 py-1.5"
+                />
+                <p className="col-span-2 text-xs text-amber-700">
+                  Använd Månad-fältet som beslutsmånad — välj gärna en
+                  historisk månad (t.ex. 2022-06) så eleven kan se facit.
+                </p>
+              </div>
             )}
             <div className="flex justify-end gap-2">
               <button

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   CheckCircle2, Check, CircleDashed, ListTodo, Trash2, Hourglass,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { api } from "@/api/client";
 
 export type AssignmentStatus = {
@@ -95,6 +96,14 @@ export function AssignmentList({
               )}
             </div>
           </div>
+          {!asTeacher && a.kind === "mortgage_decision" && (
+            <Link
+              to={`/mortgage/${a.id}`}
+              className="text-xs bg-brand-600 hover:bg-brand-700 text-white rounded px-2 py-1"
+            >
+              Öppna
+            </Link>
+          )}
           {asTeacher && (
             <div className="flex gap-1">
               {a.status !== "completed" && (
