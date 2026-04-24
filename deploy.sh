@@ -174,6 +174,15 @@ if [[ "$MODE" == "school" ]]; then
     ENV_VARS+=",HEMBUDGET_DATA_DIR=${DATA_DIR}"
     ENV_VARS+=",HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1"
     ENV_VARS+=",HEMBUDGET_BOOTSTRAP_SECRET=$BOOTSTRAP_SECRET"
+    # SMTP för verifierings- och reset-mail. Host/port/user sätts här;
+    # lösenordet ska ligga som Cloud Run-secret (HEMBUDGET_SMTP_PASSWORD)
+    # och pekas in med --update-secrets. Se SMTP_*-sektionen i CLAUDE.md.
+    ENV_VARS+=",HEMBUDGET_SMTP_HOST=smtp.gmail.com"
+    ENV_VARS+=",HEMBUDGET_SMTP_PORT=587"
+    ENV_VARS+=",HEMBUDGET_SMTP_USER=info@ekonomilabbet.org"
+    ENV_VARS+=",HEMBUDGET_MAIL_FROM=info@ekonomilabbet.org"
+    ENV_VARS+=",HEMBUDGET_MAIL_FROM_NAME=Ekonomilabbet"
+    ENV_VARS+=",HEMBUDGET_PUBLIC_BASE_URL=https://ekonomilabbet.org"
     if [[ -n "$TEACHER_EMAIL" && -n "$TEACHER_PASSWORD" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_EMAIL=$TEACHER_EMAIL"
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_PASSWORD=$TEACHER_PASSWORD"

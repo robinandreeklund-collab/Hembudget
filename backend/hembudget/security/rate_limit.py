@@ -188,6 +188,19 @@ RULES_SIGNUP = [
     Rule(limit=10, window_sec=3600, name="signup-1h"),
 ]
 
+# Återställ-lösenord-förfrågan: begränsas hårt per IP för att minska
+# spam-risken ("någon bad om reset av din mail"-bombning av andra).
+RULES_PASSWORD_RESET_REQUEST = [
+    Rule(limit=3, window_sec=300, name="reset-5min"),
+    Rule(limit=10, window_sec=3600, name="reset-1h"),
+]
+
+# Re-send av verifieringsmail — samma profil.
+RULES_VERIFY_RESEND = [
+    Rule(limit=3, window_sec=300, name="verify-5min"),
+    Rule(limit=10, window_sec=3600, name="verify-1h"),
+]
+
 
 def reset_all_for_testing() -> None:
     """Nollställ alla buckets — ENDAST för tester."""

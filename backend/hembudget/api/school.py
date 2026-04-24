@@ -327,12 +327,15 @@ def bootstrap_teacher(
                 status.HTTP_410_GONE, "Teachers already exist",
             )
         # Bootstrap-läraren är alltid super-admin — det är den enda lärare
-        # som kan tilldela AI-rättigheter till övriga lärare.
+        # som kan tilldela AI-rättigheter till övriga lärare. Räknas
+        # email-verifierad direkt (vi litar på att env-var-admin har
+        # rätt mail).
         teacher = Teacher(
             email=payload.email.lower(),
             name=payload.name,
             password_hash=hash_password(payload.password),
             is_super_admin=True,
+            email_verified_at=datetime.utcnow(),
         )
         s.add(teacher)
         s.flush()
@@ -366,6 +369,15 @@ def teacher_login(
         ):
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, "Invalid credentials",
+            )
+        # Blockera login om e-post inte är verifierad. Bootstrap- och
+        # demo-lärare samt gamla konton (backfill vid migration) är
+        # redan verifierade, så detta träffar bara nya open-signup-
+        # lärare som glömt klicka länken.
+        if teacher.email_verified_at is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "email_unverified",
             )
         tid = teacher.id
         tname = teacher.name

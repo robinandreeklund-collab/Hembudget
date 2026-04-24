@@ -14,6 +14,7 @@ dependencies = [
     "alembic>=1.13",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
+    "email-validator>=2.0",
     "sqlcipher3-binary>=0.5.2; platform_system != 'Windows'",
     "openai>=1.30",
     "pandas>=2.2",

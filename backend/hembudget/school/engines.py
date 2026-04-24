@@ -158,6 +158,19 @@ def _run_master_migrations(engine: Engine) -> None:
         _add("teachers", "ai_input_tokens INTEGER NOT NULL DEFAULT 0")
     if "ai_output_tokens" not in t_cols:
         _add("teachers", "ai_output_tokens INTEGER NOT NULL DEFAULT 0")
+    if "email_verified_at" not in t_cols:
+        # SQLite tillåter inte non-constant default med ALTER TABLE,
+        # så vi lämnar NULL som default. Befintliga lärare blir ej-
+        # verifierade rent tekniskt — men backfill:en nedan sätter
+        # dem verifierade eftersom de redan fungerar (inloggat konto).
+        _add("teachers", "email_verified_at DATETIME")
+        # Backfill: alla existerande lärare (före den här migrationen)
+        # räknas verifierade — annars skulle super-admins låsas ute.
+        with engine.begin() as conn:
+            conn.execute(_text(
+                "UPDATE teachers SET email_verified_at = CURRENT_TIMESTAMP "
+                "WHERE email_verified_at IS NULL"
+            ))
 
 
 @contextmanager

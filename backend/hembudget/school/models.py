@@ -54,12 +54,51 @@ class Teacher(MasterBase):
     ai_requests_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # NULL = ej verifierad (open-signup-lärare som inte klickat länk än).
+    # Bootstrap-läraren + demo-läraren sätts verifierade direkt vid skapelse.
+    # Login blockeras för lärare med NULL (förutom super-admin).
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
 
     students: Mapped[list["Student"]] = relationship(back_populates="teacher")
     families: Mapped[list["Family"]] = relationship(back_populates="teacher")
+
+
+class EmailToken(MasterBase):
+    """Engångs-token för e-post-verifiering och lösenords-återställning.
+
+    Vi lagrar endast SHA-256-hash av tokenvärdet — själva strängen syns
+    bara i mailet. Om DB:n läcker kan angriparen inte använda dem.
+
+    kind:
+      "verify" — klick i mailet sätter Teacher.email_verified_at
+      "reset"  — klick i mailet leder till ny-lösenord-form
+    """
+    __tablename__ = "email_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_email_token_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True,
+    )
+    used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
 
 
 class Family(MasterBase):
