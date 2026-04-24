@@ -36,6 +36,10 @@ import TeacherLogin from "./pages/TeacherLogin";
 import StudentLogin from "./pages/StudentLogin";
 import DemoChoice from "./pages/DemoChoice";
 import Docs from "./pages/Docs";
+import MyModules from "./pages/MyModules";
+import ModuleView from "./pages/ModuleView";
+import TeacherModules from "./pages/TeacherModules";
+import TeacherModuleEdit from "./pages/TeacherModuleEdit";
 import { DemoBanner } from "./components/DemoBanner";
 
 export default function App() {
@@ -91,6 +95,10 @@ export default function App() {
               <Route path="/teacher" element={<Teacher />} />
               <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
               <Route path="/teacher/all-batches" element={<AllBatches />} />
+              <Route path="/teacher/modules" element={<TeacherModules />} />
+              <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
+              <Route path="/messages" element={<Messages />} />
+              <Route path="/docs" element={<Docs />} />
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
               <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
               <Route path="/messages" element={<Messages />} />
@@ -106,6 +114,10 @@ export default function App() {
               <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/docs" element={<Docs />} />
+              <Route path="/modules" element={<MyModules />} />
+              <Route path="/modules/:moduleId" element={<ModuleView />} />
+              <Route path="/teacher/modules" element={<TeacherModules />} />
+              <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route
                 path="/dashboard"

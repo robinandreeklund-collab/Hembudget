@@ -12,6 +12,7 @@ import {
   Inbox,
   MessageCircle,
   BookOpen,
+  GitBranch,
   Landmark,
   Link2,
   LineChart,
@@ -62,6 +63,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   let items: NavItem[];
   if (isStudent) {
     items = [
+      { to: "/modules", label: "Din kursplan", icon: GitBranch },
       { to: "/my-batches", label: "Dina dokument", icon: Inbox },
       { to: "/messages", label: "Meddelanden", icon: MessageCircle },
       ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),

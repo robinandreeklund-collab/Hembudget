@@ -43,11 +43,15 @@ from ..school.models import (
     Family,
     InterestRateSeries,
     Message,
+    Module,
+    ModuleStep,
     MortgageDecision,
     ScenarioBatch,
     Student,
     StudentDataGenerationRun,
+    StudentModule,
     StudentProfile,
+    StudentStepProgress,
     Teacher,
 )
 from ..school.profile_fixtures import generate_profile

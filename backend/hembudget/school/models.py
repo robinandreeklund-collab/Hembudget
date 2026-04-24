@@ -397,6 +397,117 @@ class Message(MasterBase):
     )
 
 
+class Module(MasterBase):
+    """En lärmodul — en ordnad sekvens av steg (read/watch/reflect/task/quiz).
+    Tillhör en lärare. Kan markeras som mall så andra lärare kan kopiera.
+    """
+    __tablename__ = "modules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    # NULL teacher_id = system-mall (tillgänglig för alla)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Rekommenderad ordning i lärarens kursplan — högre = senare
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+    steps: Mapped[list["ModuleStep"]] = relationship(
+        back_populates="module",
+        cascade="all, delete-orphan",
+        order_by="ModuleStep.sort_order",
+    )
+
+
+class ModuleStep(MasterBase):
+    """Ett enskilt steg i en modul.
+    kind:
+      "read"    — markdown-text eleven läser
+      "watch"   — embed-URL (YouTube/Vimeo) + ev. frågor
+      "reflect" — öppen fråga, eleven skriver svar
+      "task"    — kopplar till ett Assignment (via assignment_id i params)
+      "quiz"    — flervalsfråga (params = {question, options, correct_index, explanation})
+    """
+    __tablename__ = "module_steps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    module_id: Mapped[int] = mapped_column(
+        ForeignKey("modules.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Typ-specifik data (video-url, quiz-alternativ, assignment-ref osv)
+    params: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    module: Mapped[Module] = relationship(back_populates="steps")
+
+
+class StudentModule(MasterBase):
+    """Eleven har tilldelats en modul. Håll ihop enrollment-metadata."""
+    __tablename__ = "student_modules"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "module_id",
+            name="uq_student_module",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    module_id: Mapped[int] = mapped_column(
+        ForeignKey("modules.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class StudentStepProgress(MasterBase):
+    """Elevens framsteg på ett enskilt steg. data lagrar svar/reflektion."""
+    __tablename__ = "student_step_progress"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "step_id",
+            name="uq_student_step",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    step_id: Mapped[int] = mapped_column(
+        ForeignKey("module_steps.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Lagrar svar: {"reflection": "..."} eller {"quiz_answer": 2, "correct": True}
+    data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Lärarens feedback-text (för reflect-steg)
+    teacher_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    feedback_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppConfig(MasterBase):
     """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
     Key-value-form så vi slipper migrera schemat vid varje nytt fält.
