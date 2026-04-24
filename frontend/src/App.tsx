@@ -42,6 +42,7 @@ import TeacherModules from "./pages/TeacherModules";
 import TeacherModuleEdit from "./pages/TeacherModuleEdit";
 import TeacherReflections from "./pages/TeacherReflections";
 import PeerReview from "./pages/PeerReview";
+import AdminAI from "./pages/AdminAI";
 import { DemoBanner } from "./components/DemoBanner";
 
 export default function App() {
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
               <Route path="/teacher/reflections" element={<TeacherReflections />} />
+              <Route path="/teacher/admin-ai" element={<AdminAI />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/docs" element={<Docs />} />
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
@@ -122,6 +124,7 @@ export default function App() {
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
               <Route path="/teacher/reflections" element={<TeacherReflections />} />
+              <Route path="/teacher/admin-ai" element={<AdminAI />} />
               <Route path="/peer-review" element={<PeerReview />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route

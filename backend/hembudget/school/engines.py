@@ -119,11 +119,45 @@ def init_master_engine() -> Engine:
         cur.close()
 
     MasterBase.metadata.create_all(engine)
+    _run_master_migrations(engine)
     _master_engine = engine
     _master_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
     )
     return engine
+
+
+def _run_master_migrations(engine: Engine) -> None:
+    """ALTER-TABLE-migrations för master-DB:n.
+
+    `create_all()` lägger inte till nya kolumner i en befintlig tabell, så
+    när nya fält läggs på Teacher/Family/Student måste vi lägga till dem
+    här. Idempotent — säker att köra varje uppstart.
+    """
+    from sqlalchemy import text as _text
+
+    def _cols(table: str) -> set[str]:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                _text(f"PRAGMA table_info({table})"),
+            ).fetchall()
+        return {r[1] for r in rows}
+
+    def _add(table: str, col_sql: str) -> None:
+        with engine.begin() as conn:
+            conn.execute(_text(f"ALTER TABLE {table} ADD COLUMN {col_sql}"))
+
+    t_cols = _cols("teachers")
+    if "is_super_admin" not in t_cols:
+        _add("teachers", "is_super_admin BOOLEAN NOT NULL DEFAULT 0")
+    if "ai_enabled" not in t_cols:
+        _add("teachers", "ai_enabled BOOLEAN NOT NULL DEFAULT 0")
+    if "ai_requests_count" not in t_cols:
+        _add("teachers", "ai_requests_count INTEGER NOT NULL DEFAULT 0")
+    if "ai_input_tokens" not in t_cols:
+        _add("teachers", "ai_input_tokens INTEGER NOT NULL DEFAULT 0")
+    if "ai_output_tokens" not in t_cols:
+        _add("teachers", "ai_output_tokens INTEGER NOT NULL DEFAULT 0")
 
 
 @contextmanager

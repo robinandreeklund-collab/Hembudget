@@ -57,6 +57,13 @@ export default function Teacher() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [qrStudent, setQrStudent] = useState<Student | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    api<{ is_super_admin: boolean }>("/admin/ai/me")
+      .then((r) => setIsSuperAdmin(Boolean(r.is_super_admin)))
+      .catch(() => setIsSuperAdmin(false));
+  }, []);
 
   async function openQr(s: Student) {
     setQrStudent(s);
@@ -256,6 +263,14 @@ export default function Teacher() {
           >
             📄 Alla PDF:er
           </Link>
+          {isSuperAdmin && (
+            <Link
+              to="/teacher/admin-ai"
+              className="bg-brand-50 border border-brand-200 hover:bg-brand-100 rounded-lg px-4 py-2 flex items-center gap-2 text-brand-700"
+            >
+              🧠 AI-admin
+            </Link>
+          )}
           <button
             onClick={() => setShowFamilies(!showFamilies)}
             className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"

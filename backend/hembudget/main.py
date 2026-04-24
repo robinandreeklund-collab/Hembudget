@@ -15,8 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 faulthandler.enable()
 
 from .api import (
-    admin, auth, backup, balances, budget, chat, elpris, funds, ledger,
-    loans, modules, reports, scenarios, school, settings_kv, tax,
+    admin, ai_admin, auth, backup, balances, budget, chat, elpris, funds,
+    ledger, loans, modules, reports, scenarios, school, settings_kv, tax,
     transactions, transfers, upcoming, upload, utility,
 )
 from .config import settings
@@ -146,6 +146,7 @@ def build_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(school.router)
     app.include_router(modules.router)
+    app.include_router(ai_admin.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -296,13 +297,16 @@ def _school_bootstrap() -> None:
         name = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_NAME", "Lärare")
         with master_session() as s:
             if email and password and s.query(Teacher).count() == 0:
+                # Första läraren blir auto super-admin (kan toggla AI
+                # för övriga lärare).
                 s.add(Teacher(
                     email=email.lower(),
                     name=name,
                     password_hash=hash_password(password),
+                    is_super_admin=True,
                 ))
                 logging.getLogger(__name__).info(
-                    "school: created bootstrap teacher %s", email,
+                    "school: created bootstrap teacher %s (super-admin)", email,
                 )
             # Seed räntor om InterestRateSeries är tom
             if s.query(InterestRateSeries).count() == 0:

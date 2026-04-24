@@ -310,10 +310,13 @@ def bootstrap_teacher(payload: TeacherBootstrapIn) -> TeacherAuthOut:
             raise HTTPException(
                 status.HTTP_410_GONE, "Teachers already exist",
             )
+        # Bootstrap-läraren är alltid super-admin — det är den enda lärare
+        # som kan tilldela AI-rättigheter till övriga lärare.
         teacher = Teacher(
             email=payload.email.lower(),
             name=payload.name,
             password_hash=hash_password(payload.password),
+            is_super_admin=True,
         )
         s.add(teacher)
         s.flush()

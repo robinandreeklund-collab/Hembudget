@@ -40,6 +40,20 @@ class Teacher(MasterBase):
     # Markerar en "demo"-lärare + alla dennes elever/familjer/batcher.
     # Demo-data rensas automatiskt var 10 min och återskapas från kod.
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Super-admin kan toggla AI-funktioner på/av för andra lärare.
+    # Första läraren (bootstrap) blir auto super-admin.
+    is_super_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    # AI-funktioner (Claude-anrop) aktiveras per-lärare av super-admin.
+    # Som default = False; inga AI-anrop görs för läraren/elever.
+    ai_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    # Räkne-siffror för AI-användning (enkel kostnadskontroll)
+    ai_requests_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
