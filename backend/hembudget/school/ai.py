@@ -162,6 +162,17 @@ class AIResult:
     cache_creation_tokens: int = 0
 
 
+@dataclass
+class AIStructuredResult:
+    """Resultat från ett tool_use-anrop. data är det tolkade tool-input:et
+    (garanterat giltigt enligt schemat av Anthropic API)."""
+    data: dict
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+
+
 def _record_usage(
     teacher_id: int | None,
     input_tokens: int,
@@ -248,6 +259,162 @@ def _call_claude(
         return None
 
 
+def _call_claude_structured(
+    *,
+    model: str,
+    system: str,
+    user_prompt: str,
+    max_tokens: int,
+    tool_name: str,
+    tool_description: str,
+    tool_schema: dict,
+    use_thinking: bool = False,
+    teacher_id: int | None = None,
+) -> Optional[AIStructuredResult]:
+    """Tvinga Claude att returnera data enligt ett JSON-schema via
+    tool_use. Anthropic-API:et garanterar att tool-input-objektet är
+    strukturellt giltigt enligt schemat — inga manuella json.loads
+    som kan krascha på trunkerade svar.
+
+    Thinking + tools kräver att `thinking` sätts om man vill ha det
+    och modell stöder det (Sonnet 4.6 gör). Vi lämnar det valfritt.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        tools = [
+            {
+                "name": tool_name,
+                "description": tool_description,
+                "input_schema": tool_schema,
+            },
+        ]
+        params: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": [
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            "messages": [
+                {"role": "user", "content": user_prompt},
+            ],
+            "tools": tools,
+            "tool_choice": {"type": "tool", "name": tool_name},
+        }
+        if use_thinking:
+            # tool_choice med "tool" + adaptive thinking är inte
+            # kompatibelt i alla Sonnet-versioner. Lämna thinking av
+            # för att garantera att tool_use faktiskt används.
+            pass
+
+        resp = client.messages.create(**params)
+
+        data: Optional[dict] = None
+        for block in resp.content:
+            if getattr(block, "type", None) == "tool_use":
+                raw = getattr(block, "input", None)
+                if isinstance(raw, dict):
+                    data = raw
+                    break
+
+        if data is None:
+            log.warning(
+                "ai: tool_use-svar saknade %s-block (model=%s)",
+                tool_name, model,
+            )
+            return None
+
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+
+        _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        return AIStructuredResult(
+            data=data,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+            cache_read_tokens=cr,
+            cache_creation_tokens=cc,
+        )
+    except Exception:
+        log.exception(
+            "ai: Claude tool_use-anrop misslyckades (model=%s, tool=%s)",
+            model, tool_name,
+        )
+        return None
+
+
+def stream_claude(
+    *,
+    model: str,
+    system: str,
+    user_prompt: str,
+    max_tokens: int,
+    use_thinking: bool = False,
+    teacher_id: int | None = None,
+):
+    """Generator som strömmar text-deltas från Claude. yieldar
+    `{"type": "delta", "text": "..."}` för varje token, och sist
+    `{"type": "done", "input_tokens": N, "output_tokens": M}`.
+    Vid fel: `{"type": "error", "message": "..."}`.
+
+    Sätt use_thinking=False för rena UI-chattar — thinking fördröjer
+    första token:en med flera sekunder.
+    """
+    client = _get_client()
+    if client is None:
+        yield {"type": "error", "message": "AI-klient saknas"}
+        return
+
+    in_tok = out_tok = cr = cc = 0
+    try:
+        params: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": [
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            "messages": [
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if use_thinking:
+            params["thinking"] = {"type": "adaptive"}
+
+        with client.messages.stream(**params) as stream:
+            for delta in stream.text_stream:
+                if delta:
+                    yield {"type": "delta", "text": delta}
+            final = stream.get_final_message()
+            usage = getattr(final, "usage", None)
+            in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+            out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+            cr = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+            cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+    except Exception as e:
+        log.exception("ai: stream-anrop misslyckades (model=%s)", model)
+        yield {"type": "error", "message": str(e)}
+        return
+
+    _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+    yield {
+        "type": "done",
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
+    }
+
+
 # ---------- Feature 1: AI-feedback-förslag på reflektion ----------
 
 FEEDBACK_SYSTEM_PROMPT = """Du är ett pedagogiskt stöd för en svensk gymnasielärare i samhällsekonomi/personlig ekonomi.
@@ -292,15 +459,6 @@ Du är ett STÖD — läraren sätter slutbetyget. Din uppgift är att föreslå
 
 Rubricen är en JSON-array med objekt: {"key": "<nyckel>", "name": "<kriterienamn>", "levels": ["<nivå 1-text>", "<nivå 2-text>", ...]}.
 
-Svara ENDAST med giltig JSON i exakt det här formatet:
-
-{
-  "scores": [
-    {"criterion_id": "<rubric.key>", "score": <level_index 0..levels.length-1>, "rationale": "<1–2 meningar på svenska>"}
-  ],
-  "overall_comment": "<2–3 meningar sammanfattande feedback på svenska>"
-}
-
 Regler:
 - score = index i levels-arrayen (0 = lägsta nivå, levels.length-1 = högsta).
 - criterion_id MÅSTE matcha rubric-objektets "key"-fält exakt.
@@ -308,7 +466,42 @@ Regler:
 - Var generös men rättvis — om kriteriet inte adresseras alls = 0.
 - "rationale" måste peka på konkret bevis i elevens text.
 - Använd ALLA kriterier som finns i rubriken, inga extra.
-- Inget annat än JSON. Ingen markdown, inga kodblock, ingen förklaring efter."""
+
+Du bedömer via `submit_rubric_assessment`-verktyget — strukturen är given där."""
+
+
+RUBRIC_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scores": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "criterion_id": {
+                        "type": "string",
+                        "description": "Rubric-kriteriets 'key'-fält.",
+                    },
+                    "score": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "Index in levels-arrayen, 0 = lägsta.",
+                    },
+                    "rationale": {
+                        "type": "string",
+                        "description": "1–2 meningar på svenska med bevis från elevens text.",
+                    },
+                },
+                "required": ["criterion_id", "score", "rationale"],
+            },
+        },
+        "overall_comment": {
+            "type": "string",
+            "description": "2–3 meningar sammanfattande feedback på svenska.",
+        },
+    },
+    "required": ["scores", "overall_comment"],
+}
 
 
 def score_with_rubric(
@@ -317,19 +510,24 @@ def score_with_rubric(
     reflection_text: str,
     step_prompt: str,
     teacher_id: int | None = None,
-) -> Optional[AIResult]:
+) -> Optional[AIStructuredResult]:
     user = (
         f"Rubric:\n{rubric_json}\n\n"
         f"Frågan eleven svarade på:\n{step_prompt}\n\n"
         f"Elevens reflektion:\n{reflection_text}\n\n"
-        "Ge din bedömning som JSON enligt instruktionen."
+        "Kör `submit_rubric_assessment` med din bedömning."
     )
-    return _call_claude(
+    return _call_claude_structured(
         model=MODEL_SONNET,
         system=RUBRIC_SYSTEM_PROMPT,
         user_prompt=user,
         max_tokens=MAX_TOKENS_RUBRIC,
-        use_thinking=True,
+        tool_name="submit_rubric_assessment",
+        tool_description=(
+            "Lämna in en rubric-bedömning med per-kriterium-nivåer och "
+            "en samlad kommentar."
+        ),
+        tool_schema=RUBRIC_TOOL_SCHEMA,
         teacher_id=teacher_id,
     )
 
@@ -377,20 +575,6 @@ def answer_student_question(
 # ---------- Feature 4: AI-modulgenerering ----------
 
 MODULE_GEN_SYSTEM_PROMPT = """Du är en kursdesigner för svensk gymnasieekonomi. En lärare ber dig skissa en modulmall.
-Svara ENDAST med giltig JSON i exakt det här formatet:
-
-{
-  "title": "<kort titel, max 60 tecken>",
-  "summary": "<1–2 meningars beskrivning för eleven, svenska>",
-  "steps": [
-    {
-      "kind": "read" | "watch" | "reflect" | "task" | "quiz",
-      "title": "<stegets titel>",
-      "body": "<instruktionstext till eleven, 1–3 stycken, svenska>",
-      "sort_order": <heltal>
-    }
-  ]
-}
 
 Regler:
 - 4–7 steg totalt, stegvis ökande svårighetsgrad.
@@ -401,25 +585,69 @@ Regler:
 - "quiz"-steg: body = en fråga + 3–4 svarsalternativ (vi markerar inget rätt här, lärare gör det).
 - Målgrupp: 16–19 år. Undvik ekonomjargong, eller förklara om du använder ett sånt ord.
 - Svenska, ingen engelska.
-- Bara JSON — inget annat, ingen markdown, inget kodblock."""
+
+Du svarar genom att kalla `submit_module_template`-verktyget — strukturen är given där."""
+
+
+MODULE_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {
+            "type": "string",
+            "description": "Kort titel, max 60 tecken.",
+            "maxLength": 60,
+        },
+        "summary": {
+            "type": "string",
+            "description": "1–2 meningars beskrivning för eleven, svenska.",
+        },
+        "steps": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 7,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["read", "watch", "reflect", "task", "quiz"],
+                    },
+                    "title": {"type": "string"},
+                    "body": {
+                        "type": "string",
+                        "description": "Instruktionstext till eleven, 1–3 stycken svenska.",
+                    },
+                    "sort_order": {"type": "integer", "minimum": 0},
+                },
+                "required": ["kind", "title", "body", "sort_order"],
+            },
+        },
+    },
+    "required": ["title", "summary", "steps"],
+}
 
 
 def generate_module_template(
     *,
     theme_prompt: str,
     teacher_id: int | None = None,
-) -> Optional[AIResult]:
+) -> Optional[AIStructuredResult]:
     user = (
         "Lärarens beskrivning av vad modulen ska handla om:\n"
         f"{theme_prompt}\n\n"
-        "Skissa en modulmall som JSON enligt instruktionen."
+        "Kör `submit_module_template` med en modulmall."
     )
-    return _call_claude(
+    return _call_claude_structured(
         model=MODEL_SONNET,
         system=MODULE_GEN_SYSTEM_PROMPT,
         user_prompt=user,
         max_tokens=MAX_TOKENS_MODULE,
-        use_thinking=True,
+        tool_name="submit_module_template",
+        tool_description=(
+            "Lämna en komplett modulmall: titel, syfte och 4–7 steg "
+            "av blandade typer."
+        ),
+        tool_schema=MODULE_TOOL_SCHEMA,
         teacher_id=teacher_id,
     )
 
@@ -432,19 +660,30 @@ Elev = den kategori eleven valt.
 
 Avgör: är elevens val SEMANTISKT korrekt? "ICA Maxi 450 kr" som lagts på "Mat & livsmedel" ska räknas som rätt även om facit säger "Matvaror". "Burger King" på "Restaurang" är också rätt när facit säger "Uteätande".
 
-Svara ENDAST med giltig JSON:
-
-{
-  "is_match": true | false,
-  "confidence": <0.0 .. 1.0>,
-  "explanation": "<1 mening på svenska — kort motivering>"
-}
-
 Regler:
-- true när kategorierna betyder ungefär samma sak i vardaglig svenska.
-- false när de helt skiljer sig (t.ex. "Mat" vs "Transport").
+- is_match=true när kategorierna betyder ungefär samma sak i vardaglig svenska.
+- is_match=false när de helt skiljer sig (t.ex. "Mat" vs "Transport").
 - confidence 0.9+ bara om det är uppenbart samma kategori.
-- Bara JSON, inget annat."""
+
+Du rapporterar via `submit_category_match`-verktyget."""
+
+
+CATEGORY_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_match": {"type": "boolean"},
+        "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+        },
+        "explanation": {
+            "type": "string",
+            "description": "1 mening på svenska med kort motivering.",
+        },
+    },
+    "required": ["is_match", "confidence", "explanation"],
+}
 
 
 def check_category_semantic_match(
@@ -454,18 +693,22 @@ def check_category_semantic_match(
     student_category: str,
     facit_category: str,
     teacher_id: int | None = None,
-) -> Optional[AIResult]:
+) -> Optional[AIStructuredResult]:
     user = (
         f"Transaktion: {merchant} ({amount:.0f} kr)\n"
         f"Facit-kategori: {facit_category}\n"
         f"Elev-val: {student_category}\n\n"
-        "Är elevens val semantiskt korrekt?"
+        "Kör `submit_category_match` med din bedömning."
     )
-    return _call_claude(
+    return _call_claude_structured(
         model=MODEL_HAIKU,
         system=CATEGORY_SYSTEM_PROMPT,
         user_prompt=user,
         max_tokens=MAX_TOKENS_CATEGORY,
-        use_thinking=False,
+        tool_name="submit_category_match",
+        tool_description=(
+            "Rapportera om elevens val är semantiskt korrekt mot facit."
+        ),
+        tool_schema=CATEGORY_TOOL_SCHEMA,
         teacher_id=teacher_id,
     )

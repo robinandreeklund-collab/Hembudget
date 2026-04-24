@@ -12,7 +12,8 @@ så frontend kan visa "AI-funktioner avstängda" istället för att dö.
 Feature-endpoints:
  K — POST /ai/reflection/{progress_id}/feedback-suggestion
  L — POST /ai/reflection/{progress_id}/rubric-suggestion
- M — POST /ai/student/ask
+ M — POST /ai/student/ask          (icke-stream, bakåtkompat)
+ M' — POST /ai/student/ask/stream  (SSE-stream)
  N — POST /ai/modules/generate
  O — POST /ai/category/check
 """
@@ -22,6 +23,7 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..school import is_enabled as school_enabled
@@ -136,8 +138,10 @@ def feedback_suggestion(
 # ---------- L: AI-rubric-bedömning ----------
 
 class RubricSuggestionOut(BaseModel):
+    # Backwards-compat: `raw` behålls (JSON-serialiserad data) så
+    # frontend som förr läste raw fortfarande fungerar.
     raw: str
-    parsed: Optional[dict] = None
+    parsed: dict
     model: str
     input_tokens: int
     output_tokens: int
@@ -191,14 +195,11 @@ def rubric_suggestion(
             status.HTTP_502_BAD_GATEWAY,
             "AI-anropet misslyckades — försök igen senare.",
         )
-    parsed: Optional[dict] = None
-    try:
-        parsed = json.loads(result.text)
-    except Exception:
-        parsed = None
+    # tool_use garanterar att result.data följer RUBRIC_TOOL_SCHEMA —
+    # inga manuella json.loads som kan krascha.
     return RubricSuggestionOut(
-        raw=result.text,
-        parsed=parsed,
+        raw=json.dumps(result.data, ensure_ascii=False),
+        parsed=result.data,
         model=ai_core.MODEL_SONNET,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
@@ -220,6 +221,26 @@ class AskOut(BaseModel):
     output_tokens: int
 
 
+def _resolve_ask_context(
+    payload: AskIn,
+) -> tuple[str, Optional[str], Optional[str]]:
+    """Slå upp modul + steg-titel för prompt-kontext."""
+    module_title = "Allmän ekonomi"
+    module_summary: Optional[str] = None
+    step_prompt: Optional[str] = None
+    with master_session() as s:
+        if payload.module_id:
+            m = s.get(Module, payload.module_id)
+            if m:
+                module_title = m.title
+                module_summary = m.summary
+        if payload.step_id:
+            st = s.get(ModuleStep, payload.step_id)
+            if st:
+                step_prompt = st.content or st.title
+    return module_title, module_summary, step_prompt
+
+
 @router.post("/student/ask", response_model=AskOut)
 def ask_student(
     payload: AskIn,
@@ -235,19 +256,7 @@ def ask_student(
     teacher_id = _teacher_id_for_info(info)
     _gate_ai(teacher_id)
 
-    module_title = "Allmän ekonomi"
-    module_summary: Optional[str] = None
-    step_prompt: Optional[str] = None
-    with master_session() as s:
-        if payload.module_id:
-            m = s.get(Module, payload.module_id)
-            if m:
-                module_title = m.title
-                module_summary = m.summary
-        if payload.step_id:
-            st = s.get(ModuleStep, payload.step_id)
-            if st:
-                step_prompt = st.content or st.title
+    module_title, module_summary, step_prompt = _resolve_ask_context(payload)
 
     result = ai_core.answer_student_question(
         question=payload.question,
@@ -269,6 +278,60 @@ def ask_student(
     )
 
 
+# ---------- M': Streaming-variant av samma fråga ----------
+
+@router.post("/student/ask/stream")
+def ask_student_stream(
+    payload: AskIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+):
+    """SSE-ström av Claudes svar. Klienten läser `text/event-stream` och
+    uppdaterar UI:t token-för-token. Samma rate-limit + gating som den
+    icke-strömmande varianten.
+
+    Event-format:
+      data: {"type": "delta", "text": "..."}
+      data: {"type": "done", "input_tokens": N, "output_tokens": M}
+      data: {"type": "error", "message": "..."}
+    """
+    _require_school()
+    check_rate_limit(request, "ai-ask", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+
+    module_title, module_summary, step_prompt = _resolve_ask_context(payload)
+
+    context_parts = [f"Modul eleven jobbar med: {module_title}"]
+    if module_summary:
+        context_parts.append(f"Modulens syfte: {module_summary}")
+    if step_prompt:
+        context_parts.append(f"Aktuellt steg: {step_prompt}")
+    user_prompt = "\n".join(context_parts) + f"\n\nElevens fråga:\n{payload.question}"
+
+    def gen():
+        for chunk in ai_core.stream_claude(
+            model=ai_core.MODEL_SONNET,
+            system=ai_core.QA_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            max_tokens=ai_core.MAX_TOKENS_QA,
+            use_thinking=False,  # streaming: snabb första token viktigast
+            teacher_id=teacher_id,
+        ):
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # Cloud Run + Cloudflare buffrar gzip:ade SSE-strömmar; stäng
+            # av det så token:arna kommer ut direkt.
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # ---------- N: AI-modulgenerering ----------
 
 class ModuleGenIn(BaseModel):
@@ -279,7 +342,7 @@ class ModuleGenIn(BaseModel):
 
 class ModuleGenOut(BaseModel):
     raw: str
-    parsed: Optional[dict] = None
+    parsed: dict
     model: str
     input_tokens: int
     output_tokens: int
@@ -303,14 +366,9 @@ def generate_module(
             status.HTTP_502_BAD_GATEWAY,
             "AI-anropet misslyckades — försök igen senare.",
         )
-    parsed: Optional[dict] = None
-    try:
-        parsed = json.loads(result.text)
-    except Exception:
-        parsed = None
     return ModuleGenOut(
-        raw=result.text,
-        parsed=parsed,
+        raw=json.dumps(result.data, ensure_ascii=False),
+        parsed=result.data,
         model=ai_core.MODEL_SONNET,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
@@ -357,22 +415,15 @@ def check_category(
             status.HTTP_502_BAD_GATEWAY,
             "AI-anropet misslyckades — försök igen senare.",
         )
-    # Default: icke-matchande om JSON-parse failar — säkrast.
-    is_match = False
-    confidence = 0.0
-    explanation = ""
-    try:
-        parsed = json.loads(result.text)
-        is_match = bool(parsed.get("is_match"))
-        confidence = float(parsed.get("confidence", 0.0))
-        explanation = str(parsed.get("explanation", ""))
-    except Exception:
-        explanation = "Kunde inte tolka AI-svaret"
+    # tool_use-schemat garanterar nycklarna — ingen defensiv parse-logik.
+    is_match = bool(result.data["is_match"])
+    confidence = float(result.data["confidence"])
+    explanation = str(result.data["explanation"])
     return CategoryCheckOut(
         is_match=is_match,
         confidence=max(0.0, min(1.0, confidence)),
         explanation=explanation,
-        raw=result.text,
+        raw=json.dumps(result.data, ensure_ascii=False),
         model=ai_core.MODEL_HAIKU,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
