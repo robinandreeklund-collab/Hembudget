@@ -309,7 +309,36 @@ function FlowSection() {
     </section>
   );
 }
-function CtaSection() { return null; }
+function CtaSection() {
+  return (
+    <section className="max-w-4xl mx-auto px-6 py-20 text-center">
+      <div className="bg-gradient-to-br from-brand-500 to-brand-700 rounded-3xl p-10 md:p-14 shadow-2xl text-white">
+        <GraduationCap className="w-12 h-12 mx-auto mb-4 text-brand-100" />
+        <h2 className="text-3xl md:text-4xl font-bold mb-3">
+          Kom igång på under en minut
+        </h2>
+        <p className="text-brand-100 max-w-xl mx-auto mb-8">
+          Skapa ditt lärarkonto, lägg till din första klass och testa flödet
+          själv. Helt gratis under beta-perioden.
+        </p>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Link
+            to="/login"
+            className="bg-white hover:bg-slate-50 text-brand-700 rounded-lg px-8 py-3 font-semibold shadow-lg hover:shadow-xl transition-all"
+          >
+            Skapa lärarkonto
+          </Link>
+          <Link
+            to="/login"
+            className="bg-brand-800 hover:bg-brand-900 text-white rounded-lg px-8 py-3 font-semibold border-2 border-brand-400"
+          >
+            Elev-inloggning
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function Footer() {
   return (
