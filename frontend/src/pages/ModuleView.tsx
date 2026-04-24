@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpen, CheckCircle2, Circle, FileText, HelpCircle,
-  PlayCircle, Send,
+  PlayCircle, Send, Sparkles,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { api, getApiBase, getToken, getAsStudent } from "@/api/client";
 import { AskAI } from "@/components/AskAI";
 
 type Step = {
@@ -378,11 +378,24 @@ function QuizPanel({
     (progress?.data?.attempts as number) ?? 0,
   );
   const [busy, setBusy] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiText, setAiText] = useState<string>("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState<string | null>(null);
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api<{ ai_enabled: boolean }>("/admin/ai/me")
+      .then((r) => setAiEnabled(Boolean(r.ai_enabled)))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   const firstCorrect = (progress?.data?.first_correct as boolean | undefined);
 
   async function submit() {
     setBusy(true);
+    setAiText("");
+    setAiErr(null);
     try {
       const body = isMulti
         ? { data: { answers: [...multiSelected].sort((a, b) => a - b) } }
@@ -403,6 +416,69 @@ function QuizPanel({
     setShowResult(false);
     setSingleSelected(null);
     setMultiSelected(new Set());
+    setAiText("");
+    setAiErr(null);
+    aiAbortRef.current?.abort();
+  }
+
+  async function explainWithAi() {
+    aiAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    aiAbortRef.current = ctrl;
+    setAiBusy(true);
+    setAiErr(null);
+    setAiText("");
+    try {
+      const token = getToken();
+      const asStudent = getAsStudent();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (asStudent) headers["X-As-Student"] = String(asStudent);
+      const res = await fetch(
+        `${getApiBase()}/ai/student/quiz-explain/stream`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ step_id: step.id }),
+          signal: ctrl.signal,
+        },
+      );
+      if (!res.ok || !res.body) {
+        if (res.status === 503) throw new Error("AI-hjälpen är inte tillgänglig just nu.");
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          try {
+            const evt = JSON.parse(line.slice(5).trim()) as
+              | { type: "delta"; text: string }
+              | { type: "done" }
+              | { type: "error"; message: string };
+            if (evt.type === "delta") setAiText((t) => t + evt.text);
+            else if (evt.type === "error") setAiErr(evt.message);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setAiErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   return (
@@ -476,6 +552,8 @@ function QuizPanel({
       ) : (
         <>
           <div
+            role="status"
+            aria-live="polite"
             className={`rounded p-3 text-sm ${
               lastSubmittedCorrect
                 ? "bg-emerald-50 border-l-4 border-emerald-500 text-emerald-900"
@@ -503,6 +581,33 @@ function QuizPanel({
               </div>
             )}
           </div>
+
+          {/* AI-förklaring: bara när svaret var fel och lärarens AI är på */}
+          {!lastSubmittedCorrect && aiEnabled && (
+            <div className="space-y-2">
+              {!aiText && !aiBusy && (
+                <button
+                  onClick={explainWithAi}
+                  className="inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 rounded-lg px-4 py-2 text-sm font-medium hover:bg-purple-100"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Fråga Ekon varför ditt svar inte stämmer
+                </button>
+              )}
+              {(aiText || aiBusy) && (
+                <div className="bg-purple-50 border-l-4 border-purple-400 rounded p-3 text-sm text-slate-800 whitespace-pre-wrap min-h-[3rem]">
+                  {aiText}
+                  {aiBusy && (
+                    <span className="inline-block w-2 h-4 ml-0.5 bg-purple-400 animate-pulse align-baseline" />
+                  )}
+                </div>
+              )}
+              {aiErr && (
+                <div className="text-xs text-rose-600">{aiErr}</div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             {!lastSubmittedCorrect && (
               <button

@@ -332,6 +332,92 @@ def ask_student_stream(
     )
 
 
+# ---------- M''': Streaming-förklaring av ett felaktigt quiz-svar ----------
+
+class QuizExplainIn(BaseModel):
+    step_id: int
+
+
+@router.post("/student/quiz-explain/stream")
+def quiz_explain_stream(
+    payload: QuizExplainIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+):
+    """Strömmar en pedagogisk förklaring av varför elevens senaste svar
+    på quiz-steget var fel. Anropet är idempotent — ingen DB-skrivning,
+    ingen påverkan på mastery. Kräver att steget är slutfört och att
+    data.correct är False."""
+    _require_school()
+    check_rate_limit(request, "ai-ask", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+
+    with master_session() as s:
+        step = s.get(ModuleStep, payload.step_id)
+        if not step or step.kind != "quiz":
+            raise HTTPException(400, "Steget är inte en quiz")
+        prog = s.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id == info.student_id,
+            StudentStepProgress.step_id == payload.step_id,
+        ).first()
+        if not prog or not prog.data:
+            raise HTTPException(400, "Du har inte svarat på frågan än")
+        data = prog.data if isinstance(prog.data, dict) else {}
+        if data.get("correct") is not False:
+            raise HTTPException(400, "Ditt svar var rätt")
+
+        params = step.params or {}
+        question = str(params.get("question") or step.content or step.title)
+        options: list[str] = list(params.get("options") or [])
+
+        multi = "correct_indices" in params
+        if multi:
+            chosen_idx: list[int] = list(data.get("answers") or [])
+            correct_idx: list[int] = list(params.get("correct_indices") or [])
+        else:
+            chosen_single = data.get("answer")
+            chosen_idx = [chosen_single] if isinstance(chosen_single, int) else []
+            ci = params.get("correct_index")
+            correct_idx = [ci] if isinstance(ci, int) else []
+
+    def label(idxs: list[int]) -> str:
+        if not idxs or not options:
+            return "(okänt)"
+        return " + ".join(
+            options[i] for i in idxs if 0 <= i < len(options)
+        ) or "(okänt)"
+
+    user_prompt = (
+        f"Fråga:\n{question}\n\n"
+        f"Alla svarsalternativ:\n"
+        + "\n".join(f"- {o}" for o in options)
+        + f"\n\nElevens val: {label(chosen_idx)}\n"
+        f"Rätt svar: {label(correct_idx)}\n\n"
+        "Förklara pedagogiskt varför elevens val inte stämmer, utan att döma."
+    )
+
+    def gen():
+        for chunk in ai_core.stream_claude(
+            model=ai_core.MODEL_SONNET,
+            system=ai_core.QUIZ_EXPLAIN_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            max_tokens=350,
+            use_thinking=False,
+            teacher_id=teacher_id,
+        ):
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # ---------- N: AI-modulgenerering ----------
 
 class ModuleGenIn(BaseModel):
