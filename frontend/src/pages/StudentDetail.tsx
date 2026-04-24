@@ -304,6 +304,9 @@ export default function StudentDetail() {
         </section>
       )}
 
+      {/* AI-sammanfattning */}
+      <AiStudentSummarySection studentId={sid} />
+
       {/* Mastery */}
       {mastery.length > 0 && (
         <section className="bg-white border rounded-xl p-4 space-y-3">
@@ -575,5 +578,102 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-slate-500">{label}</div>
       <div className="font-medium">{value}</div>
     </div>
+  );
+}
+
+
+type SummaryOut = {
+  student_id: number;
+  strengths: string;
+  gaps: string;
+  next_steps: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+};
+
+function AiStudentSummarySection({ studentId }: { studentId: number }) {
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [summary, setSummary] = useState<SummaryOut | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ ai_enabled: boolean }>("/admin/ai/me")
+      .then((r) => setAiEnabled(Boolean(r.ai_enabled)))
+      .catch(() => setAiEnabled(false));
+  }, []);
+
+  async function run() {
+    setBusy(true); setErr(null);
+    try {
+      const s = await api<SummaryOut>(
+        `/ai/teacher/students/${studentId}/summary`,
+        { method: "POST" },
+      );
+      setSummary(s);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503)
+        setErr("AI-funktioner är inte påslagna för ditt konto.");
+      else setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!aiEnabled) return null;
+
+  return (
+    <section className="bg-gradient-to-br from-purple-50 to-slate-50 border border-purple-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-purple-600" />
+          AI-lägesbild
+        </h2>
+        <button
+          onClick={run}
+          disabled={busy}
+          className="text-sm bg-purple-600 hover:bg-purple-700 text-white rounded px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          {summary ? "Generera ny" : "Generera lägesbild"}
+        </button>
+      </div>
+      {err && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded p-2">
+          {err}
+        </div>
+      )}
+      {summary && (
+        <div className="space-y-3 text-sm text-slate-800">
+          <div>
+            <div className="font-semibold text-emerald-800 mb-0.5">Styrkor</div>
+            <div className="whitespace-pre-wrap">{summary.strengths}</div>
+          </div>
+          <div>
+            <div className="font-semibold text-amber-800 mb-0.5">Gap</div>
+            <div className="whitespace-pre-wrap">{summary.gaps}</div>
+          </div>
+          <div>
+            <div className="font-semibold text-brand-800 mb-0.5">Nästa steg</div>
+            <div className="whitespace-pre-wrap">{summary.next_steps}</div>
+          </div>
+          <div className="text-xs text-slate-500">
+            Genererad med Claude Sonnet · {summary.input_tokens} in /{" "}
+            {summary.output_tokens} ut tokens
+          </div>
+        </div>
+      )}
+      {!summary && !err && !busy && (
+        <p className="text-sm text-slate-600">
+          AI-genererad lägesbild över elevens styrkor, gap och föreslagna
+          nästa steg. Baserad på mastery, reflektioner och uppdrag.
+        </p>
+      )}
+    </section>
   );
 }

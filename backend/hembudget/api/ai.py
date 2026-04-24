@@ -517,6 +517,175 @@ def check_category(
     )
 
 
+# ---------- Kategori-förklaring (streamande follow-up) ----------
+
+class CategoryExplainIn(BaseModel):
+    merchant: str = Field(min_length=1, max_length=200)
+    amount: float
+    student_category: str = Field(min_length=1, max_length=80)
+    facit_category: str = Field(min_length=1, max_length=80)
+
+
+@router.post("/category/explain/stream")
+def category_explain_stream(
+    payload: CategoryExplainIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+):
+    """Streamar en pedagogisk förklaring av varför facit-kategorin
+    skiljer sig från elevens val. Idempotent (ingen DB-skrivning)."""
+    _require_school()
+    check_rate_limit(request, "ai-ask", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+
+    prompt = (
+        f"Transaktion: {payload.merchant} ({payload.amount:.0f} kr)\n"
+        f"Läraren tänkte: {payload.facit_category}\n"
+        f"Elev-val: {payload.student_category}\n\n"
+        "Förklara pedagogiskt skillnaden."
+    )
+
+    def gen():
+        for chunk in ai_core.stream_claude(
+            model=ai_core.MODEL_HAIKU,
+            system=ai_core.CATEGORY_EXPLAIN_SYSTEM_PROMPT,
+            user_prompt=prompt,
+            max_tokens=350,
+            use_thinking=False,
+            teacher_id=teacher_id,
+        ):
+            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------- AI-elevsammanfattning för lärare ----------
+
+class StudentSummaryOut(BaseModel):
+    student_id: int
+    strengths: str
+    gaps: str
+    next_steps: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post(
+    "/teacher/students/{student_id}/summary",
+    response_model=StudentSummaryOut,
+)
+def student_summary(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> StudentSummaryOut:
+    """AI-genererad lägesbild (styrkor/gap/nästa steg). Bygger context
+    från mastery + senaste reflektioner + uppdragsstatus och skickar
+    allt i en enda Sonnet-anrop med tool_use för strukturerad output."""
+    _require_school()
+    teacher_id = info.teacher_id or 0
+    _gate_ai(teacher_id)
+
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Elev finns inte eller tillhör inte dig")
+
+        # Mastery
+        from .modules import _compute_mastery_for_student
+        from ..school.models import Competency, StudentStepProgress as _Prog, ModuleStep as _Step
+        from ..school.models import Assignment as _A
+        mastery = _compute_mastery_for_student(s, student_id)
+        comps = {
+            c.id: c for c in s.query(Competency).all()
+        }
+        mastery_lines = []
+        for cid, (m, ev, _) in sorted(
+            mastery.items(), key=lambda kv: -kv[1][0],
+        ):
+            c = comps.get(cid)
+            if not c:
+                continue
+            mastery_lines.append(
+                f"- {c.name} ({c.level}): {round(m*100)}% "
+                f"[{ev} bevis]"
+            )
+
+        # Senaste reflektioner (upp till 5)
+        reflect_rows = (
+            s.query(_Prog, _Step)
+            .join(_Step, _Prog.step_id == _Step.id)
+            .filter(
+                _Prog.student_id == student_id,
+                _Step.kind == "reflect",
+                _Prog.completed_at.isnot(None),
+            )
+            .order_by(_Prog.completed_at.desc())
+            .limit(5)
+            .all()
+        )
+        reflect_lines = []
+        for p, st in reflect_rows:
+            text = ""
+            if isinstance(p.data, dict):
+                text = str(p.data.get("reflection", ""))[:400]
+            reflect_lines.append(f"* \"{st.title}\": {text}")
+
+        # Uppdrag
+        a_rows = (
+            s.query(_A)
+            .filter(_A.student_id == student_id)
+            .order_by(_A.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        a_lines = []
+        for a in a_rows:
+            state = "klart" if a.manually_completed_at else "öppet"
+            a_lines.append(f"- {a.title} ({a.kind}, {state})")
+
+        name = stu.display_name
+
+    context_bundle = (
+        f"Elev: {name} (id={student_id})\n\n"
+        "Mastery (högst först):\n" + ("\n".join(mastery_lines) or "(ingen data)")
+        + "\n\nSenaste reflektioner:\n"
+        + ("\n".join(reflect_lines) or "(inga)")
+        + "\n\nUppdrag:\n"
+        + ("\n".join(a_lines) or "(inga)")
+    )
+
+    result = ai_core.generate_student_summary(
+        context_bundle=context_bundle,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "AI-anropet misslyckades — försök igen senare.",
+        )
+    return StudentSummaryOut(
+        student_id=student_id,
+        strengths=str(result.data.get("strengths", "")),
+        gaps=str(result.data.get("gaps", "")),
+        next_steps=str(result.data.get("next_steps", "")),
+        model=ai_core.MODEL_SONNET,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
+
+
 # ---------- Multi-turn AskAI-trådar ----------
 
 class ThreadSummary(BaseModel):

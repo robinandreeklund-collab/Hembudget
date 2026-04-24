@@ -677,7 +677,81 @@ def generate_module_template(
     )
 
 
+# ---------- Feature 6: AI-elevsammanfattning för lärare ----------
+
+STUDENT_SUMMARY_SYSTEM_PROMPT = """Du hjälper en svensk gymnasielärare få en snabb
+överblick över var en elev står i sin pedagogiska resa inom personlig ekonomi.
+
+Du får elevens profil, senaste reflektioner (de sista ca 5), mastery-
+översikt och uppdragsstatus. Skriv en koncis lägesbild i tre sektioner:
+
+1. Styrkor — vad eleven tydligt klarar, baserat på bevis (mastery,
+   reflektionskvalitet, klarade uppdrag).
+2. Gap — vilka kompetenser eller begrepp eleven verkar sakna grund i.
+   Var KONKRET: säg "bolåneränta vs amortering" istället för "lån".
+3. Nästa steg — 1–3 konkreta förslag läraren kan ge (modul att prioritera,
+   övning, samtalsämne).
+
+Riktlinjer:
+- Svenska, 4–6 meningar per sektion, 200–300 ord totalt.
+- Bygg på konkreta bevis från datan — citera inte men referera.
+- Var kollegial: eleven är fortfarande en tonåring som lär sig.
+- Ingen smink — om eleven har hunnit lite säg det, om hen har hunnit
+  mycket säg det också.
+- Inga emojis. Rubriker får vara "**Styrkor**" osv i markdown-fetstil.
+
+Svara i vanlig prosa — verktyget vi använder strukturerar de tre
+sektionerna."""
+
+
+STUDENT_SUMMARY_TOOL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "strengths": {"type": "string"},
+        "gaps": {"type": "string"},
+        "next_steps": {"type": "string"},
+    },
+    "required": ["strengths", "gaps", "next_steps"],
+}
+
+
+def generate_student_summary(
+    *,
+    context_bundle: str,
+    teacher_id: int | None = None,
+) -> Optional[AIStructuredResult]:
+    return _call_claude_structured(
+        model=MODEL_SONNET,
+        system=STUDENT_SUMMARY_SYSTEM_PROMPT,
+        user_prompt=context_bundle + "\n\nKör `submit_student_summary`.",
+        max_tokens=1200,
+        tool_name="submit_student_summary",
+        tool_description=(
+            "Lämna en pedagogisk lägesbild i tre sektioner: styrkor, "
+            "gap och nästa steg."
+        ),
+        tool_schema=STUDENT_SUMMARY_TOOL_SCHEMA,
+        teacher_id=teacher_id,
+    )
+
+
 # ---------- Feature 5: Semantisk kategori-bedömning ----------
+
+CATEGORY_EXPLAIN_SYSTEM_PROMPT = """Du är en vänlig studiecoach för svenska gymnasielever.
+Eleven har kategoriserat en transaktion "fel" jämfört med facit. Din
+uppgift är att på lätt svenska förklara varför läraren tänkt annorlunda
+— utan att döma.
+
+Struktur:
+1. Acceptera elevens tanke (varför den egna gissningen var rimlig).
+2. Förklara skillnaden mellan kategorierna i vardagliga termer.
+3. Ge en minnesregel eller ett exempel så eleven hittar rätt nästa gång.
+
+Riktlinjer:
+- Svenska, 16-åring som målgrupp, max 130 ord.
+- Inga emojis, ingen punktlista om det inte hjälper.
+- Säg aldrig "din kategorisering är dum" eller liknande."""
+
 
 CATEGORY_SYSTEM_PROMPT = """Du är ett pedagogiskt verktyg som jämför två kategorinamn på svenska hushållsutgifter.
 Facit = den kategori som läraren tänkt att transaktionen ska hamna i.
