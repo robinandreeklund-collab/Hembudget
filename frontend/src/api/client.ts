@@ -114,8 +114,14 @@ export async function api<T = unknown>(
     );
   }
   if (!res.ok) {
-    if (res.status === 401 && token) {
+    // 401 = ogiltig/utgången token. 403 = giltig token men fel roll
+    // (t.ex. gammal student-token mot ny school-mode-deploy där
+    // teacher-endpoint kräver teacher-roll). Båda → rensa allt och
+    // tvinga ny login så användaren slipper byta browser.
+    if ((res.status === 401 || res.status === 403) && token) {
       clearToken();
+      clearRole();
+      setAsStudent(null);
       window.location.reload();
     }
     let body: unknown = undefined;
@@ -143,8 +149,10 @@ export async function uploadFile<T = unknown>(
   if (asStudent) headers.set("X-As-Student", String(asStudent));
   const res = await fetch(`${apiBase()}${path}`, { method: "POST", body: form, headers });
   if (!res.ok) {
-    if (res.status === 401 && token) {
+    if ((res.status === 401 || res.status === 403) && token) {
       clearToken();
+      clearRole();
+      setAsStudent(null);
       window.location.reload();
     }
     throw new ApiError(res.status, `HTTP ${res.status}: ${res.statusText}`);
