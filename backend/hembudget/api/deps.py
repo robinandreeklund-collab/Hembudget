@@ -69,7 +69,16 @@ def require_auth(
     så ContextVar-set i deps propagerar inte ut till endpoint-körningen.
     """
     import os
-    if os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes"):
+    # School-mode har företräde över demo: om båda råkar vara satta
+    # (t.ex. läckande env-vars från en gammal Cloud Run-revision) så
+    # vinner SCHOOL_MODE och vi kör riktig auth. Annars: legacy demo-bypass.
+    school_on = os.environ.get("HEMBUDGET_SCHOOL_MODE", "").lower() in (
+        "1", "true", "yes",
+    )
+    demo_on = os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in (
+        "1", "true", "yes",
+    )
+    if demo_on and not school_on:
         return "demo"
 
     if not authorization or not authorization.startswith("Bearer "):
@@ -90,7 +99,13 @@ def require_token(
 ) -> TokenInfo:
     """Som require_auth men returnerar hela TokenInfo."""
     import os
-    if os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes"):
+    school_on = os.environ.get("HEMBUDGET_SCHOOL_MODE", "").lower() in (
+        "1", "true", "yes",
+    )
+    demo_on = os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in (
+        "1", "true", "yes",
+    )
+    if demo_on and not school_on:
         return TokenInfo(token="demo", role="demo", ts=time.time())
 
     if not authorization or not authorization.startswith("Bearer "):
