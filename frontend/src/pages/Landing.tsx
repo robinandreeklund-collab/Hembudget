@@ -4,6 +4,7 @@ import {
   Home, Lightbulb, MessageCircle, PiggyBank, Receipt, Sparkles,
   TrendingUp, Users,
 } from "lucide-react";
+import DashboardPreview from "@/components/landing/DashboardPreview";
 
 export default function Landing() {
   return (
@@ -48,35 +49,39 @@ function Header() {
 
 function Hero() {
   return (
-    <section className="max-w-6xl mx-auto px-6 py-16 md:py-24 text-center">
-      <div className="inline-flex items-center gap-2 bg-brand-100 text-brand-700 rounded-full px-4 py-1 text-sm mb-6 animate-fadein">
-        <GraduationCap className="w-4 h-4" />
-        Privatekonomi för skolan
+    <section className="max-w-6xl mx-auto px-6 py-16 md:py-20 grid md:grid-cols-2 gap-10 items-center">
+      <div>
+        <div className="inline-flex items-center gap-2 bg-brand-100 text-brand-700 rounded-full px-4 py-1 text-sm mb-6 animate-fadein">
+          <GraduationCap className="w-4 h-4" />
+          Privatekonomi för skolan
+        </div>
+        <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight animate-fadeup">
+          Lär eleverna hantera sin
+          <span className="text-brand-600"> riktiga ekonomi</span>
+          <br />– innan de möter den på riktigt.
+        </h1>
+        <p className="mt-6 text-lg text-slate-600 animate-fadeup delay-100">
+          Ekonomilabbet är en interaktiv simulator där varje elev får en egen
+          simulerad vardag — yrke, lön, skatt, hyra, lån, räkningar. De lär
+          sig budgetera, spara och förstå när livet inte går som planerat.
+        </p>
+        <div className="mt-8 flex flex-wrap gap-3 animate-fadeup delay-200">
+          <Link
+            to="/login/teacher"
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
+          >
+            Kom igång som lärare
+          </Link>
+          <Link
+            to="/login/student"
+            className="bg-white border-2 border-slate-300 hover:border-brand-500 text-slate-700 rounded-lg px-6 py-3 font-medium"
+          >
+            Jag är elev
+          </Link>
+        </div>
       </div>
-      <h1 className="text-4xl md:text-6xl font-bold text-slate-900 leading-tight animate-fadeup">
-        Lär eleverna hantera sin
-        <span className="text-brand-600"> riktiga ekonomi</span>
-        <br />– innan de möter den på riktigt.
-      </h1>
-      <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto animate-fadeup delay-100">
-        Ekonomilabbet är en interaktiv simulator där varje elev får en egen
-        simulerad vardag — yrke, lön, skatt, hyra, lån, räkningar. De lär sig
-        budgetera, spara och förstå vad som händer när livet inte går som
-        planerat.
-      </p>
-      <div className="mt-8 flex flex-wrap justify-center gap-3 animate-fadeup delay-200">
-        <Link
-          to="/login/teacher"
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
-        >
-          Kom igång som lärare
-        </Link>
-        <Link
-          to="/login/student"
-          className="bg-white border-2 border-slate-300 hover:border-brand-500 text-slate-700 rounded-lg px-6 py-3 font-medium"
-        >
-          Jag är elev
-        </Link>
+      <div className="animate-fadeup delay-300">
+        <DashboardPreview />
       </div>
     </section>
   );
