@@ -26,6 +26,7 @@ import StudentDetail from "./pages/StudentDetail";
 import Onboarding from "./pages/Onboarding";
 import MyBatches from "./pages/MyBatches";
 import AllBatches from "./pages/AllBatches";
+import EkoDashboard from "./pages/EkoDashboard";
 
 export default function App() {
   const {
@@ -67,7 +68,10 @@ export default function App() {
               <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
               <Route path="/teacher/all-batches" element={<AllBatches />} />
               <Route path="/my-batches" element={<MyBatches />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route
+                path="/dashboard"
+                element={role === "student" ? <EkoDashboard /> : <Dashboard />}
+              />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/import" element={<Import />} />
               <Route path="/budget" element={<Budget />} />

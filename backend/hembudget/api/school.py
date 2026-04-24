@@ -992,6 +992,185 @@ def complete_onboarding(
     return {"ok": True, "budget_rows_saved": saved_count}
 
 
+# ---------- Elev-dashboard ----------
+
+class DashboardCategoryRow(BaseModel):
+    category: str
+    budget: int
+    spent: int
+    pct: int
+
+
+class DashboardOvershootRow(BaseModel):
+    date: str
+    description: str
+    amount: int
+    category_hint: Optional[str] = None
+
+
+class StudentDashboardOut(BaseModel):
+    year_month: str
+    net_income: int
+    total_spent: int
+    balance: int  # net_income - total_spent
+    savings_done: int
+    savings_goal: Optional[int] = None
+    category_rows: list[DashboardCategoryRow]
+    recent_overshoots: list[DashboardOvershootRow]
+    assignments_done: int
+    assignments_total: int
+    personality: str
+    profession: str
+    display_name: str
+
+
+@router.get("/student/dashboard", response_model=StudentDashboardOut)
+def student_dashboard(
+    year_month: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> StudentDashboardOut:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    from datetime import date as _date
+    from decimal import Decimal as _Dec
+    from ..db.base import session_scope as _ss
+    from ..db.models import Budget, Category, Transaction
+    from ..teacher.assignments import evaluate
+
+    ym = year_month or _date.today().strftime("%Y-%m")
+    y, m = map(int, ym.split("-"))
+    start = _date(y, m, 1)
+    end = _date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)
+
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student or not student.profile:
+            raise HTTPException(404, "Student/profile not found")
+        display_name = student.display_name
+        personality = student.profile.personality
+        profession = student.profile.profession
+        net_income_default = student.profile.net_salary_monthly
+        scope_key = scope_for_student(student)
+
+        # Assignments-summary
+        assignments = s.query(Assignment).filter(
+            Assignment.student_id == student.id
+        ).all()
+        a_done = 0
+        a_total = len(assignments)
+        savings_goal: int | None = None
+        for a in assignments:
+            try:
+                res = evaluate(a, student)
+                if res.status == "completed":
+                    a_done += 1
+                if a.kind == "save_amount" and a.params:
+                    goal = a.params.get("amount")
+                    if isinstance(goal, (int, float)):
+                        savings_goal = max(savings_goal or 0, int(goal))
+            except Exception:
+                continue
+
+    # Scope-DB-query
+    category_rows: list[DashboardCategoryRow] = []
+    overshoots: list[DashboardOvershootRow] = []
+    total_spent = 0
+    savings_done = 0
+    net_income = net_income_default
+
+    with scope_context(scope_key):
+        with _ss() as scope_s:
+            # Månadens tx
+            txs = (
+                scope_s.query(Transaction)
+                .filter(Transaction.date >= start, Transaction.date < end)
+                .all()
+            )
+            # Faktisk inkomst denna månad (summa positiva)
+            positive = sum(
+                float(t.amount) for t in txs
+                if float(t.amount) > 0 and not t.is_transfer
+            )
+            if positive > 0:
+                net_income = int(round(positive))
+
+            # Aggregera utgifter per kategori
+            cats_by_id = {c.id: c for c in scope_s.query(Category).all()}
+            spent_by_cat: dict[int, int] = {}
+            for t in txs:
+                amt = float(t.amount)
+                if amt >= 0 or t.is_transfer:
+                    continue
+                cid = t.category_id or 0
+                spent_by_cat[cid] = spent_by_cat.get(cid, 0) + int(abs(amt))
+                total_spent += int(abs(amt))
+                # Markera stora oväntade utgifter som overshoots
+                if abs(amt) >= 1500:
+                    overshoots.append(DashboardOvershootRow(
+                        date=t.date.isoformat(),
+                        description=t.raw_description,
+                        amount=int(abs(amt)),
+                        category_hint=(
+                            cats_by_id.get(cid).name if cid in cats_by_id else None
+                        ),
+                    ))
+
+            # Sparkonto-överföringar räknas separat (negativa tx men inte utgift)
+            for t in txs:
+                if float(t.amount) < 0 and (
+                    "SPARKONTO" in t.raw_description.upper()
+                    or "SPARANDE" in t.raw_description.upper()
+                ):
+                    savings_done += int(abs(float(t.amount)))
+                    # Dra bort från total_spent om vi räknade dubbelt
+                    total_spent -= int(abs(float(t.amount)))
+
+            # Budget per kategori
+            budget_rows = (
+                scope_s.query(Budget).filter(Budget.month == ym).all()
+            )
+            for br in budget_rows:
+                cat = cats_by_id.get(br.category_id)
+                if not cat:
+                    continue
+                budget = int(br.planned_amount)
+                spent = spent_by_cat.get(cat.id, 0)
+                pct = int(100 * spent / budget) if budget > 0 else 0
+                category_rows.append(DashboardCategoryRow(
+                    category=cat.name,
+                    budget=budget,
+                    spent=spent,
+                    pct=pct,
+                ))
+
+    # Sortera overshoots nyast först, max 5
+    overshoots.sort(key=lambda o: o.date, reverse=True)
+    overshoots = overshoots[:5]
+    # Sortera kategorier efter % (överskridna först)
+    category_rows.sort(key=lambda r: -r.pct)
+
+    balance = net_income - total_spent - savings_done
+
+    return StudentDashboardOut(
+        year_month=ym,
+        net_income=net_income,
+        total_spent=total_spent,
+        balance=balance,
+        savings_done=savings_done,
+        savings_goal=savings_goal,
+        category_rows=category_rows,
+        recent_overshoots=overshoots,
+        assignments_done=a_done,
+        assignments_total=a_total,
+        personality=personality,
+        profession=profession,
+        display_name=display_name,
+    )
+
+
 # ---------- Assignments / uppdrag ----------
 
 class AssignmentIn(BaseModel):
