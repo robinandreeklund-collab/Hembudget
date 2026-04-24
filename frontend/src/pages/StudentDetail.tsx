@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpenCheck, Briefcase, CheckCircle2, Eye, FileText,
-  ListChecks, Plus, Users, XCircle,
+  ListChecks, Plus, Target, Users, XCircle,
 } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AssignmentList } from "@/components/AssignmentList";
+import { MasteryChart } from "@/components/MasteryChart";
 
 type Profile = {
   profession: string; employer: string;
@@ -55,6 +56,11 @@ export default function StudentDetail() {
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [facitMonth, setFacitMonth] = useState("");
   const [facit, setFacit] = useState<FacitOut | null>(null);
+  const [mastery, setMastery] = useState<Array<{
+    competency: { id: number; name: string; level: string };
+    mastery: number;
+    evidence_count: number;
+  }>>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newKind, setNewKind] = useState("free_text");
   const [newTitle, setNewTitle] = useState("");
@@ -88,6 +94,9 @@ export default function StudentDetail() {
 
   useEffect(() => {
     reload();
+    api<typeof mastery>(`/teacher/students/${sid}/mastery`)
+      .then((m) => setMastery(m.filter((r) => r.evidence_count > 0)))
+      .catch(() => setMastery([]));
   }, [sid]);
 
   useEffect(() => {
@@ -177,6 +186,16 @@ export default function StudentDetail() {
           />
         </div>
       </section>
+
+      {/* Mastery */}
+      {mastery.length > 0 && (
+        <section className="bg-white border rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Target className="w-5 h-5 text-brand-600" /> Färdigheter
+          </h2>
+          <MasteryChart data={mastery} compact />
+        </section>
+      )}
 
       {/* Uppdrag */}
       <section className="bg-white border rounded-xl p-4 space-y-3">

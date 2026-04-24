@@ -12,6 +12,7 @@ import {
 import { api } from "@/api/client";
 import { AssignmentList } from "@/components/AssignmentList";
 import { HelpIcon, InfoBanner } from "@/components/Tooltip";
+import { MasteryChart } from "@/components/MasteryChart";
 
 type DashboardRow = { category: string; budget: number; spent: number; pct: number };
 type Overshoot = {
@@ -45,8 +46,15 @@ function thisMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+type MasteryRow = {
+  competency: { id: number; name: string; level: string; description?: string | null };
+  mastery: number;
+  evidence_count: number;
+};
+
 export default function EkoDashboard() {
   const [data, setData] = useState<Dashboard | null>(null);
+  const [mastery, setMastery] = useState<MasteryRow[]>([]);
   const [month, setMonth] = useState(thisMonth());
   const [err, setErr] = useState<string | null>(null);
 
@@ -55,6 +63,12 @@ export default function EkoDashboard() {
       .then(setData)
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
   }, [month]);
+
+  useEffect(() => {
+    api<MasteryRow[]>("/student/mastery")
+      .then((m) => setMastery(m.filter((r) => r.evidence_count > 0)))
+      .catch(() => setMastery([]));
+  }, []);
 
   if (err) {
     return (
@@ -234,6 +248,18 @@ export default function EkoDashboard() {
         </h2>
         <AssignmentList />
       </section>
+
+      {/* Mastery */}
+      {mastery.length > 0 && (
+        <section className="bg-white rounded-xl border p-4 space-y-3">
+          <h2 className="font-semibold text-lg">Dina färdigheter</h2>
+          <p className="text-sm text-slate-600">
+            Baserat på dina svar i modulerna. Ju fler bevis, desto
+            säkrare bedömning.
+          </p>
+          <MasteryChart data={mastery} />
+        </section>
+      )}
     </div>
   );
 }

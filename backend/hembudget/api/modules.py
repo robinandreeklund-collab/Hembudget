@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
 from ..school.models import (
-    Module, ModuleStep, Student, StudentModule, StudentStepProgress,
+    Competency, Module, ModuleStep, ModuleStepCompetency,
+    Student, StudentModule, StudentStepProgress,
 )
 from .deps import TokenInfo, require_teacher, require_token
 
@@ -365,6 +366,243 @@ def unassign_module(
                 s.delete(sm)
                 removed += 1
     return {"removed": removed}
+
+
+# ---------- Kompetenser ----------
+
+class CompetencyOut(BaseModel):
+    id: int
+    key: str
+    name: str
+    description: Optional[str]
+    level: str
+    is_system: bool
+
+
+class CompetencyMasteryOut(BaseModel):
+    competency: CompetencyOut
+    mastery: float  # 0.0–1.0
+    evidence_count: int
+    latest_evidence_at: Optional[datetime] = None
+
+
+@router.get("/school/competencies", response_model=list[CompetencyOut])
+def list_competencies(
+    info: TokenInfo = Depends(require_token),
+) -> list[CompetencyOut]:
+    """Lista tillgängliga kompetenser för aktuell användare."""
+    _require_school_mode()
+    with master_session() as s:
+        q = s.query(Competency).filter(
+            (Competency.is_system.is_(True)) |
+            (
+                Competency.teacher_id == (info.teacher_id or -1)
+                if info.role == "teacher" else False
+            )
+        ).order_by(Competency.level, Competency.name)
+        return [
+            CompetencyOut(
+                id=c.id, key=c.key, name=c.name,
+                description=c.description, level=c.level,
+                is_system=c.is_system,
+            )
+            for c in q.all()
+        ]
+
+
+@router.post("/teacher/modules/{module_id}/steps/{step_id}/competencies")
+def link_step_competency(
+    module_id: int, step_id: int,
+    competency_id: int, weight: float = 1.0,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        st = s.query(ModuleStep).filter(ModuleStep.id == step_id).first()
+        if not st or st.module_id != module_id:
+            raise HTTPException(404, "Step not found")
+        m = s.query(Module).filter(
+            Module.id == module_id,
+            Module.teacher_id == info.teacher_id,
+        ).first()
+        if not m:
+            raise HTTPException(403, "Not your module")
+        existing = s.query(ModuleStepCompetency).filter(
+            ModuleStepCompetency.step_id == step_id,
+            ModuleStepCompetency.competency_id == competency_id,
+        ).first()
+        if existing:
+            existing.weight = weight
+        else:
+            s.add(ModuleStepCompetency(
+                step_id=step_id, competency_id=competency_id, weight=weight,
+            ))
+    return {"ok": True}
+
+
+@router.delete("/teacher/modules/{module_id}/steps/{step_id}/competencies/{competency_id}")
+def unlink_step_competency(
+    module_id: int, step_id: int, competency_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        m = s.query(Module).filter(
+            Module.id == module_id,
+            Module.teacher_id == info.teacher_id,
+        ).first()
+        if not m:
+            raise HTTPException(403, "Not your module")
+        row = s.query(ModuleStepCompetency).filter(
+            ModuleStepCompetency.step_id == step_id,
+            ModuleStepCompetency.competency_id == competency_id,
+        ).first()
+        if row:
+            s.delete(row)
+    return {"ok": True}
+
+
+@router.get(
+    "/teacher/modules/{module_id}/steps/{step_id}/competencies",
+    response_model=list[CompetencyOut],
+)
+def list_step_competencies(
+    module_id: int, step_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[CompetencyOut]:
+    _require_school_mode()
+    with master_session() as s:
+        rows = (
+            s.query(Competency)
+            .join(ModuleStepCompetency,
+                  Competency.id == ModuleStepCompetency.competency_id)
+            .filter(ModuleStepCompetency.step_id == step_id)
+            .all()
+        )
+        return [
+            CompetencyOut(
+                id=c.id, key=c.key, name=c.name,
+                description=c.description, level=c.level,
+                is_system=c.is_system,
+            )
+            for c in rows
+        ]
+
+
+def _compute_mastery_for_student(
+    s, student_id: int,
+) -> dict[int, tuple[float, int, Optional[datetime]]]:
+    """Returnera mastery per kompetens-id för en elev.
+    Mastery-formel per kompetens:
+       mastery = sum(done_weights * success_factor) / sum(all_weights)
+    där success_factor är 1.0 för read/task/reflect (om klar) och
+    0.0/1.0 för quiz beroende på correct.
+    """
+    # Alla step-competency-kopplingar + step-kind
+    rows = (
+        s.query(ModuleStepCompetency, ModuleStep)
+        .join(ModuleStep, ModuleStepCompetency.step_id == ModuleStep.id)
+        .all()
+    )
+    # Elevens progress per step_id
+    progs = {
+        p.step_id: p for p in s.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id == student_id
+        ).all()
+    }
+    by_comp: dict[int, dict] = {}
+    for msc, step in rows:
+        bucket = by_comp.setdefault(msc.competency_id, {
+            "total_weight": 0.0,
+            "earned_weight": 0.0,
+            "count": 0,
+            "latest": None,
+        })
+        bucket["total_weight"] += msc.weight
+        prog = progs.get(step.id)
+        if prog and prog.completed_at:
+            success = 1.0
+            if step.kind == "quiz":
+                success = 1.0 if (prog.data or {}).get("correct") else 0.0
+            bucket["earned_weight"] += msc.weight * success
+            bucket["count"] += 1
+            if not bucket["latest"] or prog.completed_at > bucket["latest"]:
+                bucket["latest"] = prog.completed_at
+    result: dict[int, tuple[float, int, Optional[datetime]]] = {}
+    for cid, b in by_comp.items():
+        mastery = (
+            b["earned_weight"] / b["total_weight"]
+            if b["total_weight"] > 0 else 0.0
+        )
+        result[cid] = (mastery, b["count"], b["latest"])
+    return result
+
+
+@router.get(
+    "/student/mastery",
+    response_model=list[CompetencyMasteryOut],
+)
+def student_mastery(
+    info: TokenInfo = Depends(require_token),
+) -> list[CompetencyMasteryOut]:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    out: list[CompetencyMasteryOut] = []
+    with master_session() as s:
+        mastery_by_cid = _compute_mastery_for_student(s, info.student_id)
+        comps = s.query(Competency).all()
+        for c in comps:
+            m = mastery_by_cid.get(c.id, (0.0, 0, None))
+            out.append(CompetencyMasteryOut(
+                competency=CompetencyOut(
+                    id=c.id, key=c.key, name=c.name,
+                    description=c.description, level=c.level,
+                    is_system=c.is_system,
+                ),
+                mastery=round(m[0], 3),
+                evidence_count=m[1],
+                latest_evidence_at=m[2],
+            ))
+        # Sortera: mest bevisade först, sedan nivå
+        out.sort(key=lambda r: (-r.evidence_count, r.competency.level, r.competency.name))
+    return out
+
+
+@router.get(
+    "/teacher/students/{student_id}/mastery",
+    response_model=list[CompetencyMasteryOut],
+)
+def teacher_student_mastery(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[CompetencyMasteryOut]:
+    """Samma som /student/mastery men för läraren som tittar."""
+    _require_school_mode()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        mastery_by_cid = _compute_mastery_for_student(s, student_id)
+        comps = s.query(Competency).all()
+        out = [
+            CompetencyMasteryOut(
+                competency=CompetencyOut(
+                    id=c.id, key=c.key, name=c.name,
+                    description=c.description, level=c.level,
+                    is_system=c.is_system,
+                ),
+                mastery=round(mastery_by_cid.get(c.id, (0.0, 0, None))[0], 3),
+                evidence_count=mastery_by_cid.get(c.id, (0.0, 0, None))[1],
+                latest_evidence_at=mastery_by_cid.get(c.id, (0.0, 0, None))[2],
+            )
+            for c in comps
+        ]
+        out.sort(key=lambda r: (-r.evidence_count, r.competency.level, r.competency.name))
+        return out
 
 
 # ---------- Lärarens reflektionsinbox ----------

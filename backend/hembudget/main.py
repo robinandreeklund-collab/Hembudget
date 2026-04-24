@@ -310,6 +310,13 @@ def _school_bootstrap() -> None:
                 logging.getLogger(__name__).info(
                     "school: seeded %d interest rate rows (static)", n,
                 )
+            # Seed system-kompetenser
+            from .school.competency_seed import seed_system_competencies
+            n = seed_system_competencies(s)
+            if n > 0:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d system competencies", n,
+                )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 

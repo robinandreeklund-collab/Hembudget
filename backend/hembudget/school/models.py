@@ -508,6 +508,52 @@ class StudentStepProgress(MasterBase):
     )
 
 
+class Competency(MasterBase):
+    """En inlärningsfärdighet, t.ex. 'läsa lönespec', 'förstå skatteavdrag'.
+
+    Systemkompetenser (teacher_id=NULL, is_system=True) finns för alla;
+    lärare kan skapa egna kompetenser för specifika klasser/ämnesområden.
+    """
+    __tablename__ = "competencies"
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_competency_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(60), nullable=False)  # ex 'salary_slip'
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # "grund" | "fordjup" | "expert"
+    level: Mapped[str] = mapped_column(String(20), nullable=False, default="grund")
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class ModuleStepCompetency(MasterBase):
+    """Koppling: detta steg tränar dessa färdigheter med viss vikt."""
+    __tablename__ = "module_step_competencies"
+    __table_args__ = (
+        UniqueConstraint("step_id", "competency_id", name="uq_step_competency"),
+    )
+
+    step_id: Mapped[int] = mapped_column(
+        ForeignKey("module_steps.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    competency_id: Mapped[int] = mapped_column(
+        ForeignKey("competencies.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # 0.0-1.0 — hur mycket detta steg räknar mot kompetensen
+    weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
+
+
 class AppConfig(MasterBase):
     """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
     Key-value-form så vi slipper migrera schemat vid varje nytt fält.
