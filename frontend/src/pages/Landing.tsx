@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
-import { GraduationCap, Sparkles } from "lucide-react";
+import {
+  AlertTriangle, GraduationCap, Lightbulb, Sparkles,
+} from "lucide-react";
 
 export default function Landing() {
   return (
@@ -78,7 +80,58 @@ function Hero() {
   );
 }
 
-function WhySection() { return null; }
+function WhySection() {
+  const stats = [
+    { num: "4 av 10", label: "unga klarar inte en oväntad räkning på 2 000 kr" },
+    { num: "60%", label: "av elever har aldrig läst en lönespecifikation" },
+    { num: "1 timme", label: "räcker för att prova grunderna i Ekonomilabbet" },
+  ];
+  return (
+    <section className="bg-white border-y border-slate-200 py-16">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
+            <AlertTriangle className="w-4 h-4" /> Problem
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
+            Ekonomi är ett livskunskapsämne.<br />Och det saknas i skolan.
+          </h2>
+          <p className="mt-4 text-slate-600 max-w-2xl mx-auto">
+            Svenska unga lämnar skolan utan grundläggande kunskaper om skatt,
+            sparande, lån och budget. Först när de flyttar hemifrån möter de
+            verkligheten — ofta för sent.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {stats.map((s, i) => (
+            <div
+              key={i}
+              className="bg-gradient-to-br from-brand-50 to-white border border-brand-100 rounded-xl p-6 text-center hover:shadow-md transition-shadow"
+            >
+              <div className="text-4xl font-bold text-brand-600 mb-2">
+                {s.num}
+              </div>
+              <div className="text-sm text-slate-700">{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-10 bg-emerald-50 border-l-4 border-emerald-500 rounded p-5 flex gap-4">
+          <Lightbulb className="w-8 h-8 text-emerald-600 shrink-0" />
+          <div>
+            <h3 className="font-semibold text-emerald-900 mb-1">
+              Lär genom att göra — inte genom att läsa om det
+            </h3>
+            <p className="text-sm text-emerald-900">
+              Eleven får egen simulerad inkomst, egna räkningar, egen lön varje
+              månad. Precis som i livet utanför klassrummet. Varje val har
+              konsekvenser som syns i deras budget.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 function FeaturesSection() { return null; }
 function FlowSection() { return null; }
 function CtaSection() { return null; }
