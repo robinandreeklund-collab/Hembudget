@@ -245,7 +245,70 @@ function FeatureCard({
     </div>
   );
 }
-function FlowSection() { return null; }
+function FlowSection() {
+  const steps = [
+    {
+      num: 1,
+      title: "Lärare skapar klass",
+      body: "Lägg till elever. Varje får en unik profil — yrke, lön, bostad — automatiskt genererad.",
+      color: "bg-brand-500",
+    },
+    {
+      num: 2,
+      title: "Eleven loggar in",
+      body: "Med en 6-teckens kod. Onboarding förklarar yrket, lönen, skatten — och ber eleven sätta en budget.",
+      color: "bg-emerald-500",
+    },
+    {
+      num: 3,
+      title: "Månadens dokument",
+      body: "Läraren skickar ut PDF:er. Eleven laddar ner, tittar, och importerar — precis som i riktiga livet.",
+      color: "bg-amber-500",
+    },
+    {
+      num: 4,
+      title: "Lärare ser framstegen",
+      body: "Klassöversikten visar status för varje uppdrag. Feedback sker via chatten.",
+      color: "bg-rose-500",
+    },
+  ];
+
+  return (
+    <section id="sa-funkar-det" className="bg-slate-900 text-white py-16">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 text-brand-300 text-sm font-medium mb-2">
+            <Sparkles className="w-4 h-4" /> Så funkar det
+          </div>
+          <h2 className="text-3xl md:text-4xl font-bold">
+            Från start till lärande på 4 steg
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
+          {/* Animated connector line (only visible on md+) */}
+          <div className="hidden md:block absolute top-8 left-[12%] right-[12%] h-0.5 bg-gradient-to-r from-brand-500 via-emerald-500 to-rose-500 opacity-30" />
+          {steps.map((s, i) => (
+            <div
+              key={s.num}
+              className="relative bg-slate-800/50 border border-slate-700 rounded-xl p-5 hover:border-brand-500 transition-colors"
+              style={{ animation: `fadeup 0.6s ${i * 0.15}s both` }}
+            >
+              <div
+                className={`${s.color} w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mb-3 shadow-lg animate-float`}
+                style={{ animationDelay: `${i * 0.5}s` }}
+              >
+                {s.num}
+              </div>
+              <h3 className="font-semibold text-lg mb-1">{s.title}</h3>
+              <p className="text-sm text-slate-300">{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 function CtaSection() { return null; }
 
 function Footer() {
