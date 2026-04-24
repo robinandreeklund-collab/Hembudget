@@ -732,6 +732,296 @@ def complete_onboarding(
     return {"ok": True}
 
 
+# ---------- Scenario-batches (PDF-utskick + import) ----------
+
+class BatchArtifactOut(BaseModel):
+    id: int
+    kind: str
+    title: str
+    filename: str
+    sort_order: int
+    imported_at: Optional[datetime]
+    meta: Optional[dict]
+
+
+class ScenarioBatchOut(BaseModel):
+    id: int
+    student_id: int
+    year_month: str
+    created_at: datetime
+    artifact_count: int
+    imported_count: int
+
+
+class ScenarioBatchDetailOut(ScenarioBatchOut):
+    artifacts: list[BatchArtifactOut]
+
+
+class CreateBatchesIn(BaseModel):
+    year_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    student_ids: list[int] | None = None
+    overwrite: bool = False
+
+
+class CreateBatchResultRow(BaseModel):
+    student_id: int
+    display_name: str
+    year_month: str
+    status: str  # "created" | "exists" | "overwritten" | "error"
+    batch_id: Optional[int] = None
+    artifact_count: Optional[int] = None
+    error: Optional[str] = None
+
+
+def _batch_to_out(b: ScenarioBatch) -> ScenarioBatchOut:
+    imported = sum(1 for a in b.artifacts if a.imported_at is not None)
+    return ScenarioBatchOut(
+        id=b.id, student_id=b.student_id, year_month=b.year_month,
+        created_at=b.created_at,
+        artifact_count=len(b.artifacts),
+        imported_count=imported,
+    )
+
+
+def _batch_to_detail(b: ScenarioBatch) -> ScenarioBatchDetailOut:
+    base = _batch_to_out(b)
+    return ScenarioBatchDetailOut(
+        **base.model_dump(),
+        artifacts=[
+            BatchArtifactOut(
+                id=a.id, kind=a.kind, title=a.title, filename=a.filename,
+                sort_order=a.sort_order, imported_at=a.imported_at,
+                meta=a.meta,
+            )
+            for a in b.artifacts
+        ],
+    )
+
+
+@router.post("/teacher/batches", response_model=list[CreateBatchResultRow])
+def create_batches(
+    payload: CreateBatchesIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[CreateBatchResultRow]:
+    """Generera PDF-batches för en månad — eleven får sedan importera
+    dem en i taget. Ersätter den gamla /teacher/generate-flödet med
+    en pedagogisk variant där eleven aktivt jobbar med dokumenten."""
+    _require_school_mode()
+    from ..teacher.batch import create_batch_for_student
+
+    results: list[CreateBatchResultRow] = []
+    with master_session() as s:
+        q = s.query(Student).filter(
+            Student.teacher_id == info.teacher_id,
+            Student.active.is_(True),
+        )
+        if payload.student_ids:
+            q = q.filter(Student.id.in_(payload.student_ids))
+        students = q.all()
+
+        for student in students:
+            try:
+                if not student.profile:
+                    _create_profile_for_student(s, student)
+                existing = s.query(ScenarioBatch).filter(
+                    ScenarioBatch.student_id == student.id,
+                    ScenarioBatch.year_month == payload.year_month,
+                ).first()
+                if existing and not payload.overwrite:
+                    results.append(CreateBatchResultRow(
+                        student_id=student.id,
+                        display_name=student.display_name,
+                        year_month=payload.year_month,
+                        status="exists", batch_id=existing.id,
+                        artifact_count=len(existing.artifacts),
+                    ))
+                    continue
+                status_str = "overwritten" if existing else "created"
+                batch = create_batch_for_student(
+                    s, student, payload.year_month,
+                    overwrite=payload.overwrite,
+                )
+                s.flush()
+                results.append(CreateBatchResultRow(
+                    student_id=student.id,
+                    display_name=student.display_name,
+                    year_month=payload.year_month,
+                    status=status_str, batch_id=batch.id,
+                    artifact_count=len(batch.artifacts),
+                ))
+            except Exception as e:
+                log.exception("Batch creation failed for %d", student.id)
+                results.append(CreateBatchResultRow(
+                    student_id=student.id,
+                    display_name=student.display_name,
+                    year_month=payload.year_month,
+                    status="error", error=str(e),
+                ))
+    return results
+
+
+@router.get(
+    "/teacher/students/{student_id}/batches",
+    response_model=list[ScenarioBatchOut],
+)
+def list_student_batches(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[ScenarioBatchOut]:
+    _require_school_mode()
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        batches = (
+            s.query(ScenarioBatch)
+            .filter(ScenarioBatch.student_id == student_id)
+            .order_by(ScenarioBatch.year_month.desc())
+            .all()
+        )
+        return [_batch_to_out(b) for b in batches]
+
+
+@router.get(
+    "/student/batches",
+    response_model=list[ScenarioBatchOut],
+)
+def student_list_batches(
+    info: TokenInfo = Depends(require_token),
+) -> list[ScenarioBatchOut]:
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        batches = (
+            s.query(ScenarioBatch)
+            .filter(ScenarioBatch.student_id == info.student_id)
+            .order_by(ScenarioBatch.year_month.desc())
+            .all()
+        )
+        return [_batch_to_out(b) for b in batches]
+
+
+def _resolve_batch_for_actor(
+    info: TokenInfo, batch_id: int, s,
+) -> ScenarioBatch:
+    batch = s.query(ScenarioBatch).filter(
+        ScenarioBatch.id == batch_id
+    ).first()
+    if not batch:
+        raise HTTPException(404, "Batch not found")
+    if info.role == "student" and batch.student_id != info.student_id:
+        raise HTTPException(404, "Batch not found")
+    if info.role == "teacher":
+        student = s.query(Student).filter(
+            Student.id == batch.student_id
+        ).first()
+        if not student or student.teacher_id != info.teacher_id:
+            raise HTTPException(404, "Batch not found")
+    return batch
+
+
+@router.get(
+    "/student/batches/{batch_id}",
+    response_model=ScenarioBatchDetailOut,
+)
+def student_batch_detail(
+    batch_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> ScenarioBatchDetailOut:
+    _require_school_mode()
+    with master_session() as s:
+        batch = _resolve_batch_for_actor(info, batch_id, s)
+        return _batch_to_detail(batch)
+
+
+@router.get("/student/batches/{batch_id}/artifacts/{artifact_id}/download")
+def download_artifact(
+    batch_id: int,
+    artifact_id: int,
+    info: TokenInfo = Depends(require_token),
+):
+    from fastapi.responses import Response
+    _require_school_mode()
+    with master_session() as s:
+        batch = _resolve_batch_for_actor(info, batch_id, s)
+        artifact = s.query(BatchArtifact).filter(
+            BatchArtifact.id == artifact_id,
+            BatchArtifact.batch_id == batch.id,
+        ).first()
+        if not artifact:
+            raise HTTPException(404, "Artifact not found")
+        return Response(
+            content=bytes(artifact.pdf_bytes),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="{artifact.filename}"',
+            },
+        )
+
+
+@router.post("/student/batches/{batch_id}/artifacts/{artifact_id}/import")
+def import_artifact_endpoint(
+    batch_id: int,
+    artifact_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Importera en specifik artefakt (PDF) till elevens scope-DB."""
+    from ..teacher.batch import import_artifact
+    _require_school_mode()
+    with master_session() as s:
+        batch = _resolve_batch_for_actor(info, batch_id, s)
+        artifact = s.query(BatchArtifact).filter(
+            BatchArtifact.id == artifact_id,
+            BatchArtifact.batch_id == batch.id,
+        ).first()
+        if not artifact:
+            raise HTTPException(404, "Artifact not found")
+        student = s.query(Student).filter(
+            Student.id == batch.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        result = import_artifact(s, artifact, student)
+        return result
+
+
+@router.post("/student/batches/{batch_id}/import-all")
+def import_all_endpoint(
+    batch_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Importera alla artefakter i en batch i ordning."""
+    from ..teacher.batch import import_artifact
+    _require_school_mode()
+    results: list[dict] = []
+    with master_session() as s:
+        batch = _resolve_batch_for_actor(info, batch_id, s)
+        student = s.query(Student).filter(
+            Student.id == batch.student_id
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        # Sortera: kontoutdrag först (skapar tx), sedan lönespec/lan/kort
+        # som berikar/länkar
+        order_priority = {
+            "kontoutdrag": 0, "lonespec": 1, "lan_besked": 2,
+            "kreditkort_faktura": 3,
+        }
+        sorted_arts = sorted(
+            batch.artifacts,
+            key=lambda a: order_priority.get(a.kind, 99),
+        )
+        for art in sorted_arts:
+            r = import_artifact(s, art, student)
+            results.append({"artifact_id": art.id, "kind": art.kind, **r})
+    return {"results": results}
+
+
 # ---------- Teacher: datagenerering ----------
 
 @router.post("/teacher/generate", response_model=list[GenerateResultRow])
