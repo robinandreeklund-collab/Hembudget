@@ -38,6 +38,7 @@ type Dashboard = {
   personality: string;
   profession: string;
   display_name: string;
+  inactivity_nudge: { days_away: number; last_active: string } | null;
 };
 
 const formatKr = (n: number): string =>
@@ -117,6 +118,26 @@ export default function EkoDashboard() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {data.inactivity_nudge && (
+        <div className="bg-sky-50 border-l-4 border-sky-400 rounded p-4 flex items-start gap-3">
+          <div className="text-2xl">👋</div>
+          <div className="flex-1">
+            <div className="font-semibold text-sky-900">
+              Välkommen tillbaka!
+            </div>
+            <p className="text-sm text-sky-800">
+              Det var {data.inactivity_nudge.days_away} dagar sedan du gjorde
+              ett steg. Klicka på "Din kursplan" så fortsätter vi där du var.
+            </p>
+          </div>
+          <Link
+            to="/modules"
+            className="text-sm bg-sky-600 hover:bg-sky-700 text-white rounded px-3 py-1.5 font-medium"
+          >
+            Till kursplanen
+          </Link>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">

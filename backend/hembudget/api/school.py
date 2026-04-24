@@ -1080,6 +1080,11 @@ class DashboardOvershootRow(BaseModel):
     category_hint: Optional[str] = None
 
 
+class InactivityNudgeOut(BaseModel):
+    days_away: int
+    last_active: str  # ISO-datum
+
+
 class StudentDashboardOut(BaseModel):
     year_month: str
     net_income: int
@@ -1094,6 +1099,9 @@ class StudentDashboardOut(BaseModel):
     personality: str
     profession: str
     display_name: str
+    # Sätts om eleven inte har klarat ett steg på >= 5 dagar MEN har
+    # minst ett historiskt klart steg. Frontend visar en välkomst-banner.
+    inactivity_nudge: Optional[InactivityNudgeOut] = None
 
 
 @router.get("/student/dashboard", response_model=StudentDashboardOut)
@@ -1226,6 +1234,26 @@ def student_dashboard(
 
     balance = net_income - total_spent - savings_done
 
+    # Inaktivitets-nudge: var eleven borta ≥ 5 dagar?
+    nudge: Optional[InactivityNudgeOut] = None
+    with master_session() as s:
+        last_prog = (
+            s.query(StudentStepProgress)
+            .filter(
+                StudentStepProgress.student_id == info.student_id,
+                StudentStepProgress.completed_at.isnot(None),
+            )
+            .order_by(StudentStepProgress.completed_at.desc())
+            .first()
+        )
+        if last_prog and last_prog.completed_at:
+            days = (datetime.utcnow() - last_prog.completed_at).days
+            if days >= 5:
+                nudge = InactivityNudgeOut(
+                    days_away=days,
+                    last_active=last_prog.completed_at.date().isoformat(),
+                )
+
     return StudentDashboardOut(
         year_month=ym,
         net_income=net_income,
@@ -1240,6 +1268,7 @@ def student_dashboard(
         personality=personality,
         profession=profession,
         display_name=display_name,
+        inactivity_nudge=nudge,
     )
 
 

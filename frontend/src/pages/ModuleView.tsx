@@ -33,6 +33,7 @@ type StepProgress = {
   completed_at: string | null;
   data: Record<string, unknown> | null;
   teacher_feedback: string | null;
+  peer_feedback?: { id: number; body: string; created_at: string }[];
 };
 
 export default function ModuleView() {
@@ -243,6 +244,19 @@ function StepPanel({
           <div className="text-sky-900 whitespace-pre-wrap">
             {progress.teacher_feedback}
           </div>
+        </div>
+      )}
+
+      {progress?.peer_feedback && progress.peer_feedback.length > 0 && (
+        <div className="bg-violet-50 border-l-4 border-violet-400 rounded p-3 text-sm space-y-2">
+          <div className="font-semibold text-violet-900">
+            Kamrater har sagt ({progress.peer_feedback.length}):
+          </div>
+          {progress.peer_feedback.map((pf) => (
+            <div key={pf.id} className="text-violet-900 whitespace-pre-wrap">
+              “{pf.body}”
+            </div>
+          ))}
         </div>
       )}
     </div>

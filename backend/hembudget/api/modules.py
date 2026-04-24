@@ -81,11 +81,20 @@ class StudentModuleOut(BaseModel):
     completed_step_count: int
 
 
+class PeerFeedbackAnon(BaseModel):
+    """Anonym peer-feedback på reflektion. Skickas tillbaka till eleven
+    som fick den (utan reviewer-identitet)."""
+    id: int
+    body: str
+    created_at: datetime
+
+
 class StudentStepOut(BaseModel):
     step: ModuleStepOut
     completed_at: Optional[datetime]
     data: Optional[dict]
     teacher_feedback: Optional[str]
+    peer_feedback: list[PeerFeedbackAnon] = []
 
 
 class AssignStudentsIn(BaseModel):
@@ -479,6 +488,13 @@ class CompetencyMasteryOut(BaseModel):
     mastery: float  # 0.0–1.0
     evidence_count: int
     latest_evidence_at: Optional[datetime] = None
+    # Nästa tröskel (0.25 / 0.50 / 0.75 / 1.0). None om eleven redan
+    # är på 100 %.
+    next_threshold: Optional[float] = None
+    # Antal steg i pågående moduler som tränar denna kompetens men som
+    # eleven inte slutfört än. Hjälper UI:t visa "N steg kvar till
+    # nästa milstolpe".
+    steps_remaining: int = 0
 
 
 @router.get("/school/competencies", response_model=list[CompetencyOut])
@@ -584,6 +600,50 @@ def list_step_competencies(
         ]
 
 
+MILESTONES = (0.25, 0.50, 0.75, 1.0)
+
+
+def _next_threshold(mastery: float) -> Optional[float]:
+    for t in MILESTONES:
+        if mastery < t:
+            return t
+    return None
+
+
+def _compute_steps_remaining_by_competency(
+    s, student_id: int,
+) -> dict[int, int]:
+    """Antal step-kopplingar per kompetens som eleven inte slutfört än,
+    inom modulerna hen är tilldelad. Bara ett approximativt mått men
+    räcker för UI-motivation."""
+    from ..school.models import StudentModule as _SM
+    assigned_module_ids = [
+        sm.module_id for sm in s.query(_SM).filter(
+            _SM.student_id == student_id
+        ).all()
+    ]
+    if not assigned_module_ids:
+        return {}
+    rows = (
+        s.query(ModuleStepCompetency, ModuleStep)
+        .join(ModuleStep, ModuleStepCompetency.step_id == ModuleStep.id)
+        .filter(ModuleStep.module_id.in_(assigned_module_ids))
+        .all()
+    )
+    completed_step_ids = {
+        p.step_id for p in s.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id == student_id,
+            StudentStepProgress.completed_at.isnot(None),
+        ).all()
+    }
+    remaining: dict[int, int] = {}
+    for msc, step in rows:
+        if step.id in completed_step_ids:
+            continue
+        remaining[msc.competency_id] = remaining.get(msc.competency_id, 0) + 1
+    return remaining
+
+
 def _compute_mastery_for_student(
     s, student_id: int,
 ) -> dict[int, tuple[float, int, Optional[datetime]]]:
@@ -649,6 +709,9 @@ def student_mastery(
     out: list[CompetencyMasteryOut] = []
     with master_session() as s:
         mastery_by_cid = _compute_mastery_for_student(s, info.student_id)
+        remaining_by_cid = _compute_steps_remaining_by_competency(
+            s, info.student_id,
+        )
         comps = s.query(Competency).all()
         for c in comps:
             m = mastery_by_cid.get(c.id, (0.0, 0, None))
@@ -661,6 +724,8 @@ def student_mastery(
                 mastery=round(m[0], 3),
                 evidence_count=m[1],
                 latest_evidence_at=m[2],
+                next_threshold=_next_threshold(m[0]),
+                steps_remaining=remaining_by_cid.get(c.id, 0),
             ))
         # Sortera: mest bevisade först, sedan nivå
         out.sort(key=lambda r: (-r.evidence_count, r.competency.level, r.competency.name))
@@ -732,6 +797,9 @@ def teacher_student_mastery(
         if not stu:
             raise HTTPException(404, "Student not found")
         mastery_by_cid = _compute_mastery_for_student(s, student_id)
+        remaining_by_cid = _compute_steps_remaining_by_competency(
+            s, student_id,
+        )
         comps = s.query(Competency).all()
         out = [
             CompetencyMasteryOut(
@@ -743,6 +811,10 @@ def teacher_student_mastery(
                 mastery=round(mastery_by_cid.get(c.id, (0.0, 0, None))[0], 3),
                 evidence_count=mastery_by_cid.get(c.id, (0.0, 0, None))[1],
                 latest_evidence_at=mastery_by_cid.get(c.id, (0.0, 0, None))[2],
+                next_threshold=_next_threshold(
+                    mastery_by_cid.get(c.id, (0.0, 0, None))[0]
+                ),
+                steps_remaining=remaining_by_cid.get(c.id, 0),
             )
             for c in comps
         ]
@@ -1402,11 +1474,26 @@ def student_step_progress(
             StudentStepProgress.student_id == info.student_id,
             StudentStepProgress.step_id == step_id,
         ).first()
+        peer: list[PeerFeedbackAnon] = []
+        if prog:
+            rows = (
+                s.query(PeerFeedback)
+                .filter(PeerFeedback.target_progress_id == prog.id)
+                .order_by(PeerFeedback.created_at.desc())
+                .all()
+            )
+            peer = [
+                PeerFeedbackAnon(
+                    id=p.id, body=p.body, created_at=p.created_at,
+                )
+                for p in rows
+            ]
         return StudentStepOut(
             step=_step_to_out(st),
             completed_at=prog.completed_at if prog else None,
             data=prog.data if prog else None,
             teacher_feedback=prog.teacher_feedback if prog else None,
+            peer_feedback=peer,
         )
 
 
