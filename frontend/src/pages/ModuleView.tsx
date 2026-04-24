@@ -6,6 +6,10 @@ import {
 } from "lucide-react";
 import { api, getApiBase, getToken, getAsStudent } from "@/api/client";
 import { AskAI } from "@/components/AskAI";
+import {
+  CelebrationOverlay,
+  type Achievement,
+} from "@/components/CelebrationOverlay";
 
 type Step = {
   id: number;
@@ -38,6 +42,7 @@ export default function ModuleView() {
   const [progressByStep, setProgressByStep] = useState<Record<number, StepProgress>>({});
   const [activeStepId, setActiveStepId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [celebration, setCelebration] = useState<Achievement[]>([]);
 
   async function loadAll() {
     try {
@@ -140,9 +145,11 @@ export default function ModuleView() {
             <StepPanel
               step={mod.steps.find((s) => s.id === activeStepId)!}
               progress={progressByStep[activeStepId] ?? null}
+              onCelebrate={(a) => {
+                if (a.length > 0) setCelebration(a);
+              }}
               onDone={async () => {
                 await loadAll();
-                // Hoppa till nästa oklara steg om det finns
                 const idx = mod.steps.findIndex((s) => s.id === activeStepId);
                 const next = mod.steps.slice(idx + 1).find(
                   (s) => !progressByStep[s.id]?.completed_at,
@@ -153,6 +160,12 @@ export default function ModuleView() {
           )}
         </main>
       </div>
+      {celebration.length > 0 && (
+        <CelebrationOverlay
+          items={celebration}
+          onClose={() => setCelebration([])}
+        />
+      )}
       <AskAI
         moduleId={mid}
         stepId={activeStepId ?? undefined}
@@ -185,11 +198,12 @@ function StepKindBadge({ kind }: { kind: Step["kind"] }) {
 }
 
 function StepPanel({
-  step, progress, onDone,
+  step, progress, onDone, onCelebrate,
 }: {
   step: Step;
   progress: StepProgress | null;
   onDone: () => void;
+  onCelebrate: (items: Achievement[]) => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
@@ -212,13 +226,13 @@ function StepPanel({
       )}
 
       {step.kind === "read" || step.kind === "watch" ? (
-        <ReadWatchPanel step={step} progress={progress} onDone={onDone} />
+        <ReadWatchPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : step.kind === "reflect" ? (
-        <ReflectPanel step={step} progress={progress} onDone={onDone} />
+        <ReflectPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : step.kind === "quiz" ? (
-        <QuizPanel step={step} progress={progress} onDone={onDone} />
+        <QuizPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : step.kind === "task" ? (
-        <TaskPanel step={step} progress={progress} onDone={onDone} />
+        <TaskPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : null}
 
       {progress?.teacher_feedback && (
@@ -262,18 +276,30 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function ReadWatchPanel({
-  step: _step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+type PanelProps = {
+  step: Step;
+  progress: StepProgress | null;
+  onDone: () => void;
+  onCelebrate: (items: Achievement[]) => void;
+};
+
+type CompleteResp = {
+  ok: boolean;
+  data: Record<string, unknown>;
+  new_achievements?: Achievement[];
+};
+
+function ReadWatchPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
   const done = !!progress?.completed_at;
   const [busy, setBusy] = useState(false);
   async function markDone() {
     setBusy(true);
     try {
-      await api(`/student/steps/${_step.id}/complete`, {
+      const res = await api<CompleteResp>(`/student/steps/${_step.id}/complete`, {
         method: "POST",
         body: JSON.stringify({}),
       });
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
       onDone();
     } finally {
       setBusy(false);
@@ -292,9 +318,7 @@ function ReadWatchPanel({
   );
 }
 
-function ReflectPanel({
-  step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+function ReflectPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
   const existing = (progress?.data?.reflection as string) ?? "";
   const [text, setText] = useState(existing);
   const [err, setErr] = useState<string | null>(null);
@@ -308,10 +332,11 @@ function ReflectPanel({
     }
     setBusy(true);
     try {
-      await api(`/student/steps/${step.id}/complete`, {
+      const res = await api<CompleteResp>(`/student/steps/${step.id}/complete`, {
         method: "POST",
         body: JSON.stringify({ data: { reflection: text.trim() } }),
       });
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -347,9 +372,7 @@ function ReflectPanel({
   );
 }
 
-function QuizPanel({
-  step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+function QuizPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
   const p = step.params ?? {};
   const options = (p.options as string[]) ?? [];
   const correctIdx = (p.correct_index as number | undefined);
@@ -400,13 +423,14 @@ function QuizPanel({
       const body = isMulti
         ? { data: { answers: [...multiSelected].sort((a, b) => a - b) } }
         : { data: { answer: singleSelected } };
-      const res = await api<{ data: Record<string, unknown> }>(
+      const res = await api<CompleteResp>(
         `/student/steps/${step.id}/complete`,
         { method: "POST", body: JSON.stringify(body) },
       );
       setLastSubmittedCorrect(!!res.data.correct);
       setAttempts((res.data.attempts as number) ?? attempts + 1);
       setShowResult(true);
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
     } finally {
       setBusy(false);
     }
@@ -630,9 +654,7 @@ function QuizPanel({
   );
 }
 
-function TaskPanel({
-  step: _step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+function TaskPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
   const assignmentId = (_step.params?.assignment_id as number) ?? null;
   const [busy, setBusy] = useState(false);
   const done = !!progress?.completed_at;
@@ -640,10 +662,11 @@ function TaskPanel({
   async function markDone() {
     setBusy(true);
     try {
-      await api(`/student/steps/${_step.id}/complete`, {
+      const res = await api<CompleteResp>(`/student/steps/${_step.id}/complete`, {
         method: "POST",
         body: JSON.stringify({}),
       });
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
       onDone();
     } finally {
       setBusy(false);

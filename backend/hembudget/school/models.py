@@ -564,6 +564,31 @@ class StudentStepProgress(MasterBase):
     )
 
 
+class StudentAchievement(MasterBase):
+    """Badge/prestation som en elev har tjänat. Unik per (student, key);
+    samma prestation kan inte delas ut två gånger.
+
+    key = kort stabil identifierare som mappas till metadata i
+    `school/achievements.py::ACHIEVEMENTS` (titel, emoji, beskrivning).
+    """
+    __tablename__ = "student_achievements"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "key", name="uq_student_achievement",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    key: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    earned_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class PeerFeedback(MasterBase):
     """Anonym feedback från en elev till en annan på en reflektion.
 

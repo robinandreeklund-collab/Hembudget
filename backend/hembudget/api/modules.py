@@ -667,6 +667,53 @@ def student_mastery(
     return out
 
 
+@router.get("/student/achievements")
+def student_achievements(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Alla prestationer eleven har tjänat + aktuell streak-info."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    from ..school import achievements as ach
+    with master_session() as s:
+        earned = ach.list_earned(s, info.student_id)
+        current, longest = ach.compute_streak(s, info.student_id)
+    # Inkludera även "ej-tjänade" så eleven ser vad som finns att få
+    earned_keys = {e["key"] for e in earned}
+    available = [
+        {"key": k, **meta, "earned": k in earned_keys}
+        for k, meta in ach.ACHIEVEMENTS.items()
+    ]
+    return {
+        "earned": earned,
+        "available": available,
+        "streak": {"current": current, "longest": longest},
+    }
+
+
+@router.get("/teacher/students/{student_id}/achievements")
+def teacher_student_achievements(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    from ..school import achievements as ach
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Elev finns ej eller tillhör inte dig")
+        earned = ach.list_earned(s, student_id)
+        current, longest = ach.compute_streak(s, student_id)
+    return {
+        "earned": earned,
+        "streak": {"current": current, "longest": longest},
+    }
+
+
 @router.get(
     "/teacher/students/{student_id}/mastery",
     response_model=list[CompetencyMasteryOut],
@@ -1466,10 +1513,21 @@ def student_complete_step(
         sm_done = total_steps > 0 and completed >= total_steps
         if sm_done and not sm.completed_at:
             sm.completed_at = datetime.utcnow()
+
+        # Flush så att evaluate_and_grant ser den precis uppdaterade
+        # StudentModule.completed_at (sessionen har autoflush=False).
+        s.flush()
+
+        # Utvärdera achievements mot det nya tillståndet. Idempotent.
+        from ..school import achievements as ach
+        new_keys = ach.evaluate_and_grant(s, info.student_id)
+        new_items = [ach.describe(k) for k in new_keys]
+
         return {
             "ok": True,
             "step_done": True,
             "module_done": sm_done,
             "progress": f"{completed}/{total_steps}",
             "data": data,
+            "new_achievements": [i for i in new_items if i],
         }

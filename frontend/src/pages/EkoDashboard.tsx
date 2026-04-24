@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   BookOpenCheck,
@@ -58,6 +59,10 @@ export default function EkoDashboard() {
   const [mastery, setMastery] = useState<MasteryRow[]>([]);
   const [month, setMonth] = useState(thisMonth());
   const [err, setErr] = useState<string | null>(null);
+  const [achievements, setAchievements] = useState<{
+    earned: { key: string; title: string; emoji: string }[];
+    streak: { current: number; longest: number };
+  } | null>(null);
 
   useEffect(() => {
     api<Dashboard>(`/student/dashboard?year_month=${month}`)
@@ -69,6 +74,12 @@ export default function EkoDashboard() {
     api<MasteryRow[]>("/student/mastery")
       .then((m) => setMastery(m.filter((r) => r.evidence_count > 0)))
       .catch(() => setMastery([]));
+    api<{
+      earned: { key: string; title: string; emoji: string }[];
+      streak: { current: number; longest: number };
+    }>("/student/achievements")
+      .then(setAchievements)
+      .catch(() => setAchievements(null));
   }, []);
 
   async function downloadPortfolio() {
@@ -267,6 +278,42 @@ export default function EkoDashboard() {
         </h2>
         <AssignmentList />
       </section>
+
+      {/* Prestationer + streak */}
+      {achievements && (achievements.earned.length > 0 || achievements.streak.current > 0) && (
+        <section className="bg-gradient-to-br from-amber-50 to-rose-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-4">
+              <div>
+                <div className="text-xs text-slate-600">Aktuell serie</div>
+                <div className="text-2xl font-bold text-slate-900 flex items-center gap-1">
+                  🔥 {achievements.streak.current}{" "}
+                  <span className="text-sm font-normal text-slate-600">
+                    {achievements.streak.current === 1 ? "dag" : "dagar"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                {achievements.earned.slice(0, 5).map((a) => (
+                  <span
+                    key={a.key}
+                    title={a.title}
+                    className="text-2xl bg-white border border-amber-200 rounded-full w-10 h-10 flex items-center justify-center shadow-sm"
+                  >
+                    {a.emoji}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <Link
+              to="/achievements"
+              className="text-sm text-brand-700 hover:text-brand-800 font-medium"
+            >
+              Se alla prestationer →
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Mastery */}
       {mastery.length > 0 && (

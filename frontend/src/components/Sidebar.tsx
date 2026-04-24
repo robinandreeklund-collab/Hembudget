@@ -14,6 +14,7 @@ import {
   BookOpen,
   GitBranch,
   MessagesSquare,
+  Trophy,
   Landmark,
   Link2,
   LineChart,
@@ -65,6 +66,7 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   if (isStudent) {
     items = [
       { to: "/modules", label: "Din kursplan", icon: GitBranch },
+      { to: "/achievements", label: "Prestationer", icon: Trophy },
       { to: "/my-batches", label: "Dina dokument", icon: Inbox },
       { to: "/messages", label: "Meddelanden", icon: MessageCircle },
       { to: "/peer-review", label: "Kamratrespons", icon: MessagesSquare },

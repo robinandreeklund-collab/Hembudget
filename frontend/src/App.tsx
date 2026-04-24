@@ -40,6 +40,7 @@ import ResetPassword from "./pages/ResetPassword";
 import StudentLogin from "./pages/StudentLogin";
 import DemoChoice from "./pages/DemoChoice";
 import Docs from "./pages/Docs";
+import MyAchievements from "./pages/MyAchievements";
 import MyModules from "./pages/MyModules";
 import ModuleView from "./pages/ModuleView";
 import TeacherModules from "./pages/TeacherModules";
@@ -129,6 +130,7 @@ export default function App() {
               <Route path="/docs" element={<Docs />} />
               <Route path="/modules" element={<MyModules />} />
               <Route path="/modules/:moduleId" element={<ModuleView />} />
+              <Route path="/achievements" element={<MyAchievements />} />
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
               <Route path="/teacher/reflections" element={<TeacherReflections />} />
