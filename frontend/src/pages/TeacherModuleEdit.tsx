@@ -287,6 +287,7 @@ function StepEditor({
           />
         </label>
       )}
+      {local.kind === "reflect" && <RubricEditor local={local} setLocal={setLocal} />}
 
       {local.kind === "watch" && (
         <>
@@ -495,6 +496,119 @@ function QuizEditor({
     </div>
   );
 }
+
+function RubricEditor({
+  local, setLocal,
+}: { local: Step; setLocal: (s: Step) => void }) {
+  const rubric = ((local.params?.rubric as Array<{
+    key: string; name: string; levels: string[];
+  }>) ?? []).slice();
+
+  function setRubric(next: typeof rubric) {
+    setLocal({
+      ...local,
+      params: { ...(local.params ?? {}), rubric: next },
+    });
+  }
+
+  function addCrit() {
+    setRubric([
+      ...rubric,
+      {
+        key: `crit_${rubric.length + 1}`,
+        name: "Nytt kriterium",
+        levels: ["Grundläggande", "Skicklig", "Utmärkt"],
+      },
+    ]);
+  }
+
+  return (
+    <div className="border rounded p-3 bg-slate-50 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+          Bedömningsmatris (rubric) — valfritt
+        </div>
+        <button
+          onClick={addCrit}
+          className="text-xs text-brand-600 hover:underline"
+        >
+          + Lägg till kriterium
+        </button>
+      </div>
+      {rubric.length === 0 && (
+        <p className="text-xs text-slate-500">
+          Lägg till kriterier om du vill bedöma kvaliteten på elevens svar
+          med en matris. T.ex. "Djup" / "Struktur" / "Reflektionsförmåga".
+        </p>
+      )}
+      {rubric.map((crit, i) => (
+        <div key={i} className="bg-white rounded border p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              value={crit.name}
+              onChange={(e) => {
+                const n = [...rubric];
+                n[i] = { ...crit, name: e.target.value };
+                setRubric(n);
+              }}
+              className="flex-1 border rounded px-2 py-1 text-sm font-medium"
+            />
+            <button
+              onClick={() => setRubric(rubric.filter((_, j) => j !== i))}
+              className="text-rose-500 hover:text-rose-700 text-xs"
+            >
+              Ta bort
+            </button>
+          </div>
+          <div className="text-xs text-slate-500">Nivåer (från lägst till högst):</div>
+          {crit.levels.map((lvl, j) => (
+            <div key={j} className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 w-4">{j + 1}.</span>
+              <input
+                value={lvl}
+                onChange={(e) => {
+                  const n = [...rubric];
+                  const levs = [...crit.levels];
+                  levs[j] = e.target.value;
+                  n[i] = { ...crit, levels: levs };
+                  setRubric(n);
+                }}
+                className="flex-1 border rounded px-2 py-1 text-xs"
+              />
+              <button
+                onClick={() => {
+                  const n = [...rubric];
+                  n[i] = {
+                    ...crit,
+                    levels: crit.levels.filter((_, k) => k !== j),
+                  };
+                  setRubric(n);
+                }}
+                className="text-rose-400 hover:text-rose-600 text-xs"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => {
+              const n = [...rubric];
+              n[i] = {
+                ...crit,
+                levels: [...crit.levels, `Nivå ${crit.levels.length + 1}`],
+              };
+              setRubric(n);
+            }}
+            className="text-xs text-brand-600 hover:underline"
+          >
+            + Lägg till nivå
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function AssignModal({
   students, onClose, onAssign,

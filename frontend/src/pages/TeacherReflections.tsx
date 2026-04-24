@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Check, Filter, MessageSquare, User } from "lucide-react";
 import { api } from "@/api/client";
 
+type RubricCriterion = { key: string; name: string; levels: string[] };
 type Reflection = {
   progress_id: number;
   student_id: number;
@@ -17,6 +18,8 @@ type Reflection = {
   completed_at: string | null;
   teacher_feedback: string | null;
   feedback_at: string | null;
+  rubric: RubricCriterion[] | null;
+  rubric_scores: Record<string, number> | null;
 };
 
 export default function TeacherReflections() {
@@ -24,6 +27,7 @@ export default function TeacherReflections() {
   const [onlyUnread, setOnlyUnread] = useState(true);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [scores, setScores] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -46,7 +50,10 @@ export default function TeacherReflections() {
   const active = items.find((r) => r.progress_id === activeId);
 
   useEffect(() => {
-    if (active) setFeedback(active.teacher_feedback ?? "");
+    if (active) {
+      setFeedback(active.teacher_feedback ?? "");
+      setScores(active.rubric_scores ?? {});
+    }
   }, [active?.progress_id]);
 
   async function save() {
@@ -55,7 +62,10 @@ export default function TeacherReflections() {
     try {
       await api(`/teacher/reflections/${active.progress_id}/feedback`, {
         method: "POST",
-        body: JSON.stringify({ feedback: feedback.trim() }),
+        body: JSON.stringify({
+          feedback: feedback.trim(),
+          rubric_scores: active.rubric ? scores : null,
+        }),
       });
       await load();
     } catch (e) {
@@ -166,6 +176,41 @@ export default function TeacherReflections() {
                     </div>
                   </div>
 
+                  {active.rubric && active.rubric.length > 0 && (
+                    <div className="space-y-3 border rounded p-3 bg-slate-50">
+                      <div className="text-sm font-semibold text-slate-700">
+                        Bedömningskriterier:
+                      </div>
+                      {active.rubric.map((crit) => (
+                        <div key={crit.key}>
+                          <div className="text-sm font-medium text-slate-800 mb-1">
+                            {crit.name}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {crit.levels.map((lvl, idx) => {
+                              const sel = scores[crit.key] === idx;
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() =>
+                                    setScores({ ...scores, [crit.key]: idx })
+                                  }
+                                  className={`text-xs rounded px-3 py-1.5 border-2 ${
+                                    sel
+                                      ? "border-brand-500 bg-brand-100 text-brand-800 font-medium"
+                                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                                  }`}
+                                >
+                                  <span className="text-slate-400 mr-1">{idx + 1}.</span>
+                                  {lvl}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <label className="block text-sm font-medium text-slate-700">
                       Din feedback:

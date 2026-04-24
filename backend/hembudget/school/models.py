@@ -503,6 +503,9 @@ class StudentStepProgress(MasterBase):
     # Lärarens feedback-text (för reflect-steg)
     teacher_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     feedback_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Rubric-bedömning: {criterion_key: level_index (0..N-1)}.
+    # Criterion-definition ligger i ModuleStep.params.rubric.
+    rubric_scores: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

@@ -624,10 +624,15 @@ class ReflectionOut(BaseModel):
     completed_at: Optional[datetime]
     teacher_feedback: Optional[str]
     feedback_at: Optional[datetime]
+    # Ev. rubric-definition från step.params + elevens bedömning
+    rubric: Optional[list[dict]] = None  # [{key, name, levels: [..]}]
+    rubric_scores: Optional[dict] = None  # {key: level_index}
 
 
 class FeedbackIn(BaseModel):
     feedback: str = Field(min_length=1, max_length=4000)
+    # Valfri rubric-bedömning: {criterion_key: level_index}
+    rubric_scores: Optional[dict] = None
 
 
 @router.get("/teacher/reflections", response_model=list[ReflectionOut])
@@ -660,6 +665,9 @@ def list_reflections(
             if prog.data and isinstance(prog.data, dict):
                 reflection = str(prog.data.get("reflection", ""))
             module = s.query(Module).filter(Module.id == step.module_id).first()
+            rubric = None
+            if step.params and isinstance(step.params.get("rubric"), list):
+                rubric = step.params["rubric"]
             out.append(ReflectionOut(
                 progress_id=prog.id,
                 student_id=stu.id, student_name=stu.display_name,
@@ -672,6 +680,8 @@ def list_reflections(
                 completed_at=prog.completed_at,
                 teacher_feedback=prog.teacher_feedback,
                 feedback_at=prog.feedback_at,
+                rubric=rubric,
+                rubric_scores=prog.rubric_scores,
             ))
     return out
 
@@ -695,6 +705,8 @@ def give_feedback(
             raise HTTPException(403, "Inte din elev")
         prog.teacher_feedback = payload.feedback.strip()
         prog.feedback_at = datetime.utcnow()
+        if payload.rubric_scores is not None:
+            prog.rubric_scores = payload.rubric_scores
     return {"ok": True}
 
 
