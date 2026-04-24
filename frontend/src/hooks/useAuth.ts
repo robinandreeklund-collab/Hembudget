@@ -15,6 +15,7 @@ type SchoolStatus = {
   school_mode: boolean;
   teacher_count?: number;
   bootstrap_ready?: boolean;
+  bootstrap_requires_secret?: boolean;
 };
 
 export function useAuth() {

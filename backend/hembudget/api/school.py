@@ -48,10 +48,13 @@ router = APIRouter(tags=["school"])
 # ---------- Schemas ----------
 
 class TeacherBootstrapIn(BaseModel):
-    bootstrap_secret: str
     email: EmailStr
     password: str = Field(min_length=8)
     name: str
+    # Valfri — krävs bara om HEMBUDGET_BOOTSTRAP_SECRET är satt i
+    # Cloud Run-env:en. När variabeln är tom räcker det att inga
+    # lärare finns för att skapa den första från UI.
+    bootstrap_secret: Optional[str] = None
 
 
 class TeacherLoginIn(BaseModel):
@@ -132,14 +135,20 @@ def _gen_login_code() -> str:
 
 @router.post("/teacher/bootstrap", response_model=TeacherAuthOut)
 def bootstrap_teacher(payload: TeacherBootstrapIn) -> TeacherAuthOut:
-    """Skapa första lärarkontot. Kräver att HEMBUDGET_BOOTSTRAP_SECRET
-    env-var är satt och matchar. 410 Gone om en lärare redan finns."""
+    """Skapa första lärarkontot.
+
+    - Om HEMBUDGET_BOOTSTRAP_SECRET är satt i env måste payloadens
+      bootstrap_secret matcha (extra skydd när tjänsten ligger publikt).
+    - Om env-varen INTE är satt räcker det att inga lärare finns — då
+      kan första besökaren skapa kontot direkt från UI.
+    - 410 Gone så snart minst en lärare finns."""
     _require_school_mode()
     expected = os.environ.get("HEMBUDGET_BOOTSTRAP_SECRET", "")
-    if not expected or payload.bootstrap_secret != expected:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, "Invalid bootstrap secret",
-        )
+    if expected:
+        if not payload.bootstrap_secret or payload.bootstrap_secret != expected:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "Invalid bootstrap secret",
+            )
     with master_session() as s:
         if s.query(Teacher).count() > 0:
             raise HTTPException(
@@ -454,9 +463,12 @@ def school_status() -> dict:
     if enabled:
         with master_session() as s:
             info["teacher_count"] = s.query(Teacher).count()
-            info["bootstrap_ready"] = (
-                info["teacher_count"] == 0
-                and bool(os.environ.get("HEMBUDGET_BOOTSTRAP_SECRET"))
+            # bootstrap_ready = ingen lärare finns ännu (första besökaren
+            # kan skapa). requires_secret styr om UI ska visa fältet för
+            # HEMBUDGET_BOOTSTRAP_SECRET eller ej.
+            info["bootstrap_ready"] = info["teacher_count"] == 0
+            info["bootstrap_requires_secret"] = bool(
+                os.environ.get("HEMBUDGET_BOOTSTRAP_SECRET")
             )
     return info
 

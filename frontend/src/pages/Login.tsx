@@ -117,8 +117,9 @@ export default function Login() {
         )}
         {mode === "teacher_bootstrap" && (
           <p className="text-sm text-amber-700 bg-amber-50 rounded p-2 border border-amber-200">
-            Första gången — skapa lärarkonto. Ange bootstrap-koden som satts i
-            deployens env-vars.
+            {schoolStatus?.bootstrap_requires_secret
+              ? "Första gången — skapa lärarkonto. Ange bootstrap-koden som satts i deployens env-vars."
+              : "Välkommen! Skapa ditt lärarkonto. Du blir administratör för alla elever på denna instans."}
           </p>
         )}
         {mode === "teacher" && (
@@ -130,15 +131,16 @@ export default function Login() {
           </p>
         )}
 
-        {mode === "teacher_bootstrap" && (
-          <input
-            type="text"
-            value={bootstrapSecret}
-            onChange={(e) => setBootstrapSecret(e.target.value)}
-            placeholder="Bootstrap-kod"
-            className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none"
-          />
-        )}
+        {mode === "teacher_bootstrap" &&
+          schoolStatus?.bootstrap_requires_secret && (
+            <input
+              type="text"
+              value={bootstrapSecret}
+              onChange={(e) => setBootstrapSecret(e.target.value)}
+              placeholder="Bootstrap-kod"
+              className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none"
+            />
+          )}
         {(mode === "teacher" || mode === "teacher_bootstrap") && (
           <>
             <input
