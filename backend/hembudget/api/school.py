@@ -483,6 +483,40 @@ def update_student(
         return _student_to_out(student)
 
 
+@router.get("/teacher/students/{student_id}/qr")
+def student_qr_code(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Returnera en PNG-QR-kod för elevens login_code. Användbart för
+    att skriva ut till klassen eller projicera på tavlan.
+    QR-koden innehåller bara koden (inte URL:en) — eleverna anger den
+    manuellt på inloggningssidan."""
+    import io
+    from fastapi.responses import Response
+    try:
+        import qrcode
+    except ImportError:
+        raise HTTPException(500, "qrcode library not installed")
+    _require_school_mode()
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not student:
+            raise HTTPException(404, "Student not found")
+        code = student.login_code
+
+    qr = qrcode.QRCode(box_size=10, border=2)
+    qr.add_data(code)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#0f172a", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
 @router.delete("/teacher/students/{student_id}")
 def delete_student(
     student_id: int,

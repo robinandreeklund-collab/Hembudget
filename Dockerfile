@@ -60,7 +60,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "openpyxl>=3.1" \
         "httpx>=0.27" \
         "rapidfuzz>=3.6" \
-        "matplotlib>=3.8"
+        "matplotlib>=3.8" \
+        "qrcode[pil]>=8.0"
 # OBS: sqlcipher3-binary hoppas över i demo — backend faller tillbaka på
 # plain SQLite automatiskt. pytesseract/tesseract skippas också eftersom
 # vision-import inte används i demo.

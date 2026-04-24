@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "@/api/client";
+import { api, getApiBase, getToken } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { AssignmentSummary } from "@/components/AssignmentList";
+import { FamilyManager, Family } from "@/components/FamilyManager";
 import {
   Eye,
   Loader2,
+  Pencil,
   Play,
   Plus,
+  QrCode,
   RotateCcw,
   Trash2,
   Users,
+  X,
 } from "lucide-react";
 
 type Student = {
@@ -19,6 +23,10 @@ type Student = {
   class_label: string | null;
   login_code: string;
   active: boolean;
+  family_id: number | null;
+  family_name: string | null;
+  profession: string | null;
+  personality: string | null;
   last_login_at: string | null;
   created_at: string;
   months_generated: string[];
@@ -44,8 +52,31 @@ export default function Teacher() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showFamilies, setShowFamilies] = useState(false);
+  const [families, setFamilies] = useState<Family[]>([]);
+  const [editStudent, setEditStudent] = useState<Student | null>(null);
+  const [qrStudent, setQrStudent] = useState<Student | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+
+  async function openQr(s: Student) {
+    setQrStudent(s);
+    setQrUrl(null);
+    try {
+      const tok = getToken();
+      const res = await fetch(
+        `${getApiBase()}/teacher/students/${s.id}/qr`,
+        { headers: tok ? { Authorization: `Bearer ${tok}` } : undefined },
+      );
+      if (!res.ok) throw new Error("QR-kod misslyckades");
+      const blob = await res.blob();
+      setQrUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
   const [newName, setNewName] = useState("");
   const [newClass, setNewClass] = useState("");
+  const [newFamilyId, setNewFamilyId] = useState<number | "">("");
   const [ym, setYm] = useState(thisMonth());
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [overwrite, setOverwrite] = useState(false);
@@ -56,8 +87,12 @@ export default function Teacher() {
   async function reload() {
     setLoading(true);
     try {
-      const list = await api<Student[]>("/teacher/students");
+      const [list, fams] = await Promise.all([
+        api<Student[]>("/teacher/students"),
+        api<Family[]>("/teacher/families"),
+      ]);
       setStudents(list);
+      setFamilies(fams);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -77,16 +112,38 @@ export default function Teacher() {
         body: JSON.stringify({
           display_name: newName.trim(),
           class_label: newClass.trim() || null,
+          family_id: newFamilyId === "" ? null : newFamilyId,
         }),
       });
       setNewName("");
       setNewClass("");
+      setNewFamilyId("");
       setShowCreate(false);
       reload();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
   }
+
+  async function saveEdit() {
+    if (!editStudent) return;
+    try {
+      await api(`/teacher/students/${editStudent.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          display_name: editStudent.display_name,
+          class_label: editStudent.class_label || null,
+          family_id: editStudent.family_id,
+          active: editStudent.active,
+        }),
+      });
+      setEditStudent(null);
+      reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
 
   async function deleteStudent(id: number) {
     if (!confirm("Ta bort eleven och all data?")) return;
@@ -162,13 +219,23 @@ export default function Teacher() {
           <Users className="w-6 h-6 text-brand-600" />
           <h1 className="text-2xl font-semibold">Lärarpanel</h1>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" /> Ny elev
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowFamilies(!showFamilies)}
+            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+          >
+            <Users className="w-4 h-4" /> Familjer
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Ny elev
+          </button>
+        </div>
       </div>
+
+      {showFamilies && <FamilyManager onChange={reload} />}
 
       {err && (
         <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
@@ -309,9 +376,23 @@ export default function Teacher() {
                       <AssignmentSummary studentId={s.id} />
                     </div>
                   </td>
-                  <td className="p-3 text-slate-600">{s.class_label || "—"}</td>
-                  <td className="p-3 font-mono text-brand-600 bg-brand-50 inline-block px-2 rounded">
-                    {s.login_code}
+                  <td className="p-3 text-slate-600">
+                    {s.class_label || "—"}
+                    {s.family_name && (
+                      <div className="text-xs text-amber-700 mt-0.5">
+                        🏠 {s.family_name}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => openQr(s)}
+                      className="font-mono text-brand-600 bg-brand-50 hover:bg-brand-100 px-2 py-0.5 rounded inline-flex items-center gap-1"
+                      title="Visa QR-kod"
+                    >
+                      {s.login_code}
+                      <QrCode className="w-3 h-3" />
+                    </button>
                   </td>
                   <td className="p-3 text-xs">
                     {s.months_generated.length === 0
@@ -330,6 +411,13 @@ export default function Teacher() {
                       className="p-1.5 hover:bg-brand-100 rounded text-brand-600"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setEditStudent(s)}
+                      title="Redigera elev"
+                      className="p-1.5 hover:bg-slate-100 rounded text-slate-600"
+                    >
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => resetStudent(s.id)}
@@ -379,6 +467,20 @@ export default function Teacher() {
               placeholder="Klass (valfritt, t.ex. 9A)"
               className="w-full px-3 py-2 border rounded-lg"
             />
+            <select
+              value={newFamilyId}
+              onChange={(e) =>
+                setNewFamilyId(e.target.value === "" ? "" : parseInt(e.target.value, 10))
+              }
+              className="w-full px-3 py-2 border rounded-lg"
+            >
+              <option value="">— Ingen familj (solo) —</option>
+              {families.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.member_count} st)
+                </option>
+              ))}
+            </select>
             <div className="flex gap-2 justify-end pt-2">
               <button
                 onClick={() => setShowCreate(false)}
@@ -393,6 +495,143 @@ export default function Teacher() {
                 Skapa
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit student modal */}
+      {editStudent && (
+        <div
+          className="fixed inset-0 bg-black/40 grid place-items-center z-50"
+          onClick={() => setEditStudent(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl p-6 w-96 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-semibold text-lg">Redigera elev</h2>
+            <label className="block">
+              <span className="text-xs text-slate-600">Namn</span>
+              <input
+                type="text"
+                value={editStudent.display_name}
+                onChange={(e) =>
+                  setEditStudent({ ...editStudent, display_name: e.target.value })
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-600">Klass</span>
+              <input
+                type="text"
+                value={editStudent.class_label || ""}
+                onChange={(e) =>
+                  setEditStudent({ ...editStudent, class_label: e.target.value || null })
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-slate-600">Familj</span>
+              <select
+                value={editStudent.family_id ?? ""}
+                onChange={(e) =>
+                  setEditStudent({
+                    ...editStudent,
+                    family_id: e.target.value === "" ? null : parseInt(e.target.value, 10),
+                  })
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              >
+                <option value="">— Ingen familj (solo) —</option>
+                {families.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-amber-700">
+                OBS: vid byte av familj börjar eleven från noll i ny scope-DB.
+              </span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={editStudent.active}
+                onChange={(e) =>
+                  setEditStudent({ ...editStudent, active: e.target.checked })
+                }
+              />
+              <span className="text-sm">Aktiv (kan logga in)</span>
+            </label>
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                onClick={() => setEditStudent(null)}
+                className="px-4 py-2 rounded text-slate-600 hover:bg-slate-100"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={saveEdit}
+                className="px-4 py-2 rounded bg-brand-600 text-white hover:bg-brand-700"
+              >
+                Spara
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR modal */}
+      {qrStudent && (
+        <div
+          className="fixed inset-0 bg-black/60 grid place-items-center z-50"
+          onClick={() => {
+            setQrStudent(null);
+            if (qrUrl) URL.revokeObjectURL(qrUrl);
+            setQrUrl(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl p-6 w-80 text-center space-y-3 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                setQrStudent(null);
+                if (qrUrl) URL.revokeObjectURL(qrUrl);
+                setQrUrl(null);
+              }}
+              className="absolute top-2 right-2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="font-semibold text-lg">{qrStudent.display_name}</h2>
+            {qrUrl ? (
+              <img
+                src={qrUrl}
+                alt="QR-kod"
+                className="mx-auto w-56 h-56 object-contain"
+              />
+            ) : (
+              <div className="w-56 h-56 mx-auto grid place-items-center bg-slate-100 rounded">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+              </div>
+            )}
+            <div className="text-2xl font-mono tracking-widest text-brand-700">
+              {qrStudent.login_code}
+            </div>
+            <p className="text-xs text-slate-500">
+              Eleven anger denna kod på inloggningssidan, eller skannar
+              QR-koden för att se den.
+            </p>
+            <button
+              onClick={() => window.print()}
+              className="text-sm text-brand-600 hover:underline"
+            >
+              Skriv ut
+            </button>
           </div>
         </div>
       )}
