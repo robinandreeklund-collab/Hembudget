@@ -1732,13 +1732,16 @@ def category_facit(
     student_id: int, year_month: str,
     info: TokenInfo = Depends(require_teacher),
 ) -> CategoryCheckOut:
-    """Jämför elevens valda kategori mot scenario-facit som lagrats i
-    tx.notes ("[FACIT:Xxx]"). Returnerar antal rätt/fel per tx."""
+    """Jämför elevens valda kategori mot scenario-facit. Facit lagras i
+    ScenarioBatch.meta['category_hints'] — vi matchar via (description,
+    date, abs(amount)) mot motsvarande Transaction i elevens scope-DB.
+
+    Matchas INTE mot tx.notes (det är elevens eget fält som vi inte
+    skriver på)."""
     _require_school_mode()
     from datetime import date as _date
     from ..db.base import session_scope as _ss
     from ..db.models import Transaction, Category as _Cat
-    import re
 
     with master_session() as s:
         student = s.query(Student).filter(
@@ -1749,13 +1752,28 @@ def category_facit(
             raise HTTPException(404, "Student not found")
         scope_key = scope_for_student(student)
         name = student.display_name
+        # Hämta facit från batch.meta för denna månad
+        batch = s.query(ScenarioBatch).filter(
+            ScenarioBatch.student_id == student_id,
+            ScenarioBatch.year_month == year_month,
+        ).first()
+        facit_by_key: dict[tuple, str] = {}
+        if batch and batch.meta:
+            for h in batch.meta.get("category_hints", []):
+                # Normalisera amount till positiv så vi kan matcha både
+                # konto-tx (negativa) och kort-tx (negativa vid import)
+                key = (
+                    h["description"],
+                    h["date"],
+                    abs(float(h["amount"])),
+                )
+                facit_by_key[key] = h["hint"]
 
     y, m = map(int, year_month.split("-"))
     start = _date(y, m, 1)
     end = _date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)
     rows: list[CategoryCheckRow] = []
     total = correct = incorrect = uncat = 0
-    facit_re = re.compile(r"\[FACIT:([^\]]+)\]")
     with scope_context(scope_key):
         with _ss() as scope_s:
             cats = {c.id: c.name for c in scope_s.query(_Cat).all()}
@@ -1766,18 +1784,19 @@ def category_facit(
                 .all()
             )
             for t in txs:
-                notes = t.notes or ""
-                m2 = facit_re.search(notes)
-                if not m2:
-                    continue  # ingen facit = hoppa
-                expected = m2.group(1)
+                key = (
+                    t.raw_description,
+                    t.date.isoformat(),
+                    abs(float(t.amount)),
+                )
+                expected = facit_by_key.get(key)
+                if not expected:
+                    continue
                 actual = cats.get(t.category_id) if t.category_id else None
                 is_cat = actual is not None
                 is_correct = is_cat and (
                     actual == expected or
-                    # Föräldrakategori räknas också som rätt (t.ex. "Mat"
-                    # som facit och eleven valt "Livsmedel" vars parent
-                    # är "Mat")
+                    # Föräldrakategori räknas också som rätt
                     _is_parent(cats, t.category_id, expected, scope_s)
                 )
                 total += 1

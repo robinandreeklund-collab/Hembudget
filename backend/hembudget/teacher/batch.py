@@ -388,6 +388,10 @@ def _import_kontoutdrag(
     s: Session, parsed: EkonomilabbetParseResult, stats: dict,
     facit: dict | None = None,
 ) -> None:
+    # facit-argumentet tas emot för bakåtkompat men används INTE — facit
+    # slås upp direkt mot batch.meta i /teacher/facit-endpointen, så
+    # vi undviker att skriva över elevens egna notes-fält.
+    _ = facit
     acc = _ensure_account(
         s, "Lönekonto", "checking",
         account_no=parsed.account_no,
@@ -405,12 +409,6 @@ def _import_kontoutdrag(
             stats["skipped_tx"] += 1
             continue
         existing_hashes.add(h)
-        # Facit: hint-kategori lagras som "[FACIT:XXX]" i notes så
-        # den inte krockar med elevens egna anteckningar.
-        facit_hint = None
-        if facit:
-            key = (raw.description, raw.date.isoformat(), float(raw.amount))
-            facit_hint = facit.get(key)
         s.add(Transaction(
             account_id=acc.id,
             date=raw.date,
@@ -421,7 +419,6 @@ def _import_kontoutdrag(
                 if raw.description else None,
             hash=h,
             user_verified=False,
-            notes=f"[FACIT:{facit_hint}]" if facit_hint else None,
         ))
         stats["imported_tx"] += 1
 
@@ -534,6 +531,7 @@ def _import_kreditkort(
     stats: dict, artifact: BatchArtifact,
     facit: dict | None = None,
 ) -> None:
+    _ = facit  # Facit lagras i batch.meta, inte i tx.notes — se _import_kontoutdrag
     card_no = parsed.account_no or "Ekonomilabbet Kort"
     acc = _ensure_account(
         s, "Kreditkort", "credit",
@@ -554,10 +552,6 @@ def _import_kreditkort(
             stats["skipped_tx"] += 1
             continue
         existing_hashes.add(h)
-        facit_hint = None
-        if facit:
-            key = (raw.description, raw.date.isoformat(), float(raw.amount))
-            facit_hint = facit.get(key)
         s.add(Transaction(
             account_id=acc.id,
             date=raw.date,
@@ -568,6 +562,5 @@ def _import_kreditkort(
                 if raw.description else None,
             hash=h,
             user_verified=False,
-            notes=f"[FACIT:{facit_hint}]" if facit_hint else None,
         ))
         stats["imported_tx"] += 1
