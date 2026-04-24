@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { BackendSetup } from "./components/BackendSetup";
+import { ImpersonationBanner } from "./components/ImpersonationBanner";
 import { MobileTopBar, Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import Dashboard from "./pages/Dashboard";
@@ -20,39 +21,54 @@ import Salaries from "./pages/Salaries";
 import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
 import TibberCallback from "./pages/TibberCallback";
+import Teacher from "./pages/Teacher";
 
 export default function App() {
-  const { isAuthenticated, loading, initialized, backendError } = useAuth();
+  const { isAuthenticated, loading, initialized, backendError, role, asStudent } =
+    useAuth();
   if (loading) return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
-  // Om /status inte gick att nå alls → backend-URL behöver konfigureras
   if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
   if (!isAuthenticated) return <Login />;
 
+  // Lärare utan vald elev → bara lärarpanelen syns (ingen sidebar mot elevdata)
+  const teacherRootOnly = role === "teacher" && !asStudent;
+
   return (
     <div className="h-full flex flex-col md:flex-row">
-      <Sidebar />
+      {!teacherRootOnly && <Sidebar />}
       <main className="flex-1 overflow-y-auto">
-        <MobileTopBar />
+        {!teacherRootOnly && <MobileTopBar />}
+        {role === "teacher" && asStudent && <ImpersonationBanner />}
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/import" element={<Import />} />
-          <Route path="/budget" element={<Budget />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/scenarios" element={<Scenarios />} />
-          <Route path="/loans" element={<Loans />} />
-          <Route path="/funds" element={<Funds />} />
-          <Route path="/transfers" element={<Transfers />} />
-          <Route path="/upcoming" element={<Upcoming />} />
-          <Route path="/salaries" element={<Salaries />} />
-          <Route path="/attachments" element={<Attachments />} />
-          <Route path="/utility" element={<Utility />} />
-          <Route path="/tax" element={<Tax />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/Callback" element={<TibberCallback />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {teacherRootOnly ? (
+            <>
+              <Route path="/teacher" element={<Teacher />} />
+              <Route path="*" element={<Navigate to="/teacher" replace />} />
+            </>
+          ) : (
+            <>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/teacher" element={<Teacher />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/transactions" element={<Transactions />} />
+              <Route path="/import" element={<Import />} />
+              <Route path="/budget" element={<Budget />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/scenarios" element={<Scenarios />} />
+              <Route path="/loans" element={<Loans />} />
+              <Route path="/funds" element={<Funds />} />
+              <Route path="/transfers" element={<Transfers />} />
+              <Route path="/upcoming" element={<Upcoming />} />
+              <Route path="/salaries" element={<Salaries />} />
+              <Route path="/attachments" element={<Attachments />} />
+              <Route path="/utility" element={<Utility />} />
+              <Route path="/tax" element={<Tax />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/Callback" element={<TibberCallback />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </>
+          )}
         </Routes>
       </main>
     </div>

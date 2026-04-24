@@ -16,8 +16,8 @@ faulthandler.enable()
 
 from .api import (
     admin, auth, backup, balances, budget, chat, elpris, funds, ledger,
-    loans, reports, scenarios, settings_kv, tax, transactions, transfers,
-    upcoming, upload, utility,
+    loans, reports, scenarios, school, settings_kv, tax, transactions,
+    transfers, upcoming, upload, utility,
 )
 from .config import settings
 
@@ -41,8 +41,9 @@ def build_app() -> FastAPI:
     import os
     import re
     demo = os.environ.get("HEMBUDGET_DEMO_MODE", "").lower() in ("1", "true", "yes")
+    school_mode = os.environ.get("HEMBUDGET_SCHOOL_MODE", "").lower() in ("1", "true", "yes")
     lan = os.environ.get("HEMBUDGET_LAN", "").lower() in ("1", "true", "yes")
-    if demo:
+    if demo or school_mode:
         cors_kwargs: dict = {
             "allow_origins": ["*"],
             "allow_credentials": False,
@@ -78,6 +79,43 @@ def build_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # School-mode middleware: sätt ContextVar för aktuell elev-DB
+    # baserat på bearer-token + X-As-Student-header. MÅSTE vara
+    # middleware (inte Depends) — FastAPI kör sync deps i en threadpool
+    # med kopierad context, så ContextVar-set där propagerar inte ut.
+    if school_mode:
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from .api.deps import _ACTIVE_TOKENS, _token_info
+        from .school.engines import set_current_student, master_session
+        from .school.models import Student
+
+        class StudentScopeMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                set_current_student(None)
+                auth = request.headers.get("authorization")
+                x_as = request.headers.get("x-as-student")
+                if auth and auth.lower().startswith("bearer "):
+                    info = _token_info(auth[7:])
+                    if info:
+                        if info.role == "student":
+                            set_current_student(info.student_id)
+                        elif info.role == "teacher" and x_as:
+                            try:
+                                sid = int(x_as)
+                            except ValueError:
+                                sid = None
+                            if sid:
+                                with master_session() as s:
+                                    stu = s.query(Student).filter(
+                                        Student.id == sid,
+                                        Student.teacher_id == info.teacher_id,
+                                    ).first()
+                                    if stu:
+                                        set_current_student(sid)
+                return await call_next(request)
+
+        app.add_middleware(StudentScopeMiddleware)
+
     app.include_router(auth.router)
     app.include_router(transactions.router)
     app.include_router(upload.router)
@@ -97,6 +135,7 @@ def build_app() -> FastAPI:
     app.include_router(settings_kv.router)
     app.include_router(utility.router)
     app.include_router(admin.router)
+    app.include_router(school.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -175,6 +214,39 @@ def _demo_bootstrap() -> None:
             logging.getLogger(__name__).info("demo bootstrap: %s", result)
     except Exception:
         logging.getLogger(__name__).exception("demo bootstrap failed")
+
+
+@app.on_event("startup")
+def _school_bootstrap() -> None:
+    """Vid school-mode: initiera master-DB + skapa första läraren från
+    env-vars om de är satta och inga lärare finns."""
+    import os as _os
+    try:
+        from .school import is_enabled
+        if not is_enabled():
+            return
+        from .school.engines import init_master_engine, master_session
+        from .school.models import Teacher
+        from .security.crypto import hash_password
+
+        init_master_engine()
+
+        email = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_EMAIL")
+        password = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_PASSWORD")
+        name = _os.environ.get("HEMBUDGET_BOOTSTRAP_TEACHER_NAME", "Lärare")
+        if email and password:
+            with master_session() as s:
+                if s.query(Teacher).count() == 0:
+                    s.add(Teacher(
+                        email=email.lower(),
+                        name=name,
+                        password_hash=hash_password(password),
+                    ))
+                    logging.getLogger(__name__).info(
+                        "school: created bootstrap teacher %s", email,
+                    )
+    except Exception:
+        logging.getLogger(__name__).exception("school bootstrap failed")
 
 
 def main() -> None:

@@ -1,10 +1,30 @@
 import { useEffect, useState } from "react";
-import { api, clearToken, getToken, setToken } from "@/api/client";
+import {
+  api,
+  clearRole,
+  clearToken,
+  getAsStudent,
+  getRole,
+  getToken,
+  setAsStudent,
+  setRole,
+  setToken,
+} from "@/api/client";
+
+type SchoolStatus = {
+  school_mode: boolean;
+  teacher_count?: number;
+  bootstrap_ready?: boolean;
+};
 
 export function useAuth() {
   const [token, setTokenState] = useState<string | null>(getToken());
+  const [role, setRoleState] = useState<"teacher" | "student" | null>(getRole());
+  const [asStudent, setAsStudentState] = useState<number | null>(getAsStudent());
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [demoMode, setDemoMode] = useState(false);
+  const [schoolMode, setSchoolMode] = useState(false);
+  const [schoolStatus, setSchoolStatus] = useState<SchoolStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState<string | null>(null);
 
@@ -21,6 +41,13 @@ export function useAuth() {
             setToken("demo");
             setTokenState("demo");
           }
+        }
+        try {
+          const ss = await api<SchoolStatus>("/school/status");
+          setSchoolStatus(ss);
+          setSchoolMode(ss.school_mode);
+        } catch {
+          /* endpoint kan saknas i äldre backend */
         }
       } catch (e) {
         setInitialized(null);
@@ -52,21 +79,81 @@ export function useAuth() {
     return res.token;
   }
 
+  async function teacherLogin(email: string, password: string) {
+    const res = await api<{ token: string }>("/teacher/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    setToken(res.token);
+    setTokenState(res.token);
+    setRole("teacher");
+    setRoleState("teacher");
+    return res.token;
+  }
+
+  async function teacherBootstrap(
+    bootstrap_secret: string,
+    email: string,
+    password: string,
+    name: string,
+  ) {
+    const res = await api<{ token: string }>("/teacher/bootstrap", {
+      method: "POST",
+      body: JSON.stringify({ bootstrap_secret, email, password, name }),
+    });
+    setToken(res.token);
+    setTokenState(res.token);
+    setRole("teacher");
+    setRoleState("teacher");
+    return res.token;
+  }
+
+  async function studentLogin(login_code: string) {
+    const res = await api<{ token: string }>("/student/login", {
+      method: "POST",
+      body: JSON.stringify({ login_code }),
+    });
+    setToken(res.token);
+    setTokenState(res.token);
+    setRole("student");
+    setRoleState("student");
+    setAsStudent(null);
+    setAsStudentState(null);
+    return res.token;
+  }
+
+  function impersonate(studentId: number | null) {
+    setAsStudent(studentId);
+    setAsStudentState(studentId);
+  }
+
   function logout() {
     api("/logout", { method: "POST" }).catch(() => undefined);
     clearToken();
+    clearRole();
+    setAsStudent(null);
     setTokenState(null);
+    setRoleState(null);
+    setAsStudentState(null);
   }
 
   return {
     token,
+    role,
+    asStudent,
     isAuthenticated: Boolean(token) || demoMode,
     initialized,
     demoMode,
+    schoolMode,
+    schoolStatus,
     loading,
     backendError,
     login,
     initialize,
+    teacherLogin,
+    teacherBootstrap,
+    studentLogin,
+    impersonate,
     logout,
   };
 }

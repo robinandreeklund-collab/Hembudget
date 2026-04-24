@@ -1,6 +1,30 @@
 const TOKEN_KEY = "hembudget_token";
 const PORT_KEY = "hembudget_api_port";
 const BASE_OVERRIDE_KEY = "hembudget_api_base_override";
+const ROLE_KEY = "hembudget_role";
+const AS_STUDENT_KEY = "hembudget_as_student";
+
+export type Role = "teacher" | "student";
+
+export function getRole(): Role | null {
+  const v = sessionStorage.getItem(ROLE_KEY);
+  return v === "teacher" || v === "student" ? v : null;
+}
+export function setRole(role: Role): void {
+  sessionStorage.setItem(ROLE_KEY, role);
+}
+export function clearRole(): void {
+  sessionStorage.removeItem(ROLE_KEY);
+}
+
+export function getAsStudent(): number | null {
+  const v = sessionStorage.getItem(AS_STUDENT_KEY);
+  return v ? parseInt(v, 10) : null;
+}
+export function setAsStudent(id: number | null): void {
+  if (id === null) sessionStorage.removeItem(AS_STUDENT_KEY);
+  else sessionStorage.setItem(AS_STUDENT_KEY, String(id));
+}
 
 export function setApiBaseOverride(url: string | null): void {
   if (url) localStorage.setItem(BASE_OVERRIDE_KEY, url);
@@ -72,6 +96,8 @@ export async function api<T = unknown>(
   headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
+  const asStudent = getAsStudent();
+  if (asStudent) headers.set("X-As-Student", String(asStudent));
 
   let res: Response;
   try {
@@ -113,6 +139,8 @@ export async function uploadFile<T = unknown>(
   const headers = new Headers();
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
+  const asStudent = getAsStudent();
+  if (asStudent) headers.set("X-As-Student", String(asStudent));
   const res = await fetch(`${apiBase()}${path}`, { method: "POST", body: form, headers });
   if (!res.ok) {
     if (res.status === 401 && token) {

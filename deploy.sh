@@ -120,10 +120,54 @@ gcloud services enable \
 ok "API:er aktiva"
 
 # ----- 5. Deploy -----
+# MODE: "demo" (default, öppet demo-läge) eller "school" (lärare/elev-läge
+# med multi-tenant-DB:er). Styrs via env-var MODE=school ./deploy.sh.
+MODE="${MODE:-demo}"
+
+if [[ "$MODE" == "school" ]]; then
+    # Skol-läge kräver:
+    #   - max-instances 1 (SQLite-filer per elev delas inte mellan instanser)
+    #   - bootstrap-secret (skyddar första lärarregistreringen)
+    #   - ev. bootstrap-teacher (email+password) för automatisk skapelse vid start
+    BOOTSTRAP_SECRET="${BOOTSTRAP_SECRET:-$(openssl rand -hex 16)}"
+    TEACHER_EMAIL="${TEACHER_EMAIL:-}"
+    TEACHER_PASSWORD="${TEACHER_PASSWORD:-}"
+    TEACHER_NAME="${TEACHER_NAME:-Lärare}"
+
+    ENV_VARS="HEMBUDGET_SCHOOL_MODE=1"
+    ENV_VARS+=",HEMBUDGET_SERVE_STATIC=1"
+    ENV_VARS+=",HEMBUDGET_HOST=0.0.0.0"
+    ENV_VARS+=",HEMBUDGET_DATA_DIR=/tmp/hembudget"
+    ENV_VARS+=",HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1"
+    ENV_VARS+=",HEMBUDGET_BOOTSTRAP_SECRET=$BOOTSTRAP_SECRET"
+    if [[ -n "$TEACHER_EMAIL" && -n "$TEACHER_PASSWORD" ]]; then
+        ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_EMAIL=$TEACHER_EMAIL"
+        ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_PASSWORD=$TEACHER_PASSWORD"
+        ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
+    fi
+
+    # Skol-läge låser till 1 instans — per-elev-SQLite delas inte över instanser
+    MAX_INSTANCES=1
+    MIN_INSTANCES=1
+
+    info "MODE=school: lärare/elev-läge aktiveras"
+    info "  Bootstrap-kod: $BOOTSTRAP_SECRET (spara den — behövs för första lärarinlog)"
+    if [[ -n "$TEACHER_EMAIL" ]]; then
+        info "  Bootstrap-lärare: $TEACHER_EMAIL (skapas automatiskt vid första start)"
+    fi
+else
+    ENV_VARS="HEMBUDGET_DEMO_MODE=1"
+    ENV_VARS+=",HEMBUDGET_SERVE_STATIC=1"
+    ENV_VARS+=",HEMBUDGET_HOST=0.0.0.0"
+    ENV_VARS+=",HEMBUDGET_DATA_DIR=/tmp/hembudget"
+    ENV_VARS+=",HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1"
+fi
+
 echo
 info "Startar bygge + deploy. Detta tar 3-5 minuter…"
 info "  Service : $SERVICE_NAME"
 info "  Region  : $REGION"
+info "  Läge    : $MODE"
 info "  Minne   : $MEMORY   CPU: $CPU"
 info "  Instans : $MIN_INSTANCES - $MAX_INSTANCES  (auto-skalning)"
 echo
@@ -139,7 +183,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --timeout "$TIMEOUT" \
     --max-instances "$MAX_INSTANCES" \
     --min-instances "$MIN_INSTANCES" \
-    --set-env-vars "HEMBUDGET_DEMO_MODE=1,HEMBUDGET_SERVE_STATIC=1,HEMBUDGET_HOST=0.0.0.0,HEMBUDGET_DATA_DIR=/tmp/hembudget,HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1" \
+    --set-env-vars "$ENV_VARS" \
     --port 8080 \
     --quiet
 
@@ -150,8 +194,14 @@ echo
 printf "%b\n" "${C_BOLD}${C_GREEN}✓ Deploy klart!${C_RESET}"
 printf "%b\n" "${C_BOLD}Publik URL:${C_RESET} ${C_BLUE}$URL${C_RESET}"
 echo
-echo "Dela med eleverna. Appen är i demo-läge (ingen inloggning, öppet)."
-echo "Ephemeral databas — data resetas när Cloud Run-instansen startar om."
+if [[ "$MODE" == "school" ]]; then
+    echo "Skol-läge aktivt. Logga in som lärare på URL:en ovan."
+    echo "Bootstrap-kod (för första lärarregistrering): $BOOTSTRAP_SECRET"
+else
+    echo "Dela med eleverna. Appen är i demo-läge (ingen inloggning, öppet)."
+fi
+echo "OBS: /tmp/hembudget är ephemeral — data resetas när instansen startar om."
+echo "För persistens i skolläge: montera Cloud Storage-volym (se README)."
 echo
 echo "Uppdatera:        ./deploy.sh"
 echo "Se loggar:        gcloud run services logs read $SERVICE_NAME --region $REGION --limit 50"

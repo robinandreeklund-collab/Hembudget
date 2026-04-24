@@ -78,6 +78,25 @@ def get_engine() -> Engine:
 
 @contextmanager
 def session_scope() -> Iterator[Session]:
+    # School-mode: om aktuell request har en current_student_id i context,
+    # öppna elevens egna SQLite-fil i stället för den globala.
+    from ..school import is_enabled as _school_enabled
+    if _school_enabled():
+        from ..school.engines import get_current_student, get_student_session
+        sid = get_current_student()
+        if sid is not None:
+            maker = get_student_session(sid)
+            session = maker()
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+            return
+
     if _SessionLocal is None:
         init_engine()
     assert _SessionLocal is not None
