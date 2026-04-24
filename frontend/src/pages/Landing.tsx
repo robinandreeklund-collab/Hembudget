@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import {
-  AlertTriangle, GraduationCap, Lightbulb, Sparkles,
+  AlertTriangle, BarChart3, Briefcase, GraduationCap,
+  Home, Lightbulb, MessageCircle, PiggyBank, Receipt, Sparkles,
+  TrendingUp, Users,
 } from "lucide-react";
 
 export default function Landing() {
@@ -132,7 +134,117 @@ function WhySection() {
     </section>
   );
 }
-function FeaturesSection() { return null; }
+function FeaturesSection() {
+  const features = [
+    {
+      icon: <Briefcase className="w-6 h-6" />,
+      title: "Unik elev-profil",
+      body: "Varje elev får ett slumpat yrke, arbetsgivare, lön, stad och livssituation. Ingen annan i klassen har samma.",
+      color: "brand",
+    },
+    {
+      icon: <Receipt className="w-6 h-6" />,
+      title: "Riktiga PDF:er",
+      body: "Läraren genererar kontoutdrag, lönespec, lån och kreditkortsfakturor som eleverna själva importerar.",
+      color: "emerald",
+    },
+    {
+      icon: <PiggyBank className="w-6 h-6" />,
+      title: "Budget mot verklighet",
+      body: "Eleven sätter sin egen månadsbudget baserat på Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp.",
+      color: "amber",
+    },
+    {
+      icon: <Home className="w-6 h-6" />,
+      title: "Bolåne-beslut",
+      body: "Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten.",
+      color: "rose",
+    },
+    {
+      icon: <AlertTriangle className="w-6 h-6" />,
+      title: "Livet händer",
+      body: "Diskmaskin går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleverna får öva på att hantera oväntat.",
+      color: "purple",
+    },
+    {
+      icon: <Users className="w-6 h-6" />,
+      title: "Familjer",
+      body: "Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål.",
+      color: "sky",
+    },
+    {
+      icon: <BarChart3 className="w-6 h-6" />,
+      title: "Lärarens översikt",
+      body: "Klassöversikt med status per elev och uppdrag. Facit för varje kategorisering — grönt/rött på en blick.",
+      color: "brand",
+    },
+    {
+      icon: <MessageCircle className="w-6 h-6" />,
+      title: "Feedback-chat",
+      body: "Eleven kan ställa frågor direkt till läraren. Läraren svarar + ger feedback på enskilda transaktioner.",
+      color: "emerald",
+    },
+    {
+      icon: <TrendingUp className="w-6 h-6" />,
+      title: "Sparmål & uppdrag",
+      body: "Läraren sätter tydliga uppdrag: 'spara 2 000 kr', 'balansera månaden', 'kategorisera alla köp'. Statusen uppdateras automatiskt.",
+      color: "amber",
+    },
+  ];
+
+  return (
+    <section id="funktioner" className="max-w-6xl mx-auto px-6 py-16">
+      <div className="text-center mb-10">
+        <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
+          <Sparkles className="w-4 h-4" /> Funktioner
+        </div>
+        <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
+          Allt du behöver för att göra ekonomi begripligt
+        </h2>
+        <p className="mt-4 text-slate-600 max-w-2xl mx-auto">
+          Från första lönen till komplexa bolåneval — varje funktion är byggd
+          för att eleven ska lära genom handling.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {features.map((f, i) => (
+          <FeatureCard key={i} {...f} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FeatureCard({
+  icon, title, body, color,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  color: string;
+}) {
+  const colorMap: Record<string, string> = {
+    brand: "bg-brand-100 text-brand-600",
+    emerald: "bg-emerald-100 text-emerald-600",
+    amber: "bg-amber-100 text-amber-600",
+    rose: "bg-rose-100 text-rose-600",
+    purple: "bg-purple-100 text-purple-600",
+    sky: "bg-sky-100 text-sky-600",
+  };
+  return (
+    <div className="group bg-white border border-slate-200 rounded-xl p-5 hover:border-brand-400 hover:shadow-lg transition-all duration-300">
+      <div
+        className={`inline-flex w-12 h-12 rounded-lg items-center justify-center mb-3 ${
+          colorMap[color] ?? "bg-brand-100 text-brand-600"
+        } group-hover:scale-110 transition-transform`}
+      >
+        {icon}
+      </div>
+      <h3 className="font-semibold text-slate-900 mb-1">{title}</h3>
+      <p className="text-sm text-slate-600 leading-relaxed">{body}</p>
+    </div>
+  );
+}
 function FlowSection() { return null; }
 function CtaSection() { return null; }
 
