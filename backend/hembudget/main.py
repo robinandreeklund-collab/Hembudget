@@ -79,39 +79,48 @@ def build_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # School-mode middleware: sätt ContextVar för aktuell elev-DB
-    # baserat på bearer-token + X-As-Student-header. MÅSTE vara
-    # middleware (inte Depends) — FastAPI kör sync deps i en threadpool
-    # med kopierad context, så ContextVar-set där propagerar inte ut.
+    # School-mode middleware: sätt ContextVar för aktuell scope-DB
+    # baserat på bearer-token + X-As-Student-header. Familjemedlemmar
+    # delar samma scope; solo-elever får sin egen.
+    # MÅSTE vara middleware (inte Depends) — FastAPI kör sync deps i en
+    # threadpool med kopierad context, så ContextVar-set där propagerar
+    # inte ut.
     if school_mode:
         from starlette.middleware.base import BaseHTTPMiddleware
-        from .api.deps import _ACTIVE_TOKENS, _token_info
-        from .school.engines import set_current_student, master_session
+        from .api.deps import _token_info
+        from .school.engines import (
+            master_session, scope_for_student, set_current_scope,
+        )
         from .school.models import Student
 
         class StudentScopeMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
-                set_current_student(None)
+                set_current_scope(None)
                 auth = request.headers.get("authorization")
                 x_as = request.headers.get("x-as-student")
                 if auth and auth.lower().startswith("bearer "):
                     info = _token_info(auth[7:])
                     if info:
+                        target_id: int | None = None
                         if info.role == "student":
-                            set_current_student(info.student_id)
+                            target_id = info.student_id
                         elif info.role == "teacher" and x_as:
                             try:
-                                sid = int(x_as)
+                                target_id = int(x_as)
                             except ValueError:
-                                sid = None
-                            if sid:
-                                with master_session() as s:
-                                    stu = s.query(Student).filter(
-                                        Student.id == sid,
+                                target_id = None
+                        if target_id is not None:
+                            with master_session() as s:
+                                q = s.query(Student).filter(
+                                    Student.id == target_id,
+                                )
+                                if info.role == "teacher":
+                                    q = q.filter(
                                         Student.teacher_id == info.teacher_id,
-                                    ).first()
-                                    if stu:
-                                        set_current_student(sid)
+                                    )
+                                stu = q.first()
+                                if stu:
+                                    set_current_scope(scope_for_student(stu))
                 return await call_next(request)
 
         app.add_middleware(StudentScopeMiddleware)
