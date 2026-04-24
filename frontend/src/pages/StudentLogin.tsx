@@ -2,19 +2,25 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, GraduationCap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { Turnstile } from "@/components/Turnstile";
 
 export default function StudentLogin() {
-  const { studentLogin } = useAuth();
+  const { studentLogin, schoolStatus } = useAuth();
   const [code, setCode] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const siteKey = schoolStatus?.turnstile_site_key ?? "";
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setBusy(true);
     try {
-      await studentLogin(code.toUpperCase().trim());
+      await studentLogin(
+        code.toUpperCase().trim(),
+        turnstileToken ?? undefined,
+      );
       window.location.reload();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Inloggning misslyckades");
@@ -51,6 +57,11 @@ export default function StudentLogin() {
             autoFocus
             maxLength={6}
             className="w-full px-3 py-4 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none font-mono tracking-[0.4em] text-center text-2xl"
+          />
+          <Turnstile
+            siteKey={siteKey}
+            onToken={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
           />
           {err && <div className="text-sm text-rose-600">{err}</div>}
           <button

@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ..school import is_enabled as school_enabled
@@ -30,6 +30,7 @@ from ..school.engines import master_session
 from ..school.models import (
     Module, ModuleStep, Student, StudentStepProgress, Teacher,
 )
+from ..security.rate_limit import RULES_STUDENT_ASK, check_rate_limit
 from .deps import TokenInfo, require_teacher, require_token
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -222,9 +223,13 @@ class AskOut(BaseModel):
 @router.post("/student/ask", response_model=AskOut)
 def ask_student(
     payload: AskIn,
+    request: Request,
     info: TokenInfo = Depends(require_token),
 ) -> AskOut:
     _require_school()
+    # Rate-limit: varje elev/lärare får max 15 frågor/minut per IP så
+    # ingen kan "kosta ihjäl" lärarens Anthropic-konto.
+    check_rate_limit(request, "ai-ask", RULES_STUDENT_ASK)
     # Både elever och lärare får fråga — men läraren räknas på sitt
     # eget konto och eleven räknas på sin lärares.
     teacher_id = _teacher_id_for_info(info)

@@ -20,7 +20,7 @@ import string
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
 from ..school import is_enabled as school_enabled
@@ -57,6 +57,13 @@ from ..school.models import (
 from ..school.profile_fixtures import generate_profile
 from ..school.tax import compute_net_salary
 from ..security.crypto import hash_password, random_token, verify_password
+from ..security.rate_limit import (
+    RULES_BOOTSTRAP,
+    RULES_LOGIN,
+    check_rate_limit,
+    turnstile_site_key,
+    verify_turnstile,
+)
 from .deps import (
     TokenInfo,
     register_token,
@@ -290,7 +297,9 @@ def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
 # ---------- Teacher: bootstrap + login ----------
 
 @router.post("/teacher/bootstrap", response_model=TeacherAuthOut)
-def bootstrap_teacher(payload: TeacherBootstrapIn) -> TeacherAuthOut:
+def bootstrap_teacher(
+    payload: TeacherBootstrapIn, request: Request,
+) -> TeacherAuthOut:
     """Skapa första lärarkontot.
 
     - Om HEMBUDGET_BOOTSTRAP_SECRET är satt i env måste payloadens
@@ -299,6 +308,10 @@ def bootstrap_teacher(payload: TeacherBootstrapIn) -> TeacherAuthOut:
       kan första besökaren skapa kontot direkt från UI.
     - 410 Gone så snart minst en lärare finns."""
     _require_school_mode()
+    # Rate-limit + Turnstile för bootstrap — annars kan en angripare
+    # race:a mot en nyuppsatt server innan admin hunnit skapa kontot.
+    check_rate_limit(request, "bootstrap", RULES_BOOTSTRAP)
+    verify_turnstile(request, required=True)
     expected = os.environ.get("HEMBUDGET_BOOTSTRAP_SECRET", "")
     if expected:
         if not payload.bootstrap_secret or payload.bootstrap_secret != expected:
@@ -332,8 +345,13 @@ def bootstrap_teacher(payload: TeacherBootstrapIn) -> TeacherAuthOut:
 
 
 @router.post("/teacher/login", response_model=TeacherAuthOut)
-def teacher_login(payload: TeacherLoginIn) -> TeacherAuthOut:
+def teacher_login(
+    payload: TeacherLoginIn, request: Request,
+) -> TeacherAuthOut:
     _require_school_mode()
+    # Rate-limit login per IP — brute-force-skydd.
+    check_rate_limit(request, "teacher-login", RULES_LOGIN)
+    verify_turnstile(request, required=True)
     with master_session() as s:
         teacher = (
             s.query(Teacher).filter(Teacher.email == payload.email.lower()).first()
@@ -2653,8 +2671,14 @@ def generate_month_deprecated(
 # ---------- Student login ----------
 
 @router.post("/student/login", response_model=StudentAuthOut)
-def student_login(payload: StudentLoginIn) -> StudentAuthOut:
+def student_login(
+    payload: StudentLoginIn, request: Request,
+) -> StudentAuthOut:
     _require_school_mode()
+    # Elev-loginkoden är kort (6 tecken) → sårbar för brute force.
+    # Rate-limit + Turnstile skyddar utan att krångla för eleven.
+    check_rate_limit(request, "student-login", RULES_LOGIN)
+    verify_turnstile(request, required=False)
     code = payload.login_code.strip().upper()
     with master_session() as s:
         student = s.query(Student).filter(Student.login_code == code).first()
@@ -2705,6 +2729,10 @@ def school_status() -> dict:
             info["bootstrap_requires_secret"] = bool(
                 os.environ.get("HEMBUDGET_BOOTSTRAP_SECRET")
             )
+    # Publik Turnstile-site-key (tom sträng = bot-skyddet är av).
+    # Frontend läser detta vid uppstart för att rendera challenge-
+    # widgeten på login-sidorna.
+    info["turnstile_site_key"] = turnstile_site_key()
     return info
 
 

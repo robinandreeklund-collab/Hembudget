@@ -88,20 +88,24 @@ export class ApiError extends Error {
   }
 }
 
+export type ApiOptions = RequestInit & { turnstileToken?: string };
+
 export async function api<T = unknown>(
   path: string,
-  options: RequestInit = {},
+  options: ApiOptions = {},
 ): Promise<T> {
-  const headers = new Headers(options.headers);
+  const { turnstileToken, ...restOptions } = options;
+  const headers = new Headers(restOptions.headers);
   headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const asStudent = getAsStudent();
   if (asStudent) headers.set("X-As-Student", String(asStudent));
+  if (turnstileToken) headers.set("X-Turnstile-Token", turnstileToken);
 
   let res: Response;
   try {
-    res = await fetch(`${apiBase()}${path}`, { ...options, headers });
+    res = await fetch(`${apiBase()}${path}`, { ...restOptions, headers });
   } catch (err) {
     // Browser-nätverksfel (typisk "Failed to fetch"): kabelfel, backend
     // avstängd, CORS-preflight misslyckad eller tunnel nere. Ge

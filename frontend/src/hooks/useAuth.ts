@@ -16,6 +16,7 @@ type SchoolStatus = {
   teacher_count?: number;
   bootstrap_ready?: boolean;
   bootstrap_requires_secret?: boolean;
+  turnstile_site_key?: string;
 };
 
 export function useAuth() {
@@ -113,10 +114,13 @@ export function useAuth() {
     return res.token;
   }
 
-  async function teacherLogin(email: string, password: string) {
+  async function teacherLogin(
+    email: string, password: string, turnstileToken?: string,
+  ) {
     const res = await api<{ token: string }>("/teacher/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+      turnstileToken,
     });
     setToken(res.token);
     setTokenState(res.token);
@@ -130,10 +134,12 @@ export function useAuth() {
     email: string,
     password: string,
     name: string,
+    turnstileToken?: string,
   ) {
     const res = await api<{ token: string }>("/teacher/bootstrap", {
       method: "POST",
       body: JSON.stringify({ bootstrap_secret, email, password, name }),
+      turnstileToken,
     });
     setToken(res.token);
     setTokenState(res.token);
@@ -169,10 +175,11 @@ export function useAuth() {
     return res.token;
   }
 
-  async function studentLogin(login_code: string) {
+  async function studentLogin(login_code: string, turnstileToken?: string) {
     const res = await api<{ token: string }>("/student/login", {
       method: "POST",
       body: JSON.stringify({ login_code }),
+      turnstileToken,
     });
     setToken(res.token);
     setTokenState(res.token);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Users } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { Turnstile } from "@/components/Turnstile";
 
 type Mode = "login" | "bootstrap";
 
@@ -15,6 +16,8 @@ export default function TeacherLogin() {
   const [confirm, setConfirm] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const siteKey = schoolStatus?.turnstile_site_key ?? "";
 
   // Om ingen lärare finns än, välj bootstrap automatiskt
   useEffect(() => {
@@ -28,14 +31,20 @@ export default function TeacherLogin() {
     setErr(null);
     setBusy(true);
     try {
+      if (siteKey && !turnstileToken) {
+        throw new Error("Säkerhetskontroll pågår — vänta en sekund och försök igen.");
+      }
       if (mode === "bootstrap") {
         if (password.length < 8)
           throw new Error("Lösenord måste vara minst 8 tecken.");
         if (password !== confirm)
           throw new Error("Lösenorden matchar inte.");
-        await teacherBootstrap(secret, email, password, name || "Lärare");
+        await teacherBootstrap(
+          secret, email, password, name || "Lärare",
+          turnstileToken ?? undefined,
+        );
       } else {
-        await teacherLogin(email, password);
+        await teacherLogin(email, password, turnstileToken ?? undefined);
       }
       window.location.reload();
     } catch (e: unknown) {
@@ -118,9 +127,14 @@ export default function TeacherLogin() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
             />
           )}
+          <Turnstile
+            siteKey={siteKey}
+            onToken={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+          />
           {err && <div className="text-sm text-rose-600">{err}</div>}
           <button
-            disabled={busy}
+            disabled={busy || (Boolean(siteKey) && !turnstileToken)}
             className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2.5 font-medium disabled:opacity-50"
           >
             {busy ? "Arbetar…" : mode === "bootstrap" ? "Skapa lärarkonto" : "Logga in"}
