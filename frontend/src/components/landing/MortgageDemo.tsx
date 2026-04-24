@@ -108,7 +108,7 @@ export default function MortgageDemo() {
 }
 
 function ChoiceCard({
-  label, rate, selected, highlight, result, best,
+  label, rate, selected, result, best,
 }: {
   label: string; rate: number;
   selected: boolean; highlight?: boolean;

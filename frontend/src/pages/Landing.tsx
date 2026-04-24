@@ -9,6 +9,7 @@ import BudgetDemo from "@/components/landing/BudgetDemo";
 import PdfImportDemo from "@/components/landing/PdfImportDemo";
 import TeacherDemo from "@/components/landing/TeacherDemo";
 import MortgageDemo from "@/components/landing/MortgageDemo";
+import { useReveal } from "@/hooks/useReveal";
 
 export default function Landing() {
   return (
@@ -143,67 +144,49 @@ function WhySection() {
     </section>
   );
 }
+type Feat = {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  color: string;
+  anim: "bounce" | "wiggle" | "spin";
+  pulse?: boolean;
+};
+
 function FeaturesSection() {
-  const features = [
-    {
-      icon: <Briefcase className="w-6 h-6" />,
-      title: "Unik elev-profil",
+  const features: Feat[] = [
+    { icon: <Briefcase className="w-6 h-6" />, title: "Unik elev-profil",
       body: "Varje elev får ett slumpat yrke, arbetsgivare, lön, stad och livssituation. Ingen annan i klassen har samma.",
-      color: "brand",
-    },
-    {
-      icon: <Receipt className="w-6 h-6" />,
-      title: "Riktiga PDF:er",
+      color: "brand", anim: "bounce" },
+    { icon: <Receipt className="w-6 h-6" />, title: "Riktiga PDF:er",
       body: "Läraren genererar kontoutdrag, lönespec, lån och kreditkortsfakturor som eleverna själva importerar.",
-      color: "emerald",
-    },
-    {
-      icon: <PiggyBank className="w-6 h-6" />,
-      title: "Budget mot verklighet",
+      color: "emerald", anim: "wiggle" },
+    { icon: <PiggyBank className="w-6 h-6" />, title: "Budget mot verklighet",
       body: "Eleven sätter sin egen månadsbudget baserat på Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp.",
-      color: "amber",
-    },
-    {
-      icon: <Home className="w-6 h-6" />,
-      title: "Bolåne-beslut",
+      color: "amber", anim: "bounce" },
+    { icon: <Home className="w-6 h-6" />, title: "Bolåne-beslut",
       body: "Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten.",
-      color: "rose",
-    },
-    {
-      icon: <AlertTriangle className="w-6 h-6" />,
-      title: "Livet händer",
+      color: "rose", anim: "wiggle", pulse: true },
+    { icon: <AlertTriangle className="w-6 h-6" />, title: "Livet händer",
       body: "Diskmaskin går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleverna får öva på att hantera oväntat.",
-      color: "purple",
-    },
-    {
-      icon: <Users className="w-6 h-6" />,
-      title: "Familjer",
+      color: "purple", anim: "wiggle" },
+    { icon: <Users className="w-6 h-6" />, title: "Familjer",
       body: "Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål.",
-      color: "sky",
-    },
-    {
-      icon: <BarChart3 className="w-6 h-6" />,
-      title: "Lärarens översikt",
+      color: "sky", anim: "bounce" },
+    { icon: <BarChart3 className="w-6 h-6" />, title: "Lärarens översikt",
       body: "Klassöversikt med status per elev och uppdrag. Facit för varje kategorisering — grönt/rött på en blick.",
-      color: "brand",
-    },
-    {
-      icon: <MessageCircle className="w-6 h-6" />,
-      title: "Feedback-chat",
+      color: "brand", anim: "spin" },
+    { icon: <MessageCircle className="w-6 h-6" />, title: "Feedback-chat",
       body: "Eleven kan ställa frågor direkt till läraren. Läraren svarar + ger feedback på enskilda transaktioner.",
-      color: "emerald",
-    },
-    {
-      icon: <TrendingUp className="w-6 h-6" />,
-      title: "Sparmål & uppdrag",
+      color: "emerald", anim: "wiggle", pulse: true },
+    { icon: <TrendingUp className="w-6 h-6" />, title: "Sparmål & uppdrag",
       body: "Läraren sätter tydliga uppdrag: 'spara 2 000 kr', 'balansera månaden', 'kategorisera alla köp'. Statusen uppdateras automatiskt.",
-      color: "amber",
-    },
+      color: "amber", anim: "bounce" },
   ];
 
   return (
-    <section id="funktioner" className="max-w-6xl mx-auto px-6 py-16">
-      <div className="text-center mb-10">
+    <section id="funktioner" className="max-w-6xl mx-auto px-6 py-20">
+      <div className="text-center mb-12">
         <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
           <Sparkles className="w-4 h-4" /> Funktioner
         </div>
@@ -217,7 +200,7 @@ function FeaturesSection() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {features.map((f, i) => (
-          <FeatureCard key={i} {...f} />
+          <FeatureCard key={i} index={i} {...f} />
         ))}
       </div>
     </section>
@@ -225,13 +208,17 @@ function FeaturesSection() {
 }
 
 function FeatureCard({
-  icon, title, body, color,
+  icon, title, body, color, anim, pulse, index,
 }: {
   icon: React.ReactNode;
   title: string;
   body: string;
   color: string;
+  anim?: "bounce" | "wiggle" | "spin";
+  pulse?: boolean;
+  index: number;
 }) {
+  const ref = useReveal<HTMLDivElement>();
   const colorMap: Record<string, string> = {
     brand: "bg-brand-100 text-brand-600",
     emerald: "bg-emerald-100 text-emerald-600",
@@ -240,14 +227,22 @@ function FeatureCard({
     purple: "bg-purple-100 text-purple-600",
     sky: "bg-sky-100 text-sky-600",
   };
+  const animClass =
+    anim === "bounce" ? "animate-hover-bounce" :
+    anim === "wiggle" ? "animate-hover-wiggle" :
+    anim === "spin" ? "animate-hover-spin" : "";
   return (
-    <div className="group bg-white border border-slate-200 rounded-xl p-5 hover:border-brand-400 hover:shadow-lg transition-all duration-300">
+    <div
+      ref={ref}
+      className="reveal group bg-white border border-slate-200 rounded-xl p-5 hover:border-brand-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+      style={{ transitionDelay: `${(index % 3) * 60}ms` }}
+    >
       <div
-        className={`inline-flex w-12 h-12 rounded-lg items-center justify-center mb-3 ${
+        className={`relative inline-flex w-12 h-12 rounded-lg items-center justify-center mb-3 ${
           colorMap[color] ?? "bg-brand-100 text-brand-600"
-        } group-hover:scale-110 transition-transform`}
+        } group-hover:scale-110 transition-transform ${pulse ? "pulse-ring" : ""}`}
       >
-        {icon}
+        <span className={animClass}>{icon}</span>
       </div>
       <h3 className="font-semibold text-slate-900 mb-1">{title}</h3>
       <p className="text-sm text-slate-600 leading-relaxed">{body}</p>
