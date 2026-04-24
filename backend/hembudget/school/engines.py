@@ -218,6 +218,18 @@ def drop_scope_db(scope_key: str) -> None:
         path.unlink()
 
 
+def dispose_scope_engine(scope_key: str) -> None:
+    """Stäng engine + töm cachen MEN behåll filen på disk.
+    Används när en elev byter scope-nyckel (t.ex. flyttar till familj)
+    och vi inte vill läcka engine-handles. Filen ligger kvar ifall
+    eleven senare flyttar tillbaka, eller om en administratör vill
+    inspektera datat."""
+    eng = _scope_engines.pop(scope_key, None)
+    _scope_sessions.pop(scope_key, None)
+    if eng is not None:
+        eng.dispose()
+
+
 def reset_scope_db(scope_key: str) -> None:
     drop_scope_db(scope_key)
 

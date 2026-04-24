@@ -25,6 +25,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from ..school import is_enabled as school_enabled
 from ..school.engines import (
+    dispose_scope_engine,
     drop_scope_db,
     drop_student_db,
     get_scope_engine,
@@ -478,10 +479,18 @@ def update_student(
                 ).first()
                 if not fam:
                     raise HTTPException(404, "Family not found")
+            old_scope_key = scope_for_student(student)
             student.family_id = new_family_id
             s.flush()
+            new_scope_key = scope_for_student(student)
+            # Om scopet faktiskt ändrades: stäng gamla engine-handeln
+            # från cachen (behåll filen — innehåller ev. historik).
+            # Om eleven var ensam i gamla familje-scope kan vi även
+            # radera filen, men för säkerhets skull behåller vi den.
+            if old_scope_key != new_scope_key:
+                dispose_scope_engine(old_scope_key)
             # Säkerställ att nya scope-DB:n finns
-            get_scope_engine(scope_for_student(student))
+            get_scope_engine(new_scope_key)
         s.refresh(student)
         return _student_to_out(student)
 
@@ -636,6 +645,19 @@ def delete_family(
     family_id: int,
     info: TokenInfo = Depends(require_teacher),
 ) -> dict:
+    """Radera en familj. Kräver att den är TOM — alla medlemmar måste
+    först flyttas ur via /teacher/students/{id} PATCH {family_id: null}.
+
+    Anledning: familjens scope-DB innehåller hela hushållets data
+    (transaktioner, budget, lån). Om vi tillät radering med aktiva
+    medlemmar skulle vi antingen:
+    1. Radera datat (tidigare bugg — data-förlust)
+    2. Behålla filen som föräldralös (svårt att städa upp senare)
+    3. Försöka migrera datat till en medlems solo-DB (komplex, riskfylld
+       om flera medlemmar)
+
+    Enklast och säkrast: kräv explicit åtgärd av läraren.
+    """
     _require_school_mode()
     with master_session() as s:
         fam = s.query(Family).filter(
@@ -644,14 +666,16 @@ def delete_family(
         ).first()
         if not fam:
             raise HTTPException(404, "Family not found")
-        # Lös upp familjebanden men behåll eleverna (de blir solo igen
-        # och får sina egna scope-DB:er)
-        for member in list(fam.members):
-            member.family_id = None
-        s.flush()
-        # Radera familje-scope-DB:n
-        drop_scope_db(f"f_{family_id}")
+        if len(fam.members) > 0:
+            raise HTTPException(
+                400,
+                f"Familjen har fortfarande {len(fam.members)} medlem(mar). "
+                f"Flytta dem till solo eller annan familj innan du tar bort "
+                f"familjen. Detta skyddar deras data.",
+            )
         s.delete(fam)
+    # Säkert att radera scope-DB:n nu — ingen har data där längre
+    drop_scope_db(f"f_{family_id}")
     return {"ok": True}
 
 
@@ -916,9 +940,14 @@ def complete_onboarding(
         ).first()
         if not student:
             raise HTTPException(404, "Student not found")
+        # Säkerställ att profilen finns — behövs för housing_type-mappingen
+        # nedan och för att elevens framtida scenario-genereringar ska
+        # fungera. För elever skapade innan profile-fältet fanns.
+        if not student.profile:
+            _create_profile_for_student(s, student)
         student.onboarding_completed = True
         scope_key = scope_for_student(student)
-        housing_type = student.profile.housing_type if student.profile else None
+        housing_type = student.profile.housing_type
 
     # Spara budgeten till elevens scope-DB om vi fick värden
     if payload and payload.values:
