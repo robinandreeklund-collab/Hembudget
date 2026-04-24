@@ -22,13 +22,24 @@ import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
 import TibberCallback from "./pages/TibberCallback";
 import Teacher from "./pages/Teacher";
+import Onboarding from "./pages/Onboarding";
+import MyBatches from "./pages/MyBatches";
 
 export default function App() {
-  const { isAuthenticated, loading, initialized, backendError, role, asStudent } =
-    useAuth();
+  const {
+    isAuthenticated, loading, initialized, backendError,
+    role, asStudent, studentMeta,
+  } = useAuth();
   if (loading) return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
   if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
   if (!isAuthenticated) return <Login />;
+
+  // Elev som inte är klar med onboarding → tvingas dit
+  if (
+    role === "student" && studentMeta && !studentMeta.onboarding_completed
+  ) {
+    return <Onboarding />;
+  }
 
   // Lärare utan vald elev → bara lärarpanelen syns (ingen sidebar mot elevdata)
   const teacherRootOnly = role === "teacher" && !asStudent;
@@ -49,6 +60,7 @@ export default function App() {
             <>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/teacher" element={<Teacher />} />
+              <Route path="/my-batches" element={<MyBatches />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/import" element={<Import />} />

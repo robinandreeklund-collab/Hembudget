@@ -28,6 +28,28 @@ export function useAuth() {
   const [schoolStatus, setSchoolStatus] = useState<SchoolStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const [studentMeta, setStudentMeta] = useState<{
+    onboarding_completed: boolean;
+    family_id: number | null;
+  } | null>(null);
+
+  // Hämta /student/me när token+role finns för att veta onboarding-status
+  useEffect(() => {
+    if (token && role === "student") {
+      api<{ onboarding_completed: boolean; family_id: number | null }>(
+        "/student/me",
+      )
+        .then((m) =>
+          setStudentMeta({
+            onboarding_completed: m.onboarding_completed,
+            family_id: m.family_id,
+          }),
+        )
+        .catch(() => undefined);
+    } else {
+      setStudentMeta(null);
+    }
+  }, [token, role]);
 
   useEffect(() => {
     (async () => {
@@ -138,6 +160,21 @@ export function useAuth() {
     setAsStudentState(null);
   }
 
+  function refreshStudentMeta() {
+    if (token && role === "student") {
+      api<{ onboarding_completed: boolean; family_id: number | null }>(
+        "/student/me",
+      )
+        .then((m) =>
+          setStudentMeta({
+            onboarding_completed: m.onboarding_completed,
+            family_id: m.family_id,
+          }),
+        )
+        .catch(() => undefined);
+    }
+  }
+
   return {
     token,
     role,
@@ -147,6 +184,8 @@ export function useAuth() {
     demoMode,
     schoolMode,
     schoolStatus,
+    studentMeta,
+    refreshStudentMeta,
     loading,
     backendError,
     login,

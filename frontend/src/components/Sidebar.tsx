@@ -7,7 +7,9 @@ import {
   CalendarPlus,
   CircleDollarSign,
   FileDown,
+  GraduationCap,
   Home,
+  Inbox,
   Landmark,
   Link2,
   LineChart,
@@ -22,8 +24,11 @@ import {
   X,
 } from "lucide-react";
 import clsx from "clsx";
+import { useAuth } from "@/hooks/useAuth";
 
-const ITEMS = [
+type NavItem = { to: string; label: string; icon: typeof Home };
+
+const ALL_ITEMS: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: Home },
   { to: "/transactions", label: "Transaktioner", icon: Receipt },
   { to: "/import", label: "Importera", icon: Upload },
@@ -42,10 +47,35 @@ const ITEMS = [
   { to: "/settings", label: "Inställningar", icon: Cog },
 ];
 
+// Elev-vyn döljer importera/AI-chat/inställningar och lägger till
+// Dina dokument-sidan. Lärare-impersonation visar fortfarande hela
+// menyn så de kan se elevens hela värld.
+const STUDENT_HIDDEN = new Set(["/import", "/chat", "/settings", "/funds"]);
+
 function NavItems({ onClick }: { onClick?: () => void }) {
+  const { role, asStudent } = useAuth();
+  const isStudent = role === "student";
+  const isTeacherViewing = role === "teacher" && Boolean(asStudent);
+
+  let items: NavItem[];
+  if (isStudent) {
+    items = [
+      { to: "/my-batches", label: "Dina dokument", icon: Inbox },
+      ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),
+    ];
+  } else if (isTeacherViewing) {
+    items = [
+      { to: "/teacher", label: "Tillbaka till lärare", icon: GraduationCap },
+      { to: "/my-batches", label: "Elevens dokument", icon: Inbox },
+      ...ALL_ITEMS,
+    ];
+  } else {
+    items = ALL_ITEMS;
+  }
+
   return (
     <>
-      {ITEMS.map((it) => (
+      {items.map((it) => (
         <NavLink
           key={it.to}
           to={it.to}
@@ -68,13 +98,26 @@ function NavItems({ onClick }: { onClick?: () => void }) {
 }
 
 function Brand() {
+  const { role } = useAuth();
+  const isStudent = role === "student";
+  const title = isStudent ? "Ekonomilabbet" : "Hembudget";
+  const subtitle = isStudent
+    ? "Övning – inte riktiga pengar"
+    : "Lokalt • Nemotron Nano 3";
   return (
     <div className="p-4">
-      <Link to="/dashboard" className="flex items-center gap-2 text-brand-600 font-semibold text-lg">
-        <LineChart className="w-5 h-5" />
-        Hembudget
+      <Link
+        to={isStudent ? "/my-batches" : "/dashboard"}
+        className="flex items-center gap-2 text-brand-600 font-semibold text-lg"
+      >
+        {isStudent ? (
+          <GraduationCap className="w-5 h-5" />
+        ) : (
+          <LineChart className="w-5 h-5" />
+        )}
+        {title}
       </Link>
-      <div className="text-xs text-slate-600 mt-0.5">Lokalt • Nemotron Nano 3</div>
+      <div className="text-xs text-slate-600 mt-0.5">{subtitle}</div>
     </div>
   );
 }
@@ -94,7 +137,11 @@ export function Sidebar() {
 export function MobileTopBar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
-  const currentItem = ITEMS.find((i) => location.pathname.startsWith(i.to));
+  const { role } = useAuth();
+  const isStudent = role === "student";
+  const currentItem = ALL_ITEMS.find((i) =>
+    location.pathname.startsWith(i.to),
+  );
 
   return (
     <>
@@ -106,9 +153,16 @@ export function MobileTopBar() {
         >
           <Menu className="w-5 h-5" />
         </button>
-        <Link to="/dashboard" className="font-semibold text-brand-600 flex items-center gap-1.5">
-          <LineChart className="w-4 h-4" />
-          Hembudget
+        <Link
+          to={isStudent ? "/my-batches" : "/dashboard"}
+          className="font-semibold text-brand-600 flex items-center gap-1.5"
+        >
+          {isStudent ? (
+            <GraduationCap className="w-4 h-4" />
+          ) : (
+            <LineChart className="w-4 h-4" />
+          )}
+          {isStudent ? "Ekonomilabbet" : "Hembudget"}
         </Link>
         {currentItem && (
           <span className="ml-auto text-sm text-slate-700">{currentItem.label}</span>
