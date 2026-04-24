@@ -60,6 +60,11 @@ class SalaryEvent:
     statlig_tax: Decimal
     net: Decimal
     pay_date: date
+    # Antal sjukdagar denna månad (karensdag + 80% ersättning på de
+    # första 14 dagarna, enligt Försäkringskassan). 0 = ingen sjukdom.
+    sick_days: int = 0
+    sick_deduction: Decimal = Decimal("0")
+    note: str = ""
 
 
 @dataclass
@@ -78,6 +83,20 @@ class MonthScenario:
 
 
 # --- Konsumtions-mallar per personlighet ---
+
+# --- Säsongsmultiplikatorer per kategori × månad ---
+# Värde 1.0 = normal, 1.5 = 50% mer, 0.8 = 20% mindre
+SEASONAL_MULT: dict[str, list[float]] = {
+    # Index 0 = januari, 11 = december
+    "groceries":     [1.05, 0.95, 1.00, 1.00, 1.00, 1.05, 1.10, 1.10, 1.00, 1.00, 1.05, 1.30],
+    "restaurant":    [0.9,  1.0,  1.0,  1.1,  1.15, 1.2,  1.3,  1.2,  1.0,  1.0,  1.0,  1.4],
+    "entertainment": [0.85, 1.0,  1.0,  1.0,  1.15, 1.1,  1.15, 1.1,  1.0,  1.0,  1.0,  1.35],
+    "shopping":      [0.7,  0.9,  1.0,  1.1,  1.0,  1.1,  1.2,  1.1,  0.9,  0.95, 1.1,  1.8],
+    "transport":     [1.1,  1.0,  1.0,  1.0,  1.0,  1.15, 1.3,  1.15, 1.0,  1.0,  1.0,  1.1],
+    "gift":          [0.5,  1.0,  1.0,  0.8,  1.5,  1.0,  1.0,  0.8,  1.0,  1.0,  1.0,  3.0],
+    # El skalas redan separat i scenario-logiken
+}
+
 
 CONSUMPTION_PROFILES: dict[str, dict] = {
     "sparsam": {
@@ -181,6 +200,13 @@ def build_scenario(
         ("Restaurang",  ("RESTAURANG OPERAKÄLLAREN", 850, 2200)),
         ("Försäkring",  ("IF FÖRSÄKRING ÅRSAVI", 1200, 3500)),
         ("Resor",       ("SJ RESA TILL STOCKHOLM", 700, 2900)),
+        # Hushåll som går sönder — trasiga vitvaror, elektronik
+        ("Hemelektronik", ("ELGIGANTEN NY DISKMASKIN", 6500, 14_000)),
+        ("Hemelektronik", ("MEDIAMARKT NY TV", 4500, 18_000)),
+        ("Hemelektronik", ("ELEKTROSKANDIA NY KYL", 8500, 18_000)),
+        ("Hemelektronik", ("NETONNET NY TVÄTTMASKIN", 5500, 12_000)),
+        ("Hem & Hushåll", ("JULA NYA MÖBLER", 1200, 4500)),
+        ("Presenter",   ("BOKUS JULKLAPPAR", 800, 3500)),  # dec
     ]
     # Personlighet styr sannolikhet
     n_events = {
@@ -211,20 +237,47 @@ def build_scenario(
     # ---------- Lön ----------
     pay_day = id_rng.choice([25, 26, 27])
     pay_date = date(year, month, min(pay_day, last_day))
+    gross_monthly = profile.gross_salary_monthly
+    net_monthly = profile.net_salary_monthly
+    sick_days = 0
+    sick_deduction = Decimal(0)
+    sick_note = ""
+
+    # 10% chans per månad för kort sjukdom (1-5 dagar)
+    # Första dagen är karens (0% ersättning), resten 80%.
+    if rng.random() < 0.10:
+        sick_days = rng.randint(1, 5)
+        # Grovt: daglig lön = gross/22 arbetsdagar
+        daily_gross = gross_monthly / 22
+        # Dag 1 = 100% avdrag, dag 2-5 = 20% avdrag (80% sjuklön)
+        deduction = daily_gross  # karensdag
+        if sick_days > 1:
+            deduction += (sick_days - 1) * daily_gross * 0.20
+        sick_deduction = Decimal(round(deduction))
+        gross_monthly = max(0, gross_monthly - int(sick_deduction))
+        net_monthly = max(0, net_monthly - int(float(sick_deduction) * 0.68))  # ca 32% skatteåtgång
+        sick_note = (
+            f"Du var sjukskriven {sick_days} dag{'ar' if sick_days > 1 else ''}. "
+            f"Sjukavdrag: {sick_deduction} kr. Lönen denna månad är lägre än vanligt."
+        )
+
     scenario.salary = SalaryEvent(
         employer=profile.employer,
         profession=profile.profession,
-        gross=Decimal(profile.gross_salary_monthly),
+        gross=Decimal(gross_monthly),
         grundavdrag=Decimal(1_250),
-        kommunal_tax=Decimal(round((profile.gross_salary_monthly - 1250) * 0.32)),
-        statlig_tax=Decimal(0),  # redan inräknat i tax_rate ifall över brytpunkt
-        net=Decimal(profile.net_salary_monthly),
+        kommunal_tax=Decimal(round((gross_monthly - 1250) * 0.32)),
+        statlig_tax=Decimal(0),
+        net=Decimal(net_monthly),
         pay_date=pay_date,
+        sick_days=sick_days,
+        sick_deduction=sick_deduction,
+        note=sick_note,
     )
     scenario.transactions.append(TxEvent(
         date=pay_date,
         description=f"LÖN {profile.employer.upper()}",
-        amount=Decimal(profile.net_salary_monthly),
+        amount=Decimal(net_monthly),
         category_hint="Lön",
     ))
 
@@ -389,14 +442,17 @@ def build_scenario(
 
     # Mat — varje vecka. Skala upp för fler personer i hushållet enligt
     # Konsumentverkets siffror (ungefär +800 kr/månad per extra person).
+    # Plus säsongsvariation (jul +30%, semester-sommar +10% osv).
     persons = (
         1 + (1 if getattr(profile, "partner_age", None) else 0)
         + len(children_ages)
     )
+    m_idx = month - 1  # 0-11
     grocery_low, grocery_high = cp["groceries_per_week"]
     person_factor = 1.0 + (persons - 1) * 0.45
-    grocery_low = int(grocery_low * person_factor)
-    grocery_high = int(grocery_high * person_factor)
+    season = SEASONAL_MULT["groceries"][m_idx]
+    grocery_low = int(grocery_low * person_factor * season)
+    grocery_high = int(grocery_high * person_factor * season)
     for week in range(4):
         day = rng.randint(1, last_day)
         amount = rng.randint(grocery_low, grocery_high)
@@ -413,11 +469,13 @@ def build_scenario(
         else:
             scenario.transactions.append(ev)
 
-    # Restaurang
-    n_rest = rng.randint(*cp["restaurant_per_month"])
+    # Restaurang — säsongsmultiplikator (jul/sommar ökar)
+    season_rest = SEASONAL_MULT["restaurant"][m_idx]
+    n_rest_base = rng.randint(*cp["restaurant_per_month"])
+    n_rest = int(round(n_rest_base * season_rest))
     for _ in range(n_rest):
         day = rng.randint(1, last_day)
-        amount = rng.randint(95, 450)
+        amount = int(rng.randint(95, 450) * season_rest)
         merchant = rng.choice(MERCHANTS_RESTAURANT)
         on_card = rng.random() < cp["card_usage"] + 0.1
         ev = (CardEvent if on_card else TxEvent)(
@@ -447,12 +505,14 @@ def build_scenario(
         )
         (scenario.card_events if on_card else scenario.transactions).append(ev)
 
-    # Shopping
-    n_shop = rng.randint(*cp["shopping_per_month"])
+    # Shopping — julshopping (dec +80%, nov +10%), sommar-utförsäljning
+    season_shop = SEASONAL_MULT["shopping"][m_idx]
+    n_shop_base = rng.randint(*cp["shopping_per_month"])
+    n_shop = int(round(n_shop_base * season_shop))
     for _ in range(n_shop):
         day = rng.randint(1, last_day)
         merchant = rng.choice(MERCHANTS_SHOP)
-        amount = rng.randint(199, 2900)
+        amount = int(rng.randint(199, 2900) * season_shop)
         on_card = rng.random() < cp["card_usage"] + 0.15
         ev = (CardEvent if on_card else TxEvent)(
             date=date(year, month, day),

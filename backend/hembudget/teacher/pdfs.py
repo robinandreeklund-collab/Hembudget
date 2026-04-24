@@ -94,12 +94,19 @@ def render_lonespec(salary: SalaryEvent, scenario: MonthScenario) -> bytes:
         Spacer(1, 12),
     ]
     rows = [
-        ["Bruttolön", _kr(salary.gross)],
+        ["Bruttolön (efter ev. sjukavdrag)", _kr(salary.gross)],
+    ]
+    if salary.sick_days > 0:
+        rows.append([
+            f"— Sjukavdrag ({salary.sick_days} dag{'ar' if salary.sick_days > 1 else ''})",
+            "-" + _kr(salary.sick_deduction),
+        ])
+    rows.extend([
         ["– Grundavdrag", "-" + _kr(salary.grundavdrag)],
         ["= Beskattningsbar inkomst",
          _kr(salary.gross - salary.grundavdrag)],
         ["Kommunalskatt (32 %)", "-" + _kr(salary.kommunal_tax)],
-    ]
+    ])
     if salary.statlig_tax > 0:
         rows.append(["Statlig skatt (20 %)", "-" + _kr(salary.statlig_tax)])
     rows.append(["", ""])
@@ -117,6 +124,11 @@ def render_lonespec(salary: SalaryEvent, scenario: MonthScenario) -> bytes:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     story.append(t)
+    if salary.note:
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(
+            f"<b>OBS:</b> {salary.note}", H_BODY,
+        ))
     story.append(Spacer(1, 18))
     story.append(Paragraph(
         "Detta är en övningsspecifikation — värden är fiktiva och syftar "
