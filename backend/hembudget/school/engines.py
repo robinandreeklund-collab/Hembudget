@@ -158,6 +158,12 @@ def _run_master_migrations(engine: Engine) -> None:
         _add("teachers", "ai_input_tokens INTEGER NOT NULL DEFAULT 0")
     if "ai_output_tokens" not in t_cols:
         _add("teachers", "ai_output_tokens INTEGER NOT NULL DEFAULT 0")
+    a_cols = _cols("assignments")
+    if "teacher_feedback" not in a_cols:
+        _add("assignments", "teacher_feedback TEXT")
+    if "teacher_feedback_at" not in a_cols:
+        _add("assignments", "teacher_feedback_at DATETIME")
+
     if "email_verified_at" not in t_cols:
         # SQLite tillåter inte non-constant default med ALTER TABLE,
         # så vi lämnar NULL som default. Befintliga lärare blir ej-

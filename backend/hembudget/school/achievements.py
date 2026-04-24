@@ -205,9 +205,13 @@ def _mastered_competency_count(
             success = 1.0
             if step.kind == "quiz":
                 d = prog.data or {}
-                success = 1.0 if d.get(
-                    "first_correct", d.get("correct")
-                ) else 0.0
+                to = d.get("teacher_override")
+                if isinstance(to, dict) and "correct" in to:
+                    success = 1.0 if to.get("correct") else 0.0
+                else:
+                    success = 1.0 if d.get(
+                        "first_correct", d.get("correct")
+                    ) else 0.0
             bucket["earn"] += msc.weight * success
     mastered = 0
     for b in by_comp.values():

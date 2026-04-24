@@ -355,6 +355,13 @@ class Assignment(MasterBase):
     manually_completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Lärarens kommentar på elevens inlämning. När satt ber läraren
+    # eleven försöka igen; frontend visar texten som "rätta mig"-
+    # banner och tillåter ny markering-som-klar.
+    teacher_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    teacher_feedback_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

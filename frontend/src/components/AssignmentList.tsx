@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  CheckCircle2, Check, CircleDashed, ListTodo, Trash2, Hourglass,
+  CheckCircle2, Check, CircleDashed, ListTodo, MessageSquare,
+  Trash2, Hourglass,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "@/api/client";
@@ -14,6 +15,8 @@ export type AssignmentStatus = {
   progress: string;
   target_year_month: string | null;
   student_id: number | null;
+  teacher_feedback?: string | null;
+  teacher_feedback_at?: string | null;
 };
 
 export function AssignmentList({
@@ -66,7 +69,8 @@ export function AssignmentList({
   return (
     <ul className="divide-y divide-slate-200">
       {items.map((a) => (
-        <li key={a.id} className="py-3 flex items-start gap-3">
+        <li key={a.id} className="py-3 space-y-2">
+          <div className="flex items-start gap-3">
           {a.status === "completed" ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5" />
           ) : a.status === "in_progress" ? (
@@ -106,6 +110,11 @@ export function AssignmentList({
           )}
           {asTeacher && (
             <div className="flex gap-1">
+              <FeedbackButton
+                assignmentId={a.id}
+                hasExisting={!!a.teacher_feedback}
+                onDone={reload}
+              />
               {a.status !== "completed" && (
                 <button
                   onClick={async () => {
@@ -129,9 +138,103 @@ export function AssignmentList({
               </button>
             </div>
           )}
+          </div>
+          {a.teacher_feedback && (
+            <div className="ml-8 bg-sky-50 border-l-4 border-sky-400 rounded p-2 text-sm">
+              <div className="font-semibold text-sky-900 text-xs mb-0.5">
+                Lärarens feedback:
+              </div>
+              <div className="text-sky-900 whitespace-pre-wrap">
+                {a.teacher_feedback}
+              </div>
+            </div>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+function FeedbackButton({
+  assignmentId, hasExisting, onDone,
+}: { assignmentId: number; hasExisting: boolean; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [retry, setRetry] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!text.trim()) return;
+    setBusy(true);
+    try {
+      await api(`/teacher/assignments/${assignmentId}/feedback`, {
+        method: "POST",
+        body: JSON.stringify({
+          body: text.trim(), request_retry: retry,
+        }),
+      });
+      setOpen(false); setText(""); setRetry(false);
+      onDone();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className={`p-1 rounded ${
+          hasExisting
+            ? "text-brand-700 hover:bg-brand-50"
+            : "text-slate-500 hover:text-brand-700"
+        }`}
+        title={hasExisting ? "Redigera återkoppling" : "Ge återkoppling"}
+      >
+        <MessageSquare className="w-4 h-4" />
+      </button>
+    );
+  }
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-30 bg-slate-900/40 flex items-center justify-center p-4"
+    >
+      <div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-md space-y-3">
+        <div className="font-semibold">Lämna återkoppling</div>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={4}
+          placeholder="Skriv feedback till eleven…"
+          className="w-full border rounded p-2 text-sm"
+          autoFocus
+        />
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={retry}
+            onChange={(e) => setRetry(e.target.checked)}
+          />
+          Be eleven försöka igen (nollar markering-som-klar)
+        </label>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={() => setOpen(false)}
+            className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
+          >
+            Avbryt
+          </button>
+          <button
+            onClick={save}
+            disabled={busy || !text.trim()}
+            className="px-4 py-1.5 text-sm bg-brand-600 hover:bg-brand-700 text-white rounded disabled:opacity-50"
+          >
+            {busy ? "Sparar…" : "Skicka"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

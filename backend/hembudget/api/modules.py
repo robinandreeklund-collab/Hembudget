@@ -680,8 +680,15 @@ def _compute_mastery_for_student(
             if step.kind == "quiz":
                 # Mastery baseras på första försöket så eleven inte kan
                 # "trappa upp" sin mastery genom att svara om tills rätt.
+                # Lärarens override (data.teacher_override.correct) vinner
+                # dock — lärare kan rätta auto-grading när frågan var
+                # dåligt formulerad.
                 d = prog.data or {}
-                success = 1.0 if d.get("first_correct", d.get("correct")) else 0.0
+                to = d.get("teacher_override")
+                if isinstance(to, dict) and "correct" in to:
+                    success = 1.0 if to.get("correct") else 0.0
+                else:
+                    success = 1.0 if d.get("first_correct", d.get("correct")) else 0.0
             bucket["earned_weight"] += msc.weight * success
             bucket["count"] += 1
             if not bucket["latest"] or prog.completed_at > bucket["latest"]:
@@ -921,6 +928,47 @@ def give_feedback(
         prog.feedback_at = datetime.utcnow()
         if payload.rubric_scores is not None:
             prog.rubric_scores = payload.rubric_scores
+    return {"ok": True}
+
+
+class QuizOverrideIn(BaseModel):
+    correct: bool
+    note: str = ""
+
+
+@router.post("/teacher/progress/{progress_id}/quiz-override")
+def quiz_override(
+    progress_id: int,
+    payload: QuizOverrideIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Lärare rättar auto-grading av en quiz-fråga. Används t.ex. när
+    frågan var dåligt formulerad och eleven egentligen hade rätt.
+
+    data.teacher_override = {correct, note, at, teacher_id} respekteras
+    av mastery-formeln (ersätter data.first_correct).
+    """
+    _require_school_mode()
+    with master_session() as s:
+        prog = s.query(StudentStepProgress).filter(
+            StudentStepProgress.id == progress_id
+        ).first()
+        if not prog:
+            raise HTTPException(404, "Progress not found")
+        stu = s.query(Student).filter(Student.id == prog.student_id).first()
+        if not stu or stu.teacher_id != info.teacher_id:
+            raise HTTPException(403, "Inte din elev")
+        step = s.query(ModuleStep).filter(ModuleStep.id == prog.step_id).first()
+        if not step or step.kind != "quiz":
+            raise HTTPException(400, "Steget är inte en quiz")
+        data = dict(prog.data or {})
+        data["teacher_override"] = {
+            "correct": bool(payload.correct),
+            "note": payload.note.strip(),
+            "at": datetime.utcnow().isoformat(),
+            "teacher_id": info.teacher_id,
+        }
+        prog.data = data
     return {"ok": True}
 
 

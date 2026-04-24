@@ -1301,6 +1301,8 @@ class AssignmentStatusOut(AssignmentOut):
     status: str  # "not_started" | "in_progress" | "completed"
     progress: str
     detail: Optional[dict] = None
+    teacher_feedback: Optional[str] = None
+    teacher_feedback_at: Optional[datetime] = None
 
 
 def _assignment_to_out(a: Assignment) -> AssignmentOut:
@@ -1354,6 +1356,39 @@ def create_assignment(
     return out
 
 
+class AssignmentFeedbackIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    # Om True nollställs manually_completed_at så eleven måste
+    # markera uppdraget som klart igen efter att ha läst feedbacken.
+    request_retry: bool = False
+
+
+@router.post("/teacher/assignments/{assignment_id}/feedback")
+def assignment_feedback(
+    assignment_id: int,
+    payload: AssignmentFeedbackIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Lärare lämnar skriftlig återkoppling på ett uppdrag. Eleven ser
+    texten i uppdrags-vyn. Om request_retry=True nollas status så
+    eleven ombeds att försöka igen."""
+    _require_school_mode()
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == info.teacher_id,
+        ).first()
+        if not a:
+            raise HTTPException(
+                404, "Uppdrag finns ej eller tillhör inte dig",
+            )
+        a.teacher_feedback = payload.body.strip()
+        a.teacher_feedback_at = datetime.utcnow()
+        if payload.request_retry:
+            a.manually_completed_at = None
+    return {"ok": True}
+
+
 @router.get(
     "/teacher/assignments",
     response_model=list[AssignmentStatusOut],
@@ -1399,6 +1434,8 @@ def list_assignments(
                 status=status_val,
                 progress=progress,
                 detail=detail,
+                teacher_feedback=a.teacher_feedback,
+                teacher_feedback_at=a.teacher_feedback_at,
             ))
         return out
 
@@ -1550,6 +1587,8 @@ def student_my_assignments(
             out.append(AssignmentStatusOut(
                 **base.model_dump(),
                 status=res.status, progress=res.progress, detail=res.detail,
+                teacher_feedback=a.teacher_feedback,
+                teacher_feedback_at=a.teacher_feedback_at,
             ))
         return out
 

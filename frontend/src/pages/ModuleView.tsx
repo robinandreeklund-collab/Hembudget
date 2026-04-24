@@ -428,6 +428,9 @@ function QuizPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
   }, []);
 
   const firstCorrect = (progress?.data?.first_correct as boolean | undefined);
+  const teacherOverride = progress?.data?.teacher_override as
+    | { correct: boolean; note: string; at: string }
+    | undefined;
 
   async function submit() {
     setBusy(true);
@@ -619,6 +622,20 @@ function QuizPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
               </div>
             )}
           </div>
+          {teacherOverride && (
+            <div className="rounded bg-sky-50 border-l-4 border-sky-400 p-3 text-sm">
+              <div className="font-semibold text-sky-900 mb-1">
+                Läraren har kommenterat:
+              </div>
+              <div className="text-sky-900">
+                Din svarsrättning är ändrad till{" "}
+                <strong>
+                  {teacherOverride.correct ? "rätt" : "fel"}
+                </strong>
+                {teacherOverride.note && `: "${teacherOverride.note}"`}
+              </div>
+            </div>
+          )}
 
           {/* AI-förklaring: bara när svaret var fel och lärarens AI är på */}
           {!lastSubmittedCorrect && aiEnabled && (
