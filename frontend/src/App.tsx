@@ -25,6 +25,7 @@ import Teacher from "./pages/Teacher";
 import StudentDetail from "./pages/StudentDetail";
 import Onboarding from "./pages/Onboarding";
 import MyBatches from "./pages/MyBatches";
+import AllBatches from "./pages/AllBatches";
 
 export default function App() {
   const {
@@ -56,6 +57,7 @@ export default function App() {
             <>
               <Route path="/teacher" element={<Teacher />} />
               <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
+              <Route path="/teacher/all-batches" element={<AllBatches />} />
               <Route path="*" element={<Navigate to="/teacher" replace />} />
             </>
           ) : (
@@ -63,6 +65,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/teacher" element={<Teacher />} />
               <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
+              <Route path="/teacher/all-batches" element={<AllBatches />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/transactions" element={<Transactions />} />

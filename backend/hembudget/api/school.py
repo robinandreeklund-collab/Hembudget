@@ -1351,6 +1351,66 @@ def list_student_batches(
         return [_batch_to_out(b) for b in batches]
 
 
+class TeacherAllBatchesRow(BaseModel):
+    student_id: int
+    display_name: str
+    class_label: Optional[str]
+    family_name: Optional[str]
+    batch: Optional[ScenarioBatchOut]
+
+
+@router.get("/teacher/batches/by-month/{year_month}",
+            response_model=list[TeacherAllBatchesRow])
+def list_all_batches_for_month(
+    year_month: str,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[TeacherAllBatchesRow]:
+    """Samlad vy: alla lärarens elever + deras batch för given månad.
+    Visar tomt (batch=None) om ingen batch skapad för eleven ännu."""
+    _require_school_mode()
+    with master_session() as s:
+        students = (
+            s.query(Student)
+            .filter(Student.teacher_id == info.teacher_id)
+            .order_by(Student.class_label, Student.display_name)
+            .all()
+        )
+        out: list[TeacherAllBatchesRow] = []
+        for st in students:
+            batch = s.query(ScenarioBatch).filter(
+                ScenarioBatch.student_id == st.id,
+                ScenarioBatch.year_month == year_month,
+            ).first()
+            out.append(TeacherAllBatchesRow(
+                student_id=st.id,
+                display_name=st.display_name,
+                class_label=st.class_label,
+                family_name=st.family.name if st.family else None,
+                batch=_batch_to_out(batch) if batch else None,
+            ))
+        return out
+
+
+@router.get("/teacher/batches/months",
+            response_model=list[str])
+def list_all_batch_months(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[str]:
+    """Lista alla unika year_month värden där minst en batch finns, för
+    lärarens elever. Används för månadsväljaren i samlad vy."""
+    _require_school_mode()
+    with master_session() as s:
+        rows = (
+            s.query(ScenarioBatch.year_month)
+            .join(Student, ScenarioBatch.student_id == Student.id)
+            .filter(Student.teacher_id == info.teacher_id)
+            .distinct()
+            .order_by(ScenarioBatch.year_month.desc())
+            .all()
+        )
+        return [r[0] for r in rows]
+
+
 @router.get(
     "/student/batches",
     response_model=list[ScenarioBatchOut],
