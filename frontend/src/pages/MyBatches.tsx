@@ -122,7 +122,7 @@ export default function MyBatches() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
         <Inbox className="w-6 h-6 text-brand-600" />
         <h1 className="serif text-3xl leading-tight">Dina dokument</h1>

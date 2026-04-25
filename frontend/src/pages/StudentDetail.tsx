@@ -268,7 +268,7 @@ export default function StudentDetail() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <button
         onClick={() => navigate("/teacher")}
         className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
@@ -722,7 +722,8 @@ export default function StudentDetail() {
                 <summary className="cursor-pointer text-slate-600 hover:text-ink">
                   Visa alla ({facit.rows.length} transaktioner)
                 </summary>
-                <table className="w-full mt-2 text-xs">
+                <div className="overflow-x-auto -mx-2 md:mx-0 mt-2">
+                <table className="w-full text-xs min-w-[640px]">
                   <thead>
                     <tr className="text-slate-500 text-left">
                       <th className="py-1">Datum</th>
@@ -792,6 +793,7 @@ export default function StudentDetail() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </details>
             )}
           </>

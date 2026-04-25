@@ -41,7 +41,7 @@ export default function AssignmentMatrix() {
   const { columns, rows } = data;
 
   return (
-    <div className="p-6 max-w-none space-y-4">
+    <div className="p-4 md:p-6 max-w-none space-y-4">
       <Link
         to="/teacher"
         className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"

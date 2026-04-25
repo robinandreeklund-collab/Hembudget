@@ -221,13 +221,13 @@ export default function Teacher() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <div className="eyebrow mb-1">
             {isFamily ? "Familjepanel" : "Lärarpanel"}
           </div>
-          <h1 className="serif text-3xl md:text-4xl leading-tight">
+          <h1 className="serif text-2xl md:text-4xl leading-tight">
             {isFamily ? "Dina barn." : "Din klass."}
           </h1>
         </div>
@@ -417,9 +417,10 @@ export default function Teacher() {
         )}
       </div>
 
-      {/* Elevlista */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Elevlista — overflow-x-auto så bred tabell går att scrolla
+          horisontellt på små skärmar istället för att bryta layout. */}
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-slate-50 text-left">
             <tr>
               <th className="p-3 w-8">

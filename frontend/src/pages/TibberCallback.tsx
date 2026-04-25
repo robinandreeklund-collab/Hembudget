@@ -63,7 +63,7 @@ export default function TibberCallback() {
   }, [navigate]);
 
   return (
-    <div className="p-6 max-w-xl">
+    <div className="p-4 md:p-6 max-w-xl">
       <Card title="Tibber — auktorisering">
         {status === "loading" && (
           <div className="text-sm text-slate-700">

@@ -117,7 +117,7 @@ export default function EkoDashboard() {
   const overBudgetCount = data.category_rows.filter((r) => r.pct > 100).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
       {data.inactivity_nudge && (
         <div className="bg-sky-50 border-l-4 border-sky-400 rounded p-4 flex items-start gap-3">
           <div className="text-2xl">👋</div>

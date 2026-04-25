@@ -165,7 +165,7 @@ export default function AdminAI() {
   }
   if (err) {
     return (
-      <div className="p-6 max-w-3xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-3">
         <Link
           to="/teacher"
           className="text-sm nav-link flex items-center gap-1"
@@ -184,7 +184,7 @@ export default function AdminAI() {
   const totalReq = rows.reduce((s, r) => s + r.ai_requests_count, 0);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div>
         <Link
           to="/teacher"

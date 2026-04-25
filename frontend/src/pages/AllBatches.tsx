@@ -135,7 +135,7 @@ export default function AllBatches() {
   ).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <Link
         to="/teacher"
         className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
@@ -181,8 +181,8 @@ export default function AllBatches() {
       {loading ? (
         <div className="text-slate-500">Laddar…</div>
       ) : (
-        <div className="bg-white rounded-xl border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-xl border overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-slate-50 text-left">
               <tr>
                 <th className="p-3">Elev</th>

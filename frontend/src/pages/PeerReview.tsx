@@ -76,7 +76,7 @@ export default function PeerReview() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <Link
         to="/dashboard"
         className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
