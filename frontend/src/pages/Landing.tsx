@@ -254,7 +254,9 @@ function PeriodicGrid({ onPick }: { onPick: (c: Cell) => void }) {
             <span className="name block">{c.name}</span>
           </span>
           <span className="val">{c.val}</span>
-          <span className="elem-tooltip">{c.tip}</span>
+          {/* Tooltip flippas under cellen för översta raden så den inte
+              klipps mot sectionkanten / professorns pratbubbla. */}
+          <span className={`elem-tooltip ${i < 8 ? "below" : ""}`}>{c.tip}</span>
           <span className="heatmap" />
         </button>
       ))}

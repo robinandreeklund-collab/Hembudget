@@ -186,20 +186,29 @@ body {
   }
   .elem:hover .elem-tooltip,
   .elem:focus-visible .elem-tooltip { opacity: 1; }
-  /* Flip tooltipen för översta raden så den inte klipps mot section-
-     kanten. nth-child(-n+8) täcker desktop rad 1 + mobil rad 1-2.
-     Klassen .flip-tooltip är manuell override för enstaka fall. */
-  .elem:nth-child(-n+8) .elem-tooltip,
-  .elem.flip-tooltip .elem-tooltip {
-    bottom: auto;
-    top: calc(100% + 8px);
+  /* Flip-variant — JSX sätter klassen .below på tooltip-spans i översta
+     raden så de visas under cellen istället för över. Use !important för
+     att undvika cascade-konflikter med base-rule:n ovan. */
+  .elem-tooltip.below {
+    bottom: auto !important;
+    top: calc(100% + 8px) !important;
   }
-  .elem:nth-child(-n+8) .elem-tooltip::after,
+  .elem-tooltip.below::after {
+    top: auto !important;
+    bottom: 100% !important;
+    border-top-color: transparent !important;
+    border-bottom-color: theme("colors.ink") !important;
+  }
+  /* Bakåtkompat — om någon stoppar in .flip-tooltip på själva cellen */
+  .elem.flip-tooltip .elem-tooltip {
+    bottom: auto !important;
+    top: calc(100% + 8px) !important;
+  }
   .elem.flip-tooltip .elem-tooltip::after {
-    top: auto;
-    bottom: 100%;
-    border-top-color: transparent;
-    border-bottom-color: theme("colors.ink");
+    top: auto !important;
+    bottom: 100% !important;
+    border-top-color: transparent !important;
+    border-bottom-color: theme("colors.ink") !important;
   }
 
   /* Feature-chip — mini-cell ur periodiska systemet, används som ikon */
