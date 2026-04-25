@@ -10,4 +10,5 @@ export { PaperCard } from "./PaperCard";
 export { PaperChip } from "./PaperChip";
 export { Eyebrow } from "./Eyebrow";
 export { SectionDivider } from "./SectionDivider";
+export { AuthShell, PaperInput } from "./AuthShell";
 export type { ChipColor } from "./PaperChip";
