@@ -2564,6 +2564,20 @@ def demo_status() -> dict:
         }
 
 
+@router.post("/admin/demo/rebuild")
+def admin_rebuild_demo(info: TokenInfo = Depends(require_teacher)) -> dict:
+    """Super-admin: trigga om demo-byggandet manuellt utan att vänta
+    på schemaläggaren (10 min). Använd om demo-data är trasigt eller
+    försvunnit efter en deploy."""
+    _require_school_mode()
+    with master_session() as s:
+        t = s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        if not t or not t.is_super_admin:
+            raise HTTPException(403, "Super-admin krävs")
+    from ..school.demo_seed import build_demo
+    return build_demo()
+
+
 @router.get("/demo/is-demo")
 def am_i_in_demo(info: TokenInfo = Depends(require_token)) -> dict:
     """Används av frontend för att visa demobanner ovanför allt UI."""

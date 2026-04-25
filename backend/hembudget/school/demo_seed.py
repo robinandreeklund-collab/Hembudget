@@ -146,7 +146,16 @@ def build_demo() -> dict:
         s.flush()
         stats["students_created"] = len(students)
 
-        # Generera 3 månaders batchar för varje elev + importera automatiskt
+        # COMMIT av students + profiler så de är persistenta innan
+        # batch-byggandet börjar. Tidigare bug: ett fel i batch-build
+        # (t.ex. integer-overflow) satte HELA sessionen i rollback,
+        # vilket tog ner profile-add:s också → "Student saknar profil"
+        # för efterföljande elever.
+        s.commit()
+
+        # Generera 3 månaders batchar för varje elev + importera automatiskt.
+        # Varje (elev, månad) körs i en SAVEPOINT så ett fel inte tar
+        # ner resten av batchen.
         from ..teacher.batch import create_batch_for_student, import_artifact
         months = ["2026-02", "2026-03", "2026-04"]
         batches_created = 0
@@ -154,12 +163,13 @@ def build_demo() -> dict:
         for stu in students:
             for ym in months:
                 try:
-                    batch = create_batch_for_student(s, stu, ym, overwrite=True)
-                    batches_created += 1
-                    # Importera alla så demot känns "ifyllt"
-                    for art in batch.artifacts:
-                        import_artifact(s, art, stu)
-                        artifacts_imported += 1
+                    with s.begin_nested():
+                        batch = create_batch_for_student(s, stu, ym, overwrite=True)
+                        batches_created += 1
+                        # Importera alla så demot känns "ifyllt"
+                        for art in batch.artifacts:
+                            import_artifact(s, art, stu)
+                            artifacts_imported += 1
                 except Exception:
                     log.exception(
                         "Failed building batch for %s %s", stu.display_name, ym,
