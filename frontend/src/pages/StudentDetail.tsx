@@ -43,6 +43,8 @@ const ASSIGNMENT_KINDS = [
   { value: "categorize_all", label: "Kategorisera alla transaktioner" },
   { value: "save_amount", label: "Spara X kr" },
   { value: "mortgage_decision", label: "Bolåne-beslut (rörlig vs bunden)" },
+  { value: "link_transfer", label: "Länka överföringar (X st)" },
+  { value: "add_upcoming", label: "Lägg till kommande räkningar (X st)" },
   { value: "free_text", label: "Annan uppgift (manuell)" },
 ];
 
@@ -226,6 +228,9 @@ export default function StudentDetail() {
               principal: parseInt(newMortgagePrincipal, 10),
               horizon_months: parseInt(newMortgageHorizon, 10),
             }
+          : (newKind === "link_transfer" || newKind === "add_upcoming")
+            && newAmount
+          ? { target_count: parseInt(newAmount, 10) }
           : null,
       }),
     });
@@ -609,6 +614,19 @@ export default function StudentDetail() {
                 value={newAmount}
                 onChange={(e) => setNewAmount(e.target.value)}
                 placeholder="Belopp att spara (kr)"
+                className="w-full border rounded px-2 py-1.5"
+              />
+            )}
+            {(newKind === "link_transfer" || newKind === "add_upcoming") && (
+              <input
+                type="number"
+                value={newAmount}
+                onChange={(e) => setNewAmount(e.target.value)}
+                placeholder={
+                  newKind === "link_transfer"
+                    ? "Antal överföringar att länka"
+                    : "Antal kommande räkningar"
+                }
                 className="w-full border rounded px-2 py-1.5"
               />
             )}

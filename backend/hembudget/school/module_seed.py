@@ -827,6 +827,119 @@ FIRST_MONTH_TEMPLATE = {
 }
 
 
+SYSTEM_TOUR_TEMPLATE = {
+    "title": "Lär känna systemet",
+    "summary": (
+        "Praktisk genomgång: använd Överföringar och Kommande räkningar "
+        "för att få full kontroll på pengaflödet. Spårning sker live mot "
+        "din huvudbok."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är en överföring?",
+            "content": (
+                "En överföring är när du flyttar pengar mellan dina egna "
+                "konton — t.ex. från lönekontot till sparkontot. Det är "
+                "INTE en utgift eller en inkomst, det är bara att pengarna "
+                "rör sig.\n\n"
+                "Om en överföring råkar bokas som en vanlig transaktion "
+                "kommer den dyka upp dubbelt i statistiken: först som en "
+                "'utgift' från det ena kontot, sen som en 'inkomst' till "
+                "det andra. Lösningen är att länka ihop de två raderna."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Snabbkoll: överföringar",
+            "content": None,
+            "params": {
+                "question": (
+                    "Du flyttar 2 000 kr från lönekonto till sparkonto. "
+                    "Hur ska det räknas i din månadsbudget?"
+                ),
+                "options": [
+                    "Som en utgift på 2 000 kr",
+                    "Som en överföring (varken utgift eller inkomst)",
+                    "Som ett sparande på 2 000 kr i kategorin 'Mat'",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Pengarna lämnar inte din ekonomi — de bara byter "
+                    "konto. Markera det som överföring så det inte stör "
+                    "kategori-statistiken."
+                ),
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Länka två överföringar",
+            "content": (
+                "Gå till sidan 'Överföringar' i menyn. Hitta två "
+                "transaktioner som hör ihop (samma belopp, motsatta "
+                "tecken, nära i tid) och länka dem som en överföring. "
+                "Steget markeras automatiskt som klart när du har minst "
+                "två länkade överföringar i din huvudbok."
+            ),
+            "params": {
+                "assignment_kind": "link_transfer",
+                "target_count": 2,
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Vad är 'kommande räkningar'?",
+            "content": (
+                "Räkningar du vet kommer men ännu inte har betalats — "
+                "elen, hyran, försäkringen. Att lägga in dem som "
+                "'kommande' låter dig se cashflow:n in i framtiden så "
+                "du inte blir överraskad.\n\n"
+                "Du hittar funktionen under 'Kommande' i menyn. Bra "
+                "vana: lägg in alla återkommande räkningar en gång, "
+                "markera 'Återkommande månad', så fylls de på "
+                "automatiskt."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Lägg till tre kommande räkningar",
+            "content": (
+                "Tänk igenom vilka återkommande räkningar du har. "
+                "Lägg till minst tre i 'Kommande' — t.ex. hyra, "
+                "telefon, streamingtjänst. Steget markeras klart "
+                "automatiskt när du har tre eller fler i huvudboken."
+            ),
+            "params": {
+                "assignment_kind": "add_upcoming",
+                "target_count": 3,
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad upptäckte du?",
+            "content": (
+                "När du gick igenom dina kommande räkningar — dök det "
+                "upp några du glömt eller inte tänkt på? Vad lärde det "
+                "dig om dina månadskostnader?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "insight",
+                        "name": "Insikt",
+                        "levels": [
+                            "Beskriver fakta",
+                            "Identifierar mönster",
+                            "Kopplar till framtida planering",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -847,6 +960,7 @@ def seed_system_modules(master_session) -> int:
         CREDITCARD_TEMPLATE,
         SAVING_TEMPLATE,
         FAMILY_TEMPLATE,
+        SYSTEM_TOUR_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue

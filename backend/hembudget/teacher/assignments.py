@@ -20,6 +20,7 @@ from ..db.models import (
     Budget,
     Loan,
     Transaction,
+    UpcomingTransaction,
 )
 from ..school.engines import scope_context, scope_for_student
 
@@ -60,6 +61,10 @@ def evaluate(assignment, student) -> CheckResult:
                 return _check_save_amount(s, assignment)
             if kind == "mortgage_decision":
                 return _check_mortgage_decision(assignment, student)
+            if kind == "link_transfer":
+                return _check_link_transfer(s, assignment)
+            if kind == "add_upcoming":
+                return _check_add_upcoming(s, assignment)
             # free_text: bara manuellt — läraren klickar "Klarmarkera"
             # i UI:n så sätts manually_completed_at.
             return CheckResult(
@@ -243,6 +248,47 @@ def _check_save_amount(s: Session, assignment) -> CheckResult:
             f"Sparat {saved:.0f} av {target} kr ({pct}%)",
         )
     return CheckResult("not_started", f"Sparat 0 av {target} kr")
+
+
+def _check_link_transfer(s: Session, assignment) -> CheckResult:
+    """Kolla att eleven manuellt eller via detektorn länkat ihop minst
+    `params.target_count` (default 1) transaktioner som överföringar.
+    Visualiserar momentet "när är ett uttag faktiskt en överföring".
+    """
+    target = int((assignment.params or {}).get("target_count", 1))
+    n = s.query(Transaction).filter(Transaction.is_transfer.is_(True)).count()
+    if n == 0:
+        return CheckResult("not_started", f"0/{target} länkade överföringar")
+    if n < target:
+        return CheckResult(
+            "in_progress",
+            f"{n}/{target} länkade överföringar",
+        )
+    return CheckResult(
+        "completed",
+        f"{n} länkade överföringar (mål: {target})",
+        detail={"count": n, "target": target},
+    )
+
+
+def _check_add_upcoming(s: Session, assignment) -> CheckResult:
+    """Kolla att eleven lagt till minst `params.target_count` (default 1)
+    kommande räkningar/inkomster i UpcomingTransaction. Verifierar att
+    eleven förstår skillnaden mellan bokat och planerat."""
+    target = int((assignment.params or {}).get("target_count", 1))
+    n = s.query(UpcomingTransaction).count()
+    if n == 0:
+        return CheckResult("not_started", f"0/{target} kommande räkningar")
+    if n < target:
+        return CheckResult(
+            "in_progress",
+            f"{n}/{target} kommande räkningar tillagda",
+        )
+    return CheckResult(
+        "completed",
+        f"{n} kommande räkningar tillagda (mål: {target})",
+        detail={"count": n, "target": target},
+    )
 
 
 # --- Hjälp att skapa standard-uppdrag åt en elev ---
