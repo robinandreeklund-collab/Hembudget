@@ -42,6 +42,28 @@
   }
   .feature-card:hover{transform:translateY(-3px);
     box-shadow:0 10px 24px rgba(0,0,0,.1);background:#fffef5;}
+
+  /* Flow-mockups (paper-style mini-vyer som visar steget) */
+  .mock{
+    border:1.5px solid var(--ink);background:#fff;padding:18px;
+    font-size:13px;line-height:1.4;
+  }
+  .mock-row{display:flex;justify-content:space-between;align-items:baseline;
+    padding:6px 0;border-bottom:1px dashed var(--rule);}
+  .mock-row:last-child{border-bottom:none;}
+  .mock-num{font-family:'Spectral',serif;font-weight:800;}
+  .mock-bar{height:8px;background:#f1eee3;border:1px solid var(--rule);position:relative;
+    border-radius:2px;}
+  .mock-bar > span{position:absolute;inset:0;background:var(--ink);border-radius:1px;}
+  .mock-pill{display:inline-block;padding:2px 8px;border:1px solid var(--ink);
+    background:#fff;font-size:11px;letter-spacing:.04em;}
+  .mock-pill.ok{background:#e8f7ef;}
+  .mock-pill.no{background:#fdecec;}
+  .flow-num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:56px;height:56px;border:2px solid var(--ink);background:var(--ink);color:#fff;
+    font-family:'Spectral',serif;font-weight:800;font-size:22px;border-radius:50%;
+  }
   /* Sektionsskiljelinje (centrerad ornament-streck) */
   .section-divider{display:flex;align-items:center;gap:10px;color:#999;font-size:11px;letter-spacing:.18em;text-transform:uppercase;}
   .section-divider:before,.section-divider:after{content:"";flex:1;height:1px;background:var(--rule);}
@@ -409,6 +431,118 @@
         </div>
       </li>
     </ul>
+  </div>
+</section>
+
+<!-- FLOW (5 numrerade steg, alternerande layout) -->
+<section id="flow" class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Så funkar det</div>
+    <div class="max-w-3xl mb-14">
+      <h2 class="serif text-4xl md:text-5xl leading-[1.05]">Fem nyckelmoment.</h2>
+      <p class="mt-4 lead">Det här är vad eleverna och läraren faktiskt gör — i ordning, månad för månad.</p>
+    </div>
+
+    <div class="space-y-16">
+      <!-- 01: Dashboard -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <div class="flow-num mb-5">1</div>
+          <h3 class="serif text-3xl leading-tight">Eleven får en egen vardag.</h3>
+          <p class="mt-3 body-prose">Yrke, lön, bostad, lån — allt slumpas unikt per elev. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid.</p>
+        </div>
+        <div class="mock">
+          <div class="eyebrow mb-3">Anna · barista · Stockholm</div>
+          <div class="mock-row"><span>Nettolön nov</span><span class="mock-num">23 450 kr</span></div>
+          <div class="mock-row"><span>Hyra</span><span class="mock-num">−9 200 kr</span></div>
+          <div class="mock-row"><span>Mat &amp; dryck</span><span class="mock-num">−3 870 kr</span></div>
+          <div class="mock-row"><span>Sparande</span><span class="mock-num">+1 500 kr</span></div>
+          <div class="mock-row"><span class="font-semibold">Saldo idag</span><span class="mock-num">8 880 kr</span></div>
+        </div>
+      </div>
+
+      <!-- 02: PDFs (omvänd ordning) -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div class="md:order-2">
+          <div class="flow-num mb-5">2</div>
+          <h3 class="serif text-3xl leading-tight">Riktiga dokument att jobba med.</h3>
+          <p class="mt-3 body-prose">Läraren trycker "generera" — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv.</p>
+        </div>
+        <div class="mock md:order-1">
+          <div class="eyebrow mb-3">Generering 2026-11</div>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-3"><span class="feature-chip konto" style="width:32px;height:32px;font-size:13px;">Ku</span><span class="flex-1">Kontoutdrag · 23 transaktioner</span><span class="mock-pill ok">PDF</span></li>
+            <li class="flex items-center gap-3"><span class="feature-chip grund" style="width:32px;height:32px;font-size:13px;">Lö</span><span class="flex-1">Lönespec · november</span><span class="mock-pill ok">PDF</span></li>
+            <li class="flex items-center gap-3"><span class="feature-chip fordj" style="width:32px;height:32px;font-size:13px;">Bl</span><span class="flex-1">Lånebesked · 18,4 kvkm</span><span class="mock-pill ok">PDF</span></li>
+            <li class="flex items-center gap-3"><span class="feature-chip risk" style="width:32px;height:32px;font-size:13px;">Kk</span><span class="flex-1">Kortfaktura · −2 340 kr</span><span class="mock-pill ok">PDF</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 03: Budget vs verkligheten -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <div class="flow-num mb-5">3</div>
+          <h3 class="serif text-3xl leading-tight">Budget möter verklighet.</h3>
+          <p class="mt-3 body-prose">Eleven sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt.</p>
+        </div>
+        <div class="mock">
+          <div class="eyebrow mb-3">Budget vs faktiskt · november</div>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1"><span>Mat (planerat 4 000)</span><span class="mock-num">3 870 kr</span></div>
+              <div class="mock-bar"><span style="width:97%"></span></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1"><span>Nöje (planerat 1 500)</span><span class="mock-num">2 410 kr</span></div>
+              <div class="mock-bar"><span style="width:100%;background:var(--risk);"></span></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1"><span>Hushåll (planerat 800)</span><span class="mock-num">3 200 kr</span></div>
+              <div class="mock-bar"><span style="width:100%;background:var(--risk);"></span></div>
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-[#777] serif-italic">Diskmaskinen sa upp sig den 14:e.</p>
+        </div>
+      </div>
+
+      <!-- 04: Bolåne-beslut -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div class="md:order-2">
+          <div class="flow-num mb-5">4</div>
+          <h3 class="serif text-3xl leading-tight">Verkliga ekonomiska val.</h3>
+          <p class="mt-3 body-prose">Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser görs synliga.</p>
+        </div>
+        <div class="mock md:order-1">
+          <div class="eyebrow mb-3">Bolåne-uppdrag · 36 mån horisont</div>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="border rule p-3"><div class="text-[#888]">Rörlig (eleven valde)</div><div class="mock-num text-2xl mt-1">3,25 %</div><div class="mt-2 text-[#666]">Snitt över perioden: 3,8 %</div></div>
+            <div class="border rule p-3"><div class="text-[#888]">3 år bunden</div><div class="mock-num text-2xl mt-1">3,90 %</div><div class="mt-2 text-[#666]">Fixerad hela perioden</div></div>
+          </div>
+          <div class="mt-3 mock-pill ok">Rörlig vann: −18 240 kr</div>
+        </div>
+      </div>
+
+      <!-- 05: Lärarens översikt -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <div class="flow-num mb-5">5</div>
+          <h3 class="serif text-3xl leading-tight">Läraren ser hela klassen.</h3>
+          <p class="mt-3 body-prose">Matris över alla elever och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Allt en lärare behöver för att följa upp.</p>
+        </div>
+        <div class="mock">
+          <div class="eyebrow mb-3">Klass NA22 · 5 elever</div>
+          <table class="w-full text-xs">
+            <tr class="text-[#888]"><th class="text-left font-normal py-1">Elev</th><th class="text-left font-normal">Budget</th><th class="text-left font-normal">Bolån</th><th class="text-left font-normal">Mastery</th></tr>
+            <tr class="border-t rule"><td class="py-1.5">Anna</td><td><span class="mock-pill ok">klar</span></td><td><span class="mock-pill ok">klar</span></td><td class="mock-num">82 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Bahar</td><td><span class="mock-pill ok">klar</span></td><td><span class="mock-pill no">pågår</span></td><td class="mock-num">71 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Carl</td><td><span class="mock-pill no">pågår</span></td><td><span class="mock-pill">väntar</span></td><td class="mock-num">54 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Disa</td><td><span class="mock-pill ok">klar</span></td><td><span class="mock-pill ok">klar</span></td><td class="mock-num">90 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Erik</td><td><span class="mock-pill no">pågår</span></td><td><span class="mock-pill no">pågår</span></td><td class="mock-num">63 %</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
