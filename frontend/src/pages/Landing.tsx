@@ -77,10 +77,10 @@ export default function Landing() {
       <Gallery />
       <Pricing />
       <Faq />
-      {/* TODO A2.8: founder + CTA + kontakt + footer */}
-      <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
-        Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
-      </div>
+      <FounderQuote />
+      <Cta />
+      <Contact />
+      <Footer />
     </div>
   );
 }
@@ -953,6 +953,124 @@ function Faq() {
         ))}
       </div>
     </section>
+  );
+}
+
+// ---------- Founder + CTA + Kontakt + Footer ----------
+
+function FounderQuote() {
+  return (
+    <section className="border-t border-rule">
+      <div className="max-w-3xl mx-auto px-6 py-20 text-center">
+        <div className="serif text-7xl leading-none text-ink/15 select-none">
+          &ldquo;
+        </div>
+        <blockquote className="serif-italic text-2xl md:text-[28px] leading-snug mt-2 text-[#222]">
+          Ekonomilabbet började som ett verktyg för min egen ekonomi. Nu
+          kan det också hjälpa unga att förstå pengar, beslut och vardags­
+          ekonomi på riktigt — på ett sätt som känns konkret och användbart.
+        </blockquote>
+        <div className="mt-6 eyebrow">— Grundaren</div>
+      </div>
+    </section>
+  );
+}
+
+function Cta() {
+  return (
+    <section className="max-w-7xl mx-auto px-6 py-24 text-center">
+      <div className="eyebrow mb-4">Kom igång</div>
+      <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+        Kursplanen din kemi­lärare aldrig fick.
+      </h2>
+      <p className="mt-5 lead max-w-xl mx-auto">
+        Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir
+        super-admin.
+      </p>
+      <div className="mt-7 flex justify-center gap-3 flex-wrap">
+        <Link to="/login/teacher" className="btn-dark px-6 py-3.5 rounded-md">
+          Starta labbet
+        </Link>
+        <a
+          href="mailto:info@ekonomilabbet.org?subject=Boka%20introduktion"
+          className="btn-outline px-6 py-3.5 rounded-md"
+        >
+          Boka introduktion
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function Contact() {
+  return (
+    <section id="kontakt" className="border-t border-rule bg-white">
+      <div className="max-w-3xl mx-auto px-6 py-16 text-center">
+        <div className="section-divider mb-8">Kontakt</div>
+        <h2 className="serif text-3xl md:text-4xl leading-[1.05]">
+          Frågor, förslag eller samarbeten?
+        </h2>
+        <p className="mt-4 lead">
+          Vi hjälper gärna till om du vill komma igång i din klass, har
+          önskemål om nya funktioner, eller vill utforska samarbeten med
+          skolor, kommuner eller lärarorganisationer.
+        </p>
+        <a
+          href="mailto:info@ekonomilabbet.org"
+          className="btn-dark inline-block mt-7 px-6 py-3.5 rounded-md font-mono text-sm"
+        >
+          info@ekonomilabbet.org
+        </a>
+        <p className="text-xs text-[#888] mt-4 serif-italic">
+          Vi svarar oftast inom ett par arbetsdagar.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="border-t border-rule">
+      <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-3 gap-10 text-sm">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <svg width="22" height="22" viewBox="0 0 40 40" aria-hidden="true">
+              <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
+              <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">Ek</text>
+            </svg>
+            <span className="serif text-lg">Ekonomilabbet</span>
+          </div>
+          <p className="text-[#666] body-prose">
+            En öppen utbildningsplattform för privatekonomi. Byggd i
+            samarbete med svenska lärare.
+          </p>
+        </div>
+        <div>
+          <div className="eyebrow mb-3">Sidan</div>
+          <ul className="space-y-1.5">
+            <li><a href="#funktioner" className="nav-link">Funktioner</a></li>
+            <li><a href="#flow" className="nav-link">Så funkar det</a></li>
+            <li><a href="#pricing" className="nav-link">Pris</a></li>
+            <li><a href="#faq" className="nav-link">FAQ</a></li>
+          </ul>
+        </div>
+        <div>
+          <div className="eyebrow mb-3">Kontakt &amp; juridik</div>
+          <ul className="space-y-1.5">
+            <li><a href="mailto:info@ekonomilabbet.org" className="nav-link">info@ekonomilabbet.org</a></li>
+            <li><a href="https://github.com/robinandreeklund-collab/Hembudget" target="_blank" rel="noreferrer" className="nav-link">GitHub</a></li>
+            <li><Link to="/docs" className="nav-link">Dokumentation</Link></li>
+          </ul>
+        </div>
+      </div>
+      <div className="border-t border-rule">
+        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-[#888] flex flex-wrap justify-between gap-3">
+          <div>© {new Date().getFullYear()} Ekonomilabbet · Utvecklad i samarbete med lärare</div>
+          <div className="serif-italic">Prototyp — utgåva 2026</div>
+        </div>
+      </div>
+    </footer>
   );
 }
 
