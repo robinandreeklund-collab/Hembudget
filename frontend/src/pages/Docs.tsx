@@ -307,6 +307,171 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: "teacher-modules",
+    title: "Moduler & kursplan",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Kursmoduler</strong> bygger du kursplanen elev för
+          elev eller för hela klassen. En modul är en serie steg av fem typer:
+        </p>
+        <ul>
+          <li><strong>Läs</strong> — markdown-text</li>
+          <li><strong>Titta</strong> — YouTube/Vimeo-embed</li>
+          <li><strong>Reflektera</strong> — öppen fråga med rubric-bedömning</li>
+          <li><strong>Quiz</strong> — flerval med direkt rätt/fel + AI-förklaring vid fel</li>
+          <li><strong>Uppdrag</strong> — koppla till ett uppdrag i plattformen</li>
+        </ul>
+        <p>
+          Skapa från scratch eller klona en system-mall (t.ex. "Din första
+          månad") och anpassa. Tilldela till elever via knappen på modulen.
+          När eleven öppnar modulen byggs framsteg upp per steg.
+        </p>
+        <p>
+          Modulen kan publiceras som <strong>delad mall</strong> så andra
+          lärare i instansen kan klona den. Klick "Publicera" på din modul.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-reflections",
+    title: "Reflektioner & rubric",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Reflektioner</strong> hittar du elevernas svar på alla
+          reflect-steg, sorterade per modul. Du skriver feedback direkt och
+          ger ev. rubric-betyg per kriterium.
+        </p>
+        <p>
+          För återanvändning: under <strong>Rubric-mallar</strong> kan du
+          skapa namngivna kriteriematriser ("Djup", "Tydlighet", "Källor"
+          ×&nbsp;3 nivåer) och klicka in dem på reflect-steg när du bygger
+          moduler. Markera mallen som delad så kollegor kan klona den.
+        </p>
+        <p>
+          Om AI är aktiverat (super-admin sätter detta) kan Claude föreslå
+          rubric-betyg per kriterium med motivering — du skriver under eller
+          ändrar med två klick.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-quiz-override",
+    title: "Quiz-override",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Auto-grading på quiz är ibland fel — frågan var dåligt formulerad
+          eller eleven hade en bättre tolkning. På elevens detalj-vy kan du
+          välja "Rätta som rätt" på ett quiz-steg och skriva en kort
+          motivering.
+        </p>
+        <p>
+          Mastery räknar då lärarens override istället för auto-grade. Eleven
+          ser banner "Läraren har kommenterat" på sitt quiz-steg.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-time-on-task",
+    title: "Time on task",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Time on task</strong> ser du median-tid per steg över
+          alla dina elever, plus antal som börjat men inte avslutat ("fastnat").
+          Bra för att hitta steg som är för svåra eller otydliga.
+        </p>
+        <p>
+          Datan kommer från en heartbeat som elevens app pingar var 20:e
+          sekund medan ett steg är öppet. Avslutat steg = senaste heartbeat
+          minus första. Stuck = heartbeat finns men ingen completion.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-portfolio",
+    title: "Klass-portfolio (ZIP)",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Knappen <strong>Klass-portfolio (ZIP)</strong> i lärarpanelen
+          genererar en portfolio-PDF per aktiv elev och packar dem i ett
+          ZIP-arkiv (filnamn <code>klass_portfolio.zip</code>). Bra
+          underlag inför betygsperiod eller utvecklingssamtal.
+        </p>
+        <p>
+          Varje PDF innehåller elevens reflektioner, mastery-grafer, klara
+          moduler och uppdragsstatus. Tar några sekunder per elev — för en
+          klass på 30 räkna med ~30 sek.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-students-summary",
+    title: "AI-elevsammanfattning",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          På varje elevs detalj-vy finns en <strong>AI-lägesbild</strong>
+          som genereras med Claude Sonnet. Tre sektioner: styrkor, gap,
+          nästa steg. Bygger på mastery, senaste reflektioner och uppdrag.
+        </p>
+        <p>
+          Kräver att AI är aktiverat på ditt konto (super-admin styr detta).
+          Genereras on-demand när du klickar knappen — inga automatiska
+          körningar.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-super-admin",
+    title: "Super-admin & inställningar",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Den första läraren som registrerar sig blir <strong>super-admin</strong>
+          automatiskt. I lärarpanelen syns då en extra knapp "🧠 AI-admin"
+          som leder till <code>/teacher/admin-ai</code>.
+        </p>
+        <p>Där styr super-admin:</p>
+        <ul>
+          <li>
+            <strong>AI-toggel per lärare</strong> — vilka av kollegorna som
+            får använda Claude-funktionerna (kostar pengar per anrop).
+          </li>
+          <li>
+            <strong>Anthropic API-nyckel</strong> — klistra in
+            <code> sk-ant-api03-…</code>. Lagras krypterat i master-DB.
+          </li>
+          <li>
+            <strong>SMTP-konfiguration</strong> — Gmail app-password eller
+            annan SMTP-server. Krävs för signup-mail, lösenords-återställning
+            och e-post-verifiering. Knappen "Skicka testmail" verifierar
+            inställningen utan att triggra ett riktigt signup.
+          </li>
+          <li>
+            <strong>Super-admin-toggel</strong> — utse fler super-admins.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     id: "teacher-families",
     title: "Familjer",
     group: "teacher",
