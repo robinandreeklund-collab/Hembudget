@@ -70,7 +70,8 @@ export default function Landing() {
       <Hero />
       <Features />
       <Flow />
-      {/* TODO A2.4-A2.8: resterande sektioner */}
+      <Stats />
+      {/* TODO A2.5-A2.8: resterande sektioner */}
       <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
         Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
       </div>
@@ -639,6 +640,71 @@ function MockClassMatrix() {
   );
 }
 
-// Notera: api är importerad ovan men används inte än —
-// kommer in i A2.5 (stats-fetch). Förhindrar tsc-fel.
-void api;
+// ---------- Stats-ticker (live från /public/stats, count-up) ----------
+
+type Stats = {
+  teachers: number;
+  students: number;
+  modules_completed: number;
+  reflections_written: number;
+};
+
+function Stats() {
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<Stats>("/public/stats")
+      .then((d) => { if (!cancelled) setStats(d); })
+      .catch(() => { /* tysta — sektionen visar '—' */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const items: { key: keyof Stats; label: string }[] = [
+    { key: "teachers", label: "Lärare" },
+    { key: "students", label: "Elever" },
+    { key: "modules_completed", label: "Avklarade moduler" },
+    { key: "reflections_written", label: "Reflektioner" },
+  ];
+
+  return (
+    <section id="stats" className="border-t border-rule bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-14">
+        <div className="section-divider mb-10">I produktion just nu</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-8">
+          {items.map((it) => (
+            <div key={it.key} className="text-center">
+              <div className="serif text-4xl md:text-5xl">
+                {stats ? <CountUp target={stats[it.key]} /> : "—"}
+              </div>
+              <div className="eyebrow mt-2">{it.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CountUp({ target }: { target: number }) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || target === 0) {
+      setVal(target);
+      return;
+    }
+    const start = performance.now();
+    const dur = 800;
+    let raf = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(Math.round(target * eased));
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return <>{val.toLocaleString("sv-SE")}</>;
+}
