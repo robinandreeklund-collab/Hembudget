@@ -109,6 +109,15 @@ body {
     cursor: pointer;
     transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   }
+  /* Långa namn ska klippas med ellipsis istället för att kvika ut
+     ur cellen. Tooltip + heatmap är inte text-noder så de påverkas inte. */
+  .elem .name,
+  .elem .val {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
   .elem:hover {
     transform: translateY(-3px);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
