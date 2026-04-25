@@ -30,7 +30,7 @@ import EkoDashboard from "./pages/EkoDashboard";
 import AssignmentMatrix from "./pages/AssignmentMatrix";
 import MortgageDecision from "./pages/MortgageDecision";
 import Messages from "./pages/Messages";
-import Landing from "./pages/Landing";
+import LandingSwitch from "./pages/LandingSwitch";
 import LoginChoice from "./pages/LoginChoice";
 import TeacherLogin from "./pages/TeacherLogin";
 import TeacherSignup from "./pages/TeacherSignup";
@@ -63,7 +63,7 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<LandingSwitch />} />
         <Route path="/login" element={<LoginChoice />} />
         <Route path="/login/teacher" element={<TeacherLogin />} />
         <Route path="/signup/teacher" element={<TeacherSignup />} />
@@ -77,7 +77,7 @@ export default function App() {
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
         <Route path="/login/legacy" element={<Login />} />
-        <Route path="*" element={<Landing />} />
+        <Route path="*" element={<LandingSwitch />} />
       </Routes>
     );
   }
