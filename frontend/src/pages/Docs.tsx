@@ -47,6 +47,12 @@ const SECTIONS: Section[] = [
           Om du tappat koden — fråga din lärare. Hen kan visa en QR-kod att
           skanna.
         </p>
+        <p>
+          Lärare har eget login med e-post och lösenord. Glömt lösen →
+          klicka "Glömt lösenord?" på inloggningssidan så skickar vi en
+          återställningslänk till mailen (länken gäller i 60 minuter).
+          Nya lärarkonton bekräftas via mail innan första inloggningen.
+        </p>
       </>
     ),
   },
@@ -152,6 +158,148 @@ const SECTIONS: Section[] = [
           Vanliga uppdrag: "sätt din budget", "importera månadens dokument",
           "spara 2 000 kr", "kategorisera alla köp". Systemet uppdaterar
           statusen automatiskt när du jobbat vidare.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-modules",
+    title: "Din kursplan (moduler)",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Din lärare bygger upp en kursplan med <strong>moduler</strong> —
+          mini-kurser om 4–7 steg vardera. Du hittar dem under
+          <em> Din kursplan</em> i menyn.
+        </p>
+        <p>Varje steg är ett av fem:</p>
+        <ul>
+          <li><strong>Läs</strong> — text att läsa, klicka "klar" när du är färdig</li>
+          <li><strong>Titta</strong> — video (oftast YouTube) plus klar-knapp</li>
+          <li><strong>Reflektera</strong> — skriv ett svar på en öppen fråga (minst 10 tecken)</li>
+          <li><strong>Quiz</strong> — flerval. Du får direkt rätt/fel + förklaring. Är det fel kan du fråga Ekon om en pedagogisk förklaring.</li>
+          <li><strong>Uppdrag</strong> — gör något i appen (sätt budget, kategorisera, etc.)</li>
+        </ul>
+        <p>
+          När du klarar steg fylls din <strong>mastery</strong> per kompetens
+          (synlig på dashboarden). När hela modulen är klar markeras den
+          grön och nästa öppnas.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-quiz",
+    title: "Quiz: rätt, fel och Ekons förklaring",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          När du svarar på ett quiz får du direkt rätt/fel — den valda
+          ringen blir grön eller röd. Förklaringstexten från frågans
+          författare visas under.
+        </p>
+        <p>
+          Om du svarade fel och din lärare har AI på får du en knapp
+          "<strong>Fråga Ekon varför ditt svar inte stämmer</strong>". Då
+          streamar Claude en pedagogisk förklaring som tar in just ditt
+          val, inte bara generella rätta svaret.
+        </p>
+        <p>
+          Du kan svara om — mastery räknar dock första försöket. Läraren
+          kan se att du svarade om och vid behov rätta auto-grading
+          (t.ex. om frågan var dåligt formulerad).
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-mastery",
+    title: "Mastery & milstolpar",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          På dashboarden ser du din <strong>mastery</strong> per kompetens
+          — staplar mellan 0 % och 100 %. Den fylls upp när du klarar steg
+          som tränar respektive kompetens.
+        </p>
+        <p>
+          Tickmarks på 25 / 50 / 75 / 100 % visar nästa milstolpe. Under
+          stapeln står "Nästa: 50 %, 3 steg kvar" så du vet vad som krävs.
+          När du når 75 % på en kompetens räknas den som "mästrad" och du
+          får en prestation.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-achievements",
+    title: "Prestationer & streaks",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Prestationer</strong> i menyn ser du badges du
+          tjänat och vilka som finns kvar att jaga:
+        </p>
+        <ul>
+          <li>🎯 Första steget</li>
+          <li>📚 Första modulen klar</li>
+          <li>✍️ Tio reflektioner skickade</li>
+          <li>🏆 Tre kompetenser mästrade (≥75%)</li>
+          <li>🔥 Sju dagar i rad med klart steg (streak)</li>
+          <li>💯 Quiz på första försöket</li>
+        </ul>
+        <p>
+          Streaken räknar konsekutiva dagar med minst ett klart steg.
+          Tappar du en dag börjar räkningen om — men din längsta serie
+          historiskt finns alltid kvar.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-ask-ekon",
+    title: "Fråga Ekon (AI-coach)",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Knappen <strong>Fråga Ekon</strong> nere i högra hörnet öppnar
+          en chat med en AI-coach (Claude Sonnet). Den anpassar svaret
+          till var du är i kursplanen — har du låg mastery på området
+          frågar Ekon snarare tillbaka för att få dig att tänka själv,
+          har du högre mastery svarar den direkt.
+        </p>
+        <p>
+          Multi-turn: du kan följdfråga inom samma samtal. Klicka på
+          plus-knappen för att starta ett nytt. Trådarna sparas så du
+          kan komma tillbaka.
+        </p>
+        <p>
+          Ekon ger inte personliga råd om vad du ska köpa eller spara —
+          den hjälper dig <em>förstå</em>.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-peer-review",
+    title: "Kamratrespons",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Kamratrespons</strong> får du läsa en anonym
+          reflektion från en klasskamrat och skriva en kort återkoppling.
+          Du ser inte vem du svarar — och eleven du recenserar ser inte
+          att det var du.
+        </p>
+        <p>
+          När någon ger dig kamratrespons syns den under reflektionen i
+          modulen. Läraren ser båda namnen i moderationsvyn.
         </p>
       </>
     ),
