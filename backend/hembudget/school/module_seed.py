@@ -6,6 +6,116 @@ import logging
 log = logging.getLogger(__name__)
 
 
+# Mall: "Kontoutdraget — vart tog pengarna vägen?"
+ACCOUNT_STATEMENT_TEMPLATE = {
+    "title": "Kontoutdraget — vart tog pengarna vägen?",
+    "summary": "Importera ditt månadens kontoutdrag, sortera utgifterna i kategorier och se var pengarna faktiskt går.",
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Bankens dagbok över dig",
+            "content": (
+                "Kontoutdraget är bankens lista över allt som hänt på ditt "
+                "konto under en månad — varje insättning, varje köp, varje "
+                "räkning. Det är facit. Många unga vuxna har aldrig läst ett "
+                "i sin helhet.\n\n"
+                "I Ekonomilabbet får du ett realistiskt PDF-utdrag varje "
+                "månad. Den första uppgiften är att importera det och "
+                "kategorisera varje rad så du faktiskt SER vart pengarna "
+                "går — inte bara att de är slut."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Importera månadens kontoutdrag",
+            "content": (
+                "Gå till 'Dina dokument' i menyn. Där ligger ditt PDF-"
+                "utdrag för den senaste månaden. Klicka 'Importera' så "
+                "läser systemet in transaktionerna och visar dem på "
+                "Transaktioner-sidan."
+            ),
+            "params": {"assignment_kind": "import_batch"},
+        },
+        {
+            "kind": "read",
+            "title": "Vad är en kategori?",
+            "content": (
+                "En kategori är en etikett som beskriver VAD pengarna gick "
+                "till: 'Mat', 'Boende', 'Transport', 'Nöje' osv.\n\n"
+                "När varje köp har en kategori kan du svara på frågor som:\n"
+                "• Hur mycket går till mat per månad?\n"
+                "• Är jag över- eller underbudget på nöje?\n"
+                "• Vad är mina tre största utgifter?\n\n"
+                "Utan kategorier syns bara att kontot är tomt i slutet."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Kategorisera alla transaktioner",
+            "content": (
+                "Gå till 'Transaktioner' och tilldela en kategori till varje "
+                "rad som saknar. Använd dropdown-menyn. Är du osäker — "
+                "tänk: vad SKULLE jag kalla detta köp om jag berättade för "
+                "min förälder? Det räcker oftast."
+            ),
+            "params": {"assignment_kind": "categorize_all"},
+        },
+        {
+            "kind": "quiz",
+            "title": "Vart hör det här hemma?",
+            "content": None,
+            "params": {
+                "question": "ICA Maxi 487 kr — vilken kategori passar bäst?",
+                "options": [
+                    "Boende",
+                    "Mat & livsmedel",
+                    "Transport",
+                    "Nöje",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "ICA är en livsmedelsbutik så det mesta du köper där "
+                    "är mat. Ibland säljer de andra saker (kläder, "
+                    "elektronik) men då hade beloppet sett annorlunda ut "
+                    "och kunden får dela upp köpet manuellt."
+                ),
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vart gick mest pengar?",
+            "content": (
+                "Titta på dashboarden och se vilka kategorier som åt mest. "
+                "Var det som du förväntade dig? Om inte — vad var skillnaden "
+                "mot vad du trodde? Skriv 3-4 meningar."
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "specifik",
+                        "name": "Specifik",
+                        "levels": [
+                            "Generellt",
+                            "Refererar till en kategori",
+                            "Refererar till specifika belopp",
+                        ],
+                    },
+                    {
+                        "key": "insikt",
+                        "name": "Insikt",
+                        "levels": [
+                            "Beskriver",
+                            "Drar slutsats",
+                            "Föreslår förändring",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 # Mall: "Din första månad"
 FIRST_MONTH_TEMPLATE = {
     "title": "Din första månad",
@@ -154,7 +264,7 @@ def seed_system_modules(master_session) -> int:
         ).all()
     }
     n = 0
-    for tpl in [FIRST_MONTH_TEMPLATE]:
+    for tpl in [FIRST_MONTH_TEMPLATE, ACCOUNT_STATEMENT_TEMPLATE]:
         if tpl["title"] in existing:
             continue
         m = Module(
