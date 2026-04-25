@@ -39,7 +39,7 @@ export function Stat({
   const color =
     tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-rose-600" : "text-slate-900";
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
+    <div className="bg-white border-[1.5px] border-rule p-4">
       <div className="text-xs uppercase tracking-wide text-slate-700">{label}</div>
       <div className={clsx("text-2xl font-semibold mt-1", color)}>{value}</div>
       {sub && <div className="text-xs text-slate-700 mt-1">{sub}</div>}

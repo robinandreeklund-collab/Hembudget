@@ -70,7 +70,7 @@ export function CelebrationOverlay({
         </div>
         <button
           onClick={onClose}
-          className="mt-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium"
+          className="mt-2 btn-dark rounded-md px-5 py-2 font-medium"
         >
           Tack!
         </button>

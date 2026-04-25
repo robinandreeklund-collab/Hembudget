@@ -103,7 +103,7 @@ export function AssignmentList({
           {!asTeacher && a.kind === "mortgage_decision" && (
             <Link
               to={`/mortgage/${a.id}`}
-              className="text-xs bg-brand-600 hover:bg-brand-700 text-white rounded px-2 py-1"
+              className="text-xs btn-dark rounded-md px-2 py-1"
             >
               Öppna
             </Link>
