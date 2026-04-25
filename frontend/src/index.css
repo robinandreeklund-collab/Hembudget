@@ -186,10 +186,15 @@ body {
   }
   .elem:hover .elem-tooltip,
   .elem:focus-visible .elem-tooltip { opacity: 1; }
+  /* Flip tooltipen för översta raden så den inte klipps mot section-
+     kanten. nth-child(-n+8) täcker desktop rad 1 + mobil rad 1-2.
+     Klassen .flip-tooltip är manuell override för enstaka fall. */
+  .elem:nth-child(-n+8) .elem-tooltip,
   .elem.flip-tooltip .elem-tooltip {
     bottom: auto;
     top: calc(100% + 8px);
   }
+  .elem:nth-child(-n+8) .elem-tooltip::after,
   .elem.flip-tooltip .elem-tooltip::after {
     top: auto;
     bottom: 100%;
