@@ -380,9 +380,9 @@ function PeriodicGrid({ onPick }: { onPick: (c: Cell) => void }) {
           style={{ ["--h" as never]: String(heat[i] ?? 0) }}
         >
           <span className="num">{c.num}</span>
-          <span>
-            <span className="sym block">{c.sym}</span>
-            <span className="name block">{c.name}</span>
+          <span className="elem-body">
+            <span className="sym">{c.sym}</span>
+            <span className="name">{c.name}</span>
           </span>
           <span className="val">{c.val}</span>
           {/* Tooltip flippas under cellen för översta raden så den inte

@@ -129,21 +129,43 @@ body {
     outline-offset: 2px;
     z-index: 31;
   }
-  .elem .num { font-size: 10px; color: #666; }
+  .elem .num {
+    font-size: 10px;
+    color: #666;
+    display: block;
+    flex-shrink: 0;
+  }
+  /* Mitten-segmentet: sym + name. display:block + min-width:0 så
+     ellipsen i .name kan trigga (en flex/block-baby med default
+     min-width:auto skulle annars inte krympa under sin egen bredd). */
+  .elem .elem-body {
+    display: block;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    margin-top: 4px;
+  }
   .elem .sym {
+    display: block;
     font-family: "Spectral", serif;
     font-weight: 800;
     font-size: 22px;
     line-height: 1;
-    margin-top: 4px;
   }
   .elem .name {
+    display: block;
     font-size: 9.5px;
     color: #444;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    margin-top: 2px;
   }
-  .elem .val { font-size: 9px; color: #888; }
+  .elem .val {
+    font-size: 9px;
+    color: #888;
+    display: block;
+    flex-shrink: 0;
+  }
   .elem.grund { background: theme("colors.elem-grund"); }
   .elem.fordj { background: theme("colors.elem-fordj"); }
   .elem.expert { background: theme("colors.elem-expert"); }
