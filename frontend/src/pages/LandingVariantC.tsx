@@ -178,9 +178,38 @@ export default function LandingVariantC() {
       <Problem />
       <ThreeWays />
       <Pricing />
+      <Faq />
+      <Cta />
     </div>
   );
 }
+
+const FAQS = [
+  {
+    q: "Vad kostar Ekonomilabbet?",
+    a: "Gratis under pilotåret 2026 — både för skolor och föräldrar. Inga dolda kostnader. Från 2027 sätts en avgift per användare i dialog med pilotkunderna.",
+  },
+  {
+    q: "Är det GDPR-säkert?",
+    a: "Ja. All användardata sparas i svensk molntjänst (Google Cloud Run, europe-west1). Vi delar inga personuppgifter med tredje part. AI-anropen anonymiseras — Claude ser aldrig namn eller personnummer.",
+  },
+  {
+    q: "Vad behöver vi installera?",
+    a: "Inget. Ekonomilabbet är en webbapp. Den vuxna (lärare eller förälder) skapar konto, lägger in elever/barn och de loggar in med en 6-teckenskod eller QR-kod.",
+  },
+  {
+    q: "Kan föräldrar använda detta hemma?",
+    a: "Ja, det är ett av tre huvudspår. Som förälder skapar du ett familjekonto, lägger till dina barn och följer deras arbete i samma admin-vy som en lärare.",
+  },
+  {
+    q: "Går det att använda utan AI?",
+    a: "Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion som kan aktiveras per konto.",
+  },
+  {
+    q: "Kan elever eller barn komma åt varandras data?",
+    a: "Nej. Varje elev/barn har en egen tenant-isolerad dataström, ingen cross-access. Den vuxna ser bara sina egna användare.",
+  },
+];
 
 const PROBLEM_STATS = [
   { num: "4 av 10", label: "unga klarar inte en oväntad räkning på 2 000 kr." },
@@ -492,6 +521,145 @@ function Hero() {
             )}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- FAQ ----------
+
+function Faq() {
+  const [open, setOpen] = useState(0);
+  return (
+    <section
+      id="faq"
+      style={{
+        padding: "64px 24px",
+        borderTop: "1px solid #e2e8f0",
+        maxWidth: 880,
+        margin: "0 auto",
+      }}
+    >
+      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+        FAQ
+      </div>
+      <h2 className="vc-h2">Vanliga frågor.</h2>
+      <div style={{ marginTop: 32 }}>
+        {FAQS.map((it, i) => (
+          <div key={i} style={{ borderTop: "1px solid #e2e8f0" }}>
+            <button
+              type="button"
+              onClick={() => setOpen(open === i ? -1 : i)}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "18px 0",
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 16,
+                fontWeight: 500,
+                color: "#0f172a",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <span>{it.q}</span>
+              <span
+                style={{
+                  color: "#64748b",
+                  transform: open === i ? "rotate(180deg)" : "none",
+                  transition: "transform .2s",
+                }}
+              >
+                ⌄
+              </span>
+            </button>
+            {open === i && (
+              <p
+                style={{
+                  paddingBottom: 18,
+                  paddingRight: 60,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: "#475569",
+                }}
+              >
+                {it.a}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- CTA ----------
+
+function Cta() {
+  return (
+    <section
+      style={{
+        padding: "80px 24px",
+        borderTop: "1px solid #e2e8f0",
+        textAlign: "center",
+        maxWidth: 880,
+        margin: "0 auto",
+      }}
+    >
+      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+        Kom igång
+      </div>
+      <h2 className="vc-h2">
+        Det vuxenlivs­ämne som varken skolan eller köksbordet riktigt
+        hann med.
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: "#475569",
+          marginTop: 18,
+          marginBottom: 32,
+          maxWidth: 560,
+          marginLeft: "auto",
+          marginRight: "auto",
+          lineHeight: 1.6,
+        }}
+      >
+        Gratis under pilotåret. Ingen bindningstid. Du väljer själv om
+        du kör med en klass eller med dina egna barn.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <Link
+          to="/signup/teacher"
+          className="vc-btn vc-btn-primary"
+          style={{ padding: "12px 22px", textDecoration: "none" }}
+        >
+          Starta som lärare →
+        </Link>
+        <Link
+          to="/signup/parent"
+          className="vc-btn vc-btn-primary"
+          style={{ padding: "12px 22px", textDecoration: "none" }}
+        >
+          Starta som förälder →
+        </Link>
+        <a
+          href="mailto:info@ekonomilabbet.org?subject=Boka%20introduktion"
+          className="vc-btn vc-btn-outline"
+          style={{ padding: "12px 22px", textDecoration: "none" }}
+        >
+          Boka introduktion
+        </a>
       </div>
     </section>
   );
