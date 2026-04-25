@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ExternalLink, Info, Sparkles, Wallet } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -132,51 +132,78 @@ export default function Onboarding() {
 
   if (err) {
     return (
-      <div className="min-h-screen grid place-items-center p-6">
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-4">
+      <div className="min-h-screen grid place-items-center p-6 bg-paper">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1 max-w-md">
           {err}
         </div>
       </div>
     );
   }
   if (!profile || !tax || !budget) {
-    return <div className="grid place-items-center min-h-screen">Laddar…</div>;
+    return (
+      <div className="grid place-items-center min-h-screen bg-paper">
+        <div className="serif-italic text-[#888]">Laddar…</div>
+      </div>
+    );
   }
 
   const totalEdited = Object.values(edited).reduce((a, b) => a + b, 0);
   const overUnder = profile.net_salary_monthly - totalEdited;
 
   return (
-    <div className="min-h-screen bg-paper py-10 px-4">
-      <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg border border-slate-200 p-8 space-y-6">
-        <div className="flex items-center gap-2 text-brand-600">
-          <Sparkles className="w-6 h-6" />
-          <h1 className="text-2xl font-bold">Välkommen till Ekonomilabbet</h1>
+    <div className="min-h-screen bg-paper text-ink py-12 px-4">
+      <div className="max-w-3xl mx-auto bg-white border-[1.5px] border-ink p-8 md:p-10 space-y-7">
+        <div>
+          <div className="eyebrow mb-2">Onboarding · Ekonomilabbet</div>
+          <h1 className="serif text-3xl md:text-4xl leading-[1.05]">
+            Välkommen — låt oss sätta upp din vardag.
+          </h1>
         </div>
+
         {/* Stepper */}
-        <div className="flex gap-1">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className={`h-1 flex-1 rounded ${
-                i <= step ? "bg-brand-500" : "bg-slate-200"
-              }`}
-            />
+        <div className="flex items-center gap-3">
+          {[
+            { i: 0, label: "Profil" },
+            { i: 1, label: "Skatt" },
+            { i: 2, label: "Budget" },
+          ].map((s) => (
+            <div key={s.i} className="flex-1 flex items-center gap-2">
+              <span
+                className={`feature-chip ${
+                  s.i < step ? "special" : s.i === step ? "" : ""
+                }`}
+                style={{
+                  width: 28, height: 28, fontSize: 12,
+                  background: s.i <= step ? "#111217" : "#fff",
+                  color: s.i <= step ? "#fff" : "#999",
+                  borderColor: s.i <= step ? "#111217" : "#e7e3d7",
+                }}
+              >
+                {s.i + 1}
+              </span>
+              <span
+                className={`text-xs uppercase tracking-eyebrow font-semibold ${
+                  s.i === step ? "text-ink" : "text-[#999]"
+                }`}
+              >
+                {s.label}
+              </span>
+            </div>
           ))}
         </div>
 
         {/* Steg 1: Välkommen + backstory */}
         {step === 0 && (
-          <div className="space-y-4">
-            <p className="text-lg">
+          <div className="space-y-5">
+            <p className="lead">
               Hej! Du är nu inloggad i din egen ekonomi-simulator. Här lär du
               dig att planera, spara och förstå vart pengarna tar vägen.
             </p>
-            <div className="bg-brand-50 border-l-4 border-brand-500 p-4 rounded">
-              <h2 className="font-semibold text-brand-900 mb-2">
-                Din situation
-              </h2>
-              <p className="text-slate-800">{profile.backstory}</p>
+            <div className="border-l-[3px] border-ink pl-5 py-1">
+              <div className="eyebrow mb-1">Din situation</div>
+              <p className="serif-italic text-lg leading-snug">
+                {profile.backstory}
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Stat label="Yrke" value={profile.profession} />
@@ -195,7 +222,7 @@ export default function Onboarding() {
             <div className="flex justify-end pt-3">
               <button
                 onClick={() => setStep(1)}
-                className="btn-dark rounded-md px-5 py-2 flex items-center gap-2"
+                className="btn-dark rounded-md px-5 py-2.5 flex items-center gap-2"
               >
                 Förstått, gå vidare <ArrowRight className="w-4 h-4" />
               </button>
@@ -205,23 +232,24 @@ export default function Onboarding() {
 
         {/* Steg 2: Skatt */}
         {step === 1 && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Info className="w-5 h-5 text-brand-600" /> Vad händer med din lön?
-            </h2>
-            <p className="text-slate-700">
+          <div className="space-y-5">
+            <div>
+              <div className="eyebrow mb-1">Steg 2 av 3</div>
+              <h2 className="serif text-2xl leading-tight">Vad händer med din lön?</h2>
+            </div>
+            <p className="body-prose text-sm">
               Den lönesumma du ser på papperet är inte den summan som hamnar
               på ditt konto. Skatten dras direkt av arbetsgivaren och skickas
               till Skatteverket. Så här ser det ut för dig:
             </p>
-            <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+            <div className="bg-paper border-[1.5px] border-rule p-5 space-y-2">
               <Row label="Bruttolön (innan skatt)" value={formatKr(tax.gross_monthly)} />
               <Row
                 label="Skatt totalt"
                 value={`-${formatKr(tax.total_tax)} (${(tax.effective_rate * 100).toFixed(1)}%)`}
                 negative
               />
-              <div className="border-t-2 border-slate-300 pt-2">
+              <div className="border-t border-ink pt-2 mt-1">
                 <Row
                   label="Nettolön (det du faktiskt får)"
                   value={formatKr(tax.net_monthly)}
@@ -229,22 +257,22 @@ export default function Onboarding() {
                 />
               </div>
             </div>
-            <details className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-900">
-              <summary className="cursor-pointer font-medium">
+            <details className="border-l-[3px] border-ink pl-5 py-2">
+              <summary className="cursor-pointer eyebrow">
                 Förklara mer om hur skatten räknas
               </summary>
-              <p className="mt-2">{tax.explanation}</p>
+              <p className="mt-2 body-prose text-sm">{tax.explanation}</p>
             </details>
             <div className="flex justify-between pt-3">
               <button
                 onClick={() => setStep(0)}
-                className="text-slate-600 hover:bg-slate-100 rounded-lg px-3 py-2"
+                className="text-sm nav-link inline-flex items-center"
               >
-                Tillbaka
+                ← Tillbaka
               </button>
               <button
                 onClick={() => setStep(2)}
-                className="btn-dark rounded-md px-5 py-2 flex items-center gap-2"
+                className="btn-dark rounded-md px-5 py-2.5 flex items-center gap-2"
               >
                 Sätt en budget <ArrowRight className="w-4 h-4" />
               </button>
@@ -254,17 +282,18 @@ export default function Onboarding() {
 
         {/* Steg 3: Budget */}
         {step === 2 && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-brand-600" /> Sätt din månadsbudget
-            </h2>
-            <p className="text-sm text-slate-700">
+          <div className="space-y-5">
+            <div>
+              <div className="eyebrow mb-1">Steg 3 av 3</div>
+              <h2 className="serif text-2xl leading-tight">Sätt din månadsbudget</h2>
+            </div>
+            <p className="body-prose text-sm">
               Värdena nedan är ett FÖRSLAG baserat på{" "}
               <a
                 href={budget.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-brand-600 underline inline-flex items-center gap-0.5"
+                className="nav-link inline-flex items-center gap-0.5"
               >
                 {budget.source_title}
                 <ExternalLink className="w-3 h-3" />
@@ -274,15 +303,16 @@ export default function Onboarding() {
               kommer leva — vi följer sedan upp mot dina riktiga köp.
             </p>
             {budget.note && (
-              <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded p-3">
-                💡 {budget.note}
+              <div className="border-l-[3px] border-ink pl-5 py-2">
+                <div className="eyebrow mb-1">Notera</div>
+                <p className="serif-italic text-sm">{budget.note}</p>
               </div>
             )}
             <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
               {BUDGET_FIELDS.map((f) => (
-                <div key={f.key} className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
+                <div key={f.key} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-1 border-b border-rule last:border-0">
                   <label className="text-sm">{f.label}</label>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-[#999]">
                     förslag: {formatKr(budget[f.key] as number)}
                   </span>
                   <input
@@ -294,50 +324,50 @@ export default function Onboarding() {
                         [f.key]: parseInt(e.target.value || "0", 10),
                       })
                     }
-                    className="w-28 text-right border rounded px-2 py-1"
+                    className="w-28 text-right border-[1.5px] border-rule focus:border-ink outline-none px-2 py-1 font-mono text-sm"
                   />
                 </div>
               ))}
             </div>
-            <div className="border-t pt-3 space-y-1 text-sm">
+            <div className="border-t border-ink pt-4 space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span>Din nettolön</span>
-                <strong>{formatKr(profile.net_salary_monthly)}</strong>
+                <span className="mock-num">{formatKr(profile.net_salary_monthly)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Din budget totalt</span>
-                <strong>{formatKr(totalEdited)}</strong>
+                <span className="mock-num">{formatKr(totalEdited)}</span>
               </div>
               <div
-                className={`flex justify-between text-base font-semibold ${
+                className={`flex justify-between text-base font-semibold pt-1 border-t border-rule ${
                   overUnder >= 0 ? "text-emerald-700" : "text-rose-700"
                 }`}
               >
-                <span>{overUnder >= 0 ? "Kvar att fördela" : "Överskott (-budgeterat)"}</span>
-                <span>
+                <span>{overUnder >= 0 ? "Kvar att fördela" : "Överbudgeterat"}</span>
+                <span className="mock-num">
                   {overUnder >= 0 ? "+" : ""}
                   {formatKr(overUnder)}
                 </span>
               </div>
             </div>
-            <div className="flex justify-between pt-3">
+            <div className="flex justify-between pt-3 flex-wrap gap-2">
               <button
                 onClick={() => setStep(1)}
-                className="text-slate-600 hover:bg-slate-100 rounded-lg px-3 py-2"
+                className="text-sm nav-link inline-flex items-center"
               >
-                Tillbaka
+                ← Tillbaka
               </button>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 <button
                   onClick={logout}
-                  className="text-slate-500 hover:bg-slate-100 rounded-lg px-3 py-2 text-sm"
+                  className="text-sm text-[#888] hover:text-ink px-2 py-2"
                 >
                   Avbryt
                 </button>
                 <button
                   onClick={finish}
                   disabled={busy}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-5 py-2 flex items-center gap-2 disabled:opacity-50"
+                  className="btn-dark rounded-md px-5 py-2.5 flex items-center gap-2 disabled:opacity-50"
                 >
                   {busy ? "Sparar…" : "Klar! Starta Ekonomilabbet"}
                 </button>
@@ -352,9 +382,9 @@ export default function Onboarding() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-50 rounded p-2">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="font-medium">{value}</div>
+    <div className="border-[1.5px] border-rule bg-white p-3">
+      <div className="eyebrow mb-1">{label}</div>
+      <div className="font-medium text-ink">{value}</div>
     </div>
   );
 }
@@ -371,11 +401,11 @@ function Row({
   negative?: boolean;
 }) {
   return (
-    <div className="flex justify-between text-sm">
-      <span className={bold ? "font-semibold" : ""}>{label}</span>
+    <div className="flex justify-between items-baseline text-sm">
+      <span className={bold ? "font-semibold" : "text-[#444]"}>{label}</span>
       <span
-        className={`${bold ? "font-bold text-base" : ""} ${
-          negative ? "text-rose-600" : ""
+        className={`mock-num ${bold ? "text-base" : ""} ${
+          negative ? "text-rose-700" : "text-ink"
         }`}
       >
         {value}
