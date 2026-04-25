@@ -291,6 +291,32 @@
   </div>
 </section>
 
+<!-- STATS TICKER (hämtar /public/stats; renderas tomt om backend saknas) -->
+<section id="stats" class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-14">
+    <div class="section-divider mb-10">I produktion just nu</div>
+    <div id="stats-grid" class="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-8">
+      <!-- 4 platshållare som JS:en byter ut. Visas dolt tills datan kommer. -->
+      <div class="text-center stat-cell" data-key="teachers">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Lärare</div>
+      </div>
+      <div class="text-center stat-cell" data-key="students">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Elever</div>
+      </div>
+      <div class="text-center stat-cell" data-key="modules_completed">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Avklarade moduler</div>
+      </div>
+      <div class="text-center stat-cell" data-key="reflections_written">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Reflektioner</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- DETAIL STRIP -->
 <section class="border-t rule bg-white">
   <div class="max-w-7xl mx-auto px-6 py-20">
@@ -452,6 +478,37 @@
       er.setAttribute('cy', String(68 + dy * 2));
     });
   }
+
+  /* --- Stats-ticker: hämta /public/stats och count-up-animera --- */
+  (function loadStats(){
+    const cells = document.querySelectorAll('.stat-cell');
+    if (!cells.length) return;
+    fetch('/public/stats', { headers: { 'Accept': 'application/json' }})
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        cells.forEach(cell => {
+          const key = cell.getAttribute('data-key');
+          const target = Number(data[key]) || 0;
+          const numEl = cell.querySelector('.stat-num');
+          if (!numEl) return;
+          if (reduce || target === 0) {
+            numEl.textContent = target.toLocaleString('sv-SE');
+            return;
+          }
+          // 800 ms easeOutCubic count-up
+          const start = performance.now();
+          const dur = 800;
+          (function step(now){
+            const t = Math.min(1, (now - start) / dur);
+            const eased = 1 - Math.pow(1 - t, 3);
+            numEl.textContent = Math.round(target * eased).toLocaleString('sv-SE');
+            if (t < 1) requestAnimationFrame(step);
+          })(start);
+        });
+      })
+      .catch(() => { /* tysta — sektionen behåller "—" */ });
+  })();
 
   /* --- Drivande partiklar bakom hero (egen wrapper för att inte
          klippa tooltip-popovers på cellerna) --- */
