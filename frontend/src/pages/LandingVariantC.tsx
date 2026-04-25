@@ -83,6 +83,79 @@ const CATEGORY_META: Record<CellCat, { label: string; count: number }> = {
   prof: { label: "Professorns tillskott", count: 4 },
 };
 
+// 9 features med målgrupp-tagg så tab-filtret fungerar.
+const FEATURES: Array<{
+  sym: string;
+  title: string;
+  desc: string;
+  cat: CellCat;
+  audience: ("larare" | "hem" | "elev")[];
+}> = [
+  {
+    sym: "Pf",
+    title: "Unik elev-profil",
+    desc: "Varje elev får slumpat yrke, lön, stad och livssituation. Ingen i klassen har samma utgångsläge.",
+    cat: "prof",
+    audience: ["larare", "elev"],
+  },
+  {
+    sym: "Ku",
+    title: "Riktiga PDF:er",
+    desc: "Du genererar kontoutdrag, lönespec, lånebesked och kreditkortsfakturor som eleven själv importerar.",
+    cat: "fordj",
+    audience: ["larare", "hem"],
+  },
+  {
+    sym: "Bu",
+    title: "Budget mot verklighet",
+    desc: "Eleven sätter månadsbudget från Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp.",
+    cat: "grund",
+    audience: ["larare", "hem", "elev"],
+  },
+  {
+    sym: "Bl",
+    title: "Bolåne-beslut",
+    desc: "Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten.",
+    cat: "grund",
+    audience: ["larare", "hem", "elev"],
+  },
+  {
+    sym: "Ov",
+    title: "Livet händer",
+    desc: "Diskmaskinen går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleven övar på det oväntade.",
+    cat: "fordj",
+    audience: ["larare", "elev"],
+  },
+  {
+    sym: "Hu",
+    title: "Familjer",
+    desc: "Två elever kan dela ekonomi — sambohushåll med gemensam budget, räkningar och sparmål.",
+    cat: "risk",
+    audience: ["larare", "hem"],
+  },
+  {
+    sym: "Rp",
+    title: "Översiktsmatris",
+    desc: "Status per elev/kompetens och uppdrag. Facit för varje kategorisering — grönt eller rött på en blick.",
+    cat: "risk",
+    audience: ["larare", "hem"],
+  },
+  {
+    sym: "AI",
+    title: "Fråga Ekon (AI)",
+    desc: "Multi-turn coach på Claude Sonnet. Anpassar språket till elevens nivå — mer Sokrates där grunder saknas.",
+    cat: "risk",
+    audience: ["larare", "hem", "elev"],
+  },
+  {
+    sym: "Sp",
+    title: "Sparmål & uppdrag",
+    desc: "Tydliga uppdrag: spara 2 000 kr, balansera månaden, kategorisera alla köp. Status uppdateras live.",
+    cat: "konto",
+    audience: ["larare", "hem", "elev"],
+  },
+];
+
 // ---------- Root ----------
 
 export default function LandingVariantC() {
@@ -99,6 +172,7 @@ export default function LandingVariantC() {
       <SharedStyles />
       <Header />
       <Hero />
+      <Features />
     </div>
   );
 }
@@ -359,6 +433,168 @@ function Hero() {
             )}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Features ----------
+
+type AudienceFilter = "alla" | "larare" | "hem" | "elev";
+
+function Features() {
+  const [filter, setFilter] = useState<AudienceFilter>("alla");
+  const visible =
+    filter === "alla"
+      ? FEATURES
+      : FEATURES.filter((f) => f.audience.includes(filter));
+  const tabs: Array<[AudienceFilter, string]> = [
+    ["alla", "Alla"],
+    ["larare", "För lärare"],
+    ["hem", "För hemmet"],
+    ["elev", "För eleven"],
+  ];
+  return (
+    <section
+      id="funktioner"
+      style={{ padding: "56px 24px 80px", maxWidth: 1200, margin: "0 auto" }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          marginBottom: 28,
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
+        <div>
+          <span className="vc-eyebrow">FUNKTIONER · 09 / 09</span>
+          <h2 className="vc-h2" style={{ marginTop: 10 }}>
+            Allt en lärare eller förälder behöver.
+          </h2>
+          <p
+            style={{
+              fontSize: 15,
+              color: "#475569",
+              marginTop: 10,
+              maxWidth: 540,
+            }}
+          >
+            Från första lönen till bolåne-beslut. Varje funktion är ett
+            element i kursplanen.
+          </p>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+            padding: 3,
+            background: "#f1f5f9",
+            borderRadius: 8,
+          }}
+        >
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              className={`vc-tab ${filter === key ? "vc-tab-on" : "vc-tab-off"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 12,
+        }}
+      >
+        {visible.map((f, i) => {
+          const p = PALETTE[f.cat];
+          return (
+            <div key={i} className="vc-card" style={{ padding: 18 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  marginBottom: 14,
+                }}
+              >
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 7,
+                    background: p.bg,
+                    color: p.fg,
+                    border: `1px solid ${p.border}`,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    padding: "3px 5px",
+                  }}
+                >
+                  <span
+                    className="vc-mono"
+                    style={{ fontSize: 7, opacity: 0.55 }}
+                  >
+                    {(i + 1).toString().padStart(2, "0")}
+                  </span>
+                  <span
+                    className="vc-mono"
+                    style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}
+                  >
+                    {f.sym}
+                  </span>
+                </div>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 10.5,
+                    padding: "3px 8px",
+                    borderRadius: 100,
+                    background: "#f1f5f9",
+                    color: "#475569",
+                    fontWeight: 500,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      background: p.bg,
+                      border: `1px solid ${p.border}`,
+                    }}
+                  />
+                  {CATEGORY_META[f.cat].label}
+                </span>
+              </div>
+              <h3
+                style={{
+                  fontSize: 15.5,
+                  fontWeight: 600,
+                  letterSpacing: -0.2,
+                  marginBottom: 6,
+                }}
+              >
+                {f.title}
+              </h3>
+              <p style={{ fontSize: 13, lineHeight: 1.5, color: "#475569" }}>
+                {f.desc}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
