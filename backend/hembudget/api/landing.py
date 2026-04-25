@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
-from ..school.models import LandingAsset, Teacher
+from ..school.models import AppConfig, LandingAsset, Teacher
 from .deps import TokenInfo, require_teacher
 
 log = logging.getLogger(__name__)
@@ -33,6 +33,11 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 ALLOWED_MIMES = {
     "image/png", "image/jpeg", "image/webp", "image/gif",
 }
+
+# AppConfig-nyckel för aktiv landings-variant. Frontend hämtar via
+# /landing/variant och router:as till respektive komponent.
+VARIANT_CONFIG_KEY = "landing_variant"
+ALLOWED_VARIANTS = {"default", "c"}
 
 
 def _require_super_admin(
@@ -202,3 +207,59 @@ def admin_clear_image(
         a.image_blob = None
         a.image_mime = None
         return {"ok": True}
+
+
+# ---------- Landings-variant-toggle (för A/B-test) ----------
+
+class LandingVariantOut(BaseModel):
+    variant: str  # "default" | "c"
+
+
+class LandingVariantIn(BaseModel):
+    variant: str
+
+
+def _read_variant() -> str:
+    """Läs aktiv variant från AppConfig. Default = "default" om
+    inget satt eller school-mode är av."""
+    if not school_enabled():
+        return "default"
+    try:
+        with master_session() as s:
+            row = s.get(AppConfig, VARIANT_CONFIG_KEY)
+            if row and isinstance(row.value, dict):
+                v = str(row.value.get("variant", "default"))
+                if v in ALLOWED_VARIANTS:
+                    return v
+    except Exception:
+        log.exception("kunde inte läsa landing_variant")
+    return "default"
+
+
+@router.get("/landing/variant", response_model=LandingVariantOut)
+def get_landing_variant() -> LandingVariantOut:
+    """Publik: vilken variant ska frontend rendera just nu?
+    Cachas inte explicit — Cloud Run cdn:ar inte denna endpoint så
+    super-admin-toggling slår igenom direkt."""
+    return LandingVariantOut(variant=_read_variant())
+
+
+@router.put("/admin/landing/variant", response_model=LandingVariantOut)
+def admin_set_variant(
+    payload: LandingVariantIn,
+    _: TokenInfo = Depends(_require_super_admin),
+) -> LandingVariantOut:
+    """Super-admin: byt aktiv variant. Tillåtna värden: 'default' | 'c'."""
+    v = (payload.variant or "").strip().lower()
+    if v not in ALLOWED_VARIANTS:
+        raise HTTPException(
+            400,
+            f"Otillåten variant '{v}'. Tillåtna: {sorted(ALLOWED_VARIANTS)}",
+        )
+    with master_session() as s:
+        row = s.get(AppConfig, VARIANT_CONFIG_KEY)
+        if row is None:
+            s.add(AppConfig(key=VARIANT_CONFIG_KEY, value={"variant": v}))
+        else:
+            row.value = {"variant": v}
+    return LandingVariantOut(variant=v)

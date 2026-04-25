@@ -201,3 +201,54 @@ def test_seed_is_idempotent(fx) -> None:
         assert n == 0  # alla slots fanns redan
     rows2 = client.get("/landing/gallery").json()
     assert len(rows1) == len(rows2) == 6
+
+
+def test_variant_default_is_default(fx) -> None:
+    """Innan någon super-admin toggar ska /landing/variant returnera
+    'default' så frontend renderar den klassiska paper-sidan."""
+    client, _, _ = fx
+    r = client.get("/landing/variant")
+    assert r.status_code == 200
+    assert r.json() == {"variant": "default"}
+
+
+def test_super_admin_can_toggle_variant(fx) -> None:
+    client, super_tok, _ = fx
+    # Sätt till c
+    r = client.put(
+        "/admin/landing/variant",
+        json={"variant": "c"},
+        headers={"Authorization": f"Bearer {super_tok}"},
+    )
+    assert r.status_code == 200
+    assert r.json()["variant"] == "c"
+    # Publik endpoint speglar
+    assert client.get("/landing/variant").json()["variant"] == "c"
+    # Toggla tillbaka
+    r = client.put(
+        "/admin/landing/variant",
+        json={"variant": "default"},
+        headers={"Authorization": f"Bearer {super_tok}"},
+    )
+    assert r.json()["variant"] == "default"
+    assert client.get("/landing/variant").json()["variant"] == "default"
+
+
+def test_invalid_variant_rejected(fx) -> None:
+    client, super_tok, _ = fx
+    r = client.put(
+        "/admin/landing/variant",
+        json={"variant": "evil"},
+        headers={"Authorization": f"Bearer {super_tok}"},
+    )
+    assert r.status_code == 400
+
+
+def test_normal_teacher_cannot_toggle_variant(fx) -> None:
+    client, _, normal_tok = fx
+    r = client.put(
+        "/admin/landing/variant",
+        json={"variant": "c"},
+        headers={"Authorization": f"Bearer {normal_tok}"},
+    )
+    assert r.status_code == 403
