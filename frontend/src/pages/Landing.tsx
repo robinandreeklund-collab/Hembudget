@@ -22,43 +22,174 @@ type Cell = {
   sym: string;
   name: string;
   val: string;
-  tip: string;
+  tip: string;       // kort en-rads-tooltip vid hover
+  long: string;      // 2-3 meningar förklaring i modal
+  example: string;   // konkret vardagsexempel
+  trains: string;    // var i kursplanen detta tränas
   color: CellColor;
 };
 
 const CELLS: Cell[] = [
-  { num: 1, sym: "Lö", name: "Lön", val: "brutto · netto", tip: "Lön = bruttolön minus skatt = det du faktiskt får", color: "grund" },
-  { num: 2, sym: "Sk", name: "Skatt", val: "kommun · stat", tip: "Skatt = din andel av samhället", color: "grund" },
-  { num: 3, sym: "Bu", name: "Budget", val: "in − ut", tip: "Budget = planen innan pengarna försvinner", color: "grund" },
-  { num: 4, sym: "Ku", name: "Kontoutdrag", val: "rörelser", tip: "Kontoutdrag = bankens dagbok över dig", color: "konto" },
-  { num: 5, sym: "Ka", name: "Kategori", val: "mat · hyra", tip: "Kategorisering = första steget till förståelse", color: "grund" },
-  { num: 6, sym: "Sa", name: "Saldo", val: "kontot nu", tip: "Saldo = sanningen just nu", color: "konto" },
-  { num: 7, sym: "Sp", name: "Sparande", val: "buffert", tip: "Sparande = framtida du tackar nuvarande du", color: "fordj" },
-  { num: 8, sym: "Hu", name: "Hushållskost.", val: "Konsumentv.", tip: "Hushållskostnader = vad det faktiskt kostar att leva", color: "fordj" },
-  { num: 9, sym: "Bl", name: "Bolån", val: "räntebärande", tip: "Bolån = ditt största ekonomiska beslut", color: "fordj" },
-  { num: 10, sym: "Am", name: "Amortering", val: "betala av", tip: "Amortering = att krympa skulden, inte bara räntan", color: "fordj" },
-  { num: 11, sym: "Ov", name: "Oväntat", val: "buffert", tip: "Oväntat = tandläkare, kyl som går sönder, en tisdag", color: "risk" },
-  { num: 12, sym: "Kk", name: "Kreditkort", val: "kostar om...", tip: "Kreditkort = bra verktyg, dålig vana", color: "risk" },
-  { num: 13, sym: "Lp", name: "Långsiktig plan", val: "3–5 år", tip: "Långsiktig plan = du vet vart du är på väg", color: "expert" },
-  { num: 14, sym: "Rb", name: "Räntebindning", val: "rörlig/bunden", tip: "Räntebindning = risk vs. förutsägbarhet", color: "expert" },
-  { num: 15, sym: "AI", name: "Fråga Ekon", val: "Claude Sonnet", tip: "AI-coach som kan hela kursplanen", color: "special" },
-  { num: 16, sym: "Pf", name: "Portfolio", val: "PDF-export", tip: "Portfolio-PDF = lärarens betygsunderlag", color: "special" },
-  { num: 17, sym: "In", name: "Inkomst", val: "lön · bidrag", tip: "Inkomst = allt som kommer in", color: "konto" },
-  { num: 18, sym: "Ut", name: "Utgift", val: "fast · rörlig", tip: "Utgift = allt som går ut", color: "konto" },
-  { num: 19, sym: "Öv", name: "Överskott", val: "sparat", tip: "Överskott = pengar kvar i slutet av månaden", color: "konto" },
-  { num: 20, sym: "Un", name: "Underskott", val: "varning", tip: "Underskott = du spenderade mer än du fick in", color: "risk" },
-  { num: 21, sym: "Rä", name: "Ränta", val: "% per år", tip: "Ränta = priset för att låna pengar", color: "fordj" },
-  { num: 22, sym: "Ef", name: "Effektiv ränta", val: "verkligt", tip: "Effektiv ränta = den ränta du faktiskt betalar inkl. avgifter", color: "fordj" },
-  { num: 23, sym: "Rp", name: "Rubric", val: "bedömning", tip: "Rubric = lärarens betygskriterier per kompetens", color: "special" },
-  { num: 24, sym: "Qr", name: "QR-kod", val: "login", tip: "QR-login = elev loggar in genom att skanna en kod", color: "special" },
-  { num: 25, sym: "Pe", name: "Pension", val: "premie", tip: "Pension = lön du får utan att jobba — så småningom", color: "grund" },
-  { num: 26, sym: "Fs", name: "Försäkring", val: "trygghet", tip: "Försäkring = du betalar lite varje månad för att slippa krasch", color: "grund" },
-  { num: 27, sym: "Fo", name: "Fondspar.", val: "index", tip: "Fondsparande = långsiktigt ägande av flera bolag samtidigt", color: "fordj" },
-  { num: 28, sym: "Ak", name: "Aktie", val: "ägarskap", tip: "Aktie = en liten del av ett bolag", color: "expert" },
-  { num: 29, sym: "Sn", name: "SMS-lån", val: "undvik", tip: "SMS-lån = den dyraste formen av kredit", color: "risk" },
-  { num: 30, sym: "Bg", name: "Bankgiro", val: "fakturor", tip: "Bankgiro = systemet svenska företag använder för räkningar", color: "konto" },
-  { num: 31, sym: "Ba", name: "Batch-PDF", val: "scenarier", tip: "Batch = lärare genererar månadens dokument till hela klassen", color: "special" },
-  { num: 32, sym: "Mo", name: "Modul", val: "7 steg", tip: "Modul = en kursvecka med läs/titta/reflektera/quiz/uppdrag", color: "special" },
+  { num: 1, sym: "Lö", name: "Lön", val: "brutto · netto", color: "grund",
+    tip: "Lön = bruttolön minus skatt = det du faktiskt får",
+    long: "Bruttolön är vad du tjänar på pappret. Nettolön är vad som landar på kontot efter att skatten dragits. Skillnaden är ofta 25–35 % beroende på kommun och inkomstnivå.",
+    example: "Anna har en bruttolön på 32 000 kr. Efter ~28 % skatt får hon ut 23 040 kr i handen den 25:e varje månad.",
+    trains: "Steg 2 i Din första månad — eleven läser sin egen lönespec." },
+  { num: 2, sym: "Sk", name: "Skatt", val: "kommun · stat", color: "grund",
+    tip: "Skatt = din andel av samhället",
+    long: "Inkomstskatt består av kommunalskatt (~30 %) och statlig skatt (på inkomster över ~615 000 kr/år). Den dras direkt från lönen och betalar för skola, vård, vägar och allt annat det offentliga gör.",
+    example: "Av Annas 32 000 kr går ~9 000 kr till kommunal- och statsskatt — varav merparten till Stockholms kommun.",
+    trains: "Steg 3 i Din första månad — eleven jämför kommun-skattesatser." },
+  { num: 3, sym: "Bu", name: "Budget", val: "in − ut", color: "grund",
+    tip: "Budget = planen innan pengarna försvinner",
+    long: "En budget är en plan över vad pengarna SKA gå till. Inkomster minus utgifter ska gå plus eller minst gå jämnt upp. Konsumentverkets siffror är ett bra startläge.",
+    example: "Anna budgeterar 4 000 kr/mån för mat, 1 500 kr för nöje, 800 kr för hygien. Totalt 6 300 kr — verkligheten avgör om det räcker.",
+    trains: "Steg 5–6 i Din första månad — eleven sätter sin egen budget och jämför mot Konsumentverkets riktvärden." },
+  { num: 4, sym: "Ku", name: "Kontoutdrag", val: "rörelser", color: "konto",
+    tip: "Kontoutdrag = bankens dagbok över dig",
+    long: "Kontoutdraget visar varje krona in och ut. Det är facit för månaden — där ser du om du höll budgeten eller inte. Att läsa ett kontoutdrag är en grundläggande färdighet som många unga aldrig övat på.",
+    example: "Annas november-utdrag har 47 rader. Lön +23 040, hyra −9 200, ICA Maxi 14 ggr för totalt 4 120 kr...",
+    trains: "Steg 4 i Din första månad — eleven importerar PDF:en läraren genererat." },
+  { num: 5, sym: "Ka", name: "Kategori", val: "mat · hyra", color: "grund",
+    tip: "Kategorisering = första steget till förståelse",
+    long: "Att sortera utgifter i kategorier (Mat, Boende, Transport, Nöje...) gör det möjligt att se var pengarna faktiskt går. Utan kategorisering syns bara att pengarna är slut.",
+    example: "ICA Maxi → Mat. SL-kort → Transport. Spotify → Nöje. Hyresvärden → Boende.",
+    trains: "Steg 7 i Din första månad — eleven kategoriserar månadens köp; läraren ser facit." },
+  { num: 6, sym: "Sa", name: "Saldo", val: "kontot nu", color: "konto",
+    tip: "Saldo = sanningen just nu",
+    long: "Saldot är vad som faktiskt finns på kontot — inte vad du \"tror\" du har. Att kolla saldot innan ett köp är en grundvana som hindrar övertrasseringar.",
+    example: "På Annas konto den 15:e: 8 880 kr. Hyran nästa månad är 9 200. Hon behöver vänta med Black Friday.",
+    trains: "Visas live i Dashboard — eleven ser saldot uppdateras vid varje import." },
+  { num: 7, sym: "Sp", name: "Sparande", val: "buffert", color: "fordj",
+    tip: "Sparande = framtida du tackar nuvarande du",
+    long: "Att sätta undan pengar regelbundet är skillnaden mellan ekonomisk frihet och stress. Tumregeln 10 % av inkomsten är en bra start — bygg först en buffert på 2–3 månadslöner, sedan långsiktigt.",
+    example: "Anna sparar 1 500 kr/mån. På ett år har hon 18 000 kr — räcker för en oväntad räkning eller en bilreparation.",
+    trains: "Modulen Buffert &amp; sparmål — eleven sätter ett konkret mål och spårar månadsvis." },
+  { num: 8, sym: "Hu", name: "Hushållskost.", val: "Konsumentv.", color: "fordj",
+    tip: "Hushållskostnader = vad det faktiskt kostar att leva",
+    long: "Konsumentverket räknar varje år ut vad det kostar att leva med rimlig levnadsstandard — mat, kläder, hygien, fritid, etc. För en ensamboende vuxen 2026: ~5 700 kr/mån (utan boendekostnad).",
+    example: "Anna får ut 23 040 kr. Konsumentverket säger 5 700. Hon har 17 340 kr till hyra, sparande och nöje.",
+    trains: "Steg 6 i Din första månad — eleven jämför sin egen budget mot Konsumentverkets nivå." },
+  { num: 9, sym: "Bl", name: "Bolån", val: "räntebärande", color: "fordj",
+    tip: "Bolån = ditt största ekonomiska beslut",
+    long: "Ett bolån är räntebärande och ofta löper över 30–50 år. En procentenhet ränta gör enorm skillnad — på ett 2 mkr-lån är 1 % = 20 000 kr/år.",
+    example: "Anna och hennes sambo köper en lägenhet för 3,2 mkr. De lånar 2,4 mkr (75 %) — räntekostnaden vid 4 % blir 96 000 kr/år.",
+    trains: "Modulen Första bolånet — eleven får en lånesimulator att leka med." },
+  { num: 10, sym: "Am", name: "Amortering", val: "betala av", color: "fordj",
+    tip: "Amortering = att krympa skulden, inte bara räntan",
+    long: "Amortering är när du betalar av själva skulden, inte bara räntan. I Sverige finns krav på minst 1–3 % amortering/år beroende på belåningsgrad och inkomst. Räntan är priset, amorteringen är att verkligen bli av med lånet.",
+    example: "Annas månadskostnad: 8 000 kr ränta + 4 000 kr amortering = 12 000 kr. Bara amorteringen krymper lånet.",
+    trains: "Modulen Första bolånet — eleven jämför ränta vs amortering över tid." },
+  { num: 11, sym: "Ov", name: "Oväntat", val: "buffert", color: "risk",
+    tip: "Oväntat = tandläkare, kyl som går sönder, en tisdag",
+    long: "Det oväntade händer alltid. Tandläkaren, en bilreparation, en trasig diskmaskin. Utan buffert blir varje sådan händelse en kris. Med buffert är det bara en räkning.",
+    example: "Anna går till tandläkaren — får en räkning på 4 200 kr. Hon har 18 000 i buffert. Inget drama.",
+    trains: "Modulen Buffert &amp; oväntat — slumpade händelser i scenariomånaden." },
+  { num: 12, sym: "Kk", name: "Kreditkort", val: "kostar om...", color: "risk",
+    tip: "Kreditkort = bra verktyg, dålig vana",
+    long: "Kreditkort är gratis OM du betalar fakturan i sin helhet varje månad. Annars ligger räntan ofta kring 18–25 % per år — bland de dyraste lånen som finns. Många bygger upp dyra skulder genom att bara betala minimibeloppet.",
+    example: "Anna handlar för 6 000 på sitt Visa. Betalar bara 500 minimum → kvarvarande 5 500 kostar 92 kr/mån i ränta tills det är betalt.",
+    trains: "Modulen Kreditkortsmånaden — eleven får en faktura och måste välja strategi." },
+  { num: 13, sym: "Lp", name: "Långsiktig plan", val: "3–5 år", color: "expert",
+    tip: "Långsiktig plan = du vet vart du är på väg",
+    long: "En långsiktig plan svarar på 'var vill jag vara om 3, 5, 10 år?'. Bostad, utbildning, resor, pensionsavsättningar. Utan plan rinner pengarna ut i konsumtion utan riktning.",
+    example: "Anna vill bo i egen bostad om 5 år. Mål: 350 000 kr i kontantinsats. Sparkrav: ~5 800 kr/mån.",
+    trains: "Modulen Mina mål — eleven sätter konkreta mål och tidsplan." },
+  { num: 14, sym: "Rb", name: "Räntebindning", val: "rörlig/bunden", color: "expert",
+    tip: "Räntebindning = risk vs. förutsägbarhet",
+    long: "Rörlig ränta följer marknaden — kan gå upp eller ner när som helst. Bunden ränta låses fast i 1–10 år. Bunden ger förutsägbarhet men du betalar oftast lite mer i utbyte.",
+    example: "2024 var rörlig 4,2 % och 5-årig bunden 4,5 %. Anna valde rörlig — och hade rätt: 2026 är den 3,1 %.",
+    trains: "Modulen Bolåneval — eleven gör ett riktigt val mot Riksbankens historiska data." },
+  { num: 15, sym: "AI", name: "Fråga Ekon", val: "Claude Sonnet", color: "special",
+    tip: "AI-coach som kan hela kursplanen",
+    long: "Ekon är en AI-coach byggd på Claude Sonnet 4.6 som svarar på elevens frågor om ekonomi. Den anpassar svaret till elevens mastery-nivå — mer Socrates där grunden saknas, direkt svar där eleven är mästrad.",
+    example: "Eleven frågar: 'Vad är ränta-på-ränta?'. Ekon: 'Berätta först — vad tror du händer med 100 kr på ett konto med 5 % ränta efter 10 år?'",
+    trains: "Tillgänglig i alla moduler — flytande knapp i nedre högra hörnet." },
+  { num: 16, sym: "Pf", name: "Portfolio", val: "PDF-export", color: "special",
+    tip: "Portfolio-PDF = lärarens betygsunderlag",
+    long: "Portfolio-PDF:en samlar elevens reflektioner, mastery, klara moduler och uppdrag i ett snyggt dokument läraren kan använda som betygsunderlag eller utvecklingssamtal-bilaga.",
+    example: "Lärare exporterar Annas portfolio inför betyg. Får en 12-sidig PDF med tre månader av reflektioner och mastery-grafer.",
+    trains: "Bygger på all data eleven genererat — laddas ner från lärarens elev-vy." },
+  { num: 17, sym: "In", name: "Inkomst", val: "lön · bidrag", color: "konto",
+    tip: "Inkomst = allt som kommer in",
+    long: "Inkomst är inte bara lön. Studiebidrag, CSN, swish från jobb, försäljning på Tradera — allt räknas. Att se HELA bilden hjälper när man planerar månaden.",
+    example: "Anna har lön 23 040 + extra-Swish från cykelförsäljning 1 200 = 24 240 kr in i november.",
+    trains: "Steg 1 i Din första månad — eleven listar alla sina inkomstkällor." },
+  { num: 18, sym: "Ut", name: "Utgift", val: "fast · rörlig", color: "konto",
+    tip: "Utgift = allt som går ut",
+    long: "Utgifter delas i fasta (hyra, abonnemang, försäkringar — kommer varje månad oavsett) och rörliga (mat, nöje, kläder — du styr själv hur mycket). Den första gruppen är svårare att skära i, den andra är där du har handlingsutrymme.",
+    example: "Annas fasta: 9 200 hyra + 99 Spotify + 590 SL + 89 Netflix = 9 978 kr/mån redan låsta.",
+    trains: "Modulen Fast vs rörligt — eleven sorterar sina egna utgifter." },
+  { num: 19, sym: "Öv", name: "Överskott", val: "sparat", color: "konto",
+    tip: "Överskott = pengar kvar i slutet av månaden",
+    long: "Överskott är när inkomsterna är större än utgifterna. Det är ENDA sättet att bygga ekonomi över tid. Två sätt att skapa överskott: tjäna mer eller spendera mindre. Oftast lättare att fixa det andra.",
+    example: "Anna har +2 800 kr i november — överförs automatiskt till sparkonto.",
+    trains: "Visas som balansraden i Dashboard varje månad." },
+  { num: 20, sym: "Un", name: "Underskott", val: "varning", color: "risk",
+    tip: "Underskott = du spenderade mer än du fick in",
+    long: "Underskott betyder att pengarna kommer från någonstans annars — sparkonto, kreditkort, lån. Ett enstaka underskott är inget drama. Återkommande underskott är ekonomiska problem som växer.",
+    example: "Anna får −1 800 i december (julshopping). Hon tar från bufferten denna gång — men måste se över januari.",
+    trains: "Dashboard visar underskott i orange/röd; AI-coach föreslår orsaksanalys." },
+  { num: 21, sym: "Rä", name: "Ränta", val: "% per år", color: "fordj",
+    tip: "Ränta = priset för att låna pengar",
+    long: "Ränta är det banken eller långivaren tar betalt för att låna ut pengar. Anges nästan alltid som procent per år. Lägre ränta = billigare lån. Räntan beror på risk (hur säker är banken på att få tillbaka), längd och konkurrens.",
+    example: "4 % ränta på 100 000 kr = 4 000 kr/år = 333 kr/månad. Per dag: 11 kr.",
+    trains: "Modulen Vad är ränta? — eleven räknar på olika räntor och horisonter." },
+  { num: 22, sym: "Ef", name: "Effektiv ränta", val: "verkligt", color: "fordj",
+    tip: "Effektiv ränta = den ränta du faktiskt betalar inkl. avgifter",
+    long: "Den nominella räntan ('3,5 %') är inte hela kostnaden. Effektiv ränta inkluderar alla avgifter (uppläggning, autogiro, etc.) och visar vad lånet egentligen kostar. Lagstiftning kräver att den anges för konsumentkrediter.",
+    example: "SMS-lån marknadsförs som '0 % ränta första månaden' men har 89 % effektiv ränta när alla avgifter räknats in.",
+    trains: "Modulen Lånets verkliga pris — eleven jämför nominell vs effektiv ränta på olika krediter." },
+  { num: 23, sym: "Rp", name: "Rubric", val: "bedömning", color: "special",
+    tip: "Rubric = lärarens betygskriterier per kompetens",
+    long: "Rubric är en matris med kriterier (t.ex. djup, struktur, källor) och nivåer (1–4). Läraren använder den för att bedöma reflektioner och uppdrag. Eleven ser kriterierna i förväg så bedömningen blir transparent.",
+    example: "Reflektionsuppdrag bedöms på Djup (1–4) och Konkretion (1–4). Eleven får 3 + 4 = mycket bra.",
+    trains: "Skapas av lärare i Rubric-mallar — kopplas till reflect-steg i moduler." },
+  { num: 24, sym: "Qr", name: "QR-kod", val: "login", color: "special",
+    tip: "QR-login = elev loggar in genom att skanna en kod",
+    long: "Eleven får en personlig QR-kod att skriva ut eller ha i mobilen. Skannar man koden öppnas Ekonomilabbet inloggat som rätt elev — ingen 6-teckenskod att memorera.",
+    example: "Lärare delar ut 27 utskrivna QR-kort i klassrummet. Två minuter senare är hela klassen inloggad.",
+    trains: "Skapas automatiskt när läraren lägger upp en elev. Print-as-PDF-funktion." },
+  { num: 25, sym: "Pe", name: "Pension", val: "premie", color: "grund",
+    tip: "Pension = lön du får utan att jobba — så småningom",
+    long: "Pension består av tre delar: allmän pension (staten, ~18,5 % av bruttolön), tjänstepension (arbetsgivaren, ~4,5 %) och privat sparande (frivilligt). Att börja tidigt spelar enorm roll — ränta-på-ränta över 40 år.",
+    example: "1 000 kr/mån från 25 års ålder, 6 % årlig avkastning → 2 mkr vid 65. Samma 1 000 kr från 45 → 460 000 kr.",
+    trains: "Modulen Pension från start — eleven leker med en pensionssimulator." },
+  { num: 26, sym: "Fs", name: "Försäkring", val: "trygghet", color: "grund",
+    tip: "Försäkring = du betalar lite varje månad för att slippa krasch",
+    long: "Hemförsäkring, sjukförsäkring, bilförsäkring. Du betalar en mindre summa regelbundet för att slippa stå med jättekostnaden om något går fel. Man behöver inte alla — men hemförsäkring är ett måste.",
+    example: "Anna betalar 250 kr/mån för hemförsäkring. När hennes laptop blir stulen får hon 14 000 kr i ersättning.",
+    trains: "Modulen Försäkringar 101 — eleven jämför olika typer mot vad de täcker." },
+  { num: 27, sym: "Fo", name: "Fondspar.", val: "index", color: "fordj",
+    tip: "Fondsparande = långsiktigt ägande av flera bolag samtidigt",
+    long: "En fond är en korg med många aktier. Indexfonder följer marknaden och har låga avgifter (~0,2–0,4 %). Aktivt förvaltade fonder försöker slå marknaden men tar 1–2 % i avgift — och slår sällan index över tid.",
+    example: "Anna sätter 1 500 kr/mån i en global indexfond. Genomsnittlig årlig avkastning: ~7 %.",
+    trains: "Modulen Fonder &amp; index — eleven jämför avgifter över 30-årshorisont." },
+  { num: 28, sym: "Ak", name: "Aktie", val: "ägarskap", color: "expert",
+    tip: "Aktie = en liten del av ett bolag",
+    long: "När du köper en aktie äger du en bit av ett bolag. Du får utdelning om bolaget delar ut vinsten, och kursen rör sig efter hur marknaden värderar bolaget. Hög potentiell avkastning, hög risk — speciellt för enstaka bolag.",
+    example: "Anna köper 10 aktier i H&amp;M för 150 kr/styck. Bolaget delar ut 6,50 kr/aktie → 65 kr i utdelning.",
+    trains: "Modulen Aktier från noll — eleven får en simulerad portfölj och följer den i 6 månader." },
+  { num: 29, sym: "Sn", name: "SMS-lån", val: "undvik", color: "risk",
+    tip: "SMS-lån = den dyraste formen av kredit",
+    long: "Snabblån, SMS-lån, mikrolån — alla namn på samma sak: små, dyra krediter med hög effektiv ränta (40–200 %+). De marknadsförs som lättillgängliga lösningar men leder ofta till skuldspiraler.",
+    example: "5 000 kr på 30 dagar med 489 kr i avgift = 117 % effektiv ränta. Att rulla över 6 ggr → skulden dubbleras.",
+    trains: "Modulen Skuldfällor — eleven analyserar verkliga SMS-lånvillkor." },
+  { num: 30, sym: "Bg", name: "Bankgiro", val: "fakturor", color: "konto",
+    tip: "Bankgiro = systemet svenska företag använder för räkningar",
+    long: "Bankgiro är ett konto-format för företag (t.ex. 5050-1055). När du betalar en faktura skriver du in bankgironumret och OCR-numret. Pengarna går till företaget oavsett vilken bank de använder.",
+    example: "Annas elräkning: bankgiro 123-4567, OCR 987654321, belopp 850 kr. Hon betalar via Swish-faktura eller bankens app.",
+    trains: "Steg 4 i Din första månad — eleven betalar en simulerad faktura." },
+  { num: 31, sym: "Ba", name: "Batch-PDF", val: "scenarier", color: "special",
+    tip: "Batch = lärare genererar månadens dokument till hela klassen",
+    long: "Läraren trycker på en knapp → systemet genererar en uppsättning realistiska PDF:er per elev: kontoutdrag, lönespec, lånebesked, kreditkortsfaktura. Eleverna importerar själva — får upplevelsen av att hantera riktiga dokument.",
+    example: "Lärare genererar november-batch för klassen NA22. 27 elever får var sin unik uppsättning på 4 PDF:er.",
+    trains: "Lärarverktyg i Teacher-vyn — knappen 'Generera exempeldata för månad'." },
+  { num: 32, sym: "Mo", name: "Modul", val: "7 steg", color: "special",
+    tip: "Modul = en kursvecka med läs/titta/reflektera/quiz/uppdrag",
+    long: "En modul är en serie steg som lär ut ett specifikt tema. Stegtyper: läs (text), titta (video), reflektera (öppen fråga), quiz (flervalsfråga med direkt feedback), uppdrag (gör något i plattformen). Mastery byggs upp per kompetens.",
+    example: "Modulen 'Din första månad' har 7 steg: 2 läs, 2 reflektera, 1 quiz, 2 uppdrag. Tar ~1 timme.",
+    trains: "Hela kursplanen — bygg egna eller klona från lärarbiblioteket." },
 ];
 
 // ---------- Default export ----------
@@ -284,21 +415,40 @@ function CellModal({ cell, onClose }: { cell: Cell; onClose: () => void }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-xl p-7 max-w-md w-full shadow-2xl"
+        className="bg-white border-[1.5px] border-ink p-7 max-w-lg w-full max-h-[85vh] overflow-y-auto"
       >
-        <div className="serif text-4xl">{cell.sym}</div>
-        <div className="text-lg font-semibold mt-1">{cell.name}</div>
-        <div className="text-sm text-[#666] mt-0.5">{cell.val}</div>
-        <p className="mt-3 text-[#333]">{cell.tip}</p>
-        <div className="mt-4 text-xs text-[#888]">
-          Tränas i modulen "Din första månad" · steg 1–7
+        <div className="flex items-baseline gap-4">
+          <span className={`feature-chip ${cell.color}`}>{cell.sym}</span>
+          <div>
+            <div className="serif text-2xl leading-tight">{cell.name}</div>
+            <div className="eyebrow mt-1">
+              {cell.color === "grund" ? "Grundkompetens"
+                : cell.color === "fordj" ? "Fördjupning"
+                : cell.color === "expert" ? "Expert"
+                : cell.color === "konto" ? "Konto &amp; flöde"
+                : cell.color === "risk" ? "Riskgrupp"
+                : "Professorns tillskott"} · #{cell.num}
+            </div>
+          </div>
         </div>
-        <button
-          onClick={onClose}
-          className="btn-dark mt-5 px-4 py-2 rounded text-sm"
-        >
-          Stäng
-        </button>
+
+        <p className="mt-5 body-prose text-[15px]">{cell.long}</p>
+
+        <div className="mt-5 border-l-[3px] border-ink pl-4 py-1">
+          <div className="eyebrow mb-1">Exempel</div>
+          <p className="serif-italic text-[15px] leading-snug">{cell.example}</p>
+        </div>
+
+        <div className="mt-5 pt-4 border-t border-rule">
+          <div className="eyebrow mb-1">Tränas i</div>
+          <p className="text-sm text-[#444]">{cell.trains}</p>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button onClick={onClose} className="btn-dark px-5 py-2 rounded-md text-sm">
+            Stäng
+          </button>
+        </div>
       </div>
     </div>
   );
