@@ -113,7 +113,7 @@ export default function FundsPage() {
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
-      <h1 className="text-2xl font-semibold">Fonder &amp; ISK</h1>
+      <h1 className="serif text-3xl leading-tight">Fonder &amp; ISK</h1>
 
       {fundAccounts.length === 0 ? (
         <Card title="Inga fondkonton">

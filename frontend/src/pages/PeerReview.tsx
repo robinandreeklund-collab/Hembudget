@@ -85,7 +85,7 @@ export default function PeerReview() {
       </Link>
       <div className="flex items-center gap-2">
         <MessageSquare className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Kamratrespons</h1>
+        <h1 className="serif text-3xl leading-tight">Kamratrespons</h1>
       </div>
       <p className="text-sm text-slate-700">
         Läs en annan elevs reflektion och ge konstruktiv feedback. Allt

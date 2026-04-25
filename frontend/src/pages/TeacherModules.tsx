@@ -166,7 +166,7 @@ export default function TeacherModules() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Library className="w-6 h-6 text-brand-600" />
-          <h1 className="text-2xl font-semibold">Kursmoduler</h1>
+          <h1 className="serif text-3xl leading-tight">Kursmoduler</h1>
         </div>
         <div className="flex gap-2">
           {aiEnabled && (

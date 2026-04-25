@@ -125,7 +125,7 @@ export default function MyBatches() {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
         <Inbox className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Dina dokument</h1>
+        <h1 className="serif text-3xl leading-tight">Dina dokument</h1>
       </div>
       <p className="text-sm text-slate-700">
         Här samlas dokumenten som din lärare skickat ut. Ladda ner och titta

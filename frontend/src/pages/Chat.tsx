@@ -192,7 +192,7 @@ export default function Chat() {
   return (
     <div className="p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">AI-chatt</h1>
+        <h1 className="serif text-3xl leading-tight">AI-chatt</h1>
         <div className="flex items-center gap-3 text-sm">
           {msgs.length > 0 && (
             <button

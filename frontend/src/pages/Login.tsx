@@ -93,7 +93,7 @@ export default function Login() {
           ) : (
             <Lock className="w-5 h-5" />
           )}
-          <h1 className="text-xl font-semibold">
+          <h1 className="serif text-2xl leading-tight">
             {schoolMode ? "Ekonomilabbet" : "Hembudget"}
           </h1>
         </div>

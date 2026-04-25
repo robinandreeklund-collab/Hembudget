@@ -109,7 +109,7 @@ export default function Messages() {
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-6 h-6 text-brand-600" />
-            <h1 className="text-2xl font-bold">Meddela din lärare</h1>
+            <h1 className="serif text-3xl leading-tight">Meddela din lärare</h1>
           </div>
           <p className="text-sm text-slate-600">
             Ställ en fråga, be om hjälp eller ge feedback. Din lärare svarar

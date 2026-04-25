@@ -140,7 +140,7 @@ export default function EkoDashboard() {
       )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="serif text-3xl leading-tight">
             Hej {data.display_name.split(" ")[0]}!
           </h1>
           <p className="text-sm text-slate-600">

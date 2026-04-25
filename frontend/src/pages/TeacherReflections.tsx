@@ -163,7 +163,7 @@ export default function TeacherReflections() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-6 h-6 text-brand-600" />
-            <h1 className="text-2xl font-semibold">Elevernas reflektioner</h1>
+            <h1 className="serif text-3xl leading-tight">Elevernas reflektioner</h1>
           </div>
           <label className="text-sm flex items-center gap-2 text-slate-700">
             <Filter className="w-4 h-4 text-slate-500" />

@@ -51,7 +51,7 @@ export default function AssignmentMatrix() {
 
       <div className="flex items-center gap-2">
         <Grid3x3 className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Klassöversikt</h1>
+        <h1 className="serif text-3xl leading-tight">Klassöversikt</h1>
       </div>
       <p className="text-sm text-slate-600">
         Elever på rader, uppdrag i kolumner. Grön = klar, gul = pågår, grå =

@@ -145,7 +145,7 @@ export default function AllBatches() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Inbox className="w-6 h-6 text-brand-600" />
-          <h1 className="text-2xl font-semibold">Månadens PDF:er – alla elever</h1>
+          <h1 className="serif text-3xl leading-tight">Månadens PDF:er – alla elever</h1>
         </div>
         <select
           value={selectedMonth}

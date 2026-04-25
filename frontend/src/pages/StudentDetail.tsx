@@ -221,7 +221,7 @@ export default function StudentDetail() {
       </button>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight">
           <Users className="w-6 h-6 text-brand-600" />
           Elev #{sid}
         </h1>

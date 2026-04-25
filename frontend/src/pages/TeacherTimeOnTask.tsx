@@ -33,7 +33,7 @@ export default function TeacherTimeOnTask() {
       </Link>
       <div className="flex items-center gap-2">
         <Clock className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold text-slate-900">Time on task</h1>
+        <h1 className="serif text-3xl leading-tight">Time on task</h1>
       </div>
       <p className="text-sm text-slate-600">
         Medianlängd per steg över alla dina elever plus antal som har

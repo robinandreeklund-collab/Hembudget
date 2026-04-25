@@ -46,7 +46,7 @@ export default function MyModules() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
         <GraduationCap className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Din kursplan</h1>
+        <h1 className="serif text-3xl leading-tight">Din kursplan</h1>
       </div>
       <p className="text-sm text-slate-700">
         Gå igenom modulerna i ordning — läs, reflektera, svara på frågor

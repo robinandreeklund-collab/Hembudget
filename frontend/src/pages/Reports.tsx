@@ -124,7 +124,7 @@ export default function Reports() {
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-5xl">
-      <h1 className="text-2xl font-semibold">Rapporter</h1>
+      <h1 className="serif text-3xl leading-tight">Rapporter</h1>
 
       <Card title="Månadsrapport (export)">
         <div className="text-sm text-slate-700 mb-3">

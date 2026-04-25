@@ -77,7 +77,7 @@ export default function TeacherRubrics() {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">Rubric-mallar</h1>
+        <h1 className="serif text-3xl leading-tight">Rubric-mallar</h1>
         <button
           onClick={() => setEditing({ ...EMPTY })}
           className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-2"

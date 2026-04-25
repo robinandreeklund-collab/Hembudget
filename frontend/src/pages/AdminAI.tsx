@@ -192,7 +192,7 @@ export default function AdminAI() {
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka till lärarvyn
         </Link>
-        <h1 className="text-2xl font-semibold mt-2 flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight mt-2">
           <Brain className="w-6 h-6 text-brand-600" />
           AI-administration
         </h1>

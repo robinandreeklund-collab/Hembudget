@@ -40,7 +40,7 @@ export default function MyAchievements() {
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-900">Mina prestationer</h1>
+      <h1 className="serif text-3xl leading-tight">Mina prestationer</h1>
 
       <div className="bg-gradient-to-br from-amber-50 to-rose-50 border border-amber-200 rounded-xl p-5 flex items-center gap-4">
         <Flame className="w-10 h-10 text-amber-500" />
