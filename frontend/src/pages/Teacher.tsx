@@ -221,33 +221,33 @@ export default function Teacher() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="w-6 h-6 text-brand-600" />
-          <h1 className="text-2xl font-semibold">Lärarpanel</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <div className="eyebrow mb-1">Lärarpanel</div>
+          <h1 className="serif text-3xl md:text-4xl leading-tight">Din klass.</h1>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Link
             to="/teacher/modules"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             🎓 Kursmoduler
           </Link>
           <Link
             to="/teacher/reflections"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             ✍️ Reflektioner
           </Link>
           <Link
             to="/teacher/rubrics"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📋 Rubric-mallar
           </Link>
           <Link
             to="/teacher/time-on-task"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             ⏱ Time on task
           </Link>
@@ -273,51 +273,51 @@ export default function Teacher() {
               a.click();
               URL.revokeObjectURL(a.href);
             }}
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📦 Klass-portfolio (ZIP)
           </button>
           <Link
             to="/docs"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📖 Guide
           </Link>
           <Link
             to="/messages"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             💬 Meddelanden
           </Link>
           <Link
             to="/teacher/matrix"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📊 Klassöversikt
           </Link>
           <Link
             to="/teacher/all-batches"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📄 Alla PDF:er
           </Link>
           {isSuperAdmin && (
             <Link
               to="/teacher/admin-ai"
-              className="bg-brand-50 border border-brand-200 hover:bg-brand-100 rounded-lg px-4 py-2 flex items-center gap-2 text-brand-700"
+              className="border-[1.5px] border-ink bg-paper hover:bg-[#fffef5] rounded-md px-4 py-2 flex items-center gap-2 text-ink"
             >
               🧠 AI-admin
             </Link>
           )}
           <button
             onClick={() => setShowFamilies(!showFamilies)}
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             <Users className="w-4 h-4" /> Familjer
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
+            className="btn-dark rounded-md px-4 py-2 text-sm flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Ny elev
           </button>
@@ -327,13 +327,13 @@ export default function Teacher() {
       {showFamilies && <FamilyManager onChange={reload} />}
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
 
       {/* Generator-panel */}
-      <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+      <div className="bg-white border-[1.5px] border-rule p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Play className="w-5 h-5 text-emerald-600" />
           <h2 className="font-semibold">Generera exempeldata för månad</h2>
@@ -708,7 +708,7 @@ export default function Teacher() {
                 <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
               </div>
             )}
-            <div className="text-2xl font-mono tracking-widest text-brand-700">
+            <div className="text-2xl font-mono tracking-widest text-ink">
               {qrStudent.login_code}
             </div>
             <p className="text-xs text-slate-500">
