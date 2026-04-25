@@ -98,6 +98,10 @@ class StudentStepOut(BaseModel):
     data: Optional[dict]
     teacher_feedback: Optional[str]
     peer_feedback: list[PeerFeedbackAnon] = []
+    # För task-steg med assignment_kind: live-status från elevens scope-
+    # DB. None om steget inte är ett spårat task-steg.
+    auto_status: Optional[str] = None     # "not_started"|"in_progress"|"completed"
+    auto_progress: Optional[str] = None   # ex. "3/5 dokument importerade"
 
 
 class AssignStudentsIn(BaseModel):
@@ -123,6 +127,108 @@ def _step_to_out(s: ModuleStep) -> ModuleStepOut:
         id=s.id, module_id=s.module_id, sort_order=s.sort_order,
         kind=s.kind, title=s.title, content=s.content, params=s.params,
     )
+
+
+def _evaluate_task_step(
+    session, step: ModuleStep, student_id: int,
+) -> tuple[Optional[str], Optional[str]]:
+    """Kör scope-DB-koll för task-steg och returnerar (status, progress).
+
+    - Hittar matchande Assignment via params.module_step_id (skapas vid
+      modul-tilldelning, se assign_module).
+    - Om status="completed" OCH eleven inte redan har en
+      StudentStepProgress med completed_at satt → sätt completed_at, och
+      trigga achievement-evaluering. Detta gör att task-steg "checks itself
+      off" så fort kravet uppfylls i huvudboken — eleven behöver inte
+      manuellt klicka klar.
+    - Returnerar (None, None) om steget inte är ett spårat task-steg.
+    """
+    if step.kind != "task":
+        return None, None
+    params = step.params or {}
+    a_kind = params.get("assignment_kind")
+    if not a_kind:
+        return None, None
+    from ..school.models import Assignment as _A
+    student = session.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        return None, None
+    # Hitta matchande Assignment via params.module_step_id
+    candidates = session.query(_A).filter(
+        _A.student_id == student_id,
+        _A.kind == a_kind,
+    ).all()
+    assignment = next(
+        (a for a in candidates
+         if isinstance(a.params, dict)
+         and a.params.get("module_step_id") == step.id),
+        None,
+    )
+    if not assignment:
+        return None, None
+    try:
+        from ..teacher.assignments import evaluate as _ev
+        res = _ev(assignment, student)
+    except Exception:
+        log.exception("auto-evaluate task-steg %s misslyckades", step.id)
+        return None, None
+    # Auto-completion när scope-DB säger "completed"
+    if res.status == "completed":
+        prog = session.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id == student_id,
+            StudentStepProgress.step_id == step.id,
+        ).first()
+        if prog is None:
+            prog = StudentStepProgress(
+                student_id=student_id,
+                step_id=step.id,
+                completed_at=datetime.utcnow(),
+                data={"auto_completed": True, "progress": res.progress},
+            )
+            session.add(prog)
+            session.flush()
+            _maybe_complete_module_and_grant(session, step.module_id, student_id)
+        elif prog.completed_at is None:
+            prog.completed_at = datetime.utcnow()
+            d = dict(prog.data or {})
+            d["auto_completed"] = True
+            d["progress"] = res.progress
+            prog.data = d
+            session.flush()
+            _maybe_complete_module_and_grant(session, step.module_id, student_id)
+    return res.status, res.progress
+
+
+def _maybe_complete_module_and_grant(
+    session, module_id: int, student_id: int,
+) -> None:
+    """Markera modulen som klar om alla steg är klara, sen kör achievements."""
+    sm = session.query(StudentModule).filter(
+        StudentModule.student_id == student_id,
+        StudentModule.module_id == module_id,
+    ).first()
+    if not sm:
+        return
+    total_steps = session.query(ModuleStep).filter(
+        ModuleStep.module_id == module_id
+    ).count()
+    completed = session.query(StudentStepProgress).filter(
+        StudentStepProgress.student_id == student_id,
+        StudentStepProgress.step_id.in_(
+            session.query(ModuleStep.id).filter(
+                ModuleStep.module_id == module_id
+            )
+        ),
+        StudentStepProgress.completed_at.isnot(None),
+    ).count()
+    if total_steps > 0 and completed >= total_steps and not sm.completed_at:
+        sm.completed_at = datetime.utcnow()
+    session.flush()
+    try:
+        from ..school import achievements as ach
+        ach.evaluate_and_grant(session, student_id)
+    except Exception:
+        log.exception("achievement-eval misslyckades efter auto-complete")
 
 
 # ---------- Lärarens modul-hantering ----------
@@ -1552,6 +1658,11 @@ def student_module_detail(
         # Markera modulen som startad om första gången
         if not sm.started_at:
             sm.started_at = datetime.utcnow()
+        # Auto-utvärdera alla task-steg så att modul-vyn visar korrekt
+        # antal-klara direkt om eleven precis fyllt budget/importerat osv.
+        for st in m.steps:
+            if st.kind == "task":
+                _evaluate_task_step(s, st, info.student_id)
         base = _module_to_out(m)
         return ModuleDetailOut(
             **base.model_dump(),
@@ -1578,6 +1689,11 @@ def student_step_progress(
         ).first()
         if not sm:
             raise HTTPException(403, "Modulen är inte tilldelad dig")
+        # Auto-utvärdera task-steg mot elevens scope-DB innan vi läser
+        # progress — gör att UI:t alltid ser senaste live-status.
+        auto_status, auto_progress = _evaluate_task_step(
+            s, st, info.student_id,
+        )
         prog = s.query(StudentStepProgress).filter(
             StudentStepProgress.student_id == info.student_id,
             StudentStepProgress.step_id == step_id,
@@ -1602,6 +1718,8 @@ def student_step_progress(
             data=prog.data if prog else None,
             teacher_feedback=prog.teacher_feedback if prog else None,
             peer_feedback=peer,
+            auto_status=auto_status,
+            auto_progress=auto_progress,
         )
 
 

@@ -34,6 +34,9 @@ type StepProgress = {
   data: Record<string, unknown> | null;
   teacher_feedback: string | null;
   peer_feedback?: { id: number; body: string; created_at: string }[];
+  // För task-steg som är spårade mot scope-DB:
+  auto_status?: "not_started" | "in_progress" | "completed" | null;
+  auto_progress?: string | null;
 };
 
 export default function ModuleView() {
@@ -710,6 +713,10 @@ function TaskPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
   const assignmentId = (_step.params?.assignment_id as number) ?? null;
   const [busy, setBusy] = useState(false);
   const done = !!progress?.completed_at;
+  const tracked = !!_step.params?.assignment_kind;
+  const autoStatus = progress?.auto_status ?? null;
+  const autoProgress = progress?.auto_progress ?? null;
+  const autoCompleted = !!progress?.data && (progress.data as Record<string, unknown>).auto_completed === true;
 
   async function markDone() {
     setBusy(true);
@@ -730,18 +737,51 @@ function TaskPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
       {assignmentId && (
         <Link
           to={`/mortgage/${assignmentId}`}
-          className="inline-block bg-brand-50 border border-brand-300 text-brand-800 rounded-lg px-4 py-2 text-sm hover:bg-paper"
+          className="inline-block bg-paper border border-rule text-ink rounded-md px-4 py-2 text-sm hover:bg-white"
         >
           Öppna kopplat uppdrag →
         </Link>
+      )}
+      {tracked && autoStatus && (
+        <div
+          className={
+            "border rounded-md p-3 text-sm " +
+            (autoStatus === "completed"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+              : autoStatus === "in_progress"
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-rule bg-paper text-[#555]")
+          }
+        >
+          <div className="font-medium">
+            {autoStatus === "completed"
+              ? "Spårning: klart ✓"
+              : autoStatus === "in_progress"
+              ? "Spårning: pågår"
+              : "Spårning: inte påbörjat"}
+          </div>
+          {autoProgress && <div className="mt-1">{autoProgress}</div>}
+          <div className="mt-1 text-xs text-[#666]">
+            Det här uppdraget kollar din huvudbok automatiskt — så fort
+            kravet är uppfyllt markeras steget som klart.
+          </div>
+        </div>
       )}
       <div>
         <button
           onClick={markDone}
           disabled={done || busy}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-5 py-2 font-medium disabled:bg-slate-300"
+          className="btn-dark rounded-md px-5 py-2 font-medium disabled:opacity-50"
         >
-          {done ? "Markerad som klar ✓" : busy ? "Sparar…" : "Jag har gjort uppdraget"}
+          {done
+            ? autoCompleted
+              ? "Klart automatiskt ✓"
+              : "Markerad som klar ✓"
+            : busy
+            ? "Sparar…"
+            : tracked
+            ? "Markera som klar manuellt"
+            : "Jag har gjort uppdraget"}
         </button>
       </div>
     </div>
