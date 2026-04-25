@@ -339,6 +339,123 @@ MORTGAGE_TEMPLATE = {
 }
 
 
+# Mall: "Kreditkort utan att gå under"
+CREDITCARD_TEMPLATE = {
+    "title": "Kreditkort utan att gå under",
+    "summary": "Förstå hur kreditkort fungerar — och varför 'minimibetalning' är en fälla.",
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Bra verktyg, dålig vana",
+            "content": (
+                "Ett kreditkort låter dig 'köpa nu, betala senare'. Du får "
+                "en månadsfaktura som du betalar ~30 dagar efter köpet.\n\n"
+                "Om du betalar HELA fakturan i tid är kreditkortet GRATIS. "
+                "Du får dessutom kortförsäkring, ångerrätt och i vissa "
+                "fall bonuspoäng.\n\n"
+                "Om du betalar bara MINIMI-beloppet (oftast 3-5 % av "
+                "skulden) börjar räntan gnaga. Och bolåneräntan (4 %) ser "
+                "ut som en gratis-överraskning jämfört med kreditkort:s "
+                "18-25 %."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad kostar minimi-betalningen?",
+            "content": None,
+            "params": {
+                "question": "Du har 6 000 kr på ditt kreditkort. Räntan är "
+                "20 % per år. Du betalar bara minimi (300 kr/månad). Hur "
+                "lång tid tar det att betala av — och hur mycket har du "
+                "betalat totalt?",
+                "options": [
+                    "20 månader, 6 000 kr (ingen ränta)",
+                    "24 månader, 7 200 kr",
+                    "28 månader, ~8 350 kr",
+                    "Det betalas aldrig av om man bara betalar minimi",
+                ],
+                "correct_index": 2,
+                "explanation": (
+                    "Räntan på 100 kr/månad (20%/12 av 6 000) äter upp en "
+                    "stor del av minibetalningen. Det tar ~28 månader att "
+                    "bli skuldfri och du har då betalat ~8 350 kr för en "
+                    "skuld på 6 000 kr. Effektiv kostnad: 2 350 kr i ränta."
+                ),
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Effektiv ränta vs nominell ränta",
+            "content": (
+                "Den NOMINELLA räntan är den 'ren' procentsiffran banken "
+                "marknadsför ('19,9 %'). Den EFFEKTIVA räntan inkluderar "
+                "alla avgifter (uppläggning, faktura, autogiro) och säger "
+                "vad lånet egentligen kostar.\n\n"
+                "Lagstadgat ska den effektiva räntan ALLTID anges för "
+                "konsumentkrediter. Titta efter den siffran — inte den "
+                "stora marknadsförda."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Granska din kortfaktura",
+            "content": (
+                "Importera månadens kreditkortsfaktura via 'Dina dokument' "
+                "om du inte redan gjort det. Titta på 'Saldo att betala' "
+                "och 'Minimum att betala'. Räkna ut hur lång tid det skulle "
+                "ta att betala av om du bara betalar minimi varje månad."
+            ),
+            "params": {"assignment_kind": "import_batch"},
+        },
+        {
+            "kind": "quiz",
+            "title": "Vilken kortvana är säkrast?",
+            "content": None,
+            "params": {
+                "question": "Vilken vana skyddar dig från att gräva ner dig "
+                "i kortskuld?",
+                "options": [
+                    "Använd kortet bara för stora köp",
+                    "Sätt autogiro på HELA fakturan varje månad",
+                    "Betala minimi varje månad — det räcker",
+                    "Använd flera kort så fakturorna blir mindre var och en",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Autogiro på hela fakturan = du kan ALDRIG glömma "
+                    "betala, ALDRIG råka ut för ränta, men får ändå "
+                    "fördelarna (försäkring, ångerrätt). Tröskeln blir "
+                    "'kan jag betala av detta nästa lön?' — inte "
+                    "'minimi räcker'."
+                ),
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Skulle du vilja ha kreditkort?",
+            "content": (
+                "Skulle du skaffa ett kreditkort när du är 18? Varför / "
+                "varför inte? Om ja — vilka regler skulle du sätta för "
+                "dig själv?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "argument",
+                        "name": "Argument",
+                        "levels": [
+                            "Bara åsikt",
+                            "Argument med skäl",
+                            "Argument med konsekvensanalys",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 # Mall: "Din första månad"
 FIRST_MONTH_TEMPLATE = {
     "title": "Din första månad",
@@ -492,6 +609,7 @@ def seed_system_modules(master_session) -> int:
         ACCOUNT_STATEMENT_TEMPLATE,
         BUFFER_TEMPLATE,
         MORTGAGE_TEMPLATE,
+        CREDITCARD_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue
