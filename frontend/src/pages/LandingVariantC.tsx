@@ -180,6 +180,8 @@ export default function LandingVariantC() {
       <Pricing />
       <Faq />
       <Cta />
+      <Contact />
+      <Footer />
     </div>
   );
 }
@@ -523,6 +525,197 @@ function Hero() {
         </div>
       </div>
     </section>
+  );
+}
+
+// ---------- Contact (samma copy som Landing.tsx, anpassat utseende) ----------
+
+function Contact() {
+  return (
+    <section
+      id="kontakt"
+      style={{
+        padding: "64px 24px",
+        borderTop: "1px solid #e2e8f0",
+        background: "#fff",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+        <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+          Kontakt
+        </div>
+        <h2 className="vc-h2">Frågor, förslag eller samarbeten?</h2>
+        <p
+          style={{
+            fontSize: 15,
+            color: "#475569",
+            marginTop: 16,
+            lineHeight: 1.65,
+          }}
+        >
+          Vi hjälper gärna till om du vill komma igång i din klass eller
+          med dina egna barn, har önskemål om nya funktioner, eller vill
+          utforska samarbeten med skolor, kommuner, föreningar eller
+          lärarorganisationer.
+        </p>
+        <a
+          href="mailto:info@ekonomilabbet.org"
+          className="vc-btn vc-btn-primary"
+          style={{
+            marginTop: 28,
+            padding: "12px 22px",
+            fontFamily: 'ui-monospace, "SF Mono", monospace',
+            textDecoration: "none",
+          }}
+        >
+          info@ekonomilabbet.org
+        </a>
+        <p
+          style={{
+            fontSize: 13,
+            color: "#94a3b8",
+            marginTop: 16,
+            fontStyle: "italic",
+          }}
+        >
+          Vi svarar oftast inom ett par arbetsdagar.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Footer (samma struktur som Landing.tsx) ----------
+
+function Footer() {
+  return (
+    <footer
+      style={{
+        borderTop: "1px solid #e2e8f0",
+        background: "#fff",
+        fontSize: 13,
+        color: "#64748b",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "40px 24px",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 24,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
+            <div
+              style={{
+                width: 22,
+                height: 22,
+                background: "#0f172a",
+                color: "#fef3c7",
+                borderRadius: 5,
+                display: "grid",
+                placeItems: "center",
+                fontSize: 10,
+                fontWeight: 700,
+                fontFamily: 'ui-monospace, "SF Mono", monospace',
+              }}
+            >
+              El
+            </div>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#0f172a" }}>
+              Ekonomilabbet
+            </span>
+          </div>
+          <p style={{ lineHeight: 1.55 }}>
+            En öppen utbildningsplattform för privatekonomi — i klassrummet
+            och vid köksbordet.
+          </p>
+        </div>
+        <div>
+          <div className="vc-eyebrow" style={{ marginBottom: 10 }}>
+            Sidan
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, lineHeight: 2 }}>
+            <li>
+              <a href="#funktioner" style={{ color: "#64748b" }}>
+                Funktioner
+              </a>
+            </li>
+            <li>
+              <a href="#malgrupper" style={{ color: "#64748b" }}>
+                Skola/Hemma
+              </a>
+            </li>
+            <li>
+              <a href="#pris" style={{ color: "#64748b" }}>
+                Pris
+              </a>
+            </li>
+            <li>
+              <a href="#faq" style={{ color: "#64748b" }}>
+                FAQ
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <div className="vc-eyebrow" style={{ marginBottom: 10 }}>
+            Kontakt &amp; juridik
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, lineHeight: 2 }}>
+            <li>
+              <a
+                href="mailto:info@ekonomilabbet.org"
+                style={{ color: "#64748b" }}
+              >
+                info@ekonomilabbet.org
+              </a>
+            </li>
+            <li>
+              <Link to="/docs" style={{ color: "#64748b" }}>
+                Dokumentation
+              </Link>
+            </li>
+            <li>
+              <a href="#faq" style={{ color: "#64748b" }}>
+                FAQ
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div style={{ borderTop: "1px solid #e2e8f0" }}>
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "16px 24px",
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            gap: 12,
+            fontSize: 12,
+            color: "#94a3b8",
+          }}
+        >
+          <div>
+            © {new Date().getFullYear()} Ekonomilabbet · För skolan och hemmet
+          </div>
+          <div style={{ fontStyle: "italic" }}>Variant C — utgåva 2026</div>
+        </div>
+      </div>
+    </footer>
   );
 }
 
