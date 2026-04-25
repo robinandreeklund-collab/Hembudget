@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, BookOpen, ChevronRight, GraduationCap, Users,
-  Lightbulb, MessageCircle,
+  ArrowLeft, ChevronRight, MessageCircle,
 } from "lucide-react";
 
 type Section = {
@@ -437,49 +436,51 @@ export default function Docs() {
   }, []);
 
   const groupLabels = {
-    student: { label: "För elever", icon: GraduationCap },
-    teacher: { label: "För lärare", icon: Users },
-    pedagogy: { label: "Bakgrund & pedagogik", icon: Lightbulb },
+    student: { label: "För elever" },
+    teacher: { label: "För lärare" },
+    pedagogy: { label: "Bakgrund & pedagogik" },
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div className="min-h-screen bg-paper text-ink">
+      <header className="sticky top-0 z-30 bg-paper/95 backdrop-blur border-b border-rule">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <Link
             to="/"
-            className="flex items-center gap-2 text-slate-700 hover:text-ink"
+            className="text-sm nav-link inline-flex items-center gap-1"
           >
             <ArrowLeft className="w-4 h-4" /> Startsidan
           </Link>
-          <div className="flex items-center gap-2 text-brand-600 font-semibold">
-            <BookOpen className="w-5 h-5" /> Dokumentation
+          <div className="flex items-center gap-2">
+            <svg width="22" height="22" viewBox="0 0 40 40" aria-hidden="true">
+              <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
+              <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">Ek</text>
+            </svg>
+            <span className="serif text-lg">Dokumentation</span>
           </div>
           <div className="w-20" />
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-10 grid md:grid-cols-[240px_1fr] gap-8">
+      <div className="max-w-6xl mx-auto px-6 py-12 grid md:grid-cols-[240px_1fr] gap-10">
         {/* Sidomeny */}
-        <aside className="md:sticky md:top-20 self-start space-y-6">
+        <aside className="md:sticky md:top-20 self-start space-y-7">
           {(["student", "teacher", "pedagogy"] as const).map((group) => {
-            const { label, icon: Icon } = groupLabels[group];
+            const { label } = groupLabels[group];
             const items = SECTIONS.filter((s) => s.group === group);
             return (
               <div key={group}>
-                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 font-semibold mb-2">
-                  <Icon className="w-3.5 h-3.5" /> {label}
-                </div>
-                <ul className="space-y-1">
+                <div className="eyebrow mb-3">{label}</div>
+                <ul className="space-y-1 border-l border-rule">
                   {items.map((s) => (
                     <li key={s.id}>
                       <a
                         href={`#${s.id}`}
                         onClick={() => setActiveSection(s.id)}
-                        className={`block rounded px-3 py-1.5 text-sm ${
+                        className={`block px-3 py-1.5 text-sm border-l-2 -ml-px transition-colors ${
                           activeSection === s.id
-                            ? "bg-brand-100 text-brand-800 font-medium"
-                            : "text-slate-700 hover:bg-slate-100"
+                            ? "border-ink text-ink font-semibold"
+                            : "border-transparent text-[#666] hover:text-ink"
                         }`}
                       >
                         {s.title}
@@ -490,10 +491,10 @@ export default function Docs() {
               </div>
             );
           })}
-          <div className="border-t pt-4">
+          <div className="border-t border-rule pt-4">
             <Link
               to="/messages"
-              className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
+              className="text-sm nav-link inline-flex items-center gap-1"
             >
               <MessageCircle className="w-4 h-4" />
               Fråga din lärare
@@ -503,17 +504,17 @@ export default function Docs() {
         </aside>
 
         {/* Innehåll */}
-        <main className="space-y-12 prose prose-slate max-w-none">
+        <main className="space-y-14">
           {SECTIONS.map((s) => (
             <section
               key={s.id}
               id={s.id}
               className="scroll-mt-24"
             >
-              <h2 className="text-2xl font-bold text-slate-900 mb-3 border-b border-slate-200 pb-2">
+              <h2 className="serif text-2xl md:text-3xl leading-tight mb-4 pb-3 border-b border-rule">
                 {s.title}
               </h2>
-              <div className="space-y-3 text-slate-700 leading-relaxed">
+              <div className="space-y-4 body-prose text-[15px]">
                 {s.body()}
               </div>
             </section>
@@ -521,10 +522,12 @@ export default function Docs() {
         </main>
       </div>
 
-      <footer className="border-t border-slate-200 bg-slate-50 py-8 mt-16">
-        <div className="max-w-6xl mx-auto px-6 text-center text-sm text-slate-500">
-          Har du förslag på vad som kan förbättras i dokumentationen? Använd
-          meddelandefunktionen i appen eller öppna en issue på GitHub.
+      <footer className="border-t border-rule mt-16">
+        <div className="max-w-6xl mx-auto px-6 py-8 text-center text-sm text-[#888] serif-italic">
+          Har du förslag på vad som kan förbättras i dokumentationen? Skriv
+          till <a href="mailto:info@ekonomilabbet.org" className="nav-link not-italic">
+            info@ekonomilabbet.org
+          </a> eller använd meddelandefunktionen i appen.
         </div>
       </footer>
     </div>
