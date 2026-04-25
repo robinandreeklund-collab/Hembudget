@@ -204,6 +204,7 @@ export default function Landing() {
       <Stats />
       <Logiken />
       <Why />
+      <Audiences />
       {/* <SocialProof /> — utkommenterad tills vi har riktiga pilotkunder */}
       <Gallery />
       <Pricing />
@@ -232,16 +233,20 @@ function Header() {
         <nav className="hidden md:flex items-center gap-7 text-sm">
           <a href="#funktioner" className="nav-link">Funktioner</a>
           <a href="#flow" className="nav-link">Så funkar det</a>
+          <a href="#malgrupper" className="nav-link">Skola/Hemma</a>
           <a href="#pricing" className="nav-link">Pris</a>
           <a href="#faq" className="nav-link">FAQ</a>
           <a href="#kontakt" className="nav-link">Kontakt</a>
         </nav>
         <div className="flex gap-2">
           <Link to="/login/student" className="btn-outline text-sm px-4 py-2 rounded-md">
-            Elevlogin
+            Elev/Barn
           </Link>
-          <Link to="/login/teacher" className="btn-dark text-sm px-4 py-2 rounded-md">
-            Lärarkonto
+          <Link to="/login/teacher" className="btn-outline text-sm px-4 py-2 rounded-md">
+            Lärare
+          </Link>
+          <Link to="/signup/parent" className="btn-dark text-sm px-4 py-2 rounded-md">
+            Förälder
           </Link>
         </div>
       </div>
@@ -274,12 +279,16 @@ function Hero() {
         </h1>
         <p className="mt-6 lead max-w-md">
           Från <span className="kbd">Lö</span> (lön) till <span className="kbd">Rb</span> (räntebindning) —
-          32 grundbegrepp som en 16-åring behöver för att inte krocka med vuxenlivet.
-          Hovra över en cell. Klassen ser resten.
+          32 grundbegrepp varje ungdom behöver för att inte krocka
+          med vuxenlivet. Hovra över en cell. Resten av kartan
+          öppnar sig.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link to="/login/teacher" className="btn-dark px-5 py-3 rounded-md">
-            Prova experimentet
+          <Link to="/signup/teacher" className="btn-dark px-5 py-3 rounded-md">
+            För skolan
+          </Link>
+          <Link to="/signup/parent" className="btn-dark px-5 py-3 rounded-md">
+            För hemmet
           </Link>
           <a href="#flow" className="btn-outline px-5 py-3 rounded-md">
             Se hur det funkar
@@ -290,7 +299,7 @@ function Hero() {
             aria-pressed={heatmapOn}
             className="btn-outline px-5 py-3 rounded-md"
           >
-            {heatmapOn ? "Ta bort klassens värmekarta" : "Lägg på klassens värmekarta"}
+            {heatmapOn ? "Ta bort värmekarta" : "Lägg på värmekarta"}
           </button>
         </div>
 
@@ -484,7 +493,7 @@ function ProfessorWithBubble() {
   return (
     <div className="prof-wrap" aria-hidden="true">
       <div className="prof-bubble">
-        Hovra över en cell — eleven ser samma karta som du.
+        Hovra över en cell — den du följer ser samma karta som du.
       </div>
       <svg ref={svgRef} className="prof-svg" viewBox="0 0 120 120">
         <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" strokeWidth="3" />
@@ -556,7 +565,7 @@ const FEATURES: Feature[] = [
   { chip: "Hu", chipColor: "grund", title: "Familjer",
     body: "Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål." },
   { chip: "Rp", chipColor: "special", title: "Lärarens översikt",
-    body: "Klassmatris med status per elev och uppdrag. Facit för varje kategorisering — grönt eller rött på en blick." },
+    body: "Översiktsmatris med status per elev/barn och uppdrag. Facit för varje kategorisering — grönt eller rött på en blick." },
   { chip: "AI", chipColor: "special", title: "Fråga Ekon (AI)",
     body: "Multi-turn coach på Claude Sonnet. Anpassar språket till elevens mastery — mer Socrates där grunden saknas." },
   { chip: "Sp", chipColor: "fordj", title: "Sparmål & uppdrag",
@@ -570,11 +579,12 @@ function Features() {
         <div className="section-divider mb-10">Funktionerna</div>
         <div className="max-w-3xl mb-12">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
-            Allt en lärare behöver för att göra ekonomi begripligt.
+            Allt en lärare eller förälder behöver för att göra ekonomi
+            begripligt.
           </h2>
           <p className="mt-4 lead">
             Från första lönen till bolåne-beslut. Varje funktion är ett
-            element i kursplanen — eleven övar genom att göra, inte genom
+            element i kursplanen — den unga övar genom att göra, inte genom
             att läsa om det.
           </p>
         </div>
@@ -608,42 +618,42 @@ function Flow() {
         <div className="max-w-3xl mb-14">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">Fem nyckelmoment.</h2>
           <p className="mt-4 lead">
-            Det här är vad eleverna och läraren faktiskt gör — i ordning,
-            månad för månad.
+            Det här är vad den unga och den vuxna faktiskt gör — i ordning,
+            månad för månad. Samma flöde i klassrummet som hemma.
           </p>
         </div>
 
         <div className="space-y-16">
           <FlowStep
             num={1}
-            title="Eleven får en egen vardag."
-            body="Yrke, lön, bostad, lån — allt slumpas unikt per elev. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid."
+            title="Den unga får en egen vardag."
+            body="Yrke, lön, bostad, lån — allt slumpas unikt per användare. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid."
             mock={<MockDashboard />}
           />
           <FlowStep
             num={2}
             reverse
             title="Riktiga dokument att jobba med."
-            body="Läraren trycker 'generera' — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv."
+            body="Du trycker 'generera' — den unga får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv."
             mock={<MockPdfList />}
           />
           <FlowStep
             num={3}
             title="Budget möter verklighet."
-            body="Eleven sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt."
+            body="Den unga sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt."
             mock={<MockBudget />}
           />
           <FlowStep
             num={4}
             reverse
             title="Verkliga ekonomiska val."
-            body="Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser görs synliga."
+            body="Bolåne-beslut baserat på Riksbankens historiska räntor. Användaren binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser görs synliga."
             mock={<MockMortgage />}
           />
           <FlowStep
             num={5}
-            title="Läraren ser hela klassen."
-            body="Matris över alla elever och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Allt en lärare behöver för att följa upp."
+            title="Du ser hela bilden."
+            body="Matris över alla användare och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Samma översikt vare sig du följer en klass eller dina barn."
             mock={<MockClassMatrix />}
           />
         </div>
@@ -851,17 +861,17 @@ function Logiken() {
     {
       n: "01",
       title: "En cell, en kompetens.",
-      body: "Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.",
+      body: "Varje element är kopplat till en eller flera moduler. När den unga klarar stegen fylls cellen — precis som MasteryChart redan gör.",
     },
     {
       n: "02",
-      title: "Lärare rättar i rader.",
-      body: "Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.",
+      title: "Du rättar i rader.",
+      body: "Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick — som lärare eller förälder.",
     },
     {
       n: "03",
-      title: "Hela klassen i en bild.",
-      body: "Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet — toggla i hero-vyn ovan.",
+      title: "Hela gruppen i en bild.",
+      body: "Översikten lägger användarnas mastery som ett värmekarta-lager ovanpå systemet — toggla i hero-vyn ovan. Funkar för en klass eller ett syskonpar.",
     },
   ];
   return (
@@ -891,21 +901,22 @@ function Why() {
           <div>
             <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
               Ekonomi är ett livskunskaps­ämne.<br />
-              Och det saknas i skolan.
+              Och det saknas — både i skolan och hemma.
             </h2>
             <p className="mt-5 lead max-w-md">
               Svenska unga lämnar gymnasiet utan grund­läggande kunskaper om
               skatt, sparande, lån och budget. Verkligheten möter dem först
-              när de flyttar hemifrån — ofta för sent.
+              när de flyttar hemifrån — ofta för sent. Skolan har sällan
+              tid, och föräldrar har sällan ett verktyg att lära ut med.
             </p>
             <div className="mt-8 border-l-[3px] border-ink pl-5 py-1 max-w-md">
               <div className="serif-italic text-lg leading-snug">
                 Lär genom att göra — inte genom att läsa om det.
               </div>
               <p className="mt-2 text-sm body-prose">
-                Eleven får egen simulerad inkomst, egna räkningar, egen lön
-                varje månad. Varje val har konsekvenser som syns direkt i
-                budgeten.
+                Den unga får egen simulerad inkomst, egna räkningar, egen
+                lön varje månad. Varje val har konsekvenser som syns direkt
+                i budgeten.
               </p>
             </div>
           </div>
@@ -917,7 +928,7 @@ function Why() {
             </li>
             <li className="border-[1.5px] border-ink bg-white p-5 flex items-baseline gap-5">
               <span className="serif text-5xl leading-none shrink-0">60 %</span>
-              <span className="body-prose">av elever har aldrig läst en lönespecifikation.</span>
+              <span className="body-prose">av unga har aldrig läst en lönespecifikation.</span>
             </li>
             <li className="border-[1.5px] border-ink bg-white p-5 flex items-baseline gap-5">
               <span className="serif text-5xl leading-none shrink-0">1 h</span>
@@ -929,6 +940,125 @@ function Why() {
     </section>
   );
 }
+
+
+// ---------- Två målgrupper: skola + hemma ----------
+
+function Audiences() {
+  return (
+    <section id="malgrupper" className="border-t border-rule bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">Två sätt att använda</div>
+        <div className="max-w-3xl mb-12">
+          <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+            Samma plattform — i klassrummet eller vid köksbordet.
+          </h2>
+          <p className="mt-4 lead">
+            Ekonomilabbet är byggt så att en lärare kan följa en hel klass
+            och en förälder kan följa sina egna barn — i samma verktyg,
+            med samma moduler och samma trygga sandlåda.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-5">
+          <article className="border-[2.5px] border-ink bg-paper p-7">
+            <div className="eyebrow mb-3">För skolan</div>
+            <h3 className="serif text-2xl leading-tight">
+              Ett labb i klassrummet.
+            </h3>
+            <ul className="mt-5 space-y-2.5 text-sm body-prose">
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  Bjud in en hel klass via 6-teckens-koder — ingen
+                  e-post per elev krävs.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  Tilldela samma modul till alla, eller skräddarsy per
+                  elev. Mastery-grafen visar var klassen fastnar.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  Portfolio-PDF per elev eller hela klassen som ZIP —
+                  perfekt som bedömningsunderlag.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  AI-coachen anpassar sig efter elevens nivå utan att
+                  läraren behöver konfigurera något.
+                </span>
+              </li>
+            </ul>
+            <Link
+              to="/signup/teacher"
+              className="mt-7 inline-block btn-dark px-5 py-2.5 rounded-md text-sm"
+            >
+              Skapa lärarkonto →
+            </Link>
+          </article>
+
+          <article className="border-[2.5px] border-ink bg-paper p-7">
+            <div className="eyebrow mb-3">För hemmet</div>
+            <h3 className="serif text-2xl leading-tight">
+              Samtalet om pengar — i lugnt format.
+            </h3>
+            <ul className="mt-5 space-y-2.5 text-sm body-prose">
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  Skapa konton för dina barn på två minuter. Varje
+                  barn får en egen sandlåda — riktiga pengar är aldrig
+                  inblandade.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  Du följer med i samma vy som läraren har: vad har
+                  barnet gjort, vad har det fastnat på, vad har det
+                  frågat AI:n.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  Modulerna täcker kontoutdrag, bolån, kreditkort,
+                  sparande och familjeekonomi — bygg upp ett gemensamt
+                  språk hemma.
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-ink shrink-0">→</span>
+                <span>
+                  AI-coachen svarar på "varför betalar man skatt?"
+                  utan att vänta på er nästa middag.
+                </span>
+              </li>
+            </ul>
+            <Link
+              to="/signup/parent"
+              className="mt-7 inline-block btn-dark px-5 py-2.5 rounded-md text-sm"
+            >
+              Skapa familjekonto →
+            </Link>
+          </article>
+        </div>
+        <p className="mt-8 text-sm text-[#666] serif-italic max-w-2xl">
+          Tekniskt är skola och hemma samma admin-konto under huven —
+          du följer dem du är ansvarig för. Ingen samkörning av data
+          mellan familjer eller skolor sker någonsin.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 
 // ---------- Social proof + Vyer-galleri ----------
 
@@ -1098,9 +1228,9 @@ function Pricing() {
         <div className="max-w-3xl mb-12">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">Enkel prismodell.</h2>
           <p className="mt-4 lead">
-            Gratis under pilotåret 2026. Ingen bindningstid, inga dolda
-            kostnader. Från 2027 sätts en per-elev-avgift i dialog med
-            pilotskolorna.
+            Gratis under pilotåret 2026 — för skolor och familjer. Ingen
+            bindningstid, inga dolda kostnader. Från 2027 sätts en avgift
+            per användare i dialog med pilotkunderna.
           </p>
         </div>
 
@@ -1112,7 +1242,7 @@ function Pricing() {
             <div className="serif text-5xl mt-3 leading-none">0 kr</div>
             <p className="mt-2 text-sm text-[#555]">Hela plattformen, utan tak.</p>
             <ul className="mt-5 space-y-2 text-sm body-prose">
-              <li className="flex items-start gap-2"><span className="serif">·</span>Obegränsat antal elever</li>
+              <li className="flex items-start gap-2"><span className="serif">·</span>Obegränsat antal elever/barn</li>
               <li className="flex items-start gap-2"><span className="serif">·</span>AI-funktioner (Claude Sonnet)</li>
               <li className="flex items-start gap-2"><span className="serif">·</span>Portfolio-PDF + ZIP-export</li>
               <li className="flex items-start gap-2"><span className="serif">·</span>Support via mail</li>
@@ -1121,10 +1251,10 @@ function Pricing() {
 
           <article className="border-[1.5px] border-rule bg-white p-7">
             <span className="eyebrow">Från 2027</span>
-            <div className="serif text-5xl mt-3 leading-none">Per-elev</div>
+            <div className="serif text-5xl mt-3 leading-none">Per-användare</div>
             <p className="mt-2 text-sm text-[#555]">
-              Nivå sätts tillsammans med pilotskolorna — troligen 50–150
-              kr/elev/läsår.
+              Nivå sätts tillsammans med pilotkunderna — troligen
+              50–150 kr/användare/år. Familjer får ett enklare paketpris.
             </p>
             <ul className="mt-5 space-y-2 text-sm body-prose">
               <li className="flex items-start gap-2"><span className="serif">·</span>Samma plattform, ingen funktionsnedskärning</li>
@@ -1141,23 +1271,27 @@ function Pricing() {
 const FAQ_ITEMS: { q: string; a: string }[] = [
   {
     q: "Vad kostar Ekonomilabbet?",
-    a: "Gratis under pilotåret 2026. Inga dolda kostnader. Från 2027 tas en per-elev-avgift ut, nivån bestäms tillsammans med pilotskolorna.",
+    a: "Gratis under pilotåret 2026 — både för skolor och föräldrar. Inga dolda kostnader. Från 2027 sätts en avgift per användare i dialog med pilotkunderna.",
   },
   {
     q: "Är det GDPR-säkert?",
-    a: "Ja. All elevdata sparas i svensk molntjänst (Google Cloud Run, europe-north1). Vi delar inga personuppgifter med tredje part. AI-anropen anonymiseras — Claude ser aldrig elevers namn eller personnummer.",
+    a: "Ja. All användardata sparas i svensk molntjänst (Google Cloud Run, europe-north1). Vi delar inga personuppgifter med tredje part. AI-anropen anonymiseras — Claude ser aldrig namn eller personnummer.",
   },
   {
     q: "Vad behöver vi installera?",
-    a: "Inget. Ekonomilabbet är en webbapp. Läraren skapar konto, lägger in eleverna och eleverna loggar in med en 6-teckenskod eller QR-kod. Ingen installation, ingen app-store.",
+    a: "Inget. Ekonomilabbet är en webbapp. Den vuxna (lärare eller förälder) skapar konto, lägger in elever/barn och de loggar in med en 6-teckenskod eller QR-kod. Ingen installation, ingen app-store.",
+  },
+  {
+    q: "Kan föräldrar använda detta hemma?",
+    a: "Ja, det är ett av två huvudspår. Som förälder skapar du ett familjekonto, lägger till dina barn (varje barn får en egen kod) och följer deras arbete i samma admin-vy som en lärare. Modulerna täcker allt från kontoutdrag och sparande till bolån och kreditkort.",
   },
   {
     q: "Går det att använda utan AI?",
-    a: "Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion som kan aktiveras per lärare.",
+    a: "Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion som kan aktiveras per konto.",
   },
   {
-    q: "Kan elever komma åt varandras data?",
-    a: "Nej. Varje elev har en egen krypterad SQLite-DB på servern, ingen cross-access även om de råkar i samma klass. Läraren ser alla sina elever men aldrig någon annan lärares.",
+    q: "Kan elever eller barn komma åt varandras data?",
+    a: "Nej. Varje elev/barn har en egen SQLite-DB på servern, ingen cross-access även om de råkar i samma klass eller familj. Den vuxna ser bara sina egna användare — aldrig någon annan lärares eller förälders.",
   },
   {
     q: "Vad händer med elevernas data när året är slut?",
@@ -1220,15 +1354,19 @@ function Cta() {
     <section className="max-w-7xl mx-auto px-6 py-24 text-center">
       <div className="eyebrow mb-4">Kom igång</div>
       <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
-        Kursplanen din kemi­lärare aldrig fick.
+        Det vuxenlivs­ämne som varken skolan eller köksbordet
+        riktigt hann med.
       </h2>
       <p className="mt-5 lead max-w-xl mx-auto">
-        Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir
-        super-admin.
+        Gratis under pilotåret. Ingen bindningstid. Du väljer själv om du
+        kör med en klass eller med dina egna barn.
       </p>
       <div className="mt-7 flex justify-center gap-3 flex-wrap">
-        <Link to="/login/teacher" className="btn-dark px-6 py-3.5 rounded-md">
-          Starta labbet
+        <Link to="/signup/teacher" className="btn-dark px-6 py-3.5 rounded-md">
+          Starta som lärare
+        </Link>
+        <Link to="/signup/parent" className="btn-dark px-6 py-3.5 rounded-md">
+          Starta som förälder
         </Link>
         <a
           href="mailto:info@ekonomilabbet.org?subject=Boka%20introduktion"
@@ -1250,9 +1388,10 @@ function Contact() {
           Frågor, förslag eller samarbeten?
         </h2>
         <p className="mt-4 lead">
-          Vi hjälper gärna till om du vill komma igång i din klass, har
-          önskemål om nya funktioner, eller vill utforska samarbeten med
-          skolor, kommuner eller lärarorganisationer.
+          Vi hjälper gärna till om du vill komma igång i din klass eller
+          med dina egna barn, har önskemål om nya funktioner, eller vill
+          utforska samarbeten med skolor, kommuner, föreningar eller
+          lärarorganisationer.
         </p>
         <a
           href="mailto:info@ekonomilabbet.org"
@@ -1281,8 +1420,8 @@ function Footer() {
             <span className="serif text-lg">Ekonomilabbet</span>
           </div>
           <p className="text-[#666] body-prose">
-            En öppen utbildningsplattform för privatekonomi. Byggd i
-            samarbete med svenska lärare.
+            En öppen utbildningsplattform för privatekonomi — i
+            klassrummet och vid köksbordet.
           </p>
         </div>
         <div>
@@ -1305,7 +1444,7 @@ function Footer() {
       </div>
       <div className="border-t border-rule">
         <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-[#888] flex flex-wrap justify-between gap-3">
-          <div>© {new Date().getFullYear()} Ekonomilabbet · Utvecklad i samarbete med lärare</div>
+          <div>© {new Date().getFullYear()} Ekonomilabbet · För skolan och hemmet</div>
           <div className="serif-italic">Prototyp — utgåva 2026</div>
         </div>
       </div>
