@@ -137,12 +137,54 @@ function Brand() {
 export function Sidebar() {
   // Desktop-sidebar — dold på mobil
   return (
-    <aside className="hidden md:block w-60 shrink-0 border-r border-rule bg-white">
+    <aside className="hidden md:flex md:flex-col w-60 shrink-0 border-r border-rule bg-white">
       <Brand />
-      <nav className="py-3">
+      <nav className="py-3 flex-1 overflow-y-auto">
         <NavItems />
       </nav>
+      <UserFooter />
     </aside>
+  );
+}
+
+function UserFooter({ onAction }: { onAction?: () => void } = {}) {
+  const { role, asStudent, impersonate, logout } = useAuth();
+  const isStudent = role === "student";
+  const isImpersonating = role === "teacher" && Boolean(asStudent);
+
+  function doLogout() {
+    if (!confirm("Logga ut?")) return;
+    logout();
+    onAction?.();
+    window.location.href = "/";
+  }
+
+  function stopImpersonating() {
+    impersonate(null);
+    onAction?.();
+    window.location.href = "/teacher";
+  }
+
+  return (
+    <div className="border-t border-rule p-4 space-y-2 text-sm">
+      <div className="eyebrow">
+        {isStudent ? "Inloggad som elev" : isImpersonating ? "Visar elev" : "Inloggad lärare"}
+      </div>
+      {isImpersonating && (
+        <button
+          onClick={stopImpersonating}
+          className="w-full text-left btn-outline rounded-md px-3 py-2 text-sm"
+        >
+          ← Tillbaka till lärare
+        </button>
+      )}
+      <button
+        onClick={doLogout}
+        className="w-full text-left text-[#666] hover:text-ink hover:bg-paper px-3 py-2 transition-colors"
+      >
+        Logga ut
+      </button>
+    </div>
   );
 }
 
@@ -204,6 +246,7 @@ export function MobileTopBar() {
             <nav className="py-3">
               <NavItems onClick={() => setOpen(false)} />
             </nav>
+            <UserFooter onAction={() => setOpen(false)} />
           </div>
         </div>
       )}
