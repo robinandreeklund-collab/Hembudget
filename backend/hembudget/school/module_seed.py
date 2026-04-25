@@ -456,6 +456,116 @@ CREDITCARD_TEMPLATE = {
 }
 
 
+# Mall: "Att börja spara på riktigt"
+SAVING_TEMPLATE = {
+    "title": "Att börja spara på riktigt",
+    "summary": "Från sparkonto till indexfond — och varför ränta-på-ränta är världens viktigaste insikt.",
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Tre nivåer av sparande",
+            "content": (
+                "Inte allt sparande är samma sak. Tre nivåer:\n\n"
+                "1. SPARKONTO (kort sikt) — bufferten. Pengar du måste "
+                "kunna ta ut imorgon. ~1-3 % ränta. Säkert.\n\n"
+                "2. INDEXFOND (lång sikt, 5+ år) — pengar du inte behöver "
+                "på flera år. ~7 % årlig avkastning historiskt. Volatilt "
+                "år för år men stabilt över tid.\n\n"
+                "3. ENSKILDA AKTIER (lång sikt, hög risk) — bara med "
+                "pengar du har råd att förlora. Kan ge 30 % på ett år, "
+                "kan tappa 50 %.\n\n"
+                "Bygg från botten: först bufferten, sedan fondsparande, "
+                "sist (om någonsin) enskilda aktier."
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Ränta-på-ränta — världens viktigaste insikt",
+            "content": (
+                "Ränta-på-ränta = du tjänar ränta INTE BARA på dina "
+                "insatta pengar, utan också på den ränta som tidigare "
+                "år gett dig.\n\n"
+                "Exempel: 1 000 kr/mån i 30 år vid 7 % årlig avkastning "
+                "blir ~1,17 MILJONER kr. Bara 360 000 är dina insatta "
+                "pengar. Resten — 810 000 — är ränta på ränta.\n\n"
+                "Samma tusenlapp/månad i bara 10 år (= 120 000 insatt) "
+                "blir bara ~173 000. Tiden är allt. Börja tidigt även om "
+                "beloppet är litet."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Vilket exempel ger mest pengar?",
+            "content": None,
+            "params": {
+                "question": "Tre personer sparar 500 kr/mån vid 7 % "
+                "avkastning. Vem har MEST pengar vid 65?",
+                "options": [
+                    "Anna börjar vid 20, sparar 10 år, slutar (60 000 insatt)",
+                    "Bahar börjar vid 30, sparar i 35 år (210 000 insatt)",
+                    "Carl börjar vid 40, sparar i 25 år (150 000 insatt)",
+                ],
+                "correct_index": 0,
+                "explanation": (
+                    "Trick-fråga! Anna slutar vid 30 men låter pengarna "
+                    "växa i 35 år vid 7 % → ~700 000 kr. Bahar har 210 000 "
+                    "insatta i 35 år → ~860 000 kr. Carl har bara 25 år "
+                    "→ ~410 000. Anna SLÅR Carl trots att hon satt in "
+                    "MINDRE. Tid > belopp för långsiktigt sparande."
+                ),
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Indexfond vs aktivt förvaltad fond",
+            "content": (
+                "INDEXFOND följer marknaden mekaniskt (köper allt). Avgift "
+                "0,2-0,4 %/år. Slår nästan alltid aktiva fonder över 10+ år.\n\n"
+                "AKTIV FOND har en förvaltare som väljer aktier. Avgift "
+                "1-2 %/år. 80-90 % av aktiva fonder presterar SÄMRE än "
+                "index över lång tid (efter avgifter).\n\n"
+                "1 % skillnad i avgift låter inte mycket. På 30 år är det "
+                "~30 % MINDRE pengar i din ficka. Indexfond är default-"
+                "valet för 99 % av sparare."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Sätt ett långsiktigt sparmål",
+            "content": (
+                "Be din lärare skapa ett 'Spara X kr/mån'-uppdrag åt dig. "
+                "Den här gången: tänk pension, inte semester. Hur mycket "
+                "kan du tänka dig att spara om DU FICK välja, inte vad "
+                "Konsumentverket säger?"
+            ),
+            "params": {"assignment_kind": "save_amount"},
+        },
+        {
+            "kind": "reflect",
+            "title": "Vilket är din 30-års-jag tacksam för?",
+            "content": (
+                "Tänk dig att du är 50 år. Vad skulle du önska att din "
+                "20-åriga jag hade gjort med pengarna? Vad tror du att "
+                "DU kommer ångra? Skriv ärligt."
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "tidshorisont",
+                        "name": "Tidshorisont",
+                        "levels": [
+                            "Bara nuet",
+                            "Refererar till framtiden",
+                            "Kopplar nuet till framtid + handling",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 # Mall: "Din första månad"
 FIRST_MONTH_TEMPLATE = {
     "title": "Din första månad",
@@ -610,6 +720,7 @@ def seed_system_modules(master_session) -> int:
         BUFFER_TEMPLATE,
         MORTGAGE_TEMPLATE,
         CREDITCARD_TEMPLATE,
+        SAVING_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue
