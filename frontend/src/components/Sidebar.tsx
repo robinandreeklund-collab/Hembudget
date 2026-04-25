@@ -92,10 +92,10 @@ function NavItems({ onClick }: { onClick?: () => void }) {
           onClick={onClick}
           className={({ isActive }) =>
             clsx(
-              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm",
+              "flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-l-2",
               isActive
-                ? "bg-brand-50 text-brand-700 font-medium"
-                : "text-slate-600 hover:bg-slate-50",
+                ? "bg-paper text-ink border-ink font-semibold"
+                : "text-[#555] hover:bg-paper border-transparent",
             )
           }
         >
@@ -110,28 +110,27 @@ function NavItems({ onClick }: { onClick?: () => void }) {
 function Brand() {
   const { role, schoolMode } = useAuth();
   const isStudent = role === "student";
-  // I school-mode = Ekonomilabbet för alla (elev + lärare).
-  // I desktop-mode = Hembudget.
   const title = schoolMode || isStudent ? "Ekonomilabbet" : "Hembudget";
   const subtitle = isStudent
     ? "Övning – inte riktiga pengar"
     : schoolMode
     ? "Lärarpanel"
-    : "Lokalt • Nemotron Nano 3";
+    : "Lokalt · Nemotron Nano 3";
   return (
-    <div className="p-4">
+    <div className="p-5 border-b border-rule">
       <Link
         to={isStudent ? "/my-batches" : "/dashboard"}
-        className="flex items-center gap-2 text-brand-600 font-semibold text-lg"
+        className="flex items-center gap-2.5"
       >
-        {isStudent || schoolMode ? (
-          <GraduationCap className="w-5 h-5" />
-        ) : (
-          <LineChart className="w-5 h-5" />
-        )}
-        {title}
+        <svg width="24" height="24" viewBox="0 0 40 40" aria-hidden="true">
+          <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
+          <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">
+            {schoolMode || isStudent ? "Ek" : "Hb"}
+          </text>
+        </svg>
+        <span className="serif text-lg leading-none">{title}</span>
       </Link>
-      <div className="text-xs text-slate-600 mt-0.5">{subtitle}</div>
+      <div className="eyebrow mt-2.5">{subtitle}</div>
     </div>
   );
 }
@@ -139,9 +138,9 @@ function Brand() {
 export function Sidebar() {
   // Desktop-sidebar — dold på mobil
   return (
-    <aside className="hidden md:block w-60 shrink-0 border-r border-slate-200 bg-white">
+    <aside className="hidden md:block w-60 shrink-0 border-r border-rule bg-white">
       <Brand />
-      <nav className="px-2 space-y-1 pb-6">
+      <nav className="py-3">
         <NavItems />
       </nav>
     </aside>
@@ -159,50 +158,51 @@ export function MobileTopBar() {
 
   return (
     <>
-      <div className="md:hidden sticky top-0 z-30 flex items-center gap-3 bg-white border-b border-slate-200 px-3 h-12">
+      <div className="md:hidden sticky top-0 z-30 flex items-center gap-3 bg-white border-b border-rule px-3 h-12">
         <button
           onClick={() => setOpen(true)}
-          className="p-2 -ml-2 text-slate-600"
+          className="p-2 -ml-2 text-ink"
           aria-label="Meny"
         >
           <Menu className="w-5 h-5" />
         </button>
         <Link
           to={isStudent ? "/my-batches" : "/dashboard"}
-          className="font-semibold text-brand-600 flex items-center gap-1.5"
+          className="serif text-base flex items-center gap-1.5 text-ink"
         >
-          {isStudent || schoolMode ? (
-            <GraduationCap className="w-4 h-4" />
-          ) : (
-            <LineChart className="w-4 h-4" />
-          )}
-          {isStudent || schoolMode ? "Ekonomilabbet" : "Hembudget"}
+          <svg width="18" height="18" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2.5" />
+            <text x="20" y="27" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">
+              {schoolMode || isStudent ? "Ek" : "Hb"}
+            </text>
+          </svg>
+          {schoolMode || isStudent ? "Ekonomilabbet" : "Hembudget"}
         </Link>
         {currentItem && (
-          <span className="ml-auto text-sm text-slate-700">{currentItem.label}</span>
+          <span className="ml-auto text-xs eyebrow">{currentItem.label}</span>
         )}
       </div>
 
       {open && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-slate-900/40"
+          className="md:hidden fixed inset-0 z-40 bg-ink/40"
           onClick={() => setOpen(false)}
         >
           <div
-            className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-lg overflow-y-auto"
+            className="absolute left-0 top-0 bottom-0 w-64 bg-white border-r border-rule overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pr-2">
               <Brand />
               <button
                 onClick={() => setOpen(false)}
-                className="p-2 text-slate-600"
+                className="p-2 text-ink"
                 aria-label="Stäng"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="px-2 space-y-1 pb-6">
+            <nav className="py-3">
               <NavItems onClick={() => setOpen(false)} />
             </nav>
           </div>
