@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Prof-B · Typografisk mascott</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#111217;--paper:#fbfaf6;--rule:#e7e3d7;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:880px;margin:0 auto;padding:60px 24px;}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
+  h1{font-family:Spectral,serif;font-weight:800;font-size:40px;letter-spacing:-.015em;
+    line-height:1.05;margin:8px 0 6px;}
+  .lead{font-size:16px;line-height:1.55;color:#444;max-width:540px;}
+
+  .stage{
+    margin-top:36px;display:grid;grid-template-columns:auto 1fr;gap:48px;
+    align-items:start;border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);padding:48px 0;
+  }
+  .emblem{position:relative;width:140px;text-align:center;}
+  .seal{
+    width:140px;height:140px;border-radius:50%;border:2.5px solid var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    font-family:Spectral,serif;font-weight:800;font-size:64px;
+    background:var(--paper);position:relative;
+  }
+  .seal:before{
+    content:"";position:absolute;inset:8px;border:1px solid var(--ink);
+    border-radius:50%;opacity:.3;
+  }
+  .seal-arc{
+    position:absolute;inset:0;font-family:Spectral,serif;font-size:9px;
+    text-transform:uppercase;letter-spacing:.32em;color:#666;
+    pointer-events:none;
+  }
+  .seal-arc text{fill:#666;}
+  .emblem .role{
+    margin-top:14px;font-family:Spectral,serif;font-style:italic;
+    font-weight:600;font-size:14px;color:#333;
+  }
+  .emblem .sub{
+    margin-top:2px;font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:#888;
+  }
+
+  /* Marginalanteckning */
+  .margin-note{
+    font-family:Spectral,serif;font-style:italic;font-size:18px;
+    line-height:1.5;color:#222;border-left:1.5px solid var(--ink);
+    padding:6px 0 6px 18px;max-width:380px;margin-bottom:24px;
+    position:relative;
+  }
+  .margin-note .arrow{
+    position:absolute;left:-2px;bottom:-26px;font-size:24px;color:var(--ink);
+    line-height:1;
+  }
+  .margin-note small{
+    display:block;font-style:normal;font-family:Inter,sans-serif;
+    font-size:11px;text-transform:uppercase;letter-spacing:.18em;
+    color:#999;margin-bottom:6px;
+  }
+
+  /* Mini-grid */
+  .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;}
+  .cell{
+    aspect-ratio:1;border:1.5px solid var(--ink);background:#fff;
+    padding:6px 8px;display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .cell .n{font-size:9px;color:#888;}
+  .cell .s{font-family:Spectral,serif;font-weight:800;font-size:22px;line-height:1;}
+  .cell .l{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.05em;}
+  .grund{background:#eef3ff;}.fordj{background:#fff3e6;}.konto{background:#e8f7ef;}
+
+  .pros{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:36px;
+    border-top:1px solid var(--rule);padding-top:28px;}
+  .col h3{font-family:Spectral,serif;font-size:18px;margin:0 0 8px;font-weight:600;}
+  .col p,.col li{font-size:14px;line-height:1.55;color:#333;}
+  .nav{display:flex;gap:18px;margin-top:32px;font-size:13px;}
+  .nav a{color:var(--ink);text-decoration:none;border-bottom:1.5px solid var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Demo B av 3</div>
+  <h1>Typografisk mascott — sigill + marginalanteckning.</h1>
+  <p class="lead">Slopa den figurativa karaktären helt. En stiliserad serif-emblem (kemilärar-sigill med ett <em>E</em>) plus en marginalanteckning i serif-italic, som om någon klottrat i en gammal lärobok. Stark identitet utan tecknad rolighet.</p>
+
+  <div class="stage">
+    <div class="emblem">
+      <div class="seal">
+        E
+        <svg class="seal-arc" viewBox="0 0 140 140">
+          <defs>
+            <path id="circle-top" d="M 14 70 A 56 56 0 0 1 126 70"/>
+            <path id="circle-bot" d="M 126 70 A 56 56 0 0 1 14 70"/>
+          </defs>
+          <text>
+            <textPath href="#circle-top" startOffset="50%" text-anchor="middle">
+              Professor Ekon
+            </textPath>
+          </text>
+          <text>
+            <textPath href="#circle-bot" startOffset="50%" text-anchor="middle">
+              · 2026 · Periodbordets förvaltare
+            </textPath>
+          </text>
+        </svg>
+      </div>
+      <div class="role">Periodbordets förvaltare</div>
+      <div class="sub">Sedan 2026</div>
+    </div>
+
+    <div>
+      <div class="margin-note">
+        <small>I marginalen står</small>
+        Hovra över en cell — eleverna ser samma karta som du. Klickar du
+        får du en längre förklaring och vilken modul cellen tränas i.
+      </div>
+      <div class="mini">
+        <div class="cell grund"><span class="n">1</span><span class="s">Lö</span><span class="l">Lön</span></div>
+        <div class="cell grund"><span class="n">2</span><span class="s">Sk</span><span class="l">Skatt</span></div>
+        <div class="cell grund"><span class="n">3</span><span class="s">Bu</span><span class="l">Budget</span></div>
+        <div class="cell konto"><span class="n">4</span><span class="s">Ku</span><span class="l">Konto</span></div>
+        <div class="cell fordj"><span class="n">5</span><span class="s">Sp</span><span class="l">Spara</span></div>
+        <div class="cell fordj"><span class="n">6</span><span class="s">Bl</span><span class="l">Bolån</span></div>
+        <div class="cell konto"><span class="n">7</span><span class="s">Sa</span><span class="l">Saldo</span></div>
+        <div class="cell grund"><span class="n">8</span><span class="s">Ka</span><span class="l">Kategori</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pros">
+    <div class="col">
+      <h3>Plus</h3>
+      <ul>
+        <li>Maximalt konsekvent med paper/serif-systemet</li>
+        <li>Inga tecknade-figur-konventioner att underhålla</li>
+        <li>Sigillet kan skalas hur som helst utan att tappa karaktär</li>
+        <li>"Marginalanteckning" känns som en gammal lärobok — passar temat</li>
+        <li>Kan läggas i flera vyer (login, footer, portfolio-PDF)</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>Minus</h3>
+      <ul>
+        <li>Ingen "person" — kan kännas mer formell, mindre lekfull</li>
+        <li>Roterande-citat-effekten är stillsam</li>
+        <li>Yngre elever kanske saknar maskoten</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="nav">
+    <a href="prof-a-lab.html">A. Lab assistant</a>
+    <a href="prof-b-mascot.html">B. Typografisk mascott</a>
+    <a href="prof-c-illustrated.html">C. Illustrerad karaktär</a>
+    <a href="demo3-periodic.html">↩ Tillbaka till demo3</a>
+  </div>
+</div>
+</body>
+</html>
