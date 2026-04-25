@@ -105,7 +105,8 @@ Sätta via Cloud Run — använd `--update-env-vars`/`--update-secrets`, aldrig
 |---|---|---|
 | `HEMBUDGET_SCHOOL_MODE` | `1` för Ekonomilabbet | alltid i prod |
 | `HEMBUDGET_SERVE_STATIC` | `1` för att serva `frontend/dist` från samma container | alltid i prod |
-| `HEMBUDGET_DATA_DIR` | Persistens-mount (typ `/mnt/school-data`) | alltid i prod |
+| `HEMBUDGET_DATABASE_URL` | Cloud SQL Postgres-connection-string (sätts som Cloud Run-secret av `deploy.sh`). När satt persisteras allt — master + scope-data — i en gemensam Postgres med tenant_id-isolering. När osatt fallback till SQLite-fil-per-scope under `HEMBUDGET_DATA_DIR`. | krävs i prod |
+| `HEMBUDGET_DATA_DIR` | Sökväg för throw-away-data (cache, uploads) — endast SQLite-fallback om `DATABASE_URL` saknas | alltid i prod |
 | `HEMBUDGET_BOOTSTRAP_SECRET` | Skyddar första lärarregistreringen | alltid |
 | `HEMBUDGET_BOOTSTRAP_TEACHER_EMAIL`/`_PASSWORD`/`_NAME` | Auto-skapa första läraren | valfritt |
 | `ANTHROPIC_API_KEY` | Aktiverar `/ai/*`-endpoints | valfritt — utan = AI tyst av |

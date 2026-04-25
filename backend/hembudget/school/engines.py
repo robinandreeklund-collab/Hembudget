@@ -264,8 +264,80 @@ def _scope_db_path(scope_key: str) -> Path:
     return _school_root() / "students" / f"{scope_key}.db"
 
 
+# Delad Postgres-engine när HEMBUDGET_DATABASE_URL är satt. Då samlas
+# all scope-data i en enda Postgres med tenant_id-isolering, och
+# fil-per-scope-cachen nedan används aldrig.
+_shared_scope_engine: Engine | None = None
+_shared_scope_session: sessionmaker[Session] | None = None
+_seeded_tenants: set[str] = set()
+
+
+def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
+    """Lazy-init en gemensam Postgres-engine för ALLA scope-keys.
+    Bara när HEMBUDGET_DATABASE_URL är satt."""
+    global _shared_scope_engine, _shared_scope_session
+    if _shared_scope_engine is not None:
+        assert _shared_scope_session is not None
+        return _shared_scope_engine, _shared_scope_session
+
+    from ..db import models as _models  # noqa: F401  (registrera modeller)
+    from ..db.base import Base
+
+    url = _master_db_url()  # samma DB som master — separata tabellset
+    engine_kwargs: dict = {"future": True}
+    if url.startswith("postgresql"):
+        engine_kwargs.update(
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800,
+        )
+    engine = create_engine(url, **engine_kwargs)
+    Base.metadata.create_all(engine)
+
+    _shared_scope_engine = engine
+    _shared_scope_session = sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False,
+    )
+    return engine, _shared_scope_session
+
+
+def _seed_tenant_if_needed(scope_key: str) -> None:
+    """Säkerställ att en ny scope (t.ex. en just-skapad elev) har
+    default-kategorier + regler i den delade Postgres. Idempotent
+    via in-memory-cache + DB-check."""
+    if scope_key in _seeded_tenants:
+        return
+    assert _shared_scope_session is not None
+    from ..db.models import Category
+    with scope_context(scope_key):
+        with _shared_scope_session() as s:
+            existing = s.query(Category).first()
+            if existing is None:
+                try:
+                    from ..categorize.rules import seed_categories_and_rules
+                    seed_categories_and_rules(s)
+                    s.commit()
+                except Exception:
+                    s.rollback()
+                    log.exception(
+                        "Failed seeding categories for tenant %s", scope_key,
+                    )
+    _seeded_tenants.add(scope_key)
+
+
 def get_scope_engine(scope_key: str) -> Engine:
-    """Skapa (eller återanvänd cachead) engine för en scope-nyckel."""
+    """Skapa (eller återanvänd cachead) engine för en scope-nyckel.
+
+    - Postgres-läge: returnerar samma delade engine för alla scopes;
+      tenant-isolering sker via tenant_id-kolumn + session-events i
+      db/base.py.
+    - SQLite-läge: en fil per scope (oförändrat — pytest + dev).
+    """
+    import os
+    if os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+        engine, _ = _init_shared_scope_engine()
+        _seed_tenant_if_needed(scope_key)
+        return engine
+
     if scope_key in _scope_engines:
         return _scope_engines[scope_key]
 
@@ -305,6 +377,20 @@ def get_scope_engine(scope_key: str) -> Engine:
 
 
 def get_scope_session(scope_key: str) -> sessionmaker[Session]:
+    """Returnerar sessionmaker för en scope.
+
+    - Postgres-läge: alla scopes delar samma sessionmaker; isolering
+      sker via tenant_id-event-listeners.
+    - SQLite-läge: en sessionmaker per scope-fil.
+    """
+    import os
+    if os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+        if _shared_scope_session is None:
+            _init_shared_scope_engine()
+        _seed_tenant_if_needed(scope_key)
+        assert _shared_scope_session is not None
+        return _shared_scope_session
+
     if scope_key not in _scope_sessions:
         get_scope_engine(scope_key)
     return _scope_sessions[scope_key]

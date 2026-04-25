@@ -19,10 +19,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base
+from .base import Base, TenantMixin
 
 
-class User(Base):
+class User(TenantMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -30,7 +30,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class Account(Base):
+class Account(TenantMixin, Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -71,20 +71,30 @@ class Account(Base):
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="account")
 
 
-class Category(Base):
+class Category(TenantMixin, Base):
     __tablename__ = "categories"
+    # Unik per tenant — i delad Postgres måste två elever kunna ha
+    # varsin "Mat"-kategori utan att de kolliderar.
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_categories_tenant_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("categories.id"), nullable=True)
     budget_monthly: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     icon: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
 
-class Transaction(Base):
+class Transaction(TenantMixin, Base):
     __tablename__ = "transactions"
-    __table_args__ = (UniqueConstraint("hash", name="uq_tx_hash"),)
+    # Hash är dedup-nyckel per elev. Två olika elever kan ha samma
+    # transaktionshash (t.ex. importerade samma demo-fil) — så
+    # constraint:n är tenant-bunden.
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "hash", name="uq_tx_tenant_hash"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
@@ -122,7 +132,7 @@ class Transaction(Base):
     )
 
 
-class Rule(Base):
+class Rule(TenantMixin, Base):
     __tablename__ = "rules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -135,7 +145,7 @@ class Rule(Base):
     source: Mapped[str] = mapped_column(String(20), default="user")  # user, seed, llm
 
 
-class Budget(Base):
+class Budget(TenantMixin, Base):
     __tablename__ = "budgets"
     __table_args__ = (UniqueConstraint("month", "category_id", name="uq_budget_month_cat"),)
 
@@ -145,7 +155,7 @@ class Budget(Base):
     planned_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 
 
-class Goal(Base):
+class Goal(TenantMixin, Base):
     __tablename__ = "goals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -156,7 +166,7 @@ class Goal(Base):
     account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
 
 
-class Subscription(Base):
+class Subscription(TenantMixin, Base):
     __tablename__ = "subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -171,7 +181,7 @@ class Subscription(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class Scenario(Base):
+class Scenario(TenantMixin, Base):
     __tablename__ = "scenarios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -182,7 +192,7 @@ class Scenario(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class Import(Base):
+class Import(TenantMixin, Base):
     __tablename__ = "imports"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -193,7 +203,7 @@ class Import(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
 
-class ChatMessage(Base):
+class ChatMessage(TenantMixin, Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -204,7 +214,7 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class Loan(Base):
+class Loan(TenantMixin, Base):
     __tablename__ = "loans"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -242,7 +252,7 @@ class Loan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class LoanPayment(Base):
+class LoanPayment(TenantMixin, Base):
     """Koppling transaktion → lån, klassificerad som ränta eller amortering.
 
     EJ unique på transaction_id — en bankrad kan splitta i både ränta och
@@ -268,7 +278,7 @@ class LoanPayment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class LoanScheduleEntry(Base):
+class LoanScheduleEntry(TenantMixin, Base):
     """Planerad kommande lånebetalning — används för exakt belopp+datum-
     matchning mot nya transaktioner. Betydligt pålitligare än textmatchning
     eftersom bankens autogiro-beloppen är exakta.
@@ -290,7 +300,7 @@ class LoanScheduleEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class UpcomingTransaction(Base):
+class UpcomingTransaction(TenantMixin, Base):
     """Planerade kommande transaktioner — fakturor och löner som ännu inte
     bokats, men som vi vet kommer. Används för cashflow-prognos + att räkna
     ut hur mycket pengar som kan fördelas 50/50 som privata pengar.
@@ -341,7 +351,7 @@ class UpcomingTransaction(Base):
     )
 
 
-class UpcomingTransactionLine(Base):
+class UpcomingTransactionLine(TenantMixin, Base):
     """Enskild post på en planerad faktura.
 
     Exempel: en faktura från Hjo Energi kan innehålla rader för el,
@@ -370,7 +380,7 @@ class UpcomingTransactionLine(Base):
     category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
 
 
-class TransactionSplit(Base):
+class TransactionSplit(TenantMixin, Base):
     """Uppdelning av en faktisk transaktion i flera budgetposter.
 
     När en UpcomingTransaction med lines matchas mot en bankrad kopieras
@@ -403,7 +413,7 @@ class TransactionSplit(Base):
     category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
 
 
-class TaxEvent(Base):
+class TaxEvent(TenantMixin, Base):
     __tablename__ = "tax_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -414,7 +424,7 @@ class TaxEvent(Base):
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
 
-class FundHolding(Base):
+class FundHolding(TenantMixin, Base):
     """Aktuell fondposition per konto — fond + antal andelar + värde.
 
     Uppdateras en gång per månad från bankens vy (t.ex. Nordea ISK) via
@@ -446,7 +456,7 @@ class FundHolding(Base):
     )
 
 
-class FundHoldingSnapshot(Base):
+class FundHoldingSnapshot(TenantMixin, Base):
     """Historik över månadsvisa fondinnehav — ger utveckling över tid per fond.
 
     Skapas varje gång användaren importerar en ny skärmdump. En rad per fond
@@ -477,7 +487,7 @@ class FundHoldingSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class UpcomingPayment(Base):
+class UpcomingPayment(TenantMixin, Base):
     """Junction-table för att koppla flera Transactions mot en
     UpcomingTransaction — t.ex. när en Amex-faktura på 13 445 kr betalas
     i två delar (5 000 + 8 445).
@@ -508,7 +518,7 @@ class UpcomingPayment(Base):
     )
 
 
-class LockedPeriod(Base):
+class LockedPeriod(TenantMixin, Base):
     """Låst månad i huvudboken — när användaren är klar med
     avstämningen för en månad kan de låsa den så inga transaktioner,
     kategoriseringar eller andra ändringar kan göras retroaktivt.
@@ -527,7 +537,7 @@ class LockedPeriod(Base):
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
-class DismissedTransferSuggestion(Base):
+class DismissedTransferSuggestion(TenantMixin, Base):
     """Användaren har klickat bort ett föreslaget transfer-par — ska
     inte föreslås igen. Primary key är (lower_tx_id, higher_tx_id) för
     att para oberoende av ordning.
@@ -547,7 +557,7 @@ class DismissedTransferSuggestion(Base):
     )
 
 
-class UtilityReading(Base):
+class UtilityReading(TenantMixin, Base):
     """Förbrukningsdata från energifakturor och smart-meter-APIer.
 
     Kompletterar Transaction-baserad kr-historik med faktisk fysisk
@@ -593,7 +603,7 @@ class UtilityReading(Base):
     )
 
 
-class AppSetting(Base):
+class AppSetting(TenantMixin, Base):
     """Enkelt key/value-lager för användarinställningar.
 
     Användsfall: default_debit_account_id (kontot som föreslås för nya
@@ -609,7 +619,7 @@ class AppSetting(Base):
     )
 
 
-class AuditLog(Base):
+class AuditLog(TenantMixin, Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

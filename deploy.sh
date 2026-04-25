@@ -136,35 +136,113 @@ if [[ "$MODE" == "school" ]]; then
     TEACHER_PASSWORD="${TEACHER_PASSWORD:-}"
     TEACHER_NAME="${TEACHER_NAME:-Lärare}"
 
-    # PERSIST: "gcs" (default — montera GCS-bucket via Fuse, persistent)
-    #          "ephemeral" (gammalt beteende, /tmp resetas vid restart)
-    PERSIST="${PERSIST:-gcs}"
+    # PERSIST: "cloudsql" (default — Cloud SQL Postgres, riktigt
+    #             managed med backup + point-in-time-restore)
+    #          "ephemeral" (utveckling/testning — data försvinner)
+    #
+    # OBS: GCS-fuse-volymen togs bort — SQLite + GCS-fuse är ett
+    # antimönster (POSIX-låsning stöds inte → korrupta skrivningar
+    # och förlorad data). Vi lagrar därför allt i Postgres istället.
+    PERSIST="${PERSIST:-cloudsql}"
+    # /tmp används för throw-away-data (uploads-cache osv) — DB:n
+    # ligger i Cloud SQL.
+    DATA_DIR="/tmp/hembudget"
 
-    if [[ "$PERSIST" == "gcs" ]]; then
-        BUCKET_NAME="${BUCKET_NAME:-hembudget-school-${PROJECT_ID}}"
-        DATA_DIR="/mnt/school-data"
+    CLOUDSQL_INSTANCE_CONN=""
+    DATABASE_URL=""
 
-        info "Persistens: GCS-fuse → bucket gs://$BUCKET_NAME"
-        # Skapa bucket om den inte finns
-        if ! gsutil ls -b "gs://$BUCKET_NAME" >/dev/null 2>&1; then
-            info "Bucket finns inte — skapar gs://$BUCKET_NAME i $REGION"
-            gsutil mb -l "$REGION" -p "$PROJECT_ID" "gs://$BUCKET_NAME" \
-                || warn "Kunde inte skapa bucket — kontrollera GCS-API"
+    if [[ "$PERSIST" == "cloudsql" ]]; then
+        DB_INSTANCE="${DB_INSTANCE:-hembudget-pg}"
+        DB_NAME="${DB_NAME:-hembudget}"
+        DB_USER="${DB_USER:-hembudget}"
+        DB_TIER="${DB_TIER:-db-f1-micro}"
+
+        info "Persistens: Cloud SQL Postgres ($DB_INSTANCE / $DB_NAME)"
+
+        # Aktivera SQL-API om inte redan på
+        gcloud services enable sqladmin.googleapis.com \
+            --project="$PROJECT_ID" --quiet 2>/dev/null || true
+
+        # Skapa instansen om den inte finns. db-f1-micro är gratis-
+        # tier-kompatibel för testning. För prod bumpa till db-g1-small
+        # eller större via DB_TIER=db-g1-small ./deploy.sh.
+        if ! gcloud sql instances describe "$DB_INSTANCE" \
+                --project="$PROJECT_ID" >/dev/null 2>&1; then
+            info "Skapar Cloud SQL-instans $DB_INSTANCE ($DB_TIER) — tar 5-10 min…"
+            gcloud sql instances create "$DB_INSTANCE" \
+                --project="$PROJECT_ID" \
+                --database-version=POSTGRES_15 \
+                --tier="$DB_TIER" \
+                --region="$REGION" \
+                --backup-start-time=03:00 \
+                --enable-point-in-time-recovery \
+                --storage-auto-increase \
+                --quiet
         else
-            ok "Bucket gs://$BUCKET_NAME finns"
+            ok "Cloud SQL-instans $DB_INSTANCE finns"
         fi
 
-        # Säkerställ att Cloud Run-tjänstens default-SA har storage.objectAdmin
+        # Skapa databas om saknas
+        if ! gcloud sql databases describe "$DB_NAME" \
+                --instance="$DB_INSTANCE" --project="$PROJECT_ID" \
+                >/dev/null 2>&1; then
+            info "Skapar databas $DB_NAME"
+            gcloud sql databases create "$DB_NAME" \
+                --instance="$DB_INSTANCE" --project="$PROJECT_ID" \
+                --quiet
+        fi
+
+        # Skapa app-user om saknas. Lösen ligger i Secret Manager —
+        # genereras nytt om hemligheten saknas, återanvänds annars.
+        if ! gcloud secrets describe hembudget-db-password \
+                --project="$PROJECT_ID" >/dev/null 2>&1; then
+            info "Skapar Secret hembudget-db-password"
+            DB_PASSWORD="$(openssl rand -base64 32)"
+            printf "%s" "$DB_PASSWORD" | gcloud secrets create \
+                hembudget-db-password \
+                --data-file=- --project="$PROJECT_ID" --quiet
+        else
+            DB_PASSWORD="$(gcloud secrets versions access latest \
+                --secret=hembudget-db-password --project="$PROJECT_ID")"
+        fi
+
+        # Skapa user (idempotent — set-password fungerar både för
+        # ny och befintlig user)
+        if ! gcloud sql users list --instance="$DB_INSTANCE" \
+                --project="$PROJECT_ID" --format='value(name)' \
+                | grep -q "^${DB_USER}$"; then
+            info "Skapar DB-user $DB_USER"
+            gcloud sql users create "$DB_USER" \
+                --instance="$DB_INSTANCE" --project="$PROJECT_ID" \
+                --password="$DB_PASSWORD" --quiet
+        else
+            gcloud sql users set-password "$DB_USER" \
+                --instance="$DB_INSTANCE" --project="$PROJECT_ID" \
+                --password="$DB_PASSWORD" --quiet
+        fi
+
+        # Ge Cloud Run-SA åtkomst till hemligheten (idempotent)
         SA_EMAIL=$(gcloud iam service-accounts list \
+            --project="$PROJECT_ID" \
             --filter="displayName:Default compute service account" \
             --format='value(email)' 2>/dev/null | head -1)
         if [[ -n "$SA_EMAIL" ]]; then
-            gsutil iam ch "serviceAccount:${SA_EMAIL}:roles/storage.objectAdmin" \
-                "gs://$BUCKET_NAME" 2>/dev/null \
-                || warn "Kunde inte sätta IAM på bucket"
+            gcloud secrets add-iam-policy-binding hembudget-db-password \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/secretmanager.secretAccessor" \
+                --project="$PROJECT_ID" --quiet 2>/dev/null || true
+            gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/cloudsql.client" \
+                --quiet 2>/dev/null || true
         fi
+
+        CLOUDSQL_INSTANCE_CONN="${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+        # Cloud Run-Postgres-via-unix-socket-URL (proxy går automatiskt
+        # via --add-cloudsql-instances)
+        DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${CLOUDSQL_INSTANCE_CONN}"
+        ok "Cloud SQL klar: $CLOUDSQL_INSTANCE_CONN"
     else
-        DATA_DIR="/tmp/hembudget"
         warn "Persistens: ephemeral — data försvinner vid container-restart!"
     fi
 
@@ -174,6 +252,28 @@ if [[ "$MODE" == "school" ]]; then
     ENV_VARS+=",HEMBUDGET_DATA_DIR=${DATA_DIR}"
     ENV_VARS+=",HEMBUDGET_LM_STUDIO_BASE_URL=http://disabled.invalid:1234/v1"
     ENV_VARS+=",HEMBUDGET_BOOTSTRAP_SECRET=$BOOTSTRAP_SECRET"
+    if [[ -n "$DATABASE_URL" ]]; then
+        # OBS: lösenord står i URL:en — vi sätter den som Cloud Run-secret
+        # nedan i stället för --update-env-vars för att inte hamna i
+        # `gcloud run revisions describe` plain-text.
+        SECRET_NAME="hembudget-database-url"
+        if ! gcloud secrets describe "$SECRET_NAME" \
+                --project="$PROJECT_ID" >/dev/null 2>&1; then
+            printf "%s" "$DATABASE_URL" | gcloud secrets create \
+                "$SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        else
+            printf "%s" "$DATABASE_URL" | gcloud secrets versions add \
+                "$SECRET_NAME" --data-file=- \
+                --project="$PROJECT_ID" --quiet
+        fi
+        if [[ -n "$SA_EMAIL" ]]; then
+            gcloud secrets add-iam-policy-binding "$SECRET_NAME" \
+                --member="serviceAccount:${SA_EMAIL}" \
+                --role="roles/secretmanager.secretAccessor" \
+                --project="$PROJECT_ID" --quiet 2>/dev/null || true
+        fi
+    fi
     # SMTP för verifierings- och reset-mail. Host/port/user sätts här;
     # lösenordet ska ligga som Cloud Run-secret (HEMBUDGET_SMTP_PASSWORD)
     # och pekas in med --update-secrets. Se SMTP_*-sektionen i CLAUDE.md.
@@ -229,12 +329,12 @@ DEPLOY_ARGS=(
     --quiet
 )
 
-# GCS-fuse-volym (kräver Cloud Run gen2 exec env, annars failar deployen)
-if [[ "$MODE" == "school" && "$PERSIST" == "gcs" ]]; then
+# Cloud SQL: koppla in Postgres-instansen + injicera DATABASE_URL
+# som secret så lösenordet inte hamnar i revisionsbeskrivningen
+if [[ "$MODE" == "school" && -n "$CLOUDSQL_INSTANCE_CONN" ]]; then
     DEPLOY_ARGS+=(
-        --execution-environment=gen2
-        --add-volume="name=school-data,type=cloud-storage,bucket=$BUCKET_NAME"
-        --add-volume-mount="volume=school-data,mount-path=$DATA_DIR"
+        --add-cloudsql-instances="$CLOUDSQL_INSTANCE_CONN"
+        --update-secrets="HEMBUDGET_DATABASE_URL=hembudget-database-url:latest"
     )
 fi
 
