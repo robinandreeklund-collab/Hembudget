@@ -307,6 +307,9 @@ export default function AdminAI() {
       {/* Landningssidans skärmdumpar */}
       <LandingGallerySection />
 
+      {/* Landningssidans variant (A/B-test) */}
+      <LandingVariantSection />
+
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Totalt antal anrop" value={totalReq.toLocaleString("sv-SE")} />
         <Stat label="In-tokens" value={totalIn.toLocaleString("sv-SE")} />
@@ -1007,5 +1010,93 @@ function LandingAssetEditor({
         )}
       </div>
     </div>
+  );
+}
+
+
+// ---------- Landings-variant (A/B-test) ----------
+
+function LandingVariantSection() {
+  const [variant, setVariant] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ variant: string }>("/landing/variant")
+      .then((r) => setVariant(r.variant))
+      .catch(() => setVariant("default"));
+  }, []);
+
+  async function setTo(v: "default" | "c") {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ variant: string }>("/admin/landing/variant", {
+        method: "PUT",
+        body: JSON.stringify({ variant: v }),
+      });
+      setVariant(r.variant);
+      setMsg(
+        `Aktiv variant: ${r.variant === "c" ? "Variant C (SaaS-stil)" : "Standard (paper-stil)"}.`,
+      );
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+      <div>
+        <h2 className="font-medium flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4" /> Landningssidans variant (A/B)
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          Två landings-designer finns. Standard är paper-stilen vi byggt
+          tillsammans; Variant C är SaaS/dashboard-stilen som testas mot
+          en annan tonalitet. Toggle-bytet slår igenom direkt — inga
+          revision-byten behövs.
+        </p>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="text-sm">
+          <span className="text-slate-500">Aktiv:</span>{" "}
+          {variant === null ? (
+            <span className="text-slate-400">laddar…</span>
+          ) : (
+            <span className="font-medium">
+              {variant === "c" ? "Variant C (SaaS)" : "Standard (paper)"}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setTo("default")}
+          disabled={busy || variant === "default"}
+          className="btn-outline rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          Sätt Standard
+        </button>
+        <button
+          type="button"
+          onClick={() => setTo("c")}
+          disabled={busy || variant === "c"}
+          className="btn-dark rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          Sätt Variant C
+        </button>
+        {busy && (
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> Sparar…
+          </span>
+        )}
+        {msg && <span className="text-xs text-slate-600">{msg}</span>}
+      </div>
+      <p className="text-xs text-slate-500">
+        Tips: öppna ekonomilabbet.org i en privat flik efter byte för
+        att slippa cachning.
+      </p>
+    </section>
   );
 }
