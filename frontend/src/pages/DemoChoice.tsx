@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, GraduationCap, Users, Zap } from "lucide-react";
+import { ArrowLeft, Zap } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+import { Eyebrow, PaperChip, SectionDivider } from "@/components/paper";
 
 type DemoStatus = {
   demo_available: boolean;
@@ -49,62 +50,59 @@ export default function DemoChoice() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-brand-50 p-6">
+    <div className="min-h-screen bg-paper text-ink p-6">
       <div className="max-w-3xl mx-auto space-y-6">
         <Link
           to="/"
-          className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+          className="text-sm text-[#666] nav-link inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka till startsidan
         </Link>
 
-        <div className="bg-amber-100 border-l-4 border-amber-500 rounded p-4">
-          <div className="flex items-center gap-2 font-semibold text-amber-900 mb-1">
-            <Zap className="w-5 h-5" /> Demoläge
+        <div className="border-l-[3px] border-ink bg-white p-4 flex items-start gap-3">
+          <Zap className="w-5 h-5 mt-0.5 shrink-0" strokeWidth={1.5} />
+          <div>
+            <div className="serif text-lg leading-tight">Demoläge</div>
+            <p className="body-prose text-sm mt-1">
+              All data i demo-miljön återställs automatiskt var 10:e minut.
+              Perfekt för att testa plattformen utan att skapa konto. Du
+              delar demo-miljön med andra besökare — spara inget viktigt.
+            </p>
           </div>
-          <p className="text-sm text-amber-900">
-            All data i demo-miljön återställs automatiskt var 10:e minut.
-            Perfekt för att testa plattformen utan att skapa konto. Du
-            delar demo-miljön med andra besökare — spara inget viktigt.
-          </p>
         </div>
 
         {err && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded p-3 text-sm">
+          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
             {err}
           </div>
         )}
 
         {!status ? (
-          <div className="text-slate-500">Laddar…</div>
+          <div className="text-[#888] text-sm serif-italic">Laddar…</div>
         ) : !status.demo_available ? (
-          <div className="bg-slate-100 rounded p-4 text-sm text-slate-700">
-            Demomiljön är inte tillgänglig just nu{status.reason ? `: ${status.reason}` : "."}. Testa igen om en minut.
+          <div className="border-[1.5px] border-rule bg-white p-4 text-sm text-[#555]">
+            Demomiljön är inte tillgänglig just nu
+            {status.reason ? `: ${status.reason}` : "."}. Testa igen om en minut.
           </div>
         ) : (
           <>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 mb-1">
-                Testa plattformen
+              <Eyebrow className="mb-2">Testa plattformen</Eyebrow>
+              <h1 className="serif text-3xl md:text-4xl leading-tight">
+                Välj rollen du vill prova.
               </h1>
-              <p className="text-slate-600">Välj rollen du vill prova.</p>
             </div>
 
-            {/* Lärarkortet */}
             <button
               onClick={loginAsTeacher}
               disabled={busy}
-              className="w-full text-left group bg-white border-2 border-slate-200 hover:border-brand-500 rounded-2xl p-6 transition-all hover:shadow-xl disabled:opacity-50"
+              className="w-full text-left feature-card disabled:opacity-50"
             >
               <div className="flex items-start gap-4">
-                <div className="inline-flex w-12 h-12 bg-brand-100 text-brand-600 rounded-full items-center justify-center group-hover:scale-110 transition-transform">
-                  <Users className="w-6 h-6" />
-                </div>
+                <PaperChip color="special">Lä</PaperChip>
                 <div className="flex-1">
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Logga in som lärare
-                  </h2>
-                  <p className="text-sm text-slate-600 mt-1">
+                  <h2 className="serif text-xl">Logga in som lärare</h2>
+                  <p className="body-prose text-sm mt-2">
                     Skapa elever, skicka dokument, se klassöversikten, skriv
                     uppdrag. Som om du skulle använda det i klassrummet.
                   </p>
@@ -112,18 +110,13 @@ export default function DemoChoice() {
               </div>
             </button>
 
-            {/* Elevrad */}
-            <div className="bg-white border-2 border-slate-200 rounded-2xl p-6">
+            <div className="border-[1.5px] border-ink bg-white p-6">
               <div className="flex items-center gap-3 mb-4">
-                <div className="inline-flex w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full items-center justify-center">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
+                <PaperChip color="grund">El</PaperChip>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    Logga in som elev
-                  </h2>
-                  <p className="text-sm text-slate-600">
-                    Välj vilken av de 5 demo-eleverna du vill prova.
+                  <h2 className="serif text-xl">Logga in som elev</h2>
+                  <p className="body-prose text-sm">
+                    Välj vilken av demo-eleverna du vill prova.
                   </p>
                 </div>
               </div>
@@ -133,13 +126,11 @@ export default function DemoChoice() {
                     key={s.code}
                     onClick={() => loginAsStudent(s.code)}
                     disabled={busy}
-                    className="text-left border border-slate-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg px-4 py-3 disabled:opacity-50"
+                    className="text-left border-[1.5px] border-rule hover:border-ink hover:bg-paper px-4 py-3 transition-colors disabled:opacity-50"
                   >
-                    <div className="font-medium text-slate-800">
-                      {s.name}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {s.class} · kod {s.code}
+                    <div className="serif text-base text-ink">{s.name}</div>
+                    <div className="text-xs text-[#666] mt-0.5">
+                      {s.class} · kod <span className="kbd">{s.code}</span>
                     </div>
                   </button>
                 ))}
@@ -151,6 +142,11 @@ export default function DemoChoice() {
             )}
           </>
         )}
+
+        <SectionDivider className="pt-4">eller</SectionDivider>
+        <div className="text-center">
+          <Link to="/login" className="nav-link text-sm">Riktig inloggning</Link>
+        </div>
       </div>
     </div>
   );
@@ -166,7 +162,7 @@ function ResetCountdown({ iso }: { iso: string }) {
   const mins = Math.max(0, Math.floor(diffMs / 60000));
   const secs = Math.max(0, Math.floor((diffMs % 60000) / 1000));
   return (
-    <div className="text-center text-xs text-slate-500">
+    <div className="text-center text-xs text-[#888] serif-italic">
       Nästa automatiska reset om {mins} min {secs.toString().padStart(2, "0")} s
     </div>
   );
