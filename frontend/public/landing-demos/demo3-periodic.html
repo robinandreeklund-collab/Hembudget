@@ -50,8 +50,19 @@
     white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:30;
   }
   .elem:hover .tooltip{opacity:1;}
+  .elem:focus-visible .tooltip{opacity:1;}
   .tooltip:after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
     border:5px solid transparent;border-top-color:var(--ink);}
+  /* Översta raden: flippa tooltipen ner istället för upp så den inte
+     klipps mot sectionkanten. Täcker desktop-row-1 (1-8) och mobil
+     rad 1-2 (samma indexar). */
+  .elem:nth-child(-n+8) .tooltip{
+    bottom:auto;top:calc(100% + 8px);
+  }
+  .elem:nth-child(-n+8) .tooltip:after{
+    top:auto;bottom:100%;
+    border-top-color:transparent;border-bottom-color:var(--ink);
+  }
   .elem:focus{outline:2px solid var(--ink);outline-offset:2px;}
   /* Heatmap-lager ovanpå cellerna — styr via CSS-variabeln --h (0-1) */
   .elem .heatmap{
