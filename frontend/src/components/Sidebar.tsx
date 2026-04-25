@@ -17,7 +17,6 @@ import {
   Trophy,
   Landmark,
   Link2,
-  LineChart,
   Menu,
   MessageSquare,
   Paperclip,
