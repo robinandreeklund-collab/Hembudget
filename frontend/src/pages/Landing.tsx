@@ -71,7 +71,9 @@ export default function Landing() {
       <Features />
       <Flow />
       <Stats />
-      {/* TODO A2.5-A2.8: resterande sektioner */}
+      <Logiken />
+      <Why />
+      {/* TODO A2.6-A2.8: resterande sektioner */}
       <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
         Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
       </div>
@@ -680,6 +682,92 @@ function Stats() {
               <div className="eyebrow mt-2">{it.label}</div>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Logiken-strip + Why-section ----------
+
+function Logiken() {
+  const items = [
+    {
+      n: "01",
+      title: "En cell, en kompetens.",
+      body: "Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.",
+    },
+    {
+      n: "02",
+      title: "Lärare rättar i rader.",
+      body: "Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.",
+    },
+    {
+      n: "03",
+      title: "Hela klassen i en bild.",
+      body: "Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet — toggla i hero-vyn ovan.",
+    },
+  ];
+  return (
+    <section className="border-t border-rule bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-12">Logiken</div>
+        <div className="grid md:grid-cols-3 gap-x-12 gap-y-10">
+          {items.map((it) => (
+            <div key={it.n}>
+              <div className="eyebrow mb-2">{it.n}</div>
+              <h3 className="serif text-2xl leading-[1.15]">{it.title}</h3>
+              <p className="mt-3 body-prose">{it.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Why() {
+  return (
+    <section id="why" className="border-t border-rule">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">Problemet</div>
+        <div className="grid md:grid-cols-[1.1fr_1fr] gap-12 items-start">
+          <div>
+            <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+              Ekonomi är ett livskunskaps­ämne.<br />
+              Och det saknas i skolan.
+            </h2>
+            <p className="mt-5 lead max-w-md">
+              Svenska unga lämnar gymnasiet utan grund­läggande kunskaper om
+              skatt, sparande, lån och budget. Verkligheten möter dem först
+              när de flyttar hemifrån — ofta för sent.
+            </p>
+            <div className="mt-8 border-l-[3px] border-ink pl-5 py-1 max-w-md">
+              <div className="serif-italic text-lg leading-snug">
+                Lär genom att göra — inte genom att läsa om det.
+              </div>
+              <p className="mt-2 text-sm body-prose">
+                Eleven får egen simulerad inkomst, egna räkningar, egen lön
+                varje månad. Varje val har konsekvenser som syns direkt i
+                budgeten.
+              </p>
+            </div>
+          </div>
+
+          <ul className="grid gap-3">
+            <li className="border-[1.5px] border-ink bg-white p-5 flex items-baseline gap-5">
+              <span className="serif text-5xl leading-none shrink-0">4 av 10</span>
+              <span className="body-prose">unga klarar inte en oväntad räkning på 2 000 kr.</span>
+            </li>
+            <li className="border-[1.5px] border-ink bg-white p-5 flex items-baseline gap-5">
+              <span className="serif text-5xl leading-none shrink-0">60 %</span>
+              <span className="body-prose">av elever har aldrig läst en lönespecifikation.</span>
+            </li>
+            <li className="border-[1.5px] border-ink bg-white p-5 flex items-baseline gap-5">
+              <span className="serif text-5xl leading-none shrink-0">1 h</span>
+              <span className="body-prose">räcker för att prova grunderna i Ekonomilabbet.</span>
+            </li>
+          </ul>
         </div>
       </div>
     </section>
