@@ -335,7 +335,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: "goo
     : tone === "info" ? "text-brand-600"
     : "text-slate-700";
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
+    <div className="bg-white border-[1.5px] border-rule p-4">
       <div className="text-xs uppercase text-slate-700">{label}</div>
       <div className={`text-2xl font-semibold mt-1 ${color}`}>{value}</div>
     </div>

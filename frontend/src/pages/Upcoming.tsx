@@ -1207,7 +1207,7 @@ function Stat({
 }) {
   const color = tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-rose-600" : "";
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3">
+    <div className="bg-white border-[1.5px] border-rule p-3">
       <div className="flex items-center gap-1.5 text-xs uppercase text-slate-700">
         {icon}
         {label}

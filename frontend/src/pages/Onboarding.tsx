@@ -195,7 +195,7 @@ export default function Onboarding() {
             <div className="flex justify-end pt-3">
               <button
                 onClick={() => setStep(1)}
-                className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 flex items-center gap-2"
+                className="btn-dark rounded-md px-5 py-2 flex items-center gap-2"
               >
                 Förstått, gå vidare <ArrowRight className="w-4 h-4" />
               </button>
@@ -244,7 +244,7 @@ export default function Onboarding() {
               </button>
               <button
                 onClick={() => setStep(2)}
-                className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 flex items-center gap-2"
+                className="btn-dark rounded-md px-5 py-2 flex items-center gap-2"
               >
                 Sätt en budget <ArrowRight className="w-4 h-4" />
               </button>
