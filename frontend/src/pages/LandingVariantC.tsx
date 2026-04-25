@@ -173,9 +173,59 @@ export default function LandingVariantC() {
       <Header />
       <Hero />
       <Features />
+      <Moments />
+      <Logic />
     </div>
   );
 }
+
+// 5 nyckelmoment — språkfix från originalbundlen:
+// 'kortfaktur' → 'kortfakturor', 'din barn' → 'dina barn'.
+const MOMENTS = [
+  {
+    n: 1,
+    title: "En egen vardag",
+    desc: "Yrke, lön, bostad, lån — allt slumpas unikt per användare. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid.",
+  },
+  {
+    n: 2,
+    title: "Riktiga dokument att jobba med",
+    desc: "Du trycker \"generera\" — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv.",
+  },
+  {
+    n: 3,
+    title: "Budget möter verklighet",
+    desc: "Eleven sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt.",
+  },
+  {
+    n: 4,
+    title: "Verkliga ekonomiska val",
+    desc: "Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden.",
+  },
+  {
+    n: 5,
+    title: "Du ser hela bilden",
+    desc: "Översiktsmatris över alla användare och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Samma översikt vare sig du följer en klass eller dina barn.",
+  },
+];
+
+const LOGIC = [
+  {
+    n: "01",
+    title: "En cell, en kompetens",
+    desc: "Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som mastery-grafen redan gör.",
+  },
+  {
+    n: "02",
+    title: "Du rättar i rader",
+    desc: "Reflektioner samlas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick — som lärare eller förälder.",
+  },
+  {
+    n: "03",
+    title: "Hela gruppen i en bild",
+    desc: "Översikten lägger användarnas mastery som ett värmekarta-lager ovanpå systemet. Funkar för en klass eller ett syskonpar.",
+  },
+];
 
 function SharedStyles() {
   return (
@@ -433,6 +483,399 @@ function Hero() {
             )}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Moments ----------
+
+function Moments() {
+  return (
+    <section
+      style={{
+        padding: "40px 24px 80px",
+        maxWidth: 1100,
+        margin: "0 auto",
+      }}
+    >
+      <h2 className="vc-h2">
+        Fem <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>nyckelmoment.</em>
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: "#475569",
+          marginTop: 16,
+          marginBottom: 48,
+          maxWidth: 540,
+        }}
+      >
+        Det är vad den unga och den vuxna faktiskt gör — i ordning, månad
+        för månad. Samma flöde i klassrummet som hemma.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+        {MOMENTS.map((m, i) => (
+          <div
+            key={m.n}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr)",
+              gap: 56,
+              paddingTop: i === 0 ? 0 : 28,
+              borderTop: i === 0 ? "none" : "1px solid #e2e8f0",
+            }}
+            className="vc-moment-row"
+          >
+            <style>{`
+              @media (max-width: 768px) {
+                .vc-moment-row { grid-template-columns: 1fr !important; gap: 20px !important; }
+              }
+            `}</style>
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 30,
+                  height: 30,
+                  borderRadius: "50%",
+                  border: "1.5px solid #0f172a",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  marginBottom: 14,
+                }}
+              >
+                {m.n}
+              </div>
+              <h3
+                style={{
+                  fontSize: 26,
+                  fontWeight: 600,
+                  letterSpacing: -0.6,
+                  lineHeight: 1.15,
+                  marginBottom: 12,
+                }}
+              >
+                {m.title}.
+              </h3>
+              <p
+                style={{
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  color: "#475569",
+                  maxWidth: 380,
+                }}
+              >
+                {m.desc}
+              </p>
+            </div>
+            <div
+              className="vc-card"
+              style={{
+                padding: 16,
+                minHeight: 180,
+                fontFamily: 'ui-monospace, "SF Mono", monospace',
+                fontSize: 11,
+                color: "#64748b",
+              }}
+            >
+              <MomentMock variant={m.n} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MomentMock({ variant }: { variant: number }) {
+  if (variant === 1) {
+    return (
+      <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            borderBottom: "1px solid #e2e8f0",
+            paddingBottom: 8,
+            marginBottom: 12,
+          }}
+        >
+          <span style={{ fontWeight: 600, color: "#0f172a" }}>
+            Anna · Barista · Stockholm
+          </span>
+        </div>
+        {[
+          ["Nettolön nov", "23 450 kr"],
+          ["Hyra", "−9 200 kr"],
+          ["Mat & dryck", "−3 870 kr"],
+          ["Sparande", "−1 500 kr"],
+          ["Saldo idag", "8 880 kr"],
+        ].map(([k, v]) => (
+          <div
+            key={k}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "5px 0",
+            }}
+          >
+            <span>{k}</span>
+            <span style={{ color: "#0f172a" }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (variant === 2) {
+    return (
+      <div>
+        <div style={{ marginBottom: 8 }}>Generering 2026-11</div>
+        {[
+          ["Kontoutdrag", "33 transaktioner"],
+          ["Lönespec", "november"],
+          ["Lånebesked", "1 år bunden"],
+          ["Kortfaktura", "−7 240 kr"],
+        ].map(([t, d], i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "6px 0",
+              borderBottom: "1px solid #e2e8f0",
+            }}
+          >
+            <div>
+              <div style={{ color: "#0f172a", fontWeight: 500 }}>{t}</div>
+              <div style={{ fontSize: 10 }}>{d}</div>
+            </div>
+            <span
+              style={{
+                padding: "2px 8px",
+                border: "1px solid #e2e8f0",
+                borderRadius: 3,
+              }}
+            >
+              PDF
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (variant === 3) {
+    return (
+      <div>
+        <div style={{ marginBottom: 10 }}>Budget vs faktiskt · november</div>
+        {[
+          ["Mat (planerat 4 000)", "3 870", 0.97],
+          ["Nöje (planerat 1 500)", "2 410", 1.6],
+          ["Hushåll (planerat 800)", "1 290", 1.6],
+        ].map(([k, v, r], i) => (
+          <div key={i} style={{ marginBottom: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 10,
+                color: "#0f172a",
+              }}
+            >
+              <span>{k as string}</span>
+              <span>{v as string}</span>
+            </div>
+            <div
+              style={{
+                height: 4,
+                background: "#e2e8f0",
+                borderRadius: 2,
+                overflow: "hidden",
+                marginTop: 3,
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.min((r as number) * 60, 100)}%`,
+                  background: (r as number) > 1 ? "#dc4c2b" : "#0f172a",
+                }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (variant === 4) {
+    return (
+      <div>
+        <div style={{ marginBottom: 8 }}>Bolåne-uppdrag · 36 mån horisont</div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+            marginBottom: 10,
+          }}
+        >
+          <div
+            style={{
+              padding: 10,
+              border: "1.5px solid #0f172a",
+              borderRadius: 4,
+            }}
+          >
+            <div style={{ fontSize: 10 }}>Rörlig (slutvärde)</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
+              3,25 %
+            </div>
+          </div>
+          <div
+            style={{
+              padding: 10,
+              border: "1px solid #e2e8f0",
+              borderRadius: 4,
+            }}
+          >
+            <div style={{ fontSize: 10 }}>3 år bunden</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
+              3,90 %
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 10 }}>
+          Snittränta över perioden: 3,5 % · Bunden hela perioden
+        </div>
+        <div
+          style={{
+            marginTop: 8,
+            padding: 6,
+            background: "#fef3c7",
+            borderRadius: 3,
+            fontSize: 10,
+            color: "#0f172a",
+          }}
+        >
+          Rörlig vann — 19 240 kr lägre kostnad
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div style={{ marginBottom: 8 }}>Klass 9A · 5 elever</div>
+      <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
+        <thead style={{ color: "#64748b" }}>
+          <tr>
+            <th align="left">Elev</th>
+            <th>Budget</th>
+            <th>Bolån</th>
+            <th align="right">Mastery</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            ["Anna", "klar", "klar", "83%"],
+            ["Edvard", "klar", "pågår", "71%"],
+            ["Cassi", "pågår", "väntar", "54%"],
+            ["Maja", "klar", "klar", "90%"],
+            ["Erik", "pågår", "klar", "67%"],
+          ].map((r, i) => (
+            <tr key={i} style={{ borderTop: "1px solid #e2e8f0" }}>
+              <td style={{ color: "#0f172a", padding: "5px 0" }}>{r[0]}</td>
+              <td align="center">
+                <span
+                  style={{
+                    padding: "1px 6px",
+                    background: r[1] === "klar" ? "#d1fae5" : "#fef3c7",
+                    borderRadius: 3,
+                  }}
+                >
+                  {r[1]}
+                </span>
+              </td>
+              <td align="center">
+                <span
+                  style={{
+                    padding: "1px 6px",
+                    background:
+                      r[2] === "klar"
+                        ? "#d1fae5"
+                        : r[2] === "pågår"
+                        ? "#fef3c7"
+                        : "#fee2e2",
+                    borderRadius: 3,
+                  }}
+                >
+                  {r[2]}
+                </span>
+              </td>
+              <td
+                align="right"
+                style={{ color: "#0f172a", fontWeight: 600 }}
+              >
+                {r[3]}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---------- Logic ----------
+
+function Logic() {
+  return (
+    <section
+      style={{
+        padding: "56px 24px",
+        maxWidth: 1100,
+        margin: "0 auto",
+        borderTop: "1px solid #e2e8f0",
+      }}
+    >
+      <div
+        className="vc-eyebrow"
+        style={{ textAlign: "center", marginBottom: 32 }}
+      >
+        Logiken
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 32,
+        }}
+      >
+        {LOGIC.map((l) => (
+          <div key={l.n}>
+            <div
+              className="vc-mono"
+              style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}
+            >
+              {l.n}
+            </div>
+            <h3
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                marginBottom: 10,
+              }}
+            >
+              {l.title}.
+            </h3>
+            <p style={{ fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
+              {l.desc}
+            </p>
+          </div>
+        ))}
       </div>
     </section>
   );
