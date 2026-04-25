@@ -75,7 +75,9 @@ export default function Landing() {
       <Why />
       <SocialProof />
       <Gallery />
-      {/* TODO A2.7-A2.8: resterande sektioner */}
+      <Pricing />
+      <Faq />
+      {/* TODO A2.8: founder + CTA + kontakt + footer */}
       <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
         Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
       </div>
@@ -842,6 +844,113 @@ function Gallery() {
             </article>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Pricing + FAQ ----------
+
+function Pricing() {
+  return (
+    <section id="pricing" className="border-t border-rule bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">Pris</div>
+        <div className="max-w-3xl mb-12">
+          <h2 className="serif text-4xl md:text-5xl leading-[1.05]">Enkel prismodell.</h2>
+          <p className="mt-4 lead">
+            Gratis under pilotåret 2026. Ingen bindningstid, inga dolda
+            kostnader. Från 2027 sätts en per-elev-avgift i dialog med
+            pilotskolorna.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-5 max-w-3xl">
+          <article className="border-[2.5px] border-ink bg-paper p-7 relative">
+            <span className="absolute -top-3 left-5 px-2 py-0.5 bg-ink text-white text-xs uppercase tracking-eyebrow">
+              Pilot 2026
+            </span>
+            <div className="serif text-5xl mt-3 leading-none">0 kr</div>
+            <p className="mt-2 text-sm text-[#555]">Hela plattformen, utan tak.</p>
+            <ul className="mt-5 space-y-2 text-sm body-prose">
+              <li className="flex items-start gap-2"><span className="serif">·</span>Obegränsat antal elever</li>
+              <li className="flex items-start gap-2"><span className="serif">·</span>AI-funktioner (Claude Sonnet)</li>
+              <li className="flex items-start gap-2"><span className="serif">·</span>Portfolio-PDF + ZIP-export</li>
+              <li className="flex items-start gap-2"><span className="serif">·</span>Support via mail</li>
+            </ul>
+          </article>
+
+          <article className="border-[1.5px] border-rule bg-white p-7">
+            <span className="eyebrow">Från 2027</span>
+            <div className="serif text-5xl mt-3 leading-none">Per-elev</div>
+            <p className="mt-2 text-sm text-[#555]">
+              Nivå sätts tillsammans med pilotskolorna — troligen 50–150
+              kr/elev/läsår.
+            </p>
+            <ul className="mt-5 space-y-2 text-sm body-prose">
+              <li className="flex items-start gap-2"><span className="serif">·</span>Samma plattform, ingen funktionsnedskärning</li>
+              <li className="flex items-start gap-2"><span className="serif">·</span>Tak för AI-användning</li>
+              <li className="flex items-start gap-2"><span className="serif">·</span>Dedikerad support</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const FAQ_ITEMS: { q: string; a: string }[] = [
+  {
+    q: "Vad kostar Ekonomilabbet?",
+    a: "Gratis under pilotåret 2026. Inga dolda kostnader. Från 2027 tas en per-elev-avgift ut, nivån bestäms tillsammans med pilotskolorna.",
+  },
+  {
+    q: "Är det GDPR-säkert?",
+    a: "Ja. All elevdata sparas i svensk molntjänst (Google Cloud Run, europe-north1). Vi delar inga personuppgifter med tredje part. AI-anropen anonymiseras — Claude ser aldrig elevers namn eller personnummer.",
+  },
+  {
+    q: "Vad behöver vi installera?",
+    a: "Inget. Ekonomilabbet är en webbapp. Läraren skapar konto, lägger in eleverna och eleverna loggar in med en 6-teckenskod eller QR-kod. Ingen installation, ingen app-store.",
+  },
+  {
+    q: "Går det att använda utan AI?",
+    a: "Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion som kan aktiveras per lärare.",
+  },
+  {
+    q: "Kan elever komma åt varandras data?",
+    a: "Nej. Varje elev har en egen krypterad SQLite-DB på servern, ingen cross-access även om de råkar i samma klass. Läraren ser alla sina elever men aldrig någon annan lärares.",
+  },
+  {
+    q: "Vad händer med elevernas data när året är slut?",
+    a: "Ingenting tvångsmässigt — datan är kvar tills läraren tar bort kontot. Vi exporterar gärna hela klassen till ZIP så du har en kopia innan du raderar.",
+  },
+  {
+    q: "Vilken AI-modell används?",
+    a: "Claude Haiku 4.5 för snabba uppgifter (kategori-check, feedback-förslag) och Claude Sonnet 4.6 för djupare uppgifter (rubric, elev-Q&A, modul-generering). Prompt-caching används för kostnadskontroll.",
+  },
+  {
+    q: "Kan jag importera befintliga moduler från andra system?",
+    a: "Inte som automatisk import än. Moduler skapas i plattformen eller klonas från systemmallar/andra lärares delade moduler. Säg till oss vad ni använder — vi bygger importen om det finns efterfrågan.",
+  },
+];
+
+function Faq() {
+  return (
+    <section id="faq" className="border-t border-rule">
+      <div className="max-w-3xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">FAQ</div>
+        <h2 className="serif text-4xl md:text-5xl leading-[1.05] mb-10">
+          Vanliga frågor.
+        </h2>
+        {FAQ_ITEMS.map((it, i) => (
+          <details key={i} className="faq">
+            <summary>
+              {it.q}
+              <span className="arrow" />
+            </summary>
+            <div className="answer">{it.a}</div>
+          </details>
+        ))}
       </div>
     </section>
   );
