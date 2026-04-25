@@ -415,14 +415,6 @@ const SECTIONS: Section[] = [
           Lärare ser bara sina egna elevers data. Meddelandetråden är
           1-till-1 och osynlig för andra.
         </p>
-        <p>
-          Koden är öppen källkod på{" "}
-          <a
-            href="https://github.com/robinandreeklund-collab/Hembudget"
-            target="_blank" rel="noreferrer"
-            className="text-brand-600 underline"
-          >GitHub</a>.
-        </p>
       </>
     ),
   },

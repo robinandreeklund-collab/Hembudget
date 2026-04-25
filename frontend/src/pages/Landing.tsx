@@ -1211,8 +1211,8 @@ function Footer() {
           <div className="eyebrow mb-3">Kontakt &amp; juridik</div>
           <ul className="space-y-1.5">
             <li><a href="mailto:info@ekonomilabbet.org" className="nav-link">info@ekonomilabbet.org</a></li>
-            <li><a href="https://github.com/robinandreeklund-collab/Hembudget" target="_blank" rel="noreferrer" className="nav-link">GitHub</a></li>
             <li><Link to="/docs" className="nav-link">Dokumentation</Link></li>
+            <li><a href="#faq" className="nav-link">FAQ</a></li>
           </ul>
         </div>
       </div>
