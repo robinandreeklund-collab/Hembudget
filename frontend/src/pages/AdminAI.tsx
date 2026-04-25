@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Brain, Check, Key, Loader2, ShieldCheck, Trash2, X, Zap,
+  ArrowLeft, Brain, Check, Key, Loader2, Mail, Send, ShieldCheck,
+  Trash2, X, Zap,
 } from "lucide-react";
 import { api, ApiError } from "@/api/client";
 
@@ -300,6 +301,9 @@ export default function AdminAI() {
         </div>
       </section>
 
+      {/* SMTP-konfiguration */}
+      <SmtpSection />
+
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Totalt antal anrop" value={totalReq.toLocaleString("sv-SE")} />
         <Stat label="In-tokens" value={totalIn.toLocaleString("sv-SE")} />
@@ -417,5 +421,308 @@ function ToggleButton({
       )}
       {active ? labelOn : labelOff}
     </button>
+  );
+}
+
+// ---------- SMTP-konfiguration (super-admin) ----------
+
+type SmtpConfig = {
+  configured: boolean;
+  source: string;        // "db" | "env" | ""
+  host: string;
+  port: number;
+  user: string;
+  password_set: boolean;
+  password_preview: string;
+  starttls: boolean;
+  mail_from: string;
+  mail_from_name: string;
+  public_base_url: string;
+};
+
+function SmtpSection() {
+  const [cfg, setCfg] = useState<SmtpConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [testTo, setTestTo] = useState("");
+
+  // Form-state
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState(587);
+  const [user, setUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [starttls, setStarttls] = useState(true);
+  const [mailFrom, setMailFrom] = useState("");
+  const [fromName, setFromName] = useState("Ekonomilabbet");
+  const [baseUrl, setBaseUrl] = useState("");
+
+  function syncForm(c: SmtpConfig) {
+    setHost(c.host);
+    setPort(c.port);
+    setUser(c.user);
+    // Behåll lösenordsfältet tomt — visning är 'password_preview'
+    setPassword("");
+    setStarttls(c.starttls);
+    setMailFrom(c.mail_from);
+    setFromName(c.mail_from_name);
+    setBaseUrl(c.public_base_url);
+  }
+
+  async function load() {
+    try {
+      const c = await api<SmtpConfig>("/admin/smtp/config");
+      setCfg(c);
+      syncForm(c);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) {
+        // Inte super-admin — visa inget
+        setCfg(null);
+      } else {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function save() {
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      const body: Record<string, unknown> = {
+        host, port, user, starttls,
+        mail_from: mailFrom,
+        mail_from_name: fromName,
+        public_base_url: baseUrl,
+      };
+      // Skicka bara password om användaren skrivit något — annars
+      // behåller backend befintligt.
+      if (password.trim()) body.password = password.trim();
+      const c = await api<SmtpConfig>("/admin/smtp/config", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setCfg(c);
+      syncForm(c);
+      setMsg("Sparat. Testa via 'Skicka testmail' nedan.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    if (!confirm("Rensa SMTP-config? Faller tillbaka till env-vars om sådana finns.")) return;
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      const c = await api<SmtpConfig>("/admin/smtp/config", { method: "DELETE" });
+      setCfg(c);
+      syncForm(c);
+      setMsg("Rensat.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    if (!testTo.trim()) return;
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      await api("/admin/smtp/test", {
+        method: "POST",
+        body: JSON.stringify({ to: testTo.trim() }),
+      });
+      setMsg(`Testmail skickat till ${testTo.trim()}. Kolla inkorgen.`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        setErr("SMTP är inte konfigurerat — fyll i config först.");
+      } else if (e instanceof ApiError && e.status === 502) {
+        setErr("Mailutskicket misslyckades — kolla host/port/lösenord.");
+      } else {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (cfg === null) {
+    return null; // Inte super-admin eller fel — tysta
+  }
+
+  return (
+    <section className="bg-white border-[1.5px] border-rule p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Mail className="w-5 h-5" />
+        <h2 className="serif text-xl">SMTP-konfiguration</h2>
+      </div>
+      <div className="text-sm text-[#444] space-y-1">
+        <div>
+          Status:{" "}
+          {cfg.configured ? (
+            <span className="font-medium text-emerald-700">
+              Konfigurerad
+              {cfg.password_set && ` (lösenord ${cfg.password_preview})`}
+            </span>
+          ) : (
+            <span className="font-medium text-amber-700">Saknas</span>
+          )}
+        </div>
+        {cfg.source && (
+          <div className="text-xs text-[#888]">
+            Källa: {cfg.source === "db"
+              ? "sparad via detta formulär"
+              : "miljövariabler (HEMBUDGET_SMTP_*)"}
+          </div>
+        )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <FormField label="SMTP-host">
+          <input
+            type="text"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            placeholder="smtp.gmail.com"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Port">
+          <input
+            type="number"
+            value={port}
+            onChange={(e) => setPort(parseInt(e.target.value, 10) || 587)}
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Användare">
+          <input
+            type="text"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            placeholder="info@ekonomilabbet.org"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField
+          label={cfg.password_set ? "Nytt lösenord (lämna tomt för oförändrat)" : "Lösenord (Gmail app-password)"}
+        >
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={cfg.password_set ? "•••• •••• (skriv för att ändra)" : "abcdefghijklmnop"}
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Mail-from-adress">
+          <input
+            type="email"
+            value={mailFrom}
+            onChange={(e) => setMailFrom(e.target.value)}
+            placeholder="info@ekonomilabbet.org"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Avsändarnamn">
+          <input
+            type="text"
+            value={fromName}
+            onChange={(e) => setFromName(e.target.value)}
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none"
+          />
+        </FormField>
+        <FormField label="Publik bas-URL (för mail-länkar)">
+          <input
+            type="url"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://ekonomilabbet.org"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="STARTTLS">
+          <label className="flex items-center gap-2 text-sm py-2">
+            <input
+              type="checkbox"
+              checked={starttls}
+              onChange={(e) => setStarttls(e.target.checked)}
+            />
+            Använd STARTTLS (rekommenderat för port 587)
+          </label>
+        </FormField>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={save}
+          disabled={busy || !host.trim() || !user.trim() || !mailFrom.trim()}
+          className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Spara config
+        </button>
+        {cfg.source === "db" && (
+          <button
+            onClick={clear}
+            disabled={busy}
+            className="btn-outline rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" /> Rensa DB-config
+          </button>
+        )}
+      </div>
+
+      <div className="pt-3 border-t border-rule">
+        <div className="eyebrow mb-2">Testa SMTP</div>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="email"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="din-mail@example.com"
+            className="flex-1 min-w-[240px] border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+          <button
+            onClick={sendTest}
+            disabled={busy || !testTo.trim() || !cfg.configured}
+            className="btn-outline rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Skicka testmail
+          </button>
+        </div>
+        <p className="text-xs text-[#888] mt-2">
+          Skickar ett kort testmail med aktiv config. Verifierar att Gmail
+          app-password fungerar utan att triggra ett riktigt signup-flöde.
+        </p>
+      </div>
+
+      {msg && (
+        <div className="text-xs bg-paper border border-rule p-2 text-[#444]">
+          {msg}
+        </div>
+      )}
+      {err && (
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
+          {err}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FormField({
+  label, children,
+}: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="eyebrow mb-1">{label}</div>
+      {children}
+    </label>
   );
 }
