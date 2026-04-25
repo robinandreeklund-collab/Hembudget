@@ -26,6 +26,14 @@
   .elem .sym{font-family:'Spectral',serif;font-weight:800;font-size:22px;line-height:1;margin-top:4px;}
   .elem .name{font-size:9.5px;color:#444;text-transform:uppercase;letter-spacing:.04em;}
   .elem .val{font-size:9px;color:#888;}
+  /* Mobil: 4 kolumner istället för 8 så cellerna går att läsa.
+     Bumpa även sym/name/val något så de andas.  */
+  @media (max-width:767px){
+    .elem .sym{font-size:26px;}
+    .elem .name{font-size:11px;}
+    .elem .val{font-size:10px;}
+    .elem .num{font-size:11px;}
+  }
   .elem.grund{background:#eef3ff;}
   .elem.fordj{background:#fff3e6;}
   .elem.expert{background:#f3eaff;}
@@ -167,7 +175,7 @@
       </svg>
     </div>
 
-    <div id="grid" class="grid grid-cols-8 gap-1.5" role="grid"
+    <div id="grid" class="grid grid-cols-4 md:grid-cols-8 gap-1.5" role="grid"
          aria-label="Periodiska systemet för pengar — 32 begrepp">
       <!-- Row 1: first 8 -->
       <div class="elem grund"><span class="num">1</span><div><div class="sym">Lö</div><div class="name">Lön</div></div><div class="val">brutto · netto</div>
