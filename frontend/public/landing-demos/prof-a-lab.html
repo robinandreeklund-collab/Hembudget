@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Prof-A · Lab assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#111217;--paper:#fbfaf6;--rule:#e7e3d7;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:880px;margin:0 auto;padding:60px 24px;}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
+  h1{font-family:Spectral,serif;font-weight:800;font-size:40px;letter-spacing:-.015em;
+    line-height:1.05;margin:8px 0 6px;}
+  .lead{font-size:16px;line-height:1.55;color:#444;max-width:540px;}
+
+  .stage{
+    margin-top:36px;display:grid;grid-template-columns:auto 1fr;gap:32px;
+    align-items:end;border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);padding:36px 0;
+  }
+  .prof-box{position:relative;width:200px;}
+  .bubble{
+    position:absolute;left:calc(100% + 14px);top:36px;background:#fff;
+    border:1.5px solid var(--ink);border-radius:14px;padding:10px 14px;
+    font-size:13px;width:230px;line-height:1.4;box-shadow:2px 2px 0 var(--ink);
+  }
+  .bubble:after{
+    content:"";position:absolute;left:-7px;top:24px;width:12px;height:12px;
+    background:#fff;border-left:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);
+    transform:rotate(45deg);
+  }
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-3px);}}
+  .prof{animation:bob 4.5s ease-in-out infinite;}
+  @media (prefers-reduced-motion:reduce){.prof{animation:none;}}
+
+  /* Mini-grid bara för kontext */
+  .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;}
+  .cell{
+    aspect-ratio:1;border:1.5px solid var(--ink);background:#fff;
+    padding:6px 8px;display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .cell .n{font-size:9px;color:#888;}
+  .cell .s{font-family:Spectral,serif;font-weight:800;font-size:22px;line-height:1;}
+  .cell .l{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.05em;}
+  .grund{background:#eef3ff;}.fordj{background:#fff3e6;}.konto{background:#e8f7ef;}
+
+  .pros{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:36px;
+    border-top:1px solid var(--rule);padding-top:28px;}
+  .col h3{font-family:Spectral,serif;font-size:18px;margin:0 0 8px;font-weight:600;}
+  .col p{font-size:14px;line-height:1.55;color:#333;margin:0 0 10px;}
+  .col li{font-size:14px;line-height:1.55;color:#333;}
+  .nav{display:flex;gap:18px;margin-top:32px;font-size:13px;}
+  .nav a{color:var(--ink);text-decoration:none;border-bottom:1.5px solid var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Demo A av 3</div>
+  <h1>Lab assistant — illustrerad i bläckstil.</h1>
+  <p class="lead">Behåller idén om en figurativ guide men ritad i samma 1.5 px svart line-art som hela paper-systemet. Inget tecknat hudfyll, ingen pratbubbel-ovan-grid-konflikt — figuren står bredvid tabellen och pekar in mot den.</p>
+
+  <div class="stage">
+    <div class="prof-box">
+      <svg class="prof" width="200" height="280" viewBox="0 0 200 280" aria-hidden="true">
+        <!-- Lab-rock ben -->
+        <line x1="84" y1="240" x2="84" y2="270" stroke="#111" stroke-width="1.5"/>
+        <line x1="116" y1="240" x2="116" y2="270" stroke="#111" stroke-width="1.5"/>
+        <line x1="76" y1="270" x2="92" y2="270" stroke="#111" stroke-width="1.5"/>
+        <line x1="108" y1="270" x2="124" y2="270" stroke="#111" stroke-width="1.5"/>
+        <!-- Lab-rock kropp -->
+        <path d="M60 130 L60 245 L140 245 L140 130 Q100 110 60 130 Z"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Knappar på rocken -->
+        <circle cx="100" cy="155" r="2" fill="#111"/>
+        <circle cx="100" cy="180" r="2" fill="#111"/>
+        <circle cx="100" cy="205" r="2" fill="#111"/>
+        <!-- Krage -->
+        <path d="M85 130 L100 152 L115 130" fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Hals -->
+        <path d="M88 110 Q88 122 90 130 M112 110 Q112 122 110 130"
+          fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Hand som pekar (höger arm sträckt mot tabellen) -->
+        <line x1="140" y1="155" x2="180" y2="170" stroke="#111" stroke-width="1.5"/>
+        <line x1="180" y1="170" x2="195" y2="172" stroke="#111" stroke-width="1.5"/>
+        <circle cx="195" cy="172" r="3" fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Vänster arm med klipp/clipboard -->
+        <line x1="60" y1="155" x2="42" y2="195" stroke="#111" stroke-width="1.5"/>
+        <rect x="32" y="195" width="22" height="28" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <line x1="36" y1="203" x2="50" y2="203" stroke="#111" stroke-width="1"/>
+        <line x1="36" y1="208" x2="50" y2="208" stroke="#111" stroke-width="1"/>
+        <line x1="36" y1="213" x2="46" y2="213" stroke="#111" stroke-width="1"/>
+        <!-- Huvud -->
+        <circle cx="100" cy="80" r="32" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Hår (kort + fluffigt à la Einstein-light) -->
+        <path d="M70 65 Q72 45 90 50 Q98 38 110 50 Q128 45 130 65 Q128 60 122 62 Q115 56 108 60 Q100 52 92 60 Q85 56 78 62 Q72 60 70 65"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Glasögon -->
+        <circle cx="89" cy="80" r="7" fill="none" stroke="#111" stroke-width="1.5"/>
+        <circle cx="111" cy="80" r="7" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="96" y1="80" x2="104" y2="80" stroke="#111" stroke-width="1.5"/>
+        <!-- Ögon (små svarta prickar i glasögonen) -->
+        <circle id="eye-l" cx="89" cy="80" r="1.8" fill="#111"/>
+        <circle id="eye-r" cx="111" cy="80" r="1.8" fill="#111"/>
+        <!-- Mun (lätt leende) -->
+        <path d="M92 96 Q100 102 108 96" fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Liten "Ek" på fickan -->
+        <text x="124" y="180" font-family="Spectral" font-size="11" font-weight="800" fill="#111">Ek</text>
+      </svg>
+
+      <div class="bubble">
+        <strong>Hej.</strong> Jag är Professor Ekon. Hovra över en cell — eleverna ser samma karta som du.
+      </div>
+    </div>
+
+    <div class="mini">
+      <div class="cell grund"><span class="n">1</span><span class="s">Lö</span><span class="l">Lön</span></div>
+      <div class="cell grund"><span class="n">2</span><span class="s">Sk</span><span class="l">Skatt</span></div>
+      <div class="cell grund"><span class="n">3</span><span class="s">Bu</span><span class="l">Budget</span></div>
+      <div class="cell konto"><span class="n">4</span><span class="s">Ku</span><span class="l">Konto</span></div>
+      <div class="cell fordj"><span class="n">5</span><span class="s">Sp</span><span class="l">Spara</span></div>
+      <div class="cell fordj"><span class="n">6</span><span class="s">Bl</span><span class="l">Bolån</span></div>
+      <div class="cell konto"><span class="n">7</span><span class="s">Sa</span><span class="l">Saldo</span></div>
+      <div class="cell grund"><span class="n">8</span><span class="s">Ka</span><span class="l">Kategori</span></div>
+    </div>
+  </div>
+
+  <div class="pros">
+    <div class="col">
+      <h3>Plus</h3>
+      <ul>
+        <li>Konsekvent med hela paper-stilen (1.5 px svart line-art)</li>
+        <li>Karaktären står bredvid tabellen, dolar inga celler</li>
+        <li>Idle-bobbing + ögonen kan följa muspekaren (befintlig kod)</li>
+        <li>Pratbubbla med tjock svart skugga matchar serif-rubrikerna</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>Minus</h3>
+      <ul>
+        <li>Tar 200×280 px på desktop — kan kännas trångt på smal skärm</li>
+        <li>SVG-koden är ~50 rader (mer komplex än nuvarande)</li>
+        <li>Kräver att hero-griden flyttas något åt höger</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="nav">
+    <a href="prof-a-lab.html">A. Lab assistant</a>
+    <a href="prof-b-mascot.html">B. Typografisk mascott</a>
+    <a href="prof-c-illustrated.html">C. Illustrerad karaktär</a>
+    <a href="demo3-periodic.html">↩ Tillbaka till demo3</a>
+  </div>
+</div>
+</body>
+</html>
