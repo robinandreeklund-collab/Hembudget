@@ -175,9 +175,18 @@ export default function LandingVariantC() {
       <Features />
       <Moments />
       <Logic />
+      <Problem />
+      <ThreeWays />
+      <Pricing />
     </div>
   );
 }
+
+const PROBLEM_STATS = [
+  { num: "4 av 10", label: "unga klarar inte en oväntad räkning på 2 000 kr." },
+  { num: "60 %", label: "av unga har aldrig läst en lönespecifikation." },
+  { num: "1 h", label: "räcker för att prova grunderna i Ekonomilabbet." },
+];
 
 // 5 nyckelmoment — språkfix från originalbundlen:
 // 'kortfaktur' → 'kortfakturor', 'din barn' → 'dina barn'.
@@ -482,6 +491,432 @@ function Hero() {
               ),
             )}
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Problem ----------
+
+function Problem() {
+  return (
+    <section
+      style={{
+        padding: "64px 24px",
+        borderTop: "1px solid #e2e8f0",
+        maxWidth: 1200,
+        margin: "0 auto",
+      }}
+    >
+      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+        Problemet
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,1.1fr) minmax(0,1.4fr)",
+          gap: 56,
+          alignItems: "start",
+        }}
+        className="vc-problem-grid"
+      >
+        <style>{`
+          @media (max-width: 768px) {
+            .vc-problem-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+          }
+        `}</style>
+        <div>
+          <h2 className="vc-h2">
+            Ekonomi är ett livskunskapsämne.{" "}
+            <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>
+              Och det saknas
+            </em>{" "}
+            — både i skolan och hemma.
+          </h2>
+          <p
+            style={{
+              fontSize: 15,
+              lineHeight: 1.65,
+              color: "#475569",
+              marginTop: 20,
+              maxWidth: 440,
+            }}
+          >
+            Svenska unga lämnar gymnasiet utan grundläggande kunskaper om
+            skatt, sparande, lån och budget. Verkligheten möter dem först
+            när de flyttar hemifrån — ofta för sent. Skolan har sällan
+            tid, och föräldrar har sällan ett verktyg att luta sig mot.
+          </p>
+          <p
+            style={{
+              fontSize: 17,
+              marginTop: 22,
+              fontStyle: "italic",
+              maxWidth: 440,
+              color: "#0f172a",
+            }}
+          >
+            Lär genom att göra — inte genom att läsa om det.
+          </p>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {PROBLEM_STATS.map((s, i) => (
+            <div
+              key={i}
+              className="vc-card"
+              style={{
+                padding: 24,
+                display: "flex",
+                alignItems: "center",
+                gap: 24,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 40,
+                  fontWeight: 700,
+                  letterSpacing: -1.2,
+                  color: "#0f172a",
+                  minWidth: 120,
+                }}
+              >
+                {s.num}
+              </div>
+              <div style={{ flex: 1, minWidth: 180, color: "#475569" }}>
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Three ways to use ----------
+
+function ThreeWays() {
+  type Way = {
+    kicker: string;
+    title: string;
+    items: string[];
+    cta: string;
+    href: string;
+    soon?: boolean;
+    lead?: string;
+  };
+  const ways: Way[] = [
+    {
+      kicker: "För skolan",
+      title: "Ett labb i klassrummet",
+      items: [
+        "Bjud in en hel klass via 6-tecken-koder — ingen e-post per elev krävs.",
+        "Tilldela samma modul till alla, eller skräddarsy per elev. Mastery-grafen visar var klassen fastnar.",
+        "Portfolio-PDF per elev eller hela klassen som ZIP — perfekt som bedömningsunderlag.",
+        "AI-coachen anpassar sig efter elevens nivå utan att läraren behöver konfigurera något.",
+      ],
+      cta: "Skapa lärarkonto →",
+      href: "/signup/teacher",
+    },
+    {
+      kicker: "För hemmet",
+      title: "Samtalet om pengar — i lugnt format",
+      items: [
+        "Skapa konton för dina barn på två minuter. Varje barn får en egen sandlåda — riktiga pengar är aldrig inblandade.",
+        "Du följer med i samma vy som läraren har: vad har barnet gjort, vad har det fastnat på, vad har det frågat AI:n.",
+        "Modulerna täcker kontoutdrag, bolån, kreditkort, sparande och familjebudget — bygg upp ett gemensamt språk hemma.",
+        'AI-coachen svarar på "varför betalar man skatt?" utan att vänta på er nästa middag.',
+      ],
+      cta: "Skapa familjekonto →",
+      href: "/signup/parent",
+    },
+    {
+      kicker: "Kommer 2026",
+      title: "Hela familjens riktiga ekonomi — på ett ställe",
+      lead: "Inspirerat av riktiga bokföringssystem — men enklare, roligare och faktiskt begripligt. Tänk Visma eller Fortnox, fast för köksbordet.",
+      items: [
+        "Anslut bankkonton, kreditkort och lån via Tink (PSD2). Vi kategoriserar varje transaktion automatiskt — inga manuella Excel-kolumner.",
+        "Ladda upp era fakturor — el, vatten, hyra, försäkringar. Vi läser av förbrukning, datum och belopp och knyter dem till rätt kategori.",
+        "Bygg månadsbudget för kommande period på minuter. Varje månad balanseras automatiskt i en huvudbok — debet och kredit på riktigt.",
+        'Fråga AI-coachen direkt: "Vad spenderade vi mest på i mars?", "Hur mycket går till prenumerationer?" — den läser hela familjens ekonomi och svarar i klartext.',
+        "Barnet ser sina sparmål bredvid familjens budget — utan beloppen om ni inte vill. Ni bestämmer vad som syns.",
+        "Bank-grade kryptering, svensk personuppgiftsbehandling. Datan stannar hos er och raderas på en knapptryckning.",
+      ],
+      cta: "Sätt upp på väntelistan →",
+      href: "mailto:info@ekonomilabbet.org?subject=V%C3%A4ntelista%20Ekonomilabbet%202026",
+      soon: true,
+    },
+  ];
+  return (
+    <section
+      id="malgrupper"
+      style={{
+        padding: "64px 24px",
+        borderTop: "1px solid #e2e8f0",
+        maxWidth: 1200,
+        margin: "0 auto",
+      }}
+    >
+      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+        Tre sätt att använda
+      </div>
+      <h2 className="vc-h2">
+        Klassrummet, köksbordet — och snart{" "}
+        <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>
+          er riktiga ekonomi.
+        </em>
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: "#475569",
+          marginTop: 16,
+          marginBottom: 36,
+          maxWidth: 680,
+          lineHeight: 1.6,
+        }}
+      >
+        Ekonomilabbet är byggt så att en lärare kan följa en hel klass och
+        en förälder kan följa sina egna barn — i samma verktyg, med samma
+        moduler och samma trygga sandlåda. 2026 öppnar vi en tredje vy:
+        er riktiga familjeekonomi, säkert kopplad och visualiserad i
+        samma karta.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: 18,
+        }}
+      >
+        {ways.map((c, i) => (
+          <article
+            key={i}
+            style={{
+              background: c.soon ? "linear-gradient(180deg, #fff 0%, #fef3c7 100%)" : "#fff",
+              border: c.soon ? "1px dashed #0f172a" : "1px solid #e2e8f0",
+              borderRadius: 10,
+              padding: 28,
+              position: "relative",
+            }}
+          >
+            {c.soon && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  right: 18,
+                  background: "#0f172a",
+                  color: "#fff",
+                  padding: "3px 9px",
+                  borderRadius: 100,
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.6,
+                  fontFamily: 'ui-monospace, "SF Mono", monospace',
+                  textTransform: "uppercase",
+                }}
+              >
+                ● Kommer snart
+              </span>
+            )}
+            <div className="vc-eyebrow" style={{ marginBottom: 8 }}>
+              {c.kicker}
+            </div>
+            <h3
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                marginBottom: 12,
+                lineHeight: 1.2,
+              }}
+            >
+              {c.title}.
+            </h3>
+            {c.lead && (
+              <p
+                style={{
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  color: "#64748b",
+                  marginBottom: 18,
+                  fontStyle: "italic",
+                }}
+              >
+                {c.lead}
+              </p>
+            )}
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px 0" }}>
+              {c.items.map((it, j) => (
+                <li
+                  key={j}
+                  style={{
+                    paddingLeft: 18,
+                    position: "relative",
+                    marginBottom: 10,
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    color: "#475569",
+                  }}
+                >
+                  <span
+                    style={{ position: "absolute", left: 0, color: "#dc4c2b" }}
+                  >
+                    —
+                  </span>
+                  {it}
+                </li>
+              ))}
+            </ul>
+            {c.soon ? (
+              <a
+                href={c.href}
+                className="vc-btn vc-btn-outline"
+                style={{ borderColor: "#0f172a", textDecoration: "none" }}
+              >
+                {c.cta}
+              </a>
+            ) : (
+              <Link
+                to={c.href}
+                className="vc-btn vc-btn-primary"
+                style={{ textDecoration: "none" }}
+              >
+                {c.cta}
+              </Link>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- Pricing ----------
+
+function Pricing() {
+  return (
+    <section
+      id="pris"
+      style={{
+        padding: "64px 24px",
+        borderTop: "1px solid #e2e8f0",
+        maxWidth: 1100,
+        margin: "0 auto",
+      }}
+    >
+      <div className="vc-eyebrow" style={{ textAlign: "center", marginBottom: 12 }}>
+        Pris
+      </div>
+      <h2 className="vc-h2" style={{ textAlign: "center" }}>
+        Enkel prismodell.
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: "#475569",
+          marginTop: 14,
+          marginBottom: 32,
+          maxWidth: 640,
+          margin: "14px auto 32px",
+          textAlign: "center",
+        }}
+      >
+        Gratis under pilotåret 2026 — för skolor och familjer. Ingen
+        bindningstid, inga dolda kostnader. Från 2027 sätts en avgift per
+        användare i dialog med pilotkunderna.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: 18,
+        }}
+      >
+        <div
+          style={{
+            background: "#fff",
+            border: "2px solid #0f172a",
+            borderRadius: 10,
+            padding: 28,
+          }}
+        >
+          <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+            Pilot 2026
+          </div>
+          <div
+            style={{
+              fontSize: 56,
+              fontWeight: 700,
+              letterSpacing: -2,
+              lineHeight: 1,
+              marginBottom: 6,
+            }}
+          >
+            0 kr
+          </div>
+          <div style={{ marginBottom: 18, color: "#475569" }}>
+            Hela plattformen, utan tak.
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {[
+              "Obegränsat antal elever/barn",
+              "AI-funktioner (Claude Sonnet)",
+              "Portfolio-PDF + ZIP-export",
+              "Support via mail",
+            ].map((t, i) => (
+              <li
+                key={i}
+                style={{ marginBottom: 6, color: "#475569", fontSize: 14 }}
+              >
+                · {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div
+          style={{
+            background: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: 10,
+            padding: 28,
+          }}
+        >
+          <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+            Från 2027
+          </div>
+          <div
+            style={{
+              fontSize: 36,
+              fontWeight: 600,
+              letterSpacing: -1,
+              lineHeight: 1.05,
+              marginBottom: 14,
+            }}
+          >
+            Per användare
+          </div>
+          <div style={{ marginBottom: 18, color: "#475569", fontSize: 14 }}>
+            Nivå sätts tillsammans med pilotkunderna — troligen 50–100
+            kr/användare/år. Familjer får ett enklare paketpris.
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {[
+              "Samma plattform, ingen funktionsnedskärning",
+              "Tak för AI-användning",
+              "Dedikerad support",
+            ].map((t, i) => (
+              <li
+                key={i}
+                style={{ marginBottom: 6, color: "#475569", fontSize: 14 }}
+              >
+                · {t}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>
