@@ -224,6 +224,121 @@ BUFFER_TEMPLATE = {
 }
 
 
+# Mall: "Första bolånet — rörlig vs bunden"
+MORTGAGE_TEMPLATE = {
+    "title": "Första bolånet — rörlig vs bunden",
+    "summary": "Förstå räntor, amortering och det stora valet rörlig vs bunden ränta — med riktiga historiska räntor.",
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett bolån?",
+            "content": (
+                "Ett bolån är pengar du lånar för att köpa en bostad. "
+                "Banken tar pant i bostaden — kan du inte betala får de "
+                "ta över den. I gengäld får du en låg ränta jämfört med "
+                "andra lån (~3-5 % istället för 8-15 %).\n\n"
+                "Två kostnader varje månad:\n"
+                "• RÄNTA — det banken tar betalt för att låna ut pengar\n"
+                "• AMORTERING — själva avbetalningen av lånet\n\n"
+                "Bara amorteringen krymper skulden. Räntan är 'priset' du "
+                "betalar för att ha lånet."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad gör amorteringen?",
+            "content": None,
+            "params": {
+                "question": "Du har ett bolån på 2 000 000 kr. Räntan är "
+                "4 % och amorteringen är 2 %. Hur mycket KRYMPER skulden "
+                "första året?",
+                "options": [
+                    "120 000 kr (räntan + amorteringen)",
+                    "80 000 kr (bara räntan)",
+                    "40 000 kr (bara amorteringen)",
+                    "Skulden krymper inte alls",
+                ],
+                "correct_index": 2,
+                "explanation": (
+                    "Bara amorteringen krymper själva skulden. 2 % av 2 mkr "
+                    "= 40 000 kr. Räntan (80 000 kr/år) är priset för att HA "
+                    "lånet — den minskar inte skulden. Många blandar ihop "
+                    "detta första gången de tittar på en bolåneberäkning."
+                ),
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Rörlig vs bunden ränta",
+            "content": (
+                "RÖRLIG ränta följer marknaden. Ändras typiskt var tredje "
+                "månad. Kan gå upp eller ner snabbt. Lägre i snitt över "
+                "lång tid.\n\n"
+                "BUNDEN ränta låses fast i 1, 3 eller 5 år. Du vet exakt "
+                "vad det kostar. Lite dyrare i utbyte mot förutsägbarhet.\n\n"
+                "I lugna räntelägen (Riksbankens styrränta nära noll) är "
+                "rörlig nästan alltid billigare. När räntan stiger snabbt "
+                "(som 2022-2023) skyddar bunden mot chocken.\n\n"
+                "Det är ett risk-vs-trygghet-val. Inget rätt svar — beror "
+                "på din egen situation."
+            ),
+        },
+        {
+            "kind": "watch",
+            "title": "Hur sätter Riksbanken styrräntan?",
+            "content": (
+                "Be din lärare om en 5-min-video från Riksbanken eller SVT "
+                "som förklarar reporäntan och dess effekter på bolånen. "
+                "(Lärare: lägg in en YouTube-länk i steg-params om du vill.)"
+            ),
+            "params": {"video_url": ""},
+        },
+        {
+            "kind": "task",
+            "title": "Gör ditt bolåne-val",
+            "content": (
+                "Be din lärare skapa ett 'Bolåne-beslut'-uppdrag åt dig. "
+                "Du får då välja en historisk beslutsmånad (t.ex. juni 2022) "
+                "och en horisont (typiskt 24-36 månader). Välj rörlig eller "
+                "bunden. Systemet räknar sedan facit mot Riksbankens "
+                "verkliga räntor och visar vilket val som blev billigast."
+            ),
+            "params": {"assignment_kind": "mortgage_decision"},
+        },
+        {
+            "kind": "reflect",
+            "title": "Hur tänkte du?",
+            "content": (
+                "Skriv 4-5 meningar om ditt val. Vad var det som vägde "
+                "tyngst — kostnad, trygghet, magkänsla? Hur skulle du "
+                "tänka om det var dina riktiga 2 miljoner?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "argumentation",
+                        "name": "Argumentation",
+                        "levels": [
+                            "Refererar inte till valet",
+                            "Argumenterar utifrån data",
+                            "Argumenterar utifrån data + egen risk",
+                        ],
+                    },
+                    {
+                        "key": "perspektiv",
+                        "name": "Perspektiv",
+                        "levels": [
+                            "Bara en tidshorisont",
+                            "Funderar på flera scenarier",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 # Mall: "Din första månad"
 FIRST_MONTH_TEMPLATE = {
     "title": "Din första månad",
@@ -372,7 +487,12 @@ def seed_system_modules(master_session) -> int:
         ).all()
     }
     n = 0
-    for tpl in [FIRST_MONTH_TEMPLATE, ACCOUNT_STATEMENT_TEMPLATE, BUFFER_TEMPLATE]:
+    for tpl in [
+        FIRST_MONTH_TEMPLATE,
+        ACCOUNT_STATEMENT_TEMPLATE,
+        BUFFER_TEMPLATE,
+        MORTGAGE_TEMPLATE,
+    ]:
         if tpl["title"] in existing:
             continue
         m = Module(
