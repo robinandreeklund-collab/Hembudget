@@ -220,16 +220,27 @@ export default function Landing() {
 // ---------- Header ----------
 
 function Header() {
+  // Hamburger-state för mobil-menyn. På desktop (>=md) renderas den
+  // klassiska två-spaltlayouten — på mobil får vi en hamburger som
+  // öppnar både nav-länkar och login-knappar i en panel.
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Stäng menyn när man klickar en länk så man inte fastnar med
+  // panelen öppen efter scroll.
+  const close = () => setMobileOpen(false);
+
   return (
-    <header className="border-b border-rule">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3">
-          <svg width="28" height="28" viewBox="0 0 40 40" aria-hidden="true">
+    <header className="border-b border-rule relative z-40">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 md:h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2.5 shrink-0">
+          <svg width="26" height="26" viewBox="0 0 40 40" aria-hidden="true">
             <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
             <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">Ek</text>
           </svg>
-          <span className="serif text-xl">Ekonomilabbet</span>
+          <span className="serif text-lg md:text-xl">Ekonomilabbet</span>
         </Link>
+
+        {/* Desktop: nav + tre login-knappar */}
         <nav className="hidden md:flex items-center gap-7 text-sm">
           <a href="#funktioner" className="nav-link">Funktioner</a>
           <a href="#flow" className="nav-link">Så funkar det</a>
@@ -238,7 +249,7 @@ function Header() {
           <a href="#faq" className="nav-link">FAQ</a>
           <a href="#kontakt" className="nav-link">Kontakt</a>
         </nav>
-        <div className="flex gap-2">
+        <div className="hidden md:flex gap-2">
           <Link to="/login/student" className="btn-outline text-sm px-4 py-2 rounded-md">
             Elev/Barn
           </Link>
@@ -249,7 +260,59 @@ function Header() {
             Förälder
           </Link>
         </div>
+
+        {/* Mobil: en knapp för logga in + en hamburger */}
+        <div className="md:hidden flex items-center gap-2">
+          <Link
+            to="/login"
+            className="btn-dark text-xs px-3 py-1.5 rounded-md"
+          >
+            Logga in
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? "Stäng meny" : "Öppna meny"}
+            aria-expanded={mobileOpen}
+            className="p-2 -mr-2 text-ink"
+          >
+            {mobileOpen ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 6 L18 18 M6 18 L18 6" />
+              </svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h16 M4 12h16 M4 17h16" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Mobil-panel — slide-down under headern */}
+      {mobileOpen && (
+        <div className="md:hidden border-t border-rule bg-white">
+          <nav className="max-w-7xl mx-auto px-4 py-3 flex flex-col text-sm">
+            <a onClick={close} href="#funktioner" className="nav-link py-2 border-b border-rule/60">Funktioner</a>
+            <a onClick={close} href="#flow" className="nav-link py-2 border-b border-rule/60">Så funkar det</a>
+            <a onClick={close} href="#malgrupper" className="nav-link py-2 border-b border-rule/60">Skola/Hemma</a>
+            <a onClick={close} href="#pricing" className="nav-link py-2 border-b border-rule/60">Pris</a>
+            <a onClick={close} href="#faq" className="nav-link py-2 border-b border-rule/60">FAQ</a>
+            <a onClick={close} href="#kontakt" className="nav-link py-2 border-b border-rule/60">Kontakt</a>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <Link onClick={close} to="/login/student" className="btn-outline text-xs px-2 py-2 rounded-md text-center">
+                Elev/Barn
+              </Link>
+              <Link onClick={close} to="/login/teacher" className="btn-outline text-xs px-2 py-2 rounded-md text-center">
+                Lärare
+              </Link>
+              <Link onClick={close} to="/signup/parent" className="btn-dark text-xs px-2 py-2 rounded-md text-center">
+                Förälder
+              </Link>
+            </div>
+          </nav>
+        </div>
+      )}
     </header>
   );
 }
