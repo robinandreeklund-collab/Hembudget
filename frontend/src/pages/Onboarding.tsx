@@ -85,6 +85,19 @@ export default function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Onboarding renderas av App.tsx oavsett URL för elever som inte
+  // är klara med onboarding. Om eleven försökte gå till en specifik
+  // sida (t.ex. /modules/1 från sin kursplan) sparar vi destinationen
+  // i sessionStorage så vi kan ta dem dit efter att de är klara.
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path && path !== "/" && path !== "/onboarding") {
+      sessionStorage.setItem("hembudget_onboarding_redirect", path);
+    }
+  }, []);
+  const intendedDestination =
+    sessionStorage.getItem("hembudget_onboarding_redirect");
+
   useEffect(() => {
     (async () => {
       try {
@@ -122,7 +135,10 @@ export default function Onboarding() {
           values: edited,
         }),
       });
-      window.location.href = "/dashboard";
+      // Om eleven blev hänvisad hit från en specifik sida — gå dit istället.
+      const dest = sessionStorage.getItem("hembudget_onboarding_redirect");
+      sessionStorage.removeItem("hembudget_onboarding_redirect");
+      window.location.href = dest || "/dashboard";
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -158,6 +174,13 @@ export default function Onboarding() {
           <h1 className="serif text-3xl md:text-4xl leading-[1.05]">
             Välkommen — låt oss sätta upp din vardag.
           </h1>
+          {intendedDestination && intendedDestination !== "/dashboard" && (
+            <p className="mt-3 text-sm text-[#666] serif-italic">
+              Du försökte gå till{" "}
+              <span className="kbd">{intendedDestination}</span> — vi tar
+              dig dit så fort du är klar med dessa tre steg.
+            </p>
+          )}
         </div>
 
         {/* Stepper */}
