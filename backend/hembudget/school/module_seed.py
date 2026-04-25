@@ -566,6 +566,131 @@ SAVING_TEMPLATE = {
 }
 
 
+# Mall: "Familjeekonomi — när två delar"
+FAMILY_TEMPLATE = {
+    "title": "Familjeekonomi — när två delar",
+    "summary": "Sambo eller gift? Egen ekonomi eller gemensam? Hur fördelar man räkningarna när inkomsterna är olika?",
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Tre modeller för parens ekonomi",
+            "content": (
+                "Det finns ingen 'rätt' modell — bara olika kompromisser:\n\n"
+                "1. ALLT GEMENSAMT — ett konto, en pott. Enklast om "
+                "inkomsterna är lika och förtroendet stort.\n\n"
+                "2. PROPORTIONELLT — tjänar du 60 % av hushållet, betalar "
+                "du 60 % av räkningarna. Egna konton för 'eget'.\n\n"
+                "3. ALLT SEPARAT, BARA NÅGRA GEMENSAMMA — eget allt, men "
+                "ett gemensamt 'hyrkonto' för fasta utgifter.\n\n"
+                "Modell 2 är vanligast i Sverige och brukar upplevas som "
+                "rättvis även när inkomsterna är olika."
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Vad räknas som 'gemensamt'?",
+            "content": (
+                "Klassiska gemensamma utgifter:\n"
+                "• Hyra/bolån\n"
+                "• El, vatten, bredband\n"
+                "• Mat (oftast)\n"
+                "• Hemförsäkring\n"
+                "• Underhåll, möbler\n\n"
+                "Klassiska personliga utgifter:\n"
+                "• Kläder, hygien\n"
+                "• Egna prenumerationer (Spotify, gym)\n"
+                "• Hobbyer\n"
+                "• Restauranger med vänner\n\n"
+                "Mat är ofta gränsfall — vissa par delar 50/50, andra "
+                "räknar mat som gemensam-pott. Båda funkar."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Räkneexempel — proportionell modell",
+            "content": None,
+            "params": {
+                "question": "Anna tjänar 30 000 kr/mån, Bahar 20 000. "
+                "Hyran är 12 000. I proportionell modell — hur mycket ska "
+                "Anna respektive Bahar betala?",
+                "options": [
+                    "6 000 kr var (50/50)",
+                    "Anna 7 200, Bahar 4 800",
+                    "Anna 8 000, Bahar 4 000",
+                    "Anna 10 000, Bahar 2 000",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Proportionellt: Anna har 30/(30+20) = 60 % av "
+                    "hushållets inkomst. 60 % av 12 000 = 7 200. "
+                    "Bahar betalar resten (4 800). Båda lägger SAMMA "
+                    "andel av sin egen lön på hyran (24 % av sin lön)."
+                ),
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Bygg en gemensam budget",
+            "content": (
+                "Be din lärare placera dig i en familj med en kompis. Då "
+                "delar ni en simulerad ekonomi — gemensamt konto, "
+                "gemensam budget, gemensamma räkningar. Diskutera och "
+                "kom överens om hur ni vill fördela kostnaderna."
+            ),
+            "params": {"assignment_kind": "set_budget"},
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad är viktigast — rättvist eller enkelt?",
+            "content": (
+                "I parets ekonomi finns ofta en spänning mellan att vara "
+                "RÄTTVIS (proportionellt) och att vara ENKEL (50/50 eller "
+                "allt gemensamt). Vad värderar du högst? Skulle du vilja "
+                "att alla regler var skrivna i förväg, eller fungerar "
+                "magkänsla?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "egen-ståndpunkt",
+                        "name": "Egen ståndpunkt",
+                        "levels": [
+                            "Refererar bara",
+                            "Egen åsikt",
+                            "Egen åsikt med skäl",
+                        ],
+                    },
+                    {
+                        "key": "perspektiv",
+                        "name": "Perspektiv",
+                        "levels": [
+                            "En sida",
+                            "Båda sidor",
+                            "Båda sidor + kompromiss",
+                        ],
+                    },
+                ],
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Vad händer om man separerar?",
+            "content": (
+                "Sambolagen: gemensamt köpt bostad och inbo (möbler, "
+                "hushållsmaskiner) delas 50/50 vid separation, även om en "
+                "betalat mer. Allt ANNAT (sparande, bil, kläder) är ditt "
+                "om du köpt själv.\n\n"
+                "Vill man ha annat — skriv samboavtal. Banalt? Ja. "
+                "Pinsamt? Ja. Smart? Ja, om en av er köpt bostaden själv "
+                "innan ni flyttade ihop.\n\n"
+                "Gift: äktenskapsförord fungerar likadant — utan det blir "
+                "allt giftorättsgods och delas vid skilsmässa."
+            ),
+        },
+    ],
+}
+
+
 # Mall: "Din första månad"
 FIRST_MONTH_TEMPLATE = {
     "title": "Din första månad",
@@ -721,6 +846,7 @@ def seed_system_modules(master_session) -> int:
         MORTGAGE_TEMPLATE,
         CREDITCARD_TEMPLATE,
         SAVING_TEMPLATE,
+        FAMILY_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue
