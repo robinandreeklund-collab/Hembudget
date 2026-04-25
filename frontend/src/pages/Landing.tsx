@@ -1,852 +1,382 @@
-import { useEffect, useState } from "react";
+/**
+ * Landing.tsx — paper-design migrerat från demo3-periodic.html.
+ *
+ * Strukturen följer exakt demo3:
+ *   Header → Hero (text + grid + prof) → Funktioner → Flow → Stats →
+ *   Logiken-strip → Why → Social proof → Vyer → Pricing → FAQ →
+ *   Founder-citat → CTA → Kontakt → Footer
+ *
+ * Alla 32 cellerna i hero-griden, eye-tracking, heatmap-toggle,
+ * cell-modal och drift-partiklar är React-portade från standalone-HTML:en.
+ */
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  AlertTriangle, ArrowRight, BarChart3, Briefcase, Check, ChevronDown,
-  GraduationCap, Home, Lightbulb, MessageCircle, PiggyBank, Quote,
-  Receipt, School, Sparkles, TrendingUp, Users, Zap,
-} from "lucide-react";
 import { api } from "@/api/client";
-import DashboardPreview from "@/components/landing/DashboardPreview";
-import BudgetDemo from "@/components/landing/BudgetDemo";
-import PdfImportDemo from "@/components/landing/PdfImportDemo";
-import TeacherDemo from "@/components/landing/TeacherDemo";
-import MortgageDemo from "@/components/landing/MortgageDemo";
-import { useReveal } from "@/hooks/useReveal";
+
+// ---------- Cell-data (32 begrepp) ----------
+
+type CellColor = "grund" | "fordj" | "expert" | "konto" | "risk" | "special";
+
+type Cell = {
+  num: number;
+  sym: string;
+  name: string;
+  val: string;
+  tip: string;
+  color: CellColor;
+};
+
+const CELLS: Cell[] = [
+  { num: 1, sym: "Lö", name: "Lön", val: "brutto · netto", tip: "Lön = bruttolön minus skatt = det du faktiskt får", color: "grund" },
+  { num: 2, sym: "Sk", name: "Skatt", val: "kommun · stat", tip: "Skatt = din andel av samhället", color: "grund" },
+  { num: 3, sym: "Bu", name: "Budget", val: "in − ut", tip: "Budget = planen innan pengarna försvinner", color: "grund" },
+  { num: 4, sym: "Ku", name: "Kontoutdrag", val: "rörelser", tip: "Kontoutdrag = bankens dagbok över dig", color: "konto" },
+  { num: 5, sym: "Ka", name: "Kategori", val: "mat · hyra", tip: "Kategorisering = första steget till förståelse", color: "grund" },
+  { num: 6, sym: "Sa", name: "Saldo", val: "kontot nu", tip: "Saldo = sanningen just nu", color: "konto" },
+  { num: 7, sym: "Sp", name: "Sparande", val: "buffert", tip: "Sparande = framtida du tackar nuvarande du", color: "fordj" },
+  { num: 8, sym: "Hu", name: "Hushållskost.", val: "Konsumentv.", tip: "Hushållskostnader = vad det faktiskt kostar att leva", color: "fordj" },
+  { num: 9, sym: "Bl", name: "Bolån", val: "räntebärande", tip: "Bolån = ditt största ekonomiska beslut", color: "fordj" },
+  { num: 10, sym: "Am", name: "Amortering", val: "betala av", tip: "Amortering = att krympa skulden, inte bara räntan", color: "fordj" },
+  { num: 11, sym: "Ov", name: "Oväntat", val: "buffert", tip: "Oväntat = tandläkare, kyl som går sönder, en tisdag", color: "risk" },
+  { num: 12, sym: "Kk", name: "Kreditkort", val: "kostar om...", tip: "Kreditkort = bra verktyg, dålig vana", color: "risk" },
+  { num: 13, sym: "Lp", name: "Långsiktig plan", val: "3–5 år", tip: "Långsiktig plan = du vet vart du är på väg", color: "expert" },
+  { num: 14, sym: "Rb", name: "Räntebindning", val: "rörlig/bunden", tip: "Räntebindning = risk vs. förutsägbarhet", color: "expert" },
+  { num: 15, sym: "AI", name: "Fråga Ekon", val: "Claude Sonnet", tip: "AI-coach som kan hela kursplanen", color: "special" },
+  { num: 16, sym: "Pf", name: "Portfolio", val: "PDF-export", tip: "Portfolio-PDF = lärarens betygsunderlag", color: "special" },
+  { num: 17, sym: "In", name: "Inkomst", val: "lön · bidrag", tip: "Inkomst = allt som kommer in", color: "konto" },
+  { num: 18, sym: "Ut", name: "Utgift", val: "fast · rörlig", tip: "Utgift = allt som går ut", color: "konto" },
+  { num: 19, sym: "Öv", name: "Överskott", val: "sparat", tip: "Överskott = pengar kvar i slutet av månaden", color: "konto" },
+  { num: 20, sym: "Un", name: "Underskott", val: "varning", tip: "Underskott = du spenderade mer än du fick in", color: "risk" },
+  { num: 21, sym: "Rä", name: "Ränta", val: "% per år", tip: "Ränta = priset för att låna pengar", color: "fordj" },
+  { num: 22, sym: "Ef", name: "Effektiv ränta", val: "verkligt", tip: "Effektiv ränta = den ränta du faktiskt betalar inkl. avgifter", color: "fordj" },
+  { num: 23, sym: "Rp", name: "Rubric", val: "bedömning", tip: "Rubric = lärarens betygskriterier per kompetens", color: "special" },
+  { num: 24, sym: "Qr", name: "QR-kod", val: "login", tip: "QR-login = elev loggar in genom att skanna en kod", color: "special" },
+  { num: 25, sym: "Pe", name: "Pension", val: "premie", tip: "Pension = lön du får utan att jobba — så småningom", color: "grund" },
+  { num: 26, sym: "Fs", name: "Försäkring", val: "trygghet", tip: "Försäkring = du betalar lite varje månad för att slippa krasch", color: "grund" },
+  { num: 27, sym: "Fo", name: "Fondspar.", val: "index", tip: "Fondsparande = långsiktigt ägande av flera bolag samtidigt", color: "fordj" },
+  { num: 28, sym: "Ak", name: "Aktie", val: "ägarskap", tip: "Aktie = en liten del av ett bolag", color: "expert" },
+  { num: 29, sym: "Sn", name: "SMS-lån", val: "undvik", tip: "SMS-lån = den dyraste formen av kredit", color: "risk" },
+  { num: 30, sym: "Bg", name: "Bankgiro", val: "fakturor", tip: "Bankgiro = systemet svenska företag använder för räkningar", color: "konto" },
+  { num: 31, sym: "Ba", name: "Batch-PDF", val: "scenarier", tip: "Batch = lärare genererar månadens dokument till hela klassen", color: "special" },
+  { num: 32, sym: "Mo", name: "Modul", val: "7 steg", tip: "Modul = en kursvecka med läs/titta/reflektera/quiz/uppdrag", color: "special" },
+];
+
+// ---------- Default export ----------
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-brand-50">
+    <div className="bg-paper text-ink min-h-screen">
       <Header />
       <Hero />
-      <StatsTicker />
-      <SocialProof />
-      <WhySection />
-      <FeaturesSection />
-      <ScreenshotGallery />
-      <DemoSection />
-      <FlowSection />
-      <PricingSection />
-      <FaqSection />
-      <FounderNote />
-      <CtaSection />
-      <ContactSection />
-      <Footer />
+      {/* TODO A2.2-A2.8: resterande sektioner */}
+      <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
+        Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
+      </div>
     </div>
   );
 }
 
-function DemoSection() {
-  return (
-    <section className="py-16">
-      <div className="max-w-5xl mx-auto px-6">
-        <div className="relative bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 rounded-3xl p-10 md:p-14 shadow-xl overflow-hidden">
-          {/* Dekorativa cirklar */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-
-          <div className="relative grid md:grid-cols-[1fr_auto] gap-8 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur text-white rounded-full px-3 py-1 text-xs font-medium mb-4">
-                <Zap className="w-3.5 h-3.5" /> Ingen registrering krävs
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
-                Prova plattformen direkt
-              </h2>
-              <p className="text-white/90 max-w-xl">
-                En färdig klass med 5 elever väntar i demo-miljön. Logga in
-                som lärare och utforska flödena, eller testa som elev och
-                se hur dashboard och budget funkar. Datan återställs var
-                10:e minut — spring-fri sandlåda.
-              </p>
-              <ul className="mt-5 text-white/90 text-sm space-y-1.5">
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                  3 månaders genererad data redan importerad
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                  Olika elev-profiler: sparsam, blandad, slösaktig
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                  Pågående uppdrag och en levande meddelandetråd
-                </li>
-              </ul>
-            </div>
-            <Link
-              to="/demo"
-              className="group bg-white hover:bg-slate-50 text-orange-600 rounded-2xl px-8 py-5 font-semibold shadow-xl hover:shadow-2xl transition-all inline-flex items-center gap-3 whitespace-nowrap"
-            >
-              <Zap className="w-5 h-5" />
-              Starta demo
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+// ---------- Header ----------
 
 function Header() {
   return (
-    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
-      <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-brand-600 font-bold text-lg">
-          <Sparkles className="w-5 h-5" />
-          Ekonomilabbet
-        </div>
-        <nav className="flex items-center gap-3 text-sm">
-          <a href="#funktioner" className="text-slate-700 hover:text-brand-600">
-            Funktioner
-          </a>
-          <a href="#sa-funkar-det" className="text-slate-700 hover:text-brand-600 hidden md:inline">
-            Så funkar det
-          </a>
-          <a href="#pricing" className="text-slate-700 hover:text-brand-600 hidden md:inline">
-            Pris
-          </a>
-          <a href="#faq" className="text-slate-700 hover:text-brand-600 hidden md:inline">
-            FAQ
-          </a>
-          <Link to="/docs" className="text-slate-700 hover:text-brand-600 hidden md:inline">
-            Dokumentation
-          </Link>
-          <a href="#kontakt" className="text-slate-700 hover:text-brand-600 hidden md:inline">
-            Kontakt
-          </a>
-          <Link
-            to="/login"
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2"
-          >
-            Logga in
-          </Link>
+    <header className="border-b border-rule">
+      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-3">
+          <svg width="28" height="28" viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
+            <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">Ek</text>
+          </svg>
+          <span className="serif text-xl">Ekonomilabbet</span>
+        </Link>
+        <nav className="hidden md:flex items-center gap-7 text-sm">
+          <a href="#funktioner" className="nav-link">Funktioner</a>
+          <a href="#flow" className="nav-link">Så funkar det</a>
+          <a href="#pricing" className="nav-link">Pris</a>
+          <a href="#faq" className="nav-link">FAQ</a>
+          <a href="#kontakt" className="nav-link">Kontakt</a>
         </nav>
+        <div className="flex gap-2">
+          <Link to="/login/student" className="btn-outline text-sm px-4 py-2 rounded-md">
+            Elevlogin
+          </Link>
+          <Link to="/login/teacher" className="btn-dark text-sm px-4 py-2 rounded-md">
+            Lärarkonto
+          </Link>
+        </div>
       </div>
     </header>
   );
 }
 
+// ---------- Hero (text + grid + professor) ----------
+
 function Hero() {
+  // Hålls i Landing-state och drillas ner till PeriodicGrid + button.
+  const [heatmapOn, setHeatmapOn] = useState(false);
+  const [openCell, setOpenCell] = useState<Cell | null>(null);
+
+  // Sätter body-klassen för heatmap-overlay (CSS triggar via .heatmap-on)
+  useEffect(() => {
+    document.body.classList.toggle("heatmap-on", heatmapOn);
+    return () => {
+      document.body.classList.remove("heatmap-on");
+    };
+  }, [heatmapOn]);
+
   return (
-    <section className="max-w-6xl mx-auto px-6 py-16 md:py-20 grid md:grid-cols-2 gap-10 items-center">
-      <div>
-        <div className="inline-flex items-center gap-2 bg-brand-100 text-brand-700 rounded-full px-4 py-1 text-sm mb-6 animate-fadein">
-          <GraduationCap className="w-4 h-4" />
-          Privatekonomi för skolan
-        </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight animate-fadeup">
-          Lär eleverna hantera sin
-          <span className="text-brand-600"> riktiga ekonomi</span>
-          <br />– innan de möter den på riktigt.
+    <section className="relative max-w-7xl mx-auto px-6 pt-16 pb-12 grid md:grid-cols-[1fr_1.4fr] gap-12 items-start">
+      <DriftParticles />
+      <div className="relative z-[1]">
+        <div className="eyebrow mb-5">Ekonomilabbet · utgåva 2026</div>
+        <h1 className="serif text-5xl md:text-6xl leading-[1.02]">
+          Det periodiska<br />systemet för pengar.
         </h1>
-        <p className="mt-6 text-lg text-slate-600 animate-fadeup delay-100">
-          Ekonomilabbet är en interaktiv simulator där varje elev får en egen
-          simulerad vardag — yrke, lön, skatt, hyra, lån, räkningar. De lär
-          sig budgetera, spara och förstå när livet inte går som planerat.
+        <p className="mt-6 lead max-w-md">
+          Från <span className="kbd">Lö</span> (lön) till <span className="kbd">Rb</span> (räntebindning) —
+          32 grundbegrepp som en 16-åring behöver för att inte krocka med vuxenlivet.
+          Hovra över en cell. Klassen ser resten.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3 animate-fadeup delay-200">
-          <Link
-            to="/login/teacher"
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
-          >
-            Kom igång som lärare
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link to="/login/teacher" className="btn-dark px-5 py-3 rounded-md">
+            Prova experimentet
           </Link>
-          <Link
-            to="/login/student"
-            className="bg-white border-2 border-slate-300 hover:border-brand-500 text-slate-700 rounded-lg px-6 py-3 font-medium"
+          <a href="#flow" className="btn-outline px-5 py-3 rounded-md">
+            Se hur det funkar
+          </a>
+          <button
+            type="button"
+            onClick={() => setHeatmapOn((v) => !v)}
+            aria-pressed={heatmapOn}
+            className="btn-outline px-5 py-3 rounded-md"
           >
-            Jag är elev
-          </Link>
+            {heatmapOn ? "Ta bort klassens värmekarta" : "Lägg på klassens värmekarta"}
+          </button>
         </div>
-      </div>
-      <div className="animate-fadeup delay-300">
-        <DashboardPreview />
-      </div>
-    </section>
-  );
-}
 
-function WhySection() {
-  const stats = [
-    { num: "4 av 10", label: "unga klarar inte en oväntad räkning på 2 000 kr" },
-    { num: "60%", label: "av elever har aldrig läst en lönespecifikation" },
-    { num: "1 timme", label: "räcker för att prova grunderna i Ekonomilabbet" },
-  ];
-  return (
-    <section className="bg-white border-y border-slate-200 py-16">
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
-            <AlertTriangle className="w-4 h-4" /> Problem
-          </div>
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
-            Ekonomi är ett livskunskapsämne.<br />Och det saknas i skolan.
-          </h2>
-          <p className="mt-4 text-slate-600 max-w-2xl mx-auto">
-            Svenska unga lämnar skolan utan grundläggande kunskaper om skatt,
-            sparande, lån och budget. Först när de flyttar hemifrån möter de
-            verkligheten — ofta för sent.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {stats.map((s, i) => (
-            <div
-              key={i}
-              className="bg-gradient-to-br from-brand-50 to-white border border-brand-100 rounded-xl p-6 text-center hover:shadow-md transition-shadow"
-            >
-              <div className="text-4xl font-bold text-brand-600 mb-2">
-                {s.num}
-              </div>
-              <div className="text-sm text-slate-700">{s.label}</div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-10 bg-emerald-50 border-l-4 border-emerald-500 rounded p-5 flex gap-4">
-          <Lightbulb className="w-8 h-8 text-emerald-600 shrink-0" />
-          <div>
-            <h3 className="font-semibold text-emerald-900 mb-1">
-              Lär genom att göra — inte genom att läsa om det
-            </h3>
-            <p className="text-sm text-emerald-900">
-              Eleven får egen simulerad inkomst, egna räkningar, egen lön varje
-              månad. Precis som i livet utanför klassrummet. Varje val har
-              konsekvenser som syns i deras budget.
-            </p>
-          </div>
-        </div>
+        <ul className="mt-10 text-sm space-y-3">
+          <li className="flex items-center gap-3"><LegendDot bg="#eef3ff" />Grundkompetens (5)</li>
+          <li className="flex items-center gap-3"><LegendDot bg="#fff3e6" />Fördjupning (5)</li>
+          <li className="flex items-center gap-3"><LegendDot bg="#f3eaff" />Expert (2)</li>
+          <li className="flex items-center gap-3"><LegendDot bg="#e8f7ef" />Konto &amp; flöde</li>
+          <li className="flex items-center gap-3"><LegendDot bg="#fdecec" />Riskgrupp</li>
+          <li className="flex items-center gap-3"><LegendDot bg="#111217" />Professorns tillskott</li>
+        </ul>
       </div>
-    </section>
-  );
-}
-type Feat = {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-  color: string;
-  anim: "bounce" | "wiggle" | "spin";
-  pulse?: boolean;
-};
 
-function FeaturesSection() {
-  const features: Feat[] = [
-    { icon: <Briefcase className="w-6 h-6" />, title: "Unik elev-profil",
-      body: "Varje elev får ett slumpat yrke, arbetsgivare, lön, stad och livssituation. Ingen annan i klassen har samma.",
-      color: "brand", anim: "bounce" },
-    { icon: <Receipt className="w-6 h-6" />, title: "Riktiga PDF:er",
-      body: "Läraren genererar kontoutdrag, lönespec, lån och kreditkortsfakturor som eleverna själva importerar.",
-      color: "emerald", anim: "wiggle" },
-    { icon: <PiggyBank className="w-6 h-6" />, title: "Budget mot verklighet",
-      body: "Eleven sätter sin egen månadsbudget baserat på Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp.",
-      color: "amber", anim: "bounce" },
-    { icon: <Home className="w-6 h-6" />, title: "Bolåne-beslut",
-      body: "Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten.",
-      color: "rose", anim: "wiggle", pulse: true },
-    { icon: <AlertTriangle className="w-6 h-6" />, title: "Livet händer",
-      body: "Diskmaskin går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleverna får öva på att hantera oväntat.",
-      color: "purple", anim: "wiggle" },
-    { icon: <Users className="w-6 h-6" />, title: "Familjer",
-      body: "Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål.",
-      color: "sky", anim: "bounce" },
-    { icon: <BarChart3 className="w-6 h-6" />, title: "Lärarens översikt",
-      body: "Klassöversikt med status per elev och uppdrag. Facit för varje kategorisering — grönt/rött på en blick.",
-      color: "brand", anim: "spin" },
-    { icon: <MessageCircle className="w-6 h-6" />, title: "Feedback-chat",
-      body: "Eleven kan ställa frågor direkt till läraren. Läraren svarar + ger feedback på enskilda transaktioner.",
-      color: "emerald", anim: "wiggle", pulse: true },
-    { icon: <TrendingUp className="w-6 h-6" />, title: "Sparmål & uppdrag",
-      body: "Läraren sätter tydliga uppdrag: 'spara 2 000 kr', 'balansera månaden', 'kategorisera alla köp'. Statusen uppdateras automatiskt.",
-      color: "amber", anim: "bounce" },
-  ];
-
-  return (
-    <section id="funktioner" className="max-w-6xl mx-auto px-6 py-20">
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
-          <Sparkles className="w-4 h-4" /> Funktioner
-        </div>
-        <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
-          Allt du behöver för att göra ekonomi begripligt
-        </h2>
-        <p className="mt-4 text-slate-600 max-w-2xl mx-auto">
-          Från första lönen till komplexa bolåneval — varje funktion är byggd
-          för att eleven ska lära genom handling.
+      <div className="relative z-[1]">
+        <ProfessorWithBubble />
+        <PeriodicGrid onPick={setOpenCell} />
+        <p className="mt-4 text-xs text-[#777] serif-italic">
+          Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {features.map((f, i) => (
-          <FeatureCard key={i} index={i} {...f} />
-        ))}
-      </div>
+
+      {openCell && <CellModal cell={openCell} onClose={() => setOpenCell(null)} />}
     </section>
   );
 }
 
-function FeatureCard({
-  icon, title, body, color, anim, pulse, index,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-  color: string;
-  anim?: "bounce" | "wiggle" | "spin";
-  pulse?: boolean;
-  index: number;
-}) {
-  const ref = useReveal<HTMLDivElement>();
-  const colorMap: Record<string, string> = {
-    brand: "bg-brand-100 text-brand-600",
-    emerald: "bg-emerald-100 text-emerald-600",
-    amber: "bg-amber-100 text-amber-600",
-    rose: "bg-rose-100 text-rose-600",
-    purple: "bg-purple-100 text-purple-600",
-    sky: "bg-sky-100 text-sky-600",
-  };
-  const animClass =
-    anim === "bounce" ? "animate-hover-bounce" :
-    anim === "wiggle" ? "animate-hover-wiggle" :
-    anim === "spin" ? "animate-hover-spin" : "";
+function LegendDot({ bg }: { bg: string }) {
+  return (
+    <span
+      className="inline-block w-2.5 h-2.5 border border-ink"
+      style={{ background: bg }}
+    />
+  );
+}
+
+// ---------- Periodic-grid (32 celler) ----------
+
+function PeriodicGrid({ onPick }: { onPick: (c: Cell) => void }) {
+  // Deterministiska heatmap-värden per cellposition (0-1)
+  const heat = [
+    0.92, 0.74, 0.88, 0.82, 0.71, 0.66, 0.54, 0.48,
+    0.38, 0.32, 0.64, 0.58, 0.22, 0.18, 0.41, 0.36,
+    0.52, 0.46, 0.42, 0.28, 0.26, 0.14, 0.50, 0.71,
+    0.67, 0.55, 0.34, 0.12, 0.08, 0.44, 0.62, 0.58,
+  ];
+
+  // Pilar mellan celler (8-kolumn grid)
+  function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const focused = document.activeElement as HTMLElement | null;
+    if (!focused?.classList.contains("elem")) return;
+    const cells = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>(".elem")
+    );
+    const idx = cells.indexOf(focused);
+    if (idx < 0) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const cell = CELLS[idx];
+      if (cell) onPick(cell);
+      return;
+    }
+    const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    const dy = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+    if (dx === 0 && dy === 0) return;
+    e.preventDefault();
+    const cols = window.innerWidth >= 768 ? 8 : 4;
+    const next = idx + dx + dy * cols;
+    if (cells[next]) cells[next].focus();
+  }
+
   return (
     <div
-      ref={ref}
-      className="reveal group bg-white border border-slate-200 rounded-xl p-5 hover:border-brand-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
-      style={{ transitionDelay: `${(index % 3) * 60}ms` }}
+      className="grid grid-cols-4 md:grid-cols-8 gap-1.5"
+      role="grid"
+      aria-label="Periodiska systemet för pengar — 32 begrepp"
+      onKeyDown={onKeyDown}
     >
-      <div
-        className={`relative inline-flex w-12 h-12 rounded-lg items-center justify-center mb-3 ${
-          colorMap[color] ?? "bg-brand-100 text-brand-600"
-        } group-hover:scale-110 transition-transform ${pulse ? "pulse-ring" : ""}`}
-      >
-        <span className={animClass}>{icon}</span>
-      </div>
-      <h3 className="font-semibold text-slate-900 mb-1">{title}</h3>
-      <p className="text-sm text-slate-600 leading-relaxed">{body}</p>
+      {CELLS.map((c, i) => (
+        <button
+          key={c.num}
+          type="button"
+          role="gridcell"
+          tabIndex={0}
+          onClick={() => onPick(c)}
+          className={`elem ${c.color}`}
+          aria-label={`${c.name}, ${c.val}. ${c.tip}`}
+          style={{ ["--h" as never]: String(heat[i] ?? 0) }}
+        >
+          <span className="num">{c.num}</span>
+          <span>
+            <span className="sym block">{c.sym}</span>
+            <span className="name block">{c.name}</span>
+          </span>
+          <span className="val">{c.val}</span>
+          <span className="elem-tooltip">{c.tip}</span>
+          <span className="heatmap" />
+        </button>
+      ))}
     </div>
   );
 }
-function FlowSection() {
-  const blocks = [
-    {
-      num: "01",
-      title: "Eleven får en egen vardag",
-      body: "Yrke, lön, bostad, lån — allt slumpas unikt per elev. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid.",
-      color: "bg-brand-500",
-      demo: <DashboardPreview />,
-    },
-    {
-      num: "02",
-      title: "Verkliga dokument att jobba med",
-      body: "Läraren trycker 'generera' — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv.",
-      color: "bg-emerald-500",
-      demo: <PdfImportDemo />,
-    },
-    {
-      num: "03",
-      title: "Budget möter verklighet",
-      body: "Eleven sätter en månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt.",
-      color: "bg-amber-500",
-      demo: <BudgetDemo />,
-    },
-    {
-      num: "04",
-      title: "Verklig fostring i ekonomiska val",
-      body: "Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser gjort synliga.",
-      color: "bg-purple-500",
-      demo: <MortgageDemo />,
-    },
-    {
-      num: "05",
-      title: "Läraren ser hela klassen",
-      body: "Matris över alla elever och uppdrag. Kategoriseringsfacit per tx. Chatt för feedback. Allt du behöver för att följa upp.",
-      color: "bg-rose-500",
-      demo: <TeacherDemo />,
-    },
-  ];
 
-  return (
-    <section id="sa-funkar-det" className="bg-slate-900 text-white py-20">
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 text-brand-300 text-sm font-medium mb-2">
-            <Sparkles className="w-4 h-4" /> Så funkar det
-          </div>
-          <h2 className="text-3xl md:text-4xl font-bold">
-            Se plattformen i rörelse
-          </h2>
-          <p className="text-slate-400 mt-3 max-w-xl mx-auto">
-            Fyra nyckel-ögonblick i Ekonomilabbet — precis så elever och
-            lärare faktiskt använder det.
-          </p>
-        </div>
+// ---------- Cell-modal ----------
 
-        <div className="space-y-20">
-          {blocks.map((b, i) => (
-            <div
-              key={b.num}
-              className={`grid md:grid-cols-2 gap-10 items-center ${
-                i % 2 === 1 ? "md:[&>div:first-child]:order-2" : ""
-              }`}
-            >
-              <div>
-                <div
-                  className={`${b.color} inline-flex w-14 h-14 rounded-full items-center justify-center text-xl font-bold mb-4 shadow-lg`}
-                >
-                  {b.num}
-                </div>
-                <h3 className="text-2xl font-bold mb-3">{b.title}</h3>
-                <p className="text-slate-300 leading-relaxed">{b.body}</p>
-              </div>
-              <div>{b.demo}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-function FounderNote() {
-  return (
-    <section className="max-w-3xl mx-auto px-6 py-16">
-      <div className="relative bg-white border border-slate-200 rounded-2xl p-8 md:p-10 shadow-sm">
-        <Quote className="absolute -top-3 -left-3 w-8 h-8 text-brand-500 bg-white p-1 rounded-full border border-slate-200" />
-        <p className="text-lg md:text-xl text-slate-800 leading-relaxed italic">
-          Ekonomilabbet började som ett verktyg för min egen ekonomi. Nu kan
-          det också hjälpa unga att förstå pengar, beslut och vardagsekonomi
-          på riktigt — på ett sätt som känns konkret och användbart.
-        </p>
-        <div className="mt-4 text-sm text-slate-500">— Grundaren</div>
-      </div>
-    </section>
-  );
-}
-
-function CtaSection() {
-  return (
-    <section className="max-w-4xl mx-auto px-6 py-20 text-center">
-      <div className="bg-gradient-to-br from-brand-500 to-brand-700 rounded-3xl p-10 md:p-14 shadow-2xl text-white">
-        <GraduationCap className="w-12 h-12 mx-auto mb-4 text-brand-100" />
-        <h2 className="text-3xl md:text-4xl font-bold mb-3">
-          Kom igång på under en minut
-        </h2>
-        <p className="text-brand-100 max-w-xl mx-auto mb-8">
-          Skapa ditt lärarkonto, lägg till din första klass och testa flödet
-          själv. Helt gratis under beta-perioden.
-        </p>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Link
-            to="/login/teacher"
-            className="bg-white hover:bg-slate-50 text-brand-700 rounded-lg px-8 py-3 font-semibold shadow-lg hover:shadow-xl transition-all"
-          >
-            Skapa lärarkonto
-          </Link>
-          <Link
-            to="/login/student"
-            className="bg-brand-800 hover:bg-brand-900 text-white rounded-lg px-8 py-3 font-semibold border-2 border-brand-400"
-          >
-            Elev-inloggning
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ContactSection() {
-  return (
-    <section id="kontakt" className="bg-slate-50 border-y border-slate-200 py-16">
-      <div className="max-w-3xl mx-auto px-6 text-center">
-        <div className="inline-flex items-center gap-2 text-brand-600 text-sm font-medium mb-2">
-          <MessageCircle className="w-4 h-4" /> Kontakta oss
-        </div>
-        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-          Frågor, förslag eller samarbeten?
-        </h2>
-        <p className="text-slate-600 mb-6">
-          Vi hjälper gärna till om du vill komma igång i din klass, har
-          önskemål om nya funktioner, eller vill utforska samarbeten med
-          skolor, kommuner eller lärarorganisationer.
-        </p>
-        <a
-          href="mailto:info@ekonomilabbet.org"
-          className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-6 py-3 font-medium shadow-lg hover:shadow-xl transition-all"
-        >
-          <MessageCircle className="w-5 h-5" />
-          info@ekonomilabbet.org
-        </a>
-        <p className="text-xs text-slate-500 mt-4">
-          Vi svarar oftast inom ett par arbetsdagar.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-
-function StatsTicker() {
-  const [stats, setStats] = useState<{
-    teachers: number; students: number;
-    modules_completed: number; reflections_written: number;
-  } | null>(null);
+function CellModal({ cell, onClose }: { cell: Cell; onClose: () => void }) {
   useEffect(() => {
-    api<typeof stats>("/public/stats")
-      .then(setStats)
-      .catch(() => setStats(null));
-  }, []);
-  if (!stats) return null;
-  const items = [
-    { label: "Lärare", value: stats.teachers },
-    { label: "Elever", value: stats.students },
-    { label: "Avklarade moduler", value: stats.modules_completed },
-    { label: "Reflektioner skickade", value: stats.reflections_written },
-  ];
-  return (
-    <section className="bg-white border-y border-slate-200 py-8">
-      <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6">
-        {items.map((x) => (
-          <div key={x.label} className="text-center">
-            <div className="text-3xl md:text-4xl font-bold text-brand-700">
-              {x.value.toLocaleString("sv-SE")}
-            </div>
-            <div className="text-xs uppercase tracking-wider text-slate-500 mt-1">
-              {x.label}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-function SocialProof() {
-  // Pilotprojekt — bara platshållare tills vi har riktiga skolor att
-  // visa upp. Tona ned med opacitet så det inte upplevs oärligt.
-  const schools = [
-    "Exempelskolan", "Ekonomilinjen Malmö",
-    "Linnéskolan", "Musikgymnasiet", "Fjällgymnasiet",
-  ];
   return (
-    <section className="py-10 bg-slate-50">
-      <div className="max-w-6xl mx-auto px-6 text-center">
-        <p className="text-xs uppercase tracking-widest text-slate-500 mb-4">
-          I pilotprojekt tillsammans med
-        </p>
-        <ul className="flex flex-wrap justify-center gap-x-8 gap-y-3 opacity-50">
-          {schools.map((s) => (
-            <li
-              key={s}
-              className="text-slate-700 font-serif text-lg flex items-center gap-2"
-            >
-              <School className="w-4 h-4" /> {s}
-            </li>
-          ))}
-        </ul>
-        <p className="text-xs text-slate-400 mt-3">
-          Vi lägger till riktiga logotyper när pilotfasen är klar.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function ScreenshotGallery() {
-  const shots = [
-    {
-      title: "Lärarens dashboard",
-      body: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm.",
-      icon: <Users className="w-5 h-5" />,
-      tint: "from-brand-100 to-sky-100",
-    },
-    {
-      title: "Elevens kursplan",
-      body: "Moduler med steg för steg: läs, reflektera, quiz och uppdrag.",
-      icon: <GraduationCap className="w-5 h-5" />,
-      tint: "from-emerald-100 to-teal-100",
-    },
-    {
-      title: "Mastery-grafen",
-      body: "Per-kompetens mastery, milstolpar och nästa-steg-hint.",
-      icon: <BarChart3 className="w-5 h-5" />,
-      tint: "from-amber-100 to-orange-100",
-    },
-    {
-      title: "Portfolio-PDF",
-      body: "Exporteras per elev eller som ZIP för hela klassen.",
-      icon: <Receipt className="w-5 h-5" />,
-      tint: "from-rose-100 to-pink-100",
-    },
-    {
-      title: "Fråga Ekon",
-      body: "Multi-turn AI-coach som anpassar svaren till elevens nivå.",
-      icon: <Sparkles className="w-5 h-5" />,
-      tint: "from-purple-100 to-fuchsia-100",
-    },
-    {
-      title: "Time-on-task",
-      body: "Se vilka steg som fastnar för eleverna i din klass.",
-      icon: <TrendingUp className="w-5 h-5" />,
-      tint: "from-indigo-100 to-blue-100",
-    },
-  ];
-  return (
-    <section className="py-16 bg-white">
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-10">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-            Se plattformen i bruk
-          </h2>
-          <p className="text-slate-600">
-            Sex vyer som täcker det mesta lärare och elever rör sig i dagligen.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {shots.map((s) => (
-            <div
-              key={s.title}
-              className={`rounded-xl bg-gradient-to-br ${s.tint} border border-white aspect-[4/3] p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow`}
-            >
-              <div className="inline-flex items-center justify-center w-9 h-9 bg-white/80 rounded-lg text-slate-700">
-                {s.icon}
-              </div>
-              <div>
-                <div className="font-semibold text-slate-900">{s.title}</div>
-                <p className="text-sm text-slate-700 mt-1">{s.body}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PricingSection() {
-  return (
-    <section id="pricing" className="py-20 bg-slate-50 border-y border-slate-200">
-      <div className="max-w-4xl mx-auto px-6 text-center">
-        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-          Enkel prismodell
-        </h2>
-        <p className="text-slate-600 max-w-xl mx-auto">
-          Gratis under pilotåret 2026. Ingen bindningstid, inga dolda kostnader.
-          Från 2027 blir det en enkel per-elev-kostnad — beslut tas i
-          dialog med pilotskolorna.
-        </p>
-        <div className="mt-10 grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
-          <div className="bg-white border-2 border-brand-600 rounded-2xl p-6 text-left shadow-sm">
-            <div className="inline-flex items-center gap-1 bg-brand-600 text-white text-xs font-medium rounded-full px-2.5 py-0.5">
-              Pilot 2026
-            </div>
-            <div className="text-3xl font-bold text-slate-900 mt-3">0 kr</div>
-            <div className="text-sm text-slate-600 mb-4">
-              Hela plattformen, utan tak.
-            </div>
-            <ul className="text-sm space-y-2">
-              {[
-                "Obegränsat antal elever",
-                "AI-funktioner (Claude Sonnet)",
-                "Portfolio-PDF + ZIP-export",
-                "Support via mail",
-              ].map((x) => (
-                <li key={x} className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 mt-0.5" /> {x}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-left">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
-              Från 2027
-            </div>
-            <div className="text-3xl font-bold text-slate-900 mt-3">
-              Per-elev
-            </div>
-            <div className="text-sm text-slate-600 mb-4">
-              Exakt nivå sätts tillsammans med pilotskolorna — troligen
-              mellan 50–150 kr/elev/läsår.
-            </div>
-            <ul className="text-sm space-y-2">
-              {[
-                "Samma plattform, ingen funktionsnedskärning",
-                "Tak för AI-användning",
-                "Dedikerad support",
-              ].map((x) => (
-                <li key={x} className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 mt-0.5" /> {x}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FaqSection() {
-  const items = [
-    {
-      q: "Vad kostar Ekonomilabbet?",
-      a:
-        "Gratis under pilotåret 2026. Inga dolda kostnader. Från 2027 tas en " +
-        "per-elev-avgift ut, nivån bestäms tillsammans med pilotskolorna.",
-    },
-    {
-      q: "Är det GDPR-säkert?",
-      a:
-        "Ja. All elevdata sparas i svensk molntjänst (Google Cloud Run, " +
-        "europe-north1). Vi delar inga personuppgifter med tredje part. " +
-        "AI-anropen anonymiseras — Claude ser aldrig elevers namn eller " +
-        "personnummer.",
-    },
-    {
-      q: "Vad behöver vi installera?",
-      a:
-        "Inget. Ekonomilabbet är en webbapp. Läraren skapar konto, lägger " +
-        "in eleverna och eleverna loggar in med en 6-teckenskod eller QR-" +
-        "kod. Ingen installation, ingen app-store.",
-    },
-    {
-      q: "Går det att använda utan AI?",
-      a:
-        "Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, " +
-        "rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion " +
-        "som kan aktiveras per lärare.",
-    },
-    {
-      q: "Kan elever komma åt varandras data?",
-      a:
-        "Nej. Varje elev har en egen krypterad SQLite-DB på servern, " +
-        "ingen cross-access även om de råkar i samma klass. Läraren ser " +
-        "alla sina elever men aldrig någon annan lärares.",
-    },
-    {
-      q: "Vad händer med elevernas data när året är slut?",
-      a:
-        "Ingenting tvångsmässigt — datan är kvar tills läraren tar bort " +
-        "kontot. Vi exporterar gärna hela klassen till ZIP så du har en " +
-        "kopia innan du raderar.",
-    },
-    {
-      q: "Vilken AI-modell används?",
-      a:
-        "Claude Haiku 4.5 för snabba uppgifter (kategori-check, feedback-" +
-        "förslag) och Claude Sonnet 4.6 för djupare uppgifter (rubric, " +
-        "elev-Q&A, modul-generering). Prompt-caching används för " +
-        "kostnadskontroll.",
-    },
-    {
-      q: "Kan jag importera befintliga moduler från andra system?",
-      a:
-        "Inte som automatisk import än. Moduler skapas i plattformen " +
-        "eller klonas från systemmallar/andra lärares delade moduler. " +
-        "Säg till oss vad ni använder — vi bygger importen om det finns " +
-        "efterfrågan.",
-    },
-  ];
-  return (
-    <section id="faq" className="py-20">
-      <div className="max-w-3xl mx-auto px-6">
-        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-10">
-          Vanliga frågor
-        </h2>
-        <ul className="space-y-2">
-          {items.map((it, i) => (
-            <FaqItem key={i} q={it.q} a={it.a} />
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <li className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="w-full flex items-center justify-between text-left px-4 py-3 hover:bg-slate-50"
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="fixed inset-0 z-40 bg-ink/55 flex items-center justify-center p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-xl p-7 max-w-md w-full shadow-2xl"
       >
-        <span className="font-medium text-slate-900">{q}</span>
-        <ChevronDown
-          className={`w-5 h-5 text-slate-500 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
-        />
-      </button>
-      {open && (
-        <div className="px-4 pb-4 text-slate-700 text-sm leading-relaxed">
-          {a}
+        <div className="serif text-4xl">{cell.sym}</div>
+        <div className="text-lg font-semibold mt-1">{cell.name}</div>
+        <div className="text-sm text-[#666] mt-0.5">{cell.val}</div>
+        <p className="mt-3 text-[#333]">{cell.tip}</p>
+        <div className="mt-4 text-xs text-[#888]">
+          Tränas i modulen "Din första månad" · steg 1–7
         </div>
-      )}
-    </li>
+        <button
+          onClick={onClose}
+          className="btn-dark mt-5 px-4 py-2 rounded text-sm"
+        >
+          Stäng
+        </button>
+      </div>
+    </div>
   );
 }
 
-function Footer() {
+// ---------- Professor + speech-bubble ----------
+
+function ProfessorWithBubble() {
+  const eyeLRef = useRef<SVGCircleElement | null>(null);
+  const eyeRRef = useRef<SVGCircleElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+    const onMove = (e: MouseEvent) => {
+      const svg = svgRef.current;
+      if (!svg || !eyeLRef.current || !eyeRRef.current) return;
+      const r = svg.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / 200));
+      const dy = Math.max(-1, Math.min(1, (e.clientY - cy) / 200));
+      eyeLRef.current.setAttribute("cx", String(48 + dx * 2));
+      eyeLRef.current.setAttribute("cy", String(68 + dy * 2));
+      eyeRRef.current.setAttribute("cx", String(72 + dx * 2));
+      eyeRRef.current.setAttribute("cy", String(68 + dy * 2));
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+
   return (
-    <footer className="border-t border-slate-200 bg-white py-10 mt-0">
-      <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-8 text-sm">
-        <div>
-          <div className="flex items-center gap-2 text-brand-600 font-bold mb-2">
-            <Sparkles className="w-5 h-5" /> Ekonomilabbet
-          </div>
-          <p className="text-slate-600">
-            En öppen utbildningsplattform för privatekonomi. Byggd med ❤
-            för svenska skolor.
-          </p>
-        </div>
-        <div>
-          <div className="font-semibold text-slate-700 mb-2">Länkar</div>
-          <ul className="space-y-1 text-slate-600">
-            <li>
-              <Link to="/docs" className="hover:text-brand-600">
-                Dokumentation
-              </Link>
-            </li>
-            <li>
-              <Link to="/demo" className="hover:text-brand-600">
-                Prova demo
-              </Link>
-            </li>
-            <li>
-              <a href="#kontakt" className="hover:text-brand-600">
-                Kontakt
-              </a>
-            </li>
-            <li>
-              <a
-                href="https://github.com/robinandreeklund-collab/Hembudget"
-                target="_blank" rel="noreferrer"
-                className="hover:text-brand-600"
-              >
-                GitHub
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <div className="font-semibold text-slate-700 mb-2">Kontakt</div>
-          <ul className="space-y-1 text-slate-600">
-            <li>
-              <a
-                href="mailto:info@ekonomilabbet.org"
-                className="hover:text-brand-600"
-              >
-                info@ekonomilabbet.org
-              </a>
-            </li>
-            <li className="text-slate-500">
-              ekonomilabbet.org
-            </li>
-          </ul>
-        </div>
+    <div className="prof-wrap" aria-hidden="true">
+      <div className="prof-bubble">
+        Hovra över en cell — eleven ser samma karta som du.
       </div>
-      <div className="max-w-6xl mx-auto px-6 mt-8 pt-6 border-t border-slate-200 text-xs text-slate-500 text-center">
-        © {new Date().getFullYear()} Ekonomilabbet · Öppen källkod
-      </div>
-    </footer>
+      <svg ref={svgRef} className="prof-svg" viewBox="0 0 120 120">
+        <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" strokeWidth="3" />
+        <path
+          d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z"
+          fill="#fff" stroke="#111" strokeWidth="3"
+        />
+        <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" strokeWidth="2.5" />
+        <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" strokeWidth="2.5" />
+        <circle ref={eyeLRef} cx="48" cy="68" r="3" fill="#111" />
+        <circle ref={eyeRRef} cx="72" cy="68" r="3" fill="#111" />
+        <path d="M48 88 Q60 96 72 88" stroke="#111" strokeWidth="2.5" fill="none" />
+        <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" strokeWidth="2.5" />
+      </svg>
+    </div>
   );
 }
+
+// ---------- Drift-partiklar bakom hero ----------
+
+function DriftParticles() {
+  const [particles] = useState(() => {
+    const arr: { top: number; left: number; dx: number; dy: number; dur: number }[] = [];
+    for (let i = 0; i < 18; i++) {
+      arr.push({
+        top: Math.random() * 100,
+        left: Math.random() * 100,
+        dx: (Math.random() - 0.5) * 120,
+        dy: (Math.random() - 0.5) * 120,
+        dur: 6 + Math.random() * 8,
+      });
+    }
+    return arr;
+  });
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
+      {particles.map((p, i) => (
+        <span
+          key={i}
+          className="particle drifting"
+          style={{
+            top: `${p.top}%`,
+            left: `${p.left}%`,
+            ["--dx" as never]: `${p.dx}px`,
+            ["--dy" as never]: `${p.dy}px`,
+            ["--dur" as never]: `${p.dur}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Notera: api är importerad ovan men används inte än —
+// kommer in i A2.5 (stats-fetch). Förhindrar tsc-fel.
+void api;
