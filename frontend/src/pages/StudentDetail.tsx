@@ -234,7 +234,7 @@ export default function StudentDetail() {
           </button>
           <button
             onClick={viewAs}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2"
+            className="btn-dark rounded-md px-4 py-2 flex items-center gap-2"
           >
             <Eye className="w-4 h-4" /> Titta som denna elev
           </button>
@@ -294,7 +294,7 @@ export default function StudentDetail() {
                 </div>
                 <button
                   onClick={() => assignRec(r.module_id)}
-                  className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm"
+                  className="btn-dark rounded-md px-3 py-1.5 text-sm"
                 >
                   Tilldela
                 </button>
@@ -325,7 +325,7 @@ export default function StudentDetail() {
           </h2>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="text-sm bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 flex items-center gap-1"
+            className="text-sm btn-dark rounded-md px-3 py-1.5 flex items-center gap-1"
           >
             <Plus className="w-4 h-4" /> Nytt uppdrag
           </button>

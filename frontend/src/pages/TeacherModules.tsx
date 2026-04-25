@@ -180,14 +180,14 @@ export default function TeacherModules() {
           )}
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
+            className="btn-dark rounded-md px-4 py-2 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Ny modul
           </button>
         </div>
       </div>
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
@@ -215,7 +215,7 @@ export default function TeacherModules() {
                 </div>
                 <button
                   onClick={() => clone(t.id)}
-                  className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm flex items-center gap-1"
+                  className="btn-dark rounded-md px-3 py-1.5 text-sm flex items-center gap-1"
                 >
                   <Copy className="w-3.5 h-3.5" /> Använd mall
                 </button>
@@ -363,7 +363,7 @@ export default function TeacherModules() {
                   <button
                     onClick={acceptAiDraft}
                     disabled={aiBusy}
-                    className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2 disabled:opacity-50"
+                    className="btn-dark rounded-md px-4 py-2 flex items-center gap-2 disabled:opacity-50"
                   >
                     {aiBusy && <Loader2 className="w-4 h-4 animate-spin" />}
                     Skapa modulen

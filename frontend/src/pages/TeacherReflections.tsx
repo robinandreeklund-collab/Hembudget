@@ -177,7 +177,7 @@ export default function TeacherReflections() {
         </div>
 
         {err && (
-          <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
             {err}
           </div>
         )}
@@ -224,7 +224,7 @@ export default function TeacherReflections() {
               </ul>
             </aside>
 
-            <main className="bg-white rounded-xl border p-5 space-y-4">
+            <main className="bg-white border-[1.5px] border-rule p-5 space-y-4">
               {active ? (
                 <>
                   <div>
@@ -340,7 +340,7 @@ export default function TeacherReflections() {
                     <button
                       onClick={save}
                       disabled={busy || !feedback.trim()}
-                      className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+                      className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
                     >
                       {active.teacher_feedback
                         ? busy

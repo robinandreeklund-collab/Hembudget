@@ -267,7 +267,7 @@ export default function AdminAI() {
             <button
               onClick={saveKey}
               disabled={keyBusy || !newKey.trim()}
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+              className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
             >
               {keyBusy ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
