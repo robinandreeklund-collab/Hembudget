@@ -876,7 +876,7 @@ function SalaryRow({
         </div>
         <button
           onClick={() => setEditing((v) => !v)}
-          className="text-xs text-brand-600 hover:underline shrink-0"
+          className="text-xs nav-link shrink-0"
         >
           {editing ? "Stäng" : "Redigera"}
         </button>

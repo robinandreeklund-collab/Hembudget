@@ -279,7 +279,7 @@ function TemplateEditor({
                       onClick={() =>
                         updateCrit(i, { levels: [...c.levels, ""] })
                       }
-                      className="text-xs text-brand-600 hover:underline"
+                      className="text-xs nav-link"
                     >
                       + lägg till nivå
                     </button>
@@ -302,7 +302,7 @@ function TemplateEditor({
                 ],
               })
             }
-            className="mt-2 text-sm text-brand-600 hover:underline"
+            className="mt-2 text-sm nav-link"
           >
             + lägg till kriterium
           </button>

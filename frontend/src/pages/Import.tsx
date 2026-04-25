@@ -582,7 +582,7 @@ function ManualTxForm({ account }: { account: Account }) {
     <div className="mt-2 pt-2 border-t">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="text-xs text-brand-600 hover:underline"
+        className="text-xs nav-link"
       >
         {open ? "− Dölj manuell transaktion" : "+ Lägg till manuell transaktion"}
       </button>

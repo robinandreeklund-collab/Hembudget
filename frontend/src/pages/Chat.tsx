@@ -234,7 +234,7 @@ export default function Chat() {
                     key={q}
                     type="button"
                     onClick={() => sendMut.mutate(q)}
-                    className="block text-left w-full px-3 py-1.5 rounded border border-slate-200 hover:border-brand-400 hover:bg-brand-50 text-slate-700 transition"
+                    className="block text-left w-full px-3 py-1.5 rounded border border-slate-200 hover:border-brand-400 hover:bg-paper text-slate-700 transition"
                   >
                     {q}
                   </button>

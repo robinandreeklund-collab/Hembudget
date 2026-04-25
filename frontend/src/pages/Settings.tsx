@@ -331,7 +331,7 @@ export default function Settings() {
                         }
                       }}
                       disabled={restoreBackupMut.isPending}
-                      className="text-xs text-brand-600 hover:underline mr-3 disabled:opacity-50"
+                      className="text-xs nav-link mr-3 disabled:opacity-50"
                     >
                       Återställ
                     </button>

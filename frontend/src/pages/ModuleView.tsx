@@ -117,7 +117,7 @@ export default function ModuleView() {
         <aside className="space-y-3">
           <Link
             to="/modules"
-            className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+            className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
           >
             <ArrowLeft className="w-4 h-4" /> Din kursplan
           </Link>
@@ -730,7 +730,7 @@ function TaskPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
       {assignmentId && (
         <Link
           to={`/mortgage/${assignmentId}`}
-          className="inline-block bg-brand-50 border border-brand-300 text-brand-800 rounded-lg px-4 py-2 text-sm hover:bg-brand-100"
+          className="inline-block bg-brand-50 border border-brand-300 text-brand-800 rounded-lg px-4 py-2 text-sm hover:bg-paper"
         >
           Öppna kopplat uppdrag →
         </Link>

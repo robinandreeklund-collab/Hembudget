@@ -168,7 +168,7 @@ export default function AdminAI() {
       <div className="p-6 max-w-3xl mx-auto space-y-3">
         <Link
           to="/teacher"
-          className="text-sm text-brand-600 hover:underline flex items-center gap-1"
+          className="text-sm nav-link flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka
         </Link>
@@ -188,7 +188,7 @@ export default function AdminAI() {
       <div>
         <Link
           to="/teacher"
-          className="text-sm text-brand-600 hover:underline flex items-center gap-1"
+          className="text-sm nav-link flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka till lärarvyn
         </Link>

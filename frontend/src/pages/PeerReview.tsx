@@ -79,7 +79,7 @@ export default function PeerReview() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <Link
         to="/dashboard"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Dashboard
       </Link>
@@ -155,7 +155,7 @@ export default function PeerReview() {
               </button>
               <button
                 onClick={loadNext}
-                className="text-sm text-slate-600 hover:text-brand-700"
+                className="text-sm text-slate-600 hover:text-ink"
               >
                 Hoppa över
               </button>

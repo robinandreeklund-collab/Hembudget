@@ -186,8 +186,8 @@ function FeedbackButton({
         onClick={() => setOpen(true)}
         className={`p-1 rounded ${
           hasExisting
-            ? "text-brand-700 hover:bg-brand-50"
-            : "text-slate-500 hover:text-brand-700"
+            ? "text-brand-700 hover:bg-paper"
+            : "text-slate-500 hover:text-ink"
         }`}
         title={hasExisting ? "Redigera återkoppling" : "Ge återkoppling"}
       >

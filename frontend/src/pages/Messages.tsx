@@ -129,7 +129,7 @@ export default function Messages() {
             <div className="p-3 border-b bg-white sticky top-0">
               <Link
                 to="/teacher"
-                className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+                className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4" /> Lärarpanel
               </Link>

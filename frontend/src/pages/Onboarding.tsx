@@ -147,7 +147,7 @@ export default function Onboarding() {
   const overUnder = profile.net_salary_monthly - totalEdited;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-50 py-10 px-4">
+    <div className="min-h-screen bg-paper py-10 px-4">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-lg border border-slate-200 p-8 space-y-6">
         <div className="flex items-center gap-2 text-brand-600">
           <Sparkles className="w-6 h-6" />

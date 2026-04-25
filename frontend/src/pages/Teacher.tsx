@@ -476,7 +476,7 @@ export default function Teacher() {
                   <td className="p-3">
                     <button
                       onClick={() => openQr(s)}
-                      className="font-mono text-brand-600 bg-brand-50 hover:bg-brand-100 px-2 py-0.5 rounded inline-flex items-center gap-1"
+                      className="font-mono text-brand-600 bg-brand-50 hover:bg-paper px-2 py-0.5 rounded inline-flex items-center gap-1"
                       title="Visa QR-kod"
                     >
                       {s.login_code}
@@ -497,7 +497,7 @@ export default function Teacher() {
                     <button
                       onClick={() => viewAs(s.id)}
                       title="Titta som elev"
-                      className="p-1.5 hover:bg-brand-100 rounded text-brand-600"
+                      className="p-1.5 hover:bg-paper rounded text-brand-600"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
@@ -717,7 +717,7 @@ export default function Teacher() {
             </p>
             <button
               onClick={() => window.print()}
-              className="text-sm text-brand-600 hover:underline"
+              className="text-sm nav-link"
             >
               Skriv ut
             </button>

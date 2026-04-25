@@ -410,7 +410,7 @@ export default function Dashboard() {
                             "",
                         });
                       }}
-                      className="text-xs text-brand-600 hover:underline"
+                      className="text-xs nav-link"
                       title="Justera ingående saldo + startdatum om saldot inte stämmer mot banken"
                     >
                       Justera

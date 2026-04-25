@@ -215,7 +215,7 @@ export default function StudentDetail() {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <button
         onClick={() => navigate("/teacher")}
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Tillbaka till elevlistan
       </button>
@@ -461,7 +461,7 @@ export default function StudentDetail() {
             </div>
             {facit.rows.length > 0 && (
               <details className="text-sm">
-                <summary className="cursor-pointer text-slate-600 hover:text-brand-700">
+                <summary className="cursor-pointer text-slate-600 hover:text-ink">
                   Visa alla ({facit.rows.length} transaktioner)
                 </summary>
                 <table className="w-full mt-2 text-xs">

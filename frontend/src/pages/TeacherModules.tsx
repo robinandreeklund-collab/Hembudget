@@ -159,7 +159,7 @@ export default function TeacherModules() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <Link
         to="/teacher"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Lärarpanel
       </Link>
@@ -258,7 +258,7 @@ export default function TeacherModules() {
               </div>
               <Link
                 to={`/teacher/modules/${m.id}`}
-                className="p-2 text-slate-500 hover:text-brand-700"
+                className="p-2 text-slate-500 hover:text-ink"
                 title="Redigera"
               >
                 <Edit2 className="w-4 h-4" />

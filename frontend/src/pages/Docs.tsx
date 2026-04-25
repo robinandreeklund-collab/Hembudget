@@ -456,7 +456,7 @@ export default function Docs() {
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <Link
             to="/"
-            className="flex items-center gap-2 text-slate-700 hover:text-brand-700"
+            className="flex items-center gap-2 text-slate-700 hover:text-ink"
           >
             <ArrowLeft className="w-4 h-4" /> Startsidan
           </Link>
@@ -501,7 +501,7 @@ export default function Docs() {
           <div className="border-t pt-4">
             <Link
               to="/messages"
-              className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+              className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
             >
               <MessageCircle className="w-4 h-4" />
               Fråga din lärare

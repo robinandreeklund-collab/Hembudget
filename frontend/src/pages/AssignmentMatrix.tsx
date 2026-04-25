@@ -44,7 +44,7 @@ export default function AssignmentMatrix() {
     <div className="p-6 max-w-none space-y-4">
       <Link
         to="/teacher"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Lärarpanel
       </Link>

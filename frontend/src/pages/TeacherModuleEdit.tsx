@@ -126,7 +126,7 @@ export default function TeacherModuleEdit() {
       <div className="max-w-6xl mx-auto space-y-4">
         <Link
           to="/teacher/modules"
-          className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+          className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Alla moduler
         </Link>
@@ -493,7 +493,7 @@ function QuizEditor({
               },
             })
           }
-          className="text-sm text-brand-600 hover:underline"
+          className="text-sm nav-link"
         >
           + Lägg till alternativ
         </button>
@@ -551,7 +551,7 @@ function RubricEditor({
         </div>
         <button
           onClick={addCrit}
-          className="text-xs text-brand-600 hover:underline"
+          className="text-xs nav-link"
         >
           + Lägg till kriterium
         </button>
@@ -620,7 +620,7 @@ function RubricEditor({
               };
               setRubric(n);
             }}
-            className="text-xs text-brand-600 hover:underline"
+            className="text-xs nav-link"
           >
             + Lägg till nivå
           </button>

@@ -599,7 +599,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           <button
             onClick={() => generateMut.mutate()}
             disabled={generateMut.isPending}
-            className="text-brand-600 hover:underline"
+            className="nav-link"
           >
             {generateMut.isPending ? "Genererar…" : "Generera 3 mån"}
           </button>
@@ -625,7 +625,7 @@ function LoanSchedule({ loanId }: { loanId: number }) {
           <span className="text-slate-300">·</span>
           <button
             onClick={() => setAdding((a) => !a)}
-            className="text-brand-600 hover:underline flex items-center gap-1"
+            className="nav-link flex items-center gap-1"
           >
             <Plus className="w-3 h-3" /> Lägg till manuellt
           </button>

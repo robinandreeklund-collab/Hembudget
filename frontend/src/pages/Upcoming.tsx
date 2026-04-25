@@ -796,7 +796,7 @@ function UpcomingRow({
                     .then((b) => window.open(URL.createObjectURL(b), "_blank"))
                     .catch((e) => alert(String(e.message ?? e)));
                 }}
-                className="text-brand-600 hover:underline"
+                className="nav-link"
                 title="Öppna original-fakturan i ny flik"
               >
                 · 📎 se faktura
@@ -993,7 +993,7 @@ function LinesEditor({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="text-xs text-slate-600 hover:text-brand-700 inline-flex items-center gap-1"
+        className="text-xs text-slate-600 hover:text-ink inline-flex items-center gap-1"
       >
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         Fakturarader ({draft.length})
@@ -1060,7 +1060,7 @@ function LinesEditor({
             <button
               type="button"
               onClick={addRow}
-              className="text-xs text-brand-600 hover:text-brand-700"
+              className="text-xs nav-link"
             >
               + Lägg till rad
             </button>
@@ -1631,7 +1631,7 @@ function FindBankTxButton({ item }: { item: UpcomingItem }) {
       <span className="text-slate-400">·</span>
       <button
         onClick={() => setOpen(true)}
-        className="text-brand-600 hover:underline text-xs"
+        className="nav-link text-xs"
         title="Leta efter en befintlig bankrad och koppla (stödjer delbetalningar)"
       >
         hitta bankrad
