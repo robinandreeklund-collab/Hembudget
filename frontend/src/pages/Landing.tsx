@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "@/api/client";
+import { api, getApiBase } from "@/api/client";
 
 // ---------- Cell-data (32 begrepp) ----------
 
@@ -204,7 +204,7 @@ export default function Landing() {
       <Stats />
       <Logiken />
       <Why />
-      <SocialProof />
+      {/* <SocialProof /> — utkommenterad tills vi har riktiga pilotkunder */}
       <Gallery />
       <Pricing />
       <Faq />
@@ -932,46 +932,96 @@ function Why() {
 
 // ---------- Social proof + Vyer-galleri ----------
 
-function SocialProof() {
-  const schools = [
-    "Exempel­skolan",
-    "Ekonomi­linjen Malmö",
-    "Linné­skolan",
-    "Musik­gymnasiet",
-    "Fjäll­gymnasiet",
-  ];
-  return (
-    <section id="social" className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-14">
-        <div className="section-divider mb-8">I pilotprojekt tillsammans med</div>
-        <ul className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4 text-center">
-          {schools.map((s) => (
-            <li key={s} className="serif text-lg text-[#555]">{s}</li>
-          ))}
-        </ul>
-        <p className="mt-6 text-xs text-[#999] text-center serif-italic">
-          Riktiga logotyper läggs till efter pilotfasen.
-        </p>
-      </div>
-    </section>
-  );
-}
+// SocialProof: pilotskole-listan är utkommenterad tills vi har riktiga
+// pilotkunder att namnge. Återanvänd komponenten genom att lägga
+// tillbaka <SocialProof /> i render-trädet ovan när det är dags.
+// function SocialProof() {
+//   const schools = [
+//     "Exempelskolan",
+//     "Ekonomilinjen Malmö",
+//     "Linnéskolan",
+//     "Musikgymnasiet",
+//     "Fjällgymnasiet",
+//   ];
+//   return (
+//     <section id="social" className="border-t border-rule bg-white">
+//       <div className="max-w-7xl mx-auto px-6 py-14">
+//         <div className="section-divider mb-8">
+//           I pilotprojekt tillsammans med
+//         </div>
+//         <ul className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4 text-center">
+//           {schools.map((s) => (
+//             <li key={s} className="serif text-lg text-[#555]">{s}</li>
+//           ))}
+//         </ul>
+//         <p className="mt-6 text-xs text-[#999] text-center serif-italic">
+//           Riktiga logotyper läggs till efter pilotfasen.
+//         </p>
+//       </div>
+//     </section>
+//   );
+// }
+
+type GalleryAsset = {
+  id: number;
+  slot: string;
+  title: string;
+  body: string;
+  chip: string;
+  chip_color: string;
+  sort_order: number;
+  has_image: boolean;
+  image_url: string | null;
+};
+
+const FALLBACK_SHOTS: Array<{
+  chip: string; chipColor: CellColor; title: string; body: string;
+}> = [
+  { chip: "Lä", chipColor: "special", title: "Lärarens dashboard",
+    body: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm." },
+  { chip: "Mo", chipColor: "grund", title: "Elevens kursplan",
+    body: "Moduler steg för steg: läs, reflektera, quiz och uppdrag." },
+  { chip: "Ms", chipColor: "fordj", title: "Mastery-grafen",
+    body: "Per-kompetens mastery, milstolpar och nästa-steg-hint." },
+  { chip: "Pf", chipColor: "special", title: "Portfolio-PDF",
+    body: "Exporteras per elev eller som ZIP för hela klassen." },
+  { chip: "AI", chipColor: "special", title: "Fråga Ekon",
+    body: "Multi-turn AI-coach som anpassar svaren till elevens nivå." },
+  { chip: "Tt", chipColor: "risk", title: "Time on task",
+    body: "Se vilka steg som fastnar för eleverna i din klass." },
+];
 
 function Gallery() {
-  const shots: { chip: string; chipColor: CellColor; title: string; body: string }[] = [
-    { chip: "Lä", chipColor: "special", title: "Lärarens dashboard",
-      body: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm." },
-    { chip: "Mo", chipColor: "grund", title: "Elevens kursplan",
-      body: "Moduler steg för steg: läs, reflektera, quiz och uppdrag." },
-    { chip: "Ms", chipColor: "fordj", title: "Mastery-grafen",
-      body: "Per-kompetens mastery, milstolpar och nästa-steg-hint." },
-    { chip: "Pf", chipColor: "special", title: "Portfolio-PDF",
-      body: "Exporteras per elev eller som ZIP för hela klassen." },
-    { chip: "AI", chipColor: "special", title: "Fråga Ekon",
-      body: "Multi-turn AI-coach som anpassar svaren till elevens nivå." },
-    { chip: "Tt", chipColor: "risk", title: "Time on task",
-      body: "Se vilka steg som fastnar för eleverna i din klass." },
-  ];
+  const [assets, setAssets] = useState<GalleryAsset[] | null>(null);
+
+  useEffect(() => {
+    api<GalleryAsset[]>("/landing/gallery")
+      .then((rows) => setAssets(rows.length ? rows : null))
+      .catch(() => setAssets(null));
+  }, []);
+
+  // Tom server-respons eller fel → fall tillbaka på placeholder-kort
+  // så landningssidan aldrig är blank för en första-besökare.
+  const items = assets
+    ? assets.map((a) => ({
+        key: `${a.id}`,
+        chip: a.chip || "·",
+        chipColor: (a.chip_color || "grund") as CellColor,
+        title: a.title,
+        body: a.body,
+        imageUrl: a.has_image && a.image_url
+          ? `${getApiBase()}${a.image_url}`
+          : null,
+      }))
+    : FALLBACK_SHOTS.map((s) => ({
+        key: s.title,
+        chip: s.chip,
+        chipColor: s.chipColor,
+        title: s.title,
+        body: s.body,
+        imageUrl: null,
+      }));
+
   return (
     <section id="vyer" className="border-t border-rule">
       <div className="max-w-7xl mx-auto px-6 py-20">
@@ -981,18 +1031,55 @@ function Gallery() {
             Sex skärmar lärare och elever rör sig i.
           </h2>
           <p className="mt-4 lead">
-            Riktiga skärmdumpar kommer här efter pilotfasens första klass —
-            tills dess konceptbilder.
+            {assets && assets.some((a) => a.has_image)
+              ? "Skärmdumpar från det riktiga systemet."
+              : "Konceptbilder — riktiga skärmdumpar laddas upp av super-admin."}
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {shots.map((s) => (
-            <article key={s.title} className="feature-card aspect-[4/3] flex flex-col justify-between">
-              <span className={`feature-chip ${s.chipColor}`} aria-hidden="true">{s.chip}</span>
-              <div>
-                <h3 className="serif text-xl leading-snug">{s.title}</h3>
-                <p className="mt-2 body-prose text-sm">{s.body}</p>
-              </div>
+          {items.map((s) => (
+            <article
+              key={s.key}
+              className={
+                "feature-card overflow-hidden flex flex-col " +
+                (s.imageUrl ? "p-0" : "aspect-[4/3] justify-between")
+              }
+            >
+              {s.imageUrl ? (
+                <>
+                  <div className="relative bg-paper">
+                    <span
+                      className={`feature-chip ${s.chipColor} absolute top-3 left-3 z-10`}
+                      aria-hidden="true"
+                    >
+                      {s.chip}
+                    </span>
+                    <img
+                      src={s.imageUrl}
+                      alt={s.title}
+                      className="block w-full h-auto"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="p-5">
+                    <h3 className="serif text-xl leading-snug">{s.title}</h3>
+                    <p className="mt-2 body-prose text-sm">{s.body}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`feature-chip ${s.chipColor}`}
+                    aria-hidden="true"
+                  >
+                    {s.chip}
+                  </span>
+                  <div>
+                    <h3 className="serif text-xl leading-snug">{s.title}</h3>
+                    <p className="mt-2 body-prose text-sm">{s.body}</p>
+                  </div>
+                </>
+              )}
             </article>
           ))}
         </div>

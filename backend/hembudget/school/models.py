@@ -792,6 +792,48 @@ class AppConfig(MasterBase):
     )
 
 
+class LandingAsset(MasterBase):
+    """Skärmdumpar + texter för landningssidans Vyerna-galleri.
+
+    Sex fasta slot:ar seedas vid uppstart (slot = "dashboard",
+    "modules", "mastery", "portfolio", "ai", "time-on-task"). Super-
+    admin kan ladda upp/byta bilden via /admin/landing/gallery och
+    redigera title/body utan deploy. Image_blob lagras direkt i
+    master-DB:n så det följer med backupen — ingen separat fil-store
+    behövs.
+
+    Bilder serveras via en publik /landing/gallery/{id}/image-endpoint
+    så landningssidan kan visa dem utan auth.
+    """
+    __tablename__ = "landing_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Stabil slot-nyckel ("dashboard", "modules", osv) — låter UI:n
+    # placera specifika bilder i specifika kort. Unik så vi aldrig
+    # dubblerar slots av misstag.
+    slot: Mapped[str] = mapped_column(
+        String(40), nullable=False, unique=True,
+    )
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    chip: Mapped[str] = mapped_column(String(8), nullable=False, default="")
+    chip_color: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="grund",
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Bild + mimetype. NULL betyder "ingen uppladdad bild — visa
+    # placeholder-kortet på landningssidan".
+    image_blob: Mapped[Optional[bytes]] = mapped_column(
+        LargeBinary, nullable=True,
+    )
+    image_mime: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 class StudentActivity(MasterBase):
     """Audit-spår för meningsfulla handlingar eleven gör i scope-DB:n.
 

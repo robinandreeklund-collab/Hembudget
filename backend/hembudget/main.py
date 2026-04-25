@@ -16,7 +16,7 @@ faulthandler.enable()
 
 from .api import (
     admin, ai, ai_admin, auth, backup, balances, budget, chat, elpris,
-    email_auth, funds, ledger, loans, modules, reports, scenarios,
+    email_auth, funds, landing, ledger, loans, modules, reports, scenarios,
     school, settings_kv, smtp_admin, tax, transactions, transfers,
     upcoming, upload, utility,
 )
@@ -153,6 +153,7 @@ def build_app() -> FastAPI:
     app.include_router(modules.router)
     app.include_router(ai_admin.router)
     app.include_router(smtp_admin.router)
+    app.include_router(landing.router)
     app.include_router(ai.router)
 
     @app.get("/healthz")
@@ -340,6 +341,14 @@ def _school_bootstrap() -> None:
             if nm > 0:
                 logging.getLogger(__name__).info(
                     "school: seeded %d system modules", nm,
+                )
+            # Seed landningssidans gallery-slots (utan bilder — super-
+            # admin laddar upp via /admin/landing/gallery)
+            from .school.landing_seed import seed_landing_assets
+            nl = seed_landing_assets(s)
+            if nl > 0:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d landing asset slots", nl,
                 )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Brain, Check, Key, Loader2, Mail, Send, ShieldCheck,
-  Trash2, X, Zap,
+  ArrowLeft, Brain, Check, Image, Key, Loader2, Mail, Send, ShieldCheck,
+  Trash2, Upload, X, Zap,
 } from "lucide-react";
-import { api, ApiError } from "@/api/client";
+import { api, ApiError, getApiBase, getToken } from "@/api/client";
 
 type TeacherRow = {
   id: number;
@@ -303,6 +303,9 @@ export default function AdminAI() {
 
       {/* SMTP-konfiguration */}
       <SmtpSection />
+
+      {/* Landningssidans skärmdumpar */}
+      <LandingGallerySection />
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Totalt antal anrop" value={totalReq.toLocaleString("sv-SE")} />
@@ -768,5 +771,241 @@ function FormField({
       <div className="eyebrow mb-1">{label}</div>
       {children}
     </label>
+  );
+}
+
+
+// ---------- Landningssidans gallery ----------
+
+type LandingAsset = {
+  id: number;
+  slot: string;
+  title: string;
+  body: string;
+  chip: string;
+  chip_color: string;
+  sort_order: number;
+  has_image: boolean;
+  image_url: string | null;
+};
+
+function LandingGallerySection() {
+  const [assets, setAssets] = useState<LandingAsset[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function reload() {
+    try {
+      const rows = await api<LandingAsset[]>("/admin/landing/gallery");
+      setAssets(rows);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  if (err) {
+    return (
+      <section className="bg-white rounded-xl border border-slate-200 p-4">
+        <h2 className="font-medium mb-2 flex items-center gap-2">
+          <Image className="w-4 h-4" /> Landningssidans skärmdumpar
+        </h2>
+        <div className="text-xs text-rose-700">{err}</div>
+      </section>
+    );
+  }
+
+  if (assets === null) {
+    return (
+      <section className="bg-white rounded-xl border border-slate-200 p-4">
+        <h2 className="font-medium mb-2 flex items-center gap-2">
+          <Image className="w-4 h-4" /> Landningssidans skärmdumpar
+        </h2>
+        <div className="text-xs text-slate-500 flex items-center gap-2">
+          <Loader2 className="w-3 h-3 animate-spin" /> Laddar…
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+      <div>
+        <h2 className="font-medium flex items-center gap-2">
+          <Image className="w-4 h-4" /> Landningssidans skärmdumpar
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          Sex slots i "Vyerna"-galleriet på landningssidan. Ladda upp en
+          PNG/JPEG (max 5 MB) per slot. Tomma slots visas som
+          placeholder-kort.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {assets.map((a) => (
+          <LandingAssetEditor
+            key={a.id}
+            asset={a}
+            onSaved={reload}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LandingAssetEditor({
+  asset, onSaved,
+}: { asset: LandingAsset; onSaved: () => void }) {
+  const [title, setTitle] = useState(asset.title);
+  const [body, setBody] = useState(asset.body);
+  const [chip, setChip] = useState(asset.chip);
+  const [chipColor, setChipColor] = useState(asset.chip_color);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const previewUrl = file
+    ? URL.createObjectURL(file)
+    : asset.has_image && asset.image_url
+    ? `${getApiBase()}${asset.image_url}?v=${asset.id}-${asset.title}`
+    : null;
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try {
+      const form = new FormData();
+      form.set("title", title);
+      form.set("body", body);
+      form.set("chip", chip);
+      form.set("chip_color", chipColor);
+      form.set("sort_order", String(asset.sort_order));
+      if (file) form.set("image", file);
+      const tok = getToken();
+      const r = await fetch(
+        `${getApiBase()}/admin/landing/gallery/${asset.id}`,
+        {
+          method: "PUT",
+          body: form,
+          headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+        },
+      );
+      if (!r.ok) {
+        let detail = `${r.status}`;
+        try {
+          const j = await r.json();
+          detail = j.detail || detail;
+        } catch {/* */}
+        throw new Error(detail);
+      }
+      setFile(null);
+      setMsg("Sparat ✓");
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearImage() {
+    if (!confirm(`Ta bort bild från "${asset.title}"?`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api(`/admin/landing/gallery/${asset.id}/image`, {
+        method: "DELETE",
+      });
+      setFile(null);
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs eyebrow">{asset.slot}</div>
+        {asset.has_image && (
+          <button
+            onClick={clearImage}
+            disabled={busy}
+            className="text-xs text-rose-700 hover:underline disabled:opacity-50"
+          >
+            Ta bort bild
+          </button>
+        )}
+      </div>
+      <div className="aspect-[4/3] bg-slate-50 border border-slate-200 rounded overflow-hidden flex items-center justify-center">
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt={title}
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <div className="text-xs text-slate-400 text-center px-3">
+            Ingen bild uppladdad — visas som placeholder på landningssidan.
+          </div>
+        )}
+      </div>
+      <label className="block text-xs">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          className="block w-full text-xs"
+        />
+      </label>
+      <div className="grid grid-cols-3 gap-2">
+        <input
+          value={chip}
+          onChange={(e) => setChip(e.target.value.slice(0, 4))}
+          placeholder="Chip"
+          className="border border-slate-300 rounded px-2 py-1 text-sm"
+        />
+        <select
+          value={chipColor}
+          onChange={(e) => setChipColor(e.target.value)}
+          className="border border-slate-300 rounded px-2 py-1 text-sm col-span-2"
+        >
+          <option value="grund">grund</option>
+          <option value="fordj">fordj</option>
+          <option value="expert">expert</option>
+          <option value="konto">konto</option>
+          <option value="risk">risk</option>
+          <option value="special">special</option>
+        </select>
+      </div>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Titel"
+        className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+      />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Beskrivande text"
+        rows={2}
+        className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={save}
+          disabled={busy}
+          className="flex items-center gap-1 bg-ink text-white text-sm rounded px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+          {file ? "Ladda upp + spara" : "Spara"}
+        </button>
+        {msg && (
+          <span className="text-xs text-slate-600">{msg}</span>
+        )}
+      </div>
+    </div>
   );
 }
