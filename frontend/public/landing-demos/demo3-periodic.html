@@ -64,6 +64,21 @@
     width:56px;height:56px;border:2px solid var(--ink);background:var(--ink);color:#fff;
     font-family:'Spectral',serif;font-weight:800;font-size:22px;border-radius:50%;
   }
+  /* FAQ — native <details>/<summary> men med custom triangel + paper-stil */
+  details.faq{border-top:1px solid var(--rule);padding:18px 0;}
+  details.faq:last-of-type{border-bottom:1px solid var(--rule);}
+  details.faq > summary{
+    list-style:none;cursor:pointer;display:flex;justify-content:space-between;
+    align-items:center;gap:18px;font-family:'Spectral',serif;font-weight:600;
+    font-size:18px;color:var(--ink);padding:4px 0;
+  }
+  details.faq > summary::-webkit-details-marker{display:none;}
+  details.faq > summary .arrow{
+    width:16px;height:16px;border-right:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);
+    transform:rotate(45deg);transition:transform .2s;flex-shrink:0;margin-top:-3px;
+  }
+  details.faq[open] > summary .arrow{transform:rotate(225deg);margin-top:3px;}
+  details.faq > .answer{margin-top:10px;line-height:1.65;color:#333;font-size:15px;}
   /* Sektionsskiljelinje (centrerad ornament-streck) */
   .section-divider{display:flex;align-items:center;gap:10px;color:#999;font-size:11px;letter-spacing:.18em;text-transform:uppercase;}
   .section-divider:before,.section-divider:after{content:"";flex:1;height:1px;background:var(--rule);}
@@ -653,6 +668,47 @@
         </ul>
       </article>
     </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="border-t rule">
+  <div class="max-w-3xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">FAQ</div>
+    <h2 class="serif text-4xl md:text-5xl leading-[1.05] mb-10">Vanliga frågor.</h2>
+
+    <details class="faq">
+      <summary>Vad kostar Ekonomilabbet?<span class="arrow"></span></summary>
+      <div class="answer">Gratis under pilotåret 2026. Inga dolda kostnader. Från 2027 tas en per-elev-avgift ut, nivån bestäms tillsammans med pilotskolorna.</div>
+    </details>
+    <details class="faq">
+      <summary>Är det GDPR-säkert?<span class="arrow"></span></summary>
+      <div class="answer">Ja. All elevdata sparas i svensk molntjänst (Google Cloud Run, europe-north1). Vi delar inga personuppgifter med tredje part. AI-anropen anonymiseras — Claude ser aldrig elevers namn eller personnummer.</div>
+    </details>
+    <details class="faq">
+      <summary>Vad behöver vi installera?<span class="arrow"></span></summary>
+      <div class="answer">Inget. Ekonomilabbet är en webbapp. Läraren skapar konto, lägger in eleverna och eleverna loggar in med en 6-teckenskod eller QR-kod. Ingen installation, ingen app-store.</div>
+    </details>
+    <details class="faq">
+      <summary>Går det att använda utan AI?<span class="arrow"></span></summary>
+      <div class="answer">Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion som kan aktiveras per lärare.</div>
+    </details>
+    <details class="faq">
+      <summary>Kan elever komma åt varandras data?<span class="arrow"></span></summary>
+      <div class="answer">Nej. Varje elev har en egen krypterad SQLite-DB på servern, ingen cross-access även om de råkar i samma klass. Läraren ser alla sina elever men aldrig någon annan lärares.</div>
+    </details>
+    <details class="faq">
+      <summary>Vad händer med elevernas data när året är slut?<span class="arrow"></span></summary>
+      <div class="answer">Ingenting tvångsmässigt — datan är kvar tills läraren tar bort kontot. Vi exporterar gärna hela klassen till ZIP så du har en kopia innan du raderar.</div>
+    </details>
+    <details class="faq">
+      <summary>Vilken AI-modell används?<span class="arrow"></span></summary>
+      <div class="answer">Claude Haiku 4.5 för snabba uppgifter (kategori-check, feedback-förslag) och Claude Sonnet 4.6 för djupare uppgifter (rubric, elev-Q&amp;A, modul-generering). Prompt-caching används för kostnadskontroll.</div>
+    </details>
+    <details class="faq">
+      <summary>Kan jag importera befintliga moduler från andra system?<span class="arrow"></span></summary>
+      <div class="answer">Inte som automatisk import än. Moduler skapas i plattformen eller klonas från systemmallar/andra lärares delade moduler. Säg till oss vad ni använder — vi bygger importen om det finns efterfrågan.</div>
+    </details>
   </div>
 </section>
 
