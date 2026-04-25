@@ -272,8 +272,11 @@ body {
   .feature-card {
     border: 1.5px solid theme("colors.ink");
     background: #fff;
-    padding: 20px;
+    padding: 16px;
     transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  @media (min-width: 768px) {
+    .feature-card { padding: 20px; }
   }
   .feature-card:hover {
     transform: translateY(-3px);

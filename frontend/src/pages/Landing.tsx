@@ -333,40 +333,40 @@ function Hero() {
   }, [heatmapOn]);
 
   return (
-    <section className="relative max-w-7xl mx-auto px-6 pt-16 pb-12 grid md:grid-cols-[1fr_1.4fr] gap-12 items-start">
+    <section className="relative max-w-7xl mx-auto px-4 md:px-6 pt-10 md:pt-16 pb-10 md:pb-12 grid md:grid-cols-[1fr_1.4fr] gap-8 md:gap-12 items-start">
       <DriftParticles />
       <div className="relative z-[1]">
-        <div className="eyebrow mb-5">Ekonomilabbet · utgåva 2026</div>
-        <h1 className="serif text-5xl md:text-6xl leading-[1.02]">
+        <div className="eyebrow mb-4 md:mb-5">Ekonomilabbet · utgåva 2026</div>
+        <h1 className="serif text-4xl md:text-6xl leading-[1.05] md:leading-[1.02]">
           Det periodiska<br />systemet för pengar.
         </h1>
         <p className="mt-6 lead max-w-md">
           Från <span className="kbd">Lö</span> (lön) till <span className="kbd">Rb</span> (räntebindning) —
           32 grundbegrepp varje ungdom behöver för att inte krocka
-          med vuxenlivet. Hovra över en cell. Resten av kartan
-          öppnar sig.
+          med vuxenlivet. Tryck eller hovra över en cell — resten av
+          kartan öppnar sig.
         </p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link to="/signup/teacher" className="btn-dark px-5 py-3 rounded-md">
+        <div className="mt-7 md:mt-8 grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 md:gap-3">
+          <Link to="/signup/teacher" className="btn-dark px-4 md:px-5 py-3 rounded-md text-center text-sm md:text-base">
             För skolan
           </Link>
-          <Link to="/signup/parent" className="btn-dark px-5 py-3 rounded-md">
+          <Link to="/signup/parent" className="btn-dark px-4 md:px-5 py-3 rounded-md text-center text-sm md:text-base">
             För hemmet
           </Link>
-          <a href="#flow" className="btn-outline px-5 py-3 rounded-md">
+          <a href="#flow" className="btn-outline px-4 md:px-5 py-3 rounded-md text-center text-sm md:text-base">
             Se hur det funkar
           </a>
           <button
             type="button"
             onClick={() => setHeatmapOn((v) => !v)}
             aria-pressed={heatmapOn}
-            className="btn-outline px-5 py-3 rounded-md"
+            className="btn-outline px-4 md:px-5 py-3 rounded-md text-center text-sm md:text-base"
           >
             {heatmapOn ? "Ta bort värmekarta" : "Lägg på värmekarta"}
           </button>
         </div>
 
-        <ul className="mt-10 text-sm space-y-3">
+        <ul className="mt-8 md:mt-10 text-sm space-y-2.5 md:space-y-3">
           <li className="flex items-center gap-3"><LegendDot bg="#eef3ff" />Grundkompetens (5)</li>
           <li className="flex items-center gap-3"><LegendDot bg="#fff3e6" />Fördjupning (5)</li>
           <li className="flex items-center gap-3"><LegendDot bg="#f3eaff" />Expert (2)</li>
@@ -638,7 +638,7 @@ const FEATURES: Feature[] = [
 function Features() {
   return (
     <section id="funktioner" className="border-t border-rule">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">Funktionerna</div>
         <div className="max-w-3xl mb-12">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
@@ -676,7 +676,7 @@ function Features() {
 function Flow() {
   return (
     <section id="flow" className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">Så funkar det</div>
         <div className="max-w-3xl mb-14">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">Fem nyckelmoment.</h2>
@@ -731,7 +731,7 @@ function FlowStep({
   num: number; title: string; body: string; mock: React.ReactNode; reverse?: boolean;
 }) {
   return (
-    <div className="grid md:grid-cols-2 gap-10 items-center">
+    <div className="grid md:grid-cols-2 gap-6 md:gap-10 items-center">
       <div className={reverse ? "md:order-2" : ""}>
         <div className="flow-num mb-5">{num}</div>
         <h3 className="serif text-3xl leading-tight">{title}</h3>
@@ -900,7 +900,7 @@ function Stats() {
 
   return (
     <section id="stats" className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-14">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-14">
         <div className="section-divider mb-10">I produktion just nu</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-8">
           {items.map((it) => (
@@ -939,9 +939,9 @@ function Logiken() {
   ];
   return (
     <section className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-12">Logiken</div>
-        <div className="grid md:grid-cols-3 gap-x-12 gap-y-10">
+        <div className="grid md:grid-cols-3 gap-x-8 md:gap-x-12 gap-y-8 md:gap-y-10">
           {items.map((it) => (
             <div key={it.n}>
               <div className="eyebrow mb-2">{it.n}</div>
@@ -958,9 +958,9 @@ function Logiken() {
 function Why() {
   return (
     <section id="why" className="border-t border-rule">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">Problemet</div>
-        <div className="grid md:grid-cols-[1.1fr_1fr] gap-12 items-start">
+        <div className="grid md:grid-cols-[1.1fr_1fr] gap-8 md:gap-12 items-start">
           <div>
             <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
               Ekonomi är ett livskunskaps­ämne.<br />
@@ -1010,7 +1010,7 @@ function Why() {
 function Audiences() {
   return (
     <section id="malgrupper" className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">Två sätt att använda</div>
         <div className="max-w-3xl mb-12">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
@@ -1138,7 +1138,7 @@ function Audiences() {
 //   ];
 //   return (
 //     <section id="social" className="border-t border-rule bg-white">
-//       <div className="max-w-7xl mx-auto px-6 py-14">
+//       <div className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-14">
 //         <div className="section-divider mb-8">
 //           I pilotprojekt tillsammans med
 //         </div>
@@ -1217,7 +1217,7 @@ function Gallery() {
 
   return (
     <section id="vyer" className="border-t border-rule">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">Vyerna</div>
         <div className="max-w-3xl mb-10">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
@@ -1286,7 +1286,7 @@ function Gallery() {
 function Pricing() {
   return (
     <section id="pricing" className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-6 py-20">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">Pris</div>
         <div className="max-w-3xl mb-12">
           <h2 className="serif text-4xl md:text-5xl leading-[1.05]">Enkel prismodell.</h2>
@@ -1373,7 +1373,7 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
 function Faq() {
   return (
     <section id="faq" className="border-t border-rule">
-      <div className="max-w-3xl mx-auto px-6 py-20">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-14 md:py-20">
         <div className="section-divider mb-10">FAQ</div>
         <h2 className="serif text-4xl md:text-5xl leading-[1.05] mb-10">
           Vanliga frågor.
@@ -1397,7 +1397,7 @@ function Faq() {
 function FounderQuote() {
   return (
     <section className="border-t border-rule">
-      <div className="max-w-3xl mx-auto px-6 py-20 text-center">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-14 md:py-20 text-center">
         <div className="serif text-7xl leading-none text-ink/15 select-none">
           &ldquo;
         </div>
@@ -1414,7 +1414,7 @@ function FounderQuote() {
 
 function Cta() {
   return (
-    <section className="max-w-7xl mx-auto px-6 py-24 text-center">
+    <section className="max-w-7xl mx-auto px-4 md:px-6 py-16 md:py-24 text-center">
       <div className="eyebrow mb-4">Kom igång</div>
       <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
         Det vuxenlivs­ämne som varken skolan eller köksbordet
@@ -1445,7 +1445,7 @@ function Cta() {
 function Contact() {
   return (
     <section id="kontakt" className="border-t border-rule bg-white">
-      <div className="max-w-3xl mx-auto px-6 py-16 text-center">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-12 md:py-16 text-center">
         <div className="section-divider mb-8">Kontakt</div>
         <h2 className="serif text-3xl md:text-4xl leading-[1.05]">
           Frågor, förslag eller samarbeten?
@@ -1473,7 +1473,7 @@ function Contact() {
 function Footer() {
   return (
     <footer className="border-t border-rule">
-      <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-3 gap-10 text-sm">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-12 grid md:grid-cols-3 gap-6 md:gap-10 text-sm">
         <div>
           <div className="flex items-center gap-2 mb-3">
             <svg width="22" height="22" viewBox="0 0 40 40" aria-hidden="true">
@@ -1506,7 +1506,7 @@ function Footer() {
         </div>
       </div>
       <div className="border-t border-rule">
-        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-[#888] flex flex-wrap justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-5 text-xs text-[#888] flex flex-wrap justify-between gap-3">
           <div>© {new Date().getFullYear()} Ekonomilabbet · För skolan och hemmet</div>
           <div className="serif-italic">Prototyp — utgåva 2026</div>
         </div>
