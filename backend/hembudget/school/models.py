@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -244,7 +245,9 @@ class StudentDataGenerationRun(MasterBase):
         nullable=False, index=True,
     )
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)  # YYYY-MM
-    seed: Mapped[int] = mapped_column(Integer, nullable=False)
+    # BigInteger eftersom seed:s är hela uint32-rangen (0..2**32-1)
+    # och Postgres INTEGER bara går till 2**31-1 ≈ 2.1 mrd.
+    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     stats: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(
@@ -280,7 +283,9 @@ class ScenarioBatch(MasterBase):
         nullable=False, index=True,
     )
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)
-    seed: Mapped[int] = mapped_column(Integer, nullable=False)
+    # BigInteger eftersom seed:s är hela uint32-rangen (0..2**32-1)
+    # och Postgres INTEGER bara går till 2**31-1 ≈ 2.1 mrd.
+    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
