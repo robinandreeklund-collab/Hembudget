@@ -31,6 +31,33 @@ def _require_school_mode() -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "School mode disabled")
 
 
+def _resolve_student_actor(info: TokenInfo) -> int:
+    """Returnera student_id för anropet:
+    - Elev-token: info.student_id direkt.
+    - Lärare med x-as-student-impersonation: middleware har redan
+      satt actor_student_id i ContextVar:n efter att verifierat att
+      eleven tillhör läraren. Vi läser den.
+
+    Höjer 403 om ingen student-kontext finns.
+
+    Anledning till helpern: en lärare som klickar runt i sin elev-vy
+    via impersonation måste kunna läsa /student/* endpoints. Tidigare
+    krävde de hårt info.role == "student", vilket fick lärare att
+    tappa token+session och flygas tillbaka till landningssidan så
+    fort de öppnade en modul."""
+    if info.role == "student" and info.student_id:
+        return info.student_id
+    if info.role == "teacher":
+        from ..school.engines import get_current_actor_student
+        sid = get_current_actor_student()
+        if sid is not None:
+            return sid
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Saknar student-kontext (sätt x-as-student för lärar-impersonation)",
+    )
+
+
 # ---------- Schemas ----------
 
 class ModuleStepIn(BaseModel):
@@ -903,13 +930,12 @@ def student_mastery(
     info: TokenInfo = Depends(require_token),
 ) -> list[CompetencyMasteryOut]:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     out: list[CompetencyMasteryOut] = []
     with master_session() as s:
-        mastery_by_cid = _compute_mastery_for_student(s, info.student_id)
+        mastery_by_cid = _compute_mastery_for_student(s, student_id)
         remaining_by_cid = _compute_steps_remaining_by_competency(
-            s, info.student_id,
+            s, student_id,
         )
         comps = s.query(Competency).all()
         for c in comps:
@@ -937,12 +963,11 @@ def student_achievements(
 ) -> dict:
     """Alla prestationer eleven har tjänat + aktuell streak-info."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     from ..school import achievements as ach
     with master_session() as s:
-        earned = ach.list_earned(s, info.student_id)
-        current, longest = ach.compute_streak(s, info.student_id)
+        earned = ach.list_earned(s, student_id)
+        current, longest = ach.compute_streak(s, student_id)
     # Inkludera även "ej-tjänade" så eleven ser vad som finns att få
     earned_keys = {e["key"] for e in earned}
     available = [
@@ -1351,10 +1376,9 @@ def student_recommendations(
     info: TokenInfo = Depends(require_token),
 ) -> list[RecommendationOut]:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
-        return _recommend_modules_for_student(s, info.student_id)
+        return _recommend_modules_for_student(s, student_id)
 
 
 @router.get(
@@ -1408,11 +1432,10 @@ def peer_review_next(
     samma modul, andra elever hos samma lärare, och endast för steg
     där läraren aktiverat peer_review=true i params."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     import random
     with master_session() as s:
-        me = s.query(Student).filter(Student.id == info.student_id).first()
+        me = s.query(Student).filter(Student.id == student_id).first()
         if not me:
             raise HTTPException(404, "Student not found")
         # Hitta progress-rader från andra elever hos samma lärare, på
@@ -1501,8 +1524,7 @@ def peer_review_received(
     """Peer-feedback jag fått från andra elever — anonymt (inget
     reviewer-namn visas)."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     out: list[PeerFeedbackReceived] = []
     with master_session() as s:
         rows = (
@@ -1512,7 +1534,7 @@ def peer_review_received(
                 PeerFeedback.target_progress_id == StudentStepProgress.id,
             )
             .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
-            .filter(StudentStepProgress.student_id == info.student_id)
+            .filter(StudentStepProgress.student_id == student_id)
             .order_by(PeerFeedback.created_at.desc())
             .all()
         )
@@ -1624,10 +1646,9 @@ def student_portfolio_pdf(info: TokenInfo = Depends(require_token)):
     from fastapi.responses import Response
     from ..teacher.portfolio_pdf import build_portfolio_pdf
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
-        data = _collect_portfolio(s, info.student_id)
+        data = _collect_portfolio(s, student_id)
     if not data or not data.get("profile"):
         raise HTTPException(404, "Elev eller profil saknas")
     pdf = build_portfolio_pdf(**data)
@@ -1739,13 +1760,12 @@ def student_modules(
     info: TokenInfo = Depends(require_token),
 ) -> list[StudentModuleOut]:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     out: list[StudentModuleOut] = []
     with master_session() as s:
         rows = (
             s.query(StudentModule)
-            .filter(StudentModule.student_id == info.student_id)
+            .filter(StudentModule.student_id == student_id)
             .order_by(StudentModule.sort_order)
             .all()
         )
@@ -1757,7 +1777,7 @@ def student_modules(
             completed = (
                 s.query(StudentStepProgress)
                 .filter(
-                    StudentStepProgress.student_id == info.student_id,
+                    StudentStepProgress.student_id == student_id,
                     StudentStepProgress.step_id.in_(step_ids),
                     StudentStepProgress.completed_at.isnot(None),
                 )
@@ -1780,26 +1800,26 @@ def student_module_detail(
     info: TokenInfo = Depends(require_token),
 ) -> ModuleDetailOut:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         sm = s.query(StudentModule).filter(
-            StudentModule.student_id == info.student_id,
+            StudentModule.student_id == student_id,
             StudentModule.module_id == module_id,
         ).first()
         if not sm:
-            raise HTTPException(404, "Modulen är inte tilldelad dig")
+            raise HTTPException(404, "Modulen är inte tilldelad")
         m = s.query(Module).filter(Module.id == module_id).first()
         if not m:
             raise HTTPException(404, "Module not found")
-        # Markera modulen som startad om första gången
-        if not sm.started_at:
+        # Markera modulen som startad om första gången — bara om eleven
+        # själv öppnar (inte när läraren impersonerar och kollar).
+        if not sm.started_at and info.role == "student":
             sm.started_at = datetime.utcnow()
         # Auto-utvärdera alla task-steg så att modul-vyn visar korrekt
         # antal-klara direkt om eleven precis fyllt budget/importerat osv.
         for st in m.steps:
             if st.kind == "task":
-                _evaluate_task_step(s, st, info.student_id)
+                _evaluate_task_step(s, st, student_id)
         base = _module_to_out(m)
         return ModuleDetailOut(
             **base.model_dump(),
@@ -1813,26 +1833,25 @@ def student_step_progress(
     info: TokenInfo = Depends(require_token),
 ) -> StudentStepOut:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         st = s.query(ModuleStep).filter(ModuleStep.id == step_id).first()
         if not st:
             raise HTTPException(404, "Step not found")
         # Säkerställ att eleven är tilldelad modulen
         sm = s.query(StudentModule).filter(
-            StudentModule.student_id == info.student_id,
+            StudentModule.student_id == student_id,
             StudentModule.module_id == st.module_id,
         ).first()
         if not sm:
-            raise HTTPException(403, "Modulen är inte tilldelad dig")
+            raise HTTPException(404, "Modulen är inte tilldelad")
         # Auto-utvärdera task-steg mot elevens scope-DB innan vi läser
         # progress — gör att UI:t alltid ser senaste live-status.
         auto_status, auto_progress = _evaluate_task_step(
-            s, st, info.student_id,
+            s, st, student_id,
         )
         prog = s.query(StudentStepProgress).filter(
-            StudentStepProgress.student_id == info.student_id,
+            StudentStepProgress.student_id == student_id,
             StudentStepProgress.step_id == step_id,
         ).first()
         peer: list[PeerFeedbackAnon] = []
