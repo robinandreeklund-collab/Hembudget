@@ -116,6 +116,114 @@ ACCOUNT_STATEMENT_TEMPLATE = {
 }
 
 
+# Mall: "Buffert — när livet smäller till"
+BUFFER_TEMPLATE = {
+    "title": "Buffert — när livet smäller till",
+    "summary": "Bygg upp en sparbuffert som klarar ett oväntat slag — tandläkare, trasig mobil, sjukdagar.",
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är en buffert?",
+            "content": (
+                "En buffert är pengar du har sparat undan för det "
+                "OVÄNTADE — inte för en semester eller en ny telefon, utan "
+                "för när tandläkaren säger 4 200 kr eller diskmaskinen säger "
+                "upp sig en tisdag i februari.\n\n"
+                "Tumregeln: 2-3 månadslöner i buffert är ett bra mål för "
+                "en vuxen. För dig som elev kan ett mindre mål (5-10 000 kr) "
+                "räcka för att täcka det vanligaste oväntade."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad räknas som 'oväntat'?",
+            "content": None,
+            "params": {
+                "question": "Vilka av dessa borde bufferten täcka?",
+                "options": [
+                    "Trasig laptop som du måste ha för skolan",
+                    "Konsertbiljett du köper på ett impuls",
+                    "Tandläkare-räkning på 3 800 kr",
+                    "Resa du planerat i ett halvår",
+                ],
+                "correct_indices": [0, 2],
+                "explanation": (
+                    "Buffert = pengar för OVÄNTAT som du måste fixa NU. "
+                    "Konserter och planerade resor är 'roligt' och borde "
+                    "ha eget sparmål. Trasig dator + tandläkare är "
+                    "klassisk buffert-användning."
+                ),
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Räkna ut ditt eget buffert-mål",
+            "content": (
+                "Ett bra första buffert-mål är ungefär två månaders "
+                "fasta utgifter (hyra, abonnemang, mat). \n\n"
+                "Exempel: hyra 5 200 + mat 3 500 + abonnemang 700 = "
+                "9 400 kr/månad. Två månader = 18 800 kr som mål.\n\n"
+                "Vid 1 500 kr sparat per månad tar det ~13 månader. "
+                "Vid 750 kr/månad → 25 månader. Bygg vad du kan, varje "
+                "månad räknas."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Sätt ett konkret sparmål",
+            "content": (
+                "Räkna ut två månaders fasta utgifter och be din lärare "
+                "skapa ett 'Spara X kr'-uppdrag åt dig med det beloppet. "
+                "Om du redan har det — försök spara minst 10 % av "
+                "nettolönen denna månad."
+            ),
+            "params": {"assignment_kind": "save_amount"},
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad skulle gå sönder först hos dig?",
+            "content": (
+                "Tänk dig att du fick en oväntad räkning på 5 000 kr "
+                "imorgon. Vad skulle den vara på? Hur skulle du betala "
+                "den utan buffert? Vad skulle du behöva ge upp för att "
+                "fixa den?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "konkret",
+                        "name": "Konkret",
+                        "levels": [
+                            "Allmänt",
+                            "Specifikt scenario",
+                            "Specifikt scenario + plan",
+                        ],
+                    },
+                    {
+                        "key": "ärlighet",
+                        "name": "Ärlighet",
+                        "levels": ["Generellt", "Personligt"],
+                    },
+                ],
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Var ska bufferten ligga?",
+            "content": (
+                "Bufferten ska INTE ligga på lönekontot — då försvinner "
+                "den. Och inte i fonder/aktier — där kan värdet vara nere "
+                "när du behöver pengarna.\n\n"
+                "Bästa platsen: ett separat sparkonto med fri uttag och "
+                "minst lite ränta. Många banker har 'flexibelt sparkonto' "
+                "med 1-3 % ränta. Inte mycket, men bättre än lönekontots "
+                "0 %."
+            ),
+        },
+    ],
+}
+
+
 # Mall: "Din första månad"
 FIRST_MONTH_TEMPLATE = {
     "title": "Din första månad",
@@ -264,7 +372,7 @@ def seed_system_modules(master_session) -> int:
         ).all()
     }
     n = 0
-    for tpl in [FIRST_MONTH_TEMPLATE, ACCOUNT_STATEMENT_TEMPLATE]:
+    for tpl in [FIRST_MONTH_TEMPLATE, ACCOUNT_STATEMENT_TEMPLATE, BUFFER_TEMPLATE]:
         if tpl["title"] in existing:
             continue
         m = Module(
