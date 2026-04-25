@@ -113,8 +113,13 @@ body {
     transform: translateY(-3px);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
     background: #fffef5;
+    z-index: 31;
   }
-  .elem:focus-visible { outline: 2px solid theme("colors.ink"); outline-offset: 2px; }
+  .elem:focus-visible {
+    outline: 2px solid theme("colors.ink");
+    outline-offset: 2px;
+    z-index: 31;
+  }
   .elem .num { font-size: 10px; color: #666; }
   .elem .sym {
     font-family: "Spectral", serif;
