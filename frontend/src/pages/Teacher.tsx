@@ -305,8 +305,9 @@ export default function Teacher() {
             <Link
               to="/teacher/admin-ai"
               className="border-[1.5px] border-ink bg-paper hover:bg-[#fffef5] rounded-md px-4 py-2 flex items-center gap-2 text-ink"
+              title="Super-admin · AI, lärar-toggel, SMTP/Gmail, API-nyckel"
             >
-              🧠 AI-admin
+              ⚙ Inställningar
             </Link>
           )}
           <button
@@ -323,6 +324,8 @@ export default function Teacher() {
           </button>
         </div>
       </div>
+
+      {isSuperAdmin && <SmtpStatusCallout />}
 
       {showFamilies && <FamilyManager onChange={reload} />}
 
@@ -724,6 +727,56 @@ export default function Teacher() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- SMTP-status-callout (visas bara för super-admin) ----------
+
+function SmtpStatusCallout() {
+  const [cfg, setCfg] = useState<{ configured: boolean; source: string } | null>(null);
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem("hembudget_smtp_callout_dismissed") === "1",
+  );
+
+  useEffect(() => {
+    api<{ configured: boolean; source: string }>("/admin/smtp/config")
+      .then(setCfg)
+      .catch(() => setCfg(null));
+  }, []);
+
+  if (!cfg || cfg.configured || dismissed) return null;
+
+  return (
+    <div className="border-l-[3px] border-ink bg-white p-4 flex items-start gap-4">
+      <div className="text-2xl shrink-0" aria-hidden="true">✉</div>
+      <div className="flex-1">
+        <div className="serif text-lg leading-tight">
+          E-post är inte konfigurerat än.
+        </div>
+        <p className="body-prose text-sm mt-1">
+          Utan SMTP kan nya lärare inte verifiera sin e-post och elever
+          kan inte återställa lösenord. Sätt Gmail app-password (eller
+          annan SMTP) under <strong>⚙ Inställningar</strong>.
+        </p>
+        <div className="mt-3 flex gap-2 items-center">
+          <Link
+            to="/teacher/admin-ai"
+            className="btn-dark rounded-md px-4 py-2 text-sm"
+          >
+            Öppna inställningar
+          </Link>
+          <button
+            onClick={() => {
+              sessionStorage.setItem("hembudget_smtp_callout_dismissed", "1");
+              setDismissed(true);
+            }}
+            className="text-sm text-[#888] hover:text-ink px-3 py-2"
+          >
+            Påminn mig nästa session
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
