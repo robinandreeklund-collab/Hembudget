@@ -539,7 +539,13 @@ function SmtpSection() {
       if (e instanceof ApiError && e.status === 503) {
         setErr("SMTP är inte konfigurerat — fyll i config först.");
       } else if (e instanceof ApiError && e.status === 502) {
-        setErr("Mailutskicket misslyckades — kolla host/port/lösenord.");
+        // Backend skickar { detail: { message, hint } } så super-admin
+        // ser exakt vad SMTP-servern svarade och hur det kan fixas.
+        const body = e.body as { detail?: { message?: string; hint?: string } } | undefined;
+        const detail = body?.detail;
+        const message = detail?.message ?? "Kunde inte skicka mail (okänt fel)";
+        const hint = detail?.hint;
+        setErr(hint ? `${message}\n\n→ ${hint}` : message);
       } else {
         setErr(e instanceof Error ? e.message : String(e));
       }
@@ -657,6 +663,44 @@ function SmtpSection() {
         </FormField>
       </div>
 
+      <details className="border-l-[3px] border-ink pl-4 py-1">
+        <summary className="cursor-pointer eyebrow">
+          Konfigurera Gmail (vanligaste fallet)
+        </summary>
+        <div className="mt-3 body-prose text-sm space-y-2">
+          <p>
+            Gmail kräver ett <strong>app-password</strong> (16 tecken,
+            inga mellanslag). Vanligt Gmail-lösen funkar INTE via SMTP.
+          </p>
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>Slå på 2-stegs-verifiering på Google-kontot om du inte redan har det.</li>
+            <li>
+              Gå till{" "}
+              <a
+                href="https://myaccount.google.com/apppasswords"
+                target="_blank"
+                rel="noreferrer"
+                className="nav-link"
+              >
+                myaccount.google.com/apppasswords
+              </a>
+            </li>
+            <li>Skapa ett nytt app-password (välj "Mail" + "Övrigt: Ekonomilabbet").</li>
+            <li>
+              Fyll i nedan: host <span className="kbd">smtp.gmail.com</span>,
+              port <span className="kbd">587</span>, STARTTLS PÅ, användare =
+              full mail-adress (info@…), lösenord = de 16 tecknen utan
+              mellanslag.
+            </li>
+            <li>Klicka <strong>Spara config</strong> och sen <strong>Skicka testmail</strong>.</li>
+          </ol>
+          <p className="text-xs text-[#888] serif-italic mt-2">
+            Får du fel? Felmeddelandet under testmail-knappen visar exakt
+            vad SMTP-servern svarade med en hint om hur det fixas.
+          </p>
+        </div>
+      </details>
+
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={save}
@@ -708,7 +752,7 @@ function SmtpSection() {
         </div>
       )}
       {err && (
-        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-2 whitespace-pre-line">
           {err}
         </div>
       )}

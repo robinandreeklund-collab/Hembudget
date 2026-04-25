@@ -197,8 +197,47 @@ def send_test_mail(
         raise HTTPException(503, str(e))
     except Exception as e:
         log.exception("smtp-test misslyckades")
+        # Klassificera vanliga fel så super-admin direkt ser vad som
+        # är problemet — SMTPLib-undantag har specifika klassnamn vi kan
+        # mönstermatcha mot.
+        cls = type(e).__name__
+        msg = str(e)
+        hint = ""
+        low = (msg + " " + cls).lower()
+        if "authentication" in low or "username and password" in low or "535" in msg:
+            hint = (
+                "Inloggningen avvisades. Kolla att du använder ett Gmail "
+                "APP-PASSWORD (16 tecken utan mellanslag) — vanligt Gmail-"
+                "lösen funkar INTE via SMTP. Skapa app-password på "
+                "https://myaccount.google.com/apppasswords (kräver 2-stegs)."
+            )
+        elif "name or service not known" in low or "getaddrinfo" in low:
+            hint = (
+                "Kunde inte slå upp SMTP-host. Kolla att host:en är skriven "
+                "rätt (för Gmail: smtp.gmail.com)."
+            )
+        elif "connection refused" in low or "connectionrefused" in low:
+            hint = (
+                "Servern svarade inte på den porten. Gmail använder 587 "
+                "med STARTTLS eller 465 med SSL — kolla att port + STARTTLS-"
+                "flaggan stämmer ihop."
+            )
+        elif "ssl" in low or "wrap_socket" in low or "certificate" in low:
+            hint = (
+                "TLS-handshake misslyckades. För Gmail port 587: ha STARTTLS "
+                "PÅ. För port 465: ha STARTTLS AV (då används implicit SSL)."
+            )
+        elif "timed out" in low or "timeout" in low:
+            hint = (
+                "Anslutningen tog för lång tid. Cloud Run kan blockera "
+                "utgående SMTP — testa från lokal körning först, eller "
+                "använd en HTTP-baserad SMTP-relay (SendGrid, Postmark)."
+            )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            f"Kunde inte skicka mail: {e}",
+            detail={
+                "message": f"SMTP-fel ({cls}): {msg}",
+                "hint": hint,
+            },
         )
     return {"ok": True, "to": str(payload.to)}
