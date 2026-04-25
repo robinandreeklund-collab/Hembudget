@@ -107,13 +107,14 @@ function NavItems({ onClick }: { onClick?: () => void }) {
 }
 
 function Brand() {
-  const { role, schoolMode } = useAuth();
+  const { role, schoolMode, teacherMeta } = useAuth();
   const isStudent = role === "student";
+  const isFamily = teacherMeta?.is_family_account === true;
   const title = schoolMode || isStudent ? "Ekonomilabbet" : "Hembudget";
   const subtitle = isStudent
     ? "Övning – inte riktiga pengar"
     : schoolMode
-    ? "Lärarpanel"
+    ? (isFamily ? "Familjepanel" : "Lärarpanel")
     : "Lokalt · Nemotron Nano 3";
   return (
     <div className="p-5 border-b border-rule">
@@ -148,9 +149,12 @@ export function Sidebar() {
 }
 
 function UserFooter({ onAction }: { onAction?: () => void } = {}) {
-  const { role, asStudent, impersonate, logout } = useAuth();
+  const { role, asStudent, impersonate, logout, teacherMeta } = useAuth();
   const isStudent = role === "student";
   const isImpersonating = role === "teacher" && Boolean(asStudent);
+  const isFamily = teacherMeta?.is_family_account === true;
+  const adminLabel = isFamily ? "förälder" : "lärare";
+  const studentLabel = isFamily ? "barn" : "elev";
 
   function doLogout() {
     if (!confirm("Logga ut?")) return;
@@ -168,14 +172,18 @@ function UserFooter({ onAction }: { onAction?: () => void } = {}) {
   return (
     <div className="border-t border-rule p-4 space-y-2 text-sm">
       <div className="eyebrow">
-        {isStudent ? "Inloggad som elev" : isImpersonating ? "Visar elev" : "Inloggad lärare"}
+        {isStudent
+          ? `Inloggad som ${studentLabel}`
+          : isImpersonating
+          ? `Visar ${studentLabel}`
+          : `Inloggad ${adminLabel}`}
       </div>
       {isImpersonating && (
         <button
           onClick={stopImpersonating}
           className="w-full text-left btn-outline rounded-md px-3 py-2 text-sm"
         >
-          ← Tillbaka till lärare
+          ← Tillbaka till {adminLabel}
         </button>
       )}
       <button

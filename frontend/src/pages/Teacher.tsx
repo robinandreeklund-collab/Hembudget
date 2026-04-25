@@ -48,7 +48,8 @@ function thisMonth(): string {
 }
 
 export default function Teacher() {
-  const { impersonate } = useAuth();
+  const { impersonate, teacherMeta } = useAuth();
+  const isFamily = teacherMeta?.is_family_account === true;
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -223,8 +224,12 @@ export default function Teacher() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="eyebrow mb-1">Lärarpanel</div>
-          <h1 className="serif text-3xl md:text-4xl leading-tight">Din klass.</h1>
+          <div className="eyebrow mb-1">
+            {isFamily ? "Familjepanel" : "Lärarpanel"}
+          </div>
+          <h1 className="serif text-3xl md:text-4xl leading-tight">
+            {isFamily ? "Dina barn." : "Din klass."}
+          </h1>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Link
@@ -320,7 +325,7 @@ export default function Teacher() {
             onClick={() => setShowCreate(true)}
             className="btn-dark rounded-md px-4 py-2 text-sm flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" /> Ny elev
+            <Plus className="w-4 h-4" /> {isFamily ? "Nytt barn" : "Ny elev"}
           </button>
         </div>
       </div>
@@ -444,7 +449,9 @@ export default function Teacher() {
             ) : students.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-6 text-center text-slate-500">
-                  Inga elever ännu. Skapa din första med "Ny elev".
+                  {isFamily
+                    ? "Inga barn ännu. Skapa det första med \"Nytt barn\"."
+                    : "Inga elever ännu. Skapa din första med \"Ny elev\"."}
                 </td>
               </tr>
             ) : (
@@ -543,7 +550,9 @@ export default function Teacher() {
             className="bg-white rounded-xl shadow-xl p-6 w-96 space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold text-lg">Ny elev</h2>
+            <h2 className="font-semibold text-lg">
+              {isFamily ? "Nytt barn" : "Ny elev"}
+            </h2>
             <input
               type="text"
               value={newName}
