@@ -121,6 +121,30 @@ def _master_db_path() -> Path:
     return _school_root() / "master.db"
 
 
+def _master_db_url() -> str:
+    """Vilken DB-URL master-engine ska använda.
+
+    Prioritet:
+    1. HEMBUDGET_DATABASE_URL — riktig managed Postgres (Cloud SQL i prod).
+       Detta är vad vi vill ha: data persisterar mellan deploys, automatisk
+       backup, point-in-time-restore.
+    2. Fallback: SQLite-fil i HEMBUDGET_DATA_DIR — används lokalt och i
+       pytest. SQLite-filen försvinner vid Cloud Run-restart om volymen
+       inte är monterad.
+    """
+    import os
+    url = os.environ.get("HEMBUDGET_DATABASE_URL", "").strip()
+    if url:
+        # SQLAlchemy använder "postgresql+psycopg2://" men gcloud genererar
+        # "postgresql://"-URL:er. Acceptera båda.
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        if url.startswith("postgresql://") and "+psycopg2" not in url:
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url
+    return f"sqlite:///{_master_db_path().as_posix()}"
+
+
 def init_master_engine() -> Engine:
     """Skapa master-engine + kör create_all för MasterBase. Idempotent."""
     global _master_engine, _master_session
@@ -128,14 +152,24 @@ def init_master_engine() -> Engine:
         return _master_engine
     from .models import MasterBase
 
-    url = f"sqlite:///{_master_db_path().as_posix()}"
-    engine = create_engine(url, future=True)
+    url = _master_db_url()
+    is_sqlite = url.startswith("sqlite:")
+    engine_kwargs: dict = {"future": True}
+    if not is_sqlite:
+        # Postgres: pre-ping så stale connections från Cloud SQL inte
+        # smäller. Pool små eftersom Cloud Run kör en instans.
+        engine_kwargs.update(
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800,
+        )
+    engine = create_engine(url, **engine_kwargs)
 
-    @event.listens_for(engine, "connect")
-    def _set_pragmas(dbapi_conn, _):
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys = ON")
-        cur.close()
+    if is_sqlite:
+        @event.listens_for(engine, "connect")
+        def _set_pragmas(dbapi_conn, _):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA foreign_keys = ON")
+            cur.close()
 
     MasterBase.metadata.create_all(engine)
     _run_master_migrations(engine)
@@ -152,15 +186,19 @@ def _run_master_migrations(engine: Engine) -> None:
     `create_all()` lägger inte till nya kolumner i en befintlig tabell, så
     när nya fält läggs på Teacher/Family/Student måste vi lägga till dem
     här. Idempotent — säker att köra varje uppstart.
+
+    Stödjer både SQLite (pytest, lokalt) och Postgres (prod) — använder
+    SQLAlchemy-inspector så ingen DB-specifik PRAGMA behövs.
     """
-    from sqlalchemy import text as _text
+    from sqlalchemy import inspect as _inspect, text as _text
+
+    inspector = _inspect(engine)
 
     def _cols(table: str) -> set[str]:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                _text(f"PRAGMA table_info({table})"),
-            ).fetchall()
-        return {r[1] for r in rows}
+        try:
+            return {c["name"] for c in inspector.get_columns(table)}
+        except Exception:
+            return set()
 
     def _add(table: str, col_sql: str) -> None:
         with engine.begin() as conn:
