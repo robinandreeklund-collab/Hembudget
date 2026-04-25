@@ -73,7 +73,9 @@ export default function Landing() {
       <Stats />
       <Logiken />
       <Why />
-      {/* TODO A2.6-A2.8: resterande sektioner */}
+      <SocialProof />
+      <Gallery />
+      {/* TODO A2.7-A2.8: resterande sektioner */}
       <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
         Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
       </div>
@@ -768,6 +770,77 @@ function Why() {
               <span className="body-prose">räcker för att prova grunderna i Ekonomilabbet.</span>
             </li>
           </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Social proof + Vyer-galleri ----------
+
+function SocialProof() {
+  const schools = [
+    "Exempel­skolan",
+    "Ekonomi­linjen Malmö",
+    "Linné­skolan",
+    "Musik­gymnasiet",
+    "Fjäll­gymnasiet",
+  ];
+  return (
+    <section id="social" className="border-t border-rule bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-14">
+        <div className="section-divider mb-8">I pilotprojekt tillsammans med</div>
+        <ul className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4 text-center">
+          {schools.map((s) => (
+            <li key={s} className="serif text-lg text-[#555]">{s}</li>
+          ))}
+        </ul>
+        <p className="mt-6 text-xs text-[#999] text-center serif-italic">
+          Riktiga logotyper läggs till efter pilotfasen.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function Gallery() {
+  const shots: { chip: string; chipColor: CellColor; title: string; body: string }[] = [
+    { chip: "Lä", chipColor: "special", title: "Lärarens dashboard",
+      body: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm." },
+    { chip: "Mo", chipColor: "grund", title: "Elevens kursplan",
+      body: "Moduler steg för steg: läs, reflektera, quiz och uppdrag." },
+    { chip: "Ms", chipColor: "fordj", title: "Mastery-grafen",
+      body: "Per-kompetens mastery, milstolpar och nästa-steg-hint." },
+    { chip: "Pf", chipColor: "special", title: "Portfolio-PDF",
+      body: "Exporteras per elev eller som ZIP för hela klassen." },
+    { chip: "AI", chipColor: "special", title: "Fråga Ekon",
+      body: "Multi-turn AI-coach som anpassar svaren till elevens nivå." },
+    { chip: "Tt", chipColor: "risk", title: "Time on task",
+      body: "Se vilka steg som fastnar för eleverna i din klass." },
+  ];
+  return (
+    <section id="vyer" className="border-t border-rule">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">Vyerna</div>
+        <div className="max-w-3xl mb-10">
+          <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+            Sex skärmar lärare och elever rör sig i.
+          </h2>
+          <p className="mt-4 lead">
+            Riktiga skärmdumpar kommer här efter pilotfasens första klass —
+            tills dess konceptbilder.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {shots.map((s) => (
+            <article key={s.title} className="feature-card aspect-[4/3] flex flex-col justify-between">
+              <span className={`feature-chip ${s.chipColor}`} aria-hidden="true">{s.chip}</span>
+              <div>
+                <h3 className="serif text-xl leading-snug">{s.title}</h3>
+                <p className="mt-2 body-prose text-sm">{s.body}</p>
+              </div>
+            </article>
+          ))}
         </div>
       </div>
     </section>
