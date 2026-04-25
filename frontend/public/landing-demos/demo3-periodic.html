@@ -22,6 +22,26 @@
   .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
   .lead{font-size:17px;line-height:1.55;color:#333;}
   .body-prose{line-height:1.65;color:#333;}
+  /* Feature-chip — mini-version av en periodic-cell, används som
+     ikon-ersättning på feature- och flow-korten */
+  .feature-chip{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:42px;height:42px;border:1.5px solid var(--ink);background:#fff;
+    font-family:'Spectral',serif;font-weight:800;font-size:18px;
+    line-height:1;flex-shrink:0;
+  }
+  .feature-chip.grund{background:#eef3ff;}
+  .feature-chip.fordj{background:#fff3e6;}
+  .feature-chip.expert{background:#f3eaff;}
+  .feature-chip.konto{background:#e8f7ef;}
+  .feature-chip.risk{background:#fdecec;}
+  .feature-chip.special{background:var(--ink);color:#fff;}
+  .feature-card{
+    border:1.5px solid var(--ink);background:#fff;padding:20px;
+    transition:transform .15s,box-shadow .15s,background .15s;
+  }
+  .feature-card:hover{transform:translateY(-3px);
+    box-shadow:0 10px 24px rgba(0,0,0,.1);background:#fffef5;}
   /* Sektionsskiljelinje (centrerad ornament-streck) */
   .section-divider{display:flex;align-items:center;gap:10px;color:#999;font-size:11px;letter-spacing:.18em;text-transform:uppercase;}
   .section-divider:before,.section-divider:after{content:"";flex:1;height:1px;background:var(--rule);}
@@ -288,6 +308,107 @@
 
     <!-- caption -->
     <div class="mt-4 text-xs text-[#777] serif-italic">Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.</div>
+  </div>
+</section>
+
+<!-- FEATURES (9 funktioner — varje en mini-cell ur periodic-tabellen) -->
+<section id="funktioner" class="border-t rule">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Funktionerna</div>
+    <div class="max-w-3xl mb-12">
+      <h2 class="serif text-4xl md:text-5xl leading-[1.05]">
+        Allt en lärare behöver för att göra ekonomi begripligt.
+      </h2>
+      <p class="mt-4 lead">
+        Från första lönen till bolåne-beslut. Varje funktion är ett
+        element i kursplanen — eleven övar genom att göra, inte genom
+        att läsa om det.
+      </p>
+    </div>
+
+    <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip grund" aria-hidden="true">Pf</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Unik elev-profil</h3>
+            <p class="mt-2 body-prose text-sm">Varje elev får slumpat yrke, lön, stad och livssituation. Ingen i klassen har samma utgångsläge.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip konto" aria-hidden="true">Ku</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Riktiga PDF:er</h3>
+            <p class="mt-2 body-prose text-sm">Läraren genererar kontoutdrag, lönespec, lånebesked och kreditkortsfakturor som eleverna själva importerar.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip grund" aria-hidden="true">Bu</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Budget mot verklighet</h3>
+            <p class="mt-2 body-prose text-sm">Eleven sätter månadsbudget från Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip fordj" aria-hidden="true">Bl</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Bolåne-beslut</h3>
+            <p class="mt-2 body-prose text-sm">Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip risk" aria-hidden="true">Ov</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Livet händer</h3>
+            <p class="mt-2 body-prose text-sm">Diskmaskin går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleverna övar på det oväntade.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip grund" aria-hidden="true">Hu</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Familjer</h3>
+            <p class="mt-2 body-prose text-sm">Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip special" aria-hidden="true">Rp</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Lärarens översikt</h3>
+            <p class="mt-2 body-prose text-sm">Klassmatris med status per elev och uppdrag. Facit för varje kategorisering — grönt eller rött på en blick.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip special" aria-hidden="true">AI</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Fråga Ekon (AI)</h3>
+            <p class="mt-2 body-prose text-sm">Multi-turn coach på Claude Sonnet. Anpassar språket till elevens mastery — mer Socrates där grunden saknas.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip fordj" aria-hidden="true">Sp</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Sparmål &amp; uppdrag</h3>
+            <p class="mt-2 body-prose text-sm">Tydliga uppdrag: "spara 2 000 kr", "balansera månaden", "kategorisera alla köp". Status uppdateras live.</p>
+          </div>
+        </div>
+      </li>
+    </ul>
   </div>
 </section>
 
