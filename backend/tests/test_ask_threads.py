@@ -231,3 +231,130 @@ def test_cannot_access_another_students_thread(
         headers={"Authorization": f"Bearer {other_tok}"},
     )
     assert r.status_code == 404
+
+
+def test_quick_ask_is_audit_logged_for_teacher(
+    fx, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Snabbfrågor via /ai/student/ask ska loggas till AskAiThread så
+    läraren kan se vad eleven frågat AI:n. Tidigare gick frågan rakt
+    förbi DB:n och försvann."""
+    client, tok, sid = fx
+
+    class _Result:
+        text = "Ränta är priset på pengar."
+        input_tokens = 5
+        output_tokens = 6
+
+    monkeypatch.setattr(
+        ai_core, "answer_student_question",
+        lambda **kw: _Result(),
+    )
+
+    r = client.post(
+        "/ai/student/ask",
+        json={"question": "Vad är ränta?"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert r.status_code == 200
+    assert r.json()["answer"] == "Ränta är priset på pengar."
+
+    with master_session() as s:
+        threads = s.query(AskAiThread).filter(
+            AskAiThread.student_id == sid,
+        ).all()
+        assert len(threads) == 1
+        msgs = s.query(AskAiMessage).filter(
+            AskAiMessage.thread_id == threads[0].id,
+        ).order_by(AskAiMessage.created_at).all()
+        assert [m.role for m in msgs] == ["user", "assistant"]
+        assert msgs[0].content == "Vad är ränta?"
+        assert msgs[1].content == "Ränta är priset på pengar."
+
+    # Andra snabbfrågan (samma modul-kontext) ska återanvända tråden
+    r2 = client.post(
+        "/ai/student/ask",
+        json={"question": "Och inflation då?"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert r2.status_code == 200
+    with master_session() as s:
+        threads = s.query(AskAiThread).filter(
+            AskAiThread.student_id == sid,
+        ).all()
+        assert len(threads) == 1, "snabbfrågor ska gruppera i en tråd"
+        n = s.query(AskAiMessage).filter(
+            AskAiMessage.thread_id == threads[0].id,
+        ).count()
+        assert n == 4  # 2 user + 2 assistant
+
+
+def test_teacher_can_list_and_read_student_ai_threads(
+    fx, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lärare ska kunna lista och öppna sina elevers AskAI-trådar."""
+    client, stu_tok, sid = fx
+
+    class _Result:
+        text = "Svar A"
+        input_tokens = 1
+        output_tokens = 1
+
+    monkeypatch.setattr(
+        ai_core, "answer_student_question",
+        lambda **kw: _Result(),
+    )
+
+    # Eleven ställer en fråga som loggas
+    r = client.post(
+        "/ai/student/ask",
+        json={"question": "Fråga A"},
+        headers={"Authorization": f"Bearer {stu_tok}"},
+    )
+    assert r.status_code == 200
+
+    # Skapa lärar-token
+    with master_session() as s:
+        t = s.query(Teacher).first()
+        tid = t.id
+    teacher_tok = random_token()
+    register_token(teacher_tok, role="teacher", teacher_id=tid)
+
+    # Lista elevens trådar
+    r = client.get(
+        f"/ai/teacher/students/{sid}/threads",
+        headers={"Authorization": f"Bearer {teacher_tok}"},
+    )
+    assert r.status_code == 200, r.text
+    threads = r.json()
+    assert len(threads) == 1
+    thread_id = threads[0]["id"]
+
+    # Hämta detaljerna
+    r = client.get(
+        f"/ai/teacher/students/{sid}/threads/{thread_id}",
+        headers={"Authorization": f"Bearer {teacher_tok}"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["message_count"] == 2
+    contents = [m["content"] for m in body["messages"]]
+    assert "Fråga A" in contents
+    assert "Svar A" in contents
+
+    # En annan lärare ska INTE få se denna elevs trådar
+    with master_session() as s:
+        other_t = Teacher(
+            email="other@x.se", name="Other",
+            password_hash=hash_password("Abcdef12!"),
+            ai_enabled=True,
+        )
+        s.add(other_t); s.flush()
+        otid = other_t.id
+    other_tok = random_token()
+    register_token(other_tok, role="teacher", teacher_id=otid)
+    r = client.get(
+        f"/ai/teacher/students/{sid}/threads",
+        headers={"Authorization": f"Bearer {other_tok}"},
+    )
+    assert r.status_code == 404

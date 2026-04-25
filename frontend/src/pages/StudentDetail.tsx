@@ -98,6 +98,15 @@ export default function StudentDetail() {
     is_match: boolean; confidence: number; explanation: string;
   }>>({});
   const [aiBusyRow, setAiBusyRow] = useState<number | null>(null);
+  const [aiThreads, setAiThreads] = useState<Array<{
+    id: number; title: string | null; module_id: number | null;
+    created_at: string; updated_at: string; message_count: number;
+  }>>([]);
+  const [openThread, setOpenThread] = useState<{
+    id: number; title: string | null; messages: Array<{
+      id: number; role: string; content: string; created_at: string;
+    }>;
+  } | null>(null);
 
   useEffect(() => {
     api<{ ai_enabled: boolean }>("/admin/ai/me")
@@ -162,7 +171,22 @@ export default function StudentDetail() {
     api<typeof moduleProgress>(`/teacher/students/${sid}/modules`)
       .then(setModuleProgress)
       .catch(() => setModuleProgress([]));
+    api<typeof aiThreads>(`/ai/teacher/students/${sid}/threads`)
+      .then(setAiThreads)
+      .catch(() => setAiThreads([]));
   }, [sid]);
+
+  async function openAiThread(id: number) {
+    try {
+      const t = await api<{
+        id: number; title: string | null;
+        messages: Array<{ id: number; role: string; content: string; created_at: string }>;
+      }>(`/ai/teacher/students/${sid}/threads/${id}`);
+      setOpenThread(t);
+    } catch {
+      setOpenThread(null);
+    }
+  }
 
   async function assignRec(moduleId: number) {
     await api(`/teacher/modules/${moduleId}/assign`, {
@@ -413,6 +437,85 @@ export default function StudentDetail() {
             })}
           </ul>
         </section>
+      )}
+
+      {/* AI-konversationer — vad eleven har frågat Claude */}
+      {aiThreads.length > 0 && (
+        <section className="bg-white border border-rule rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Brain className="w-5 h-5 text-ink" /> AI-konversationer
+          </h2>
+          <p className="text-sm text-[#666]">
+            Vad eleven har frågat AI:n. Klicka på en tråd för att läsa
+            hela konversationen — viktigt för bedömning och
+            missbruksskydd.
+          </p>
+          <ul className="space-y-1.5">
+            {aiThreads.map((t) => (
+              <li
+                key={t.id}
+                className="border border-rule rounded-md px-3 py-2 flex items-center gap-3 hover:bg-paper cursor-pointer"
+                onClick={() => openAiThread(t.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {t.title || "(utan titel)"}
+                  </div>
+                  <div className="text-xs text-[#666]">
+                    {new Date(t.updated_at).toLocaleString("sv-SE")} ·
+                    {" "}{t.message_count} meddelanden
+                  </div>
+                </div>
+                <Eye className="w-4 h-4 text-[#888] shrink-0" />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Modal: full AI-tråd */}
+      {openThread && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/50 flex items-center justify-center p-4"
+          onClick={() => setOpenThread(null)}
+        >
+          <div
+            className="bg-white border border-rule rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-5 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-rule pb-3">
+              <h3 className="font-semibold text-lg">
+                {openThread.title || "(utan titel)"}
+              </h3>
+              <button
+                onClick={() => setOpenThread(null)}
+                className="text-[#666] hover:text-ink text-xl leading-none"
+                aria-label="Stäng"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3">
+              {openThread.messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={
+                    "border rounded-md p-3 text-sm whitespace-pre-wrap " +
+                    (m.role === "user"
+                      ? "border-rule bg-paper"
+                      : "border-rule bg-white")
+                  }
+                >
+                  <div className="text-xs eyebrow mb-1">
+                    {m.role === "user" ? "Eleven" : "AI"} ·
+                    {" "}{new Date(m.created_at).toLocaleString("sv-SE")}
+                  </div>
+                  <div className="text-ink">{m.content}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Uppdrag */}

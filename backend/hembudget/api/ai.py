@@ -20,6 +20,8 @@ Feature-endpoints:
 from __future__ import annotations
 
 import json
+import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -35,6 +37,8 @@ from ..school.models import (
 )
 from ..security.rate_limit import RULES_STUDENT_ASK, check_rate_limit
 from .deps import TokenInfo, require_teacher, require_token
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -242,6 +246,76 @@ def _resolve_ask_context(
     return module_title, module_summary, step_prompt
 
 
+def _log_quick_ask(
+    info: TokenInfo,
+    payload: AskIn,
+    module_title: str,
+) -> Optional[int]:
+    """Persistera elevens snabbfråga som AskAiMessage. Återanvänder en
+    befintlig "Snabbfrågor: <modul>"-tråd per elev/modul så att lärar-
+    vyn får en hanterbar lista istället för en tråd per fråga.
+
+    Returnerar thread_id eller None om något gick snett. Vi sväljer fel
+    avsiktligt — audit-loggning får ALDRIG blockera en AI-fråga som
+    eleven betalar med tokens för.
+    """
+    if info.role != "student" or info.student_id is None:
+        return None
+    try:
+        with master_session() as s:
+            title = f"Snabbfrågor: {module_title}"
+            existing = (
+                s.query(AskAiThread)
+                .filter(
+                    AskAiThread.student_id == info.student_id,
+                    AskAiThread.module_id == payload.module_id,
+                    AskAiThread.title == title,
+                )
+                .order_by(AskAiThread.updated_at.desc())
+                .first()
+            )
+            if existing:
+                thread = existing
+            else:
+                thread = AskAiThread(
+                    student_id=info.student_id,
+                    teacher_id=None,
+                    title=title,
+                    module_id=payload.module_id,
+                )
+                s.add(thread)
+                s.flush()
+            s.add(AskAiMessage(
+                thread_id=thread.id,
+                role="user",
+                content=payload.question,
+            ))
+            # Bumpa updated_at så lärar-vyn sorterar senaste högst
+            thread.updated_at = datetime.utcnow()
+            return thread.id
+    except Exception:
+        log.exception("kunde inte logga elev-snabbfråga (auditspår)")
+        return None
+
+
+def _log_quick_ask_answer(thread_id: Optional[int], answer: str) -> None:
+    """Persistera Claudes svar i samma tråd som frågan. Tyst om fel."""
+    if thread_id is None or not answer:
+        return
+    try:
+        with master_session() as s:
+            s.add(AskAiMessage(
+                thread_id=thread_id,
+                role="assistant",
+                content=answer,
+            ))
+            t = s.get(AskAiThread, thread_id)
+            if t:
+                t.updated_at = datetime.utcnow()
+    except Exception:
+        log.exception("kunde inte logga AI-svar (auditspår)")
+
+
 @router.post("/student/ask", response_model=AskOut)
 def ask_student(
     payload: AskIn,
@@ -259,6 +333,10 @@ def ask_student(
 
     module_title, module_summary, step_prompt = _resolve_ask_context(payload)
 
+    # Audit-logga elevens fråga FÖRE Claude-anropet — så lärare ser
+    # frågan även om svaret skulle krascha.
+    thread_id = _log_quick_ask(info, payload, module_title)
+
     result = ai_core.answer_student_question(
         question=payload.question,
         module_title=module_title,
@@ -271,6 +349,7 @@ def ask_student(
             status.HTTP_502_BAD_GATEWAY,
             "AI-anropet misslyckades — försök igen senare.",
         )
+    _log_quick_ask_answer(thread_id, result.text)
     return AskOut(
         answer=result.text,
         model=ai_core.MODEL_SONNET,
@@ -310,7 +389,12 @@ def ask_student_stream(
         context_parts.append(f"Aktuellt steg: {step_prompt}")
     user_prompt = "\n".join(context_parts) + f"\n\nElevens fråga:\n{payload.question}"
 
+    # Audit-logga frågan direkt så lärare ser den även om eleven
+    # avbryter strömmen mitt i.
+    thread_id = _log_quick_ask(info, payload, module_title)
+
     def gen():
+        text_parts: list[str] = []
         for chunk in ai_core.stream_claude(
             model=ai_core.MODEL_SONNET,
             system=ai_core.QA_SYSTEM_PROMPT,
@@ -319,7 +403,11 @@ def ask_student_stream(
             use_thinking=False,  # streaming: snabb första token viktigast
             teacher_id=teacher_id,
         ):
+            if chunk.get("type") == "delta":
+                text_parts.append(chunk.get("text", ""))
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        # Persistera assistant-svaret när strömmen är klar
+        _log_quick_ask_answer(thread_id, "".join(text_parts).strip())
 
     return StreamingResponse(
         gen(),
@@ -721,6 +809,93 @@ def _owner_filter(info: TokenInfo):
             & (AskAiThread.student_id.is_(None))
         ), {"teacher_id": info.teacher_id}
     return None, None
+
+
+@router.get(
+    "/teacher/students/{student_id}/threads",
+    response_model=list[ThreadSummary],
+)
+def teacher_list_student_threads(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[ThreadSummary]:
+    """Lärar-vy: alla AskAI-trådar (snabbfrågor + multi-turn) som
+    eleven har öppnat. Läraren ser elevens AI-historik utan att behöva
+    impersonera. Audit-spår för bedömning + missbruksskydd."""
+    _require_school()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        threads = (
+            s.query(AskAiThread)
+            .filter(AskAiThread.student_id == student_id)
+            .order_by(AskAiThread.updated_at.desc())
+            .limit(50)
+            .all()
+        )
+        out: list[ThreadSummary] = []
+        for t in threads:
+            n = (
+                s.query(AskAiMessage)
+                .filter(AskAiMessage.thread_id == t.id)
+                .count()
+            )
+            out.append(ThreadSummary(
+                id=t.id, title=t.title, module_id=t.module_id,
+                created_at=t.created_at.isoformat(),
+                updated_at=t.updated_at.isoformat(),
+                message_count=n,
+            ))
+        return out
+
+
+@router.get(
+    "/teacher/students/{student_id}/threads/{thread_id}",
+    response_model=ThreadDetail,
+)
+def teacher_get_student_thread(
+    student_id: int,
+    thread_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> ThreadDetail:
+    """Hämta en specifik AskAI-tråd för en av lärarens elever, med alla
+    meddelanden. Används från StudentDetail-sidan."""
+    _require_school()
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        t = s.query(AskAiThread).filter(
+            AskAiThread.id == thread_id,
+            AskAiThread.student_id == student_id,
+        ).first()
+        if not t:
+            raise HTTPException(404, "Tråd finns ej")
+        msgs = (
+            s.query(AskAiMessage)
+            .filter(AskAiMessage.thread_id == thread_id)
+            .order_by(AskAiMessage.created_at.asc())
+            .all()
+        )
+        return ThreadDetail(
+            id=t.id, title=t.title, module_id=t.module_id,
+            created_at=t.created_at.isoformat(),
+            updated_at=t.updated_at.isoformat(),
+            message_count=len(msgs),
+            messages=[
+                ThreadMessage(
+                    id=m.id, role=m.role, content=m.content,
+                    created_at=m.created_at.isoformat(),
+                ) for m in msgs
+            ],
+        )
 
 
 @router.get("/student/threads", response_model=list[ThreadSummary])
