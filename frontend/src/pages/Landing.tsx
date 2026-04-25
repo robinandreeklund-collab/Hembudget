@@ -68,7 +68,8 @@ export default function Landing() {
     <div className="bg-paper text-ink min-h-screen">
       <Header />
       <Hero />
-      {/* TODO A2.2-A2.8: resterande sektioner */}
+      <Features />
+      {/* TODO A2.3-A2.8: resterande sektioner */}
       <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
         Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
       </div>
@@ -374,6 +375,66 @@ function DriftParticles() {
         />
       ))}
     </div>
+  );
+}
+
+// ---------- Funktioner-sektion (9 mini-celler) ----------
+
+type Feature = { chip: string; chipColor: CellColor; title: string; body: string };
+
+const FEATURES: Feature[] = [
+  { chip: "Pf", chipColor: "special", title: "Unik elev-profil",
+    body: "Varje elev får slumpat yrke, lön, stad och livssituation. Ingen i klassen har samma utgångsläge." },
+  { chip: "Ku", chipColor: "konto", title: "Riktiga PDF:er",
+    body: "Läraren genererar kontoutdrag, lönespec, lånebesked och kreditkortsfakturor som eleverna själva importerar." },
+  { chip: "Bu", chipColor: "grund", title: "Budget mot verklighet",
+    body: "Eleven sätter månadsbudget från Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp." },
+  { chip: "Bl", chipColor: "fordj", title: "Bolåne-beslut",
+    body: "Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten." },
+  { chip: "Ov", chipColor: "risk", title: "Livet händer",
+    body: "Diskmaskin går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleverna övar på det oväntade." },
+  { chip: "Hu", chipColor: "grund", title: "Familjer",
+    body: "Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål." },
+  { chip: "Rp", chipColor: "special", title: "Lärarens översikt",
+    body: "Klassmatris med status per elev och uppdrag. Facit för varje kategorisering — grönt eller rött på en blick." },
+  { chip: "AI", chipColor: "special", title: "Fråga Ekon (AI)",
+    body: "Multi-turn coach på Claude Sonnet. Anpassar språket till elevens mastery — mer Socrates där grunden saknas." },
+  { chip: "Sp", chipColor: "fordj", title: "Sparmål & uppdrag",
+    body: "Tydliga uppdrag: 'spara 2 000 kr', 'balansera månaden', 'kategorisera alla köp'. Status uppdateras live." },
+];
+
+function Features() {
+  return (
+    <section id="funktioner" className="border-t border-rule">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">Funktionerna</div>
+        <div className="max-w-3xl mb-12">
+          <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+            Allt en lärare behöver för att göra ekonomi begripligt.
+          </h2>
+          <p className="mt-4 lead">
+            Från första lönen till bolåne-beslut. Varje funktion är ett
+            element i kursplanen — eleven övar genom att göra, inte genom
+            att läsa om det.
+          </p>
+        </div>
+        <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {FEATURES.map((f) => (
+            <li key={f.title} className="feature-card">
+              <div className="flex items-start gap-4">
+                <span className={`feature-chip ${f.chipColor}`} aria-hidden="true">
+                  {f.chip}
+                </span>
+                <div>
+                  <h3 className="serif text-xl leading-snug">{f.title}</h3>
+                  <p className="mt-2 body-prose text-sm">{f.body}</p>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
   );
 }
 
