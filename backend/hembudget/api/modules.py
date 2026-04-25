@@ -104,6 +104,32 @@ class StudentStepOut(BaseModel):
     auto_progress: Optional[str] = None   # ex. "3/5 dokument importerade"
 
 
+class TeacherStepStatusOut(BaseModel):
+    """Lärarens vy på ett enskilt steg för en specifik elev."""
+    id: int
+    sort_order: int
+    kind: str
+    title: str
+    completed_at: Optional[datetime]
+    auto_status: Optional[str] = None
+    auto_progress: Optional[str] = None
+
+
+class TeacherStudentModuleOut(BaseModel):
+    """En elevs modul-progression sett ur lärarens perspektiv. Task-steg
+    har live-status från elevens scope-DB."""
+    id: int
+    module_id: int
+    module_title: str
+    module_summary: Optional[str]
+    sort_order: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    step_count: int
+    completed_step_count: int
+    steps: list[TeacherStepStatusOut]
+
+
 class AssignStudentsIn(BaseModel):
     student_ids: list[int]
 
@@ -1593,6 +1619,68 @@ def teacher_portfolio_pdf(
                 f'attachment; filename="portfolio_{student_id}.pdf"',
         },
     )
+
+
+# ---------- Lärarens vy på en elevs moduler ----------
+
+@router.get(
+    "/teacher/students/{student_id}/modules",
+    response_model=list[TeacherStudentModuleOut],
+)
+def teacher_student_modules(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[TeacherStudentModuleOut]:
+    """Lista en elevs moduler med per-steg-status. Task-steg
+    auto-utvärderas mot elevens scope-DB så lärare ser live-progress
+    (t.ex. "3/5 dokument importerade") även innan eleven loggat in på
+    just det steget."""
+    _require_school_mode()
+    out: list[TeacherStudentModuleOut] = []
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        rows = (
+            s.query(StudentModule)
+            .filter(StudentModule.student_id == student_id)
+            .order_by(StudentModule.sort_order)
+            .all()
+        )
+        for sm in rows:
+            m = s.query(Module).filter(Module.id == sm.module_id).first()
+            if not m:
+                continue
+            steps_out: list[TeacherStepStatusOut] = []
+            done_count = 0
+            for st in m.steps:
+                auto_status, auto_progress = _evaluate_task_step(
+                    s, st, student_id,
+                )
+                prog = s.query(StudentStepProgress).filter(
+                    StudentStepProgress.student_id == student_id,
+                    StudentStepProgress.step_id == st.id,
+                ).first()
+                completed_at = prog.completed_at if prog else None
+                if completed_at:
+                    done_count += 1
+                steps_out.append(TeacherStepStatusOut(
+                    id=st.id, sort_order=st.sort_order, kind=st.kind,
+                    title=st.title, completed_at=completed_at,
+                    auto_status=auto_status, auto_progress=auto_progress,
+                ))
+            out.append(TeacherStudentModuleOut(
+                id=sm.id, module_id=m.id,
+                module_title=m.title, module_summary=m.summary,
+                sort_order=sm.sort_order,
+                started_at=sm.started_at, completed_at=sm.completed_at,
+                step_count=len(m.steps), completed_step_count=done_count,
+                steps=steps_out,
+            ))
+    return out
 
 
 # ---------- Elevens kursplan ----------

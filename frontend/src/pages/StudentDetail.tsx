@@ -68,6 +68,22 @@ export default function StudentDetail() {
     reason: string;
     step_count: number;
   }>>([]);
+  const [moduleProgress, setModuleProgress] = useState<Array<{
+    id: number;
+    module_id: number;
+    module_title: string;
+    module_summary: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    step_count: number;
+    completed_step_count: number;
+    steps: Array<{
+      id: number; sort_order: number; kind: string; title: string;
+      completed_at: string | null;
+      auto_status: "not_started" | "in_progress" | "completed" | null;
+      auto_progress: string | null;
+    }>;
+  }>>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newKind, setNewKind] = useState("free_text");
   const [newTitle, setNewTitle] = useState("");
@@ -143,6 +159,9 @@ export default function StudentDetail() {
     api<typeof recommendations>(`/teacher/students/${sid}/recommendations`)
       .then(setRecommendations)
       .catch(() => setRecommendations([]));
+    api<typeof moduleProgress>(`/teacher/students/${sid}/modules`)
+      .then(setModuleProgress)
+      .catch(() => setModuleProgress([]));
   }, [sid]);
 
   async function assignRec(moduleId: number) {
@@ -314,6 +333,85 @@ export default function StudentDetail() {
             <Target className="w-5 h-5 text-brand-600" /> Färdigheter
           </h2>
           <MasteryChart data={mastery} compact />
+        </section>
+      )}
+
+      {/* Modul-progression — task-steg auto-spårade mot scope-DB */}
+      {moduleProgress.length > 0 && (
+        <section className="bg-white border border-rule rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <ListChecks className="w-5 h-5 text-ink" /> Modul-progression
+          </h2>
+          <p className="text-sm text-[#666]">
+            Task-steg utvärderas live mot elevens huvudbok. Du ser
+            samma status som eleven utan att eleven behöver klicka klar.
+          </p>
+          <ul className="space-y-3">
+            {moduleProgress.map((m) => {
+              const pct = m.step_count > 0
+                ? Math.round((m.completed_step_count / m.step_count) * 100)
+                : 0;
+              return (
+                <li
+                  key={m.id}
+                  className="border border-rule rounded-md p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">
+                        {m.module_title}
+                      </div>
+                      <div className="text-xs text-[#666] mt-0.5">
+                        {m.completed_step_count}/{m.step_count} steg klara
+                        {m.completed_at ? " · klar" : m.started_at ? " · pågår" : " · ej påbörjad"}
+                      </div>
+                    </div>
+                    <div className="text-sm tabular-nums text-[#444] shrink-0">
+                      {pct}%
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-paper rounded overflow-hidden">
+                    <div
+                      className="h-full bg-ink"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <ul className="text-xs space-y-1 mt-2">
+                    {m.steps.map((s) => {
+                      const dotColor = s.completed_at
+                        ? "bg-emerald-600"
+                        : s.auto_status === "in_progress"
+                        ? "bg-amber-500"
+                        : "bg-rule";
+                      return (
+                        <li
+                          key={s.id}
+                          className="flex items-center gap-2"
+                        >
+                          <span
+                            className={
+                              "inline-block w-2 h-2 rounded-full " + dotColor
+                            }
+                          />
+                          <span className="truncate flex-1">
+                            <span className="text-[#999] mr-1">
+                              [{s.kind}]
+                            </span>
+                            {s.title}
+                          </span>
+                          {s.kind === "task" && s.auto_progress && (
+                            <span className="text-[#666] shrink-0">
+                              {s.auto_progress}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
 
