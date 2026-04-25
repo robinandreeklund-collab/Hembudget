@@ -12,10 +12,19 @@
     --ink:#111217; --paper:#fbfaf6; --rule:#e7e3d7;
     --grund:#5b8def; --fordj:#f2994a; --expert:#9b51e0; --konto:#27ae60; --risk:#eb5757;
   }
-  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
-  .serif{font-family:'Spectral',Georgia,serif;font-weight:800;letter-spacing:-.01em;}
+  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;}
+  .serif{font-family:'Spectral',Georgia,serif;font-weight:800;letter-spacing:-.015em;}
+  .serif-italic{font-family:'Spectral',Georgia,serif;font-style:italic;font-weight:400;}
   .rule{border-color:var(--rule);}
-  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee3;border:1px solid var(--rule);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee3;border:1px solid var(--rule);padding:1px 6px;border-radius:4px;font-size:12px;font-weight:600;}
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
+  .lead{font-size:17px;line-height:1.55;color:#333;}
+  .body-prose{line-height:1.65;color:#333;}
+  /* Sektionsskiljelinje (centrerad ornament-streck) */
+  .section-divider{display:flex;align-items:center;gap:10px;color:#999;font-size:11px;letter-spacing:.18em;text-transform:uppercase;}
+  .section-divider:before,.section-divider:after{content:"";flex:1;height:1px;background:var(--rule);}
   .elem{
     position:relative;aspect-ratio:1/1;border:1.5px solid var(--ink);background:#fff;
     display:flex;flex-direction:column;justify-content:space-between;padding:6px 7px;cursor:pointer;
@@ -152,11 +161,11 @@
 <!-- HERO -->
 <section class="max-w-7xl mx-auto px-6 pt-16 pb-12 grid md:grid-cols-[1fr_1.4fr] gap-12 items-start">
   <div>
-    <div class="text-xs uppercase tracking-[0.2em] text-[#888] mb-5">Ekonomilabbet · utgåva 2026</div>
+    <div class="eyebrow mb-5">Ekonomilabbet · utgåva 2026</div>
     <h1 class="serif text-5xl md:text-6xl leading-[1.02]">
       Det periodiska<br/>systemet för pengar.
     </h1>
-    <p class="mt-6 text-lg text-[#333] max-w-md">
+    <p class="mt-6 lead max-w-md">
       Från <span class="kbd">Lö</span> (lön) till <span class="kbd">Rb</span> (räntebindning) —
       32 grundbegrepp som en 16-åring behöver för att inte krocka med vuxenlivet.
       Hovra över en cell. Klassen ser resten.
@@ -278,32 +287,39 @@
     </div>
 
     <!-- caption -->
-    <div class="mt-4 text-xs text-[#777] italic">Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.</div>
+    <div class="mt-4 text-xs text-[#777] serif-italic">Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.</div>
   </div>
 </section>
 
 <!-- DETAIL STRIP -->
 <section class="border-t rule bg-white">
-  <div class="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-10">
-    <div>
-      <div class="serif text-xl">En cell, en kompetens.</div>
-      <p class="mt-2 text-[#444]">Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.</p>
-    </div>
-    <div>
-      <div class="serif text-xl">Lärare rättar i rader.</div>
-      <p class="mt-2 text-[#444]">Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.</p>
-    </div>
-    <div>
-      <div class="serif text-xl">Hela klassen i en bild.</div>
-      <p class="mt-2 text-[#444]">Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet.</p>
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-12">Logiken</div>
+    <div class="grid md:grid-cols-3 gap-x-12 gap-y-10">
+      <div>
+        <div class="eyebrow mb-2">01</div>
+        <h3 class="serif text-2xl leading-[1.15]">En cell, en kompetens.</h3>
+        <p class="mt-3 body-prose">Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.</p>
+      </div>
+      <div>
+        <div class="eyebrow mb-2">02</div>
+        <h3 class="serif text-2xl leading-[1.15]">Lärare rättar i rader.</h3>
+        <p class="mt-3 body-prose">Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.</p>
+      </div>
+      <div>
+        <div class="eyebrow mb-2">03</div>
+        <h3 class="serif text-2xl leading-[1.15]">Hela klassen i en bild.</h3>
+        <p class="mt-3 body-prose">Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet — toggla i hero-vyn ovan.</p>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- CTA -->
-<section class="max-w-7xl mx-auto px-6 py-20 text-center">
-  <h2 class="serif text-4xl md:text-5xl">Kursplanen din kemi­lärare aldrig fick.</h2>
-  <p class="mt-4 text-[#555] max-w-xl mx-auto">Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir super-admin.</p>
+<section class="max-w-7xl mx-auto px-6 py-24 text-center">
+  <div class="eyebrow mb-4">Kom igång</div>
+  <h2 class="serif text-4xl md:text-5xl leading-[1.05]">Kursplanen din kemi­lärare aldrig fick.</h2>
+  <p class="mt-5 lead max-w-xl mx-auto">Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir super-admin.</p>
   <div class="mt-7 flex justify-center gap-3 flex-wrap">
     <a href="/login/teacher" class="btn-dark px-6 py-3.5 rounded-md">Starta labbet</a>
     <a href="mailto:info@ekonomilabbet.org?subject=Boka%20introduktion" class="btn-outline px-6 py-3.5 rounded-md">Boka introduktion</a>
