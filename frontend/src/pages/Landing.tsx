@@ -69,7 +69,8 @@ export default function Landing() {
       <Header />
       <Hero />
       <Features />
-      {/* TODO A2.3-A2.8: resterande sektioner */}
+      <Flow />
+      {/* TODO A2.4-A2.8: resterande sektioner */}
       <div className="max-w-7xl mx-auto px-6 py-20 text-center text-sm text-[#888] serif-italic">
         Landningssidan migreras till paper-stil — fler sektioner kommer i nästa commit.
       </div>
@@ -435,6 +436,206 @@ function Features() {
         </ul>
       </div>
     </section>
+  );
+}
+
+// ---------- Flow-sektionen (5 numrerade steg) ----------
+
+function Flow() {
+  return (
+    <section id="flow" className="border-t border-rule bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-20">
+        <div className="section-divider mb-10">Så funkar det</div>
+        <div className="max-w-3xl mb-14">
+          <h2 className="serif text-4xl md:text-5xl leading-[1.05]">Fem nyckelmoment.</h2>
+          <p className="mt-4 lead">
+            Det här är vad eleverna och läraren faktiskt gör — i ordning,
+            månad för månad.
+          </p>
+        </div>
+
+        <div className="space-y-16">
+          <FlowStep
+            num={1}
+            title="Eleven får en egen vardag."
+            body="Yrke, lön, bostad, lån — allt slumpas unikt per elev. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid."
+            mock={<MockDashboard />}
+          />
+          <FlowStep
+            num={2}
+            reverse
+            title="Riktiga dokument att jobba med."
+            body="Läraren trycker 'generera' — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv."
+            mock={<MockPdfList />}
+          />
+          <FlowStep
+            num={3}
+            title="Budget möter verklighet."
+            body="Eleven sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt."
+            mock={<MockBudget />}
+          />
+          <FlowStep
+            num={4}
+            reverse
+            title="Verkliga ekonomiska val."
+            body="Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser görs synliga."
+            mock={<MockMortgage />}
+          />
+          <FlowStep
+            num={5}
+            title="Läraren ser hela klassen."
+            body="Matris över alla elever och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Allt en lärare behöver för att följa upp."
+            mock={<MockClassMatrix />}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FlowStep({
+  num, title, body, mock, reverse,
+}: {
+  num: number; title: string; body: string; mock: React.ReactNode; reverse?: boolean;
+}) {
+  return (
+    <div className="grid md:grid-cols-2 gap-10 items-center">
+      <div className={reverse ? "md:order-2" : ""}>
+        <div className="flow-num mb-5">{num}</div>
+        <h3 className="serif text-3xl leading-tight">{title}</h3>
+        <p className="mt-3 body-prose">{body}</p>
+      </div>
+      <div className={reverse ? "md:order-1" : ""}>{mock}</div>
+    </div>
+  );
+}
+
+function MockDashboard() {
+  return (
+    <div className="mock">
+      <div className="eyebrow mb-3">Anna · barista · Stockholm</div>
+      <div className="mock-row"><span>Nettolön nov</span><span className="mock-num">23 450 kr</span></div>
+      <div className="mock-row"><span>Hyra</span><span className="mock-num">−9 200 kr</span></div>
+      <div className="mock-row"><span>Mat &amp; dryck</span><span className="mock-num">−3 870 kr</span></div>
+      <div className="mock-row"><span>Sparande</span><span className="mock-num">+1 500 kr</span></div>
+      <div className="mock-row"><span className="font-semibold">Saldo idag</span><span className="mock-num">8 880 kr</span></div>
+    </div>
+  );
+}
+
+function MockPdfList() {
+  const docs = [
+    { sym: "Ku", color: "konto" as CellColor, label: "Kontoutdrag · 23 transaktioner" },
+    { sym: "Lö", color: "grund" as CellColor, label: "Lönespec · november" },
+    { sym: "Bl", color: "fordj" as CellColor, label: "Lånebesked · 18,4 kvkm" },
+    { sym: "Kk", color: "risk" as CellColor, label: "Kortfaktura · −2 340 kr" },
+  ];
+  return (
+    <div className="mock">
+      <div className="eyebrow mb-3">Generering 2026-11</div>
+      <ul className="space-y-2">
+        {docs.map((d) => (
+          <li key={d.sym} className="flex items-center gap-3">
+            <span
+              className={`feature-chip ${d.color}`}
+              style={{ width: 32, height: 32, fontSize: 13 }}
+              aria-hidden="true"
+            >
+              {d.sym}
+            </span>
+            <span className="flex-1">{d.label}</span>
+            <span className="mock-pill ok">PDF</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MockBudget() {
+  return (
+    <div className="mock">
+      <div className="eyebrow mb-3">Budget vs faktiskt · november</div>
+      <div className="space-y-3">
+        <div>
+          <div className="flex justify-between text-xs mb-1"><span>Mat (planerat 4 000)</span><span className="mock-num">3 870 kr</span></div>
+          <div className="mock-bar"><span style={{ width: "97%" }} /></div>
+        </div>
+        <div>
+          <div className="flex justify-between text-xs mb-1"><span>Nöje (planerat 1 500)</span><span className="mock-num">2 410 kr</span></div>
+          <div className="mock-bar"><span style={{ width: "100%", background: "#eb5757" }} /></div>
+        </div>
+        <div>
+          <div className="flex justify-between text-xs mb-1"><span>Hushåll (planerat 800)</span><span className="mock-num">3 200 kr</span></div>
+          <div className="mock-bar"><span style={{ width: "100%", background: "#eb5757" }} /></div>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-[#777] serif-italic">
+        Diskmaskinen sa upp sig den 14:e.
+      </p>
+    </div>
+  );
+}
+
+function MockMortgage() {
+  return (
+    <div className="mock">
+      <div className="eyebrow mb-3">Bolåne-uppdrag · 36 mån horisont</div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="border border-rule p-3">
+          <div className="text-[#888]">Rörlig (eleven valde)</div>
+          <div className="mock-num text-2xl mt-1">3,25 %</div>
+          <div className="mt-2 text-[#666]">Snitt över perioden: 3,8 %</div>
+        </div>
+        <div className="border border-rule p-3">
+          <div className="text-[#888]">3 år bunden</div>
+          <div className="mock-num text-2xl mt-1">3,90 %</div>
+          <div className="mt-2 text-[#666]">Fixerad hela perioden</div>
+        </div>
+      </div>
+      <div className="mt-3 mock-pill ok">Rörlig vann: −18 240 kr</div>
+    </div>
+  );
+}
+
+function MockClassMatrix() {
+  const rows: { name: string; budget: "ok" | "no" | ""; mortg: "ok" | "no" | ""; mastery: string }[] = [
+    { name: "Anna", budget: "ok", mortg: "ok", mastery: "82 %" },
+    { name: "Bahar", budget: "ok", mortg: "no", mastery: "71 %" },
+    { name: "Carl", budget: "no", mortg: "", mastery: "54 %" },
+    { name: "Disa", budget: "ok", mortg: "ok", mastery: "90 %" },
+    { name: "Erik", budget: "no", mortg: "no", mastery: "63 %" },
+  ];
+  function pillClass(s: "ok" | "no" | "") {
+    return s === "ok" ? "mock-pill ok" : s === "no" ? "mock-pill no" : "mock-pill";
+  }
+  function pillText(s: "ok" | "no" | "") {
+    return s === "ok" ? "klar" : s === "no" ? "pågår" : "väntar";
+  }
+  return (
+    <div className="mock">
+      <div className="eyebrow mb-3">Klass NA22 · 5 elever</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-[#888]">
+            <th className="text-left font-normal py-1">Elev</th>
+            <th className="text-left font-normal">Budget</th>
+            <th className="text-left font-normal">Bolån</th>
+            <th className="text-left font-normal">Mastery</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.name} className="border-t border-rule">
+              <td className="py-1.5">{r.name}</td>
+              <td><span className={pillClass(r.budget)}>{pillText(r.budget)}</span></td>
+              <td><span className={pillClass(r.mortg)}>{pillText(r.mortg)}</span></td>
+              <td className="mock-num">{r.mastery}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
