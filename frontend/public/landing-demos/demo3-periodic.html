@@ -74,6 +74,25 @@
     .drifting{animation:none;}
     .blink{animation:none;}
   }
+  /* Professor + speech-bubble */
+  .prof-wrap{display:flex;align-items:flex-end;justify-content:flex-end;gap:10px;margin-bottom:10px;}
+  .prof-bubble{
+    position:relative;background:#fff;border:1.5px solid var(--ink);
+    border-radius:12px;padding:8px 12px;font-size:13px;max-width:240px;
+    line-height:1.35;box-shadow:0 2px 0 var(--ink);
+  }
+  .prof-bubble:after{
+    content:"";position:absolute;right:-7px;top:50%;transform:translateY(-50%) rotate(45deg);
+    width:11px;height:11px;background:#fff;border-right:1.5px solid var(--ink);
+    border-top:1.5px solid var(--ink);
+  }
+  .prof-svg{width:96px;height:96px;flex-shrink:0;filter:drop-shadow(0 2px 0 rgba(17,18,23,.15));}
+  @media (max-width:767px){.prof-wrap{display:none;}}
+  /* Subtil idle-andning på prof-svg när inte reduced-motion */
+  @keyframes prof-bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
+  @media (prefers-reduced-motion: no-preference){
+    .prof-svg{animation:prof-bob 4s ease-in-out infinite;}
+  }
 </style>
 </head>
 <body>
@@ -129,19 +148,24 @@
 
   <!-- Periodic grid -->
   <div class="relative">
-    <!-- Prof peeking top right — ögonen följer musen -->
-    <svg id="prof-svg" viewBox="0 0 120 120" class="absolute -top-6 -right-4 w-28 h-28 z-10" aria-hidden="true">
-      <g>
-        <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" stroke-width="3"/>
-        <path d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z" fill="#fff" stroke="#111" stroke-width="3"/>
-        <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
-        <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
-        <circle id="eye-l" cx="48" cy="68" r="3" fill="#111"/>
-        <circle id="eye-r" cx="72" cy="68" r="3" fill="#111"/>
-        <path d="M48 88 Q60 96 72 88" stroke="#111" stroke-width="2.5" fill="none"/>
-        <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" stroke-width="2.5"/>
-      </g>
-    </svg>
+    <!-- Professor med pratbubbla — peekar in från höger ovanför tabellen -->
+    <div class="prof-wrap" aria-hidden="true">
+      <div class="prof-bubble">
+        Hovra över en cell — eleven ser samma karta som du.
+      </div>
+      <svg id="prof-svg" class="prof-svg" viewBox="0 0 120 120">
+        <g>
+          <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" stroke-width="3"/>
+          <path d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z" fill="#fff" stroke="#111" stroke-width="3"/>
+          <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <circle id="eye-l" cx="48" cy="68" r="3" fill="#111"/>
+          <circle id="eye-r" cx="72" cy="68" r="3" fill="#111"/>
+          <path d="M48 88 Q60 96 72 88" stroke="#111" stroke-width="2.5" fill="none"/>
+          <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" stroke-width="2.5"/>
+        </g>
+      </svg>
+    </div>
 
     <div id="grid" class="grid grid-cols-8 gap-1.5" role="grid"
          aria-label="Periodiska systemet för pengar — 32 begrepp">
