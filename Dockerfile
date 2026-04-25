@@ -62,7 +62,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "rapidfuzz>=3.6" \
         "matplotlib>=3.8" \
         "qrcode[pil]>=8.0" \
-        "anthropic>=0.40"
+        "anthropic>=0.40" \
+        "psycopg2-binary>=2.9"
 # OBS: sqlcipher3-binary hoppas över i demo — backend faller tillbaka på
 # plain SQLite automatiskt. pytesseract/tesseract skippas också eftersom
 # vision-import inte används i demo.
