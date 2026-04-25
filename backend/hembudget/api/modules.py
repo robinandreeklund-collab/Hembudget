@@ -412,15 +412,32 @@ def assign_module(
     payload: AssignStudentsIn,
     info: TokenInfo = Depends(require_teacher),
 ) -> dict:
-    """Tilldela en modul till en eller flera elever."""
+    """Tilldela en modul till en eller flera elever.
+
+    Sidoeffekt: alla task-steg med params.assignment_kind får ett
+    Assignment-row skapat åt eleven om det inte redan finns. Det betyder
+    att task-stegen utvärderas live mot elevens scope-DB av
+    teacher/assignments.py::evaluate(), och syns i lärarens uppdragsvy
+    automatiskt.
+    """
+    from ..school.models import Assignment as _A
     _require_school_mode()
     assigned = 0
+    auto_assignments = 0
     with master_session() as s:
         m = s.query(Module).filter(Module.id == module_id).first()
         if not m:
             raise HTTPException(404, "Module not found")
         if m.teacher_id not in (None, info.teacher_id):
             raise HTTPException(403, "Not your module")
+        # Plocka ut task-steg med assignment_kind så vi kan auto-skapa
+        # Assignments per elev nedan.
+        task_steps = [
+            st for st in m.steps
+            if st.kind == "task"
+            and isinstance(st.params, dict)
+            and st.params.get("assignment_kind")
+        ]
         for sid in payload.student_ids:
             stu = s.query(Student).filter(
                 Student.id == sid,
@@ -446,7 +463,47 @@ def assign_module(
                 student_id=sid, module_id=module_id, sort_order=next_so,
             ))
             assigned += 1
-    return {"assigned": assigned}
+            # Auto-skapa Assignment per task-steg med assignment_kind.
+            # Idempotent: hoppa över om eleven redan har ett uppdrag
+            # som matchar (kind, module_id, step_id) — sparat i params.
+            for st in task_steps:
+                kind = str(st.params["assignment_kind"])
+                # Letar match via params.module_step_id för att inte
+                # krocka med manuellt skapade uppdrag av samma kind.
+                already = s.query(_A).filter(
+                    _A.teacher_id == info.teacher_id,
+                    _A.student_id == sid,
+                    _A.kind == kind,
+                ).all()
+                hit = next(
+                    (a for a in already
+                     if isinstance(a.params, dict)
+                     and a.params.get("module_step_id") == st.id),
+                    None,
+                )
+                if hit:
+                    continue
+                desc_text = (st.content or "")[:400]
+                s.add(_A(
+                    teacher_id=info.teacher_id,
+                    student_id=sid,
+                    title=f"Modul: {m.title} · {st.title}",
+                    description=desc_text or st.title,
+                    kind=kind,
+                    target_year_month=None,
+                    params={
+                        "module_id": module_id,
+                        "module_step_id": st.id,
+                        # Bevara övriga params (t.ex. amount, principal)
+                        # om sådana ligger på steget.
+                        **{
+                            k: v for k, v in st.params.items()
+                            if k != "assignment_kind"
+                        },
+                    },
+                ))
+                auto_assignments += 1
+    return {"assigned": assigned, "auto_assignments": auto_assignments}
 
 
 @router.post("/teacher/modules/{module_id}/unassign")
