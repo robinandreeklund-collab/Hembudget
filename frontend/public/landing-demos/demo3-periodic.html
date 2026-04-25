@@ -93,6 +93,18 @@
     .drifting{animation:none;}
     .blink{animation:none;}
   }
+  /* Knappar + nav-länkar */
+  .btn-dark{background:var(--ink);color:#fff;transition:background .15s, transform .1s;font-weight:600;}
+  .btn-dark:hover{background:#000;}
+  .btn-dark:active{transform:translateY(1px);}
+  .btn-outline{border:1px solid var(--rule);background:#fff;transition:background .15s, border-color .15s;font-weight:600;}
+  .btn-outline:hover{background:#f5f1e3;border-color:var(--ink);}
+  .nav-link{color:var(--ink);position:relative;transition:color .15s;text-decoration:none;}
+  .nav-link:hover{color:#444;}
+  .nav-link:after{content:"";position:absolute;left:0;bottom:-4px;height:1.5px;width:0;background:var(--ink);transition:width .2s;}
+  .nav-link:hover:after{width:100%;}
+  *:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px;}
+
   /* Professor + speech-bubble */
   .prof-wrap{display:flex;align-items:flex-end;justify-content:flex-end;gap:10px;margin-bottom:10px;}
   .prof-bubble{
@@ -124,11 +136,15 @@
       <span class="serif text-xl">Ekonomilabbet</span>
     </a>
     <nav class="hidden md:flex items-center gap-7 text-sm">
-      <a>Kursplan</a><a>Läroplan</a><a>Forskning</a><a>För lärare</a><a>För skolor</a>
+      <a href="#funktioner" class="nav-link">Funktioner</a>
+      <a href="#flow" class="nav-link">Så funkar det</a>
+      <a href="#pricing" class="nav-link">Pris</a>
+      <a href="#faq" class="nav-link">FAQ</a>
+      <a href="#kontakt" class="nav-link">Kontakt</a>
     </nav>
     <div class="flex gap-2">
-      <a class="text-sm px-4 py-2 border rule rounded-md">Elevlogin</a>
-      <a class="text-sm px-4 py-2 bg-[var(--ink)] text-white rounded-md">Lärarkonto</a>
+      <a href="/login/student" class="btn-outline text-sm px-4 py-2 rounded-md">Elevlogin</a>
+      <a href="/login/teacher" class="btn-dark text-sm px-4 py-2 rounded-md">Lärarkonto</a>
     </div>
   </div>
 </header>
@@ -146,10 +162,10 @@
       Hovra över en cell. Klassen ser resten.
     </p>
     <div class="mt-8 flex flex-wrap gap-3">
-      <a class="px-5 py-3 bg-[var(--ink)] text-white rounded-md font-semibold">Prova experimentet</a>
-      <a class="px-5 py-3 border rule rounded-md font-semibold">Ladda ner läroplans­matrisen (PDF)</a>
+      <a href="/login/teacher" class="btn-dark px-5 py-3 rounded-md">Prova experimentet</a>
+      <a href="#" class="btn-outline px-5 py-3 rounded-md">Ladda ner läroplans­matrisen (PDF)</a>
       <button id="heatmap-toggle" type="button"
-        class="px-5 py-3 border rule rounded-md font-semibold"
+        class="btn-outline px-5 py-3 rounded-md"
         aria-pressed="false">
         Lägg på klassens värmekarta
       </button>
@@ -289,8 +305,8 @@
   <h2 class="serif text-4xl md:text-5xl">Kursplanen din kemi­lärare aldrig fick.</h2>
   <p class="mt-4 text-[#555] max-w-xl mx-auto">Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir super-admin.</p>
   <div class="mt-7 flex justify-center gap-3 flex-wrap">
-    <a class="px-6 py-3.5 bg-[var(--ink)] text-white rounded-md font-semibold">Starta labbet</a>
-    <a class="px-6 py-3.5 border rule rounded-md font-semibold">Boka introduktion</a>
+    <a href="/login/teacher" class="btn-dark px-6 py-3.5 rounded-md">Starta labbet</a>
+    <a href="mailto:info@ekonomilabbet.org?subject=Boka%20introduktion" class="btn-outline px-6 py-3.5 rounded-md">Boka introduktion</a>
   </div>
 </section>
 
