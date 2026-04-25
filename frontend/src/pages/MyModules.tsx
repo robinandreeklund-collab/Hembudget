@@ -53,7 +53,7 @@ export default function MyModules() {
         och gör uppdrag. Din lärare ser när du är klar.
       </p>
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}

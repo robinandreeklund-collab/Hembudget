@@ -98,7 +98,7 @@ export default function ModuleView() {
   if (err) {
     return (
       <div className="p-6">
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       </div>
@@ -345,7 +345,7 @@ function ReadWatchPanel({ step: _step, progress, onDone, onCelebrate }: PanelPro
       <button
         onClick={markDone}
         disabled={done || busy}
-        className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:bg-slate-300"
+        className="btn-dark rounded-md px-5 py-2 font-medium disabled:bg-slate-300"
       >
         {done ? "Klar ✓" : busy ? "Sparar…" : "Jag har läst klart"}
       </button>
@@ -396,7 +396,7 @@ function ReflectPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
         <button
           onClick={save}
           disabled={busy}
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-50"
+          className="btn-dark rounded-md px-5 py-2 font-medium disabled:opacity-50"
         >
           <Send className="w-4 h-4 inline mr-1" />
           {progress?.completed_at ? "Spara ny version" : "Skicka"}
@@ -607,7 +607,7 @@ function QuizPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
             busy ||
             (isMulti ? multiSelected.size === 0 : singleSelected == null)
           }
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-50"
+          className="btn-dark rounded-md px-5 py-2 font-medium disabled:opacity-50"
         >
           Svara
         </button>
@@ -695,7 +695,7 @@ function QuizPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
             )}
             <button
               onClick={onDone}
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium"
+              className="btn-dark rounded-md px-5 py-2 font-medium"
             >
               Nästa steg →
             </button>

@@ -94,7 +94,7 @@ export default function PeerReview() {
       </p>
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
@@ -117,7 +117,7 @@ export default function PeerReview() {
           </button>
         </div>
       ) : (
-        <section className="bg-white rounded-xl border p-5 space-y-4">
+        <section className="bg-white border-[1.5px] border-rule p-5 space-y-4">
           <div className="text-xs text-slate-500">
             {target.module_title} · {target.step_title}
           </div>
@@ -148,7 +148,7 @@ export default function PeerReview() {
               <button
                 onClick={submit}
                 disabled={busy || body.trim().length < 10}
-                className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1"
+                className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1"
               >
                 <Send className="w-4 h-4" />
                 {busy ? "Skickar…" : "Skicka"}
@@ -165,7 +165,7 @@ export default function PeerReview() {
       )}
 
       {received.length > 0 && (
-        <section className="bg-white rounded-xl border p-5 space-y-3">
+        <section className="bg-white border-[1.5px] border-rule p-5 space-y-3">
           <h2 className="font-semibold">
             Anonym feedback på dina reflektioner ({received.length})
           </h2>

@@ -104,7 +104,7 @@ export default function EkoDashboard() {
   if (err) {
     return (
       <div className="p-6">
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       </div>
@@ -215,7 +215,7 @@ export default function EkoDashboard() {
       </div>
 
       {/* Budget-status */}
-      <section className="bg-white rounded-xl border p-4 space-y-3">
+      <section className="bg-white border-[1.5px] border-rule p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Budget denna månad</h2>
           {overBudgetCount > 0 && (
@@ -267,7 +267,7 @@ export default function EkoDashboard() {
 
       {/* Överraskande utgifter */}
       {data.recent_overshoots.length > 0 && (
-        <section className="bg-white rounded-xl border p-4 space-y-3">
+        <section className="bg-white border-[1.5px] border-rule p-4 space-y-3">
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <Flame className="w-5 h-5 text-amber-500" />
             Oväntade utgifter denna månad
@@ -292,7 +292,7 @@ export default function EkoDashboard() {
       )}
 
       {/* Uppdrag */}
-      <section className="bg-white rounded-xl border p-4 space-y-3">
+      <section className="bg-white border-[1.5px] border-rule p-4 space-y-3">
         <h2 className="font-semibold text-lg flex items-center gap-2">
           <BookOpenCheck className="w-5 h-5 text-brand-600" />
           Uppdrag ({data.assignments_done}/{data.assignments_total} klara)
@@ -338,12 +338,12 @@ export default function EkoDashboard() {
 
       {/* Mastery */}
       {mastery.length > 0 && (
-        <section className="bg-white rounded-xl border p-4 space-y-3">
+        <section className="bg-white border-[1.5px] border-rule p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-lg">Dina färdigheter</h2>
             <button
               onClick={downloadPortfolio}
-              className="text-sm bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 flex items-center gap-1"
+              className="text-sm btn-dark rounded-md px-3 py-1.5 flex items-center gap-1"
               title="Ladda ner din portfolio som PDF"
             >
               <Download className="w-4 h-4" /> Portfolio PDF
