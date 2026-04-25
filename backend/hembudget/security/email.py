@@ -26,32 +26,81 @@ from ..config import settings
 
 log = logging.getLogger(__name__)
 
+# AppConfig-nyckel där super-admins UI sparar SMTP-config (DB vinner
+# över env-vars så man kan byta utan att redeploya). Strukturen är:
+#   {"host": "...", "port": 587, "user": "...", "password": "...",
+#    "starttls": true, "mail_from": "...", "mail_from_name": "...",
+#    "public_base_url": "..."}
+SMTP_CONFIG_KEY = "smtp_config"
+
 
 class EmailNotConfigured(RuntimeError):
-    """SMTP är inte konfigurerat (smtp_host saknas). Endpoints som
-    kräver mail ska omvandla detta till HTTP 503."""
+    """SMTP är inte konfigurerat. Endpoints som kräver mail ska omvandla
+    detta till HTTP 503."""
+
+
+def _read_db_config() -> dict | None:
+    """Försök läsa SMTP-config från master-DB:n. Returnerar None om
+    school-läge inte är på eller om inget värde finns."""
+    try:
+        from ..school.engines import master_session
+        from ..school.models import AppConfig
+        with master_session() as s:
+            cfg = s.get(AppConfig, SMTP_CONFIG_KEY)
+            if cfg and isinstance(cfg.value, dict):
+                return dict(cfg.value)
+    except Exception:
+        # DB-läsning får aldrig krascha mail-flödet — falla tillbaka
+        # till env tyst.
+        log.exception("email: kunde inte läsa SMTP-config från DB")
+    return None
+
+
+def _effective_config() -> dict:
+    """Slå ihop env (settings) + DB. DB vinner per fält."""
+    db = _read_db_config() or {}
+    return {
+        "host": db.get("host") or settings.smtp_host,
+        "port": db.get("port") or settings.smtp_port,
+        "user": db.get("user") or settings.smtp_user,
+        "password": db.get("password") or settings.smtp_password,
+        "starttls": db.get("starttls", settings.smtp_starttls),
+        "mail_from": db.get("mail_from") or settings.mail_from,
+        "mail_from_name": db.get("mail_from_name") or settings.mail_from_name,
+        "public_base_url": db.get("public_base_url") or settings.public_base_url,
+    }
 
 
 def is_configured() -> bool:
-    return bool(settings.smtp_host and settings.smtp_user and settings.mail_from)
+    cfg = _effective_config()
+    return bool(cfg["host"] and cfg["user"] and cfg["mail_from"])
+
+
+def config_source() -> str:
+    """'db' om DB-config aktivt sätter host, 'env' om bara env-var, '' annars."""
+    db = _read_db_config()
+    if db and db.get("host"):
+        return "db"
+    if settings.smtp_host:
+        return "env"
+    return ""
 
 
 def _from_header() -> str:
-    name = settings.mail_from_name or "Ekonomilabbet"
-    return formataddr((name, settings.mail_from))
+    cfg = _effective_config()
+    name = cfg["mail_from_name"] or "Ekonomilabbet"
+    return formataddr((name, cfg["mail_from"]))
 
 
 def send_mail(*, to: str, subject: str, html: str, text: str) -> None:
-    """Skicka mail. Kastar EmailNotConfigured om SMTP inte är inställt.
-
-    Synkron — endpoints kör den direkt (mail är sällan och snabbt
-    < 1 s via Gmail). Ingen kö behövs i första versionen.
-    """
+    """Skicka mail. Kastar EmailNotConfigured om SMTP inte är inställt."""
     if not is_configured():
         raise EmailNotConfigured(
-            "SMTP är inte konfigurerat (sätt HEMBUDGET_SMTP_HOST m.fl.)."
+            "SMTP är inte konfigurerat (sätt det via super-admin eller "
+            "HEMBUDGET_SMTP_HOST m.fl.)."
         )
 
+    cfg = _effective_config()
     msg = EmailMessage()
     msg["From"] = _from_header()
     msg["To"] = to
@@ -59,11 +108,11 @@ def send_mail(*, to: str, subject: str, html: str, text: str) -> None:
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
 
-    host = settings.smtp_host
-    port = settings.smtp_port
-    user = settings.smtp_user
-    pw = settings.smtp_password
-    use_tls = settings.smtp_starttls
+    host = str(cfg["host"])
+    port = int(cfg["port"])
+    user = str(cfg["user"])
+    pw = str(cfg["password"] or "")
+    use_tls = bool(cfg["starttls"])
 
     # Gmail: STARTTLS på 587. Implicit TLS (465) hanteras av SMTP_SSL —
     # vi stöder båda via flaggan.
