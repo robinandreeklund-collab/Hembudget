@@ -1,0 +1,150 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { api, ApiError } from "@/api/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Turnstile } from "@/components/Turnstile";
+import { AuthShell, PaperButton, PaperInput } from "@/components/paper";
+
+// Tekniskt samma signup-flöde som TeacherSignup, men:
+// - postar till /parent/signup (sätter is_family_account=true i DB)
+// - copy:n riktas till en förälder, inte till en lärare
+// - back-länkar till /login/teacher (samma login-form används av båda)
+//
+// Det gör att en familj kan ha samma admin-konto-funktioner som en
+// lärare utan parallell auth-infrastruktur.
+export default function ParentSignup() {
+  const { schoolStatus } = useAuth();
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const siteKey = schoolStatus?.turnstile_site_key ?? "";
+
+  async function handle(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (password.length < 8) return setErr("Lösenord måste vara minst 8 tecken.");
+    if (password !== confirm) return setErr("Lösenorden matchar inte.");
+    if (siteKey && !turnstileToken)
+      return setErr("Säkerhetskontroll pågår — vänta en sekund.");
+    setBusy(true);
+    try {
+      await api("/parent/signup", {
+        method: "POST",
+        body: JSON.stringify({
+          email, password, name: name || "Förälder",
+        }),
+        turnstileToken: turnstileToken ?? undefined,
+      });
+      setDone(true);
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 503) {
+        setErr(
+          "E-postutskick är inte påslaget på servern. Kontakta administratören.",
+        );
+      } else if (e instanceof ApiError && e.status === 429) {
+        setErr("För många försök. Vänta en stund och försök igen.");
+      } else {
+        setErr(e instanceof Error ? e.message : "Registrering misslyckades");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <AuthShell
+        eyebrow="Snart klart"
+        title="Kolla din inkorg"
+        back="/login/teacher"
+        backLabel="Tillbaka till inloggning"
+      >
+        <p className="body-prose text-sm">
+          Vi har skickat ett bekräftelsemail till{" "}
+          <span className="kbd">{email}</span>. Klicka på länken i mailet
+          för att aktivera ditt familjekonto. Länken är giltig i 24 timmar.
+        </p>
+        <p className="text-xs text-[#888] serif-italic mt-3">
+          Hittar du inte mailet? Kolla skräpposten.
+        </p>
+        <Link
+          to="/login/teacher"
+          className="btn-dark mt-6 inline-block w-full text-center px-5 py-3 rounded-md"
+        >
+          Till inloggning
+        </Link>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell
+      eyebrow="Ekonomilabbet · för hemmet"
+      title="Skapa familjekonto"
+      intro={
+        "Skapa ett konto för din familj och bekräfta din e-post. " +
+        "När du är inloggad lägger du till dina barn — varje barn " +
+        "får en egen 6-teckens-kod att logga in med."
+      }
+      back="/"
+      backLabel="Tillbaka till start"
+    >
+      <form onSubmit={handle} className="space-y-3">
+        <PaperInput
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Din e-post"
+          autoFocus
+        />
+        <PaperInput
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ditt namn"
+        />
+        <PaperInput
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Lösenord (minst 8 tecken)"
+        />
+        <PaperInput
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          placeholder="Bekräfta lösenord"
+        />
+        <Turnstile
+          siteKey={siteKey}
+          onToken={setTurnstileToken}
+          onExpire={() => setTurnstileToken(null)}
+        />
+        {err && (
+          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
+            {err}
+          </div>
+        )}
+        <PaperButton
+          type="submit"
+          disabled={busy || (Boolean(siteKey) && !turnstileToken)}
+          className="w-full justify-center disabled:opacity-50"
+        >
+          {busy ? "Skapar konto…" : "Skapa familjekonto"}
+        </PaperButton>
+        <p className="text-xs text-[#888] serif-italic pt-2">
+          Är du istället lärare?{" "}
+          <Link to="/signup/teacher" className="underline">
+            Skapa lärarkonto
+          </Link>
+          .
+        </p>
+      </form>
+    </AuthShell>
+  );
+}

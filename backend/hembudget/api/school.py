@@ -98,6 +98,7 @@ class TeacherAuthOut(BaseModel):
     teacher_id: int
     name: str
     email: str
+    is_family_account: bool = False
 
 
 class StudentIn(BaseModel):
@@ -342,11 +343,13 @@ def bootstrap_teacher(
         tid = teacher.id
         tname = teacher.name
         temail = teacher.email
+        tfam = teacher.is_family_account
 
     token = random_token()
     register_token(token, role="teacher", teacher_id=tid)
     return TeacherAuthOut(
         token=token, teacher_id=tid, name=tname, email=temail,
+        is_family_account=tfam,
     )
 
 
@@ -382,10 +385,12 @@ def teacher_login(
         tid = teacher.id
         tname = teacher.name
         temail = teacher.email
+        tfam = teacher.is_family_account
     token = random_token()
     register_token(token, role="teacher", teacher_id=tid)
     return TeacherAuthOut(
         token=token, teacher_id=tid, name=tname, email=temail,
+        is_family_account=tfam,
     )
 
 
@@ -2891,6 +2896,7 @@ def teacher_me(info: TokenInfo = Depends(require_teacher)) -> TeacherAuthOut:
             raise HTTPException(404, "Teacher not found")
         return TeacherAuthOut(
             token=info.token, teacher_id=t.id, name=t.name, email=t.email,
+            is_family_account=t.is_family_account,
         )
 
 

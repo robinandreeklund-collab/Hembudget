@@ -34,6 +34,7 @@ import Landing from "./pages/Landing";
 import LoginChoice from "./pages/LoginChoice";
 import TeacherLogin from "./pages/TeacherLogin";
 import TeacherSignup from "./pages/TeacherSignup";
+import ParentSignup from "./pages/ParentSignup";
 import VerifyEmail from "./pages/VerifyEmail";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/login" element={<LoginChoice />} />
         <Route path="/login/teacher" element={<TeacherLogin />} />
         <Route path="/signup/teacher" element={<TeacherSignup />} />
+        <Route path="/signup/parent" element={<ParentSignup />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />

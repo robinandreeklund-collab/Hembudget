@@ -60,6 +60,13 @@ class Teacher(MasterBase):
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Familjekonto: tekniskt samma som ett vanligt lärarkonto, men signupen
+    # gick via /signup/parent. Påverkar copy + default-moduler i UI:n
+    # (Sidebar visar "Familjepanel", elever kallas "barn", osv). Samma
+    # databas-modell, ingen extra tabell — bara en pedagogisk flagga.
+    is_family_account: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

@@ -236,15 +236,13 @@ class SimpleOkOut(BaseModel):
 
 # ---------- Endpoints ----------
 
-@router.post("/teacher/signup", response_model=SimpleOkOut)
-def teacher_signup(payload: SignupIn, request: Request) -> SimpleOkOut:
-    """Öppen registrering av nytt lärarkonto. Läraren måste bekräfta
-    e-post innan den kan logga in.
-
-    Bootstrap-flödet i school.py är fortfarande separat — det används
-    för FÖRSTA läraren (super-admin) medan denna endpoint är för alla
-    efterföljande lärare som själva skaffar konto.
-    """
+def _create_open_signup(
+    payload: SignupIn, request: Request, *, is_family: bool,
+) -> SimpleOkOut:
+    """Delad signup-logik för lärare och förälder. Skapar en overifierad
+    Teacher-rad och skickar verifieringsmail. Sätter is_family_account
+    om signupen gick via familje-flödet — det är den enda skillnaden
+    mellan lärar- och förälder-konto i databasen."""
     _require_school_mode()
     _require_email_configured()
     check_rate_limit(request, "teacher-signup", RULES_SIGNUP)
@@ -264,11 +262,37 @@ def teacher_signup(payload: SignupIn, request: Request) -> SimpleOkOut:
             name=payload.name.strip(),
             password_hash=hash_password(payload.password),
             email_verified_at=None,
+            is_family_account=is_family,
         )
         s.add(teacher)
         s.flush()
         _send_verify(s, request, teacher)
     return SimpleOkOut(ok=True)
+
+
+@router.post("/teacher/signup", response_model=SimpleOkOut)
+def teacher_signup(payload: SignupIn, request: Request) -> SimpleOkOut:
+    """Öppen registrering av nytt lärarkonto. Läraren måste bekräfta
+    e-post innan den kan logga in.
+
+    Bootstrap-flödet i school.py är fortfarande separat — det används
+    för FÖRSTA läraren (super-admin) medan denna endpoint är för alla
+    efterföljande lärare som själva skaffar konto.
+    """
+    return _create_open_signup(payload, request, is_family=False)
+
+
+@router.post("/parent/signup", response_model=SimpleOkOut)
+def parent_signup(payload: SignupIn, request: Request) -> SimpleOkOut:
+    """Öppen registrering av nytt familjekonto. Tekniskt samma flöde
+    som /teacher/signup men markerar kontot som is_family_account=True
+    så UI:n kan välja förälder-anpassad copy.
+
+    Bidragsorsaken att hålla detta som en separat endpoint istället för
+    en flagga i payloaden: rate-limiten + Turnstile är gemensamma men
+    framtida policyändringar (t.ex. annan e-post-mall, annat välkomst-
+    paket) kan ändras här utan att röra lärar-flödet."""
+    return _create_open_signup(payload, request, is_family=True)
 
 
 @router.post("/teacher/request-verify-resend", response_model=SimpleOkOut)

@@ -15,7 +15,7 @@ export default function LoginChoice() {
         <div className="text-center mb-10">
           <div className="eyebrow mb-3">Ekonomilabbet</div>
           <h1 className="serif text-4xl md:text-5xl leading-[1.05]">Välkommen.</h1>
-          <p className="lead mt-3">Är du lärare eller elev?</p>
+          <p className="lead mt-3">Vem är du?</p>
         </div>
 
         <Link
@@ -33,15 +33,27 @@ export default function LoginChoice() {
           </div>
         </Link>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link
             to="/login/teacher"
             className="feature-card text-left group block"
           >
             <PaperChip color="special">Lä</PaperChip>
-            <h2 className="serif text-2xl mt-4">Lärare / Skola</h2>
+            <h2 className="serif text-2xl mt-4">Lärare</h2>
             <p className="mt-2 body-prose text-sm">
               Logga in med e-post och lösenord för att hantera din klass.
+            </p>
+          </Link>
+
+          <Link
+            to="/signup/parent"
+            className="feature-card text-left group block"
+          >
+            <PaperChip color="fordj">Fö</PaperChip>
+            <h2 className="serif text-2xl mt-4">Förälder</h2>
+            <p className="mt-2 body-prose text-sm">
+              Skapa familjekonto för dig och dina barn — eller logga in
+              med befintligt.
             </p>
           </Link>
 
@@ -50,9 +62,10 @@ export default function LoginChoice() {
             className="feature-card text-left group block"
           >
             <PaperChip color="grund">El</PaperChip>
-            <h2 className="serif text-2xl mt-4">Elev</h2>
+            <h2 className="serif text-2xl mt-4">Elev / Barn</h2>
             <p className="mt-2 body-prose text-sm">
-              Använd din 6-teckens kod som du fått av din lärare.
+              Använd din 6-teckens kod som du fått av din lärare eller
+              förälder.
             </p>
           </Link>
         </div>

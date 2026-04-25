@@ -196,6 +196,8 @@ def _run_master_migrations(engine: Engine) -> None:
                 "UPDATE teachers SET email_verified_at = CURRENT_TIMESTAMP "
                 "WHERE email_verified_at IS NULL"
             ))
+    if "is_family_account" not in t_cols:
+        _add("teachers", "is_family_account BOOLEAN NOT NULL DEFAULT 0")
 
 
 @contextmanager
