@@ -1687,56 +1687,61 @@ def create_batches(
 
         for student in students:
             try:
-                if not student.profile:
-                    _create_profile_for_student(s, student)
-                existing = s.query(ScenarioBatch).filter(
-                    ScenarioBatch.student_id == student.id,
-                    ScenarioBatch.year_month == payload.year_month,
-                ).first()
-                if existing and not payload.overwrite:
+                # SAVEPOINT per elev: om en specifik elev-batch failar
+                # (t.ex. unika constraint, integer-overflow, etc.) ska
+                # sessionen rollbacka isolerat så övriga elever lyckas
+                # och hela POST-svaret inte blir 500.
+                with s.begin_nested():
+                    if not student.profile:
+                        _create_profile_for_student(s, student)
+                    existing = s.query(ScenarioBatch).filter(
+                        ScenarioBatch.student_id == student.id,
+                        ScenarioBatch.year_month == payload.year_month,
+                    ).first()
+                    if existing and not payload.overwrite:
+                        results.append(CreateBatchResultRow(
+                            student_id=student.id,
+                            display_name=student.display_name,
+                            year_month=payload.year_month,
+                            status="exists", batch_id=existing.id,
+                            artifact_count=len(existing.artifacts),
+                        ))
+                        continue
+                    status_str = "overwritten" if existing else "created"
+                    batch = create_batch_for_student(
+                        s, student, payload.year_month,
+                        overwrite=payload.overwrite,
+                    )
+                    s.flush()
+                    # Auto-skapa import-uppdrag för månaden om det inte finns
+                    from ..teacher.assignments import (
+                        DEFAULT_ASSIGNMENT_FOR_NEW_BATCH,
+                    )
+                    exists_a = s.query(Assignment).filter(
+                        Assignment.student_id == student.id,
+                        Assignment.kind == "import_batch",
+                        Assignment.target_year_month == payload.year_month,
+                    ).first()
+                    if not exists_a:
+                        s.add(Assignment(
+                            teacher_id=info.teacher_id,
+                            student_id=student.id,
+                            title=(
+                                f"Importera dokument för {payload.year_month}"
+                            ),
+                            description=DEFAULT_ASSIGNMENT_FOR_NEW_BATCH[
+                                "description"
+                            ],
+                            kind="import_batch",
+                            target_year_month=payload.year_month,
+                        ))
                     results.append(CreateBatchResultRow(
                         student_id=student.id,
                         display_name=student.display_name,
                         year_month=payload.year_month,
-                        status="exists", batch_id=existing.id,
-                        artifact_count=len(existing.artifacts),
+                        status=status_str, batch_id=batch.id,
+                        artifact_count=len(batch.artifacts),
                     ))
-                    continue
-                status_str = "overwritten" if existing else "created"
-                batch = create_batch_for_student(
-                    s, student, payload.year_month,
-                    overwrite=payload.overwrite,
-                )
-                s.flush()
-                # Auto-skapa import-uppdrag för månaden om det inte finns
-                from ..teacher.assignments import (
-                    DEFAULT_ASSIGNMENT_FOR_NEW_BATCH,
-                )
-                exists_a = s.query(Assignment).filter(
-                    Assignment.student_id == student.id,
-                    Assignment.kind == "import_batch",
-                    Assignment.target_year_month == payload.year_month,
-                ).first()
-                if not exists_a:
-                    s.add(Assignment(
-                        teacher_id=info.teacher_id,
-                        student_id=student.id,
-                        title=(
-                            f"Importera dokument för {payload.year_month}"
-                        ),
-                        description=DEFAULT_ASSIGNMENT_FOR_NEW_BATCH[
-                            "description"
-                        ],
-                        kind="import_batch",
-                        target_year_month=payload.year_month,
-                    ))
-                results.append(CreateBatchResultRow(
-                    student_id=student.id,
-                    display_name=student.display_name,
-                    year_month=payload.year_month,
-                    status=status_str, batch_id=batch.id,
-                    artifact_count=len(batch.artifacts),
-                ))
             except Exception as e:
                 log.exception("Batch creation failed for %d", student.id)
                 results.append(CreateBatchResultRow(
@@ -2622,13 +2627,18 @@ def list_all_batch_months(
 def student_list_batches(
     info: TokenInfo = Depends(require_token),
 ) -> list[ScenarioBatchOut]:
+    """Lista elevens egna batchar. Tillåter lärar-impersonation
+    (x-as-student-headern) så lärare kan kolla elevens vy utan att
+    smällas ut med 403."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    # Använd actor_student_id från middleware — fungerar för både
+    # elev-token och lärare med x-as-student.
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         batches = (
             s.query(ScenarioBatch)
-            .filter(ScenarioBatch.student_id == info.student_id)
+            .filter(ScenarioBatch.student_id == student_id)
             .order_by(ScenarioBatch.year_month.desc())
             .all()
         )

@@ -195,3 +195,30 @@ def test_step_complete_still_locked_to_student_role(fx) -> None:
         },
     )
     assert r.status_code == 403
+
+
+def test_teacher_with_x_as_student_can_list_batches(fx) -> None:
+    """Lärare som impersonerar elev ska kunna hämta /student/batches
+    utan 403 — annars knäcks elevens dokument-vy i lärar-impersonation.
+    """
+    client, teacher_tok, _, sid, _mid, _step_id = fx
+    r = client.get(
+        "/student/batches",
+        headers={
+            "Authorization": f"Bearer {teacher_tok}",
+            "X-As-Student": str(sid),
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert isinstance(r.json(), list)
+
+
+def test_teacher_without_x_as_student_cannot_list_batches(fx) -> None:
+    """En lärare utan x-as-student har ingen scope-context och
+    /student/batches ska därför 403:a."""
+    client, teacher_tok, _, _sid, _mid, _step_id = fx
+    r = client.get(
+        "/student/batches",
+        headers={"Authorization": f"Bearer {teacher_tok}"},
+    )
+    assert r.status_code == 403
