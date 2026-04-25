@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, XCircle, Loader } from "lucide-react";
 import { api, ApiError } from "@/api/client";
+import { AuthShell } from "@/components/paper";
 
 type State = "pending" | "ok" | "expired" | "invalid" | "error";
 
@@ -47,46 +48,52 @@ export default function VerifyEmail() {
     })();
   }, [token]);
 
+  if (state === "pending") {
+    return (
+      <AuthShell title="Bekräftar…" eyebrow="Verifiering">
+        <div className="text-center py-4">
+          <Loader className="w-10 h-10 text-ink mx-auto animate-spin" strokeWidth={1.5} />
+        </div>
+      </AuthShell>
+    );
+  }
+
+  if (state === "ok") {
+    return (
+      <AuthShell title="E-post bekräftad" eyebrow="Klart" back="/login/teacher" backLabel="Tillbaka">
+        <div className="text-center">
+          <CheckCircle2 className="w-12 h-12 text-ink mx-auto" strokeWidth={1.5} />
+          <p className="body-prose text-sm mt-3">
+            Kontot är aktivt. Du kan nu logga in.
+          </p>
+          <Link
+            to="/login/teacher"
+            className="btn-dark mt-6 inline-block w-full text-center px-5 py-3 rounded-md"
+          >
+            Till inloggning
+          </Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-50 grid place-items-center p-6">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-slate-200 text-center">
-        {state === "pending" && (
-          <>
-            <Loader className="w-10 h-10 text-brand-600 mx-auto animate-spin" />
-            <h1 className="text-xl font-semibold mt-4">Bekräftar…</h1>
-          </>
-        )}
-        {state === "ok" && (
-          <>
-            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-            <h1 className="text-xl font-semibold mt-3">E-post bekräftad</h1>
-            <p className="text-sm text-slate-600 mt-2">
-              Kontot är aktivt. Du kan nu logga in.
-            </p>
-            <Link
-              to="/login/teacher"
-              className="mt-6 inline-block w-full bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2.5 font-medium"
-            >
-              Till inloggning
-            </Link>
-          </>
-        )}
-        {(state === "expired" || state === "invalid" || state === "error") && (
-          <>
-            <XCircle className="w-12 h-12 text-rose-500 mx-auto" />
-            <h1 className="text-xl font-semibold mt-3">
-              {state === "expired" ? "Länken kan inte användas" : "Ogiltig länk"}
-            </h1>
-            <p className="text-sm text-slate-600 mt-2">{msg}</p>
-            <Link
-              to="/login/teacher"
-              className="mt-6 inline-block w-full border border-slate-300 hover:bg-slate-50 rounded-lg py-2.5 font-medium"
-            >
-              Till inloggning
-            </Link>
-          </>
-        )}
+    <AuthShell
+      title={state === "expired" ? "Länken kan inte användas" : "Ogiltig länk"}
+      eyebrow="Verifiering"
+      back="/login/teacher"
+      backLabel="Tillbaka"
+    >
+      <div className="text-center">
+        <XCircle className="w-12 h-12 text-ink mx-auto" strokeWidth={1.5} />
+        <p className="body-prose text-sm mt-3">{msg}</p>
+        <Link
+          to="/login/teacher"
+          className="btn-outline mt-6 inline-block w-full text-center px-5 py-3 rounded-md"
+        >
+          Till inloggning
+        </Link>
       </div>
-    </div>
+    </AuthShell>
   );
 }

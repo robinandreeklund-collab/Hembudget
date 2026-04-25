@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Mail } from "lucide-react";
 import { api, ApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
+import { AuthShell, PaperButton, PaperInput } from "@/components/paper";
 
 export default function ForgotPassword() {
   const { schoolStatus } = useAuth();
@@ -40,62 +39,59 @@ export default function ForgotPassword() {
     }
   }
 
+  if (done) {
+    return (
+      <AuthShell
+        eyebrow="Snart klart"
+        title="Kolla din inkorg"
+        back="/login/teacher"
+        backLabel="Tillbaka till inloggning"
+      >
+        <p className="body-prose text-sm">
+          Om ett konto finns för <span className="kbd">{email}</span> har
+          vi skickat en länk för att välja nytt lösenord. Länken gäller i
+          60 minuter.
+        </p>
+        <p className="text-xs text-[#888] serif-italic mt-3">
+          Hittar du inte mailet? Kolla skräpposten.
+        </p>
+      </AuthShell>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-50 grid place-items-center p-6">
-      <div className="w-full max-w-md">
-        <Link
-          to="/login/teacher"
-          className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" /> Tillbaka till inloggning
-        </Link>
-        {done ? (
-          <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
-            <div className="flex items-center gap-2 text-brand-600 mb-3">
-              <Mail className="w-6 h-6" />
-              <h1 className="text-xl font-semibold">Kolla din inkorg</h1>
-            </div>
-            <p className="text-sm text-slate-700 leading-relaxed">
-              Om ett konto finns för{" "}
-              <span className="font-semibold">{email}</span> har vi skickat
-              en länk för att välja nytt lösenord. Länken gäller i 60 minuter.
-            </p>
-            <p className="text-sm text-slate-500 mt-4">
-              Hittar du inte mailet? Kolla skräpposten.
-            </p>
+    <AuthShell
+      title="Glömt lösenord?"
+      intro="Ange din e-post så skickar vi en länk för att välja ett nytt."
+      back="/login/teacher"
+      backLabel="Tillbaka till inloggning"
+    >
+      <form onSubmit={handle} className="space-y-3">
+        <PaperInput
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="E-post"
+          autoFocus
+        />
+        <Turnstile
+          siteKey={siteKey}
+          onToken={setTurnstileToken}
+          onExpire={() => setTurnstileToken(null)}
+        />
+        {err && (
+          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
+            {err}
           </div>
-        ) : (
-          <form
-            onSubmit={handle}
-            className="bg-white rounded-2xl shadow-xl p-8 space-y-4 border border-slate-200"
-          >
-            <h1 className="text-xl font-semibold">Glömt lösenord?</h1>
-            <p className="text-sm text-slate-600">
-              Ange din e-post så skickar vi en länk för att välja ett nytt.
-            </p>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-post"
-              autoFocus
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
-            />
-            <Turnstile
-              siteKey={siteKey}
-              onToken={setTurnstileToken}
-              onExpire={() => setTurnstileToken(null)}
-            />
-            {err && <div className="text-sm text-rose-600">{err}</div>}
-            <button
-              disabled={busy || (Boolean(siteKey) && !turnstileToken)}
-              className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-2.5 font-medium disabled:opacity-50"
-            >
-              {busy ? "Skickar…" : "Skicka länk"}
-            </button>
-          </form>
         )}
-      </div>
-    </div>
+        <PaperButton
+          type="submit"
+          disabled={busy || (Boolean(siteKey) && !turnstileToken)}
+          className="w-full justify-center disabled:opacity-50"
+        >
+          {busy ? "Skickar…" : "Skicka länk"}
+        </PaperButton>
+      </form>
+    </AuthShell>
   );
 }
