@@ -2698,6 +2698,16 @@ def import_artifact_endpoint(
         if not student:
             raise HTTPException(404, "Student not found")
         result = import_artifact(s, artifact, student)
+        from ..school.activity import log_activity as _act
+        _act(
+            "batch.imported",
+            f"Importerade {artifact.kind} ({batch.year_month})",
+            payload={
+                "batch_id": batch.id, "artifact_id": artifact.id,
+                "kind": artifact.kind, "year_month": batch.year_month,
+            },
+            student_id=student.id,
+        )
         return result
 
 
@@ -2730,6 +2740,18 @@ def import_all_endpoint(
         for art in sorted_arts:
             r = import_artifact(s, art, student)
             results.append({"artifact_id": art.id, "kind": art.kind, **r})
+        if results:
+            from ..school.activity import log_activity as _act
+            _act(
+                "batch.imported",
+                f"Importerade alla {len(results)} dokument för "
+                f"{batch.year_month}",
+                payload={
+                    "batch_id": batch.id, "year_month": batch.year_month,
+                    "count": len(results),
+                },
+                student_id=student.id,
+            )
     return {"results": results}
 
 

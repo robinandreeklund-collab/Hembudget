@@ -10,6 +10,7 @@ from ..budget.forecast import CashflowForecaster
 from ..budget.monthly import MonthlyBudgetService
 from ..chat import tools as chat_tools
 from ..db.models import Transaction
+from ..school.activity import log_activity as _log_activity
 from ..subscriptions.detector import SubscriptionDetector
 from .deps import db, require_auth
 from .schemas import BudgetBulkIn, BudgetIn
@@ -36,6 +37,16 @@ def available_months(session: Session = Depends(db)) -> dict:
 def set_budget(payload: BudgetIn, session: Session = Depends(db)) -> dict:
     svc = MonthlyBudgetService(session)
     b = svc.set_budget(payload.month, payload.category_id, payload.planned_amount)
+    _log_activity(
+        "budget.set",
+        f"Satte budget för {payload.month}: "
+        f"{float(payload.planned_amount):.0f} kr",
+        payload={
+            "month": payload.month,
+            "category_id": payload.category_id,
+            "amount": float(payload.planned_amount),
+        },
+    )
     return {"id": b.id, "month": b.month, "category_id": b.category_id,
             "planned_amount": float(b.planned_amount)}
 
@@ -219,6 +230,14 @@ def bulk_set_budget(payload: BudgetBulkIn, session: Session = Depends(db)) -> di
         payload.month,
         [(r.category_id, r.planned_amount) for r in payload.rows],
     )
+    if saved:
+        total = sum(float(b.planned_amount) for b in saved)
+        _log_activity(
+            "budget.set",
+            f"Satte budget för {len(saved)} kategorier i {payload.month} "
+            f"(totalt {total:.0f} kr)",
+            payload={"month": payload.month, "count": len(saved), "total": total},
+        )
     return {
         "month": payload.month,
         "saved": len(saved),

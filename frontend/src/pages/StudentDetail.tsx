@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, BookOpenCheck, Brain, Briefcase, CheckCircle2, Eye, FileText,
-  ListChecks, Loader2, Plus, Sparkles, Target, Users, XCircle,
+  Activity, ArrowLeft, BookOpenCheck, Brain, Briefcase, CheckCircle2, Eye,
+  FileText, ListChecks, Loader2, Plus, Sparkles, Target, Users, XCircle,
 } from "lucide-react";
 import { api, ApiError, getApiBase, getToken } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -107,6 +107,11 @@ export default function StudentDetail() {
       id: number; role: string; content: string; created_at: string;
     }>;
   } | null>(null);
+  const [activity, setActivity] = useState<Array<{
+    id: number; kind: string; summary: string;
+    payload: Record<string, unknown> | null;
+    occurred_at: string;
+  }>>([]);
 
   useEffect(() => {
     api<{ ai_enabled: boolean }>("/admin/ai/me")
@@ -174,6 +179,9 @@ export default function StudentDetail() {
     api<typeof aiThreads>(`/ai/teacher/students/${sid}/threads`)
       .then(setAiThreads)
       .catch(() => setAiThreads([]));
+    api<{ items: typeof activity }>(`/teacher/students/${sid}/activity?limit=30`)
+      .then((r) => setActivity(r.items))
+      .catch(() => setActivity([]));
   }, [sid]);
 
   async function openAiThread(id: number) {
@@ -516,6 +524,37 @@ export default function StudentDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Aktivitetsflöde — vad eleven gjort i scope-DB:n */}
+      {activity.length > 0 && (
+        <section className="bg-white border border-rule rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Activity className="w-5 h-5 text-ink" /> Senaste aktivitet
+          </h2>
+          <p className="text-sm text-[#666]">
+            Tidslinje över elevens handlingar — transaktioner, budget, lån
+            och kategorisering. Fångas automatiskt utan att eleven behöver
+            rapportera.
+          </p>
+          <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+            {activity.map((a) => (
+              <li
+                key={a.id}
+                className="flex items-start gap-3 border-b border-rule/50 pb-1.5 last:border-0"
+              >
+                <span className="text-xs eyebrow shrink-0 mt-0.5 w-28">
+                  {new Date(a.occurred_at).toLocaleString("sv-SE", {
+                    month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </span>
+                <span className="text-sm flex-1">{a.summary}</span>
+                <span className="text-xs text-[#999] shrink-0">{a.kind}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* Uppdrag */}

@@ -90,13 +90,15 @@ def build_app() -> FastAPI:
         from starlette.middleware.base import BaseHTTPMiddleware
         from .api.deps import _token_info
         from .school.engines import (
-            master_session, scope_for_student, set_current_scope,
+            master_session, scope_for_student,
+            set_current_actor_student, set_current_scope,
         )
         from .school.models import Student
 
         class StudentScopeMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
                 set_current_scope(None)
+                set_current_actor_student(None)
                 auth = request.headers.get("authorization")
                 x_as = request.headers.get("x-as-student")
                 if auth and auth.lower().startswith("bearer "):
@@ -122,6 +124,7 @@ def build_app() -> FastAPI:
                                 stu = q.first()
                                 if stu:
                                     set_current_scope(scope_for_student(stu))
+                                    set_current_actor_student(stu.id)
                 return await call_next(request)
 
         app.add_middleware(StudentScopeMiddleware)

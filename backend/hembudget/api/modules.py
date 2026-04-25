@@ -978,6 +978,55 @@ def teacher_student_achievements(
     }
 
 
+@router.get("/teacher/students/{student_id}/activity")
+def teacher_student_activity(
+    student_id: int,
+    limit: int = 50,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Tidslinje över elevens senaste handlingar i scope-DB:n
+    (transaktioner, budget, lån, importer, kategorisering osv).
+
+    Audit-spåret skrivs av endpoints i transactions/budget/loans/imports
+    via `school.activity::log_activity`. Tabellen växer monotont — vi
+    cap:ar svaret men sparar aldrig något."""
+    from ..school.models import StudentActivity
+    _require_school_mode()
+    limit = max(1, min(limit, 500))
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Elev finns ej eller tillhör inte dig")
+        rows = (
+            s.query(StudentActivity)
+            .filter(StudentActivity.student_id == student_id)
+            # SQLite CURRENT_TIMESTAMP har bara sekund-precision, så
+            # två events i samma sekund måste tiebreakas på id annars
+            # blir ordningen ostabil.
+            .order_by(
+                StudentActivity.occurred_at.desc(),
+                StudentActivity.id.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+        return {
+            "items": [
+                {
+                    "id": r.id,
+                    "kind": r.kind,
+                    "summary": r.summary,
+                    "payload": r.payload,
+                    "occurred_at": r.occurred_at.isoformat(),
+                }
+                for r in rows
+            ],
+        }
+
+
 @router.get(
     "/teacher/students/{student_id}/mastery",
     response_model=list[CompetencyMasteryOut],

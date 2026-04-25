@@ -50,6 +50,25 @@ def scope_context(scope_key: str | None) -> Iterator[None]:
         _current_scope.reset(token)
 
 
+# Aktör-student-id för aktivitetsloggning. Sätts i StudentScopeMiddleware
+# för elev-tokens; läraren som impersonerar (x-as-student) hamnar också
+# här så audit-spåret tillskrivs eleven (det är trots allt i elevens DB
+# läraren agerar). För familje-scope är detta vilken specifik elev/
+# vårdnadshavare som loggat in just nu — viktigt eftersom flera personer
+# delar samma scope-DB.
+_current_actor_student: ContextVar[int | None] = ContextVar(
+    "current_actor_student", default=None,
+)
+
+
+def set_current_actor_student(student_id: int | None) -> None:
+    _current_actor_student.set(student_id)
+
+
+def get_current_actor_student() -> int | None:
+    return _current_actor_student.get()
+
+
 # --- Bekvämlighet: scope-nyckel från Student-objekt ---
 
 def scope_for_student(student) -> str:

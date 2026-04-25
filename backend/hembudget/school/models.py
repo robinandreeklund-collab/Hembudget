@@ -790,3 +790,39 @@ class AppConfig(MasterBase):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(),
     )
+
+
+class StudentActivity(MasterBase):
+    """Audit-spår för meningsfulla handlingar eleven gör i scope-DB:n.
+
+    Skapas av endpoints i transactions/budget/loans/imports osv via
+    helper:n `school.activity::log_activity`. Lärare ser flödet under
+    StudentDetail → "Senaste aktivitet" och kan på så sätt följa elevens
+    arbete utan att behöva impersonera.
+
+    Inga PII-värden lagras i payload — bara siffror och rubriker (ex.
+    "kategoriserade 4 transaktioner i 2025-08"). Hela elevens scope-DB
+    har redan persondata och raderas vid /reset.
+
+    Vi sparar inte här någon koppling till en Assignment — använd
+    matrix-endpointen för det. Aktivitetsflödet är en separat tidslinje.
+    """
+    __tablename__ = "student_activities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Stabil sträng-identifierare. Mappas till människo-läsbar text i
+    # frontend (StudentDetail.tsx). Exempel:
+    # "transaction.created", "budget.set", "loan.created",
+    # "transaction.recategorized", "transfer.linked", "batch.imported"
+    kind: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    # Sammanfattande rubrik som visas direkt i flödet utan klick.
+    summary: Mapped[str] = mapped_column(String(240), nullable=False)
+    # Frivilliga strukturerade detaljer (belopp, antal, månad osv).
+    payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )

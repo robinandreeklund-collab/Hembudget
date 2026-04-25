@@ -16,6 +16,7 @@ from ..config import settings
 from ..db.models import Account, Loan, LoanPayment, LoanScheduleEntry, Transaction
 from ..llm.client import LMStudioClient, LLMUnavailable
 from ..loans.matcher import LoanMatcher
+from ..school.activity import log_activity as _log_activity
 from .deps import db, llm_client, require_auth
 
 log = logging.getLogger(__name__)
@@ -113,6 +114,16 @@ def create_loan(payload: LoanIn, session: Session = Depends(db)) -> Loan:
     # Match existing transactions against the new loan
     txs = session.query(Transaction).filter(Transaction.amount < 0).all()
     LoanMatcher(session).match_and_classify(txs)
+    _log_activity(
+        "loan.created",
+        f"Registrerade lån: {loan.name} "
+        f"({float(loan.principal_amount or 0):.0f} kr)",
+        payload={
+            "loan_id": loan.id,
+            "principal_amount": float(loan.principal_amount or 0),
+            "name": loan.name,
+        },
+    )
     return loan
 
 
@@ -127,6 +138,11 @@ def update_loan(loan_id: int, payload: LoanUpdate, session: Session = Depends(db
     if payload.match_pattern is not None:
         txs = session.query(Transaction).filter(Transaction.amount < 0).all()
         LoanMatcher(session).match_and_classify(txs)
+    _log_activity(
+        "loan.updated",
+        f"Uppdaterade lån: {loan.name}",
+        payload={"loan_id": loan.id, "name": loan.name},
+    )
     return loan
 
 
