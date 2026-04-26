@@ -629,6 +629,76 @@ class AuditLog(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
+class StockHolding(TenantMixin, Base):
+    """Aktuell aktieposition på ett ISK-konto.
+
+    Aggregat — uppdateras efter varje StockTransaction. Snittkursen
+    (`avg_cost`) viktas mot tidigare köp + courtage. Säljs allt så
+    raderas raden (quantity = 0 är inte ett giltigt tillstånd)."""
+    __tablename__ = "stock_holdings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "account_id", "ticker", name="uq_holding_acc_ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    avg_cost: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="SEK", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class StockTransaction(TenantMixin, Base):
+    """Append-only ledger över alla aktieaffärer.
+
+    Tabellen är revisionsmässig: aldrig delete eller update. Lärare
+    kan se exakt vilken kurs (`quote_id` → master.stock_quotes.id) som
+    gällde vid varje affär.
+    """
+    __tablename__ = "stock_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String(4), nullable=False)  # "buy" | "sell"
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    courtage: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    realized_pnl: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True,
+    )  # Bara satt på sälj
+    quote_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )  # Länk till bokförda Transaction (likviden på ISK-kontot)
+    student_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+
+
+class StockWatchlist(TenantMixin, Base):
+    """Aktier som eleven flaggat som intressanta att följa."""
+    __tablename__ = "stock_watchlist"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "ticker", name="uq_watchlist_ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 def create_all() -> None:
     from .base import get_engine
 
