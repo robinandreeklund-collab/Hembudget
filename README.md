@@ -176,3 +176,153 @@ del — men båda får samma marginal kvar att leva på. Det är ett moget val."
 | **Aktier — komma igång** | ISK, riskspridning, courtage, peer-revision |
 | **Kreditmånaden — när pengarna inte räcker** | Privatlån vs SMS-lån, kreditscore, reflektion |
 
+## Teknisk arkitektur
+
+### Stack
+
+- **Backend:** Python 3.11, FastAPI, SQLAlchemy 2.x, SQLite (lokalt) + Postgres (prod via Cloud SQL), reportlab, Anthropic SDK, matplotlib, pandas, httpx
+- **Frontend:** React 18 + TypeScript 5, Vite 5, TailwindCSS, react-router, recharts, lucide-react, @tanstack/react-query
+- **Deploy:** Google Cloud Run via `deploy.sh` (Cloud Build, ingen lokal Docker krävs)
+- **AI:** Claude (Anthropic SDK, Haiku 4.5 + Sonnet 4.6) för skolfunktioner; LM Studio (Nemotron Nano 3) för desktop-AI
+- **Marknadsdata:** Finnhub.io (gratis 60 req/min) eller Yahoo Finance via yfinance som fallback
+- **Mobil/desktop:** Tauri (Rust + WebView) för krypterad lokal version
+
+### Multi-tenant-arkitektur
+
+Skolläget använder en **ContextVar-driven scope-isolering**:
+
+- `StudentScopeMiddleware` läser `Authorization` + `X-As-Student`-headers
+- Sätter `_current_scope` ContextVar (`s_<id>` för solo-elev, `f_<id>` för familjemedlem)
+- `session_scope()` öppnar rätt SQLite-fil under `data/school/students/`
+- I prod: gemensam Postgres med `tenant_id`-filter på alla tabeller via `TenantMixin`
+
+Lärar-impersonation av elev sker via `X-As-Student`-header — middleware verifierar att läraren äger eleven, sätter sedan ContextVar:n.
+
+### Domänmoduler
+
+```
+backend/hembudget/
+  api/           # FastAPI-routers (en fil per domän)
+  school/        # Multi-tenant scope, AI-klient, demo-seed, moduler, events
+  security/      # Crypto, audit, rate_limit (Turnstile + IP-buckets)
+  db/            # Base, session_scope, per-scope migrations, modeller
+  teacher/       # PDF-generering, scenario-data, batch-distribution
+  categorize/    # Kategoriserings-regelmotor + LLM-bakfall
+  parsers/       # CSV/XLSX/PDF-import
+  llm/           # LM Studio-klient (desktop-AI, inte Claude)
+  wellbeing/     # Wellbeing-Score-beräkning + Konsumentverket-validering
+  events/        # Event-trigger-engine (78 event-mallar)
+  credit/        # Kreditscoring + privatlån/SMS-lån-flöde
+  stocks/        # Aktiekurspolling, courtage-beräkning, börstidskalender
+
+frontend/src/
+  pages/         # Route-nivå (Teacher, StudentDetail, ModuleView, Investments, ...)
+  components/    # WellbeingCard, EventModal, CreditModal, HouseholdSplitQuiz, ...
+  hooks/useAuth  # Token + school-status + impersonation
+  api/client     # fetch-wrapper, hanterar 401/403 + Turnstile-header
+  data/          # Delade datafiler (cell-info för landningssidan)
+```
+
+### Tester
+
+- **705 backend-tester** (pytest), körs på ~4 min
+- TypeScript-typecheck via `npx tsc --noEmit`
+- Vite-build verifierar produktionsbundle
+- CI-vänligt: alla tester använder in-memory SQLite, inga externa beroenden
+
+## Snabbstart
+
+### Google Cloud Run (rekommenderas för klassrum)
+
+```bash
+./deploy.sh
+```
+
+Skriptet sköter allt automatiskt:
+1. Kontrollerar `gcloud` CLI och aktiv inloggning
+2. Frågar efter GCP-projekt-ID
+3. Aktiverar Cloud Run, Cloud Build och Artifact Registry
+4. Bygger Docker-imagen i molnet — **ingen lokal Docker krävs**
+5. Deployar till Cloud Run i `europe-north1`
+6. Skriver ut den publika URL:en
+
+**Loggar:** `gcloud run services logs read hembudget-demo --region europe-north1`
+**Radera:** `gcloud run services delete hembudget-demo --region europe-north1`
+
+### Utveckling lokalt
+
+Förkrav: Python 3.11+, Node 20+, Rust (för Tauri).
+
+```bash
+# Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Frontend
+cd ../frontend
+npm install
+
+# Tauri (om desktop-app)
+cd ../src-tauri
+cargo build
+```
+
+Kör i utvecklingsläge:
+
+```bash
+# Terminal 1 — backend (skol-läge)
+cd backend && HEMBUDGET_SCHOOL_MODE=1 HEMBUDGET_DATA_DIR=/tmp/hb \
+    python -m hembudget.main --host 127.0.0.1 --port 8765
+
+# Terminal 2 — frontend
+cd frontend && npm run dev   # öppna http://localhost:1420
+
+# Backend tester (måste alla passera innan commit)
+cd backend && python -m pytest tests/ -x -q
+
+# Frontend typecheck + build
+cd frontend && npx tsc --noEmit && npx vite build
+```
+
+Första gången på desktop sätter du ett master-lösenord (minst 8 tecken). Detta krypterar din databas — det går inte att återställa om du glömmer det.
+
+## Env-vars (produktion)
+
+| Variabel | Vad | Krav |
+|---|---|---|
+| `HEMBUDGET_SCHOOL_MODE` | `1` för Ekonomilabbet | alltid i prod |
+| `HEMBUDGET_SERVE_STATIC` | `1` för att serva `frontend/dist` från samma container | alltid i prod |
+| `HEMBUDGET_DATABASE_URL` | Cloud SQL Postgres-connection-string | krävs i prod |
+| `HEMBUDGET_DATA_DIR` | Sökväg för throw-away-data (cache, uploads) | alltid i prod |
+| `HEMBUDGET_BOOTSTRAP_SECRET` | Skyddar första lärarregistreringen | alltid |
+| `ANTHROPIC_API_KEY` | Aktiverar `/ai/*`-endpoints — kan istället sättas via UI | valfritt |
+| `FINNHUB_API_KEY` | Aktiekursdata — kan istället sättas via UI | valfritt |
+| `HEMBUDGET_QUOTE_PROVIDER` | `finnhub` / `yfinance` / `mock` (auto-väljer om ej satt) | valfritt |
+| `HEMBUDGET_COURTAGE_MODEL` | `mini` (default) / `start` / `none` | valfritt |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET` | Cloudflare bot-skydd | valfritt |
+| `HEMBUDGET_SMTP_*` | SMTP för signup + reset-mail | krävs för signup |
+| `HEMBUDGET_PUBLIC_BASE_URL` | URL i mail-länkar (`https://ekonomilabbet.org`) | rekommenderas |
+
+**Viktigt vid Cloud Run-deploy:** använd `--update-env-vars` (additivt) istället för `--set-env-vars` (raderar allt).
+
+## Designprinciper (icke-förhandlingsbara)
+
+1. **Bugs fixas alltid** — även om de inte hör till den uppgift du jobbar på
+2. **Inga genvägar** — ingen `--no-verify`, ingen `# type: ignore` utan kommentar, ingen catch-all-except, ingen mock där en riktig implementation krävs
+3. **Allt testas** — ny endpoint = happy path + 4xx-test, ny komponent = manuell verifiering i browser
+4. **Migrationer är idempotenta** — körs på varje uppstart utan effekt om redan körda
+5. **Svenska i UI, svenska i kommentarer, engelska i kodidentifierare**
+6. **Pedagogiskt fokus, inte spelmässigt** — inga konfetti-explosioner, ingen poängjakt utan koppling till lärande
+7. **Determinism för rättvisa** — samma elev + samma vecka → samma events
+8. **Konsekvenser kvarstår** — beslut idag påverkar Wellbeing nästa månad
+9. **Aldrig fördömande** — AI:n säger aldrig "du gjorde fel", den säger "din relationsdimension har sjunkit. Det är OK — men varför?"
+10. **3-stegs opt-in för all social funktionalitet** — super-admin, lärare, elev. Skyddar elever som inte vill jämföras
+
+## Bidra
+
+Det här är ett pilotprojekt med fokus på pedagogisk användning i svenska
+gymnasieskolor. Buggrapporter, pedagogiska förslag och pull requests
+välkomnas. Se `CLAUDE.md` för utvecklingsguidelines.
+
+Frågor: **info@ekonomilabbet.org**
