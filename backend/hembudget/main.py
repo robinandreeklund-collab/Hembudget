@@ -17,7 +17,7 @@ faulthandler.enable()
 from .api import (
     admin, ai, ai_admin, auth, backup, balances, budget, chat, elpris,
     email_auth, funds, landing, ledger, loans, modules, reports, scenarios,
-    school, settings_kv, smtp_admin, tax, transactions, transfers,
+    school, settings_kv, smtp_admin, stocks, tax, transactions, transfers,
     upcoming, upload, utility,
 )
 from .config import settings
@@ -155,6 +155,7 @@ def build_app() -> FastAPI:
     app.include_router(smtp_admin.router)
     app.include_router(landing.router)
     app.include_router(ai.router)
+    app.include_router(stocks.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -349,6 +350,15 @@ def _school_bootstrap() -> None:
             if nl > 0:
                 logging.getLogger(__name__).info(
                     "school: seeded %d landing asset slots", nl,
+                )
+            # Seed aktie-universum + börskalender (idempotent).
+            # Krävs innan POST /stocks/internal/poll-quotes kan användas.
+            from .school.stock_seed import seed_all as seed_stocks_all
+            ns = seed_stocks_all(s)
+            if ns["stocks_added"] or ns["calendar_days_added"]:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d stocks + %d calendar days",
+                    ns["stocks_added"], ns["calendar_days_added"],
                 )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
