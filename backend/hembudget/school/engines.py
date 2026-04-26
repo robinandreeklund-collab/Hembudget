@@ -415,7 +415,12 @@ _seeded_tenants: set[str] = set()
 
 def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     """Lazy-init en gemensam Postgres-engine för ALLA scope-keys.
-    Bara när HEMBUDGET_DATABASE_URL är satt."""
+    Bara när HEMBUDGET_DATABASE_URL är satt.
+
+    Bulletproof: även om create_all eller migrationerna failar ska vi
+    kunna returnera en användbar engine + sessionmaker. Annars cachas
+    inte engine, varje request retry:ar och hela tjänsten blir 500.
+    """
     global _shared_scope_engine, _shared_scope_session
     if _shared_scope_engine is not None:
         assert _shared_scope_session is not None
@@ -425,7 +430,7 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     from ..db.base import Base
     from ..db.migrate import run_migrations
 
-    url = _master_db_url()  # samma DB som master — separata tabellset
+    url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
         engine_kwargs.update(
@@ -433,13 +438,22 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
             pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)
-    Base.metadata.create_all(engine)
+
+    # create_all kan misslyckas mot existerande Postgres-schema (typkonflikt,
+    # FK-konflikt, etc). Logga och fortsätt — engine är fortfarande
+    # användbar för befintliga tabeller.
+    try:
+        Base.metadata.create_all(engine)
+    except Exception:
+        log.exception(
+            "shared scope create_all failed — fortsätter ändå med "
+            "befintliga tabeller",
+        )
+
     # ALTER-migrationer för befintliga tabeller. create_all hanterar bara
     # NYA tabeller, så när vi lägger till kolumner på befintliga tabeller
     # (t.ex. loans.loan_kind) MÅSTE migrationerna köras här. Annars
     # kraschar SELECT på Postgres med 'column does not exist'.
-    # Fail-soft: migrations är wrapped — login + nya elever ska funka
-    # även om en ALTER misslyckas.
     try:
         run_migrations(engine)
     except Exception:
@@ -447,8 +461,14 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
             "shared scope migrations failed — fortsätter ändå (login + "
             "nya elever ska funka, gamla kan ha schema-skev)",
         )
-    _refresh_scope_columns_cache(engine)
 
+    try:
+        _refresh_scope_columns_cache(engine)
+    except Exception:
+        log.exception("scope-columns-cache refresh misslyckades")
+
+    # CACHE engine OBEROENDE av om migrationerna gick bra. Annars
+    # försöker varje ny request init:a om → blockerar hela skol-läget.
     _shared_scope_engine = engine
     _shared_scope_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
