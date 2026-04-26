@@ -20,15 +20,25 @@ router = APIRouter(prefix="/budget", tags=["budget"], dependencies=[Depends(requ
 
 @router.get("/months")
 def available_months(session: Session = Depends(db)) -> dict:
-    """Returnerar alla månader som har minst en icke-transfer transaktion."""
+    """Returnerar alla månader som har minst en icke-transfer transaktion.
+
+    Tidigare bug: använde func.strftime som är SQLite-only — på Postgres
+    (prod) returnerade endpointen tom lista och Dashboard sa felaktigt
+    'Ingen data importerad ännu'. Vi väljer rätt month-uttryck per
+    dialect i stället."""
+    dialect = session.bind.dialect.name if session.bind else "sqlite"
+    if dialect == "postgresql":
+        month_expr = func.to_char(Transaction.date, "YYYY-MM")
+    else:
+        month_expr = func.strftime("%Y-%m", Transaction.date)
     rows = session.execute(
         select(
-            func.strftime("%Y-%m", Transaction.date).label("month"),
+            month_expr.label("month"),
             func.count(Transaction.id).label("count"),
         )
         .where(Transaction.is_transfer.is_(False))
-        .group_by("month")
-        .order_by("month")
+        .group_by(month_expr)
+        .order_by(month_expr)
     ).all()
     return {"months": [{"month": m, "count": c} for m, c in rows]}
 
