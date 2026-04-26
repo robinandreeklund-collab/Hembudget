@@ -17,6 +17,7 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Import from "./pages/Import";
 import Funds from "./pages/Funds";
+import Investments from "./pages/Investments";
 import Salaries from "./pages/Salaries";
 import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
@@ -156,6 +157,7 @@ export default function App() {
               <Route path="/scenarios" element={<Scenarios />} />
               <Route path="/loans" element={<Loans />} />
               <Route path="/funds" element={<Funds />} />
+              <Route path="/investments" element={<Investments />} />
               <Route path="/transfers" element={<Transfers />} />
               <Route path="/upcoming" element={<Upcoming />} />
               <Route path="/salaries" element={<Salaries />} />

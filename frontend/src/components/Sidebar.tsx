@@ -25,6 +25,7 @@ import {
   Receipt,
   CalculatorIcon,
   PiggyBank,
+  TrendingUp,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -45,6 +46,7 @@ const ALL_ITEMS: NavItem[] = [
   { to: "/scenarios", label: "Scenarion", icon: CalculatorIcon },
   { to: "/loans", label: "Lån", icon: Landmark },
   { to: "/funds", label: "Fonder & ISK", icon: PiggyBank },
+  { to: "/investments", label: "Aktier", icon: TrendingUp },
   { to: "/utility", label: "Förbrukning", icon: Activity },
   { to: "/tax", label: "Skatt", icon: BarChart3 },
   { to: "/reports", label: "Rapporter", icon: FileDown },
