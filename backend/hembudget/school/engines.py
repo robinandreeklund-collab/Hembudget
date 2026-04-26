@@ -188,7 +188,48 @@ def init_master_engine() -> Engine:
     _master_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
     )
+    # Cacha kolumn-existens efter migrations. API-lagret konsulterar
+    # detta innan deferred-fält accessas så att SELECT inte kraschar
+    # mot prod-Postgres där en migration eventuellt failat.
+    _refresh_master_columns_cache(engine)
     return engine
+
+
+# Cache av kolumner per master-tabell. Populeras av init_master_engine
+# efter att migrationerna körts. Används av master_has_column() för att
+# avgöra om en deferred-kolumn är säker att läsa.
+_master_columns: dict[str, set[str]] = {}
+
+
+def _refresh_master_columns_cache(engine: Engine) -> None:
+    from sqlalchemy import inspect as _inspect
+    try:
+        insp = _inspect(engine)
+        for table in ("teachers", "students", "student_profiles", "assignments"):
+            try:
+                _master_columns[table] = {
+                    c["name"] for c in insp.get_columns(table)
+                }
+            except Exception:
+                _master_columns[table] = set()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "kunde inte cacha master-kolumner — fortsätter med tom cache",
+        )
+
+
+def master_has_column(table: str, column: str) -> bool:
+    """True om kolumnen finns i master-DB:n. Används som guard innan
+    deferred-fält accessas — annars kraschar SELECT i prod om migration
+    inte hunnit lägga till kolumnen.
+
+    Default True om cachen inte är populerad ännu (t.ex. i test) — då
+    förlitar vi oss på att SQLAlchemy-create_all skapat kolumnerna."""
+    cols = _master_columns.get(table)
+    if cols is None:
+        return True
+    return column in cols
 
 
 def _run_master_migrations(engine: Engine) -> None:
@@ -214,17 +255,28 @@ def _run_master_migrations(engine: Engine) -> None:
     import logging as _logging
     _log = _logging.getLogger(__name__)
 
+    is_postgres = engine.dialect.name == "postgresql"
+
     def _add(table: str, col_sql: str) -> None:
         """Idempotent ALTER TABLE ADD COLUMN. Fail-soft: en kraschad
         migration får inte ta ner hela master-init eftersom det skulle
         ge 500 på alla endpoints (login, demo, reset).
 
+        På Postgres används 'IF NOT EXISTS' så concurrent restarts inte
+        krockar. På SQLite finns inte syntaxen — då litar vi på _cols-
+        guarden som körs INNAN _add anropas.
+
         Vid fel: logga och fortsätt. På Postgres kan 'duplicate column'
         vara ofarligt; på SQLite kan en parallell init ha hunnit före.
         """
+        if is_postgres:
+            stmt = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_sql}"
+        else:
+            stmt = f"ALTER TABLE {table} ADD COLUMN {col_sql}"
         try:
             with engine.begin() as conn:
-                conn.execute(_text(f"ALTER TABLE {table} ADD COLUMN {col_sql}"))
+                conn.execute(_text(stmt))
+            _log.info("migration: %s.%s tillagd", table, col_sql.split()[0])
         except Exception as exc:
             msg = str(exc).lower()
             if "already exists" in msg or "duplicate" in msg:

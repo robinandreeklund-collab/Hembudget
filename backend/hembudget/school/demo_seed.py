@@ -119,7 +119,8 @@ def build_demo() -> dict:
             from .models import StudentProfile
             gen = generate_profile(stu.id, stu.display_name)
             tax = compute_net_salary(gen.gross_salary_monthly)
-            s.add(StudentProfile(
+            from .engines import master_has_column
+            profile_kwargs = dict(
                 student_id=stu.id,
                 profession=gen.profession,
                 employer=gen.employer,
@@ -138,10 +139,13 @@ def build_demo() -> dict:
                 has_credit_card=gen.has_credit_card,
                 children_ages=gen.children_ages,
                 partner_age=gen.partner_age,
-                partner_profession=gen.partner_profession,
-                partner_gross_salary=gen.partner_gross_salary,
                 backstory=gen.backstory,
-            ))
+            )
+            if master_has_column("student_profiles", "partner_profession"):
+                profile_kwargs["partner_profession"] = gen.partner_profession
+            if master_has_column("student_profiles", "partner_gross_salary"):
+                profile_kwargs["partner_gross_salary"] = gen.partner_gross_salary
+            s.add(StudentProfile(**profile_kwargs))
             # Skapa scope-DB så kategorier seedas
             get_scope_engine(scope_for_student(stu))
             students.append(stu)

@@ -30,6 +30,7 @@ from ..school.engines import (
     drop_student_db,
     get_scope_engine,
     get_student_engine,
+    master_has_column,
     master_session,
     reset_scope_db,
     reset_student_db,
@@ -283,37 +284,45 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
         partner_age=gen.partner_age,
     )
 
-    # Försök INSERT med partner-fälten (nyast). Om DB:n saknar
-    # kolumnerna failar vi och loggar — försök igen utan dem.
+    # Lägg bara på partner-fälten om kolumnerna finns i DB:n. Då kan
+    # vi aldrig generera en INSERT som refererar saknade kolumner.
+    if master_has_column("student_profiles", "partner_profession"):
+        profile_kwargs["partner_profession"] = gen.partner_profession
+    if master_has_column("student_profiles", "partner_gross_salary"):
+        profile_kwargs["partner_gross_salary"] = gen.partner_gross_salary
+
     try:
-        profile = StudentProfile(
-            **profile_kwargs,
-            partner_profession=gen.partner_profession,
-            partner_gross_salary=gen.partner_gross_salary,
-        )
+        profile = StudentProfile(**profile_kwargs)
         session.add(profile)
         session.flush()
         return profile
-    except Exception as exc:
-        msg = str(exc).lower()
-        if "partner_profession" in msg or "partner_gross_salary" in msg or "undefined column" in msg or "no such column" in msg:
-            logging.getLogger(__name__).warning(
-                "_create_profile: partner-kolumner saknas i master-DB — "
-                "skapar profil utan dem. Kör migration manuellt eller "
-                "via /admin/db/diagnose. Fel: %s", exc,
-            )
-            # Rulla tillbaka den misslyckade INSERT:en
-            session.rollback()
-            profile = StudentProfile(**profile_kwargs)
-            session.add(profile)
-            session.flush()
-            return profile
-        # Annat fel — logga med kontext och bubbla upp
+    except Exception:
         logging.getLogger(__name__).exception(
             "_create_profile_for_student: oväntat fel för student %s",
             student.id,
         )
         raise
+
+
+def _safe_profile_attr(p: StudentProfile, field: str):
+    """Läs ett deferred-fält om kolumnen finns i master-DB:n. Om
+    migrationen ännu inte hunnit lägga till kolumnen i prod-Postgres
+    returnerar vi None — då kraschar inte requesten."""
+    if not master_has_column("student_profiles", field):
+        return None
+    try:
+        return getattr(p, field)
+    except Exception:
+        # Defensiv fallback: om deferred-load kraschar, rulla tillbaka
+        # session-state och returnera None.
+        from sqlalchemy.orm import object_session
+        sess = object_session(p)
+        if sess is not None:
+            try:
+                sess.rollback()
+            except Exception:
+                pass
+        return None
 
 
 def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
@@ -336,10 +345,10 @@ def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
         has_credit_card=p.has_credit_card,
         children_ages=p.children_ages or [],
         partner_age=p.partner_age,
-        partner_profession=p.partner_profession,
-        partner_gross_salary=p.partner_gross_salary,
-        cost_split_preference=p.cost_split_preference,
-        cost_split_decided_at=p.cost_split_decided_at,
+        partner_profession=_safe_profile_attr(p, "partner_profession"),
+        partner_gross_salary=_safe_profile_attr(p, "partner_gross_salary"),
+        cost_split_preference=_safe_profile_attr(p, "cost_split_preference"),
+        cost_split_decided_at=_safe_profile_attr(p, "cost_split_decided_at"),
         backstory=p.backstory,
     )
 
@@ -888,7 +897,9 @@ def student_get_own_profile(
         is_household = student.profile.family_status in (
             "sambo", "familj_med_barn",
         )
-        if is_household and not student.profile.cost_split_preference:
+        if is_household and not _safe_profile_attr(
+            student.profile, "cost_split_preference",
+        ):
             out.partner_gross_salary = None
             # Behåll partner_profession + partner_age — eleven får veta
             # ATT hen har en partner och vad partnern gör, men inte
@@ -951,22 +962,24 @@ def student_get_cost_split(
         p = student.profile
 
         is_household = p.family_status in ("sambo", "familj_med_barn")
-        decided = p.cost_split_preference is not None
+        pref = _safe_profile_attr(p, "cost_split_preference")
+        decided = pref is not None
 
         out = CostSplitOut(
             family_status=p.family_status,
             needs_decision=is_household and not decided,
-            cost_split_preference=p.cost_split_preference,
-            cost_split_decided_at=p.cost_split_decided_at,
+            cost_split_preference=pref,
+            cost_split_decided_at=_safe_profile_attr(p, "cost_split_decided_at"),
         )
         # Avslöja partner-info bara om eleven redan beslutat
         if decided and is_household:
-            out.partner_profession = p.partner_profession
-            out.partner_gross_salary = p.partner_gross_salary
+            partner_salary = _safe_profile_attr(p, "partner_gross_salary")
+            out.partner_profession = _safe_profile_attr(p, "partner_profession")
+            out.partner_gross_salary = partner_salary
             out.student_share_pct = _calc_student_share(
-                p.cost_split_preference,
+                pref,
                 p.gross_salary_monthly,
-                p.partner_gross_salary or 0,
+                partner_salary or 0,
             )
         return out
 
@@ -998,25 +1011,34 @@ def student_set_cost_split(
             raise HTTPException(
                 400, "Ensamhushåll har ingen partner att dela kostnader med",
             )
+        if not master_has_column("student_profiles", "cost_split_preference"):
+            # Migration ej körd ännu — be admin reparera DB-schemat innan
+            # eleven gör cost-split-valet.
+            raise HTTPException(
+                503,
+                "DB-schemat är inte fullständigt — be administratören "
+                "köra migrationerna (POST /admin/ai/db/run-migrations).",
+            )
 
-        first_time = p.cost_split_preference is None
+        first_time = _safe_profile_attr(p, "cost_split_preference") is None
         p.cost_split_preference = payload.preference
         if first_time:
             p.cost_split_decided_at = _dt.utcnow()
         s.flush()
 
+        partner_salary = _safe_profile_attr(p, "partner_gross_salary")
         share = _calc_student_share(
             payload.preference,
             p.gross_salary_monthly,
-            p.partner_gross_salary or 0,
+            partner_salary or 0,
         )
         return CostSplitOut(
             family_status=p.family_status,
             needs_decision=False,
-            cost_split_preference=p.cost_split_preference,
-            cost_split_decided_at=p.cost_split_decided_at,
-            partner_profession=p.partner_profession,
-            partner_gross_salary=p.partner_gross_salary,
+            cost_split_preference=payload.preference,
+            cost_split_decided_at=_safe_profile_attr(p, "cost_split_decided_at"),
+            partner_profession=_safe_profile_attr(p, "partner_profession"),
+            partner_gross_salary=partner_salary,
             student_share_pct=share,
         )
 

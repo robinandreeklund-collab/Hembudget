@@ -21,7 +21,9 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase, Mapped, mapped_column, deferred, relationship,
+)
 
 
 class MasterBase(DeclarativeBase):
@@ -218,23 +220,27 @@ class StudentProfile(MasterBase):
     partner_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Partnerns yrke och bruttolön — krävs för att hushållsekonomin ska gå
     # ihop. Sätts vid profilgenerering om family_status != "ensam".
-    partner_profession: Mapped[Optional[str]] = mapped_column(
+    # deferred() = exkludera från default-SELECT så att lazy-load av
+    # student.profile inte kraschar när migration ännu inte hunnit lägga
+    # till kolumnen i prod-Postgres. Värdet hämtas först vid explicit
+    # access (cost-split-endpoint, generator).
+    partner_profession: Mapped[Optional[str]] = deferred(mapped_column(
         String(80), nullable=True,
-    )
-    partner_gross_salary: Mapped[Optional[int]] = mapped_column(
+    ))
+    partner_gross_salary: Mapped[Optional[int]] = deferred(mapped_column(
         Integer, nullable=True,
-    )
+    ))
     # Hushållets fördelningsmodell — eleven väljer vid onboarding INNAN
     # hen ser sin egen profil ('veil of ignorance' — pedagogiskt ärligt
     # val). Påverkar generatorn: vilken andel av gemensamma kostnader
     # eleven får på sitt konto.
     # "even_50_50" | "pro_rata" | "all_shared" | None (ej onboardad/ensam)
-    cost_split_preference: Mapped[Optional[str]] = mapped_column(
+    cost_split_preference: Mapped[Optional[str]] = deferred(mapped_column(
         String(20), nullable=True,
-    )
-    cost_split_decided_at: Mapped[Optional[datetime]] = mapped_column(
+    ))
+    cost_split_decided_at: Mapped[Optional[datetime]] = deferred(mapped_column(
         DateTime, nullable=True,
-    )
+    ))
 
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

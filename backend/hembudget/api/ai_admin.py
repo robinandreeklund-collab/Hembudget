@@ -529,13 +529,14 @@ def force_run_migrations(
     """Tvinga _run_master_migrations() att köra direkt. Returnerar
     diagnostisk info efteråt så super-admin kan se vad som skedde."""
     import logging as _logging
+    from ..school import engines as _eng
     from ..school.engines import (
-        _master_engine,
+        _refresh_master_columns_cache,
         _run_master_migrations,
         init_master_engine,
     )
 
-    if _master_engine is None:
+    if _eng._master_engine is None:
         init_master_engine()
 
     log_msgs: list[str] = []
@@ -549,7 +550,11 @@ def force_run_migrations(
     target_logger = _logging.getLogger("hembudget.school.engines")
     target_logger.addHandler(handler)
     try:
-        _run_master_migrations(_master_engine)
+        _run_master_migrations(_eng._master_engine)
+        # Uppdatera kolumn-cachen så master_has_column() omedelbart
+        # ser de nya kolumnerna utan omstart
+        _refresh_master_columns_cache(_eng._master_engine)
+        log_msgs.append("INFO: master-columns-cache uppdaterad")
     except Exception as e:
         log_msgs.append(f"EXCEPTION: {e}")
     finally:

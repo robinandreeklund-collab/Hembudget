@@ -148,3 +148,38 @@ def test_orphan_student_can_be_deleted(fx) -> None:
     )
     assert r2.status_code == 200
     assert r2.json() == []
+
+
+def test_list_students_works_when_partner_columns_missing(fx, monkeypatch) -> None:
+    """Simulerar prod-buggen: master-DB:n saknar partner-kolumner men har
+    elever. Tidigare kraschade /teacher/students med 500. Med deferred()
+    + master_has_column-guard ska listan returneras OK."""
+    client, t_tok, sid = fx
+    # Skapa profil först (så vi har fall där SELECT skulle träffa)
+    rr = client.post(
+        f"/teacher/students/{sid}/repair-profile",
+        headers={"Authorization": f"Bearer {t_tok}"},
+    )
+    assert rr.status_code == 200
+
+    # Patcha kolumn-cachen för att låtsas att kolumnerna saknas i DB:n
+    from hembudget.school import engines as eng_mod
+    original = dict(eng_mod._master_columns)
+    sp = set(eng_mod._master_columns.get("student_profiles", set()))
+    sp.discard("partner_profession")
+    sp.discard("partner_gross_salary")
+    sp.discard("cost_split_preference")
+    sp.discard("cost_split_decided_at")
+    eng_mod._master_columns["student_profiles"] = sp
+    try:
+        r = client.get(
+            "/teacher/students",
+            headers={"Authorization": f"Bearer {t_tok}"},
+        )
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        assert len(rows) == 1
+        assert rows[0]["has_profile"] is True
+    finally:
+        eng_mod._master_columns.clear()
+        eng_mod._master_columns.update(original)
