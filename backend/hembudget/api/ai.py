@@ -1295,3 +1295,152 @@ def stock_evaluate_diversification(
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
     )
+
+
+# ---------- Wellbeing AI-endpoints (Fas 6) ----------
+
+class WellbeingMonthlyIn(BaseModel):
+    year_month: str
+    total_score: int
+    economy: int
+    health: int
+    social: int
+    leisure: int
+    safety: int
+    events_accepted: int
+    events_declined: int
+    budget_violations: int
+    decline_streak: int
+
+
+class WellbeingFeedbackOut(BaseModel):
+    feedback: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post("/wellbeing/monthly-feedback", response_model=WellbeingFeedbackOut)
+def wellbeing_monthly_feedback(
+    payload: WellbeingMonthlyIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> WellbeingFeedbackOut:
+    """Pedagogisk månadsreflektion baserat på elevens Wellbeing."""
+    _require_school()
+    check_rate_limit(request, "ai-wellbeing-monthly", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+    result = ai_core.monthly_wellbeing_feedback(
+        year_month=payload.year_month,
+        total_score=payload.total_score,
+        economy=payload.economy,
+        health=payload.health,
+        social=payload.social,
+        leisure=payload.leisure,
+        safety=payload.safety,
+        events_accepted=payload.events_accepted,
+        events_declined=payload.events_declined,
+        budget_violations=payload.budget_violations,
+        decline_streak=payload.decline_streak,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "AI-anropet misslyckades.",
+        )
+    return WellbeingFeedbackOut(
+        feedback=result.text,
+        model=ai_core.MODEL_HAIKU,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
+
+
+class DeclineNudgeIn(BaseModel):
+    streak_count: int
+    recent_categories: list[str] = []
+
+
+class DeclineNudgeOut(BaseModel):
+    nudge: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post("/wellbeing/decline-nudge", response_model=DeclineNudgeOut)
+def wellbeing_decline_nudge(
+    payload: DeclineNudgeIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> DeclineNudgeOut:
+    """Sokratisk nudge när eleven nekat 3+ events i rad."""
+    _require_school()
+    check_rate_limit(request, "ai-decline-nudge", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+    result = ai_core.decline_streak_nudge(
+        streak_count=payload.streak_count,
+        recent_categories=payload.recent_categories,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "AI-anropet misslyckades.")
+    return DeclineNudgeOut(
+        nudge=result.text,
+        model=ai_core.MODEL_HAIKU,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
+
+
+class InviteMotivationIn(BaseModel):
+    inviter_name: str
+    event_title: str
+    cost: float
+    cost_split_model: str
+    swish_amount: float
+    student_balance: float
+    student_savings: float
+
+
+class InviteMotivationOut(BaseModel):
+    note: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post(
+    "/wellbeing/invite-motivation", response_model=InviteMotivationOut,
+)
+def wellbeing_invite_motivation(
+    payload: InviteMotivationIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> InviteMotivationOut:
+    """Neutral kommentar när klasskompis bjuder. Hjälper se båda sidor."""
+    _require_school()
+    check_rate_limit(request, "ai-invite-motivation", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+    result = ai_core.class_invite_motivation(
+        inviter_name=payload.inviter_name,
+        event_title=payload.event_title,
+        cost=payload.cost,
+        cost_split_model=payload.cost_split_model,
+        swish_amount=payload.swish_amount,
+        student_balance=payload.student_balance,
+        student_savings=payload.student_savings,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "AI-anropet misslyckades.")
+    return InviteMotivationOut(
+        note=result.text,
+        model=ai_core.MODEL_HAIKU,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
