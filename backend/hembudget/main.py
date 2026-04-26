@@ -365,6 +365,24 @@ def _school_bootstrap() -> None:
                     "school: seeded %d stocks + %d calendar days",
                     ns["stocks_added"], ns["calendar_days_added"],
                 )
+            # Bootstrap: om LatestStockQuote är tom efter att StockMaster
+            # har seedats, kör en force-poll så det finns kursdata direkt
+            # vid boot — annars visar frontend tomma rader tills nästa
+            # marknadsöppning.
+            from .school.stock_models import LatestStockQuote
+            from .stocks.poller import poll_quotes
+            if s.query(LatestStockQuote).count() == 0:
+                try:
+                    pr = poll_quotes(s, force=True)
+                    logging.getLogger(__name__).info(
+                        "school: bootstrap-pollade %d kursrader (provider %s)",
+                        pr["fetched"],
+                        s.bind.dialect.name if s.bind else "?",
+                    )
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "school: bootstrap-poll misslyckades — fortsätter ändå"
+                    )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 
