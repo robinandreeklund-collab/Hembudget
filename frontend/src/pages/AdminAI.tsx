@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Brain, Check, Image, Key, Loader2, Mail, Send, ShieldCheck,
-  Trash2, Upload, X, Zap,
+  ArrowLeft, Brain, Check, Database, Image, Key, Loader2, Mail, Send, ShieldCheck,
+  Trash2, Upload, Wrench, X, Zap,
 } from "lucide-react";
 import { api, ApiError, getApiBase, getToken } from "@/api/client";
 
@@ -392,9 +392,87 @@ export default function AdminAI() {
           lärare. Din egen super-status kan du inte ta bort själv.
         </p>
       </div>
+
+      <DbMigrationsCard />
     </div>
   );
 }
+
+
+function DbMigrationsCard() {
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState<string[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run() {
+    if (!confirm(
+      "Tvinga master-DB-migrationerna att köra direkt mot databasen?\n\n" +
+      "Idempotent — säker att köra om en migration tidigare failat (t.ex. " +
+      "efter en deploy där ALTER TABLE krockade med Postgres-syntax). " +
+      "Loggen visar exakt vad som hände.",
+    )) return;
+    setBusy(true);
+    setErr(null);
+    setLog(null);
+    try {
+      const res = await api<{ ok: boolean; log: string[] }>(
+        "/admin/ai/db/run-migrations",
+        { method: "POST" },
+      );
+      setLog(res.log);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Database className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">DB-migrationer</h2>
+      </div>
+      <p className="text-sm text-slate-700">
+        Tvinga master-DB-migrationerna att köra. Användbart efter en
+        deploy om Postgres-loggarna visar t.ex. <code>column does not exist</code>{" "}
+        eller <code>type "datetime" does not exist</code> — kör då detta så
+        läggs saknade kolumner till utan omstart. Operationen är idempotent
+        (kan köras flera gånger utan effekt).
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={run}
+          disabled={busy}
+          className="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Wrench className="w-4 h-4" />
+          )}
+          Kör master-migrationer nu
+        </button>
+        {log && (
+          <span className="text-xs text-emerald-700">
+            Klart — {log.length} log-rader
+          </span>
+        )}
+      </div>
+      {err && (
+        <div className="text-sm text-rose-600 border-l-2 border-rose-300 pl-3 py-1">
+          {err}
+        </div>
+      )}
+      {log && log.length > 0 && (
+        <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto whitespace-pre-wrap max-h-80">
+          {log.join("\n")}
+        </pre>
+      )}
+    </section>
+  );
+}
+
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
