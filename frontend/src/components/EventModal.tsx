@@ -5,9 +5,9 @@
  * Pedagogisk princip: alla impacts visas i förväg så eleven gör ett
  * informerat val. Inga rekommendationer från systemet.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, Calendar, Coins, Heart, X,
+  AlertTriangle, Calendar, Coins, Heart, UserPlus, Users, X,
 } from "lucide-react";
 import { useState } from "react";
 import { api, formatSEK } from "@/api/client";
@@ -80,11 +80,47 @@ interface Props {
   onClose: () => void;
 }
 
+interface ClassmatesResp {
+  classmates: { student_id: number; display_name: string; class_label: string | null }[];
+  invites_enabled: boolean;
+  cost_split_model?: string;
+  max_invites_per_week?: number;
+}
+
+interface InviteResultOut {
+  invites_created: number;
+  invite_ids: number[];
+  cost_split_model: string;
+  swish_amount_per_recipient: number;
+  week_remaining: number;
+}
+
 export function EventModal({ event, template, onClose }: Props) {
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
   const [result, setResult] = useState<AcceptResultOut | DeclineResultOut | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [selectedClassmates, setSelectedClassmates] = useState<number[]>([]);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [inviteResult, setInviteResult] = useState<InviteResultOut | null>(null);
+
+  // Fetcha klasskompisar bara om eleven öppnar bjud-vyn
+  const classmatesQ = useQuery({
+    queryKey: ["events-classmates"],
+    queryFn: () => api<ClassmatesResp>("/events/classmates"),
+    enabled: showInvite && event.social_invite_allowed,
+  });
+
+  const inviteMut = useMutation({
+    mutationFn: (body: { event_id: number; classmate_ids: number[]; message: string }) =>
+      api<InviteResultOut>("/events/invite-classmates", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: (data) => setInviteResult(data),
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Kunde inte skicka"),
+  });
 
   const acceptMut = useMutation({
     mutationFn: () =>
@@ -238,7 +274,16 @@ export function EventModal({ event, template, onClose }: Props) {
                 </div>
               )}
 
-              <div className="flex gap-2 justify-end pt-2">
+              <div className="flex gap-2 justify-end pt-2 flex-wrap">
+                {event.social_invite_allowed && !showInvite && (
+                  <button
+                    onClick={() => setShowInvite(true)}
+                    className="px-3 py-2 rounded border bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 flex items-center gap-1 text-sm"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Bjud klasskompis
+                  </button>
+                )}
                 {!isUnexpected && (
                   <button
                     onClick={() => declineMut.mutate()}
@@ -257,6 +302,131 @@ export function EventModal({ event, template, onClose }: Props) {
                 </button>
               </div>
             </>
+          )}
+
+          {showInvite && !inviteResult && (
+            <div className="space-y-3 border-t pt-3">
+              <div className="flex items-center gap-2 font-medium">
+                <Users className="w-4 h-4" />
+                Bjud klasskompisar
+              </div>
+              {classmatesQ.isLoading && (
+                <div className="text-sm text-slate-500">Laddar…</div>
+              )}
+              {classmatesQ.data && !classmatesQ.data.invites_enabled && (
+                <div className="text-sm text-slate-700 bg-slate-50 border rounded p-2">
+                  Klasskompis-bjudningar är avstängda av läraren.
+                </div>
+              )}
+              {classmatesQ.data?.invites_enabled && (
+                <>
+                  <div className="text-xs text-slate-600">
+                    Kostnadsmodell: <strong>{classmatesQ.data.cost_split_model}</strong>
+                    {" · "}
+                    Max {classmatesQ.data.max_invites_per_week} bjudningar/vecka
+                  </div>
+                  <div className="border rounded p-2 max-h-48 overflow-y-auto space-y-1">
+                    {classmatesQ.data.classmates.length === 0 ? (
+                      <div className="text-sm text-slate-500 p-2">
+                        Inga klasskompisar i din klass än.
+                      </div>
+                    ) : (
+                      classmatesQ.data.classmates.map((c) => {
+                        const checked = selectedClassmates.includes(c.student_id);
+                        return (
+                          <label
+                            key={c.student_id}
+                            className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedClassmates([...selectedClassmates, c.student_id]);
+                                } else {
+                                  setSelectedClassmates(
+                                    selectedClassmates.filter((id) => id !== c.student_id),
+                                  );
+                                }
+                              }}
+                            />
+                            <span className="flex-1">{c.display_name}</span>
+                            <span className="text-xs text-slate-500">
+                              {c.class_label ?? ""}
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  <textarea
+                    value={inviteMessage}
+                    onChange={(e) => setInviteMessage(e.target.value)}
+                    placeholder="Personligt meddelande (valfritt)"
+                    rows={2}
+                    className="w-full border rounded px-2 py-1.5 text-sm"
+                  />
+                  {selectedClassmates.length > 0 &&
+                    classmatesQ.data.cost_split_model === "split" && (
+                      <div className="text-xs text-slate-600 bg-slate-50 border rounded p-2">
+                        Vid 'split': {formatSEK(event.cost / (selectedClassmates.length + 1))}{" "}
+                        per person ({selectedClassmates.length + 1} personer totalt).
+                      </div>
+                    )}
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => {
+                        setShowInvite(false);
+                        setSelectedClassmates([]);
+                      }}
+                      className="px-3 py-2 rounded border"
+                    >
+                      Avbryt
+                    </button>
+                    <button
+                      onClick={() =>
+                        inviteMut.mutate({
+                          event_id: event.id,
+                          classmate_ids: selectedClassmates,
+                          message: inviteMessage,
+                        })
+                      }
+                      disabled={
+                        selectedClassmates.length === 0 || inviteMut.isPending
+                      }
+                      className="bg-amber-600 text-white px-4 py-2 rounded disabled:opacity-50"
+                    >
+                      {inviteMut.isPending
+                        ? "Skickar…"
+                        : `Skicka till ${selectedClassmates.length}`}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {inviteResult && (
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm">
+              <div className="font-medium mb-1 flex items-center gap-1">
+                <UserPlus className="w-4 h-4" />
+                Bjudningar skickade
+              </div>
+              <p className="text-xs text-slate-700">
+                {inviteResult.invites_created} bjudningar gick iväg.
+                {inviteResult.swish_amount_per_recipient > 0 && (
+                  <>
+                    {" "}Var och en får återbetala{" "}
+                    <strong>
+                      {formatSEK(inviteResult.swish_amount_per_recipient)}
+                    </strong>{" "}
+                    via Swish.
+                  </>
+                )}
+                {" "}Du har {inviteResult.week_remaining} bjudningar kvar denna vecka.
+              </p>
+            </div>
           )}
 
           {result && (
