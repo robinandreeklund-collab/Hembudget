@@ -172,7 +172,18 @@ def init_master_engine() -> Engine:
             cur.close()
 
     MasterBase.metadata.create_all(engine)
-    _run_master_migrations(engine)
+    # Migrationer är fail-soft per ALTER (varje _add fångar Exception)
+    # men vi wrappar ändå hela funktionen — om SQLAlchemy-inspector
+    # kraschar (t.ex. timeout mot Cloud SQL) ska login fortfarande
+    # fungera så länge tabellerna existerar via create_all.
+    try:
+        _run_master_migrations(engine)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "master migrations failed — fortsätter ändå så master-engine "
+            "kan returneras (login + demo förblir funktionella)",
+        )
     _master_engine = engine
     _master_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
@@ -200,9 +211,32 @@ def _run_master_migrations(engine: Engine) -> None:
         except Exception:
             return set()
 
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
     def _add(table: str, col_sql: str) -> None:
-        with engine.begin() as conn:
-            conn.execute(_text(f"ALTER TABLE {table} ADD COLUMN {col_sql}"))
+        """Idempotent ALTER TABLE ADD COLUMN. Fail-soft: en kraschad
+        migration får inte ta ner hela master-init eftersom det skulle
+        ge 500 på alla endpoints (login, demo, reset).
+
+        Vid fel: logga och fortsätt. På Postgres kan 'duplicate column'
+        vara ofarligt; på SQLite kan en parallell init ha hunnit före.
+        """
+        try:
+            with engine.begin() as conn:
+                conn.execute(_text(f"ALTER TABLE {table} ADD COLUMN {col_sql}"))
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "already exists" in msg or "duplicate" in msg:
+                _log.info(
+                    "migration: %s.%s redan tillagd — hoppar över",
+                    table, col_sql.split()[0],
+                )
+            else:
+                _log.exception(
+                    "migration: ALTER TABLE %s ADD COLUMN %s misslyckades",
+                    table, col_sql,
+                )
 
     t_cols = _cols("teachers")
     if "is_super_admin" not in t_cols:
