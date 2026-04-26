@@ -8,6 +8,7 @@ import { Card, Stat } from "@/components/Card";
 import { ClassLeaderboard } from "@/components/ClassLeaderboard";
 import { EventInbox } from "@/components/EventInbox";
 import { HouseholdSplitQuiz } from "@/components/HouseholdSplitQuiz";
+import { HouseholdSummaryCard } from "@/components/HouseholdSummaryCard";
 import { InvitationsInbox } from "@/components/InvitationsInbox";
 import { PersonalityQuiz } from "@/components/PersonalityQuiz";
 import { ResetDialog } from "@/components/ResetDialog";
@@ -279,6 +280,8 @@ export default function Dashboard() {
       )}
 
       <HouseholdSplitQuiz />
+
+      <HouseholdSummaryCard />
 
       <PersonalityQuiz />
 
