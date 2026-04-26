@@ -10,7 +10,6 @@ import { EventInbox } from "@/components/EventInbox";
 import { HouseholdSplitQuiz } from "@/components/HouseholdSplitQuiz";
 import { HouseholdSummaryCard } from "@/components/HouseholdSummaryCard";
 import { InvitationsInbox } from "@/components/InvitationsInbox";
-import { PersonalityQuiz } from "@/components/PersonalityQuiz";
 import { ResetDialog } from "@/components/ResetDialog";
 import { WellbeingCard } from "@/components/WellbeingCard";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -282,8 +281,6 @@ export default function Dashboard() {
       <HouseholdSplitQuiz />
 
       <HouseholdSummaryCard />
-
-      <PersonalityQuiz />
 
       <WellbeingCard />
 
