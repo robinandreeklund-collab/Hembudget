@@ -698,3 +698,221 @@ def invite_classmates(
         swish_amount_per_recipient=round(swish_per, 2),
         week_remaining=remaining - n_recipients,
     )
+
+
+class InvitationOut(BaseModel):
+    id: int
+    from_student_id: int
+    from_display_name: Optional[str]
+    event_code: str
+    event_title: str
+    proposed_date: Optional[str]
+    deadline: str
+    cost: float
+    cost_split_model: str
+    swish_amount: Optional[float]
+    message: Optional[str]
+    status: str
+    created_at: str
+
+
+@router.get("/invitations")
+def list_invitations(scope: Session = Depends(db)) -> dict:
+    """Lista invitationer som JAG fått (mottagit) — pending + recent.
+
+    Pedagogiskt: 'inkorgen' där eleven ser vem som bjudit och kan
+    svara. Visar vem (display_name) men inga ekonomiska detaljer
+    om bjudaren.
+    """
+    from ..school.engines import get_current_actor_student
+    from ..school.models import Student
+    from ..school.social_models import ClassEventInvite
+
+    actor_id = get_current_actor_student()
+    if actor_id is None:
+        raise HTTPException(403, "Saknar student-kontext")
+
+    with master_session() as ms:
+        rows = (
+            ms.query(ClassEventInvite)
+            .filter(ClassEventInvite.to_student_id == actor_id)
+            .order_by(ClassEventInvite.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        # Slå upp avsändarnamn
+        sender_ids = list({r.from_student_id for r in rows})
+        senders = {
+            s.id: s.display_name
+            for s in ms.query(Student).filter(Student.id.in_(sender_ids)).all()
+        }
+
+        return {
+            "invitations": [
+                InvitationOut(
+                    id=r.id,
+                    from_student_id=r.from_student_id,
+                    from_display_name=senders.get(r.from_student_id),
+                    event_code=r.event_code,
+                    event_title=r.event_title,
+                    proposed_date=r.proposed_date.isoformat() if r.proposed_date else None,
+                    deadline=r.deadline.isoformat(),
+                    cost=float(r.cost),
+                    cost_split_model=r.cost_split_model,
+                    swish_amount=float(r.swish_amount) if r.swish_amount else None,
+                    message=r.message,
+                    status=r.status,
+                    created_at=r.created_at.isoformat() if r.created_at else "",
+                ).model_dump()
+                for r in rows
+            ],
+            "count": len(rows),
+        }
+
+
+class InvitationRespondIn(BaseModel):
+    invite_id: int
+    accept: bool
+
+
+class InvitationRespondOut(BaseModel):
+    invite_id: int
+    status: str
+    student_event_id: Optional[int]
+    swish_upcoming_id: Optional[int]
+    pedagogical_note: str
+
+
+@router.post("/invitations/respond", response_model=InvitationRespondOut)
+def respond_to_invitation(
+    payload: InvitationRespondIn,
+    scope: Session = Depends(db),
+) -> InvitationRespondOut:
+    """Mottagaren svarar på en bjudning.
+
+    Vid accept:
+    - Skapas en StudentEvent i mottagarens scope (status pending så
+      hen kan acceptera/neka som vanligt — ELLER så accepterar vi
+      direkt? V1: vi skapar pending event så mottagaren ser samma
+      flöde som systemgenererade events)
+    - Om swish_amount > 0: skapas en UpcomingTransaction (Swish-skuld
+      till bjudaren) i mottagarens scope
+
+    Vid decline:
+    - Bara invitationens status uppdateras
+    """
+    from datetime import datetime as _dt
+    from decimal import Decimal as _Dec
+
+    from ..db.models import UpcomingTransaction
+    from ..school.engines import get_current_actor_student
+    from ..school.models import Student
+    from ..school.social_models import ClassEventInvite
+
+    actor_id = get_current_actor_student()
+    if actor_id is None:
+        raise HTTPException(403, "Saknar student-kontext")
+
+    with master_session() as ms:
+        inv = ms.get(ClassEventInvite, payload.invite_id)
+        if inv is None:
+            raise HTTPException(404, "Invitation saknas")
+        if inv.to_student_id != actor_id:
+            raise HTTPException(403, "Du är inte mottagare av denna invitation")
+        if inv.status != "pending":
+            raise HTTPException(400, f"Redan svarat ({inv.status})")
+
+        sender = ms.query(Student).filter(Student.id == inv.from_student_id).first()
+        sender_name = sender.display_name if sender else "okänd"
+
+        if not payload.accept:
+            inv.status = "declined"
+            inv.responded_at = _dt.utcnow()
+            ms.flush()
+            return InvitationRespondOut(
+                invite_id=inv.id,
+                status=inv.status,
+                student_event_id=None,
+                swish_upcoming_id=None,
+                pedagogical_note=(
+                    f"Du tackade nej till {sender_name}s bjudning. Inget "
+                    "betalningskrav. {inv.event_title} är borta från din inbox."
+                ),
+            )
+
+        # ACCEPT — skapa StudentEvent + ev. Swish-skuld
+        inv.status = "accepted"
+        inv.responded_at = _dt.utcnow()
+        ms.flush()
+
+        invite_data = {
+            "title": inv.event_title,
+            "code": inv.event_code,
+            "proposed_date": inv.proposed_date,
+            "deadline": inv.deadline,
+            "cost": _Dec(inv.cost),
+            "swish_amount": _Dec(inv.swish_amount) if inv.swish_amount else None,
+            "from_student_id": inv.from_student_id,
+        }
+        sender_id = invite_data["from_student_id"]
+
+    # Skapa pending StudentEvent i mottagarens scope
+    new_event = StudentEvent(
+        event_code=invite_data["code"],
+        title=invite_data["title"],
+        description=(
+            f"Bjuden av {sender_name}. {invite_data['title']}"
+            + (f"\n\nMeddelande: {inv.message}" if inv.message else "")
+        ),
+        category="social",
+        cost=invite_data["cost"],
+        proposed_date=invite_data["proposed_date"],
+        deadline=invite_data["deadline"],
+        source="classmate_invite",
+        source_classmate_id=sender_id,
+        status="pending",
+        social_invite_allowed=False,  # Mottagaren bjuder inte vidare
+        declinable=True,
+    )
+    scope.add(new_event)
+    scope.flush()
+
+    swish_upcoming_id = None
+    if invite_data["swish_amount"] and invite_data["swish_amount"] > 0:
+        # Skapa Swish-skuld som UpcomingTransaction (bill, betalas inom
+        # 14 dagar). Mottagaren ser den i Kommande-listan och kan
+        # markera betald när hen swishar bjudaren.
+        from datetime import timedelta as _td
+        swish_due = _dt.utcnow().date() + _td(days=14)
+        upcoming = UpcomingTransaction(
+            kind="bill",
+            name=f"Swish till {sender_name} ({invite_data['title']})",
+            amount=invite_data["swish_amount"],
+            expected_date=swish_due,
+            owner=None,
+            recurring_monthly=False,
+            source="classmate_invite",
+            notes=f"Återbetalning för bjudning till {invite_data['title']}",
+        )
+        scope.add(upcoming)
+        scope.flush()
+        swish_upcoming_id = upcoming.id
+
+    note_parts = [
+        f"Du tackade ja till {sender_name}s bjudning till {invite_data['title']}.",
+    ]
+    if invite_data["swish_amount"] and invite_data["swish_amount"] > 0:
+        note_parts.append(
+            f"Swish-skuld: {invite_data['swish_amount']} kr — ligger som "
+            f"kommande räkning, betalas senast om 14 dagar."
+        )
+    else:
+        note_parts.append("Bjudaren betalar — inga pengar från ditt konto.")
+
+    return InvitationRespondOut(
+        invite_id=payload.invite_id,
+        status="accepted",
+        student_event_id=new_event.id,
+        swish_upcoming_id=swish_upcoming_id,
+        pedagogical_note=" ".join(note_parts),
+    )
