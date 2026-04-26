@@ -277,19 +277,26 @@ function MarketTab({
                   <div className="text-right pr-3">
                     {s.last !== undefined ? (
                       <>
-                        <div className="font-medium">{formatSEK(s.last)}</div>
+                        <div className={`font-medium ${marketOpen ? "" : "text-slate-700"}`}>
+                          {formatSEK(s.last)}
+                        </div>
                         {s.change_pct !== null && s.change_pct !== undefined && (
                           <div
                             className={`text-xs ${
                               s.change_pct >= 0 ? "text-emerald-700" : "text-red-700"
-                            }`}
+                            } ${marketOpen ? "" : "opacity-70"}`}
                           >
                             {s.change_pct >= 0 ? "+" : ""}{s.change_pct.toFixed(2)} %
                           </div>
                         )}
+                        {!marketOpen && s.ts && (
+                          <div className="text-[10px] text-slate-500" title={`Senast handlad ${new Date(s.ts).toLocaleString("sv-SE")}`}>
+                            stängd · {new Date(s.ts).toLocaleDateString("sv-SE", { weekday: "short" })} {new Date(s.ts).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
                       </>
                     ) : (
-                      <div className="text-slate-400 text-sm">— ingen kurs —</div>
+                      <div className="text-slate-400 text-sm">— väntar på kurs —</div>
                     )}
                   </div>
                   <button
@@ -308,9 +315,10 @@ function MarketTab({
                   <button
                     onClick={() => onTrade(s.ticker)}
                     disabled={!marketOpen || s.last === undefined}
-                    className="bg-brand-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50"
+                    title={!marketOpen ? "Börsen är stängd — handel öppnar igen vid nästa börstid" : undefined}
+                    className="bg-brand-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Köp
+                    {marketOpen ? "Köp" : "Stängd"}
                   </button>
                 </div>
               );
