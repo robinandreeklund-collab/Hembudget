@@ -940,6 +940,171 @@ SYSTEM_TOUR_TEMPLATE = {
 }
 
 
+STOCKS_TEMPLATE = {
+    "title": "Aktier — komma igång",
+    "summary": (
+        "Från första ISK-kontot till en diversifierad portfölj. Steg-för-"
+        "steg-modul som lär dig riskspridning, courtage och hur "
+        "aktiehandel fungerar i praktiken."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är en aktie?",
+            "content": (
+                "En aktie är en del av ett företag. När du köper en aktie "
+                "blir du delägare i företaget — om de går bra ökar värdet, "
+                "om de går dåligt minskar det. Värdet på en aktie bestäms "
+                "av utbud och efterfrågan på börsen.\n\n"
+                "Tänk på det så här: Volvo har ungefär 2 miljarder aktier. "
+                "Om du köper 10 stycken äger du 0,000 000 5 % av Volvo. "
+                "Du har också rätt till en del av vinsten — det kallas "
+                "utdelning."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Skapa ditt första aktiekonto (ISK)",
+            "content": (
+                "Gå till 'Konton' i menyn och skapa ett nytt konto med "
+                "typen 'ISK'. Det är ett särskilt konto för aktier och "
+                "fonder där skatten är schablonmässig — du betalar en "
+                "liten procent på värdet varje år istället för "
+                "kapitalvinstskatt på varje sälj."
+            ),
+            "params": {
+                "assignment_kind": "stock_open_account",
+                "target_count": 1,
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Flytta 10 000 kr till ditt aktiekonto",
+            "content": (
+                "Gå till 'Överföringar' och klicka 'Ny överföring'. "
+                "Flytta 10 000 kr från ditt sparkonto till ditt nya "
+                "ISK. Det kallas att 'fonda kontot' — pengarna behöver "
+                "ligga där för att du ska kunna handla."
+            ),
+            "params": {
+                "assignment_kind": "make_transfer",
+                "target_count": 1,
+                "min_amount": 1000,
+                "to_account_kind": "isk",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Riskspridning — varför du inte ska lägga alla ägg i en korg",
+            "content": (
+                "Om du satsar alla pengar på en aktie och företaget går "
+                "i konkurs — då är allt borta. Lösningen är "
+                "diversifiering: sprid pengarna mellan flera olika "
+                "företag i flera olika branscher.\n\n"
+                "På Stockholmsbörsen finns t.ex. Industri (Volvo, "
+                "Atlas Copco), Bank (SEB, Swedbank), Telecom (Telia, "
+                "Ericsson), Hälsa (AstraZeneca), Konsument (H&M), "
+                "och fler. När en bransch går dåligt går oftast en "
+                "annan bra — det jämnar ut svängningarna."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Köp 5 aktier från minst 3 olika sektorer",
+            "content": (
+                "Gå till 'Aktier' i menyn → fliken 'Marknad'. Välj 5 "
+                "aktier som passar dig — men minst 3 olika sektorer. "
+                "Lägg max ~2 000 kr per aktie så du hinner sprida "
+                "innan likviden tar slut. Skriv en kort motivering "
+                "för varje köp."
+            ),
+            "params": {
+                "assignment_kind": "stock_diversify",
+                "min_holdings": 5,
+                "min_sectors": 3,
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Courtage — den dolda kostnaden",
+            "content": (
+                "Varje gång du köper eller säljer aktier tar mäklaren ut "
+                "en avgift. Vi använder Avanza Mini-courtage: minst 1 kr "
+                "per affär, eller 0,25 % av beloppet — det som är högst.\n\n"
+                "Räkneexempel: köper du för 100 kr betalar du 1 kr "
+                "(minimi). Köper du för 4 000 kr betalar du 10 kr "
+                "(0,25 %). Vid 100 köp om året på 1 000 kr blir det "
+                "100 kr i avgifter — pengar som äter upp vinsten. "
+                "Stora och få affärer är billigare än många små."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Snabbkoll på det du lärt dig",
+            "content": None,
+            "params": {
+                "question": (
+                    "Du köper 20 Volvo-aktier för 200 kr/styck. Hur "
+                    "mycket courtage betalar du (Mini-modell)?"
+                ),
+                "options": [
+                    "1 kr",
+                    "10 kr",
+                    "20 kr",
+                    "100 kr",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "20 × 200 = 4 000 kr × 0,25 % = 10 kr. Det är "
+                    "över minimumet på 1 kr, så procenten gäller."
+                ),
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Var det svårt att välja?",
+            "content": (
+                "När du valde dina 5 aktier — vad styrde dig? Var det "
+                "namn du kände igen, sektorer du tror på, eller "
+                "siffrorna i dagens kurs? Vad lärde du dig om "
+                "diversifiering?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "risk_understanding",
+                        "name": "Förståelse för risk",
+                        "levels": [
+                            "Nämner inte risk",
+                            "Pratar om en risk",
+                            "Förklarar varför spridning minskar risken",
+                        ],
+                    },
+                    {
+                        "key": "courtage_understanding",
+                        "name": "Förståelse för courtage",
+                        "levels": [
+                            "Nämner inte avgifter",
+                            "Vet att courtage finns",
+                            "Räknar med courtage i sina beslut",
+                        ],
+                    },
+                    {
+                        "key": "own_reflection",
+                        "name": "Egen reflektion",
+                        "levels": [
+                            "Återger fakta",
+                            "Bedömer sina egna val",
+                            "Drar pedagogiska slutsatser",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -961,6 +1126,7 @@ def seed_system_modules(master_session) -> int:
         SAVING_TEMPLATE,
         FAMILY_TEMPLATE,
         SYSTEM_TOUR_TEMPLATE,
+        STOCKS_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue

@@ -65,6 +65,10 @@ def evaluate(assignment, student) -> CheckResult:
                 return _check_link_transfer(s, assignment)
             if kind == "make_transfer":
                 return _check_make_transfer(s, assignment)
+            if kind == "stock_open_account":
+                return _check_stock_open_account(s, assignment)
+            if kind == "stock_diversify":
+                return _check_stock_diversify(s, assignment)
             if kind == "add_upcoming":
                 return _check_add_upcoming(s, assignment)
             # free_text: bara manuellt — läraren klickar "Klarmarkera"
@@ -321,6 +325,80 @@ def _check_make_transfer(s: Session, assignment) -> CheckResult:
         "completed",
         f"{n} överföringar{label_extra} (mål: {target})",
         detail={"count": n, "target": target},
+    )
+
+
+def _check_stock_open_account(s: Session, assignment) -> CheckResult:
+    """Kolla att eleven skapat ett ISK-konto.
+
+    params:
+      - target_count (int, default 1)
+      - account_kind (str, default "isk")
+    """
+    p = assignment.params or {}
+    target = int(p.get("target_count", 1))
+    kind = p.get("account_kind", "isk")
+    n = s.query(Account).filter(Account.type == kind).count()
+    if n == 0:
+        return CheckResult("not_started", f"0/{target} {kind}-konton skapade")
+    if n < target:
+        return CheckResult("in_progress", f"{n}/{target} {kind}-konton skapade")
+    return CheckResult(
+        "completed",
+        f"{n} {kind}-konton skapade (mål: {target})",
+        detail={"count": n, "target": target},
+    )
+
+
+def _check_stock_diversify(s: Session, assignment) -> CheckResult:
+    """Kolla att eleven har en diversifierad portfölj.
+
+    params:
+      - min_holdings (int, default 5) — antal olika tickers
+      - min_sectors (int, default 3) — antal olika sektorer
+        Sektorinformation hämtas från StockMaster i master-DB.
+    """
+    from ..db.models import StockHolding
+    from ..school.engines import master_session as _master
+    from ..school.stock_models import StockMaster
+
+    p = assignment.params or {}
+    min_holdings = int(p.get("min_holdings", 5))
+    min_sectors = int(p.get("min_sectors", 3))
+
+    holdings = s.query(StockHolding).filter(StockHolding.quantity > 0).all()
+    n_holdings = len({h.ticker for h in holdings})
+
+    if n_holdings == 0:
+        return CheckResult(
+            "not_started",
+            f"0/{min_holdings} olika aktier i portföljen",
+        )
+
+    # Slå upp sektorer från master
+    tickers = {h.ticker for h in holdings}
+    sectors: set[str] = set()
+    with _master() as ms:
+        for sm in (
+            ms.query(StockMaster).filter(StockMaster.ticker.in_(tickers)).all()
+        ):
+            sectors.add(sm.sector)
+
+    n_sectors = len(sectors)
+    if n_holdings < min_holdings or n_sectors < min_sectors:
+        return CheckResult(
+            "in_progress",
+            f"{n_holdings}/{min_holdings} aktier, {n_sectors}/{min_sectors} sektorer",
+        )
+
+    return CheckResult(
+        "completed",
+        f"{n_holdings} aktier över {n_sectors} sektorer (mål: {min_holdings}/{min_sectors})",
+        detail={
+            "holdings": n_holdings,
+            "sectors": n_sectors,
+            "sector_list": sorted(sectors),
+        },
     )
 
 
