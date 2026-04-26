@@ -11,6 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from ..credit.affordability import check_affordability
@@ -18,7 +19,7 @@ from ..credit.scoring import (
     annuity_monthly_payment,
     calculate_credit_score,
 )
-from ..db.models import CreditApplication, Loan, Transaction
+from ..db.models import Account, CreditApplication, Loan, Transaction
 from .deps import db, require_auth
 
 
@@ -331,6 +332,231 @@ def private_decline(payload: DeclineIn, session: Session = Depends(db)) -> dict:
         app_row.decided_at = datetime.utcnow()
         session.flush()
     return {"ok": True, "application_id": app_row.id, "result": app_row.result}
+
+
+# ---------- SMS-lån (sista utväg) ----------
+#
+# SMS-lån är medvetet *enkelt att få* men *väldigt dyrt*. Pedagogiken
+# är att eleven ska se konsekvenserna i klartext innan acceptans —
+# inte att vi ska göra det svårt att ta lånet (det är inte verkligheten).
+
+SMS_LENDERS = ["Klarna Quick", "Bynk", "Cashbuddy", "GF Money"]
+# Effektiv ränta beror på avgifter + nominell ränta. Vi simulerar
+# realistiskt: nominell ~30 % årligen + uppläggningsavgift + aviavgift.
+SMS_NOMINAL_RATE = 0.30
+SMS_SETUP_FEE = Decimal("500")
+SMS_AVI_FEE_PER_MONTH = Decimal("50")
+
+
+def _sms_total_cost(amount: Decimal, months: int) -> tuple[Decimal, Decimal, Decimal, float]:
+    """Returnera (total, ränta_kr, total_avgifter, effektiv_ränta_årlig)."""
+    # Beräkna ränta på principal under perioden (förenklat — riktiga
+    # SMS-lån räknar på utestående saldo men vi gör det rakare).
+    interest_part = amount * Decimal(str(SMS_NOMINAL_RATE)) * Decimal(months) / Decimal("12")
+    avi = SMS_AVI_FEE_PER_MONTH * months
+    fees = SMS_SETUP_FEE + avi
+    total = amount + interest_part + fees
+    # Effektiv ränta = (total/amount)^(12/months) − 1, annualiserat
+    if amount > 0 and months > 0:
+        ratio = float(total / amount)
+        eff = (ratio ** (12.0 / months) - 1.0)
+    else:
+        eff = 0.0
+    return total.quantize(Decimal("0.01")), interest_part.quantize(Decimal("0.01")), fees.quantize(Decimal("0.01")), eff
+
+
+def _sms_lender(student_seed: int, amount: Decimal) -> str:
+    import hashlib as _hashlib
+    key = f"sms-{student_seed}-{int(amount)}"
+    h = int(_hashlib.sha256(key.encode()).hexdigest()[:8], 16)
+    return SMS_LENDERS[h % len(SMS_LENDERS)]
+
+
+class SmsApplyIn(BaseModel):
+    requested_amount: Decimal = Field(ge=1_000, le=30_000)
+    requested_months: int = Field(ge=1, le=3)  # 1, 2, eller 3 månader
+    triggered_by_tx_id: Optional[int] = None
+
+
+class SmsApplyOut(BaseModel):
+    application_id: int
+    approved: bool
+    simulated_lender: str
+    nominal_rate: float
+    effective_rate: float
+    setup_fee: float
+    avi_fee_per_month: float
+    months: int
+    requested_amount: float
+    total_to_pay: float
+    interest_kr: float
+    total_fees: float
+    pedagogical_warning: str
+
+
+@router.post("/sms/apply", response_model=SmsApplyOut)
+def sms_apply(payload: SmsApplyIn, session: Session = Depends(db)) -> SmsApplyOut:
+    """SMS-lån: snabb, dyr kredit. Auto-godkänd så länge inkomsten är
+    >0 (annars skulle ingen vilja låna ut). Eleven ska se den
+    effektiva räntan + total kostnad innan acceptans."""
+    # Vi godkänner alltid om eleven har någon lön (rimlig minimum-
+    # spärr så det inte blir absurt). I verkligheten ger SMS-lånare
+    # nästan alltid OK — det är just det som gör dem farliga.
+    income = (
+        session.query(sa_func.coalesce(sa_func.sum(Transaction.amount), 0))
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(
+            Account.type == "checking",
+            Transaction.amount >= Decimal("5000"),
+            Transaction.is_transfer.is_(False),
+        )
+        .scalar() or Decimal("0")
+    )
+    if not isinstance(income, Decimal):
+        income = Decimal(str(income))
+    approved = income > 0
+
+    seed = int(payload.requested_amount) * 100 + payload.requested_months
+    lender = _sms_lender(seed, payload.requested_amount)
+
+    total, interest_kr, total_fees, eff_rate = _sms_total_cost(
+        payload.requested_amount, payload.requested_months,
+    )
+
+    # Pedagogisk varning som visas ordagrant
+    warning = (
+        f"⚠️ DETTA ÄR DYR KREDIT.\n"
+        f"Du lånar {payload.requested_amount:.0f} kr, men ska "
+        f"betala tillbaka {total:.0f} kr på {payload.requested_months} "
+        f"månader. Effektiv ränta: {eff_rate*100:.0f} %.\n\n"
+        f"För att jämföra: ett vanligt privatlån på samma belopp i "
+        f"24 månader hade kostat ungefär {payload.requested_amount * Decimal('1.08'):.0f} kr totalt — "
+        f"alltså ~{(total - payload.requested_amount * Decimal('1.08')):.0f} kr mindre.\n\n"
+        f"SMS-lån är vettigt bara om du är 100 % säker på att kunna "
+        f"betala tillbaka i tid. Missade betalningar leder till "
+        f"inkasso och betalningsanmärkning."
+    )
+
+    app_row = CreditApplication(
+        kind="sms",
+        requested_amount=payload.requested_amount,
+        requested_months=payload.requested_months,
+        purpose="Sista utväg",
+        result="approved" if approved else "declined",
+        score_value=None,  # SMS-lån har ingen score
+        decline_reason=None if approved else "Vi hittar ingen inkomst.",
+        simulated_lender=lender,
+        offered_rate=SMS_NOMINAL_RATE,
+        offered_monthly_payment=(total / payload.requested_months).quantize(Decimal("0.01")),
+        triggered_by_tx_id=payload.triggered_by_tx_id,
+        decided_at=datetime.utcnow(),
+    )
+    session.add(app_row)
+    session.flush()
+
+    return SmsApplyOut(
+        application_id=app_row.id,
+        approved=approved,
+        simulated_lender=lender,
+        nominal_rate=SMS_NOMINAL_RATE,
+        effective_rate=eff_rate,
+        setup_fee=float(SMS_SETUP_FEE),
+        avi_fee_per_month=float(SMS_AVI_FEE_PER_MONTH),
+        months=payload.requested_months,
+        requested_amount=float(payload.requested_amount),
+        total_to_pay=float(total),
+        interest_kr=float(interest_kr),
+        total_fees=float(total_fees),
+        pedagogical_warning=warning,
+    )
+
+
+class SmsAcceptIn(BaseModel):
+    application_id: int
+    deposit_account_id: int
+
+
+class SmsAcceptOut(BaseModel):
+    loan_id: int
+    transaction_id: int
+    deposited_amount: float
+    total_to_pay: float
+    months: int
+    pedagogical_note: str
+
+
+@router.post("/sms/accept", response_model=SmsAcceptOut)
+def sms_accept(payload: SmsAcceptIn, session: Session = Depends(db)) -> SmsAcceptOut:
+    """Eleven accepterar SMS-lånet. Skapar Loan med is_high_cost_credit=True."""
+    app_row = session.get(CreditApplication, payload.application_id)
+    if app_row is None:
+        raise HTTPException(404, "Ansökan saknas")
+    if app_row.kind != "sms":
+        raise HTTPException(400, "Fel ansökningstyp")
+    if app_row.result != "approved":
+        raise HTTPException(400, "Ansökan är inte godkänd")
+    if app_row.resulting_loan_id is not None:
+        raise HTTPException(400, "Lånet är redan accepterat")
+
+    total, interest_kr, total_fees, _ = _sms_total_cost(
+        app_row.requested_amount, app_row.requested_months,
+    )
+    monthly = (total / app_row.requested_months).quantize(Decimal("0.01"))
+
+    loan = Loan(
+        name=f"SMS-lån {app_row.simulated_lender}",
+        lender=app_row.simulated_lender or "Snabblån",
+        principal_amount=app_row.requested_amount,
+        start_date=date.today(),
+        interest_rate=float(app_row.offered_rate or SMS_NOMINAL_RATE),
+        binding_type="rörlig",
+        amortization_monthly=monthly,
+        active=True,
+        loan_kind="sms",
+        is_high_cost_credit=True,
+        applied_at=app_row.created_at,
+    )
+    session.add(loan)
+    session.flush()
+
+    import hashlib as _hashlib
+    h = _hashlib.sha256(
+        f"sms-loan-{loan.id}-{datetime.utcnow().isoformat()}".encode()
+    ).hexdigest()
+    deposit_tx = Transaction(
+        account_id=payload.deposit_account_id,
+        date=date.today(),
+        amount=app_row.requested_amount,
+        currency="SEK",
+        raw_description=f"SMS-lån utbetalning — {app_row.simulated_lender}",
+        is_transfer=False,
+        hash=h,
+    )
+    session.add(deposit_tx)
+    session.flush()
+
+    app_row.result = "accepted"
+    app_row.resulting_loan_id = loan.id
+    session.flush()
+
+    note = (
+        f"Du har tagit ett SMS-lån på {app_row.requested_amount:.0f} kr.\n\n"
+        f"Du ska betala tillbaka {total:.0f} kr på "
+        f"{app_row.requested_months} månader — det är "
+        f"{total - app_row.requested_amount:.0f} kr mer än vad du lånade.\n\n"
+        f"Reflektion: hur hamnade du här? Vad kunde du gjort annorlunda? "
+        f"Ett buffertsparande på ungefär en månadslön hade troligen "
+        f"räckt för att slippa det här lånet."
+    )
+
+    return SmsAcceptOut(
+        loan_id=loan.id,
+        transaction_id=deposit_tx.id,
+        deposited_amount=float(app_row.requested_amount),
+        total_to_pay=float(total),
+        months=app_row.requested_months,
+        pedagogical_note=note,
+    )
 
 
 @router.get("/applications")
