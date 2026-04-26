@@ -356,3 +356,130 @@ def finnhub_test(
         "change_pct": q.change_pct,
         "ts": q.ts.isoformat(),
     }
+
+
+# ---------- Klassdisplay-inställningar (super-admin) ----------
+#
+# Per-lärar-toggles för klassgemensamma funktioner: anonymiserad
+# rangordning, klasskompis-bjudningar, kostnadsmodell, anti-spam-tak.
+# Default: minimal exponering (allt utom invitations är AV).
+
+class ClassDisplaySettingsOut(BaseModel):
+    teacher_id: int
+    teacher_email: str
+    teacher_name: str
+    class_list_enabled: bool
+    show_full_names: bool
+    invite_classmates_enabled: bool
+    cost_split_model: str  # "split" | "inviter_pays" | "each_pays_own"
+    class_event_creation_enabled: bool
+    max_invites_per_week: int
+
+
+class ClassDisplaySettingsIn(BaseModel):
+    teacher_id: int
+    class_list_enabled: bool | None = None
+    show_full_names: bool | None = None
+    invite_classmates_enabled: bool | None = None
+    cost_split_model: str | None = None
+    class_event_creation_enabled: bool | None = None
+    max_invites_per_week: int | None = None
+
+
+@router.get("/class-display", response_model=list[ClassDisplaySettingsOut])
+def list_class_display(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> list[ClassDisplaySettingsOut]:
+    """Lista klassdisplay-inställning per lärare. Lärare utan rad får
+    default-värden (allt avstängt utom invitations)."""
+    from ..school.social_models import ClassDisplaySettings
+
+    out = []
+    with master_session() as s:
+        teachers = s.query(Teacher).order_by(Teacher.name).all()
+        configs_by_id = {
+            c.teacher_id: c
+            for c in s.query(ClassDisplaySettings).all()
+        }
+        for t in teachers:
+            cfg = configs_by_id.get(t.id)
+            if cfg is None:
+                out.append(ClassDisplaySettingsOut(
+                    teacher_id=t.id,
+                    teacher_email=t.email,
+                    teacher_name=t.name,
+                    class_list_enabled=False,
+                    show_full_names=False,
+                    invite_classmates_enabled=True,
+                    cost_split_model="split",
+                    class_event_creation_enabled=False,
+                    max_invites_per_week=3,
+                ))
+            else:
+                out.append(ClassDisplaySettingsOut(
+                    teacher_id=t.id,
+                    teacher_email=t.email,
+                    teacher_name=t.name,
+                    class_list_enabled=cfg.class_list_enabled,
+                    show_full_names=cfg.show_full_names,
+                    invite_classmates_enabled=cfg.invite_classmates_enabled,
+                    cost_split_model=cfg.cost_split_model,
+                    class_event_creation_enabled=cfg.class_event_creation_enabled,
+                    max_invites_per_week=cfg.max_invites_per_week,
+                ))
+    return out
+
+
+@router.post("/class-display", response_model=ClassDisplaySettingsOut)
+def set_class_display(
+    payload: ClassDisplaySettingsIn,
+    _: TokenInfo = Depends(_require_super_admin),
+) -> ClassDisplaySettingsOut:
+    """Uppdatera klassdisplay-inställningarna för en specifik lärare.
+    Skapa rad om den inte finns. Bara fält som skickas in uppdateras."""
+    from ..school.social_models import ClassDisplaySettings
+
+    with master_session() as s:
+        teacher = s.get(Teacher, payload.teacher_id)
+        if teacher is None:
+            raise HTTPException(404, "Lärare saknas")
+
+        cfg = (
+            s.query(ClassDisplaySettings)
+            .filter(ClassDisplaySettings.teacher_id == payload.teacher_id)
+            .first()
+        )
+        if cfg is None:
+            cfg = ClassDisplaySettings(teacher_id=payload.teacher_id)
+            s.add(cfg)
+
+        if payload.class_list_enabled is not None:
+            cfg.class_list_enabled = payload.class_list_enabled
+        if payload.show_full_names is not None:
+            cfg.show_full_names = payload.show_full_names
+        if payload.invite_classmates_enabled is not None:
+            cfg.invite_classmates_enabled = payload.invite_classmates_enabled
+        if payload.cost_split_model is not None:
+            if payload.cost_split_model not in {"split", "inviter_pays", "each_pays_own"}:
+                raise HTTPException(400, "Ogiltig cost_split_model")
+            cfg.cost_split_model = payload.cost_split_model
+        if payload.class_event_creation_enabled is not None:
+            cfg.class_event_creation_enabled = payload.class_event_creation_enabled
+        if payload.max_invites_per_week is not None:
+            if not (0 <= payload.max_invites_per_week <= 50):
+                raise HTTPException(400, "max_invites_per_week måste vara 0-50")
+            cfg.max_invites_per_week = payload.max_invites_per_week
+
+        s.flush()
+
+        return ClassDisplaySettingsOut(
+            teacher_id=teacher.id,
+            teacher_email=teacher.email,
+            teacher_name=teacher.name,
+            class_list_enabled=cfg.class_list_enabled,
+            show_full_names=cfg.show_full_names,
+            invite_classmates_enabled=cfg.invite_classmates_enabled,
+            cost_split_model=cfg.cost_split_model,
+            class_event_creation_enabled=cfg.class_event_creation_enabled,
+            max_invites_per_week=cfg.max_invites_per_week,
+        )
