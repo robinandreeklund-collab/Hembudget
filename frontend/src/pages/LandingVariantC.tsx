@@ -289,9 +289,14 @@ function SharedStyles() {
       .vc-tab-off { color: #64748b; }
       .vc-tab-off:hover { color: #0f172a; }
       .vc-eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
+      .vc-hamburger { display: none; }
       @media (max-width: 768px) {
         .vc-h1 { font-size: 36px; letter-spacing: -1.2px; }
         .vc-h2 { font-size: 28px; }
+        .vc-nav-desktop { display: none !important; }
+        .vc-search-desktop { display: none !important; }
+        .vc-login-desktop { display: none !important; }
+        .vc-hamburger { display: inline-flex !important; }
       }
     `}</style>
   );
@@ -302,6 +307,8 @@ function SharedStyles() {
 function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pickedCell, setPickedCell] = useState<CellInfo | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const closeMobile = () => setMobileOpen(false);
 
   // Cmd/Ctrl+K aktiverar söket. Esc stänger.
   useEffect(() => {
@@ -360,7 +367,7 @@ function Header() {
             Ekonomilabbet
           </span>
         </Link>
-        <nav style={{ display: "flex", gap: 4 }} className="vc-nav">
+        <nav style={{ display: "flex", gap: 4 }} className="vc-nav vc-nav-desktop">
           {([
             { label: "Översikt", href: "#oversikt", external: false },
             { label: "Funktioner", href: "#funktioner", external: false },
@@ -410,7 +417,7 @@ function Header() {
             fontFamily: "inherit",
             minWidth: 200,
           }}
-          className="vc-search-btn"
+          className="vc-search-btn vc-search-desktop"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="7" />
@@ -419,21 +426,148 @@ function Header() {
           <span style={{ flex: 1, textAlign: "left" }}>Sök i kursplanen…</span>
           <span className="vc-kbd">⌘K</span>
         </button>
-        <Link
-          to="/login"
-          className="vc-btn vc-btn-ghost"
-          style={{ textDecoration: "none" }}
+        <div className="vc-login-desktop" style={{ display: "flex", gap: 10 }}>
+          <Link
+            to="/login"
+            className="vc-btn vc-btn-ghost"
+            style={{ textDecoration: "none" }}
+          >
+            Logga in
+          </Link>
+          <Link
+            to="/signup/teacher"
+            className="vc-btn vc-btn-primary"
+            style={{ textDecoration: "none" }}
+          >
+            Kom igång →
+          </Link>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileOpen((v) => !v)}
+          aria-label={mobileOpen ? "Stäng meny" : "Öppna meny"}
+          aria-expanded={mobileOpen}
+          className="vc-hamburger"
+          style={{
+            alignItems: "center",
+            justifyContent: "center",
+            width: 38,
+            height: 38,
+            border: "1px solid #e2e8f0",
+            background: "#fff",
+            borderRadius: 8,
+            cursor: "pointer",
+            color: "#0f172a",
+          }}
         >
-          Logga in
-        </Link>
-        <Link
-          to="/signup/teacher"
-          className="vc-btn vc-btn-primary"
-          style={{ textDecoration: "none" }}
-        >
-          Kom igång →
-        </Link>
+          {mobileOpen ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 6 L18 18 M6 18 L18 6" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 7h16 M4 12h16 M4 17h16" />
+            </svg>
+          )}
+        </button>
       </div>
+      {mobileOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            borderBottom: "1px solid #e2e8f0",
+            boxShadow: "0 6px 18px rgba(15,23,42,.06)",
+            padding: "12px 24px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              closeMobile();
+              setSearchOpen(true);
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 12px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              color: "#64748b",
+              fontFamily: "inherit",
+              fontSize: 14,
+              cursor: "pointer",
+              marginBottom: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            Sök i kursplanen…
+          </button>
+          {[
+            { label: "Översikt", href: "#oversikt" },
+            { label: "Funktioner", href: "#funktioner" },
+            { label: "Pris", href: "#pris" },
+            { label: "FAQ", href: "#faq" },
+          ].map((t) => (
+            <a
+              key={t.label}
+              href={t.href}
+              onClick={closeMobile}
+              style={{
+                padding: "10px 4px",
+                fontSize: 14,
+                color: "#0f172a",
+                textDecoration: "none",
+                borderBottom: "1px solid #f1f5f9",
+              }}
+            >
+              {t.label}
+            </a>
+          ))}
+          <Link
+            to="/docs"
+            onClick={closeMobile}
+            style={{
+              padding: "10px 4px",
+              fontSize: 14,
+              color: "#0f172a",
+              textDecoration: "none",
+              borderBottom: "1px solid #f1f5f9",
+            }}
+          >
+            Dokumentation
+          </Link>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+            <Link
+              to="/login"
+              onClick={closeMobile}
+              className="vc-btn vc-btn-outline"
+              style={{ textAlign: "center", textDecoration: "none", justifyContent: "center" }}
+            >
+              Logga in
+            </Link>
+            <Link
+              to="/signup/teacher"
+              onClick={closeMobile}
+              className="vc-btn vc-btn-primary"
+              style={{ textAlign: "center", textDecoration: "none", justifyContent: "center" }}
+            >
+              Kom igång →
+            </Link>
+          </div>
+        </div>
+      )}
       {searchOpen && (
         <SearchPalette
           onClose={() => setSearchOpen(false)}
