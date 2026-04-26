@@ -56,7 +56,7 @@ const ALL_ITEMS: NavItem[] = [
 // Elev-vyn döljer importera/AI-chat/inställningar och lägger till
 // Dina dokument-sidan. Lärare-impersonation visar fortfarande hela
 // menyn så de kan se elevens hela värld.
-const STUDENT_HIDDEN = new Set(["/import", "/chat", "/settings", "/funds"]);
+const STUDENT_HIDDEN = new Set(["/import", "/chat", "/settings"]);
 
 function NavItems({ onClick }: { onClick?: () => void }) {
   const { role, asStudent } = useAuth();

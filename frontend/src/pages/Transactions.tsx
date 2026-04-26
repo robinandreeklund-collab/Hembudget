@@ -21,7 +21,11 @@ const ALL_ACCOUNTS = "__all__";
 export default function Transactions() {
   const qc = useQueryClient();
   const [uncategorizedOnly, setUncategorizedOnly] = useState(false);
-  const [hideTransfers, setHideTransfers] = useState(true);
+  // Default false så elever ser ALLA bankrader när de öppnar sidan
+  // — annars försvinner överföringar (t.ex. flytt till ISK) tyst och
+  // eleven förstår inte var pengarna tog vägen. Användaren kan
+  // fortfarande kryssa i för att dölja paret.
+  const [hideTransfers, setHideTransfers] = useState(false);
   const [newCatFor, setNewCatFor] = useState<number | null>(null);
   const [uploadingFor, setUploadingFor] = useState<number | null>(null);
   const [attachMsg, setAttachMsg] = useState<{
