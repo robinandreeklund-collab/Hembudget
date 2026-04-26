@@ -132,10 +132,16 @@ EMPLOYERS: list[tuple[str, int, int]] = [
     ("Scania CV", 27_000, 45_000),
 ]
 
-# Startkonton som alla elever får
+# Startkonton som alla elever får. opening_balance ger eleven en
+# realistisk startposition första månaden — annars hade lönekontot
+# gått minus mellan 1:a (hyra dras) och 25:e (lön kommer).
+# Beloppen motsvarar ungefär en månads buffert för en 22-åring som
+# precis flyttat hemifrån.
 DEFAULT_ACCOUNTS = [
-    {"name": "Lönekonto", "bank": "nordea", "type": "checking"},
-    {"name": "Sparkonto", "bank": "nordea", "type": "savings"},
+    {"name": "Lönekonto", "bank": "nordea", "type": "checking",
+     "opening_balance": 25_000},
+    {"name": "Sparkonto", "bank": "nordea", "type": "savings",
+     "opening_balance": 5_000},
     {"name": "Kreditkort", "bank": "seb_kort", "type": "credit",
-     "credit_limit": 40_000},
+     "credit_limit": 40_000, "opening_balance": 0},
 ]

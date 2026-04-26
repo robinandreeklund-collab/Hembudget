@@ -103,6 +103,9 @@ class MonthlyDataGenerator:
         for spec in DEFAULT_ACCOUNTS:
             acc = existing_by_name.get(spec["name"])
             if acc is None:
+                # Eleven ska ha en realistisk startposition (se DEFAULT_ACCOUNTS-
+                # kommentaren) — annars går lönekontot minus innan lönen kommer.
+                opening = Decimal(str(spec.get("opening_balance", 0) or 0))
                 acc = Account(
                     name=spec["name"],
                     bank=spec["bank"],
@@ -110,7 +113,7 @@ class MonthlyDataGenerator:
                     currency="SEK",
                     credit_limit=Decimal(str(spec.get("credit_limit", 0) or 0))
                         if spec.get("credit_limit") else None,
-                    opening_balance=Decimal("0"),
+                    opening_balance=opening,
                     opening_balance_date=date(self.year, 1, 1),
                 )
                 session.add(acc)

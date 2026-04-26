@@ -133,10 +133,12 @@ def create_batch_for_student(
             ).first()
             if not lonekonto:
                 from decimal import Decimal as _Dec
+                # Realistisk startposition så hyran kan dras innan lönen kommer.
+                # Matchar DEFAULT_ACCOUNTS i fixtures.py.
                 lonekonto = Account(
                     name="Lönekonto", bank="ekonomilabbet",
                     type="checking", currency="SEK",
-                    opening_balance=_Dec("0"),
+                    opening_balance=_Dec("25000"),
                 )
                 s.add(lonekonto)
                 s.flush()
