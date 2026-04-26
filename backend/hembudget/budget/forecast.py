@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Transaction
+from ..db.sql_compat import month_str
 
 
 @dataclass
@@ -37,9 +38,10 @@ class CashflowForecaster:
         lookback_start = _add_months(today.replace(day=1), -self.lookback)
         end = today.replace(day=1)
 
+        _m_expr = month_str(self.session, Transaction.date)
         rows = self.session.execute(
             select(
-                func.strftime("%Y-%m", Transaction.date).label("month"),
+                _m_expr.label("month"),
                 func.sum(Transaction.amount).label("total"),
             )
             .where(
@@ -47,8 +49,8 @@ class CashflowForecaster:
                 Transaction.date < end,
                 Transaction.is_transfer.is_(False),
             )
-            .group_by("month")
-            .order_by("month")
+            .group_by(_m_expr)
+            .order_by(_m_expr)
         ).all()
 
         incomes: list[float] = []

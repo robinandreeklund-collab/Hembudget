@@ -37,6 +37,7 @@ from ..db.models import (
     UpcomingTransaction,
     User,
 )
+from ..db.sql_compat import month_str
 from ..loans.matcher import LoanMatcher
 from ..scenarios.engine import ScenarioEngine
 from ..subscriptions.detector import SubscriptionDetector
@@ -685,9 +686,10 @@ def detect_anomalies(
     start, end = _month_bounds(month)
     lookback_start = start - timedelta(days=186)
 
+    _m_expr = month_str(session, Transaction.date)
     rows = session.execute(
         select(
-            func.strftime("%Y-%m", Transaction.date).label("m"),
+            _m_expr.label("m"),
             Category.name,
             func.sum(Transaction.amount).label("total"),
         )
@@ -698,7 +700,7 @@ def detect_anomalies(
             Transaction.amount < 0,
             Transaction.is_transfer.is_(False),
         )
-        .group_by("m", Category.name)
+        .group_by(_m_expr, Category.name)
     ).all()
 
     by_cat: dict[str, dict[str, float]] = {}
