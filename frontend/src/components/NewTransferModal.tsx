@@ -5,8 +5,8 @@ import { api, formatSEK } from "@/api/client";
 import type { Account } from "@/types/models";
 
 interface BalanceRow {
-  account_id: number;
-  current: number;
+  id: number;
+  current_balance: number;
 }
 
 interface CreateResponse {
@@ -54,14 +54,14 @@ export function NewTransferModal({ open, onClose, defaultFromId }: Props) {
   const balancesQ = useQuery({
     queryKey: ["balances", "today"],
     queryFn: () =>
-      api<{ accounts: BalanceRow[] }>("/balances"),
+      api<{ accounts: BalanceRow[] }>("/balances/"),
     enabled: open,
   });
 
   const accounts = accountsQ.data ?? [];
   const balanceMap = useMemo(() => {
     const m = new Map<number, number>();
-    for (const b of balancesQ.data?.accounts ?? []) m.set(b.account_id, b.current);
+    for (const b of balancesQ.data?.accounts ?? []) m.set(b.id, b.current_balance);
     return m;
   }, [balancesQ.data]);
 
