@@ -757,6 +757,58 @@ class StockWatchlist(TenantMixin, Base):
     )
 
 
+class WellbeingScore(TenantMixin, Base):
+    """Sammansatt välbefinnande-poäng per månad. Pedagogisk mätare för
+    att eleven ska se att ekonomi är medel, inte mål.
+
+    Total = viktat snitt över 5 dimensioner (lika vikt i V1, V2 kan
+    nyansera per personlighet). Beräknas vid månadsskifte och lagras
+    som tidsserie över terminen.
+    """
+    __tablename__ = "wellbeing_scores"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "year_month", name="uq_wellbeing_month"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year_month: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    total_score: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-100
+    economy: Mapped[int] = mapped_column(Integer, nullable=False)
+    health: Mapped[int] = mapped_column(Integer, nullable=False)
+    social: Mapped[int] = mapped_column(Integer, nullable=False)
+    leisure: Mapped[int] = mapped_column(Integer, nullable=False)
+    safety: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Faktor-uppdelning för pedagogisk transparens
+    events_accepted: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    events_declined: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    budget_violations: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Förklarande text på svenska — visas under pentagon-radarn
+    explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class PersonalityProfile(TenantMixin, Base):
+    """En rad per elev — sätts vid onboarding via 3-frågors quiz.
+    Påverkar event-mix och Wellbeing-tröskelvärden i V2.
+
+    Alla skalor 0-100 (50 = mitten, neutral).
+    """
+    __tablename__ = "personality_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    introvert_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    thrill_seeker_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    family_oriented_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    onboarded_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 def create_all() -> None:
     from .base import get_engine
 
