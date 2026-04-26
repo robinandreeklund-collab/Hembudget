@@ -1,36 +1,65 @@
-"""In-place schema migrations for SQLite.
+"""In-place schema migrations för scope-DB:n (SQLite-per-scope ELLER
+delad Postgres i prod).
 
 Kör alla vid startup efter `create_all()`. Nya kolumner läggs till om de
-saknas. Idempotent — säker att köra flera gånger.
+saknas. Idempotent — säker att köra flera gånger. Cross-dialect: stödjer
+både SQLite (lokalt + pytest) och Postgres (Cloud Run-prod).
 """
 from __future__ import annotations
 
 import logging
 
-from sqlalchemy import text
+from sqlalchemy import inspect as _inspect, text
 from sqlalchemy.engine import Engine
 
 log = logging.getLogger(__name__)
 
 
 def _columns(engine: Engine, table: str) -> set[str]:
-    with engine.connect() as conn:
-        rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
-    return {row[1] for row in rows}
+    """Cross-dialect kolumn-lookup. SQLAlchemy-inspector funkar för
+    både SQLite och Postgres. Tom set om tabellen inte finns."""
+    try:
+        return {c["name"] for c in _inspect(engine).get_columns(table)}
+    except Exception:
+        return set()
 
 
 def _table_exists(engine: Engine, table: str) -> bool:
-    with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
-            {"n": table},
-        ).first()
-    return row is not None
+    try:
+        return _inspect(engine).has_table(table)
+    except Exception:
+        return False
 
 
 def _add_column(engine: Engine, table: str, column_sql: str) -> None:
-    with engine.begin() as conn:
-        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column_sql}"))
+    """Idempotent ALTER TABLE ADD COLUMN. Fail-soft: en kraschad
+    migration får inte ta ner scope-init eftersom det gör hela elev-
+    DB:n oanvändbar (404 på alla endpoints).
+
+    På Postgres används 'IF NOT EXISTS' så concurrent restarts inte
+    krockar. På SQLite finns inte syntaxen — då litar vi på _columns-
+    guarden som körs INNAN _add_column anropas.
+    """
+    is_postgres = engine.dialect.name == "postgresql"
+    if is_postgres:
+        stmt = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column_sql}"
+    else:
+        stmt = f"ALTER TABLE {table} ADD COLUMN {column_sql}"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(stmt))
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "already exists" in msg or "duplicate" in msg:
+            log.info(
+                "scope-migration: %s.%s redan tillagd — hoppar över",
+                table, column_sql.split()[0],
+            )
+        else:
+            log.exception(
+                "scope-migration: ALTER TABLE %s ADD COLUMN %s misslyckades",
+                table, column_sql,
+            )
 
 
 def run_migrations(engine: Engine) -> list[str]:
@@ -371,6 +400,8 @@ def run_migrations(engine: Engine) -> list[str]:
 
     # loans.current_balance_at_creation — saldo när lånet registrerades
     # loans.category_id — valfri budgetkategori (Huslån/Billån/…)
+    # loans.loan_kind/is_high_cost_credit/applied_at/score_at_application
+    #   — credit-flow-fas: skiljer SMS-lån från huslån + audit-trail
     if _table_exists(engine, "loans"):
         loan_cols = _columns(engine, "loans")
         if "current_balance_at_creation" not in loan_cols:
@@ -387,6 +418,29 @@ def run_migrations(engine: Engine) -> list[str]:
                 "category_id INTEGER REFERENCES categories(id)",
             )
             applied.append("loans.category_id")
+        if "loan_kind" not in loan_cols:
+            # NOT NULL DEFAULT 'mortgage' — befintliga rader är pre-credit-flow
+            # och var alltid bolån eller "övrigt" som vi konservativt
+            # taggar 'mortgage'. Eleven kan ändra om det visar sig fel.
+            _add_column(
+                engine,
+                "loans",
+                "loan_kind VARCHAR(20) NOT NULL DEFAULT 'mortgage'",
+            )
+            applied.append("loans.loan_kind")
+        if "is_high_cost_credit" not in loan_cols:
+            _add_column(
+                engine,
+                "loans",
+                "is_high_cost_credit BOOLEAN NOT NULL DEFAULT 0",
+            )
+            applied.append("loans.is_high_cost_credit")
+        if "applied_at" not in loan_cols:
+            _add_column(engine, "loans", "applied_at TIMESTAMP")
+            applied.append("loans.applied_at")
+        if "score_at_application" not in loan_cols:
+            _add_column(engine, "loans", "score_at_application INTEGER")
+            applied.append("loans.score_at_application")
 
     # Fakturarader på planerade fakturor (el/vatten/bredband etc.)
     if not _table_exists(engine, "upcoming_transaction_lines"):

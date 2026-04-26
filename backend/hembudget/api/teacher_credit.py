@@ -47,7 +47,19 @@ def _summarize_student_credit(student) -> dict:
             total_debt = sum(
                 Decimal(loan.principal_amount or 0) for loan in loans
             )
-            n_high_cost = sum(1 for loan in loans if loan.is_high_cost_credit)
+            # is_high_cost_credit är deferred + saknas i prod-Postgres
+            # om migration ej hunnit köra. Säker access via try/except
+            # så rapporten visas även med skev DB-schema.
+            from ..school.engines import scope_has_column
+            if scope_has_column("loans", "is_high_cost_credit"):
+                try:
+                    n_high_cost = sum(
+                        1 for loan in loans if loan.is_high_cost_credit
+                    )
+                except Exception:
+                    n_high_cost = 0
+            else:
+                n_high_cost = 0
 
             return {
                 "n_applications": n_applications,

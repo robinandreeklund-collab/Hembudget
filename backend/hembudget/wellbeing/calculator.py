@@ -107,11 +107,27 @@ def _total_active_debt(session: Session) -> Decimal:
 
 
 def _high_cost_credit_count(session: Session) -> int:
-    return (
-        session.query(Loan)
-        .filter(Loan.active.is_(True), Loan.is_high_cost_credit.is_(True))
-        .count()
-    )
+    # Skydda mot prod-Postgres som ännu saknar kolumnen (migration ej körd).
+    # Wellbeing-räkning får inte krascha — då tar den ner hela dashboarden.
+    from ..school.engines import scope_has_column
+    if not scope_has_column("loans", "is_high_cost_credit"):
+        return 0
+    try:
+        return (
+            session.query(Loan)
+            .filter(Loan.active.is_(True), Loan.is_high_cost_credit.is_(True))
+            .count()
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_high_cost_credit_count: SELECT misslyckades — returnerar 0",
+        )
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return 0
 
 
 def _budget_violations(session: Session, year_month: str) -> tuple[int, list[str]]:

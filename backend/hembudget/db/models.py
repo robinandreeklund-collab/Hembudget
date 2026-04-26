@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from .base import Base, TenantMixin
 
@@ -249,22 +249,28 @@ class Loan(TenantMixin, Base):
         ForeignKey("categories.id"), nullable=True
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Pedagogiska fält för kreditmotorn (privatlån/SMS-lån)
+    # Pedagogiska fält för kreditmotorn (privatlån/SMS-lån).
+    # deferred() = exkludera från default-SELECT så att SELECT på Loan
+    # inte kraschar i prod-Postgres om migrationen inte hunnit lägga
+    # till kolumnen. Värdet hämtas först vid explicit access (credit-
+    # endpoint, generator).
     # loan_kind: "mortgage" | "private" | "sms" | "car" | "student" | "other"
-    loan_kind: Mapped[str] = mapped_column(String(20), default="mortgage", nullable=False)
+    loan_kind: Mapped[str] = deferred(mapped_column(
+        String(20), default="mortgage", nullable=False,
+    ))
     # Snabblån/SMS-lån — lärar-UI färgmärker rött och varnar.
-    is_high_cost_credit: Mapped[bool] = mapped_column(
+    is_high_cost_credit: Mapped[bool] = deferred(mapped_column(
         Boolean, default=False, nullable=False,
-    )
+    ))
     # Pedagogiskt: lagra ansökningsdatum separat så lärare ser
     # vad eleven *sökte* (inte bara när lånet startade).
-    applied_at: Mapped[Optional[datetime]] = mapped_column(
+    applied_at: Mapped[Optional[datetime]] = deferred(mapped_column(
         DateTime, nullable=True,
-    )
+    ))
     # Kreditscoren när ansökan godkändes — för retro-analys.
-    score_at_application: Mapped[Optional[int]] = mapped_column(
+    score_at_application: Mapped[Optional[int]] = deferred(mapped_column(
         Integer, nullable=True,
-    )
+    ))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

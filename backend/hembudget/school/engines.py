@@ -232,6 +232,47 @@ def master_has_column(table: str, column: str) -> bool:
     return column in cols
 
 
+# Cache för scope-DB-kolumner. Inga kolumner returneras tomt = "antar
+# att de finns" (för SQLite-fil-per-scope där create_all lagt till allt).
+# I prod-Postgres blir denna cachen källan-av-sanning för säkra
+# deferred-fält (t.ex. loans.loan_kind innan migrationen körts).
+_scope_columns: dict[str, set[str]] = {}
+
+
+def _refresh_scope_columns_cache(engine: Engine) -> None:
+    from sqlalchemy import inspect as _inspect
+    try:
+        insp = _inspect(engine)
+        for table in (
+            "loans", "transactions", "accounts", "categories",
+            "upcoming_transactions", "transaction_splits",
+            "fund_holdings", "stock_holdings", "stock_transactions",
+            "credit_applications", "wellbeing_scores",
+        ):
+            try:
+                _scope_columns[table] = {
+                    c["name"] for c in insp.get_columns(table)
+                }
+            except Exception:
+                _scope_columns[table] = set()
+    except Exception:
+        log.exception(
+            "kunde inte cacha scope-kolumner — fortsätter med tom cache",
+        )
+
+
+def scope_has_column(table: str, column: str) -> bool:
+    """Som master_has_column men för scope-DB-tabeller.
+
+    Default True om cachen är tom — då förlitar vi oss på att
+    create_all + run_migrations skapat allt. Endast i prod-Postgres
+    där en migration kan ha failat blir denna cachen viktig."""
+    cols = _scope_columns.get(table)
+    if cols is None or not cols:
+        return True
+    return column in cols
+
+
 def _run_master_migrations(engine: Engine) -> None:
     """ALTER-TABLE-migrations för master-DB:n.
 
@@ -382,6 +423,7 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
 
     from ..db import models as _models  # noqa: F401  (registrera modeller)
     from ..db.base import Base
+    from ..db.migrate import run_migrations
 
     url = _master_db_url()  # samma DB som master — separata tabellset
     engine_kwargs: dict = {"future": True}
@@ -392,6 +434,20 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
         )
     engine = create_engine(url, **engine_kwargs)
     Base.metadata.create_all(engine)
+    # ALTER-migrationer för befintliga tabeller. create_all hanterar bara
+    # NYA tabeller, så när vi lägger till kolumner på befintliga tabeller
+    # (t.ex. loans.loan_kind) MÅSTE migrationerna köras här. Annars
+    # kraschar SELECT på Postgres med 'column does not exist'.
+    # Fail-soft: migrations är wrapped — login + nya elever ska funka
+    # även om en ALTER misslyckas.
+    try:
+        run_migrations(engine)
+    except Exception:
+        log.exception(
+            "shared scope migrations failed — fortsätter ändå (login + "
+            "nya elever ska funka, gamla kan ha schema-skev)",
+        )
+    _refresh_scope_columns_cache(engine)
 
     _shared_scope_engine = engine
     _shared_scope_session = sessionmaker(
@@ -456,7 +512,13 @@ def get_scope_engine(scope_key: str) -> Engine:
         cur.close()
 
     Base.metadata.create_all(engine)
-    run_migrations(engine)
+    try:
+        run_migrations(engine)
+    except Exception:
+        log.exception(
+            "scope migrations failed for %s — fortsätter ändå", scope_key,
+        )
+    _refresh_scope_columns_cache(engine)
 
     _scope_engines[scope_key] = engine
     _scope_sessions[scope_key] = sessionmaker(
