@@ -361,16 +361,34 @@ function Header() {
           </span>
         </Link>
         <nav style={{ display: "flex", gap: 4 }} className="vc-nav">
-          {["Översikt", "Funktioner", "Pris", "FAQ"].map((t, i) => (
-            <a
-              key={t}
-              href={`#${t.toLowerCase()}`}
-              className={`vc-tab ${i === 0 ? "vc-tab-on" : "vc-tab-off"}`}
-              style={{ textDecoration: "none" }}
-            >
-              {t}
-            </a>
-          ))}
+          {([
+            { label: "Översikt", href: "#oversikt", external: false },
+            { label: "Funktioner", href: "#funktioner", external: false },
+            { label: "Pris", href: "#pris", external: false },
+            { label: "FAQ", href: "#faq", external: false },
+            { label: "Dokumentation", href: "/docs", external: true },
+          ] as Array<{ label: string; href: string; external: boolean }>).map(
+            (t, i) =>
+              t.external ? (
+                <Link
+                  key={t.label}
+                  to={t.href}
+                  className="vc-tab vc-tab-off"
+                  style={{ textDecoration: "none" }}
+                >
+                  {t.label}
+                </Link>
+              ) : (
+                <a
+                  key={t.label}
+                  href={t.href}
+                  className={`vc-tab ${i === 0 ? "vc-tab-on" : "vc-tab-off"}`}
+                  style={{ textDecoration: "none" }}
+                >
+                  {t.label}
+                </a>
+              ),
+          )}
         </nav>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -439,7 +457,7 @@ function Hero() {
   const [openCell, setOpenCell] = useState<CellInfo | null>(null);
 
   return (
-    <section style={{ padding: "32px 24px 16px" }}>
+    <section id="oversikt" style={{ padding: "32px 24px 16px" }}>
       <div
         style={{
           display: "grid",
