@@ -370,6 +370,7 @@ def _create_credit_invoice_upcoming(
 def _ensure_account(
     s: Session, name: str, type_: str, bank: str = "ekonomilabbet",
     credit_limit: int | None = None, account_no: str | None = None,
+    opening_balance: Decimal | int = 0,
 ) -> Account:
     acc = s.query(Account).filter(Account.name == name).first()
     if acc:
@@ -379,7 +380,7 @@ def _ensure_account(
         currency="SEK",
         account_number=account_no,
         credit_limit=Decimal(credit_limit) if credit_limit else None,
-        opening_balance=Decimal("0"),
+        opening_balance=Decimal(str(opening_balance or 0)),
     )
     s.add(acc)
     s.flush()
@@ -397,21 +398,34 @@ def _import_kontoutdrag(
     acc = _ensure_account(
         s, "Lönekonto", "checking",
         account_no=parsed.account_no,
+        opening_balance=25_000,
     )
     stats["accounts_touched"].append(acc.name)
+    # Försäkra att Sparkonto + Kreditkort också existerar — matchar
+    # DEFAULT_ACCOUNTS i fixtures.py. Behövs eftersom kontoutdraget har
+    # 'ÖVERFÖRING SPARKONTO'-rader (vi parar dem på Sparkonto nedan) och
+    # kreditkortsfakturan vid senare import behöver Kreditkort att
+    # landa på.
+    sparkonto = _ensure_account(
+        s, "Sparkonto", "savings", opening_balance=5_000,
+    )
+    _ensure_account(
+        s, "Kreditkort", "credit", credit_limit=40_000, opening_balance=0,
+    )
 
     existing_hashes = {
         h for (h,) in s.query(Transaction.hash).filter(
             Transaction.account_id == acc.id
         ).all()
     }
+    new_transfer_txs: list[Transaction] = []
     for raw in parsed.transactions:
         h = raw.stable_hash(acc.id)
         if h in existing_hashes:
             stats["skipped_tx"] += 1
             continue
         existing_hashes.add(h)
-        s.add(Transaction(
+        tx = Transaction(
             account_id=acc.id,
             date=raw.date,
             amount=raw.amount,
@@ -421,8 +435,52 @@ def _import_kontoutdrag(
                 if raw.description else None,
             hash=h,
             user_verified=False,
-        ))
+        )
+        s.add(tx)
         stats["imported_tx"] += 1
+        # Spara referens om det är en sparkonto-överföring så vi kan
+        # para den nedan
+        if (
+            raw.description
+            and "ÖVERFÖRING SPARKONTO" in raw.description.upper()
+            and raw.amount < 0
+        ):
+            new_transfer_txs.append(tx)
+    s.flush()
+
+    # Para sparkonto-överföringar: skapa motsvarande +rad på Sparkonto
+    # och länka via transfer_pair_id. Annars försvinner pengarna —
+    # Lönekonto -2000 utan motpar = ledger ur balans.
+    sparkonto_existing = {
+        h for (h,) in s.query(Transaction.hash).filter(
+            Transaction.account_id == sparkonto.id
+        ).all()
+    }
+    for src_tx in new_transfer_txs:
+        # Idempotent hash baserat på (sparkonto, datum, belopp, src-id)
+        pair_hash = f"transfer_pair_{sparkonto.id}_{src_tx.id}"[:64]
+        if pair_hash in sparkonto_existing:
+            continue
+        pair = Transaction(
+            account_id=sparkonto.id,
+            date=src_tx.date,
+            amount=-src_tx.amount,  # spegelvänd belopp
+            currency="SEK",
+            raw_description="ÖVERFÖRING FRÅN LÖNEKONTO",
+            normalized_merchant="Överföring",
+            hash=pair_hash,
+            user_verified=False,
+            is_transfer=True,
+            transfer_pair_id=src_tx.id,
+        )
+        s.add(pair)
+        s.flush()
+        # Bind tillbaka från src till pair
+        src_tx.is_transfer = True
+        src_tx.transfer_pair_id = pair.id
+        stats["imported_tx"] += 1
+        if "Sparkonto" not in stats["accounts_touched"]:
+            stats["accounts_touched"].append("Sparkonto")
 
 
 def _import_lonespec(
