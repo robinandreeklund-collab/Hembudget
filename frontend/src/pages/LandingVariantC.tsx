@@ -13,8 +13,9 @@
  *
  * Innehåll byggs ut sektion för sektion. Just nu: Header + Hero.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { CELL_INFO, type CellInfo } from "@/data/landingCells";
 
 // ---------- Delade data ----------
 
@@ -381,6 +382,7 @@ function Header() {
 
 function Hero() {
   const [hovered, setHovered] = useState<number | null>(null);
+  const [openCell, setOpenCell] = useState<CellInfo | null>(null);
 
   return (
     <section style={{ padding: "32px 24px 16px" }}>
@@ -482,7 +484,11 @@ function Hero() {
             </div>
           </div>
 
-          <PeriodicGrid hovered={hovered} setHovered={setHovered} />
+          <PeriodicGrid
+            hovered={hovered}
+            setHovered={setHovered}
+            onPick={(c) => setOpenCell(c)}
+          />
 
           <div
             style={{
@@ -524,6 +530,9 @@ function Hero() {
           </div>
         </div>
       </div>
+      {openCell && (
+        <CellModal cell={openCell} onClose={() => setOpenCell(null)} />
+      )}
     </section>
   );
 }
@@ -1842,10 +1851,15 @@ function Features() {
 function PeriodicGrid({
   hovered,
   setHovered,
+  onPick,
 }: {
   hovered: number | null;
   setHovered: (n: number | null) => void;
+  onPick?: (cell: CellInfo) => void;
 }) {
+  // Map nummer → CellInfo så vi kan slå upp tip/long/example/trains
+  // utan att förändra PERIODIC_CELLS-strukturen.
+  const infoByN = new Map<number, CellInfo>(CELL_INFO.map((c) => [c.n, c]));
   return (
     <div
       style={{
@@ -1857,11 +1871,16 @@ function PeriodicGrid({
       {PERIODIC_CELLS.map((c) => {
         const p = PALETTE[c.cat];
         const isH = hovered === c.n;
+        const info = infoByN.get(c.n);
         return (
-          <div
+          <button
             key={c.n}
+            type="button"
             onMouseEnter={() => setHovered(c.n)}
             onMouseLeave={() => setHovered(null)}
+            onClick={() => info && onPick?.(info)}
+            aria-label={`${c.name} — ${info?.tip ?? c.desc}`}
+            title={info?.tip}
             style={{
               aspectRatio: "1",
               padding: 4,
@@ -1875,8 +1894,10 @@ function PeriodicGrid({
               transform: isH ? "translateY(-2px)" : "none",
               boxShadow: isH ? "0 4px 10px rgba(15,23,42,.1)" : "none",
               transition: "all .12s",
-              cursor: "default",
+              cursor: onPick ? "pointer" : "default",
               minHeight: 0,
+              fontFamily: "inherit",
+              textAlign: "inherit",
             }}
           >
             <div
@@ -1908,9 +1929,67 @@ function PeriodicGrid({
             >
               {c.name}
             </div>
-          </div>
+          </button>
         );
       })}
+    </div>
+  );
+}
+
+// ---------- Cell-modal (stub, fylls i fas A3) ----------
+
+function CellModal({
+  cell,
+  onClose,
+}: {
+  cell: CellInfo;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          padding: 24,
+          maxWidth: 480,
+          width: "100%",
+        }}
+      >
+        <div style={{ fontSize: 20, fontWeight: 600 }}>{cell.name}</div>
+        <p style={{ marginTop: 12, fontSize: 14, color: "#475569" }}>{cell.long}</p>
+        <button
+          onClick={onClose}
+          className="vc-btn vc-btn-primary"
+          style={{ marginTop: 16 }}
+        >
+          Stäng
+        </button>
+      </div>
     </div>
   );
 }
