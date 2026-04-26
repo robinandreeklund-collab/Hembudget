@@ -290,6 +290,8 @@ function SharedStyles() {
       .vc-tab-off:hover { color: #0f172a; }
       .vc-eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
       .vc-hamburger { display: none; }
+      .vc-periodic-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+      .vc-hero-section { padding: 32px 24px 16px; }
       @media (max-width: 768px) {
         .vc-h1 { font-size: 36px; letter-spacing: -1.2px; }
         .vc-h2 { font-size: 28px; }
@@ -297,6 +299,13 @@ function SharedStyles() {
         .vc-search-desktop { display: none !important; }
         .vc-login-desktop { display: none !important; }
         .vc-hamburger { display: inline-flex !important; }
+        .vc-hero-section { padding: 24px 16px 8px !important; }
+      }
+      @media (max-width: 600px) {
+        .vc-periodic-grid { grid-template-columns: repeat(6, 1fr) !important; gap: 3px !important; }
+      }
+      @media (max-width: 420px) {
+        .vc-periodic-grid { grid-template-columns: repeat(4, 1fr) !important; }
       }
     `}</style>
   );
@@ -591,7 +600,7 @@ function Hero() {
   const [openCell, setOpenCell] = useState<CellInfo | null>(null);
 
   return (
-    <section id="oversikt" style={{ padding: "32px 24px 16px" }}>
+    <section id="oversikt" className="vc-hero-section">
       <div
         style={{
           display: "grid",
@@ -2067,13 +2076,7 @@ function PeriodicGrid({
   // utan att förändra PERIODIC_CELLS-strukturen.
   const infoByN = new Map<number, CellInfo>(CELL_INFO.map((c) => [c.n, c]));
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(8, 1fr)",
-        gap: 4,
-      }}
-    >
+    <div className="vc-periodic-grid">
       {PERIODIC_CELLS.map((c) => {
         const p = PALETTE[c.cat];
         const isH = hovered === c.n;
