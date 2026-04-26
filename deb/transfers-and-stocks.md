@@ -132,3 +132,149 @@ när eleven gör en överföring som matchar.
   pedagogiskt rätt — inte bara som "Överföring ut". Lägg till en
   speciell kategori "Eget uttag / Kapitaltillskott" som triggas när
   ena kontot är `business`-typen.
+
+---
+
+# DEL 2 — Aktiehandel
+
+## 8. Konceptet i en mening
+
+Eleven öppnar ett aktiekonto (ISK), flyttar pengar dit via överförings-
+funktionen från del 1, väljer från en lista på **30 svenska
+large-caps** (förslagsvis OMXS30), köper och säljer fritt under
+börsens öppettider, betalar **Avanza Mini-courtage**, och får en
+realtidsvy över portföljen. Allt köp/sälj loggas i en **immutable
+ledger** som läraren kan granska beslut för beslut.
+
+## 9. Vad finns redan att bygga vidare på
+
+| Behov | Befintlig komponent |
+|---|---|
+| ISK som kontotyp | `accountTypes.ts` har `isk` |
+| Aggregerade innehav per ISK | `FundHolding` + `FundHoldingSnapshot` (`db/models.py:427-487`) — *liknande mönster* återanvänds men för aktier |
+| ISK-schablonbeskattning | `ISKCalculator` i `api/tax.py` — utökas så att aktievärden räknas in i underlaget |
+| Vision-AI för bankskärmbilder | `api/funds.py::parse_image` — kan återanvändas senare för att importera Avanza-portfölj |
+| Saldoberäkning från transaktioner | `api/balances.py` — likviden räknas live, inget cachat |
+| Lärarens tilldelning av uppgifter | `Assignment`-modellen — ny `kind: stock_buy/stock_sell/diversify` |
+| Modulinfrastruktur | `Module/ModuleStep/StudentModule` — ny systemmodul "Aktier — komma igång" |
+| AI-Q&A | `ai.py::answer_student_question` — utökad kontext för aktietermer |
+
+**Det helt nya:** datakälla för kurser, en globalt delad
+`StockMaster`/`StockQuote`-tabell, en ordermotor (även om den i V1
+bara tar marknadsorder), och börstidskalender.
+
+## 10. Datakälla för kurser — den största designbeslutet
+
+Kursdata kostar pengar eller har gränser. Tre realistiska alternativ:
+
+| Källa | Kostnad | Realtid? | Risk |
+|---|---|---|---|
+| **yfinance** (Yahoo, inofficiell) | Gratis | Ja, ~15 min försening | Kan brytas, ingen SLA |
+| **Finnhub** | Gratis 60 anrop/min | Ja | Kräver API-nyckel; rate limit räcker (30 aktier/5 min = 6/min) |
+| **Alpha Vantage** | Gratis 25/dag, $50/mån för premium | Ja på premium | Gratis nivå räcker inte för 30 aktier |
+| **Nasdaq Stockholm direkt** | Dyrt (4-siffrig $/mån) | Ja, äkta realtid | Inte värt det för skolbruk |
+| **EOD Historical Data** | $20/mån | 15-min försenat | Bra om budget finns |
+
+**Rekommendation:** Bygg en `QuoteProvider`-abstraktion (interface) med
+två implementationer från start — `YFinanceProvider` (default,
+fallback) och `FinnhubProvider` (primär om `FINNHUB_API_KEY` är satt
+i env). Då kan ni:
+- starta gratis med yfinance
+- skala upp till Finnhub om Yahoo bryts
+- byta källa utan att röra resten av koden
+
+Lägg in en envvar `HEMBUDGET_QUOTE_PROVIDER` (default `yfinance`) och
+`FINNHUB_API_KEY` (frivillig).
+
+**Pedagogisk märkning:** kursvyn ska *alltid* visa "Försening: ~15
+min" tydligt, så elever förstår att de inte tradeear på äkta realtid.
+Det är pedagogiskt korrekt och rättsligt skyddande.
+
+## 11. Datamodell
+
+### Globalt (ej scope-isolerat — delas mellan alla elever)
+
+- **`StockMaster`** — Ticker (`VOLV-B.ST`), namn (`Volvo B`), namn på
+  svenska, ISIN, sektor (`Industri`), valuta (`SEK`), börs (`XSTO`),
+  marknadsplats-ID. ~30 rader, seedade en gång.
+- **`StockQuote`** — append-only historik. `ticker, ts, last, bid,
+  ask, volume, change_pct`. En rad per polltick (var 5:e min). Används
+  för grafer (1d/1w/1m/1y).
+- **`LatestStockQuote`** — denormaliserad senaste-pris-tabell, en rad
+  per ticker. Uppdateras vid varje polltick. Gör att portföljvärdering
+  blir en `JOIN` istället för subquery.
+- **`MarketCalendar`** — datum + status (`open`/`closed`/`half_day`)
+  + öppningstid + stängningstid. Seedad för innevarande + nästa år
+  med svenska helgdagar och midsommarafton (kort dag).
+
+### Scope-isolerat (ärver `TenantMixin`)
+
+- **`StockHolding`** — `account_id` (måste vara `isk` eller ny `depa`),
+  `ticker`, `quantity` (antal aktier), `avg_cost` (snittinköpspris
+  efter courtage). Aggregat — uppdateras efter varje
+  StockTransaction. Antal kan inte vara fraktion i V1 (förenklar).
+- **`StockTransaction`** — `account_id, ticker, side` (`buy`/`sell`),
+  `quantity`, `price` (kurs vid execution), `courtage`,
+  `total_amount` (= quantity * price + courtage vid köp; quantity *
+  price - courtage vid sälj), `executed_at`, `quote_id` (FK till
+  exakt vilken `StockQuote`-rad som användes — pedagogiskt och
+  audit-bart). **Append-only — aldrig delete eller update.** Detta
+  är "ledgern" som läraren granskar.
+- **`StockOrder`** *(valfritt i V1)* — om limit-orders ska stödjas.
+  Annars: bara marknadsorder utförs synkront mot `LatestStockQuote`
+  och `StockOrder`-tabellen behövs ej.
+
+### Vad gör den valda modellen pedagogiskt rätt
+
+`StockTransaction` lagrar `quote_id` istället för bara `price`. Det
+betyder att om läraren senare frågar "varför fick eleven det priset?"
+kan systemet visa **exakt** vilken polltick som gällde — vilken minut
+data hämtades och från vilken källa. Det här är revisionsspårbarhet
+på riktigt och passar perfekt ihop med Företagsekonomi 2:s kapitel
+om revision.
+
+## 12. Kursprispipeline (bakgrundsjobb)
+
+### Schemaläggning
+
+Lägg en `APScheduler`-baserad bakgrundsjobb i `main.py::lifespan`
+(byt från `on_event("startup")` samtidigt — CLAUDE.md noterar att den
+är deprecated):
+
+```
+schedule:
+  - var 5:e minut, måndag–fredag, 09:00–17:30 CET
+  - skip om MarketCalendar säger closed eller half_day-stängt
+  - hoppa över första 60 sek efter öppning (volatilitet, dåliga quoter)
+```
+
+### Pipeline-steg
+
+1. Hämta de 30 tickers från `StockMaster`
+2. Anropa `QuoteProvider.fetch_quotes(tickers)` — batchat
+3. Skriv en rad per ticker till `StockQuote` (history)
+4. Upsert till `LatestStockQuote`
+5. Logga eventuella fetch-fel utan att krasha jobbet
+6. Notifiera frontend via SSE/WebSocket *(V2)* — i V1 räcker att
+   frontend pollar var 30:e sek
+
+### Cloud Run-fallgropen
+
+Med `--max-instances=1` är detta enkelt — bakgrundsjobbet körs i
+samma process som webben. Men: om instansen sover ner (Cloud Run
+suspend efter inaktivitet), missar man pollar. Lösning:
+- sätt `--min-instances=1` på prod (lite dyrare, kanske $10/mån)
+- eller: använd Cloud Scheduler som pingar ett internt endpoint
+  `/internal/poll-quotes` var 5:e min — då vaknar instansen
+
+**Rekommendation:** Cloud Scheduler-varianten. Kostar inget extra
+(Cloud Scheduler är gratis upp till 3 jobb), och håller arkitekturen
+identisk med dagens.
+
+### Historik-storlek
+
+30 aktier × 12 ticks/timme × 9 timmar × 252 börsdagar/år = **~815
+000 rader/år**. Trivialt för Postgres, fungerar i SQLite men gör att
+DB-filen växer. Lägg en städnings-jobb som downsampleear quoter äldre
+än 90 dagar till 1 quote/dag (close).
+
