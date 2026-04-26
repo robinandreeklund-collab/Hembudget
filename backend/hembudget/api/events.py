@@ -474,3 +474,227 @@ def get_decline_streak(scope: Session = Depends(db)) -> dict:
             row.last_accept_at.isoformat() if row.last_accept_at else None
         ),
     }
+
+
+# ---------- Klasskompis-bjudningar ----------
+
+class ClassmateOut(BaseModel):
+    student_id: int
+    display_name: str
+    class_label: Optional[str]
+
+
+@router.get("/classmates")
+def list_classmates() -> dict:
+    """Lista klasskompisar för bjudningar. Kräver att läraren har slagit
+    på invite_classmates_enabled. Visar bara student_id + display_name —
+    inga ekonomiska detaljer.
+
+    OBS: denna endpoint kräver student-token för att veta vilken klass
+    eleven tillhör. Vi läser via master_session + ContextVar för att
+    plocka rätt student.
+    """
+    from ..school.engines import get_current_actor_student
+    from ..school.models import Student
+    from ..school.social_models import ClassDisplaySettings
+
+    actor_id = get_current_actor_student()
+    if actor_id is None:
+        raise HTTPException(403, "Saknar student-kontext")
+
+    with master_session() as ms:
+        me = ms.query(Student).filter(Student.id == actor_id).first()
+        if me is None:
+            raise HTTPException(404, "Student saknas")
+
+        # Är klasskompis-bjudningar aktiverade för denna lärare?
+        cfg = (
+            ms.query(ClassDisplaySettings)
+            .filter(ClassDisplaySettings.teacher_id == me.teacher_id)
+            .first()
+        )
+        if cfg is not None and cfg.invite_classmates_enabled is False:
+            return {"classmates": [], "invites_enabled": False}
+
+        # Klasskamrater = samma teacher_id, inte mig själv. Filtrera
+        # också på class_label om eleven har en sådan (annars alla i
+        # lärarens klass).
+        q = ms.query(Student).filter(
+            Student.teacher_id == me.teacher_id,
+            Student.id != me.id,
+        )
+        if me.class_label:
+            q = q.filter(Student.class_label == me.class_label)
+        rows = q.order_by(Student.display_name).all()
+
+        return {
+            "classmates": [
+                ClassmateOut(
+                    student_id=s.id,
+                    display_name=s.display_name,
+                    class_label=s.class_label,
+                ).model_dump()
+                for s in rows
+            ],
+            "invites_enabled": True,
+            "cost_split_model": cfg.cost_split_model if cfg else "split",
+            "max_invites_per_week": cfg.max_invites_per_week if cfg else 3,
+        }
+
+
+class InviteIn(BaseModel):
+    event_id: int
+    classmate_ids: list[int]
+    message: Optional[str] = None
+
+
+class InviteResultOut(BaseModel):
+    invites_created: int
+    invite_ids: list[int]
+    cost_split_model: str
+    swish_amount_per_recipient: float
+    week_remaining: int  # Hur många bjudningar eleven har kvar denna vecka
+
+
+def _count_invites_this_week(master_sess, from_student_id: int) -> int:
+    """Räkna bjudningar denna ISO-vecka för anti-spam."""
+    from datetime import date as _d, datetime as _dt
+    from ..school.social_models import ClassEventInvite
+
+    today = _d.today()
+    iso_year, iso_week, _ = today.isocalendar()
+    week_start = _d.fromisocalendar(iso_year, iso_week, 1)
+    return (
+        master_sess.query(ClassEventInvite)
+        .filter(
+            ClassEventInvite.from_student_id == from_student_id,
+            ClassEventInvite.created_at >= _dt.combine(week_start, _dt.min.time()),
+        )
+        .count()
+    )
+
+
+@router.post("/invite-classmates", response_model=InviteResultOut)
+def invite_classmates(
+    payload: InviteIn,
+    scope: Session = Depends(db),
+) -> InviteResultOut:
+    """Bjud N klasskompisar på ett event. Skapar ClassEventInvite per
+    mottagare. Mottagarna ser invitationen via /events/invitations.
+
+    Kostnadsmodell sätts från lärarens ClassDisplaySettings — låses i
+    invitationen så ändringen i config inte påverkar pågående.
+    """
+    from datetime import date as _d
+    from decimal import Decimal as _Dec
+
+    from ..school.engines import get_current_actor_student
+    from ..school.models import Student
+    from ..school.social_models import (
+        ClassDisplaySettings,
+        ClassEventInvite,
+    )
+
+    if not payload.classmate_ids:
+        raise HTTPException(400, "Inga klasskompisar valda")
+    if len(payload.classmate_ids) > 20:
+        raise HTTPException(400, "Max 20 mottagare per bjudning")
+
+    # Hämta eventet i scope
+    ev = scope.get(StudentEvent, payload.event_id)
+    if ev is None:
+        raise HTTPException(404, "Event saknas")
+    if ev.status != "pending":
+        raise HTTPException(400, "Event är inte längre pending")
+    if not ev.social_invite_allowed:
+        raise HTTPException(400, "Detta event tillåter inte klasskompis-bjudningar")
+
+    actor_id = get_current_actor_student()
+    if actor_id is None:
+        raise HTTPException(403, "Saknar student-kontext")
+
+    with master_session() as ms:
+        me = ms.query(Student).filter(Student.id == actor_id).first()
+        if me is None:
+            raise HTTPException(404, "Student saknas")
+
+        cfg = (
+            ms.query(ClassDisplaySettings)
+            .filter(ClassDisplaySettings.teacher_id == me.teacher_id)
+            .first()
+        )
+        if cfg is not None and not cfg.invite_classmates_enabled:
+            raise HTTPException(400, "Klasskompis-bjudningar är avstängda av läraren")
+
+        cost_split_model = cfg.cost_split_model if cfg else "split"
+        max_per_week = cfg.max_invites_per_week if cfg else 3
+
+        # Anti-spam: räkna bjudningar denna ISO-vecka
+        already_this_week = _count_invites_this_week(ms, actor_id)
+        remaining = max_per_week - already_this_week
+        if len(payload.classmate_ids) > remaining:
+            raise HTTPException(
+                400,
+                f"Du kan bjuda max {remaining} fler denna vecka "
+                f"({already_this_week}/{max_per_week} redan skickade).",
+            )
+
+        # Validera att alla mottagare är klasskompisar
+        valid_ids = {
+            s.id for s in ms.query(Student)
+            .filter(
+                Student.teacher_id == me.teacher_id,
+                Student.id != me.id,
+                Student.id.in_(payload.classmate_ids),
+            )
+            .all()
+        }
+        invalid = set(payload.classmate_ids) - valid_ids
+        if invalid:
+            raise HTTPException(
+                400, f"Dessa elever finns inte i klassen: {sorted(invalid)}",
+            )
+
+        # Beräkna swish-belopp per mottagare
+        cost = float(ev.cost)
+        n_recipients = len(payload.classmate_ids)
+        if cost_split_model == "split":
+            # 50/50 mellan alla deltagare (bjudaren + N mottagare)
+            swish_per = cost / (n_recipients + 1) if n_recipients > 0 else 0
+        elif cost_split_model == "each_pays_own":
+            swish_per = cost
+        else:  # inviter_pays
+            swish_per = 0.0
+
+        # Skapa invitationer
+        invite_ids = []
+        for mate_id in payload.classmate_ids:
+            inv = ClassEventInvite(
+                from_student_id=actor_id,
+                to_student_id=mate_id,
+                event_code=ev.event_code,
+                event_title=ev.title,
+                proposed_date=ev.proposed_date,
+                deadline=ev.deadline,
+                cost=ev.cost,
+                cost_split_model=cost_split_model,
+                message=payload.message,
+                status="pending",
+                swish_amount=_Dec(str(round(swish_per, 2))) if swish_per > 0 else None,
+            )
+            ms.add(inv)
+        ms.flush()
+        # Hämta IDn
+        for inv in ms.query(ClassEventInvite).filter(
+            ClassEventInvite.from_student_id == actor_id,
+            ClassEventInvite.event_code == ev.event_code,
+        ).order_by(ClassEventInvite.id.desc()).limit(n_recipients).all():
+            invite_ids.append(inv.id)
+
+    return InviteResultOut(
+        invites_created=n_recipients,
+        invite_ids=invite_ids,
+        cost_split_model=cost_split_model,
+        swish_amount_per_recipient=round(swish_per, 2),
+        week_remaining=remaining - n_recipients,
+    )
