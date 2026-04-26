@@ -57,8 +57,50 @@ def set_budget(payload: BudgetIn, session: Session = Depends(db)) -> dict:
             "amount": float(payload.planned_amount),
         },
     )
-    return {"id": b.id, "month": b.month, "category_id": b.category_id,
-            "planned_amount": float(b.planned_amount)}
+    # V2: pedagogisk minimum-check mot Konsumentverket. Inte en hård
+    # blockering — bara informativ. Frontend visar varning om severity
+    # != 'ok'. Wellbeing-impact räknas av wellbeing/calculator.py.
+    from ..db.models import Category
+    from ..wellbeing.minimums import check_against_minimum
+    cat = session.get(Category, payload.category_id)
+    minimum_check = None
+    if cat is not None:
+        chk = check_against_minimum(cat.name, int(payload.planned_amount))
+        minimum_check = {
+            "category": chk.category,
+            "minimum": chk.minimum,
+            "actual": chk.actual,
+            "ratio": chk.ratio,
+            "severity": chk.severity,
+            "message": chk.message,
+            "is_violation": chk.is_violation,
+        }
+    return {
+        "id": b.id, "month": b.month, "category_id": b.category_id,
+        "planned_amount": float(b.planned_amount),
+        "minimum_check": minimum_check,
+    }
+
+
+@router.get("/minimum-check")
+def check_minimum(
+    category: str,
+    amount: int,
+) -> dict:
+    """Pedagogisk pre-check innan eleven sparar budgeten. Frontend kan
+    kalla denna live när eleven skriver i fältet — så visas
+    'Konsumentverket räknar med X kr/mån'-banner direkt."""
+    from ..wellbeing.minimums import check_against_minimum
+    chk = check_against_minimum(category, amount)
+    return {
+        "category": chk.category,
+        "minimum": chk.minimum,
+        "actual": chk.actual,
+        "ratio": chk.ratio,
+        "severity": chk.severity,
+        "message": chk.message,
+        "is_violation": chk.is_violation,
+    }
 
 
 @router.post("/auto")
