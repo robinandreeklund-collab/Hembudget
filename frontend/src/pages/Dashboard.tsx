@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
+import { EventInbox } from "@/components/EventInbox";
 import { ResetDialog } from "@/components/ResetDialog";
 import { WellbeingCard } from "@/components/WellbeingCard";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -274,6 +275,8 @@ export default function Dashboard() {
       )}
 
       <WellbeingCard />
+
+      <EventInbox />
 
       {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
         <Card
