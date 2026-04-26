@@ -304,6 +304,9 @@ export default function AdminAI() {
       {/* Finnhub-nyckel för aktiekurser */}
       <FinnhubSection />
 
+      {/* Klassdisplay-toggles per lärare */}
+      <ClassDisplaySection />
+
       {/* SMTP-konfiguration */}
       <SmtpSection />
 
@@ -1308,6 +1311,178 @@ function FinnhubSection() {
           </div>
         )}
       </div>
+    </section>
+  );
+}
+
+// ---------- Klassdisplay-inställningar (Wellbeing-events) ----------
+
+type ClassDisplaySettings = {
+  teacher_id: number;
+  teacher_email: string;
+  teacher_name: string;
+  class_list_enabled: boolean;
+  show_full_names: boolean;
+  invite_classmates_enabled: boolean;
+  cost_split_model: string;
+  class_event_creation_enabled: boolean;
+  max_invites_per_week: number;
+};
+
+function ClassDisplaySection() {
+  const [rows, setRows] = useState<ClassDisplaySettings[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function reload() {
+    setLoading(true);
+    try {
+      const r = await api<ClassDisplaySettings[]>("/admin/ai/class-display");
+      setRows(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  async function update(teacherId: number, patch: Partial<ClassDisplaySettings>) {
+    setBusyId(teacherId);
+    setMsg(null);
+    try {
+      await api<ClassDisplaySettings>("/admin/ai/class-display", {
+        method: "POST",
+        body: JSON.stringify({ teacher_id: teacherId, ...patch }),
+      });
+      await reload();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">Klass-funktioner (Wellbeing &amp; events)</h2>
+      </div>
+      <div className="text-xs text-slate-600">
+        Per-lärar-toggles för Wellbeing-events. Default: minimal exponering
+        — bara klasskompis-bjudningar är på, klasslista och fullständiga
+        namn är av. Eleverna kan inte se varandras Wellbeing förrän
+        läraren explicit slår på det.
+      </div>
+
+      {loading && <div className="text-sm text-slate-500">Laddar…</div>}
+      {msg && (
+        <div className="text-xs bg-rose-50 border border-rose-200 rounded p-2 text-rose-900">
+          {msg}
+        </div>
+      )}
+
+      {!loading && rows.length === 0 && (
+        <div className="text-sm text-slate-500">Inga lärare hittade.</div>
+      )}
+
+      {rows.map((r) => (
+        <div key={r.teacher_id} className="border rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="font-medium text-sm">{r.teacher_name}</div>
+              <div className="text-xs text-slate-500">{r.teacher_email}</div>
+            </div>
+            {busyId === r.teacher_id && (
+              <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.invite_classmates_enabled}
+                onChange={(e) =>
+                  update(r.teacher_id, { invite_classmates_enabled: e.target.checked })
+                }
+                disabled={busyId === r.teacher_id}
+              />
+              Klasskompis-bjudningar tillåtna
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.class_list_enabled}
+                onChange={(e) =>
+                  update(r.teacher_id, { class_list_enabled: e.target.checked })
+                }
+                disabled={busyId === r.teacher_id}
+              />
+              Anonymiserad klasslista (Wellbeing-rangordning)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.show_full_names}
+                onChange={(e) =>
+                  update(r.teacher_id, { show_full_names: e.target.checked })
+                }
+                disabled={busyId === r.teacher_id || !r.class_list_enabled}
+              />
+              <span className={!r.class_list_enabled ? "text-slate-400" : ""}>
+                Visa namn (kräver elev-opt-in)
+              </span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.class_event_creation_enabled}
+                onChange={(e) =>
+                  update(r.teacher_id, {
+                    class_event_creation_enabled: e.target.checked,
+                  })
+                }
+                disabled={busyId === r.teacher_id}
+              />
+              Klassgemensamma events (V2)
+            </label>
+            <label className="flex items-center gap-2">
+              Kostnadsmodell:
+              <select
+                value={r.cost_split_model}
+                onChange={(e) =>
+                  update(r.teacher_id, { cost_split_model: e.target.value })
+                }
+                disabled={busyId === r.teacher_id}
+                className="border rounded px-2 py-1 text-xs"
+              >
+                <option value="split">Dela jämnt</option>
+                <option value="inviter_pays">Bjudaren betalar</option>
+                <option value="each_pays_own">Var och en betalar sig själv</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              Max bjudningar/vecka:
+              <input
+                type="number"
+                min={0} max={50}
+                value={r.max_invites_per_week}
+                onChange={(e) =>
+                  update(r.teacher_id, {
+                    max_invites_per_week: parseInt(e.target.value || "0"),
+                  })
+                }
+                disabled={busyId === r.teacher_id}
+                className="border rounded px-2 py-1 text-xs w-16"
+              />
+            </label>
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
