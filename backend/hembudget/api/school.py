@@ -127,6 +127,10 @@ class StudentOut(BaseModel):
     personality: Optional[str] = None
     last_login_at: Optional[datetime]
     created_at: datetime
+    # True om StudentProfile-raden finns. False = "föräldralös" elev
+    # (raden i `students` skapades men profile-INSERTen kraschade — då
+    # behöver läraren reparera eller ta bort eleven).
+    has_profile: bool = True
 
 
 class StudentWithRunsOut(StudentOut):
@@ -461,6 +465,7 @@ def _student_to_out(s: Student) -> StudentOut:
         personality=s.profile.personality if s.profile else None,
         last_login_at=s.last_login_at,
         created_at=s.created_at,
+        has_profile=s.profile is not None,
     )
 
 
@@ -650,6 +655,42 @@ def delete_student(
     if scope_to_drop:
         drop_scope_db(scope_to_drop)
     return {"ok": True}
+
+
+@router.post("/teacher/students/{student_id}/repair-profile", response_model=StudentOut)
+def repair_student_profile(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> StudentOut:
+    """Skapa StudentProfile-raden för en "föräldralös" elev.
+
+    Bakgrund: om master-migrationerna inte hunnit köra när första
+    eleven skapades så kunde profile-INSERTen krascha medan
+    Student-raden redan var commitad — då blev eleven "föräldralös"
+    (Student finns men StudentProfile saknas). Defensiv-fixen i
+    `_create_profile_for_student` förhindrar nya sådana fall, men
+    befintliga elever måste lagas.
+
+    Endpointen är idempotent: kan köras flera gånger, gör bara något
+    om profilen faktiskt saknas. Returnerar uppdaterad StudentOut.
+    """
+    _require_school_mode()
+    with master_session() as s:
+        student = (
+            s.query(Student)
+            .filter(Student.id == student_id, Student.teacher_id == info.teacher_id)
+            .first()
+        )
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if student.profile is not None:
+            # Idempotent: redan reparerad / aldrig trasig
+            return _student_to_out(student)
+        _create_profile_for_student(s, student)
+        # Säkerställ att scope-DB:n finns (kategorier seedas där)
+        get_scope_engine(scope_for_student(student))
+        s.refresh(student)
+        return _student_to_out(student)
 
 
 @router.post("/teacher/students/{student_id}/reset")

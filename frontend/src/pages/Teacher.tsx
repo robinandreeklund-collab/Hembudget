@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AssignmentSummary } from "@/components/AssignmentList";
 import { FamilyManager, Family } from "@/components/FamilyManager";
 import {
+  AlertTriangle,
   Eye,
   Loader2,
   Pencil,
@@ -14,6 +15,7 @@ import {
   RotateCcw,
   Trash2,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 
@@ -30,6 +32,7 @@ type Student = {
   last_login_at: string | null;
   created_at: string;
   months_generated: string[];
+  has_profile: boolean;
 };
 
 type GenerateRow = {
@@ -157,6 +160,15 @@ export default function Teacher() {
     if (!confirm("Ta bort eleven och all data?")) return;
     await api(`/teacher/students/${id}`, { method: "DELETE" });
     reload();
+  }
+
+  async function repairProfile(id: number) {
+    try {
+      await api(`/teacher/students/${id}/repair-profile`, { method: "POST" });
+      reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function resetStudent(id: number) {
@@ -472,6 +484,12 @@ export default function Teacher() {
                     >
                       {s.display_name}
                     </Link>
+                    {!s.has_profile && (
+                      <div className="mt-1 inline-flex items-center gap-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                        <AlertTriangle className="w-3 h-3" />
+                        Saknar profil — reparera eller ta bort
+                      </div>
+                    )}
                     <div className="mt-1">
                       <AssignmentSummary studentId={s.id} />
                     </div>
@@ -505,6 +523,15 @@ export default function Teacher() {
                       : "Aldrig"}
                   </td>
                   <td className="p-3 text-right space-x-1">
+                    {!s.has_profile && (
+                      <button
+                        onClick={() => repairProfile(s.id)}
+                        title="Reparera saknad profil"
+                        className="p-1.5 hover:bg-amber-100 rounded text-amber-700"
+                      >
+                        <Wrench className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => viewAs(s.id)}
                       title="Titta som elev"
