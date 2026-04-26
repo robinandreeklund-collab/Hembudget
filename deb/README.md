@@ -358,3 +358,146 @@ Stegen kopplas till nya `Competency`-rader: `business_idea`,
 
 Eleven kan jobba i simulatorn utan att vara i modulen — men modulen ger
 den pedagogiska scaffoldingen och rapporteringen till läraren.
+
+---
+
+## 12. Optimeringar och fallgropar
+
+**Beräkningstunga ticks:** "Stega vecka framåt" gör mycket: genererar
+nya jobb, accepterar/avslår offerter, bokför löpande utgifter, betalar
+löner, kör event-engine. Lägg det som en **bakgrundsuppgift** med en
+jobs-tabell `BusinessTickJob` (status: queued/running/done) snarare än
+synkron HTTP — annars frisar UI:n när 30 elever stegar samtidigt. Detta
+är en arkitekturprincip ni *inte* har idag (allt är synkront), så det
+blir en ny pattern. Alternativ: håll det synkront men begränsa
+scope-locking via `_current_scope`-ContextVar och låta varje tick ta
+<500 ms.
+
+**Determinism för rättvisa:** Två elever med samma affärsidé, samma
+beslut och samma vecka ska få *liknande* utfall. Seed:a
+slumpgeneratorn på `(business_id, week_number)` — inte på `time()`.
+Detta gör också att läraren kan "spela om" en elevs vecka för att
+förstå varför något hände.
+
+**Lärartokenkostnad:** AI-funktionerna i den här modulen kommer att bli
+**den dyraste** AI-användningen i hela systemet, eftersom varje vecka
+kan trigga 5–10 LLM-anrop per elev. Mätning:
+- Vid 30 elever × 16 veckor × 5 LLM-anrop = 2 400 anrop per
+  modulkörning.
+- Cacha aggressivt: bransch-/segment-prompts är stabila →
+  `cache_control: ephemeral` på allt.
+- Ge läraren en kvotlimit per elev per vecka i `Teacher`-tabellen.
+  Lägg till varning vid 80 %.
+- Erbjud `ai_enabled=False`-läge: simulatorn fungerar med fasta texter
+  (försämrad upplevelse men inte broken). Det här är viktigt eftersom
+  CLAUDE.md säger att avsaknad av nyckel ska vara "tyst av", inte 500.
+
+**Multi-tenant-fallgrop:** Bakgrundsuppgifter körs *utan* HTTP-kontext,
+alltså utan `StudentScopeMiddleware`. ContextVar:n måste sättas
+explicit i tick-jobbet via `set_current_scope(scope_for_student(student))`.
+Det här är dokumenterat-men-lätt-glömt; bygg en helper som dekorerar
+alla bakgrundsfunktioner.
+
+**Master-DB-migrationer:** `ScenarioBatch.kind` får nya värden
+(`leverantorsfaktura`, `kundfaktura_kopia`). Lägg ALTER TABLE-koll i
+`school/engines.py::_run_master_migrations` om ni stoppar in nya
+kolumner, annars räcker värde-utvidgning utan schema-ändring.
+Per-scope-tabellerna (Business, Quote, …) hanteras av
+`db/migrate.py::run_migrations`.
+
+**PDF-prestanda:** reportlab är trögt vid bulk. Massutskick av
+leverantörsfaktura till 30 elever = 30 PDF-genereringar. Generera lazy
+(vid första visning/nedladdning), inte vid skapande. Lagra mall +
+parametrar tills någon faktiskt klickar.
+
+**Frontend-bundle:** ny vy med dashboard, drag-and-drop-avstämning,
+flera tabeller — håll koll på chunk-size. Lazy-load `/business`-rutten
+med React.lazy. CLAUDE.md noterar att 500 kB-varningen är
+OK-att-ignorera, men passa på att inte *väsentligt* förvärra.
+
+**Pedagogisk komplexitet:** modulen riskerar bli överväldigande. Lös
+detta genom att **dölja flikar** i grundläge (bara `Offerter`, `Jobb`,
+`Fakturor`, `Resultat` syns; bokföring, avstämning, nyckeltal är
+låsta tills läraren slår på dem eller eleven byter till advanced).
+
+**Cheating/kollusion:** Peer-revisionen kan missbrukas (kompisar
+godkänner allt). Lägg en "spot check"-mekanik: AI granskar 1 av 5
+revisioner och flaggar uppenbart slarviga rapporter.
+
+**Persistens i Cloud Run:** Hela ert system är `--max-instances=1`
+p.g.a. SQLite. Den här modulen ändrar inte det villkoret — men tunga
+bakgrundsjobb kan blockera HTTP-instansen. Om belastningen blir hög är
+det här *exakt* den modul som först kommer pressa er mot
+Postgres-fallback (ni har den path:en redan via `HEMBUDGET_DATABASE_URL`).
+
+---
+
+## 13. Implementationsplan i faser
+
+Att bygga allt på en gång är garanterat att misslyckas. Föreslagen
+sekvens:
+
+**Fas 1 — Grunden (1–2 veckor):** Domänmodellerna `Business`, `Customer`,
+`JobOpportunity`, `Quote`, `Job`, `CustomerInvoice`. Onboarding-wizard.
+Statisk kundpool (ingen LLM-text än). Manuell tick-knapp.
+Acceptansmodell utan pitch-AI. Fakturor som rena Transactions, ingen
+separat ledger. → Fungerar end-to-end i grundläge.
+
+**Fas 2 — Modul + lärar-MVP (1 vecka):** Seed systemmodulen "Mitt
+företag — från idé till revision" (8 steg, bara basics-relevanta).
+Lärarvyn med klassöversikt och kundfaktura-granskning. Token-räknad
+AI för pitch-bedömning och jobbeskrivning.
+
+**Fas 3 — Marknadsföring och beslut (1 vecka):** `MarketingCampaign`,
+`BusinessDecision`. AI-bedömning av kampanjcopy. Påverkan på engine.
+Lärarens leverantörsfakturor (PDF + masskickning).
+
+**Fas 4 — Avancerat läge (2 veckor):** `LedgerEntry`, `ChartOfAccount`,
+kontering-förslag-AI. Bankavstämnings-UI. Nyckeltalsdashboard. Lägg
+till advanced-stegen i modulen.
+
+**Fas 5 — Peer-revision och polish (1 vecka):** `AuditAssignment`.
+Spot-check-AI. Spelmekaniska finjusteringar baserat på tidiga
+klassrumstester. Optimera AI-kostnader.
+
+Mellan varje fas: släpp till en testlärare, samla feedback, justera.
+Den här modulen är "spel-design" lika mycket som "mjukvaru-design",
+så iteration är obligatorisk.
+
+---
+
+## 14. Vad ni ska ta ställning till innan första raden kod
+
+1. **Tidsuppfattning i simulatorn:** Stegar eleven manuellt vecka för
+   vecka, eller går simuleringen i realtid (1 vecka = X timmar)?
+   Manuell stegning är *betydligt* enklare arkitekturellt men mindre
+   engagerande. Min rekommendation: börja manuellt; lägg till
+   "auto-advance vid lärarens kommando" senare.
+2. **Klass-ekonomi eller individ-ekonomi:** Kan elever handla av
+   varandra? (Spännande pedagogiskt, mardröm tekniskt — kräver delad
+   tabell utanför scope-DB:n.) Min rekommendation: nej i V1, ja som
+   möjlig V2.
+3. **Verifiering på allvar i basics?** Idag har ni quiz/reflect/task.
+   För manuell resultaträkning behövs en ny step-typ — `compute` —
+   eller så återanvänder ni `task` med specifika `params`. Min
+   rekommendation: utöka `task`, inga nya step-typer.
+4. **Lås av läraren eller fritt val?** Får eleven byta mellan basics
+   och advanced själv? Min rekommendation: läraren sätter taket per
+   klass, eleven kan stiga inom det.
+5. **Hur stor är "kundpoolen"?** Hand-skrivna kunder ger pedagogisk
+   kontroll, AI-genererade ger variation. Min rekommendation: hybrid
+   — 20 grundkunder per bransch i seed, AI varierar pitchtext per
+   förfrågan.
+
+---
+
+## Sammanfattning
+
+Detta passar utmärkt i er befintliga arkitektur, kräver inga
+revolutioner — bara nya domäntabeller, en ny seed-modul, fyra–fem nya
+AI-funktioner, en ny router och en ny frontend-sektion. Den största
+risken är AI-token-kostnaden och tick-prestandan; det första hanteras
+med caching och kvoter, det andra med bakgrundsjobb och deterministisk
+seedning. Den största pedagogiska vinsten är att ni får ett verktyg som
+täcker både Företagsekonomi 1 och 2 i samma simulator, med läraren som
+aktiv motpart snarare än passiv granskare.
