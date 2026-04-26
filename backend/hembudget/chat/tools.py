@@ -34,6 +34,7 @@ from ..db.models import (
     TaxEvent,
     Transaction,
     TransactionSplit,
+    UpcomingPayment,
     UpcomingTransaction,
     User,
 )
@@ -960,8 +961,25 @@ def ytd_income_by_person(
 
     # Källa 2: manuellt inlagda upcoming incomes — kompletterar när
     # partnerns kontoutdrag inte är importerat än.
+    #
+    # Tre filter mot dubbelräkning:
+    # 1. Skippa upcomings matchade via legacy matched_transaction_id.
+    # 2. Skippa upcomings matchade via UpcomingPayment-junction (nyare
+    #    väg som tidigare missades — gav 24 200 + 24 200 = 48 400 i
+    #    school-mode där generator skapar tx + lönespec-PDF parsas till
+    #    upcoming).
+    # 3. Skippa upcomings där en Transaction finns i samma månad med
+    #    nästan samma belopp (±2 SEK) — fångar fallet där generator
+    #    skapat båda men matchern inte lyckats länka dem.
+    #
+    # Manuellt inlagd historisk lön UTAN motsvarande transaktion räknas
+    # fortfarande (det är en legitim ihärdighet — t.ex. partner som inte
+    # har importerat sitt kontoutdrag).
+    payment_matched_ids = {
+        up_id for (up_id,) in session.query(UpcomingPayment.upcoming_id).all()
+    }
     user_name_to_id = {u.name: u.id for u in session.query(User).all()}
-    manual_incomes = (
+    manual_incomes_q = (
         session.query(UpcomingTransaction)
         .filter(
             UpcomingTransaction.kind == "income",
@@ -971,6 +989,35 @@ def ytd_income_by_person(
         )
         .all()
     )
+
+    def _has_near_tx(up: UpcomingTransaction) -> bool:
+        """True om det finns en inkomst-Transaction inom samma månad med
+        ungefär samma belopp — då är upcomings:en bara en dublett som
+        matchern missat länka."""
+        ed = up.expected_date
+        month_start = date(ed.year, ed.month, 1)
+        next_month = date(
+            ed.year + 1, 1, 1,
+        ) if ed.month == 12 else date(ed.year, ed.month + 1, 1)
+        target = float(up.amount)
+        q = (
+            session.query(Transaction.id)
+            .filter(
+                Transaction.date >= month_start,
+                Transaction.date < next_month,
+                Transaction.amount > 0,
+                Transaction.is_transfer.is_(False),
+                func.abs(Transaction.amount - target) <= 2.0,
+            )
+            .first()
+        )
+        return q is not None
+
+    manual_incomes = [
+        up for up in manual_incomes_q
+        if up.id not in payment_matched_ids
+        and not _has_near_tx(up)
+    ]
     total_from_manual = 0.0
     # Cacha account-owner-id:s så vi kan falla tillbaka när upcoming.owner
     # är tomt — typiskt för en kommande lön som lagts till på partnerns

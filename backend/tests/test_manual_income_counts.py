@@ -118,6 +118,43 @@ def test_manual_income_combined_with_real_transaction(session):
     assert "Evelina" in result["by_owner"]
 
 
+def test_unmatched_upcoming_with_near_tx_not_double_counted(session):
+    """Regression (school-mode 2026-04): generator skapade både en
+    Transaction (LÖN ELAJO 24 200) OCH en UpcomingTransaction från
+    lönespec-PDF (Lön Elajo 24 200, expected_date i samma månad). De
+    är samma lön men matchern hade inte hunnit länka dem. Tidigare
+    räknade ytd_income_by_person 48 400 kr (24 200 + 24 200). Med
+    nya filtret upptäcks samma-månad-samma-belopp som dublett och
+    skippar upcomings:en."""
+    from hembudget.db.models import (
+        Account, Category, Transaction, UpcomingTransaction,
+    )
+    from hembudget.chat.tools import ytd_income_by_person
+
+    acc = Account(name="Lönekonto", bank="ekonomilabbet", type="checking")
+    session.add(acc); session.flush()
+    lon = session.query(Category).filter(Category.name == "Lön").one()
+    session.add(Transaction(
+        account_id=acc.id, date=date(2026, 4, 25),
+        amount=Decimal("24200"), currency="SEK",
+        raw_description="LÖN ELAJO", hash="h1",
+        category_id=lon.id,
+    ))
+    # Lönespec-PDF parsad till upcoming, ej matchad mot tx
+    session.add(UpcomingTransaction(
+        kind="income", name="Lön Elajo",
+        amount=Decimal("24200"),
+        expected_date=date(2026, 4, 25),
+        source="salary_pdf",
+        # matched_transaction_id=None (matchern missade)
+    ))
+    session.commit()
+
+    result = ytd_income_by_person(session, year=2026)
+    # 24 200 kr — INTE 48 400. Upcomings:en är dublett av tx.
+    assert result["grand_total"] == pytest.approx(24200.0)
+
+
 def test_matched_upcoming_not_double_counted(session):
     """Om en manuell upcoming redan matchats mot en Transaction ska den
     INTE räknas en gång till — Transaction är källan."""
