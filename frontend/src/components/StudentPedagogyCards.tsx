@@ -1,19 +1,33 @@
+/**
+ * StudentPedagogyCards — pedagogiska elev-vy-element som tidigare bara
+ * fanns i den separata EkoDashboard. Vi monterar dem nu överst i den
+ * gemensamma Dashboard så ATT eleven OCH läraren-via-impersonation ser
+ * samma sak — annars blir det förvirrande att vyn skiljer sig beroende
+ * på roll.
+ *
+ * Innehåll (top-down):
+ *  - Inactivity-nudge (om eleven varit borta länge)
+ *  - "Hej {namn}" + profession
+ *  - Budget denna månad (progressbars per kategori)
+ *  - Oväntade utgifter denna månad
+ *  - Uppdrag-summary (AssignmentList)
+ *  - Streak + prestationer (badges)
+ *  - Färdighets-mastery (radar)
+ *
+ * KPIs (Inkomst/Utgifter/Sparande/Sparkvot) lämnas till Dashboard
+ * eftersom de redan finns där och är mer detaljerade.
+ */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   BookOpenCheck,
-  Coins,
   Download,
   Flame,
-  PiggyBank,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
 } from "lucide-react";
 import { api, getApiBase, getToken } from "@/api/client";
 import { AssignmentList } from "@/components/AssignmentList";
-import { HelpIcon, InfoBanner } from "@/components/Tooltip";
+import { InfoBanner } from "@/components/Tooltip";
 import { MasteryChart } from "@/components/MasteryChart";
 
 type DashboardRow = { category: string; budget: number; spent: number; pct: number };
@@ -41,25 +55,23 @@ type Dashboard = {
   inactivity_nudge: { days_away: number; last_active: string } | null;
 };
 
-const formatKr = (n: number): string =>
-  n.toLocaleString("sv-SE") + " kr";
-
-function thisMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
 type MasteryRow = {
   competency: { id: number; name: string; level: string; description?: string | null };
   mastery: number;
   evidence_count: number;
 };
 
-export default function EkoDashboard() {
+const formatKr = (n: number): string =>
+  n.toLocaleString("sv-SE") + " kr";
+
+interface Props {
+  /** YYYY-MM. Driver budget-/oväntade-utgifter-vyerna. */
+  month: string;
+}
+
+export function StudentPedagogyCards({ month }: Props) {
   const [data, setData] = useState<Dashboard | null>(null);
   const [mastery, setMastery] = useState<MasteryRow[]>([]);
-  const [month, setMonth] = useState(thisMonth());
-  const [err, setErr] = useState<string | null>(null);
   const [achievements, setAchievements] = useState<{
     earned: { key: string; title: string; emoji: string }[];
     streak: { current: number; longest: number };
@@ -68,7 +80,7 @@ export default function EkoDashboard() {
   useEffect(() => {
     api<Dashboard>(`/student/dashboard?year_month=${month}`)
       .then(setData)
-      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+      .catch(() => setData(null));
   }, [month]);
 
   useEffect(() => {
@@ -88,36 +100,24 @@ export default function EkoDashboard() {
     const res = await fetch(`${getApiBase()}/student/portfolio.pdf`, {
       headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
     });
-    if (!res.ok) {
-      setErr("Kunde inte ladda ner PDF");
-      return;
-    }
+    if (!res.ok) return;
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `portfolio.pdf`;
+    a.download = "portfolio.pdf";
     document.body.appendChild(a);
     a.click();
     a.remove();
   }
 
-  if (err) {
-    return (
-      <div className="p-6">
-        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
-          {err}
-        </div>
-      </div>
-    );
-  }
-  if (!data) {
-    return <div className="p-6 text-slate-500">Laddar…</div>;
-  }
+  // Om endpointen inte är tillgänglig (t.ex. ingen scope eller fel
+  // konfig) — rendera ingenting tyst i stället för att haverera vyn.
+  if (!data) return null;
 
   const overBudgetCount = data.category_rows.filter((r) => r.pct > 100).length;
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+    <>
       {data.inactivity_nudge && (
         <div className="bg-sky-50 border-l-4 border-sky-400 rounded p-4 flex items-start gap-3">
           <div className="text-2xl">👋</div>
@@ -138,27 +138,14 @@ export default function EkoDashboard() {
           </Link>
         </div>
       )}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="serif text-3xl leading-tight">
-            Hej {data.display_name.split(" ")[0]}!
-          </h1>
-          <p className="text-sm text-slate-600">
-            Du är {data.profession.toLowerCase()} — {data.personality} typ.
-          </p>
-        </div>
-        <select
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className="border rounded px-3 py-1.5"
-        >
-          {[0, 1, 2, 3, 4, 5].map((back) => {
-            const d = new Date();
-            d.setMonth(d.getMonth() - back);
-            const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-            return <option key={ym} value={ym}>{ym}</option>;
-          })}
-        </select>
+
+      <div>
+        <h1 className="serif text-2xl leading-tight">
+          Hej {data.display_name.split(" ")[0]}!
+        </h1>
+        <p className="text-sm text-slate-600">
+          Du är {data.profession.toLowerCase()} — {data.personality} typ.
+        </p>
       </div>
 
       {data.assignments_total > 0 && data.assignments_done === 0 && (
@@ -168,53 +155,7 @@ export default function EkoDashboard() {
         </InfoBanner>
       )}
 
-      {/* Toppkort */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <KpiCard
-          icon={<Coins className="w-5 h-5 text-emerald-600" />}
-          label="Nettolön"
-          value={formatKr(data.net_income)}
-          bgClass="bg-emerald-50"
-          help="Så mycket pengar landar på ditt konto efter skatt. Det här är vad du har att röra dig med varje månad."
-        />
-        <KpiCard
-          icon={<Wallet className="w-5 h-5 text-slate-600" />}
-          label="Utgifter"
-          value={formatKr(data.total_spent)}
-          bgClass="bg-slate-50"
-          help="Summan av allt du spenderat denna månad — mat, nöjen, räkningar. Inräknar INTE sparande."
-        />
-        <KpiCard
-          icon={<PiggyBank className="w-5 h-5 text-brand-600" />}
-          label="Sparat"
-          value={
-            data.savings_goal
-              ? `${formatKr(data.savings_done)} / ${formatKr(data.savings_goal)}`
-              : formatKr(data.savings_done)
-          }
-          bgClass="bg-brand-50"
-          help="Överföringar till sparkonto. Om du har ett sparmål visas det också — försök nå dit!"
-        />
-        <KpiCard
-          icon={
-            data.balance >= 0 ? (
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-            ) : (
-              <TrendingDown className="w-5 h-5 text-rose-600" />
-            )
-          }
-          label={data.balance >= 0 ? "Överskott" : "Underskott"}
-          value={formatKr(Math.abs(data.balance))}
-          bgClass={data.balance >= 0 ? "bg-emerald-50" : "bg-rose-50"}
-          help={
-            data.balance >= 0
-              ? "Grymt! Du har pengar kvar — fundera på om du kan spara ännu mer."
-              : "Du har spenderat mer än du tjänat. Något måste du dra ner på. Titta i budgeten vilka kategorier som sticker ut."
-          }
-        />
-      </div>
-
-      {/* Budget-status */}
+      {/* Budget denna månad */}
       <section className="bg-white border-[1.5px] border-rule p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Budget denna månad</h2>
@@ -265,7 +206,7 @@ export default function EkoDashboard() {
         )}
       </section>
 
-      {/* Överraskande utgifter */}
+      {/* Oväntade utgifter */}
       {data.recent_overshoots.length > 0 && (
         <section className="bg-white border-[1.5px] border-rule p-4 space-y-3">
           <h2 className="font-semibold text-lg flex items-center gap-2">
@@ -356,26 +297,6 @@ export default function EkoDashboard() {
           <MasteryChart data={mastery} />
         </section>
       )}
-    </div>
-  );
-}
-
-function KpiCard({
-  icon, label, value, bgClass, help,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  bgClass: string;
-  help?: string;
-}) {
-  return (
-    <div className={`${bgClass} rounded-lg p-4`}>
-      <div className="flex items-center gap-2 text-xs text-slate-600 mb-1">
-        {icon} {label}
-        {help && <HelpIcon content={help} />}
-      </div>
-      <div className="text-xl font-bold text-slate-800">{value}</div>
-    </div>
+    </>
   );
 }

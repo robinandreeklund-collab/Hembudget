@@ -30,7 +30,6 @@ import StudentDetail from "./pages/StudentDetail";
 import Onboarding from "./pages/Onboarding";
 import MyBatches from "./pages/MyBatches";
 import AllBatches from "./pages/AllBatches";
-import EkoDashboard from "./pages/EkoDashboard";
 import AssignmentMatrix from "./pages/AssignmentMatrix";
 import MortgageDecision from "./pages/MortgageDecision";
 import Messages from "./pages/Messages";
@@ -155,10 +154,12 @@ export default function App() {
               <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
               <Route path="/peer-review" element={<PeerReview />} />
               <Route path="/my-batches" element={<MyBatches />} />
-              <Route
-                path="/dashboard"
-                element={role === "student" ? <EkoDashboard /> : <Dashboard />}
-              />
+              {/* Dashboard är nu gemensam för elev + lärare-impersonering.
+                  De pedagogiska EkoDashboard-bitarna (greeting, budget-bars,
+                  oväntade utgifter, uppdrag, streak, mastery) ligger som
+                  StudentPedagogyCards-komponent högst upp i Dashboard.tsx
+                  så elev + lärar-vy aldrig divergerar. */}
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/transactions" element={<Transactions />} />
               <Route path="/import" element={<Import />} />
               <Route path="/budget" element={<Budget />} />

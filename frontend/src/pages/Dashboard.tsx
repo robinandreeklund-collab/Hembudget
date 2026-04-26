@@ -11,6 +11,7 @@ import { HouseholdSplitQuiz } from "@/components/HouseholdSplitQuiz";
 import { HouseholdSummaryCard } from "@/components/HouseholdSummaryCard";
 import { InvitationsInbox } from "@/components/InvitationsInbox";
 import { ResetDialog } from "@/components/ResetDialog";
+import { StudentPedagogyCards } from "@/components/StudentPedagogyCards";
 import { WellbeingCard } from "@/components/WellbeingCard";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ForecastPoint, HouseholdUser, MonthSummary } from "@/types/models";
@@ -277,6 +278,12 @@ export default function Dashboard() {
           onClose={() => setBreakdownMode(null)}
         />
       )}
+
+      {/* Pedagogiska elev-vy-element (greeting, budget-bars, oväntade
+          utgifter, uppdrag, streak, mastery). Tidigare bara i den
+          separata EkoDashboard. Visas för båda elev OCH lärare-via-
+          impersonation så vyn är konsistent. */}
+      <StudentPedagogyCards month={month} />
 
       <HouseholdSplitQuiz />
 
