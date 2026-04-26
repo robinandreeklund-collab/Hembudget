@@ -18,8 +18,8 @@ from .api import (
     admin, ai, ai_admin, auth, backup, balances, budget, chat, credit,
     elpris, email_auth, funds, landing, ledger, loans, modules, reports,
     scenarios, school, settings_kv, smtp_admin, stock_trading, stocks, tax,
-    events, teacher_credit, teacher_stocks, transactions, transfers,
-    upcoming, upload, utility, wellbeing,
+    events, teacher_credit, teacher_stocks, teacher_wellbeing,
+    transactions, transfers, upcoming, upload, utility, wellbeing,
 )
 from .config import settings
 
@@ -163,6 +163,7 @@ def build_app() -> FastAPI:
     app.include_router(teacher_credit.router)
     app.include_router(wellbeing.router)
     app.include_router(events.router)
+    app.include_router(teacher_wellbeing.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
