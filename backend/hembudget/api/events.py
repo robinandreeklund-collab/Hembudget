@@ -181,6 +181,46 @@ def _resolve_default_account(scope: Session) -> Optional[int]:
     return acc.id if acc else None
 
 
+def _get_or_create_streak(scope: Session):
+    """Hämta eller skapa elevens DeclineStreak-rad."""
+    from ..db.models import DeclineStreak
+    row = scope.query(DeclineStreak).first()
+    if row is None:
+        row = DeclineStreak(current_streak=0)
+        scope.add(row); scope.flush()
+    return row
+
+
+def _bump_decline_streak(scope: Session, *, social_event: bool, justified: bool) -> dict:
+    """Uppdaterar streak vid en decline. Returnerar info för frontend.
+
+    Bara onödiga nej (sociala events utan sparande-skäl) räknas i
+    streak — eleven straffas inte för att neka tandläkaren eller
+    aktivt välja sparande."""
+    from datetime import datetime as _dt
+    streak = _get_or_create_streak(scope)
+    if social_event and not justified:
+        streak.current_streak += 1
+        streak.last_decline_at = _dt.utcnow()
+    scope.flush()
+    return {
+        "current_streak": streak.current_streak,
+        "should_show_nudge": (
+            streak.current_streak >= 3
+            and streak.current_streak > streak.nudge_shown_for_streak
+        ),
+    }
+
+
+def _reset_decline_streak(scope: Session) -> None:
+    """Vid accept — nollställ streak."""
+    from datetime import datetime as _dt
+    streak = _get_or_create_streak(scope)
+    streak.current_streak = 0
+    streak.last_accept_at = _dt.utcnow()
+    scope.flush()
+
+
 def _is_income_event(template_or_event) -> bool:
     """Inkomst-event = cost=0 men positivt impact_economy. Eleven får
     alltså pengar för att accepterat (julmarknadsjobb, bonus, blod)."""
@@ -286,6 +326,9 @@ def accept_event(
     ev.impact_applied = impacts
     scope.flush()
 
+    # Nollställ decline-streak — eleven har sagt ja
+    _reset_decline_streak(scope)
+
     # Pedagogisk note
     if is_income:
         note = (
@@ -324,6 +367,8 @@ class DeclineResultOut(BaseModel):
     status: str
     impact_applied: dict
     pedagogical_note: str
+    current_decline_streak: int = 0
+    show_streak_nudge: bool = False
 
 
 @router.post("/{event_id}/decline", response_model=DeclineResultOut)
@@ -382,9 +427,50 @@ def decline_event(
     ev.impact_applied = decline_impact
     scope.flush()
 
+    # Underhåll decline-streak. social-kategori utan 'sparande'-skäl
+    # räknas som onödigt nej.
+    is_social = ev.category in {"social", "family", "culture", "sport"}
+    reason_lower = (payload.decision_reason or "").lower()
+    justified = "sparande" in reason_lower or "sparmål" in reason_lower
+    streak_info = _bump_decline_streak(
+        scope, social_event=is_social, justified=justified,
+    )
+
+    if streak_info["should_show_nudge"]:
+        # Markera att vi visat nudge för denna streak-nivå
+        from ..db.models import DeclineStreak
+        s = scope.query(DeclineStreak).first()
+        if s:
+            s.nudge_shown_for_streak = streak_info["current_streak"]
+            scope.flush()
+
     return DeclineResultOut(
         event_id=ev.id,
         status=ev.status,
         impact_applied=decline_impact,
         pedagogical_note=note,
+        current_decline_streak=streak_info["current_streak"],
+        show_streak_nudge=streak_info["should_show_nudge"],
     )
+
+
+@router.get("/decline-streak")
+def get_decline_streak(scope: Session = Depends(db)) -> dict:
+    """Aktuell streak — för Dashboard-banner och pedagogisk feedback."""
+    from ..db.models import DeclineStreak
+    row = scope.query(DeclineStreak).first()
+    if row is None:
+        return {
+            "current_streak": 0,
+            "last_decline_at": None,
+            "last_accept_at": None,
+        }
+    return {
+        "current_streak": row.current_streak,
+        "last_decline_at": (
+            row.last_decline_at.isoformat() if row.last_decline_at else None
+        ),
+        "last_accept_at": (
+            row.last_accept_at.isoformat() if row.last_accept_at else None
+        ),
+    }

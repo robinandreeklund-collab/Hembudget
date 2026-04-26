@@ -101,3 +101,46 @@ def test_decline_unknown_event_404(session):
     with pytest.raises(HTTPException) as exc:
         decline_event(9999, DeclineIn(), session)
     assert exc.value.status_code == 404
+
+
+def test_decline_streak_increases_on_unjustified(session):
+    """3 onödiga sociala nej → streak=3, nudge ska visas."""
+    from hembudget.api.events import DeclineIn, decline_event
+    from hembudget.db.models import DeclineStreak
+
+    for i in range(3):
+        ev = _make_event(session, code=f"e{i}", category="social")
+        r = decline_event(ev.id, DeclineIn(), session)
+    assert r.current_decline_streak == 3
+    assert r.show_streak_nudge is True
+
+    s = session.query(DeclineStreak).first()
+    assert s.current_streak == 3
+    assert s.nudge_shown_for_streak == 3
+
+
+def test_decline_streak_not_increased_with_savings_reason(session):
+    """Sparmål-skäl ska INTE räknas i streak."""
+    from hembudget.api.events import DeclineIn, decline_event
+
+    for i in range(3):
+        ev = _make_event(session, code=f"e{i}", category="social")
+        decline_event(ev.id, DeclineIn(decision_reason="valde sparande"), session)
+
+    from hembudget.db.models import DeclineStreak
+    s = session.query(DeclineStreak).first()
+    assert s is None or s.current_streak == 0
+
+
+def test_decline_unexpected_does_not_increase_streak(session):
+    """Visdomstand-decline (skulle vara oviktig om den ens var
+    declinable). Vi använder lifestyle som icke-social."""
+    from hembudget.api.events import DeclineIn, decline_event
+
+    for i in range(3):
+        ev = _make_event(session, code=f"e{i}", category="lifestyle")
+        decline_event(ev.id, DeclineIn(), session)
+
+    from hembudget.db.models import DeclineStreak
+    s = session.query(DeclineStreak).first()
+    assert s is None or s.current_streak == 0

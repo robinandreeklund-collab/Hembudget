@@ -809,6 +809,31 @@ class PersonalityProfile(TenantMixin, Base):
     )
 
 
+class DeclineStreak(TenantMixin, Base):
+    """En rad per elev — räknar nej-streak i sociala events.
+
+    Pedagogiskt: när eleven nekat 3+ social-events i rad utan
+    ekonomiskt skäl ('valde sparande') triggar frontend en
+    nudge. Att alltid säga nej är fel — isolering har en kostnad.
+    """
+    __tablename__ = "decline_streaks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    current_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_decline_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    last_accept_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    nudge_shown_for_streak: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )  # Senaste streak vi visat nudge för — undvik spam
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
 class StudentEvent(TenantMixin, Base):
     """Event-instans per elev — refererar till EventTemplate i master.
 
