@@ -26,6 +26,7 @@ from ..parsers.ekonomilabbet import (
     EkonomilabbetParseResult,
     parse_ekonomilabbet,
 )
+from ..config import settings
 from ..school.engines import scope_context
 from ..school.models import (
     BatchArtifact,
@@ -42,6 +43,24 @@ from .pdfs import (
 from .scenario import build_scenario, MonthScenario
 
 log = logging.getLogger(__name__)
+
+
+def _save_artifact_to_disk(artifact: BatchArtifact) -> str:
+    """Spara en artefakts PDF-bytes till data_dir/invoices/ och returnera
+    sökvägen. Behövs för att UpcomingTransaction.source_image_path ska
+    kunna peka på en fil som /upcoming/{id}/source kan servera.
+
+    Idempotent — om filen redan finns för samma artefakt återanvänds den.
+    """
+    import hashlib as _h
+    invoice_dir = settings.data_dir / "invoices"
+    invoice_dir.mkdir(parents=True, exist_ok=True)
+    short = _h.sha1(artifact.pdf_bytes or b"").hexdigest()[:8]
+    safe = (artifact.filename or f"artifact_{artifact.id}.pdf").replace("/", "_")
+    p = invoice_dir / f"batch_{artifact.id}_{short}_{safe}"
+    if not p.exists():
+        p.write_bytes(artifact.pdf_bytes or b"")
+    return str(p)
 
 
 def create_batch_for_student(
@@ -350,10 +369,17 @@ def _create_credit_invoice_upcoming(
         from datetime import date as _date, timedelta
         due = _date.today() + timedelta(days=20)
     name = f"Kreditkortsfaktura {parsed.period or ''}".strip()
-    if s.query(UpcomingTransaction).filter(
+    existing = s.query(UpcomingTransaction).filter(
         UpcomingTransaction.name == name,
         UpcomingTransaction.expected_date == due,
-    ).first():
+    ).first()
+    # Spara fakturans PDF till disk så /attachments kan visa den
+    path = _save_artifact_to_disk(artifact)
+    if existing:
+        # Berika befintlig rad med path om den saknades (idempotent
+        # uppgradering vid re-import).
+        if existing.source_image_path is None:
+            existing.source_image_path = path
         return
     s.add(UpcomingTransaction(
         kind="bill",
@@ -361,6 +387,7 @@ def _create_credit_invoice_upcoming(
         amount=parsed.total_amount,
         expected_date=due,
         source="scenario",
+        source_image_path=path,
         debit_account_id=lonekonto.id,
         debit_date=due,
         autogiro=True,
@@ -489,15 +516,19 @@ def _import_lonespec(
 ) -> None:
     """Lönespec sätter ingen ny tx i sig — kontoutdraget innehåller
     redan löneutbetalningen. Vi använder istället metadata för att
-    upplysa eleven om bruttolön och berika lön-tx med kategori."""
+    upplysa eleven om bruttolön och berika lön-tx med kategori.
+
+    Skapar dessutom en UpcomingTransaction(kind=income) med PDF:en
+    sparad till disk + source_image_path satt — så lönespecen syns
+    under /attachments (Bildunderlag) som en riktig bilaga."""
     acc = _ensure_account(s, "Lönekonto", "checking")
     cat = s.query(Category).filter(Category.name == "Lön").first()
-    if not cat:
-        return
     if not parsed.transactions:
         return
     target_date = parsed.transactions[0].date
     target_amount = parsed.total_amount or parsed.transactions[0].amount
+
+    # Berika existerande lön-tx med kategori
     matched = (
         s.query(Transaction)
         .filter(
@@ -507,11 +538,42 @@ def _import_lonespec(
         )
         .first()
     )
-    if matched:
-        if matched.category_id != cat.id:
-            matched.category_id = cat.id
-            matched.user_verified = True
-            stats["imported_tx"] += 1
+    if matched and cat and matched.category_id != cat.id:
+        matched.category_id = cat.id
+        matched.user_verified = True
+        stats["imported_tx"] += 1
+
+    # Skapa Upcoming-bilaga så PDF:en syns i /attachments (Bildunderlag).
+    # Idempotent — om vi redan har en lönespec-Upcoming för samma
+    # datum + belopp, skippa.
+    artifact_meta = artifact.meta or {}
+    employer = artifact_meta.get("employer", "Arbetsgivare")
+    name = f"Lönespec {employer}"
+    existing = s.query(UpcomingTransaction).filter(
+        UpcomingTransaction.kind == "income",
+        UpcomingTransaction.expected_date == target_date,
+        UpcomingTransaction.amount == target_amount,
+        UpcomingTransaction.source == "salary_pdf",
+    ).first()
+    if existing is None:
+        path = _save_artifact_to_disk(artifact)
+        s.add(UpcomingTransaction(
+            kind="income",
+            name=name,
+            amount=target_amount,
+            expected_date=target_date,
+            recurring_monthly=True,
+            source="salary_pdf",
+            source_image_path=path,
+            debit_account_id=acc.id,
+            debit_date=target_date,
+            matched_transaction_id=matched.id if matched else None,
+        ))
+    elif existing.source_image_path is None:
+        # Befintlig upcoming utan path — lägg till path:en (idempotent
+        # uppgradering för historik).
+        existing.source_image_path = _save_artifact_to_disk(artifact)
+
     stats["accounts_touched"].append(acc.name)
 
 
