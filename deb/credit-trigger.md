@@ -125,4 +125,153 @@ samma flöde.
 
 ---
 
-*(Fortsätter i nästa commit: privatlån-flödet, SMS-lån, datamodell.)*
+## 4. Privatlån-flödet (förstaval)
+
+När eleven klickar **"Ta privatlån"**:
+
+### 4.1 Ansökningsformulär
+
+Modal som visar:
+- **Belopp** (förvalt = shortfall + buffer 5 000 kr, slider 5 000 –
+  100 000 kr)
+- **Återbetalningstid** (12 / 24 / 36 / 60 / 84 mån)
+- **Ändamål** (dropdown: oförutsedda utgifter / boende / annat)
+- **Sammanfattning live:**
+  - Månadskostnad
+  - Total ränta över löptiden
+  - Effektiv ränta
+  - Total kostnad
+
+### 4.2 Simulerad kreditupplysning
+
+Eleven klickar **"Ansök"**. Servern kör en deterministisk
+kreditbedömning baserat på:
+
+| Faktor | Vikt | Källa |
+|---|---|---|
+| Inkomst (lön senaste 3 mån, snitt) | +++ | `Transaction` med kategori "Lön" |
+| Befintliga lån (skuldkvot) | −−− | `Loan`-tabellen, summa principal_amount |
+| Sparkonto-saldo (buffert) | + | live-saldo savings-konton |
+| Antal nyligen tagna lån (senaste 6 mån) | −− | `Loan.start_date` |
+| Betalningsanmärkningar (om vi simulerar) | −−− | nytt fält `Loan.is_default` |
+| Ålder (om sätts på elev) | + | StudentProfile |
+
+Algoritm:
+```
+score = 600   # mid
+score += min(income_avg / 1000, 30)              # max +30
+score -= min(total_debt / 10000, 50)             # max −50
+score += min(savings / 5000, 20)                 # max +20
+score -= recent_loans_count * 15                 # −15 per nyligt lån
+score -= defaults_count * 100                    # hård straff
+score -= (requested_amount / income_avg) * 10    # för stor ansökan = nej
+# Slumpfaktor (deterministisk på elev+månad+belopp): ±20 poäng
+
+approval_threshold = 550
+```
+
+Resultat: **godkänd / avslag** med kort förklaring i klartext.
+
+### 4.3 Vid godkännande
+
+Modal byter vy:
+- "Banken har godkänt din ansökan!"
+- Räntan beräknas: `nominell = 4–9 %` baserat på score (bättre score
+  → lägre ränta — exakt formel: `9 - (score-550)/50 %`)
+- **Villkorstext** att läsa: 4–6 punkter på lättläst svenska
+- **Två knappar:** "Acceptera och få pengarna" / "Tacka nej"
+
+Vid acceptera:
+1. Skapa **`Loan`**-rad: name="Privatlån", lender=valt bank-namn,
+   principal_amount, start_date, interest_rate, binding_type="rörlig",
+   amortization_monthly = beräknad rakamortering
+2. Skapa **`LoanScheduleEntry`**-rader för varje månad i löptiden
+3. Skapa **`Transaction`** på lönekontot: `+lånebelopp`, kategori
+   "Privatlån utbetalning", is_transfer=False
+4. Returnera till transaktions-flödet — den ursprungliga utgiften går
+   nu igenom (saldot räcker)
+
+### 4.4 Vid avslag
+
+- "Banken har tackat nej. Skäl: din skuldkvot är för hög."
+- **Två knappar:** "Försök en annan bank" (1–2 fler simulerade
+  bankförsök med liknande villkor) / "Prova SMS-lån som sista utväg"
+  / "Avbryt transaktionen"
+
+---
+
+## 5. SMS-lån-flödet (sista utväg)
+
+Eleven klickar **"Prova SMS-lån"**. Distinkt UX som signalerar att
+detta är *fel* val:
+
+### 5.1 Visuell varning
+
+- Röd toppbar: **"Detta är dyr kredit. Läs noga."**
+- Tre snabba fakta i mono:
+  - Effektiv ränta: **89 % – 200 %**
+  - Avgifter utöver räntan
+  - Risk att hamna i skuldspiral
+
+### 5.2 Förenklad ansökan
+
+- Belopp: 1 000 – 30 000 kr
+- Löptid: 30 / 60 / 90 dagar (kort!)
+- Ingen kreditupplysning (eller en pro forma som *alltid* godkänns
+  så länge eleven har lön — det är poängen med SMS-lån)
+- Snabbgodkännande (modal byter vy direkt)
+
+### 5.3 Villkor är hårda
+
+- Effektiv ränta enligt formel: `nominell ~30 % + uppläggningsavgift
+  500 kr + aviavgift 50 kr/månad`
+- Räknat över löptiden ger detta **89 % – 150 %** effektiv ränta
+- Visa eleven **innan** acceptans:
+  - "Du lånar 5 000 kr. Du betalar tillbaka 5 950 kr om 30 dagar."
+  - "Effektiv ränta: 117 %"
+
+### 5.4 Vid acceptans
+
+Samma som privatlån men:
+- `Loan.lender` = "Bynk" / "Klarna" / "Cashbuddy" (slumpat per elev)
+- Räntan högre, löptiden kortare
+- Tag `is_high_cost_credit=True` på Loan så lärar-UI:t kan
+  färgmärka det rött
+
+### 5.5 Pedagogisk follow-up
+
+- Efter accepterat SMS-lån: skapa automatiskt en **reflektionsfråga**
+  i `StudentStepProgress`: "Hur hamnade du här? Vad kunde du gjort
+  annorlunda?"
+- AI:n (om aktiverad) skickar en pedagogisk kommentar — inte
+  fördömande utan analytisk: "SMS-lånet kostar 1 200 kr på 90 dagar.
+  Det motsvarar X dagars sparande. Hur hade du kunnat undvika det?"
+
+---
+
+## 6. Sparkonto strikt — utvidgning
+
+**V1-fix (snabb):** Generalisera blocket i `create_transfer` till att
+gälla alla *uttagsbara* kontotyper som inte ska kunna gå minus:
+
+```
+NEVER_NEGATIVE = {"savings", "isk", "pension"}
+if src.type in NEVER_NEGATIVE:
+    if balance - amount < 0:
+        raise HTTPException(400, f"{src.name} skulle gå minus...")
+```
+
+Lönekonto (`checking`) och Kreditkort (`credit`) får fortfarande gå
+minus — men checking triggar kreditflödet, credit-kort använder
+kreditgränsen som vanligt.
+
+**V2 (senare):** Validera även på **transaktions-skapandet**, inte
+bara överföringar. När en POST `/transactions` skulle ge negativt
+saldo på ett `NEVER_NEGATIVE`-konto → 400. Detta blir relevant först
+om vi tillåter eleven att skapa egna manuella transaktioner direkt
+(idag importeras de från PDF).
+
+---
+
+*(Fortsätter i nästa commit: datamodell, backend-endpoints, UX-flöde,
+faseplan.)*
