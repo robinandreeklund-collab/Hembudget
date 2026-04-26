@@ -6,6 +6,7 @@ import {
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
 import { ResetDialog } from "@/components/ResetDialog";
+import { WellbeingCard } from "@/components/WellbeingCard";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ForecastPoint, HouseholdUser, MonthSummary } from "@/types/models";
 
@@ -271,6 +272,8 @@ export default function Dashboard() {
           onClose={() => setBreakdownMode(null)}
         />
       )}
+
+      <WellbeingCard />
 
       {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
         <Card
