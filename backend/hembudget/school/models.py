@@ -880,3 +880,9 @@ class StudentActivity(MasterBase):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), index=True,
     )
+
+
+# Aktie-master-modeller (StockMaster, StockQuote, LatestStockQuote,
+# MarketCalendar) — importeras här så att MasterBase.metadata känner
+# till dem vid create_all.
+from . import stock_models as _stock_models  # noqa: E402, F401
