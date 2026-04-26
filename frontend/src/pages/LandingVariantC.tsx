@@ -300,6 +300,21 @@ function SharedStyles() {
 // ---------- Header ----------
 
 function Header() {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [pickedCell, setPickedCell] = useState<CellInfo | null>(null);
+
+  // Cmd/Ctrl+K aktiverar söket. Esc stänger.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <header
       style={{
@@ -359,6 +374,33 @@ function Header() {
         </nav>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          aria-label="Sök i kursplanen"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "7px 12px",
+            border: "1px solid #e2e8f0",
+            background: "#f8fafc",
+            color: "#64748b",
+            borderRadius: 8,
+            fontSize: 13,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            minWidth: 200,
+          }}
+          className="vc-search-btn"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <span style={{ flex: 1, textAlign: "left" }}>Sök i kursplanen…</span>
+          <span className="vc-kbd">⌘K</span>
+        </button>
         <Link
           to="/login"
           className="vc-btn vc-btn-ghost"
@@ -374,6 +416,18 @@ function Header() {
           Kom igång →
         </Link>
       </div>
+      {searchOpen && (
+        <SearchPalette
+          onClose={() => setSearchOpen(false)}
+          onPick={(c) => {
+            setSearchOpen(false);
+            setPickedCell(c);
+          }}
+        />
+      )}
+      {pickedCell && (
+        <CellModal cell={pickedCell} onClose={() => setPickedCell(null)} />
+      )}
     </header>
   );
 }
@@ -2175,6 +2229,211 @@ function CellModal({
               Stäng
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Search palette (B1) ----------
+
+function SearchPalette({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (cell: CellInfo) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // Filtrera på namn, sym eller tip — case-insensitivt.
+  const ql = q.toLowerCase().trim();
+  const results = ql
+    ? CELL_INFO.filter(
+        (c) =>
+          c.name.toLowerCase().includes(ql) ||
+          c.sym.toLowerCase().includes(ql) ||
+          c.tip.toLowerCase().includes(ql),
+      )
+    : CELL_INFO;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIdx((i) => Math.min(i + 1, results.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const cell = results[activeIdx];
+        if (cell) onPick(cell);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onPick, results, activeIdx]);
+
+  // Reset activeIdx när query ändras så vi inte hamnar utanför listan.
+  useEffect(() => {
+    setActiveIdx(0);
+  }, [q]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Sök i kursplanen"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,.45)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        paddingTop: "12vh",
+        zIndex: 60,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          width: "min(560px, 92vw)",
+          maxHeight: "70vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 24px 64px rgba(15,23,42,.2)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "12px 16px",
+            borderBottom: "1px solid #e2e8f0",
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Sök bland 32 grundbegrepp…"
+            style={{
+              flex: 1,
+              border: 0,
+              outline: 0,
+              fontSize: 15,
+              fontFamily: "inherit",
+              background: "transparent",
+            }}
+          />
+          <span className="vc-kbd">Esc</span>
+        </div>
+        <div style={{ overflowY: "auto", padding: "6px 0" }}>
+          {results.length === 0 && (
+            <div
+              style={{
+                padding: "24px 16px",
+                color: "#64748b",
+                fontSize: 14,
+                textAlign: "center",
+              }}
+            >
+              Inget begrepp matchar &quot;{q}&quot;.
+            </div>
+          )}
+          {results.map((c, i) => {
+            const p = PALETTE[c.cat];
+            const active = i === activeIdx;
+            return (
+              <button
+                key={c.n}
+                type="button"
+                onMouseEnter={() => setActiveIdx(i)}
+                onClick={() => onPick(c)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  padding: "9px 16px",
+                  background: active ? "#f1f5f9" : "transparent",
+                  border: 0,
+                  textAlign: "left",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span
+                  className="vc-mono"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 6,
+                    background: p.bg,
+                    color: p.fg,
+                    border: `1px solid ${p.border}`,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    flexShrink: 0,
+                  }}
+                >
+                  {c.sym}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: "#0f172a" }}>
+                    {c.name}
+                  </span>
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: 12,
+                      color: "#64748b",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {c.tip}
+                  </span>
+                </span>
+                <span className="vc-mono" style={{ fontSize: 11, color: "#94a3b8" }}>
+                  #{c.n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div
+          style={{
+            padding: "8px 16px",
+            borderTop: "1px solid #e2e8f0",
+            background: "#f8fafc",
+            fontSize: 11.5,
+            color: "#64748b",
+            display: "flex",
+            gap: 16,
+          }}
+        >
+          <span><span className="vc-kbd">↑↓</span> bläddra</span>
+          <span><span className="vc-kbd">↵</span> öppna</span>
+          <span><span className="vc-kbd">Esc</span> stäng</span>
         </div>
       </div>
     </div>
