@@ -407,3 +407,176 @@ Varje `StockTransaction` får ett valfritt fält `student_rationale`
 
 Det här är vad som gör skillnad mellan "spel" och "lärande".
 
+## 18. Lärarintegration
+
+### Klassöversikt `/teacher/investments`
+
+Tabell över alla elever som handlar:
+- Företag / namn
+- Antal innehav
+- Total likvid
+- Totalt portföljvärde (likvid + marknadsvärde)
+- Realiserad vinst/förlust YTD
+- Orealiserad vinst/förlust just nu
+- Total courtage spenderad
+- Antal trades senaste 7 dagarna
+- Senaste trade-tidpunkt
+
+Sortbar och filtrerbar. Klick på elev → drilldown med **hela ledgern**
+(varje köp/sälj med tidsstämpel, ticker, antal, pris, courtage,
+motivering, quote_id-länk till exakt källdata).
+
+### Lärar-uppdrag (`Assignment.kind`)
+
+Nya kinds som passar in i den befintliga `Assignment`-modellen:
+
+| Kind | Beskrivning | Params |
+|---|---|---|
+| `stock_open_account` | Öppna ett aktiekonto | `{account_kind: "isk"}` |
+| `stock_fund_account` | Flytta likvid till aktiekonto | `{min_amount, target_account_kind}` |
+| `stock_buy_specific` | Köp en specifik aktie | `{ticker, min_quantity}` |
+| `stock_buy_amount` | Köp för minst X kr i fritt vald aktie | `{min_amount}` |
+| `stock_diversify` | Sprid över N olika sektorer | `{min_sectors, min_holdings}` |
+| `stock_sell_all` | Sälj alla innehav (lik vidationsövning) | `{}` |
+| `stock_calculate_pnl` | Räkna ut vinst/förlust manuellt | `{ticker}` |
+| `stock_courtage_total` | Räkna ut total courtage senaste månaden | `{}` |
+| `stock_write_motivation` | Skriv motivering för varje köp i vecka | `{}` |
+
+Varje uppdrag har `due_date` och `manually_completed_at` precis som
+befintliga Assignments. Lärarens vy "Pågående uppdrag" får automatiskt
+de nya kinds — ingen ny UI-kod krävs för listning, bara nya
+ikoner/labels.
+
+### Lärarens "skicka marknadshändelse" (V2-möjlighet)
+
+Tänk att läraren ska kunna trycka på en knapp och säga "Telia släpper
+Q3-rapport, kursen rasar 8 %". Det skulle påverka den globala
+`StockMaster`-poolen — vilket är **fel** eftersom alla elever delar
+den. Bättre: introducera en **scope-overlay**: `StockEvent` per
+scope (sällsynt) som modifierar pristrenden. Komplext — håll utanför
+V1.
+
+## 19. Modulen "Aktier — komma igång"
+
+Ny systemmodul i `module_seed.py`. 8 steg, idempotent seedad. Läraren
+tilldelar den med ett klick.
+
+1. **`read`** — *Vad är en aktie?* (200 ord, lättläst svenska)
+   Aktie = del av ett företag. Pris bestäms av utbud/efterfrågan.
+   Värdet kan både öka och minska.
+
+2. **`task: stock_open_account`** — *Skapa ditt första aktiekonto*
+   Eleven klickar på `/accounts` → "Nytt konto" → väljer ISK → namnger
+   det. Steg auto-markeras klart vid skapande.
+
+3. **`task: stock_fund_account`** — *Flytta 10 000 kr till ditt
+   aktiekonto* (testar **direkt** överföringsfunktionen från del 1!).
+   Använder `make_transfer`-uppdragstypen från sektion 6.
+
+4. **`read`** — *Riskspridning — varför du inte ska lägga alla ägg
+   i en korg* Förklarar sektorbegreppet, kopplar till de 30
+   tillgängliga aktierna grupperade per sektor (Industri, Bank,
+   Telecom, Hälsa, Konsument, IT, Råvaror, Fastighet).
+
+5. **`task: stock_diversify`** — *Köp 5 aktier från minst 3 olika
+   sektorer, max 2 000 kr per aktie*. Auto-markeras klart när
+   `StockHolding` har minst 5 olika tickers från minst 3 olika
+   `StockMaster.sektor`-värden.
+
+6. **`read`** — *Courtage, spread och varför din avkastning är
+   mindre än kursen visar* Visar elevens **egna** courtage-data:
+   "Du har spenderat 23,40 kr i courtage hittills. Det är 0,7 % av
+   ditt portföljvärde."
+
+7. **`quiz`** — Kontrollfrågor:
+   - Vad händer med ett aktiebolags värde om alla vill sälja?
+   - Vad är skillnaden mellan ISK och en vanlig depå?
+   - Räkna ut courtage för ett köp på 4 500 kr (= max(1, 11,25) =
+     11,25 kr)
+   - Vad är en sektor? Ge tre exempel.
+
+8. **`reflect`** — *Var det svårt att välja? Vad lärde du dig?*
+   Rubric-bedömt via befintlig `score_with_rubric`. Kriterier:
+   "Förståelse för risk", "Förståelse för courtage", "Egna
+   reflektioner".
+
+Kompetenser (nya rader i `competency_seed.py`):
+`stock_basics`, `risk_diversification`, `courtage_understanding`,
+`portfolio_thinking`.
+
+## 20. AI-integration
+
+| Funktion | Modell | Var | Pedagogiskt syfte |
+|---|---|---|---|
+| `explain_stock_term` | Haiku | ny i `ai.py` | Eleven hovrar ord som "P/E-tal", "spread", "utdelning" och får 1-mening-förklaring |
+| `evaluate_diversification` | Haiku, tool_use | ny | Bedömer portföljens spridning (sektorvikter, antal innehav) och returnerar kommentar |
+| `feedback_on_trade` | Haiku | ny | Efter varje köp/sälj — kort kommentar "Du köpte Volvo. Industri-sektorn är cyklisk — bra om du tror på konjunkturuppgång." |
+| `answer_student_question` | Sonnet, **befintlig** | utvidga prompt-kontext | Aktieterminologi och svensk skatt |
+| `score_with_rubric` | Sonnet, **befintlig** | — | Rubric-bedömning av reflektionssteg 8 |
+
+**Strikt regel som måste respekteras i prompten:** AI får aldrig ge
+finansiell **rådgivning** (köp/sälj-rekommendationer för enskilda
+aktier). Endast **förklaringar** och **observationer** av elevens
+egna val. Lägg detta som ett hårt direktiv i systemprompten och
+testa med adversarial prompts. Det här är både juridiskt skyddande
+(simulator i skola, inte rådgivning) och pedagogiskt rätt — eleven
+ska tänka själv.
+
+Token-räkning: alla anrop går genom `_record_usage` (befintlig).
+Sätt en **soft cap per elev per vecka** för aktie-AI specifikt
+(`Teacher.ai_stock_weekly_cap`) — annars kan en elev som hovrar
+över 50 ord trigga onödiga kostnader.
+
+## 21. Frontend-undersida `/investments`
+
+### Elev-vyn
+
+Toppnivå i sidofältet, ikon "trending_up". Sektioner:
+
+- **Översikt** — totalt portföljvärde, dagens förändring, total
+  realiserad/orealiserad vinst, sektorvikter (donut chart)
+- **Mina aktier** — lista av `StockHolding` med live-värdering
+- **Marknad** — alla 30 tillgängliga aktier sorterbara per kurs,
+  förändring %, sektor; klick → detaljvy med graf + köp/sälj
+- **Order-historik (Ledger)** — hela `StockTransaction`-loggen,
+  filtreringsbar per ticker/datum/typ
+- **Watchlist** — favoriter eleven flaggat (ny scope-tabell
+  `StockWatchlist`)
+
+### Lärarens drilldown `/teacher/investments/:student_id`
+
+- Aggregerade siffror i kortrad
+- **Ledger-vy** — exakt samma data som eleven ser, men med extra
+  kolumn "Quote source" som visar `quote_id` → exakt
+  polldata-tidsstämpel + källa
+- "Lägg till uppdrag" — snabbt ge eleven en av kinds från
+  sektion 18
+
+### Pedagogisk widget — "Vad om?"
+
+På varje innehavskort: knapp "Vad om jag inte hade köpt detta?".
+Räknar `quantity * (current_price - alternative_baseline)` där
+baseline = OMXS30-index från samma datum. Visar "Du har gjort 230 kr
+*sämre* än om du hade köpt en indexfond". Smärtsam men sann
+pedagogik om aktiv förvaltning vs index.
+
+## 22. ISK-skatt — koppla in befintlig motor
+
+`ISKCalculator` i `api/tax.py` beräknar idag schablonskatt på
+kvartalsvärden. Det den behöver är **portföljens samlade värde** —
+inte bara fonder. Lös genom att utöka `_quarterly_value()` (eller
+motsvarande metod) så att den inkluderar:
+
+```
+quarterly_value = likvid_på_isk_konto
+                + sum(StockHolding.quantity * StockQuote_close_at_quarter)
+                + sum(FundHolding.market_value)
+```
+
+Det enda som ändras är *underlaget* — formeln (statslåneränta + 1 %,
+schablon på underlaget) är samma. **Inga schemaändringar**.
+
+För Företagsekonomi 2 är det här en pedagogisk poäng: schablonskatten
+straffar inte vinst, den straffar *värde*. Eleven kan göra förlust
+och ändå betala skatt.
+
