@@ -7,6 +7,7 @@ import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
 import { ClassLeaderboard } from "@/components/ClassLeaderboard";
 import { EventInbox } from "@/components/EventInbox";
+import { HouseholdSplitQuiz } from "@/components/HouseholdSplitQuiz";
 import { InvitationsInbox } from "@/components/InvitationsInbox";
 import { PersonalityQuiz } from "@/components/PersonalityQuiz";
 import { ResetDialog } from "@/components/ResetDialog";
@@ -276,6 +277,8 @@ export default function Dashboard() {
           onClose={() => setBreakdownMode(null)}
         />
       )}
+
+      <HouseholdSplitQuiz />
 
       <PersonalityQuiz />
 
