@@ -1936,7 +1936,7 @@ function PeriodicGrid({
   );
 }
 
-// ---------- Cell-modal (stub, fylls i fas A3) ----------
+// ---------- Cell-modal (SaaS-stil) ----------
 
 function CellModal({
   cell,
@@ -1945,50 +1945,237 @@ function CellModal({
   cell: CellInfo;
   onClose: () => void;
 }) {
+  // Esc stänger; lås body-scroll medan modalen är öppen.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
+
+  const p = PALETTE[cell.cat];
+  const meta = CATEGORY_META[cell.cat];
 
   return (
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby="cell-modal-title"
       onClick={onClose}
       style={{
         position: "fixed",
         inset: 0,
         background: "rgba(15,23,42,.55)",
+        backdropFilter: "blur(2px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: 16,
         zIndex: 50,
+        animation: "vc-modal-fade .15s ease-out",
       }}
     >
+      <style>{`
+        @keyframes vc-modal-fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes vc-modal-pop {
+          from { opacity: 0; transform: translateY(8px) scale(.98); }
+          to { opacity: 1; transform: none; }
+        }
+      `}</style>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "#fff",
           border: "1px solid #e2e8f0",
-          borderRadius: 12,
-          padding: 24,
-          maxWidth: 480,
+          borderRadius: 14,
+          maxWidth: 540,
           width: "100%",
+          maxHeight: "85vh",
+          overflowY: "auto",
+          boxShadow: "0 24px 64px rgba(15,23,42,.18), 0 6px 18px rgba(15,23,42,.08)",
+          animation: "vc-modal-pop .18s ease-out",
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 600 }}>{cell.name}</div>
-        <p style={{ marginTop: 12, fontSize: 14, color: "#475569" }}>{cell.long}</p>
-        <button
-          onClick={onClose}
-          className="vc-btn vc-btn-primary"
-          style={{ marginTop: 16 }}
-        >
-          Stäng
-        </button>
+        {/* Färgband i kategori-pastell */}
+        <div
+          style={{
+            height: 6,
+            background: p.bg,
+            borderTopLeftRadius: 14,
+            borderTopRightRadius: 14,
+          }}
+        />
+        <div style={{ padding: "22px 26px 26px" }}>
+          {/* Header: cell-pill + namn + kategori */}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 10,
+                background: p.bg,
+                color: p.fg,
+                border: `1px solid ${p.border}`,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <span
+                className="vc-mono"
+                style={{ fontSize: 9, opacity: 0.7, lineHeight: 1 }}
+              >
+                {String(cell.n).padStart(2, "0")}
+              </span>
+              <span
+                className="vc-mono"
+                style={{ fontSize: 18, fontWeight: 700, lineHeight: 1 }}
+              >
+                {cell.sym}
+              </span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2
+                id="cell-modal-title"
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  letterSpacing: -0.4,
+                  lineHeight: 1.2,
+                  margin: 0,
+                }}
+              >
+                {cell.name}
+              </h2>
+              <div
+                className="vc-eyebrow"
+                style={{ marginTop: 4, color: "#64748b" }}
+              >
+                {meta.label} · #{cell.n}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              aria-label="Stäng"
+              style={{
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+                color: "#64748b",
+                fontSize: 22,
+                lineHeight: 1,
+                padding: 4,
+              }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* TIP-banner */}
+          <div
+            style={{
+              marginTop: 18,
+              padding: "10px 14px",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              fontSize: 13.5,
+              color: "#0f172a",
+              fontStyle: "italic",
+            }}
+          >
+            {cell.tip}
+          </div>
+
+          {/* LONG */}
+          <p
+            style={{
+              marginTop: 18,
+              fontSize: 14.5,
+              lineHeight: 1.6,
+              color: "#334155",
+            }}
+          >
+            {cell.long}
+          </p>
+
+          {/* EXAMPLE */}
+          <div
+            style={{
+              marginTop: 18,
+              borderLeft: "3px solid #0f172a",
+              paddingLeft: 14,
+              paddingTop: 2,
+              paddingBottom: 2,
+            }}
+          >
+            <div className="vc-eyebrow" style={{ marginBottom: 4 }}>
+              Exempel
+            </div>
+            <p
+              style={{
+                fontSize: 14,
+                lineHeight: 1.55,
+                color: "#475569",
+                margin: 0,
+              }}
+            >
+              {cell.example}
+            </p>
+          </div>
+
+          {/* TRAINS-IN */}
+          <div
+            style={{
+              marginTop: 20,
+              paddingTop: 16,
+              borderTop: "1px solid #e2e8f0",
+            }}
+          >
+            <div className="vc-eyebrow" style={{ marginBottom: 4 }}>
+              Tränas i
+            </div>
+            <p
+              style={{
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: "#475569",
+                margin: 0,
+              }}
+            >
+              {cell.trains}
+            </p>
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              marginTop: 22,
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+            }}
+          >
+            <button
+              onClick={onClose}
+              className="vc-btn vc-btn-primary"
+              style={{ padding: "9px 16px" }}
+            >
+              Stäng
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
