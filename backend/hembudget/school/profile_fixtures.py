@@ -142,6 +142,12 @@ class GeneratedProfile:
     backstory: str
     children_ages: list[int]
     partner_age: int | None
+    # Partnerns yrke + bruttolön. None om family_status == "ensam".
+    # Slumpas oberoende av elevens egna yrke för realistisk variation —
+    # eleven kan tjäna mer eller mindre än sin partner. Det här är
+    # poängen i 'veil of ignorance'-onboardingen.
+    partner_profession: str | None
+    partner_gross_salary: int | None
 
 
 def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
@@ -199,9 +205,31 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
 
     # Partner — om sambo eller familj_med_barn
     partner_age: int | None = None
+    partner_profession: str | None = None
+    partner_gross_salary: int | None = None
     if family_status in ("sambo", "familj_med_barn"):
         partner_age = age + rng.randint(-4, 4)
         partner_age = max(20, min(60, partner_age))
+        # Partnerns yrke slumpas oberoende av elevens. Realism + variation:
+        # ibland tjänar partnern mer, ibland mindre.
+        partner_prof = rng.choice(PROFESSIONS)
+        partner_profession = partner_prof.title
+        # Partnerns lön mellan low och high baserat på ålder (samma logik
+        # som elevens — fast ny rng-draw)
+        if partner_age <= 25:
+            p_factor = 0.0
+        elif partner_age <= 35:
+            p_factor = (partner_age - 25) / 10
+        else:
+            p_factor = 1.0
+        partner_gross_salary = int(
+            partner_prof.salary_low
+            + (partner_prof.salary_high - partner_prof.salary_low) * p_factor
+        )
+        # Lite extra variation ±5 %
+        partner_gross_salary = int(
+            partner_gross_salary * (0.95 + rng.random() * 0.10)
+        )
 
     # Barn — endast om family_med_barn
     children_ages: list[int] = []
@@ -236,6 +264,8 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
         backstory=backstory,
         children_ages=children_ages,
         partner_age=partner_age,
+        partner_profession=partner_profession,
+        partner_gross_salary=partner_gross_salary,
     )
 
 

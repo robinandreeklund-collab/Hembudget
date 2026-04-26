@@ -138,6 +138,8 @@ def build_demo() -> dict:
                 has_credit_card=gen.has_credit_card,
                 children_ages=gen.children_ages,
                 partner_age=gen.partner_age,
+                partner_profession=gen.partner_profession,
+                partner_gross_salary=gen.partner_gross_salary,
                 backstory=gen.backstory,
             ))
             # Skapa scope-DB så kategorier seedas

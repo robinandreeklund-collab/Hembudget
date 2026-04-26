@@ -237,6 +237,20 @@ def _run_master_migrations(engine: Engine) -> None:
     if "is_family_account" not in t_cols:
         _add("teachers", "is_family_account BOOLEAN NOT NULL DEFAULT 0")
 
+    # StudentProfile partner-fält + cost-split-preference (Wellbeing Fas
+    # 7+: 'veil of ignorance'-onboarding där eleven väljer fördelnings-
+    # modell innan partner-lön avslöjas).
+    sp_cols = _cols("student_profiles")
+    if sp_cols:  # Skippa om tabellen inte finns ännu
+        if "partner_profession" not in sp_cols:
+            _add("student_profiles", "partner_profession VARCHAR(80)")
+        if "partner_gross_salary" not in sp_cols:
+            _add("student_profiles", "partner_gross_salary INTEGER")
+        if "cost_split_preference" not in sp_cols:
+            _add("student_profiles", "cost_split_preference VARCHAR(20)")
+        if "cost_split_decided_at" not in sp_cols:
+            _add("student_profiles", "cost_split_decided_at DATETIME")
+
 
 @contextmanager
 def master_session() -> Iterator[Session]:

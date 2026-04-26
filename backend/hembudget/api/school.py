@@ -163,6 +163,10 @@ class StudentProfileOut(BaseModel):
     has_credit_card: bool
     children_ages: list[int] = []
     partner_age: Optional[int] = None
+    partner_profession: Optional[str] = None
+    partner_gross_salary: Optional[int] = None
+    cost_split_preference: Optional[str] = None
+    cost_split_decided_at: Optional[datetime] = None
     backstory: Optional[str]
 
 
@@ -265,6 +269,8 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
         backstory=gen.backstory,
         children_ages=gen.children_ages,
         partner_age=gen.partner_age,
+        partner_profession=gen.partner_profession,
+        partner_gross_salary=gen.partner_gross_salary,
     )
     session.add(profile)
     session.flush()
@@ -291,6 +297,10 @@ def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
         has_credit_card=p.has_credit_card,
         children_ages=p.children_ages or [],
         partner_age=p.partner_age,
+        partner_profession=p.partner_profession,
+        partner_gross_salary=p.partner_gross_salary,
+        cost_split_preference=p.cost_split_preference,
+        cost_split_decided_at=p.cost_split_decided_at,
         backstory=p.backstory,
     )
 
