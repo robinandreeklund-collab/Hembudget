@@ -49,6 +49,9 @@ MAX_TOKENS_CATEGORY = 200
 MAX_TOKENS_STOCK_TERM = 200
 MAX_TOKENS_STOCK_FEEDBACK = 300
 MAX_TOKENS_DIVERSIFICATION = 400
+MAX_TOKENS_WELLBEING_MONTHLY = 500
+MAX_TOKENS_DECLINE_NUDGE = 200
+MAX_TOKENS_INVITE_MOTIVATION = 250
 
 # app_config-nyckel där DB-nyckeln lagras. Super-admin kan sätta,
 # uppdatera och rensa den via UI. Fallback är ANTHROPIC_API_KEY-env-
@@ -930,6 +933,149 @@ def evaluate_diversification(
         system=DIVERSIFICATION_SYSTEM_PROMPT,
         user_prompt=user,
         max_tokens=MAX_TOKENS_DIVERSIFICATION,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+# ---------- Wellbeing-features (Fas 6) ----------
+#
+# AI används för pedagogisk reflektion runt elevens beslut. Sokratisk
+# princip: AI frågar mer än hen svarar. Aldrig fördömande, aldrig
+# 'rekommendera'. Bara hjälpa eleven se mönster i egna val.
+
+WELLBEING_MONTHLY_SYSTEM_PROMPT = """Du är en pedagogisk Wellbeing-coach för svenska gymnasieelever.
+
+Du får elevens Wellbeing-poäng över 5 dimensioner och elevens egna beslut
+denna månad. Skriv en kort, vänlig sammanfattning på lättläst svenska:
+
+Regler:
+- 4-6 meningar, max 100 ord
+- Aldrig fördömande — eleven har valt själv, det finns inte 'rätt' eller 'fel'
+- Lyft det som GICK BRA före det som behöver tänkas på
+- Ställ minst en öppen fråga som eleven kan reflektera över själv
+- Förklara samband: 'Du nekade alla sociala events och Sociala band sjönk —
+  det är förväntat'
+- Aldrig 'du borde' — använd 'du kan tänka på' eller 'fundera över'
+- Var mänsklig, inte robotisk. Korta meningar. Inga punktlistor."""
+
+
+def monthly_wellbeing_feedback(
+    *,
+    year_month: str,
+    total_score: int,
+    economy: int,
+    health: int,
+    social: int,
+    leisure: int,
+    safety: int,
+    events_accepted: int,
+    events_declined: int,
+    budget_violations: int,
+    decline_streak: int,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Pedagogisk månadsreflektion — Sokratisk, ej fördömande."""
+    prompt = (
+        f"Månad: {year_month}\n"
+        f"Total Wellbeing: {total_score}/100\n"
+        f"  Ekonomi: {economy}\n"
+        f"  Mat & hälsa: {health}\n"
+        f"  Sociala band: {social}\n"
+        f"  Fritid: {leisure}\n"
+        f"  Trygghet: {safety}\n"
+        f"\nElevens val denna månad:\n"
+        f"  Accepterade events: {events_accepted}\n"
+        f"  Nekade events: {events_declined}\n"
+        f"  Budget under Konsumentverket-minimum: "
+        f"{budget_violations} kategorier\n"
+        f"  Aktiv neka-streak: {decline_streak}\n"
+        f"\nSkriv en pedagogisk månadsreflektion. Ställ en öppen fråga "
+        f"som eleven kan tänka på inför nästa månad."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=WELLBEING_MONTHLY_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        max_tokens=MAX_TOKENS_WELLBEING_MONTHLY,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+DECLINE_NUDGE_SYSTEM_PROMPT = """Du är en pedagogisk coach för svenska gymnasieelever.
+
+Eleven har just nekat 3+ sociala events i rad. Du ska INTE skälla — ditt
+jobb är att låta eleven själv reflektera över valen.
+
+Regler:
+- 3-4 meningar, max 60 ord
+- Inga 'du borde' eller 'du måste'
+- Föreslå att eleven kan flagga 'valde sparande' om valen är medvetna
+- Påminn om att att alltid säga nej har en kostnad för relationer
+- Sluta med en öppen fråga: 'Var det medvetet?' eller liknande"""
+
+
+def decline_streak_nudge(
+    *,
+    streak_count: int,
+    recent_categories: list[str],
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Pedagogisk nudge när eleven nekat 3+ events i rad."""
+    cats = ", ".join(set(recent_categories[:5])) or "olika"
+    prompt = (
+        f"Eleven har nekat {streak_count} sociala förslag i rad "
+        f"(kategorier: {cats}).\n"
+        f"Skriv en kort, omtänksam reflektion."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=DECLINE_NUDGE_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        max_tokens=MAX_TOKENS_DECLINE_NUDGE,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+INVITE_MOTIVATION_SYSTEM_PROMPT = """Du är en neutral pedagogisk kommentator.
+
+En klasskompis har bjudit eleven på ett event. Du ska INTE rekommendera
+att hen accepterar eller nekar — bara hjälpa eleven se båda sidor.
+
+Regler:
+- 3-4 meningar, max 60 ord
+- Nämn både kostnaden och det sociala värdet
+- Påminn om elevens budget om relevant
+- Ställ en öppen fråga som hjälper eleven bestämma sig"""
+
+
+def class_invite_motivation(
+    *,
+    inviter_name: str,
+    event_title: str,
+    cost: float,
+    cost_split_model: str,
+    swish_amount: float,
+    student_balance: float,
+    student_savings: float,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Neutral kommentar när en klasskompis bjuder på ett event."""
+    prompt = (
+        f"{inviter_name} har bjudit eleven på '{event_title}'.\n"
+        f"Total kostnad: {cost:.0f} kr (modell: {cost_split_model})\n"
+        f"Elevens del (Swish): {swish_amount:.0f} kr\n"
+        f"Elevens lönekonto: {student_balance:.0f} kr\n"
+        f"Elevens sparkonto: {student_savings:.0f} kr\n\n"
+        f"Skriv en neutral pedagogisk kommentar — inte rekommendation."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=INVITE_MOTIVATION_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        max_tokens=MAX_TOKENS_INVITE_MOTIVATION,
         use_thinking=False,
         teacher_id=teacher_id,
     )
