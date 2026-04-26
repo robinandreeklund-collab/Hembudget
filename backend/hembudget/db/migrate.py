@@ -36,15 +36,30 @@ def _add_column(engine: Engine, table: str, column_sql: str) -> None:
     migration får inte ta ner scope-init eftersom det gör hela elev-
     DB:n oanvändbar (404 på alla endpoints).
 
-    På Postgres används 'IF NOT EXISTS' så concurrent restarts inte
-    krockar. På SQLite finns inte syntaxen — då litar vi på _columns-
-    guarden som körs INNAN _add_column anropas.
+    Vi använder INTE 'IF NOT EXISTS' (gav 'syntax error near OR' i
+    Cloud SQL-loggar). Istället litar vi på _columns-guarden som körs
+    INNAN _add_column anropas.
+
+    Översätter SQLite-typer (DATETIME) till Postgres-ekvivalenter
+    (TIMESTAMP) — annars 'type "datetime" does not exist'.
     """
     is_postgres = engine.dialect.name == "postgresql"
     if is_postgres:
-        stmt = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column_sql}"
-    else:
-        stmt = f"ALTER TABLE {table} ADD COLUMN {column_sql}"
+        # SQLite-typer → Postgres-ekvivalenter:
+        # - DATETIME → TIMESTAMP (annars 'type datetime does not exist')
+        # - BOOLEAN ... DEFAULT 0/1 → DEFAULT FALSE/TRUE (Postgres
+        #   kräver booleska literaler, inte heltal)
+        column_sql = column_sql.replace(" DATETIME", " TIMESTAMP")
+        column_sql = column_sql.replace(
+            "BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT FALSE",
+        ).replace(
+            "BOOLEAN NOT NULL DEFAULT 1", "BOOLEAN NOT NULL DEFAULT TRUE",
+        ).replace(
+            "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE",
+        ).replace(
+            "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE",
+        )
+    stmt = f"ALTER TABLE {table} ADD COLUMN {column_sql}"
     try:
         with engine.begin() as conn:
             conn.execute(text(stmt))

@@ -171,11 +171,15 @@ def init_master_engine() -> Engine:
             cur.execute("PRAGMA foreign_keys = ON")
             cur.close()
 
-    MasterBase.metadata.create_all(engine)
-    # Migrationer är fail-soft per ALTER (varje _add fångar Exception)
-    # men vi wrappar ändå hela funktionen — om SQLAlchemy-inspector
-    # kraschar (t.ex. timeout mot Cloud SQL) ska login fortfarande
-    # fungera så länge tabellerna existerar via create_all.
+    # Bulletproof: även om create_all eller migrationerna failar
+    # MÅSTE engine cachas så hela appen inte 500:ar varje request.
+    try:
+        MasterBase.metadata.create_all(engine)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "master create_all failed — fortsätter med befintliga tabeller",
+        )
     try:
         _run_master_migrations(engine)
     except Exception:
@@ -191,7 +195,13 @@ def init_master_engine() -> Engine:
     # Cacha kolumn-existens efter migrations. API-lagret konsulterar
     # detta innan deferred-fält accessas så att SELECT inte kraschar
     # mot prod-Postgres där en migration eventuellt failat.
-    _refresh_master_columns_cache(engine)
+    try:
+        _refresh_master_columns_cache(engine)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "master-columns-cache refresh misslyckades",
+        )
     return engine
 
 
@@ -298,22 +308,38 @@ def _run_master_migrations(engine: Engine) -> None:
 
     is_postgres = engine.dialect.name == "postgresql"
 
+    def _translate(col_sql: str) -> str:
+        """Översätt SQLite-typer till Postgres-ekvivalenter när dialekten
+        är postgresql. SQLite tillåter 'DATETIME' och 'BOOLEAN DEFAULT 0'
+        men Postgres kräver 'TIMESTAMP' resp. 'DEFAULT FALSE'.
+        """
+        if is_postgres:
+            col_sql = col_sql.replace(" DATETIME", " TIMESTAMP")
+            col_sql = col_sql.replace(
+                "BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT FALSE",
+            ).replace(
+                "BOOLEAN NOT NULL DEFAULT 1", "BOOLEAN NOT NULL DEFAULT TRUE",
+            ).replace(
+                "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE",
+            ).replace(
+                "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE",
+            )
+        return col_sql
+
     def _add(table: str, col_sql: str) -> None:
         """Idempotent ALTER TABLE ADD COLUMN. Fail-soft: en kraschad
         migration får inte ta ner hela master-init eftersom det skulle
         ge 500 på alla endpoints (login, demo, reset).
 
-        På Postgres används 'IF NOT EXISTS' så concurrent restarts inte
-        krockar. På SQLite finns inte syntaxen — då litar vi på _cols-
-        guarden som körs INNAN _add anropas.
+        Vi använder INTE 'IF NOT EXISTS' (gav 'syntax error near OR' på
+        en del Postgres-versioner). Istället litar vi på _cols-guarden
+        som körs INNAN _add anropas.
 
         Vid fel: logga och fortsätt. På Postgres kan 'duplicate column'
         vara ofarligt; på SQLite kan en parallell init ha hunnit före.
         """
-        if is_postgres:
-            stmt = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_sql}"
-        else:
-            stmt = f"ALTER TABLE {table} ADD COLUMN {col_sql}"
+        translated = _translate(col_sql)
+        stmt = f"ALTER TABLE {table} ADD COLUMN {translated}"
         try:
             with engine.begin() as conn:
                 conn.execute(_text(stmt))
@@ -531,7 +557,12 @@ def get_scope_engine(scope_key: str) -> Engine:
         cur.execute("PRAGMA foreign_keys = ON")
         cur.close()
 
-    Base.metadata.create_all(engine)
+    try:
+        Base.metadata.create_all(engine)
+    except Exception:
+        log.exception(
+            "scope create_all failed for %s — fortsätter ändå", scope_key,
+        )
     try:
         run_migrations(engine)
     except Exception:
