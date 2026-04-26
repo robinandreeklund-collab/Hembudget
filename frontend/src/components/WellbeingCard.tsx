@@ -4,9 +4,9 @@
  * Visar elevens välbefinnande baserat på ekonomi, hälsa, sociala band,
  * fritid, trygghet. Pedagogiskt: alla bidrag är transparenta.
  */
-import { useQuery } from "@tanstack/react-query";
-import { TrendingDown } from "lucide-react";
-import { useMemo } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Loader2, Sparkles, TrendingDown } from "lucide-react";
+import { useMemo, useState } from "react";
 import { api } from "@/api/client";
 import { Card } from "@/components/Card";
 
@@ -159,11 +159,60 @@ function PentagonRadar({ data }: { data: WellbeingOut }) {
   );
 }
 
+interface AIFeedbackOut {
+  feedback: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+interface DeclineStreakOut {
+  current_streak: number;
+}
+
 export function WellbeingCard() {
+  const [aiFeedback, setAiFeedback] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const wellbeingQ = useQuery({
     queryKey: ["wellbeing-current"],
     queryFn: () => api<WellbeingOut>("/wellbeing/current"),
     refetchInterval: 60_000,
+  });
+
+  const streakQ = useQuery({
+    queryKey: ["wellbeing-decline-streak"],
+    queryFn: () => api<DeclineStreakOut>("/events/decline-streak"),
+  });
+
+  const aiMut = useMutation({
+    mutationFn: (body: WellbeingOut & { decline_streak: number }) =>
+      api<AIFeedbackOut>("/ai/wellbeing/monthly-feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          year_month: body.year_month,
+          total_score: body.total_score,
+          economy: body.economy,
+          health: body.health,
+          social: body.social,
+          leisure: body.leisure,
+          safety: body.safety,
+          events_accepted: body.events_accepted,
+          events_declined: body.events_declined,
+          budget_violations: body.budget_violations,
+          decline_streak: body.decline_streak,
+        }),
+      }),
+    onSuccess: (data) => {
+      setAiFeedback(data.feedback);
+      setAiError(null);
+    },
+    onError: (e: unknown) => {
+      // 503: AI ej aktivt (kräver Teacher.ai_enabled). Tysta felet
+      // i UI:t — bara dölj knappen om läraren inte slagit på AI.
+      const msg = e instanceof Error ? e.message : "AI inte tillgängligt";
+      setAiError(msg);
+    },
   });
 
   const data = wellbeingQ.data;
@@ -250,6 +299,54 @@ export function WellbeingCard() {
               {data.budget_violations} budget(ar) under Konsumentverket-minimum
             </div>
           )}
+
+          {/* AI-feedback (opt-in via Teacher.ai_enabled) */}
+          <div className="border-t pt-2">
+            {!aiFeedback && (
+              <button
+                onClick={() =>
+                  aiMut.mutate({
+                    ...data,
+                    decline_streak: streakQ.data?.current_streak ?? 0,
+                  })
+                }
+                disabled={aiMut.isPending}
+                className="w-full flex items-center justify-center gap-1 text-xs px-2 py-1.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 disabled:opacity-50"
+              >
+                {aiMut.isPending ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    AI tänker…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3" />
+                    Be AI-coach om en månadsreflektion
+                  </>
+                )}
+              </button>
+            )}
+            {aiFeedback && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs whitespace-pre-line">
+                <div className="font-medium mb-1 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  AI-coachens reflektion
+                </div>
+                {aiFeedback}
+                <button
+                  onClick={() => setAiFeedback(null)}
+                  className="text-[10px] text-slate-500 underline mt-2"
+                >
+                  Dölj
+                </button>
+              </div>
+            )}
+            {aiError && !aiFeedback && (
+              <div className="text-[10px] text-slate-400 text-center mt-1">
+                AI-coach är inte tillgänglig (kräver att läraren slagit på AI).
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Card>
