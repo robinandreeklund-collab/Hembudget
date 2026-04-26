@@ -100,6 +100,32 @@ def test_create_blocks_negative_savings(session):
     assert "minus" in exc.value.detail.lower()
 
 
+def test_create_blocks_negative_isk(session):
+    """ISK ska aldrig kunna gå minus — samma regel som sparkonto."""
+    src = _acc(session, "ISK", "isk", opening=100, opening_date=date(2026, 1, 1))
+    dst = _acc(session, "Lön", "checking", opening=0, opening_date=date(2026, 1, 1))
+    payload = CreateTransferIn(
+        from_account_id=src.id, to_account_id=dst.id, amount=Decimal("500"),
+    )
+    with pytest.raises(HTTPException) as exc:
+        create_transfer(payload, session)
+    assert exc.value.status_code == 400
+    assert "ISK-kontot" in exc.value.detail
+
+
+def test_create_blocks_negative_pension(session):
+    """Pensionskonto ska aldrig kunna gå minus."""
+    src = _acc(session, "Pension", "pension", opening=100, opening_date=date(2026, 1, 1))
+    dst = _acc(session, "Lön", "checking", opening=0, opening_date=date(2026, 1, 1))
+    payload = CreateTransferIn(
+        from_account_id=src.id, to_account_id=dst.id, amount=Decimal("500"),
+    )
+    with pytest.raises(HTTPException) as exc:
+        create_transfer(payload, session)
+    assert exc.value.status_code == 400
+    assert "Pensionskontot" in exc.value.detail
+
+
 def test_create_allows_negative_checking(session):
     """Checking får gå minus — pedagogiskt: man kan övertrassera lön men
     inte sparkonto."""

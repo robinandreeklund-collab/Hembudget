@@ -614,12 +614,23 @@ def create_transfer(payload: CreateTransferIn, session: Session = Depends(db)) -
     if amount <= 0:
         raise HTTPException(400, "Belopp måste vara större än noll")
 
-    # Sparkonto får inte gå negativt — pedagogisk regel.
-    if src.type == "savings":
+    # Konton som aldrig får gå minus via elev-aktioner. Pedagogisk
+    # regel — eleven kan inte fylla sparkontot med fiktiva pengar.
+    # Lönekonto (checking) och Kreditkort (credit) får gå minus
+    # eftersom kreditflödet (privatlån / SMS-lån) tar över där.
+    NEVER_NEGATIVE_KINDS = {"savings", "isk", "pension"}
+    if src.type in NEVER_NEGATIVE_KINDS:
         balance = _balance_for(session, src.id)
         if balance - amount < 0:
+            kind_sv = {
+                "savings": "Sparkontot",
+                "isk": "ISK-kontot",
+                "pension": "Pensionskontot",
+            }.get(src.type, src.name)
             raise HTTPException(
-                400, f"Sparkontot skulle gå minus ({balance - amount} kr)",
+                400,
+                f"{kind_sv} skulle gå minus ({balance - amount} kr). "
+                f"Du kan inte ta ut mer än vad som finns där.",
             )
 
     tx_date = payload.date or date.today()
