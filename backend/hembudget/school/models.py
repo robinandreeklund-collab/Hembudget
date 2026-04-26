@@ -890,3 +890,6 @@ from . import stock_models as _stock_models  # noqa: E402, F401
 # EventTemplate (delade event-mallar för Wellbeing-events) — samma
 # import-trick.
 from . import event_models as _event_models  # noqa: E402, F401
+
+# Sociala mekanismer (ClassEventInvite, ClassDisplaySettings).
+from . import social_models as _social_models  # noqa: E402, F401
