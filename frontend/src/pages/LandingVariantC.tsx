@@ -816,6 +816,30 @@ function Contact() {
         >
           Vi svarar oftast inom ett par arbetsdagar.
         </p>
+        <div
+          className="vc-mono"
+          style={{
+            marginTop: 28,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 11,
+            letterSpacing: 1.4,
+            textTransform: "uppercase",
+            color: "#64748b",
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#10b981",
+              boxShadow: "0 0 0 3px rgba(16,185,129,.15)",
+            }}
+          />
+          Pilot 2026 · Stockholm · Svensk molntjänst
+        </div>
       </div>
     </section>
   );
@@ -901,6 +925,33 @@ function Footer() {
               <a href="#faq" style={{ color: "#64748b" }}>
                 FAQ
               </a>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <div className="vc-eyebrow" style={{ marginBottom: 10 }}>
+            Snabbstart
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, lineHeight: 2 }}>
+            <li>
+              <Link to="/signup/teacher" style={{ color: "#64748b" }}>
+                För skolan
+              </Link>
+            </li>
+            <li>
+              <Link to="/signup/parent" style={{ color: "#64748b" }}>
+                För hemmet
+              </Link>
+            </li>
+            <li>
+              <Link to="/login/student" style={{ color: "#64748b" }}>
+                Elev/barn-login
+              </Link>
+            </li>
+            <li>
+              <Link to="/login" style={{ color: "#64748b" }}>
+                Logga in
+              </Link>
             </li>
           </ul>
         </div>
