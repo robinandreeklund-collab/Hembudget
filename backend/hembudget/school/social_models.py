@@ -132,3 +132,46 @@ class ClassDisplaySettings(MasterBase):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(),
     )
+
+
+class TeacherClassEvent(MasterBase):
+    """Klassgemensamt event som läraren skapar och som distribueras
+    till alla elever. Pedagogiskt: 'klassresan till Berlin' känns
+    annorlunda att neka när 25 av 26 sa ja.
+
+    Status (event-livscykel):
+      "draft"        — läraren skapar men har inte distribuerat
+      "distributed"  — alla elever har fått det i sina inboxar
+      "closed"       — deadline passerat, ingen kan svara mer
+    """
+    __tablename__ = "teacher_class_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Valfritt class_label-filter (None = alla elever, annars bara
+    # eleverna i den klassen)
+    class_label: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(20), default="culture", nullable=False)
+    cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    proposed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    deadline: Mapped[date] = mapped_column(Date, nullable=False)
+    # Wellbeing-impact när elev accepterar (samma fält som EventTemplate)
+    impact_economy: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    impact_health: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    impact_social: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    impact_leisure: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    impact_safety: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="draft", nullable=False, index=True,
+    )
+    distributed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )

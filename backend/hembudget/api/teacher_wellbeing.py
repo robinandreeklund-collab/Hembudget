@@ -261,3 +261,143 @@ def class_leaderboard() -> dict:
             "total_students": len(scored),
         },
     }
+
+
+# ---------- Klassgemensamma events (Fas 7) ----------
+
+class TeacherClassEventIn(BaseModel):
+    title: str
+    description: str
+    category: str = "culture"
+    cost: float
+    proposed_date: Optional[str] = None  # YYYY-MM-DD
+    deadline: str  # YYYY-MM-DD
+    impact_economy: int = 0
+    impact_health: int = 0
+    impact_social: int = 0
+    impact_leisure: int = 0
+    impact_safety: int = 0
+    class_label: Optional[str] = None  # None = alla
+
+
+class TeacherClassEventOut(BaseModel):
+    id: int
+    teacher_id: int
+    class_label: Optional[str]
+    title: str
+    description: str
+    category: str
+    cost: float
+    proposed_date: Optional[str]
+    deadline: str
+    impact_economy: int
+    impact_health: int
+    impact_social: int
+    impact_leisure: int
+    impact_safety: int
+    status: str
+    distributed_at: Optional[str]
+    created_at: str
+
+
+def _class_event_to_out(e) -> TeacherClassEventOut:
+    return TeacherClassEventOut(
+        id=e.id,
+        teacher_id=e.teacher_id,
+        class_label=e.class_label,
+        title=e.title,
+        description=e.description,
+        category=e.category,
+        cost=float(e.cost),
+        proposed_date=e.proposed_date.isoformat() if e.proposed_date else None,
+        deadline=e.deadline.isoformat(),
+        impact_economy=e.impact_economy,
+        impact_health=e.impact_health,
+        impact_social=e.impact_social,
+        impact_leisure=e.impact_leisure,
+        impact_safety=e.impact_safety,
+        status=e.status,
+        distributed_at=e.distributed_at.isoformat() if e.distributed_at else None,
+        created_at=e.created_at.isoformat() if e.created_at else "",
+    )
+
+
+@router.post("/teacher/class-events", response_model=TeacherClassEventOut)
+def create_class_event(
+    payload: TeacherClassEventIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> TeacherClassEventOut:
+    """Lärare skapar ett klassgemensamt event (draft).
+
+    Validerar att läraren har class_event_creation_enabled = True i
+    ClassDisplaySettings (kräver super-admin opt-in)."""
+    from datetime import date as _date
+
+    from ..school.social_models import (
+        ClassDisplaySettings,
+        TeacherClassEvent,
+    )
+
+    with master_session() as ms:
+        cfg = (
+            ms.query(ClassDisplaySettings)
+            .filter(ClassDisplaySettings.teacher_id == info.teacher_id)
+            .first()
+        )
+        if cfg is None or not cfg.class_event_creation_enabled:
+            raise HTTPException(
+                403,
+                "Klassgemensamma events är inte aktiverat — fråga super-admin.",
+            )
+
+        try:
+            deadline = _date.fromisoformat(payload.deadline)
+        except ValueError:
+            raise HTTPException(400, "Felaktig deadline")
+        proposed = None
+        if payload.proposed_date:
+            try:
+                proposed = _date.fromisoformat(payload.proposed_date)
+            except ValueError:
+                raise HTTPException(400, "Felaktigt proposed_date")
+
+        from decimal import Decimal as _Dec
+        ev = TeacherClassEvent(
+            teacher_id=info.teacher_id,
+            class_label=payload.class_label,
+            title=payload.title,
+            description=payload.description,
+            category=payload.category,
+            cost=_Dec(str(payload.cost)),
+            proposed_date=proposed,
+            deadline=deadline,
+            impact_economy=payload.impact_economy,
+            impact_health=payload.impact_health,
+            impact_social=payload.impact_social,
+            impact_leisure=payload.impact_leisure,
+            impact_safety=payload.impact_safety,
+            status="draft",
+        )
+        ms.add(ev)
+        ms.flush()
+        return _class_event_to_out(ev)
+
+
+@router.get("/teacher/class-events")
+def list_class_events(
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Lärarens egna klassevent (alla statusar)."""
+    from ..school.social_models import TeacherClassEvent
+
+    with master_session() as ms:
+        rows = (
+            ms.query(TeacherClassEvent)
+            .filter(TeacherClassEvent.teacher_id == info.teacher_id)
+            .order_by(TeacherClassEvent.created_at.desc())
+            .all()
+        )
+        return {
+            "events": [_class_event_to_out(r).model_dump() for r in rows],
+            "count": len(rows),
+        }
