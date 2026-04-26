@@ -809,6 +809,53 @@ class PersonalityProfile(TenantMixin, Base):
     )
 
 
+class StudentEvent(TenantMixin, Base):
+    """Event-instans per elev — refererar till EventTemplate i master.
+
+    Skapas av engine vid 'tick' (var/varje vecka) eller av klasskompis-
+    bjudning. Eleven bestämmer accept/decline inom deadline. Vid
+    accept skapas en Transaction och Wellbeing-impact appliceras.
+    """
+    __tablename__ = "student_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_code: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    proposed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    deadline: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # source: "system" | "classmate_invite" | "teacher_triggered"
+    source: Mapped[str] = mapped_column(String(20), default="system", nullable=False)
+    source_classmate_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )  # master.student_id om bjuden — ingen FK pga master/scope-split
+    # status: "pending" | "accepted" | "declined" | "expired"
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    decision_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Transaktionen som skapades vid accept (för audit)
+    resulting_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )
+    # Vilken Wellbeing-impact som faktiskt applicerades (för audit/rollback)
+    impact_applied: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Får eleven bjuda klasskompisar?
+    social_invite_allowed: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    # Är detta inte-nekbart? (oförutsedda kostnader)
+    declinable: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+
 def create_all() -> None:
     from .base import get_engine
 
