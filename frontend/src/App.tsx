@@ -20,6 +20,7 @@ import Funds from "./pages/Funds";
 import Investments from "./pages/Investments";
 import TeacherCredit from "./pages/TeacherCredit";
 import TeacherInvestments from "./pages/TeacherInvestments";
+import TeacherWellbeing from "./pages/TeacherWellbeing";
 import Salaries from "./pages/Salaries";
 import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
@@ -122,6 +123,7 @@ export default function App() {
               <Route path="/teacher/admin-ai" element={<AdminAI />} />
               <Route path="/teacher/investments" element={<TeacherInvestments />} />
               <Route path="/teacher/credit" element={<TeacherCredit />} />
+              <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/docs" element={<Docs />} />
               <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
@@ -150,6 +152,7 @@ export default function App() {
               <Route path="/teacher/admin-ai" element={<AdminAI />} />
               <Route path="/teacher/investments" element={<TeacherInvestments />} />
               <Route path="/teacher/credit" element={<TeacherCredit />} />
+              <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
               <Route path="/peer-review" element={<PeerReview />} />
               <Route path="/my-batches" element={<MyBatches />} />
               <Route
