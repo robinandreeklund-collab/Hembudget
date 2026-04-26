@@ -63,6 +63,8 @@ def evaluate(assignment, student) -> CheckResult:
                 return _check_mortgage_decision(assignment, student)
             if kind == "link_transfer":
                 return _check_link_transfer(s, assignment)
+            if kind == "make_transfer":
+                return _check_make_transfer(s, assignment)
             if kind == "add_upcoming":
                 return _check_add_upcoming(s, assignment)
             # free_text: bara manuellt — läraren klickar "Klarmarkera"
@@ -267,6 +269,57 @@ def _check_link_transfer(s: Session, assignment) -> CheckResult:
     return CheckResult(
         "completed",
         f"{n} länkade överföringar (mål: {target})",
+        detail={"count": n, "target": target},
+    )
+
+
+def _check_make_transfer(s: Session, assignment) -> CheckResult:
+    """Kolla att eleven proaktivt skapat en överföring som matchar
+    parametrarna.
+
+    params:
+      - target_count (int, default 1)
+      - min_amount (Decimal/float, default 0) — minsta belopp per överföring
+      - to_account_kind (str, default None) — t.ex. "savings", "isk"
+      - max_age_days (int, default 30) — bara överföringar inom intervallet räknas
+    """
+    from datetime import timedelta
+
+    p = assignment.params or {}
+    target = int(p.get("target_count", 1))
+    min_amount = Decimal(str(p.get("min_amount", 0)))
+    to_kind = p.get("to_account_kind")
+    max_age = int(p.get("max_age_days", 30))
+    cutoff = date.today() - timedelta(days=max_age)
+
+    q = (
+        s.query(Transaction)
+        .join(Account, Transaction.account_id == Account.id)
+        .filter(
+            Transaction.is_transfer.is_(True),
+            Transaction.transfer_pair_id.is_not(None),
+            Transaction.amount > 0,
+            Transaction.amount >= min_amount,
+            Transaction.date >= cutoff,
+        )
+    )
+    if to_kind:
+        q = q.filter(Account.type == to_kind)
+    n = q.count()
+
+    label_extra = ""
+    if to_kind:
+        label_extra = f" till {to_kind}-konto"
+    if min_amount > 0:
+        label_extra += f" på minst {min_amount} kr"
+
+    if n == 0:
+        return CheckResult("not_started", f"0/{target} överföringar{label_extra}")
+    if n < target:
+        return CheckResult("in_progress", f"{n}/{target} överföringar{label_extra}")
+    return CheckResult(
+        "completed",
+        f"{n} överföringar{label_extra} (mål: {target})",
         detail={"count": n, "target": target},
     )
 
