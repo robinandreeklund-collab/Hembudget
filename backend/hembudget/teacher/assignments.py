@@ -69,6 +69,8 @@ def evaluate(assignment, student) -> CheckResult:
                 return _check_stock_open_account(s, assignment)
             if kind == "stock_diversify":
                 return _check_stock_diversify(s, assignment)
+            if kind == "trigger_credit_flow":
+                return _check_trigger_credit_flow(s, assignment)
             if kind == "add_upcoming":
                 return _check_add_upcoming(s, assignment)
             # free_text: bara manuellt — läraren klickar "Klarmarkera"
@@ -399,6 +401,32 @@ def _check_stock_diversify(s: Session, assignment) -> CheckResult:
             "sectors": n_sectors,
             "sector_list": sorted(sectors),
         },
+    )
+
+
+def _check_trigger_credit_flow(s: Session, assignment) -> CheckResult:
+    """Kolla att eleven har minst N kreditansökningar i loggen — oavsett
+    om de godkändes, avslogs eller eleven tackade nej. Pedagogiken är
+    att eleven ska ha *sett* flödet en gång, inte att ta ett lån.
+    """
+    from ..db.models import CreditApplication
+    p = assignment.params or {}
+    target = int(p.get("target_count", 1))
+    n = s.query(CreditApplication).count()
+    if n == 0:
+        return CheckResult(
+            "not_started",
+            f"0/{target} kreditansökningar (försök övertrassera lönekontot)",
+        )
+    if n < target:
+        return CheckResult(
+            "in_progress",
+            f"{n}/{target} kreditansökningar i loggen",
+        )
+    return CheckResult(
+        "completed",
+        f"{n} kreditansökningar testade (mål: {target})",
+        detail={"count": n, "target": target},
     )
 
 

@@ -1105,6 +1105,144 @@ STOCKS_TEMPLATE = {
 }
 
 
+CREDIT_TEMPLATE = {
+    "title": "Kreditmånaden — när pengarna inte räcker",
+    "summary": (
+        "Vad händer när lönekontot går mot noll? Du övar att fatta "
+        "kreditbeslut i en simulerad bank. Lär dig skillnaden mellan "
+        "privatlån och SMS-lån — och varför båda kostar mer än du tror."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad händer när pengarna tar slut?",
+            "content": (
+                "Hyran kommer den 1:a, men lönen den 25:e. Mellan dem "
+                "kan kontot stå tomt. I verkligheten stoppar banken "
+                "uttag som skulle ge minus — eller tar ut hög "
+                "straffränta. I Ekonomilabbet triggar systemet ett "
+                "kreditflöde som tvingar dig att aktivt välja:\n\n"
+                "1. Skjuta upp utgiften (förfallen räkning + risk för "
+                "betalningsanmärkning)\n"
+                "2. Ta privatlån (kräver kreditupplysning, lägre ränta "
+                "om du har ordnat ekonomi)\n"
+                "3. Ta SMS-lån (snabbt men dyrt)\n\n"
+                "Det viktiga är inte att 'välja rätt' utan att förstå "
+                "konsekvenserna av vart och ett."
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Kreditscore — så bedömer bankerna dig",
+            "content": (
+                "När du söker privatlån får banken se en sammanfattning "
+                "av din ekonomi. De räknar ut en kreditscore på en "
+                "skala 300–850. Faktorer som påverkar:\n\n"
+                "• Inkomst (snittlön senaste 3 mån)\n"
+                "• Skuldkvot (hur mycket du redan lånat / årsinkomst)\n"
+                "• Sparkonto-buffert\n"
+                "• Antal nyligt tagna lån\n"
+                "• Tidigare avslag\n"
+                "• Hur stort belopp du söker\n\n"
+                "I Ekonomilabbet ser du exakt vilken faktor som drog "
+                "ner eller gav poäng — så du kan förstå vad du kan "
+                "ändra till nästa månad."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Vilken faktor påverkar mest?",
+            "content": None,
+            "params": {
+                "question": (
+                    "Du har 35 000 kr i månadsinkomst men ett bolån på "
+                    "3 miljoner. Vad sänker din kreditscore mest?"
+                ),
+                "options": [
+                    "Att du har för låg inkomst",
+                    "Att din skuldkvot är 7x årsinkomsten",
+                    "Att du saknar sparkonto",
+                    "Att du tar ett nytt lån",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "7x årsinkomsten är väldigt högt — banker oroar "
+                    "sig redan vid 4–5x. Det är därför skuldkvot är "
+                    "den enskilt största faktorn vid bolåneprövning."
+                ),
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Privatlån vs SMS-lån — räkneexempel",
+            "content": (
+                "Säg att du behöver 8 000 kr.\n\n"
+                "**Privatlån, 24 mån, 7 % ränta:**\n"
+                "  Månadskostnad ≈ 358 kr\n"
+                "  Total tillbakabetalning ≈ 8 600 kr\n"
+                "  Total räntekostnad ≈ 600 kr\n\n"
+                "**SMS-lån, 1 mån, ~117 % effektiv ränta:**\n"
+                "  Tillbakabetalning på 30 dagar ≈ 9 200 kr\n"
+                "  Total räntekostnad ≈ 1 200 kr\n\n"
+                "På samma belopp kostar SMS-lånet ungefär 600 kr mer "
+                "trots att löptiden är kortare. Effektiv ränta tar "
+                "hänsyn till alla avgifter (uppläggning + aviavgift), "
+                "inte bara den nominella räntan banken marknadsför."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Försök att övertrassera lönekontot",
+            "content": (
+                "Gå till 'Överföringar' → 'Ny överföring'. Försök "
+                "föra över mer pengar än vad som finns på lönekontot. "
+                "Modalen 'Din ekonomi går inte ihop' ska dyka upp.\n\n"
+                "Klicka 'Avbryt' eller 'Tacka nej' — vi vill bara att "
+                "du sett flödet en gång. Steget markeras klart när du "
+                "har minst en kreditansökan i loggen (oavsett resultat)."
+            ),
+            "params": {
+                "assignment_kind": "trigger_credit_flow",
+                "target_count": 1,
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad skulle du göra på riktigt?",
+            "content": (
+                "Tänk dig att du står med 3 000 kr i hyresskuld och "
+                "lönen kommer om 12 dagar. Vad skulle du välja: ta "
+                "SMS-lån, be om förlängning hos hyresvärden, eller "
+                "låna av en familjemedlem? Varför? Vad är "
+                "konsekvenserna av vart och ett?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "konsekvensanalys",
+                        "name": "Konsekvensanalys",
+                        "levels": [
+                            "Nämner bara ett alternativ",
+                            "Jämför två alternativ",
+                            "Resonerar om konsekvenser av tre alternativ",
+                        ],
+                    },
+                    {
+                        "key": "egen_situation",
+                        "name": "Förankring i egen situation",
+                        "levels": [
+                            "Generell text",
+                            "Hänvisar till sin egen ekonomi",
+                            "Identifierar konkreta åtgärder framåt",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -1127,6 +1265,7 @@ def seed_system_modules(master_session) -> int:
         FAMILY_TEMPLATE,
         SYSTEM_TOUR_TEMPLATE,
         STOCKS_TEMPLATE,
+        CREDIT_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue

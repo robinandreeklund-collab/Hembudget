@@ -397,6 +397,55 @@ def test_stock_diversify_in_progress_when_only_one_sector(fx) -> None:
     assert res.status == "in_progress"
 
 
+def test_trigger_credit_flow_not_started(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    student = fx
+    a = _make_assignment("trigger_credit_flow", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+
+
+def test_trigger_credit_flow_completes_with_application(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import CreditApplication
+    from hembudget.school.engines import scope_context, scope_for_student
+    from decimal import Decimal as D
+    student = fx
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            s.add(CreditApplication(
+                kind="private", requested_amount=D("10000"),
+                requested_months=24, result="declined",
+            ))
+
+    a = _make_assignment("trigger_credit_flow", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "completed"
+
+
+def test_credit_template_seeds(fx) -> None:
+    from hembudget.school.module_seed import seed_system_modules
+    from hembudget.school.models import Module
+    with master_session() as s:
+        seed_system_modules(s)
+    with master_session() as s:
+        m = s.query(Module).filter(
+            Module.title == "Kreditmånaden — när pengarna inte räcker",
+            Module.teacher_id.is_(None),
+        ).first()
+        assert m is not None
+        assert m.is_template is True
+        assert len(m.steps) == 6
+        kinds = [
+            (st.params or {}).get("assignment_kind")
+            for st in m.steps if st.kind == "task"
+        ]
+        assert "trigger_credit_flow" in kinds
+
+
 def test_stocks_template_seeds(fx) -> None:
     """Aktiemodulen ska seedas som systemmodul med 8 steg."""
     from hembudget.school.module_seed import seed_system_modules
