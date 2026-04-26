@@ -263,3 +263,98 @@ banken. Lägg detta som en flik `/teacher/business` med tre kort:
 
 Lärar-PDF-mallen för leverantörsfaktura ärver direkt från befintlig
 reportlab-mall — ny mall, samma motor.
+
+---
+
+## 9. AI-integration — var och varför
+
+LLM ska göra det den är bra på (språk, bedömning) och inte det den är
+dålig på (deterministiska siffror). Konkret:
+
+| Funktion | Modell | Var i `ai.py` | Pedagogiskt syfte |
+|---|---|---|---|
+| Generera realistisk jobbeskrivning från en branschseed | Haiku | ny `generate_job_description` | Variation, autenticitet |
+| Bedöma kvalitet på elevens marknadsföringscopy | Haiku | ny `evaluate_marketing_copy` | Får kvalitetsfaktor till engine |
+| Bedöma elevens pitch i en offert | Haiku | ny `evaluate_quote_pitch` | Får matchningsfaktor till acceptansmodellen |
+| Föreslå bokföringskontering | Haiku, tool_use | ny `suggest_bookkeeping_entry` | Förslag — eleven ska kunna säga emot |
+| Granska elevs revisionsrapport | Sonnet, rubric | befintlig `score_with_rubric` | Peer-revision |
+| Föreslå förbättringar i affärsidé (modererad) | Haiku | ny `review_business_idea` | "Inom lagliga gränser" — fångar uppenbart olagligt/oetiskt |
+| Eleven frågar "vad är moms?" "hur bokför jag friskvård?" | Sonnet, befintlig | `answer_student_question` med utökad kontext | Domänspecifika svar |
+
+**Viktigt:** all AI-användning passerar `_gate_ai()`, räknas mot
+lärarens token-konto, och cachas via `cache_control` på systemprompten —
+exakt samma mönster som idag. Inget nytt rate limit-system behövs.
+
+**Modereringsspår:** elevens fria affärsidé skickas alltid genom
+`review_business_idea` *innan* den sparas. Olagligt/oetiskt → returneras
+med pedagogiskt avslag. Detta är ett krav, inte en finess — annars
+riskerar ni klassrum med "drogförsäljning AB".
+
+---
+
+## 10. Egen undersida — UX-flödet
+
+### Elev-vyn `/business`
+
+En egen toppnivå i sidofältet (lägg till efter "Moduler" i
+`Sidebar.tsx`). När eleven klickar in:
+
+- Om inget företag finns → onboarding-wizard (3 steg: affärsidé →
+  bransch → företagsnamn → välj svårighetsnivå om läraren tillåter
+  eleven att välja).
+- Om företag finns → en **dashboard** med:
+  - Översta raden: vecka X av Y, kontosaldo, denna månads resultat,
+    rykte (badge), nästa avstämningsdeadline.
+  - Vänster panel: pågående jobb, inkommande offertförfrågningar (med
+    "ge offert"-knapp), förfallna fakturor.
+  - Höger panel: marknadsföringskampanjer, senaste lärar-meddelanden,
+    AI-rådgivare.
+  - Knappen "Stega vecka framåt" — utlöser engine-tick.
+- Underflikar: `Offerter`, `Jobb`, `Fakturor`, `Bokföring`,
+  `Avstämning`, `Beslut`, `Rapporter`.
+
+Modulkopplingen är subtil men viktig: när eleven jobbar med simulatorn
+så **markeras ModuleStep:s automatiskt klara** när motsvarande aktivitet
+utförs (skickade offert → "Skicka din första offert"-steg klar). Det
+binder ihop simulator och modul utan dubbelarbete.
+
+### Lärar-vyn `/teacher/business`
+
+Egen sektion under "Lärare" i navigationen. Beskrivs i avsnitt 8. Visa
+även en "Klassens nyckeltal" — aggregerade siffror som "klassens
+snitt-omsättning", "vanligaste bokföringsfel" — användbart för
+helklassgenomgång.
+
+---
+
+## 11. Integration med befintliga moduler
+
+Lägg en ny systemmodul i `module_seed.py`: **"Mitt företag — från idé
+till revision"** med 12–16 steg som *guidar* eleven genom simulatorn:
+
+1. `read` — Vad är ett företag? (text, lättläst svenska)
+2. `task` — Skapa ditt företag (påminner: "öppna `/business` och kör
+   onboarding")
+3. `read` — Vad är en offert? Vad ska den innehålla?
+4. `task` — Skicka din första offert
+5. `quiz` — Skillnad bruttovinst/nettovinst
+6. `task` — Vunnit ett jobb! Skicka faktura
+7. `read` — Vad är bokföring och varför?
+8. `task` — Bokför första intäkten (basics: bara fyll i; advanced:
+   debet/kredit)
+9. `reflect` — Vad var svårast med din första kund? (rubric-bedömt)
+10. `task` — Genomför en marknadsföringskampanj
+11. `task` — Stäm av första månaden
+12. `read` — Resultatrapport: vad säger den? (länkar till elevens egna
+    rapport)
+13. `reflect` — Vad ska du ändra på till nästa månad?
+14. *(advanced)* `task` — Bankavstämning vecka 8
+15. *(advanced)* `task` — Beräkna fyra nyckeltal
+16. *(advanced)* `task` — Revidera en kamrats bokföring
+
+Stegen kopplas till nya `Competency`-rader: `business_idea`,
+`quote_writing`, `invoicing`, `bookkeeping_basics`,
+`bank_reconciliation`, `key_ratios`, `audit_skills`.
+
+Eleven kan jobba i simulatorn utan att vara i modulen — men modulen ger
+den pedagogiska scaffoldingen och rapporteringen till läraren.
