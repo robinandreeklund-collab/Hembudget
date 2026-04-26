@@ -247,3 +247,112 @@ def ai_me(info: TokenInfo = Depends(require_teacher)) -> dict:
             "is_super_admin": bool(t.is_super_admin),
             "ai_available": ai_available(),
         }
+
+
+# ---------- Finnhub-API-nyckel (super-admin) ----------
+
+class FinnhubKeyStatusOut(BaseModel):
+    configured: bool
+    source: str          # "db" | "env" | ""
+    preview: str         # "…1234" eller ""
+
+
+class FinnhubKeyIn(BaseModel):
+    key: str
+
+
+@router.get("/finnhub-key", response_model=FinnhubKeyStatusOut)
+def finnhub_key_status(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> FinnhubKeyStatusOut:
+    from ..stocks.quote_providers import (
+        finnhub_key_configured,
+        finnhub_key_preview,
+        finnhub_key_source,
+    )
+    return FinnhubKeyStatusOut(
+        configured=finnhub_key_configured(),
+        source=finnhub_key_source(),
+        preview=finnhub_key_preview(),
+    )
+
+
+@router.post("/finnhub-key", response_model=FinnhubKeyStatusOut)
+def set_finnhub_key(
+    payload: FinnhubKeyIn,
+    _: TokenInfo = Depends(_require_super_admin),
+) -> FinnhubKeyStatusOut:
+    """Spara/uppdatera Finnhub-nyckel i master-DB. Skriver över ev.
+    env-var. Pollern plockar upp den vid nästa anrop."""
+    from ..stocks.quote_providers import (
+        FINNHUB_KEY_CONFIG_KEY,
+        finnhub_key_configured,
+        finnhub_key_preview,
+        finnhub_key_source,
+    )
+    key = payload.key.strip()
+    if not key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tom nyckel")
+    with master_session() as s:
+        cfg = s.get(AppConfig, FINNHUB_KEY_CONFIG_KEY)
+        if cfg is None:
+            cfg = AppConfig(key=FINNHUB_KEY_CONFIG_KEY, value={"key": key})
+            s.add(cfg)
+        else:
+            cfg.value = {"key": key}
+            cfg.updated_at = datetime.utcnow()
+    return FinnhubKeyStatusOut(
+        configured=finnhub_key_configured(),
+        source=finnhub_key_source(),
+        preview=finnhub_key_preview(),
+    )
+
+
+@router.delete("/finnhub-key", response_model=FinnhubKeyStatusOut)
+def delete_finnhub_key(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> FinnhubKeyStatusOut:
+    """Rensa DB-nyckeln. Faller tillbaka till FINNHUB_API_KEY-env om
+    satt, annars använder pollern MockQuoteProvider."""
+    from ..stocks.quote_providers import (
+        FINNHUB_KEY_CONFIG_KEY,
+        finnhub_key_configured,
+        finnhub_key_preview,
+        finnhub_key_source,
+    )
+    with master_session() as s:
+        cfg = s.get(AppConfig, FINNHUB_KEY_CONFIG_KEY)
+        if cfg is not None:
+            s.delete(cfg)
+    return FinnhubKeyStatusOut(
+        configured=finnhub_key_configured(),
+        source=finnhub_key_source(),
+        preview=finnhub_key_preview(),
+    )
+
+
+@router.post("/finnhub-test")
+def finnhub_test(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Test-anrop: hämtar 1 quote från Finnhub för VOLV-B.ST. Bra för
+    super-admin att verifiera att nyckeln fungerar utan att vänta på
+    nästa polltick."""
+    from ..stocks.quote_providers import FinnhubProvider
+    p = FinnhubProvider()
+    if not p.api_key:
+        return {"ok": False, "error": "Ingen Finnhub-nyckel konfigurerad."}
+    quotes = p.fetch_quotes(["VOLV-B.ST"])
+    if not quotes:
+        return {
+            "ok": False,
+            "error": "Inget kursvärde returnerat — verifiera nyckeln eller kontrollera nätverk.",
+        }
+    q = quotes[0]
+    return {
+        "ok": True,
+        "ticker": q.ticker,
+        "last": float(q.last),
+        "change_pct": q.change_pct,
+        "ts": q.ts.isoformat(),
+    }
