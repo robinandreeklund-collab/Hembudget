@@ -75,6 +75,50 @@ def test_get_provider_unknown_falls_back_to_mock(monkeypatch):
     assert isinstance(p, MockQuoteProvider)
 
 
+def test_finnhub_provider_returns_empty_without_key(monkeypatch):
+    """Utan nyckel ska FinnhubProvider returnera tom lista."""
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    from hembudget.stocks.quote_providers import FinnhubProvider
+    p = FinnhubProvider(api_key="")
+    assert p.fetch_quotes(["VOLV-B.ST"]) == []
+
+
+def test_get_provider_auto_picks_finnhub_when_key_set(monkeypatch):
+    """Utan HEMBUDGET_QUOTE_PROVIDER men med FINNHUB_API_KEY → finnhub."""
+    monkeypatch.delenv("HEMBUDGET_QUOTE_PROVIDER", raising=False)
+    monkeypatch.setenv("FINNHUB_API_KEY", "test-key-123")
+    from hembudget.stocks.quote_providers import FinnhubProvider, get_provider
+    p = get_provider()
+    assert isinstance(p, FinnhubProvider)
+
+
+def test_get_provider_auto_picks_mock_without_key(monkeypatch):
+    """Utan nyckel + utan env-var → mock."""
+    monkeypatch.delenv("HEMBUDGET_QUOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    p = get_provider()
+    assert isinstance(p, MockQuoteProvider)
+
+
+def test_finnhub_key_source_env(monkeypatch):
+    monkeypatch.setenv("FINNHUB_API_KEY", "abc")
+    from hembudget.stocks.quote_providers import finnhub_key_source
+    assert finnhub_key_source() == "env"
+
+
+def test_finnhub_key_source_empty(monkeypatch):
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    from hembudget.stocks.quote_providers import finnhub_key_source
+    # När det inte finns nyckel anywhere
+    assert finnhub_key_source() == ""
+
+
+def test_finnhub_key_preview_masks(monkeypatch):
+    monkeypatch.setenv("FINNHUB_API_KEY", "abc12345xyz")
+    from hembudget.stocks.quote_providers import finnhub_key_preview
+    assert finnhub_key_preview() == "…5xyz"
+
+
 def test_yfinance_provider_returns_empty_when_pkg_missing():
     """Om yfinance ej installerat ska providern returnera tom lista,
     inte krascha."""
