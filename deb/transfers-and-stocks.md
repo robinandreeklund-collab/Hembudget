@@ -580,3 +580,199 @@ För Företagsekonomi 2 är det här en pedagogisk poäng: schablonskatten
 straffar inte vinst, den straffar *värde*. Eleven kan göra förlust
 och ändå betala skatt.
 
+---
+
+# DEL 3 — Optimeringar och risker (gemensamt för båda)
+
+## 23. Prestanda och skalning
+
+- **Saldoberäkning vid många transaktioner:** Idag räknas saldot
+  live från alla transaktioner. När en aktiv elev har 200+ trades +
+  privatekonomi-transaktioner blir det tungt. Lösning *när det
+  behövs*, inte nu: snapshot-tabell `AccountBalanceSnapshot` som
+  uppdateras vid varje transaktion (cache-invalideringen är
+  kontrollerad eftersom alla muteringar sker via era endpoints).
+- **Kursgrafer:** Frontend-komponenten ska aldrig ladda 815 000
+  rader. Servern aggregerar baserat på vald period (1d → råa quoter
+  senaste dygnet, 1w → 30-min bars, 1y → dagsclose). Lägg detta i
+  `GET /stocks/:ticker/history?period=1d|1w|1m|1y`.
+- **Frontend-bundle:** En ny route med charting (recharts) +
+  drag-and-drop + tabeller adderar storlek. Lazy-load
+  `/investments`-rutten med `React.lazy`. Recharts redan i
+  beroendena — ingen ny dep.
+- **Polling vs WebSocket:** V1 frontend-polling var 30:e sek räcker
+  gott för 30 elever × 10 öppna flikar = 600 anrop/min mot
+  `LatestStockQuote`-endpoint. Det är trivialt. SSE/WebSocket först
+  vid behov.
+
+## 24. Kostnadskontroll
+
+- **Datakälla:** Finnhub gratis 60/min räcker för 30 aktier var 5:e
+  min (= 6/min). Yfinance gratis utan limit men opålitlig.
+  Värsta-fall budget: $50/mån för Alpha Vantage premium om båda
+  fallar.
+- **AI-tokens:** `feedback_on_trade` triggas vid varje köp/sälj.
+  Aktiv elev gör kanske 10 trades/vecka × 30 elever = 300 anrop/v.
+  Med Haiku ~$0,25/mån/lärare. Trivial om man har caching på
+  systemprompten.
+- **Cloud Run:** `--min-instances=1` för att hålla bakgrundsjobbet
+  vaket = ca $10–15/mån. Alternativ Cloud Scheduler är gratis.
+- **DB-storlek:** 815k quote-rader/år ~= 80 MB SQLite. Postgres-
+  fallback ändå rekommenderad innan ni har >200 elever.
+
+## 25. Säkerhet och dataskydd
+
+- **API-nycklar för kursdata:** Lagra som Cloud Run-secret, aldrig
+  i kod eller frontend. `FINNHUB_API_KEY` exponeras *aldrig* till
+  klient — alla quoter går via er backend.
+- **Rate limiting:** Befintlig sliding window i `security/rate_limit.py`
+  räcker. Lägg en strikt limit på `/stocks/:ticker/buy` och
+  `/stocks/:ticker/sell` (t.ex. 60 trades/timme/elev) för att hindra
+  spam-trading-bots eller frustrerade elever som klickar 100 ggr.
+- **Audit-trail:** Alla `StockTransaction` är append-only. Lägg en
+  databas-trigger eller en CI-test som verifierar att inga
+  DELETE/UPDATE körs mot tabellen. Det är revisorns garanti.
+- **PII:** Inget extra — eleven loggas redan via scope-systemet,
+  ingen ny känslig data.
+
+## 26. Pedagogiska fallgropar
+
+- **Spel-känsla:** Risk att modulen blir "Robinhood för barn" och
+  uppmuntrar daytrading. Motverka:
+  - Visa courtage-summan tydligt på dashboard ("Du har spenderat
+    56 kr i avgifter denna vecka — det är X % av dina vinster")
+  - "Vad om?"-widgeten (sektion 21) som jämför mot indexfond
+  - Modulens `read`-steg betonar långsiktigt sparande
+  - Reflektionssteg som tvingar eleven att motivera sina val
+- **Fiktiva pengar respekteras inte:** Risk att eleven tar absurda
+  risker eftersom det "inte är riktiga pengar". Motverka genom att
+  låta läraren ge "klassens portföljmästare"-utmärkelse efter ett
+  läsår — ger social vikt.
+- **Marknadsförståelse vs lyckokast:** En elev kan tjäna mycket på
+  ren tur (en aktie råkar gå upp 30 %). Pedagogen behöver kunna säga
+  "Bra resultat — men kan du förklara *varför*?". Det är därför
+  `student_rationale` och reflektionssteget är viktiga.
+
+## 27. Konflikter med befintlig kod
+
+- `Account.kind` är `varchar(20)` — `isk` finns redan, ingen
+  schemaändring krävs för kontotyp.
+- `Transaction` får ny *implicit* användning ("Aktieköp"-kategori)
+  — ingen ny kolumn behövs om ni använder `metadata`/`tags`-fält.
+  Verifiera att `metadata` finns; annars lägg till `is_investment`-
+  bool eller bara använd specifika kategori-namn.
+- `MasterBase`-tabeller `StockMaster`, `StockQuote`,
+  `LatestStockQuote`, `MarketCalendar` läggs till i
+  `school/engines.py::_run_master_migrations` med ALTER TABLE-checks
+  per CLAUDE.md.
+- Per-scope-tabeller (`StockHolding`, `StockTransaction`,
+  `StockWatchlist`) hanteras av `db/migrate.py::run_migrations`.
+
+## 28. Implementationsplan i faser
+
+**Fas A — Överföringar (3–5 dagar):**
+- Ny endpoint `POST /transfers/create` med validering
+- `TransferModal` på Accounts-sidan
+- Idempotency-key + UNIQUE-constraint
+- Lägg till `make_transfer`-uppdragstyp
+- Tester: happy path, samma konto blockeras, negativt blockeras,
+  insufficient funds blockeras
+- → Använd som onboarding-byggsten för aktiemodulen
+
+**Fas B — Aktiekursinfrastruktur (1 vecka):**
+- `StockMaster` seedat med 30 OMXS30
+- `MarketCalendar` seedat 2 år
+- `QuoteProvider`-interface + `YFinanceProvider`
+- Bakgrundsjobb i `lifespan` + Cloud Scheduler-pinger
+- `StockQuote`/`LatestStockQuote`-tabeller
+- `GET /stocks/:ticker`, `GET /stocks/:ticker/history`
+- Frontend: `/investments` placeholder med statisk lista
+- → Verifiera att kurser uppdateras live, ingen handel än
+
+**Fas C — Handel (1 vecka):**
+- `StockHolding`, `StockTransaction` (append-only)
+- `POST /stocks/:ticker/buy`, `POST /stocks/:ticker/sell`
+- Avanza Mini-courtage-formel + envvar
+- `compute_courtage` helper
+- Köp/sälj-modal i frontend
+- Order-historik-vy
+- Tester: börstid-blockering, saldo-validering, snittkurs-beräkning,
+  realiserad pnl-beräkning
+- → End-to-end fungerande för en elev
+
+**Fas D — Modul + lärare (1 vecka):**
+- Seed "Aktier — komma igång" i `module_seed.py`
+- Nya kompetenser i `competency_seed.py`
+- 9 nya `Assignment.kind` + UI för lärare att tilldela
+- `/teacher/investments` klassöversikt + drilldown med ledger
+- AI-funktioner: `explain_stock_term`, `evaluate_diversification`,
+  `feedback_on_trade`
+- → Klassrums-redo
+
+**Fas E — Polish och pedagogik (3–5 dagar):**
+- "Vad om?"-widget (jämför mot OMXS30-index)
+- ISK-skatte-koppling i `_quarterly_value`
+- Watchlist
+- Sektorvikter-donut chart
+- Token-cap per elev/vecka
+- Klassens topplista (anonym, opt-in per lärare)
+
+**Total tid:** ~4–5 veckor för full leverans, men Fas A ensam ger
+omedelbart värde och kan lanseras separat.
+
+## 29. Vad ni ska besluta före kod
+
+1. **Datakälla för kurser:** yfinance gratis (risk för avbrott)
+   eller Finnhub-nyckel (kräver registrering, gratis nivå räcker)?
+   Min rekommendation: börja med `QuoteProvider`-interface och båda
+   som plug-ins, default yfinance.
+2. **`min-instances=1` eller Cloud Scheduler för polling?** Min
+   rekommendation: Cloud Scheduler (gratis, lättare att förklara).
+3. **Strikt vs mjuk hantering utanför börstid?** Min rekommendation:
+   strikt i V1.
+4. **Fraktionella aktier?** Min rekommendation: nej i V1 (heltal
+   bara), spegla Avanza Mini-erfarenhet.
+5. **Limit-orders i V1?** Min rekommendation: nej, bara marknadsorder.
+6. **Aktielista — strikt OMXS30 eller bredare 30 stycken?** Min
+   rekommendation: OMXS30 (välkänt, pedagogiskt, regelbundet
+   uppdaterat). Komplettera ev. med 1–2 utanför (Tesla?) för
+   internationell exponering — men då måste valutaomräkning lösas.
+   Håll SEK-only i V1.
+7. **Företags-modulens kassa kopplas till aktiekonto?** Får
+   företagskassan investera i aktier? Realistiskt
+   (likviditetsförvaltning) men komplicerar. Min rekommendation:
+   nej i V1 — håll privat och företag separata.
+8. **Watchlist på Stock-nivå eller Account-nivå?** Min
+   rekommendation: per scope (en watchlist per elev) — enklast.
+
+---
+
+# Sammanfattning
+
+**Del 1 — Överföringar:** Liten tilläggsfunktion ovanpå redan
+existerande infrastruktur. Ingen ny modell, en ny endpoint, en ny
+modal. Levererbar på en vecka och blir omedelbart byggsten för Del 2.
+
+**Del 2 — Aktiehandel:** Större men välavgränsad funktion. Kräver:
+- Ny global tabell-trio (`StockMaster`, `StockQuote`,
+  `LatestStockQuote`) + `MarketCalendar`
+- Två nya scope-tabeller (`StockHolding`, `StockTransaction`)
+- Ett bakgrundsjobb (kursprispolling)
+- Tre nya AI-funktioner (alla pedagogiska, ej rådgivning)
+- En ny systemmodul + 9 nya Assignment-kinds
+- En ny lärarsektion `/teacher/investments` med fullständig
+  ledger-drilldown
+- Återanvänder befintlig ISK-skatteberäkning, befintlig
+  Module/Step-infrastruktur, befintlig AI-token-mätning
+
+**Total leveranstid:** 4–5 veckor med tydlig faseplan där varje fas
+är livefärdig.
+
+**Största risken:** datakällans tillförlitlighet. Mitigering:
+abstrakt provider-interface med fallback. Allt övrigt är hantverk
+ovanpå er befintliga arkitektur.
+
+**Pedagogisk vinst:** Eleven får en sömlös resa från privatekonomi
+→ överföring till aktiekonto → riskspridning → faktisk handel →
+reflektion, allt i ett verktyg läraren kan följa beslut för beslut.
+
