@@ -213,17 +213,25 @@ def create_batch_for_student(
     # 1. Lönespec (alltid)
     if scenario.salary:
         pdf = render_lonespec(scenario.salary, scenario)
+        # Spara hela skattefördelningen så lönespec-importen kan skriva
+        # den till UpcomingTransaction.notes (JSON) för /tax-vyn.
+        sal = scenario.salary
         master_session.add(BatchArtifact(
             batch_id=batch.id,
             kind="lonespec",
-            title=f"Lönespec {year_month} – {scenario.salary.employer}",
+            title=f"Lönespec {year_month} – {sal.employer}",
             filename=f"lonespec_{year_month}.pdf",
             sort_order=sort_order,
             pdf_bytes=pdf,
             meta={
-                "employer": scenario.salary.employer,
-                "net": float(scenario.salary.net),
-                "gross": float(scenario.salary.gross),
+                "employer": sal.employer,
+                "profession": sal.profession,
+                "gross": float(sal.gross),
+                "grundavdrag": float(sal.grundavdrag),
+                "kommunal_tax": float(sal.kommunal_tax),
+                "statlig_tax": float(sal.statlig_tax),
+                "net": float(sal.net),
+                "pay_date": sal.pay_date.isoformat(),
             },
         ))
         sort_order += 1
@@ -543,12 +551,28 @@ def _import_lonespec(
         matched.user_verified = True
         stats["imported_tx"] += 1
 
-    # Skapa Upcoming-bilaga så PDF:en syns i /attachments (Bildunderlag).
-    # Idempotent — om vi redan har en lönespec-Upcoming för samma
-    # datum + belopp, skippa.
+    # Skapa Upcoming-bilaga så PDF:en syns i /attachments (Bildunderlag),
+    # OCH skriv hela skattefördelningen till .notes (JSON) så
+    # /tax/salary-summary kan visa Lön & skatt-kortet.
+    import json as _json
     artifact_meta = artifact.meta or {}
     employer = artifact_meta.get("employer", "Arbetsgivare")
     name = f"Lönespec {employer}"
+    gross = artifact_meta.get("gross")
+    kommunal = artifact_meta.get("kommunal_tax", 0)
+    statlig = artifact_meta.get("statlig_tax", 0)
+    total_tax = float(kommunal or 0) + float(statlig or 0)
+    notes_json = _json.dumps({
+        "gross": gross,
+        "tax": total_tax,
+        "extra_tax": 0,
+        "benefit": 0,
+        "kommunal_tax": float(kommunal or 0),
+        "statlig_tax": float(statlig or 0),
+        "grundavdrag": float(artifact_meta.get("grundavdrag") or 0),
+        "profession": artifact_meta.get("profession"),
+    })
+
     existing = s.query(UpcomingTransaction).filter(
         UpcomingTransaction.kind == "income",
         UpcomingTransaction.expected_date == target_date,
@@ -568,11 +592,34 @@ def _import_lonespec(
             debit_account_id=acc.id,
             debit_date=target_date,
             matched_transaction_id=matched.id if matched else None,
+            notes=notes_json,
         ))
-    elif existing.source_image_path is None:
-        # Befintlig upcoming utan path — lägg till path:en (idempotent
-        # uppgradering för historik).
-        existing.source_image_path = _save_artifact_to_disk(artifact)
+    else:
+        # Berika befintlig rad (idempotent uppgradering vid re-import)
+        if existing.source_image_path is None:
+            existing.source_image_path = _save_artifact_to_disk(artifact)
+        if not existing.notes:
+            existing.notes = notes_json
+
+    # Skapa även en TaxEvent (type=salary_tax) för månaden — så /tax/events
+    # och de framtida prognos-vyerna kan se inbetalda skatter över tid.
+    from ..db.models import TaxEvent as _TaxEvent
+    if total_tax > 0 and not s.query(_TaxEvent).filter(
+        _TaxEvent.type == "salary_tax",
+        _TaxEvent.date == target_date,
+        _TaxEvent.amount == Decimal(str(total_tax)),
+    ).first():
+        s.add(_TaxEvent(
+            type="salary_tax",
+            amount=Decimal(str(total_tax)),
+            date=target_date,
+            transaction_id=matched.id if matched else None,
+            meta={
+                "kommunal": float(kommunal or 0),
+                "statlig": float(statlig or 0),
+                "employer": employer,
+            },
+        ))
 
     stats["accounts_touched"].append(acc.name)
 
