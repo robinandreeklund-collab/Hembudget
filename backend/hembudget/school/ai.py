@@ -46,6 +46,9 @@ MAX_TOKENS_RUBRIC = 600
 MAX_TOKENS_QA = 800
 MAX_TOKENS_MODULE = 2500
 MAX_TOKENS_CATEGORY = 200
+MAX_TOKENS_STOCK_TERM = 200
+MAX_TOKENS_STOCK_FEEDBACK = 300
+MAX_TOKENS_DIVERSIFICATION = 400
 
 # app_config-nyckel där DB-nyckeln lagras. Super-admin kan sätta,
 # uppdatera och rensa den via UI. Fallback är ANTHROPIC_API_KEY-env-
@@ -809,5 +812,124 @@ def check_category_semantic_match(
             "Rapportera om elevens val är semantiskt korrekt mot facit."
         ),
         tool_schema=CATEGORY_TOOL_SCHEMA,
+        teacher_id=teacher_id,
+    )
+
+
+# ---------- Aktie-features (D4) ----------
+#
+# AI får ALDRIG ge köp/sälj-rekommendationer för enskilda aktier. Endast
+# förklaringar, observationer och pedagogiska frågor. Detta är både
+# juridiskt skyddande (simulator i skola, inte rådgivning) och
+# pedagogiskt rätt — eleven ska tänka själv.
+
+STOCK_TERM_SYSTEM_PROMPT = """Du är en pedagogisk förklarare av aktietermer på lättläst svenska för svenska gymnasieelever (16–18 år).
+
+Regler:
+- Förklara termen i 1–2 meningar, max 60 ord.
+- Använd ett vardagligt exempel om möjligt.
+- Ge ALDRIG köp- eller säljrekommendationer.
+- Säg aldrig "du borde", "jag rekommenderar", "satsa på".
+- Om termen handlar om risk eller skatt: var saklig, inte skrämmande.
+- Skriv på svenska."""
+
+
+def explain_stock_term(
+    *,
+    term: str,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Förklarar en aktieterm pedagogiskt. Anropas när eleven hovrar
+    eller klickar på 'Vad är X?' i UI:t."""
+    user = f"Förklara termen: '{term}'"
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=STOCK_TERM_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=MAX_TOKENS_STOCK_TERM,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT = """Du ger pedagogisk återkoppling till en svensk gymnasieelev som just gjort en aktieaffär i en skol-simulator.
+
+Regler:
+- Reflektera över KARAKTÄREN av affären (sektor, storlek, timing) — INTE om den var "bra eller dålig".
+- Ge ALDRIG köp- eller säljrekommendationer.
+- Nämn ev. courtage som procentandel av affären om det är högt (>1 %).
+- Om eleven skrev en motivering, kommentera den kort men ärligt.
+- 2–4 meningar, max 80 ord, lättläst svenska.
+- Ingen "du borde", inga åsikter om aktiens framtida värde."""
+
+
+def feedback_on_trade(
+    *,
+    side: str,  # "buy" | "sell"
+    ticker: str,
+    stock_name: str,
+    sector: str,
+    quantity: int,
+    price: float,
+    courtage: float,
+    total: float,
+    student_rationale: str | None,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Kort kommentar efter köp/sälj. Aktiveras bara när lärarens
+    ai_enabled=True. Tom kommentar = simulatorn fungerar utan."""
+    courtage_pct = (courtage / total * 100) if total > 0 else 0
+    rationale = student_rationale or "(ingen motivering angiven)"
+    user = (
+        f"Affär: {side} {quantity} st {stock_name} ({ticker}, {sector}).\n"
+        f"Kurs {price:.2f} kr/styck, courtage {courtage:.2f} kr "
+        f"({courtage_pct:.2f} % av affären), totalt {total:.2f} kr.\n"
+        f"Elevens motivering: {rationale}\n\n"
+        "Ge en kort pedagogisk reflektion på svenska."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=MAX_TOKENS_STOCK_FEEDBACK,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+DIVERSIFICATION_SYSTEM_PROMPT = """Du bedömer hur diversifierad en svensk gymnasieelevs aktieportfölj är.
+
+Regler:
+- Bedöm spridning över sektorer + viktning (är en sektor extremt dominerande?).
+- Säg ALDRIG vilka aktier eleven ska köpa eller sälja.
+- Om spridningen är god, säg det och förklara varför kort.
+- Om en sektor dominerar (>50 %), nämn det som observation utan att skriva "byt ut".
+- 2–4 meningar, max 80 ord, lättläst svenska."""
+
+
+def evaluate_diversification(
+    *,
+    sector_weights: dict,  # sector -> percent
+    n_holdings: int,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Bedömer portföljens diversifiering pedagogiskt."""
+    sector_lines = "\n".join(
+        f"- {sector}: {weight:.1f} %"
+        for sector, weight in sorted(
+            sector_weights.items(), key=lambda kv: -kv[1],
+        )
+    )
+    user = (
+        f"Antal innehav: {n_holdings}\n"
+        f"Sektorvikter:\n{sector_lines}\n\n"
+        "Bedöm diversifieringen pedagogiskt på svenska."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=DIVERSIFICATION_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=MAX_TOKENS_DIVERSIFICATION,
+        use_thinking=False,
         teacher_id=teacher_id,
     )

@@ -1157,3 +1157,141 @@ def thread_message_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------- Aktie-features (D4) ----------
+
+class StockTermIn(BaseModel):
+    term: str
+
+
+class StockTermOut(BaseModel):
+    explanation: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post("/stocks/explain-term", response_model=StockTermOut)
+def stock_explain_term(
+    payload: StockTermIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> StockTermOut:
+    """Förklarar en aktieterm pedagogiskt på lättläst svenska."""
+    _require_school()
+    check_rate_limit(request, "ai-stock-term", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+    result = ai_core.explain_stock_term(
+        term=payload.term, teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "AI-anropet misslyckades.",
+        )
+    return StockTermOut(
+        explanation=result.text,
+        model=ai_core.MODEL_HAIKU,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
+
+
+class TradeFeedbackIn(BaseModel):
+    side: str
+    ticker: str
+    stock_name: str
+    sector: str
+    quantity: int
+    price: float
+    courtage: float
+    total: float
+    student_rationale: str | None = None
+
+
+class TradeFeedbackOut(BaseModel):
+    feedback: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post("/stocks/trade-feedback", response_model=TradeFeedbackOut)
+def stock_trade_feedback(
+    payload: TradeFeedbackIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> TradeFeedbackOut:
+    """Pedagogisk reflektion efter ett köp/sälj. Inga rekommendationer."""
+    _require_school()
+    check_rate_limit(request, "ai-stock-feedback", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+    if payload.side not in ("buy", "sell"):
+        raise HTTPException(400, "side måste vara 'buy' eller 'sell'")
+    result = ai_core.feedback_on_trade(
+        side=payload.side,
+        ticker=payload.ticker,
+        stock_name=payload.stock_name,
+        sector=payload.sector,
+        quantity=payload.quantity,
+        price=payload.price,
+        courtage=payload.courtage,
+        total=payload.total,
+        student_rationale=payload.student_rationale,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "AI-anropet misslyckades.",
+        )
+    return TradeFeedbackOut(
+        feedback=result.text,
+        model=ai_core.MODEL_HAIKU,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
+
+
+class DiversificationIn(BaseModel):
+    sector_weights: dict[str, float]
+    n_holdings: int
+
+
+class DiversificationOut(BaseModel):
+    feedback: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post("/stocks/evaluate-diversification", response_model=DiversificationOut)
+def stock_evaluate_diversification(
+    payload: DiversificationIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> DiversificationOut:
+    """Bedömer portföljens diversifiering pedagogiskt."""
+    _require_school()
+    check_rate_limit(request, "ai-stock-diversify", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+    result = ai_core.evaluate_diversification(
+        sector_weights=payload.sector_weights,
+        n_holdings=payload.n_holdings,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "AI-anropet misslyckades.",
+        )
+    return DiversificationOut(
+        feedback=result.text,
+        model=ai_core.MODEL_HAIKU,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
