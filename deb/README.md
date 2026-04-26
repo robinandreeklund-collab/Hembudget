@@ -179,3 +179,87 @@ fick du tre jobb istället för ett" och eleven måste kunna räkna ut
 samband — annars går pedagogiken förlorad. LLM används bara för
 *innehåll* (kundtext, jobbeskrivning, pitch-bedömning), inte för
 *beslut* (acceptans, antal jobb). Det är en viktig arkitekturprincip.
+
+---
+
+## 6. Marknadsföring och företagsbeslut
+
+Två spår:
+
+**Marknadsföring (pågående):** Eleven väljer kampanjtyp + skriver kort
+kampanjtext (t.ex. en Instagrampost). Systemet räknar ut kostnad,
+varaktighet och baseffekt. Kampanjtexten skickas till
+`ai.py::evaluate_marketing_copy` (ny funktion, Haiku, ~300 tokens) som
+ger en kvalitetsfaktor 0.5–1.5 som multipliceras på baseffekten. Eleven
+ser **både** vad AI:n tyckte och hur det påverkade — pedagogiskt guld.
+
+**Strategiska beslut (engångs):** Anställa timanställd (löpande
+lönekostnad, men ökar leveranskapacitet → kan ta fler jobb samtidigt).
+Friskvårdsbidrag (kostnad men höjer "rykte" via pseudo-medarbetarnöjdhet).
+Försäkring (skyddar mot slumpmässiga händelser i `RandomEventEngine`).
+Leasingbil (transportkostnad men låser upp jobb som kräver utkörning).
+Varje beslut är en `BusinessDecision`-rad som påverkar parametrar i
+acceptans-/pipeline-modellerna.
+
+Båda spåren genererar `Transaction` + `LedgerEntry` automatiskt. Inget
+extra bokföringsarbete för eleven utöver att verifiera.
+
+---
+
+## 7. Bokföring och avstämning
+
+### Grundläge (Företagsekonomi 1)
+
+Var fjärde simulerad vecka triggas en `task`-step "Stäm av månaden".
+Eleven får ett formulär: lista över intäkter, kostnader, beräknad vinst.
+Systemet visar facit när eleven svarat. Detta är direkt analogt med hur
+ni redan gör i kontoutdrags-modulen — pedagogen är "räkna själv, få
+facit". `StudentStepProgress.data` lagrar elevens svar, AI ger feedback
+via befintlig `generate_feedback_suggestion`.
+
+### Avancerat läge (Företagsekonomi 2)
+
+- **Löpande bokföring:** Vid varje affärshändelse föreslår systemet ett
+  bokföringsförslag (t.ex. "1930 Bank D, 3000 Försäljning K"). Eleven
+  kan acceptera eller redigera. Felaktiga konteringar markeras inte på
+  en gång — de fångas vid avstämning, vilket är hur det fungerar i
+  verkligheten.
+- **Bankavstämning:** Var fjärde vecka genererar systemet ett
+  *kontoutdrag* (återanvänd `teacher/pdfs.py::render_kontoutdrag` med
+  en ny `kontoutdrag_business`-variant). Eleven får en split-vy:
+  bokförda poster vänster, bankposter höger. Drar matchningar med
+  drag-och-släpp. Diff = avvikelse → måste utredas. Systemet sätter
+  avsiktligt in vissa "fel" (en post med fel datum, en saknad post)
+  för att simulera verkligheten.
+- **Nyckeltal:** Beräknas automatiskt i en dashboard-flik men eleven
+  ska först **gissa själv** i ett quiz-steg innan facit visas.
+- **Peer-revision:** Elev A får tilldelat sig elev B:s bokföringspaket
+  (anonymiserat). Checklista: stämmer ingående/utgående saldo? Är moms
+  rätt? Saknas verifikationer? Skriver kort revisionsberättelse. AI
+  ger rubric-feedback (`score_with_rubric` finns redan), läraren
+  modererar.
+
+---
+
+## 8. Lärarverktyg — den dolda hjälten
+
+Lärarens roll är att vara "omvärlden" — Skatteverket, leverantörer,
+banken. Lägg detta som en flik `/teacher/business` med tre kort:
+
+1. **Klassöversikt:** tabell över alla elever — företagsnamn,
+   omsättning, vinst, antal kundfakturor, antal förfallna fakturor,
+   status på senaste avstämning, AI-tokens använda. Sortbar och
+   filtrerbar — *exakt* samma mönster som ni redan har på
+   `/teacher/reflections`.
+2. **Skicka leverantörsfaktura:** välj en eller flera elever, fyll i
+   avsändare/belopp/förfallodatum/fritext, klicka. Systemet genererar
+   PDF (samma stack som `BatchArtifact`) och skapar en
+   `SupplierInvoice` i varje vald elevs scope. Använd massutskick —
+   annars blir det tjatigt.
+3. **Granska kundfakturor:** lista över alla fakturor eleven skickat
+   ut. Kan kommentera, märka som "ej godkänd" (tvingar eleven att
+   korrigera), eller godkänna. Detta blir lärarens kontrollpunkt och
+   uppfyller kravet "läraren har möjlighet att se elevens kundfakturor".
+
+Lärar-PDF-mallen för leverantörsfaktura ärver direkt från befintlig
+reportlab-mall — ny mall, samma motor.
