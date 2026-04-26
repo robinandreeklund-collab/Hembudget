@@ -150,3 +150,241 @@ def trigger_expire(scope: Session = Depends(db)) -> dict:
     """Markera passade pending-events som expired."""
     n = expire_old_events(scope)
     return {"expired": n}
+
+
+# ---------- Accept / decline ----------
+
+class AcceptIn(BaseModel):
+    account_id: Optional[int] = None  # Vart kostnaden bokförs (default: lönekonto)
+    classmate_invite_ids: list[int] = []  # V2: bjuda kompisar
+
+
+class AcceptResultOut(BaseModel):
+    event_id: int
+    status: str
+    transaction_id: Optional[int]
+    cost_applied: float
+    income_applied: float
+    impact_applied: dict
+    pedagogical_note: str
+
+
+def _resolve_default_account(scope: Session) -> Optional[int]:
+    """Hitta elevens checking-konto — där kostnader/inkomster bokförs."""
+    from ..db.models import Account
+    acc = (
+        scope.query(Account)
+        .filter(Account.type == "checking")
+        .order_by(Account.id.asc())
+        .first()
+    )
+    return acc.id if acc else None
+
+
+def _is_income_event(template_or_event) -> bool:
+    """Inkomst-event = cost=0 men positivt impact_economy. Eleven får
+    alltså pengar för att accepterat (julmarknadsjobb, bonus, blod)."""
+    cost = getattr(template_or_event, "cost", None) or getattr(
+        template_or_event, "cost_min", 0
+    )
+    impact_economy = getattr(template_or_event, "impact_economy", 0)
+    if isinstance(cost, (int, float)):
+        return cost == 0 and impact_economy > 0
+    # Decimal
+    return float(cost) == 0 and impact_economy > 0
+
+
+def _income_for_event(event: StudentEvent, impact_economy: int) -> float:
+    """Härledd inkomst-formel för cost=0-events. Ungefärligt rimlig
+    skala — pedagogiskt men inte exakt. Kan ersättas med ett dedikerat
+    income_amount-fält senare."""
+    return max(50.0, abs(impact_economy) * 400.0)
+
+
+@router.post("/{event_id}/accept", response_model=AcceptResultOut)
+def accept_event(
+    event_id: int,
+    payload: Optional[AcceptIn] = None,
+    scope: Session = Depends(db),
+) -> AcceptResultOut:
+    """Eleven accepterar ett event. Skapar Transaction (utgift eller
+    inkomst), uppdaterar status, returnerar Wellbeing-impact + pedagogisk
+    notis."""
+    import hashlib as _hashlib
+    from datetime import datetime as _dt
+    from decimal import Decimal as _Dec
+
+    from ..db.models import Transaction
+    from ..school.event_models import EventTemplate
+
+    payload = payload or AcceptIn()
+    ev = scope.get(StudentEvent, event_id)
+    if ev is None:
+        raise HTTPException(404, "Event saknas")
+    if ev.status != "pending":
+        raise HTTPException(400, f"Event har redan status '{ev.status}'")
+
+    # Hämta master-templaten för impact-värden
+    with master_session() as ms:
+        tpl = (
+            ms.query(EventTemplate)
+            .filter(EventTemplate.code == ev.event_code)
+            .first()
+        )
+        if tpl is None:
+            raise HTTPException(404, "Event-mall saknas i master")
+        impacts = {
+            "economy": tpl.impact_economy,
+            "health": tpl.impact_health,
+            "social": tpl.impact_social,
+            "leisure": tpl.impact_leisure,
+            "safety": tpl.impact_safety,
+        }
+
+    account_id = payload.account_id or _resolve_default_account(scope)
+    if account_id is None:
+        raise HTTPException(
+            400, "Inget konto hittades — skapa ett checking-konto först.",
+        )
+
+    # Bestäm transaktionsbelopp
+    is_income = float(ev.cost) == 0 and impacts["economy"] > 0
+    if is_income:
+        amount = _income_for_event(ev, impacts["economy"])
+        signed_amount = _Dec(str(amount))  # positivt = inkomst
+        cost_applied = 0.0
+        income_applied = amount
+        desc = f"Event: {ev.title}"
+    else:
+        cost_applied = float(ev.cost)
+        income_applied = 0.0
+        signed_amount = -_Dec(str(cost_applied))  # negativt = utgift
+        desc = f"Event: {ev.title}"
+
+    # Skapa Transaction
+    tx = None
+    if signed_amount != 0:
+        h = _hashlib.sha256(
+            f"event-{ev.id}-{_dt.utcnow().isoformat()}".encode()
+        ).hexdigest()
+        tx = Transaction(
+            account_id=account_id,
+            date=_dt.utcnow().date(),
+            amount=signed_amount,
+            currency="SEK",
+            raw_description=desc,
+            is_transfer=False,
+            hash=h,
+        )
+        scope.add(tx)
+        scope.flush()
+
+    # Uppdatera event
+    ev.status = "accepted"
+    ev.decided_at = _dt.utcnow()
+    ev.resulting_transaction_id = tx.id if tx else None
+    ev.impact_applied = impacts
+    scope.flush()
+
+    # Pedagogisk note
+    if is_income:
+        note = (
+            f"Du tog uppdraget och tjänade {amount:.0f} kr. "
+            f"Wellbeing-effekt: ekonomi +{impacts['economy']}"
+        )
+    else:
+        note_parts = []
+        for k, v in impacts.items():
+            if v != 0:
+                sign = "+" if v > 0 else ""
+                note_parts.append(f"{k} {sign}{v}")
+        impact_str = ", ".join(note_parts) if note_parts else "ingen Wellbeing-impact"
+        note = (
+            f"Du betalade {cost_applied:.0f} kr för {ev.title}. "
+            f"Wellbeing-effekt: {impact_str}."
+        )
+
+    return AcceptResultOut(
+        event_id=ev.id,
+        status=ev.status,
+        transaction_id=tx.id if tx else None,
+        cost_applied=cost_applied,
+        income_applied=income_applied,
+        impact_applied=impacts,
+        pedagogical_note=note,
+    )
+
+
+class DeclineIn(BaseModel):
+    decision_reason: Optional[str] = None  # T.ex. "valde sparande"
+
+
+class DeclineResultOut(BaseModel):
+    event_id: int
+    status: str
+    impact_applied: dict
+    pedagogical_note: str
+
+
+@router.post("/{event_id}/decline", response_model=DeclineResultOut)
+def decline_event(
+    event_id: int,
+    payload: Optional[DeclineIn] = None,
+    scope: Session = Depends(db),
+) -> DeclineResultOut:
+    """Eleven nekar ett event. Negativ social-impact appliceras om
+    eleven HADE råd (annars ekonomiskt skäl, ingen impact).
+
+    decline_reason='valde sparande' eller liknande → vi flaggar att
+    valet var medvetet, ingen straff-impact.
+    """
+    from datetime import datetime as _dt
+
+    from ..school.event_models import EventTemplate
+
+    payload = payload or DeclineIn()
+    ev = scope.get(StudentEvent, event_id)
+    if ev is None:
+        raise HTTPException(404, "Event saknas")
+    if ev.status != "pending":
+        raise HTTPException(400, f"Event har redan status '{ev.status}'")
+    if not ev.declinable:
+        raise HTTPException(
+            400, "Detta event går inte att neka (oförutsedd kostnad)",
+        )
+
+    # Endast sociala kategorier ger negativ impact vid neka — du straffas
+    # inte för att neka tandläkaren eller en lifestyle-prenumeration.
+    decline_impact = {
+        "economy": 0, "health": 0, "social": 0,
+        "leisure": 0, "safety": 0,
+    }
+    if ev.category in {"social", "family", "culture", "sport"}:
+        # Om eleven uttryckligen valt att spara → ingen straff-impact
+        reason_lower = (payload.decision_reason or "").lower()
+        if "sparande" in reason_lower or "sparmål" in reason_lower:
+            note = (
+                f"Du nekade {ev.title} för att prioritera sparande. "
+                "Det är ett medvetet val — Wellbeing påverkas inte."
+            )
+        else:
+            decline_impact["social"] = -1
+            note = (
+                f"Du nekade {ev.title}. Sociala band sänks med 1 p — "
+                "att alltid säga nej har en kostnad."
+            )
+    else:
+        note = f"Du nekade {ev.title}. Ingen Wellbeing-impact."
+
+    ev.status = "declined"
+    ev.decision_reason = payload.decision_reason
+    ev.decided_at = _dt.utcnow()
+    ev.impact_applied = decline_impact
+    scope.flush()
+
+    return DeclineResultOut(
+        event_id=ev.id,
+        status=ev.status,
+        impact_applied=decline_impact,
+        pedagogical_note=note,
+    )
