@@ -1564,14 +1564,14 @@ def delete_assignment(
 def student_my_assignments(
     info: TokenInfo = Depends(require_token),
 ) -> list[AssignmentStatusOut]:
+    """Lista uppdrag för aktiv elev. Tillåter lärar-impersonation via
+    x-as-student-headern så lärare kan kolla elevens vy utan 403."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     from ..teacher.assignments import evaluate
     with master_session() as s:
-        student = s.query(Student).filter(
-            Student.id == info.student_id
-        ).first()
+        student = s.query(Student).filter(Student.id == student_id).first()
         if not student:
             raise HTTPException(404, "Student not found")
         assignments = s.query(Assignment).filter(
