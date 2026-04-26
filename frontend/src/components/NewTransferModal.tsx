@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, formatSEK } from "@/api/client";
+import { CreditModal } from "@/components/CreditModal";
 import type { Account } from "@/types/models";
 
 interface BalanceRow {
@@ -42,6 +43,16 @@ export function NewTransferModal({ open, onClose, defaultFromId }: Props) {
   const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  // När checking-saldot skulle gå minus → öppna kreditflödet i stället
+  const [creditFlow, setCreditFlow] = useState<null | {
+    affordability: {
+      ok: boolean; current_balance: number; threshold: number;
+      shortfall: number; explanation: string; account_kind: string;
+      options: string[];
+    };
+    shortfall: number;
+    depositAccountId: number;
+  }>(null);
   // Stabil idempotency-key per öppnad modal — samma key skickas vid retries
   // så servern inte skapar dubbla rader om användaren råkar dubbelklicka.
   const [idemKey, setIdemKey] = useState<string>("");
@@ -110,7 +121,11 @@ export function NewTransferModal({ open, onClose, defaultFromId }: Props) {
   const fromAfter = fromBal - (validAmount ? amountNum : 0);
   const toAfter = toBal + (validAmount ? amountNum : 0);
   const wouldOverdrawSavings =
-    fromAcc?.type === "savings" && validAmount && fromAfter < 0;
+    (fromAcc?.type === "savings" || fromAcc?.type === "isk" ||
+     fromAcc?.type === "pension") &&
+    validAmount && fromAfter < 0;
+  const wouldOverdrawChecking =
+    fromAcc?.type === "checking" && validAmount && fromAfter < 0;
 
   const canSubmit =
     fromId !== null &&
@@ -236,7 +251,20 @@ export function NewTransferModal({ open, onClose, defaultFromId }: Props) {
 
         {wouldOverdrawSavings && (
           <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2">
-            Sparkontot skulle gå minus. Sparkonton kan inte övertrasseras.
+            {fromAcc?.type === "savings" && "Sparkontot kan inte gå minus."}
+            {fromAcc?.type === "isk" && "ISK-kontot kan inte gå minus."}
+            {fromAcc?.type === "pension" && "Pensionskontot kan inte gå minus."}
+          </div>
+        )}
+        {wouldOverdrawChecking && (
+          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <strong>Saldot räcker inte.</strong> Du saknar{" "}
+              {formatSEK(-fromAfter)}.
+              {" "}Klicka "Genomför" för att se dina alternativ
+              (privatlån eller avbryt).
+            </div>
           </div>
         )}
         {sameAccount && (
@@ -259,7 +287,28 @@ export function NewTransferModal({ open, onClose, defaultFromId }: Props) {
           </button>
           <button
             onClick={() => {
-              if (!canSubmit || fromId === null || toId === null) return;
+              if (fromId === null || toId === null || !validAmount) return;
+              if (wouldOverdrawChecking && fromAcc) {
+                // Trigga kreditflödet i stället för att skicka in
+                setCreditFlow({
+                  affordability: {
+                    ok: false,
+                    current_balance: fromBal,
+                    threshold: 0,
+                    shortfall: -fromAfter,
+                    explanation:
+                      `Du har ${formatSEK(fromBal)} på ${fromAcc.name} men ` +
+                      `försöker ta ut ${formatSEK(amountNum)}. Du saknar ` +
+                      `${formatSEK(-fromAfter)} för att överföringen ska gå.`,
+                    account_kind: fromAcc.type,
+                    options: ["private_loan", "sms_loan", "cancel"],
+                  },
+                  shortfall: -fromAfter,
+                  depositAccountId: fromAcc.id,
+                });
+                return;
+              }
+              if (!canSubmit) return;
               createMut.mutate({
                 from_account_id: fromId,
                 to_account_id: toId,
@@ -269,13 +318,22 @@ export function NewTransferModal({ open, onClose, defaultFromId }: Props) {
                 idempotency_key: idemKey,
               });
             }}
-            disabled={!canSubmit}
+            disabled={!canSubmit && !wouldOverdrawChecking}
             className="bg-brand-600 text-white px-4 py-2 rounded disabled:opacity-50"
           >
             {createMut.isPending ? "Genomför…" : "Genomför"}
           </button>
         </div>
       </div>
+      {creditFlow && (
+        <CreditModal
+          open={true}
+          onClose={() => setCreditFlow(null)}
+          shortfall={creditFlow.shortfall}
+          affordability={creditFlow.affordability}
+          depositAccountId={creditFlow.depositAccountId}
+        />
+      )}
     </div>
   );
 }
