@@ -793,7 +793,8 @@ def update_student_profile(
 def student_get_own_profile(
     info: TokenInfo = Depends(require_token),
 ) -> StudentProfileOut:
-    """Eleven läser sin egen profil (för onboarding och info-vy)."""
+    """Eleven läser sin egen profil. Pedagogiskt: partner-lön döljs
+    förrän eleven gjort cost-split-valet ('veil of ignorance')."""
     _require_school_mode()
     if info.role != "student":
         raise HTTPException(403, "Not a student token")
@@ -805,7 +806,143 @@ def student_get_own_profile(
             raise HTTPException(404, "Student not found")
         if not student.profile:
             _create_profile_for_student(s, student)
-        return _profile_to_out(student.profile)
+        out = _profile_to_out(student.profile)
+        # Dölj partner-lön tills eleven gjort cost-split-valet. Annars
+        # förstör vi ärligheten i pedagogiken.
+        is_household = student.profile.family_status in (
+            "sambo", "familj_med_barn",
+        )
+        if is_household and not student.profile.cost_split_preference:
+            out.partner_gross_salary = None
+            # Behåll partner_profession + partner_age — eleven får veta
+            # ATT hen har en partner och vad partnern gör, men inte
+            # exakt lön.
+        return out
+
+
+# ---------- Cost-split-preference ('veil of ignorance'-onboarding) ----------
+#
+# Pedagogiskt: eleven måste välja fördelningsmodell INNAN partner-lönen
+# avslöjas. Det blir ett ärligt etiskt val (Rawls 'veil of ignorance')
+# istället för ett rationellt självoptimerings-val. Endpointen
+# blockerar att se partner-lön förrän valet gjorts.
+
+class CostSplitOut(BaseModel):
+    family_status: str
+    needs_decision: bool  # True om sambo/familj OCH ej beslutat
+    cost_split_preference: Optional[str] = None
+    cost_split_decided_at: Optional[datetime] = None
+    # Visa BARA om beslut gjorts:
+    partner_profession: Optional[str] = None
+    partner_gross_salary: Optional[int] = None
+    student_share_pct: Optional[float] = None  # Beräknad andel (0-100)
+
+
+class CostSplitIn(BaseModel):
+    preference: str  # "even_50_50" | "pro_rata" | "all_shared"
+
+
+def _calc_student_share(
+    pref: str, student_salary: int, partner_salary: int,
+) -> float:
+    """Räknar elevens andel av gemensamma kostnader baserat på modellen."""
+    if pref == "even_50_50":
+        return 50.0
+    total = student_salary + partner_salary
+    if total <= 0:
+        return 50.0
+    # pro_rata och all_shared använder samma formel — i all_shared går
+    # alla pengar via gemensamma konton men bokföringen är samma.
+    return round(student_salary / total * 100, 1)
+
+
+@router.get("/student/cost-split", response_model=CostSplitOut)
+def student_get_cost_split(
+    info: TokenInfo = Depends(require_token),
+) -> CostSplitOut:
+    """Returnerar elevens cost-split-status. Visar partner_profession +
+    partner_gross_salary BARA om eleven redan beslutat — annars är
+    fälten None ('veil of ignorance')."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student or not student.profile:
+            raise HTTPException(404, "Profil saknas")
+        p = student.profile
+
+        is_household = p.family_status in ("sambo", "familj_med_barn")
+        decided = p.cost_split_preference is not None
+
+        out = CostSplitOut(
+            family_status=p.family_status,
+            needs_decision=is_household and not decided,
+            cost_split_preference=p.cost_split_preference,
+            cost_split_decided_at=p.cost_split_decided_at,
+        )
+        # Avslöja partner-info bara om eleven redan beslutat
+        if decided and is_household:
+            out.partner_profession = p.partner_profession
+            out.partner_gross_salary = p.partner_gross_salary
+            out.student_share_pct = _calc_student_share(
+                p.cost_split_preference,
+                p.gross_salary_monthly,
+                p.partner_gross_salary or 0,
+            )
+        return out
+
+
+@router.post("/student/cost-split", response_model=CostSplitOut)
+def student_set_cost_split(
+    payload: CostSplitIn,
+    info: TokenInfo = Depends(require_token),
+) -> CostSplitOut:
+    """Eleven sätter sin fördelningsmodell. Idempotent: kan ändras
+    senare men cost_split_decided_at uppdateras inte (vi sparar det
+    *första* valet — det är det pedagogiskt centrala)."""
+    from datetime import datetime as _dt
+
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    if payload.preference not in {"even_50_50", "pro_rata", "all_shared"}:
+        raise HTTPException(400, "Ogiltig preference")
+
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == info.student_id
+        ).first()
+        if not student or not student.profile:
+            raise HTTPException(404, "Profil saknas")
+        p = student.profile
+        if p.family_status == "ensam":
+            raise HTTPException(
+                400, "Ensamhushåll har ingen partner att dela kostnader med",
+            )
+
+        first_time = p.cost_split_preference is None
+        p.cost_split_preference = payload.preference
+        if first_time:
+            p.cost_split_decided_at = _dt.utcnow()
+        s.flush()
+
+        share = _calc_student_share(
+            payload.preference,
+            p.gross_salary_monthly,
+            p.partner_gross_salary or 0,
+        )
+        return CostSplitOut(
+            family_status=p.family_status,
+            needs_decision=False,
+            cost_split_preference=p.cost_split_preference,
+            cost_split_decided_at=p.cost_split_decided_at,
+            partner_profession=p.partner_profession,
+            partner_gross_salary=p.partner_gross_salary,
+            student_share_pct=share,
+        )
 
 
 # ---------- Tax-helper ----------
