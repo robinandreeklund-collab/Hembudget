@@ -411,4 +411,283 @@ elev-vyn.
 
 ---
 
-*(Fortsätter i nästa commit: datamodell, endpoints, AI, faseplan.)*
+## 8. Datamodell
+
+### 8.1 Master-DB (delade tabeller)
+
+```
+EventTemplate (master, seedad ~80 rader):
+  id, code (unik nyckel "bio_filmstaden"), title, description,
+  category ("social"|"family"|"opportunity"|"unexpected"|"culture"|...),
+  cost_min, cost_max,
+  impact_economy, impact_health, impact_social,
+  impact_leisure, impact_safety,
+  duration_days,
+  triggers (JSON: när får detta dyka upp),
+  social_invite_allowed (bool),
+  declinable (bool — vissa events är "händelser" som inte kan nekas),
+  ai_text_template (för AI-genererad personlig version),
+  brand (Filmstaden, AIK, ICA, osv. för pedagogisk autenticitet)
+```
+
+```
+ClassDisplaySettings (master, per teacher_id):
+  teacher_id (PK)
+  class_list_enabled (bool, default False)
+  show_full_names (bool, default False — bara om eleven själv opt-in)
+  invite_classmates_enabled (bool, default True)
+  cost_split_model ("split"|"inviter_pays"|"each_pays_own")
+  class_event_creation_enabled (bool, default False)
+  updated_at
+```
+
+```
+ClassEventInvite (master — mellan elever inom en lärares klass):
+  id, from_student_id, to_student_id, event_code,
+  status ("pending"|"accepted"|"declined"|"expired"),
+  proposed_date, response_at, message,
+  created_at
+```
+
+### 8.2 Scope-DB (per elev/familj — TenantMixin)
+
+```
+StudentEvent (TenantMixin):
+  id, event_code (FK till master.event_templates.code),
+  proposed_date, deadline, cost, currency,
+  source ("system"|"classmate_invite"|"teacher_triggered"),
+  source_classmate_id (om från klasskompis — master.student_id),
+  status ("pending"|"accepted"|"declined"|"expired"),
+  decision_reason (text om eleven flaggade "valde sparande"),
+  resulting_transaction_id (FK till transactions.id om accepted),
+  impact_applied JSON (vilka Wellbeing-poäng som faktiskt påverkades),
+  created_at, decided_at
+```
+
+```
+WellbeingScore (TenantMixin):
+  id, year_month (YYYY-MM),
+  total_score (0–100, beräknat),
+  economy, health, social, leisure, safety (0–100 per dimension),
+  events_accepted, events_declined,
+  budget_minimum_violations (int, hur många kategorier under min),
+  computed_at
+```
+
+```
+PersonalityProfile (TenantMixin, en rad per elev):
+  introvert_score (0–100, default 50)  # eleven kan justera vid onboarding
+  thrill_seeker_score (0–100, default 50)
+  family_oriented_score (0–100, default 50)
+  # Påverkar event-mix och tröskelvärden
+```
+
+```
+DeclineStreak (TenantMixin):
+  current_streak (int)
+  last_accepted_at (datetime)
+  category_streak JSON (per kategori — kan vara 0 sociala men 5 nöjes-nej)
+```
+
+### 8.3 Återanvänder befintliga tabeller
+
+- `Transaction` — eventets kostnad bokförs här som vanligt, med en
+  ny kategori "Event - Sociala" eller liknande
+- `UpcomingTransaction` — Swish-skulder från delade events
+- `Assignment` — nya `assignment_kind = "wellbeing_above_X"` så
+  läraren kan tilldela "håll Wellbeing över 70 i 3 månader"
+
+---
+
+## 9. AI-användning (allt opt-in via `Teacher.ai_enabled`)
+
+| Funktion | Modell | När | Pedagogiskt syfte |
+|---|---|---|---|
+| `generate_event_text` | Haiku, 200 t | När event triggas | Personlig text utöver mall — "din mormor fyller 80, hon vill att du kommer" |
+| `monthly_wellbeing_feedback` | Haiku, 400 t | Vid månadsslut | "Sociala band sjönk 8 p — du nekade 4/4. Reflektera utan att jag dömer." |
+| `decline_streak_nudge` | Haiku, 150 t | När streak ≥ 3 | "Du har nekat 4 i rad — vill du dela varför?" |
+| `event_decision_advisor` | Sonnet, befintlig | När eleven *frågar* | Låter eleven prata med Ekon-coachen om dilemmat |
+| `class_invite_motivation` | Haiku, 200 t | När kompis bjuder | Läser kompisens text + elevens situation, ger neutral kommentar |
+
+Princip: AI:n är **rådgivare som inte ger råd** — den frågar mer än
+den svarar. Sokratisk metod.
+
+---
+
+## 10. Backend-endpoints
+
+```
+# Events
+GET    /events/pending                  # Lista pågående events
+GET    /events/history                  # Tidigare beslut
+POST   /events/{id}/accept              # Acceptera (skapar Transaction)
+POST   /events/{id}/decline             # Neka
+POST   /events/{id}/decline-with-reason # Neka + skäl ("valde sparande")
+POST   /events/internal/tick            # Trigger-jobb (cron)
+
+# Wellbeing
+GET    /wellbeing/current               # Senaste månadens score
+GET    /wellbeing/history               # Tidsserie över terminen
+POST   /wellbeing/internal/recompute    # Räkna om (vid månadsskifte)
+
+# Klassinbjudningar
+GET    /events/classmates               # Lista klasskompisar (om enabled)
+POST   /events/{id}/invite-classmates   # Bjud N klasskompisar
+GET    /events/invitations              # Pending där JAG är mottagare
+POST   /events/invitations/{id}/respond # Acceptera/neka
+
+# Klasslista
+GET    /class/leaderboard               # Anonymiserad ranking (om enabled)
+GET    /teacher/class/wellbeing         # Lärare: full vy med namn
+POST   /teacher/class/event             # Lärare triggar klassevent
+
+# Super-admin
+GET    /admin/class-display             # Toggle-status per lärare
+POST   /admin/class-display             # Sätt config
+```
+
+---
+
+## 11. Frontend-flöden
+
+### 11.1 Notifikations-bubbla
+
+I header (bredvid sökrutan): liten klockikon med röd badge när events
+finns. Klick öppnar dropdown med pågående events.
+
+### 11.2 Wellbeing-kort på Dashboard
+
+Direkt under saldo-översikt. Pentagon-radar + dimensions-trend +
+pedagogisk text.
+
+### 11.3 Event-sida `/events`
+
+Egen sida för fördjupning: alla pågående + tidigare beslut + statistik
+(% accepterat per kategori).
+
+### 11.4 Onboarding för Personality
+
+När eleven loggar in första gången: kort 3-frågors quiz som sätter
+introvert/thrill/family-värdena. Pedagogiskt: "det finns inget rätt
+svar".
+
+### 11.5 Lärar-vy `/teacher/wellbeing`
+
+Klassöversikt med rödflagg-färger, klick på elev → drilldown med
+Wellbeing-historik och beslutshistorik.
+
+---
+
+## 12. Faseplan
+
+**Fas 1 — Wellbeing-grundmotor (1 vecka):**
+- Modeller: WellbeingScore + PersonalityProfile
+- Beräkningsmotor (utan events än — bara från budget vs minimum)
+- Pentagon-radar på Dashboard
+- Konsumentverket-validering vid budget-sättning + generator-anpassning
+
+**Fas 2 — Event-bibliotek (3–5 dagar):**
+- EventTemplate-tabell + seed med 30–40 grund-events
+- Trigger-logik (slump, tid, reaktiv)
+- Cron-job för att skapa StudentEvent-rader
+
+**Fas 3 — Accept/decline-flöde (1 vecka):**
+- StudentEvent-modeller
+- Backend-endpoints för accept/decline
+- Notifikations-bubbla + modal i frontend
+- Decline-streak-mekanik
+- Wellbeing-impact-applicering
+
+**Fas 4 — Sociala bjudningar (1 vecka):**
+- ClassEventInvite-modell
+- Backend-endpoints för invitations
+- 3 kostnadsdelnings-modeller
+- Frontend: bjud-kompis-flow + Swish-skuld i Upcoming
+
+**Fas 5 — Klasslista (3–5 dagar):**
+- ClassDisplaySettings + super-admin-toggle
+- Anonymiserad leaderboard
+- Lärar-vy med full namn + rödflaggor
+
+**Fas 6 — AI-integration + reflektion (3–5 dagar):**
+- 5 nya AI-funktioner i `school/ai.py`
+- Månadssammanfattning (1 reflektion per månad, opt-in)
+- Decline-streak-nudge
+
+**Fas 7 — Avancerat: klassgemensamma events (1 vecka, V2):**
+- Lärare skapar event som tilldelas hela klassen
+- Backend-flöde + UI
+
+**Total leveranstid:** 5–6 veckor uppdelat i 7 faser.
+
+---
+
+## 13. Beslutspunkter innan kod
+
+1. **Wellbeing-vikten av varje dimension.** Lika eller olika? Min
+   rekommendation: lika i V1, justerbart per personlighetstyp i V2.
+2. **Deklinations-tröskel.** 3 events i rad → impact? Eller 5? Min
+   rekommendation: 3, men gör det konfigurerbart per lärare.
+3. **Event-bibliotek-storlek.** 30 räcker pedagogiskt; 80 ger variation
+   över terminen utan upprepningar. Min rekommendation: börja 30, växa
+   till 80 över V1 → V2.
+4. **Klasslista anonym vs öppet.** Min rekommendation: anonym default,
+   3-stegs opt-in. Aldrig öppna namn utan elevens samtycke.
+5. **Klassgemensamma events i V1?** Komplex social dynamik som kan
+   stjälpa pilotklasser. Min rekommendation: nej, V2.
+6. **Personality-test obligatoriskt?** Påverkar event-mix. Min
+   rekommendation: frivilligt, default = mitten på alla skalor.
+7. **Wellbeing-historik radering.** GDPR — eleven ska kunna radera
+   sin Wellbeing-historik. Min rekommendation: lägg en
+   "rensa historik"-knapp i elevens inställningar.
+8. **Lärare-triggat-event misshandling-risk?** Lärare som triggar
+   pinsamma events mot specifik elev. Min rekommendation: bara klass-
+   nivå-triggers, ej per elev (utom från system-engine).
+
+---
+
+## 14. Pedagogiska kärnvärden — sammanfattning
+
+Den största insikten plattformen ska förmedla:
+
+> **Pengar är ett medel för välmående, inte ett mål i sig själv.**
+>
+> Att maximera saldot till priset av sociala band och fritid är
+> inte ekonomisk framgång — det är en form av fattigdom. Att
+> spendera allt på upplevelser utan buffert är heller inte rikedom —
+> det är skörhet.
+>
+> Ekonomi är konsten att balansera idag mot imorgon, mig själv mot
+> mina relationer, planering mot spontanitet.
+
+Wellbeing-Score är vår mätare för den balansen. Eleven lär sig genom
+att se sin pentagon-radar växa och krympa över terminen — och förstå
+varför.
+
+---
+
+## 15. Sammanfattning för dig att ta ställning till
+
+**Detta är ett stort projekt.** 5–6 veckor uppdelat i 7 faser, men
+varje fas är livefärdig. Min rekommendation:
+
+1. **Börja med Fas 1** — Wellbeing-radar utan events ger ändå pedagogisk
+   vinst (budget-minimum-validering, generator-anpassning)
+2. **Hoppa direkt till Fas 3** efter det — accept/decline-flödet är
+   där "magin" händer för eleven
+3. **Sociala mekanismer (Fas 4)** är där pilotklasser kommer engagera
+   sig. Lansera den vid termsstart
+4. **AI-integration (Fas 6)** kan göras parallellt med vilken fas som
+   helst eftersom den är opt-in
+
+**Största pedagogiska vinsten:** eleven slutar fråga "har jag pengar
+över?" och börjar fråga "lever jag det liv jag vill leva, ekonomiskt
+hållbart?". Det är skiftet från räknebok till livskunskap.
+
+**Största risken:** överengagemang i social-mekaniken kan göra att
+elever som mår dåligt i klassen får en till arena att jämföra sig på.
+Därför opt-in-stegen + lärar-toggle. Vi vill inte att en elev som har
+det svårt i livet får en röd flagga i ett system som syns i klassrummet.
+
+Säg "kör fas 1" så börjar jag bygga Wellbeing-grundmotorn — eller
+"kör allt" så går jag igenom alla 7 faserna med commit per delfas.
