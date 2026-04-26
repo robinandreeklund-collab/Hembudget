@@ -483,3 +483,76 @@ def set_class_display(
             class_event_creation_enabled=cfg.class_event_creation_enabled,
             max_invites_per_week=cfg.max_invites_per_week,
         )
+
+
+# ---------- DB-diagnostik (super-admin) ----------
+
+@router.get("/db/diagnose")
+def diagnose_master_db(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Returnerar exakt vilka kolumner master-DB har på de viktigaste
+    tabellerna. Används för att felsöka migration-problem på prod
+    utan att behöva SSH:a till Cloud Run."""
+    from sqlalchemy import inspect as _inspect
+    from ..school.engines import _master_engine, init_master_engine
+
+    if _master_engine is None:
+        init_master_engine()
+    insp = _inspect(_master_engine)
+
+    tables_to_check = [
+        "teachers", "students", "student_profiles", "families",
+        "assignments", "modules", "module_steps",
+        "event_templates", "class_event_invites",
+        "class_display_settings", "teacher_class_events",
+        "stock_master", "stock_quotes", "latest_stock_quotes",
+        "market_calendar",
+    ]
+    out = {"dialect": _master_engine.dialect.name, "tables": {}}
+    for tbl in tables_to_check:
+        try:
+            cols = insp.get_columns(tbl)
+            out["tables"][tbl] = {
+                "exists": True,
+                "columns": [c["name"] for c in cols],
+            }
+        except Exception as e:
+            out["tables"][tbl] = {"exists": False, "error": str(e)[:100]}
+    return out
+
+
+@router.post("/db/run-migrations")
+def force_run_migrations(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Tvinga _run_master_migrations() att köra direkt. Returnerar
+    diagnostisk info efteråt så super-admin kan se vad som skedde."""
+    import logging as _logging
+    from ..school.engines import (
+        _master_engine,
+        _run_master_migrations,
+        init_master_engine,
+    )
+
+    if _master_engine is None:
+        init_master_engine()
+
+    log_msgs: list[str] = []
+
+    class _CaptureHandler(_logging.Handler):
+        def emit(self, record):
+            log_msgs.append(f"{record.levelname}: {record.getMessage()}")
+
+    handler = _CaptureHandler()
+    handler.setLevel(_logging.INFO)
+    target_logger = _logging.getLogger("hembudget.school.engines")
+    target_logger.addHandler(handler)
+    try:
+        _run_master_migrations(_master_engine)
+    except Exception as e:
+        log_msgs.append(f"EXCEPTION: {e}")
+    finally:
+        target_logger.removeHandler(handler)
+
+    return {"ok": True, "log": log_msgs}

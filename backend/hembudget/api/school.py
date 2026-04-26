@@ -246,10 +246,18 @@ def _gen_login_code() -> str:
 
 
 def _create_profile_for_student(session, student: Student) -> StudentProfile:
-    """Slumpa fram en deterministisk profil + cache:a netto-lön."""
+    """Slumpa fram en deterministisk profil + cache:a netto-lön.
+
+    Defensiv: om DB:n saknar de nyaste partner-kolumnerna (migration
+    har inte körts) skapar vi profilen utan dem och loggar — då
+    fungerar elev-skapande även om _run_master_migrations failade.
+    """
+    import logging
     gen = generate_profile(student.id, student.display_name)
     tax = compute_net_salary(gen.gross_salary_monthly)
-    profile = StudentProfile(
+
+    # Bas-fält som funnits sedan länge
+    profile_kwargs = dict(
         student_id=student.id,
         profession=gen.profession,
         employer=gen.employer,
@@ -269,12 +277,39 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
         backstory=gen.backstory,
         children_ages=gen.children_ages,
         partner_age=gen.partner_age,
-        partner_profession=gen.partner_profession,
-        partner_gross_salary=gen.partner_gross_salary,
     )
-    session.add(profile)
-    session.flush()
-    return profile
+
+    # Försök INSERT med partner-fälten (nyast). Om DB:n saknar
+    # kolumnerna failar vi och loggar — försök igen utan dem.
+    try:
+        profile = StudentProfile(
+            **profile_kwargs,
+            partner_profession=gen.partner_profession,
+            partner_gross_salary=gen.partner_gross_salary,
+        )
+        session.add(profile)
+        session.flush()
+        return profile
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "partner_profession" in msg or "partner_gross_salary" in msg or "undefined column" in msg or "no such column" in msg:
+            logging.getLogger(__name__).warning(
+                "_create_profile: partner-kolumner saknas i master-DB — "
+                "skapar profil utan dem. Kör migration manuellt eller "
+                "via /admin/db/diagnose. Fel: %s", exc,
+            )
+            # Rulla tillbaka den misslyckade INSERT:en
+            session.rollback()
+            profile = StudentProfile(**profile_kwargs)
+            session.add(profile)
+            session.flush()
+            return profile
+        # Annat fel — logga med kontext och bubbla upp
+        logging.getLogger(__name__).exception(
+            "_create_profile_for_student: oväntat fel för student %s",
+            student.id,
+        )
+        raise
 
 
 def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
