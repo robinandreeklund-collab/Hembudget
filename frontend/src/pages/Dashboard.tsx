@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
+import { ClassLeaderboard } from "@/components/ClassLeaderboard";
 import { EventInbox } from "@/components/EventInbox";
 import { InvitationsInbox } from "@/components/InvitationsInbox";
 import { ResetDialog } from "@/components/ResetDialog";
@@ -280,6 +281,8 @@ export default function Dashboard() {
       <InvitationsInbox />
 
       <EventInbox />
+
+      <ClassLeaderboard />
 
       {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
         <Card
