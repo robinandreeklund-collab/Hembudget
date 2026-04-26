@@ -48,7 +48,8 @@ function thisMonth(): string {
 }
 
 export default function Teacher() {
-  const { impersonate } = useAuth();
+  const { impersonate, teacherMeta } = useAuth();
+  const isFamily = teacherMeta?.is_family_account === true;
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -220,82 +221,127 @@ export default function Teacher() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="w-6 h-6 text-brand-600" />
-          <h1 className="text-2xl font-semibold">Lärarpanel</h1>
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <div className="eyebrow mb-1">
+            {isFamily ? "Familjepanel" : "Lärarpanel"}
+          </div>
+          <h1 className="serif text-2xl md:text-4xl leading-tight">
+            {isFamily ? "Dina barn." : "Din klass."}
+          </h1>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Link
             to="/teacher/modules"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             🎓 Kursmoduler
           </Link>
           <Link
             to="/teacher/reflections"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             ✍️ Reflektioner
           </Link>
           <Link
+            to="/teacher/rubrics"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
+          >
+            📋 Rubric-mallar
+          </Link>
+          <Link
+            to="/teacher/time-on-task"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
+          >
+            ⏱ Time on task
+          </Link>
+          <button
+            onClick={async () => {
+              const { getApiBase, getToken } = await import("@/api/client");
+              const res = await fetch(
+                `${getApiBase()}/teacher/portfolio-bundle.zip`,
+                {
+                  headers: getToken()
+                    ? { Authorization: `Bearer ${getToken()}` }
+                    : undefined,
+                },
+              );
+              if (!res.ok) {
+                alert("Kunde inte skapa ZIP");
+                return;
+              }
+              const blob = await res.blob();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = "klass_portfolio.zip";
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }}
+            className="btn-outline rounded-md px-4 py-2 text-sm"
+          >
+            📦 Klass-portfolio (ZIP)
+          </button>
+          <Link
             to="/docs"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📖 Guide
           </Link>
           <Link
             to="/messages"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             💬 Meddelanden
           </Link>
           <Link
             to="/teacher/matrix"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📊 Klassöversikt
           </Link>
           <Link
             to="/teacher/all-batches"
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             📄 Alla PDF:er
           </Link>
           {isSuperAdmin && (
             <Link
               to="/teacher/admin-ai"
-              className="bg-brand-50 border border-brand-200 hover:bg-brand-100 rounded-lg px-4 py-2 flex items-center gap-2 text-brand-700"
+              className="border-[1.5px] border-ink bg-paper hover:bg-[#fffef5] rounded-md px-4 py-2 flex items-center gap-2 text-ink"
+              title="Super-admin · AI, lärar-toggel, SMTP/Gmail, API-nyckel"
             >
-              🧠 AI-admin
+              ⚙ Inställningar
             </Link>
           )}
           <button
             onClick={() => setShowFamilies(!showFamilies)}
-            className="bg-white border border-slate-300 hover:bg-slate-50 rounded-lg px-4 py-2 flex items-center gap-2 text-slate-700"
+            className="btn-outline rounded-md px-4 py-2 text-sm"
           >
             <Users className="w-4 h-4" /> Familjer
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
+            className="btn-dark rounded-md px-4 py-2 text-sm flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" /> Ny elev
+            <Plus className="w-4 h-4" /> {isFamily ? "Nytt barn" : "Ny elev"}
           </button>
         </div>
       </div>
 
+      {isSuperAdmin && <SmtpStatusCallout />}
+
       {showFamilies && <FamilyManager onChange={reload} />}
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
 
       {/* Generator-panel */}
-      <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+      <div className="bg-white border-[1.5px] border-rule p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Play className="w-5 h-5 text-emerald-600" />
           <h2 className="font-semibold">Generera exempeldata för månad</h2>
@@ -371,9 +417,10 @@ export default function Teacher() {
         )}
       </div>
 
-      {/* Elevlista */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Elevlista — overflow-x-auto så bred tabell går att scrolla
+          horisontellt på små skärmar istället för att bryta layout. */}
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-slate-50 text-left">
             <tr>
               <th className="p-3 w-8">
@@ -403,7 +450,9 @@ export default function Teacher() {
             ) : students.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-6 text-center text-slate-500">
-                  Inga elever ännu. Skapa din första med "Ny elev".
+                  {isFamily
+                    ? "Inga barn ännu. Skapa det första med \"Nytt barn\"."
+                    : "Inga elever ännu. Skapa din första med \"Ny elev\"."}
                 </td>
               </tr>
             ) : (
@@ -438,7 +487,7 @@ export default function Teacher() {
                   <td className="p-3">
                     <button
                       onClick={() => openQr(s)}
-                      className="font-mono text-brand-600 bg-brand-50 hover:bg-brand-100 px-2 py-0.5 rounded inline-flex items-center gap-1"
+                      className="font-mono text-brand-600 bg-brand-50 hover:bg-paper px-2 py-0.5 rounded inline-flex items-center gap-1"
                       title="Visa QR-kod"
                     >
                       {s.login_code}
@@ -459,7 +508,7 @@ export default function Teacher() {
                     <button
                       onClick={() => viewAs(s.id)}
                       title="Titta som elev"
-                      className="p-1.5 hover:bg-brand-100 rounded text-brand-600"
+                      className="p-1.5 hover:bg-paper rounded text-brand-600"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
@@ -502,7 +551,9 @@ export default function Teacher() {
             className="bg-white rounded-xl shadow-xl p-6 w-96 space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-semibold text-lg">Ny elev</h2>
+            <h2 className="font-semibold text-lg">
+              {isFamily ? "Nytt barn" : "Ny elev"}
+            </h2>
             <input
               type="text"
               value={newName}
@@ -670,7 +721,7 @@ export default function Teacher() {
                 <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
               </div>
             )}
-            <div className="text-2xl font-mono tracking-widest text-brand-700">
+            <div className="text-2xl font-mono tracking-widest text-ink">
               {qrStudent.login_code}
             </div>
             <p className="text-xs text-slate-500">
@@ -679,13 +730,63 @@ export default function Teacher() {
             </p>
             <button
               onClick={() => window.print()}
-              className="text-sm text-brand-600 hover:underline"
+              className="text-sm nav-link"
             >
               Skriv ut
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- SMTP-status-callout (visas bara för super-admin) ----------
+
+function SmtpStatusCallout() {
+  const [cfg, setCfg] = useState<{ configured: boolean; source: string } | null>(null);
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem("hembudget_smtp_callout_dismissed") === "1",
+  );
+
+  useEffect(() => {
+    api<{ configured: boolean; source: string }>("/admin/smtp/config")
+      .then(setCfg)
+      .catch(() => setCfg(null));
+  }, []);
+
+  if (!cfg || cfg.configured || dismissed) return null;
+
+  return (
+    <div className="border-l-[3px] border-ink bg-white p-4 flex items-start gap-4">
+      <div className="text-2xl shrink-0" aria-hidden="true">✉</div>
+      <div className="flex-1">
+        <div className="serif text-lg leading-tight">
+          E-post är inte konfigurerat än.
+        </div>
+        <p className="body-prose text-sm mt-1">
+          Utan SMTP kan nya lärare inte verifiera sin e-post och elever
+          kan inte återställa lösenord. Sätt Gmail app-password (eller
+          annan SMTP) under <strong>⚙ Inställningar</strong>.
+        </p>
+        <div className="mt-3 flex gap-2 items-center">
+          <Link
+            to="/teacher/admin-ai"
+            className="btn-dark rounded-md px-4 py-2 text-sm"
+          >
+            Öppna inställningar
+          </Link>
+          <button
+            onClick={() => {
+              sessionStorage.setItem("hembudget_smtp_callout_dismissed", "1");
+              setDismissed(true);
+            }}
+            className="text-sm text-[#888] hover:text-ink px-3 py-2"
+          >
+            Påminn mig nästa session
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

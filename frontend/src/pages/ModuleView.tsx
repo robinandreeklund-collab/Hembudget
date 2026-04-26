@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpen, CheckCircle2, Circle, FileText, HelpCircle,
-  PlayCircle, Send,
+  PlayCircle, Send, Sparkles,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { api, getApiBase, getToken, getAsStudent } from "@/api/client";
 import { AskAI } from "@/components/AskAI";
+import {
+  CelebrationOverlay,
+  type Achievement,
+} from "@/components/CelebrationOverlay";
 
 type Step = {
   id: number;
@@ -29,6 +33,10 @@ type StepProgress = {
   completed_at: string | null;
   data: Record<string, unknown> | null;
   teacher_feedback: string | null;
+  peer_feedback?: { id: number; body: string; created_at: string }[];
+  // För task-steg som är spårade mot scope-DB:
+  auto_status?: "not_started" | "in_progress" | "completed" | null;
+  auto_progress?: string | null;
 };
 
 export default function ModuleView() {
@@ -38,6 +46,7 @@ export default function ModuleView() {
   const [progressByStep, setProgressByStep] = useState<Record<number, StepProgress>>({});
   const [activeStepId, setActiveStepId] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [celebration, setCelebration] = useState<Achievement[]>([]);
 
   async function loadAll() {
     try {
@@ -68,10 +77,31 @@ export default function ModuleView() {
     loadAll();
   }, [mid]);
 
+  // Heartbeat-pings medan eleven har steget öppet. Backend upserts
+  // StudentStepHeartbeat-raden så lärarstatistiken får data även för
+  // steg eleven fastnar på.
+  useEffect(() => {
+    if (activeStepId == null) return;
+    let cancelled = false;
+    const send = () => {
+      if (cancelled) return;
+      api("/student/step-heartbeat", {
+        method: "POST",
+        body: JSON.stringify({ step_id: activeStepId }),
+      }).catch(() => undefined);
+    };
+    send();
+    const iv = window.setInterval(send, 20000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(iv);
+    };
+  }, [activeStepId]);
+
   if (err) {
     return (
       <div className="p-6">
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       </div>
@@ -90,7 +120,7 @@ export default function ModuleView() {
         <aside className="space-y-3">
           <Link
             to="/modules"
-            className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+            className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
           >
             <ArrowLeft className="w-4 h-4" /> Din kursplan
           </Link>
@@ -140,9 +170,11 @@ export default function ModuleView() {
             <StepPanel
               step={mod.steps.find((s) => s.id === activeStepId)!}
               progress={progressByStep[activeStepId] ?? null}
+              onCelebrate={(a) => {
+                if (a.length > 0) setCelebration(a);
+              }}
               onDone={async () => {
                 await loadAll();
-                // Hoppa till nästa oklara steg om det finns
                 const idx = mod.steps.findIndex((s) => s.id === activeStepId);
                 const next = mod.steps.slice(idx + 1).find(
                   (s) => !progressByStep[s.id]?.completed_at,
@@ -153,6 +185,12 @@ export default function ModuleView() {
           )}
         </main>
       </div>
+      {celebration.length > 0 && (
+        <CelebrationOverlay
+          items={celebration}
+          onClose={() => setCelebration([])}
+        />
+      )}
       <AskAI
         moduleId={mid}
         stepId={activeStepId ?? undefined}
@@ -185,11 +223,12 @@ function StepKindBadge({ kind }: { kind: Step["kind"] }) {
 }
 
 function StepPanel({
-  step, progress, onDone,
+  step, progress, onDone, onCelebrate,
 }: {
   step: Step;
   progress: StepProgress | null;
   onDone: () => void;
+  onCelebrate: (items: Achievement[]) => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
@@ -212,13 +251,13 @@ function StepPanel({
       )}
 
       {step.kind === "read" || step.kind === "watch" ? (
-        <ReadWatchPanel step={step} progress={progress} onDone={onDone} />
+        <ReadWatchPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : step.kind === "reflect" ? (
-        <ReflectPanel step={step} progress={progress} onDone={onDone} />
+        <ReflectPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : step.kind === "quiz" ? (
-        <QuizPanel step={step} progress={progress} onDone={onDone} />
+        <QuizPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : step.kind === "task" ? (
-        <TaskPanel step={step} progress={progress} onDone={onDone} />
+        <TaskPanel step={step} progress={progress} onDone={onDone} onCelebrate={onCelebrate} />
       ) : null}
 
       {progress?.teacher_feedback && (
@@ -229,6 +268,19 @@ function StepPanel({
           <div className="text-sky-900 whitespace-pre-wrap">
             {progress.teacher_feedback}
           </div>
+        </div>
+      )}
+
+      {progress?.peer_feedback && progress.peer_feedback.length > 0 && (
+        <div className="bg-violet-50 border-l-4 border-violet-400 rounded p-3 text-sm space-y-2">
+          <div className="font-semibold text-violet-900">
+            Kamrater har sagt ({progress.peer_feedback.length}):
+          </div>
+          {progress.peer_feedback.map((pf) => (
+            <div key={pf.id} className="text-violet-900 whitespace-pre-wrap">
+              “{pf.body}”
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -262,18 +314,30 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function ReadWatchPanel({
-  step: _step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+type PanelProps = {
+  step: Step;
+  progress: StepProgress | null;
+  onDone: () => void;
+  onCelebrate: (items: Achievement[]) => void;
+};
+
+type CompleteResp = {
+  ok: boolean;
+  data: Record<string, unknown>;
+  new_achievements?: Achievement[];
+};
+
+function ReadWatchPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
   const done = !!progress?.completed_at;
   const [busy, setBusy] = useState(false);
   async function markDone() {
     setBusy(true);
     try {
-      await api(`/student/steps/${_step.id}/complete`, {
+      const res = await api<CompleteResp>(`/student/steps/${_step.id}/complete`, {
         method: "POST",
         body: JSON.stringify({}),
       });
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
       onDone();
     } finally {
       setBusy(false);
@@ -284,7 +348,7 @@ function ReadWatchPanel({
       <button
         onClick={markDone}
         disabled={done || busy}
-        className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:bg-slate-300"
+        className="btn-dark rounded-md px-5 py-2 font-medium disabled:bg-slate-300"
       >
         {done ? "Klar ✓" : busy ? "Sparar…" : "Jag har läst klart"}
       </button>
@@ -292,9 +356,7 @@ function ReadWatchPanel({
   );
 }
 
-function ReflectPanel({
-  step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+function ReflectPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
   const existing = (progress?.data?.reflection as string) ?? "";
   const [text, setText] = useState(existing);
   const [err, setErr] = useState<string | null>(null);
@@ -308,10 +370,11 @@ function ReflectPanel({
     }
     setBusy(true);
     try {
-      await api(`/student/steps/${step.id}/complete`, {
+      const res = await api<CompleteResp>(`/student/steps/${step.id}/complete`, {
         method: "POST",
         body: JSON.stringify({ data: { reflection: text.trim() } }),
       });
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -336,7 +399,7 @@ function ReflectPanel({
         <button
           onClick={save}
           disabled={busy}
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-50"
+          className="btn-dark rounded-md px-5 py-2 font-medium disabled:opacity-50"
         >
           <Send className="w-4 h-4 inline mr-1" />
           {progress?.completed_at ? "Spara ny version" : "Skicka"}
@@ -347,9 +410,7 @@ function ReflectPanel({
   );
 }
 
-function QuizPanel({
-  step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+function QuizPanel({ step, progress, onDone, onCelebrate }: PanelProps) {
   const p = step.params ?? {};
   const options = (p.options as string[]) ?? [];
   const correctIdx = (p.correct_index as number | undefined);
@@ -378,22 +439,39 @@ function QuizPanel({
     (progress?.data?.attempts as number) ?? 0,
   );
   const [busy, setBusy] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiText, setAiText] = useState<string>("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState<string | null>(null);
+  const aiAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api<{ ai_enabled: boolean }>("/admin/ai/me")
+      .then((r) => setAiEnabled(Boolean(r.ai_enabled)))
+      .catch(() => setAiEnabled(false));
+  }, []);
 
   const firstCorrect = (progress?.data?.first_correct as boolean | undefined);
+  const teacherOverride = progress?.data?.teacher_override as
+    | { correct: boolean; note: string; at: string }
+    | undefined;
 
   async function submit() {
     setBusy(true);
+    setAiText("");
+    setAiErr(null);
     try {
       const body = isMulti
         ? { data: { answers: [...multiSelected].sort((a, b) => a - b) } }
         : { data: { answer: singleSelected } };
-      const res = await api<{ data: Record<string, unknown> }>(
+      const res = await api<CompleteResp>(
         `/student/steps/${step.id}/complete`,
         { method: "POST", body: JSON.stringify(body) },
       );
       setLastSubmittedCorrect(!!res.data.correct);
       setAttempts((res.data.attempts as number) ?? attempts + 1);
       setShowResult(true);
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
     } finally {
       setBusy(false);
     }
@@ -403,6 +481,69 @@ function QuizPanel({
     setShowResult(false);
     setSingleSelected(null);
     setMultiSelected(new Set());
+    setAiText("");
+    setAiErr(null);
+    aiAbortRef.current?.abort();
+  }
+
+  async function explainWithAi() {
+    aiAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    aiAbortRef.current = ctrl;
+    setAiBusy(true);
+    setAiErr(null);
+    setAiText("");
+    try {
+      const token = getToken();
+      const asStudent = getAsStudent();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (asStudent) headers["X-As-Student"] = String(asStudent);
+      const res = await fetch(
+        `${getApiBase()}/ai/student/quiz-explain/stream`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ step_id: step.id }),
+          signal: ctrl.signal,
+        },
+      );
+      if (!res.ok || !res.body) {
+        if (res.status === 503) throw new Error("AI-hjälpen är inte tillgänglig just nu.");
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          try {
+            const evt = JSON.parse(line.slice(5).trim()) as
+              | { type: "delta"; text: string }
+              | { type: "done" }
+              | { type: "error"; message: string };
+            if (evt.type === "delta") setAiText((t) => t + evt.text);
+            else if (evt.type === "error") setAiErr(evt.message);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      setAiErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   return (
@@ -469,13 +610,15 @@ function QuizPanel({
             busy ||
             (isMulti ? multiSelected.size === 0 : singleSelected == null)
           }
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium disabled:opacity-50"
+          className="btn-dark rounded-md px-5 py-2 font-medium disabled:opacity-50"
         >
           Svara
         </button>
       ) : (
         <>
           <div
+            role="status"
+            aria-live="polite"
             className={`rounded p-3 text-sm ${
               lastSubmittedCorrect
                 ? "bg-emerald-50 border-l-4 border-emerald-500 text-emerald-900"
@@ -503,6 +646,47 @@ function QuizPanel({
               </div>
             )}
           </div>
+          {teacherOverride && (
+            <div className="rounded bg-sky-50 border-l-4 border-sky-400 p-3 text-sm">
+              <div className="font-semibold text-sky-900 mb-1">
+                Läraren har kommenterat:
+              </div>
+              <div className="text-sky-900">
+                Din svarsrättning är ändrad till{" "}
+                <strong>
+                  {teacherOverride.correct ? "rätt" : "fel"}
+                </strong>
+                {teacherOverride.note && `: "${teacherOverride.note}"`}
+              </div>
+            </div>
+          )}
+
+          {/* AI-förklaring: bara när svaret var fel och lärarens AI är på */}
+          {!lastSubmittedCorrect && aiEnabled && (
+            <div className="space-y-2">
+              {!aiText && !aiBusy && (
+                <button
+                  onClick={explainWithAi}
+                  className="inline-flex items-center gap-2 bg-purple-50 border border-purple-200 text-purple-800 rounded-lg px-4 py-2 text-sm font-medium hover:bg-purple-100"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Fråga Ekon varför ditt svar inte stämmer
+                </button>
+              )}
+              {(aiText || aiBusy) && (
+                <div className="bg-purple-50 border-l-4 border-purple-400 rounded p-3 text-sm text-slate-800 whitespace-pre-wrap min-h-[3rem]">
+                  {aiText}
+                  {aiBusy && (
+                    <span className="inline-block w-2 h-4 ml-0.5 bg-purple-400 animate-pulse align-baseline" />
+                  )}
+                </div>
+              )}
+              {aiErr && (
+                <div className="text-xs text-rose-600">{aiErr}</div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             {!lastSubmittedCorrect && (
               <button
@@ -514,7 +698,7 @@ function QuizPanel({
             )}
             <button
               onClick={onDone}
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-5 py-2 font-medium"
+              className="btn-dark rounded-md px-5 py-2 font-medium"
             >
               Nästa steg →
             </button>
@@ -525,20 +709,23 @@ function QuizPanel({
   );
 }
 
-function TaskPanel({
-  step: _step, progress, onDone,
-}: { step: Step; progress: StepProgress | null; onDone: () => void }) {
+function TaskPanel({ step: _step, progress, onDone, onCelebrate }: PanelProps) {
   const assignmentId = (_step.params?.assignment_id as number) ?? null;
   const [busy, setBusy] = useState(false);
   const done = !!progress?.completed_at;
+  const tracked = !!_step.params?.assignment_kind;
+  const autoStatus = progress?.auto_status ?? null;
+  const autoProgress = progress?.auto_progress ?? null;
+  const autoCompleted = !!progress?.data && (progress.data as Record<string, unknown>).auto_completed === true;
 
   async function markDone() {
     setBusy(true);
     try {
-      await api(`/student/steps/${_step.id}/complete`, {
+      const res = await api<CompleteResp>(`/student/steps/${_step.id}/complete`, {
         method: "POST",
         body: JSON.stringify({}),
       });
+      if (res.new_achievements?.length) onCelebrate(res.new_achievements);
       onDone();
     } finally {
       setBusy(false);
@@ -550,18 +737,51 @@ function TaskPanel({
       {assignmentId && (
         <Link
           to={`/mortgage/${assignmentId}`}
-          className="inline-block bg-brand-50 border border-brand-300 text-brand-800 rounded-lg px-4 py-2 text-sm hover:bg-brand-100"
+          className="inline-block bg-paper border border-rule text-ink rounded-md px-4 py-2 text-sm hover:bg-white"
         >
           Öppna kopplat uppdrag →
         </Link>
+      )}
+      {tracked && autoStatus && (
+        <div
+          className={
+            "border rounded-md p-3 text-sm " +
+            (autoStatus === "completed"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+              : autoStatus === "in_progress"
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-rule bg-paper text-[#555]")
+          }
+        >
+          <div className="font-medium">
+            {autoStatus === "completed"
+              ? "Spårning: klart ✓"
+              : autoStatus === "in_progress"
+              ? "Spårning: pågår"
+              : "Spårning: inte påbörjat"}
+          </div>
+          {autoProgress && <div className="mt-1">{autoProgress}</div>}
+          <div className="mt-1 text-xs text-[#666]">
+            Det här uppdraget kollar din huvudbok automatiskt — så fort
+            kravet är uppfyllt markeras steget som klart.
+          </div>
+        </div>
       )}
       <div>
         <button
           onClick={markDone}
           disabled={done || busy}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-5 py-2 font-medium disabled:bg-slate-300"
+          className="btn-dark rounded-md px-5 py-2 font-medium disabled:opacity-50"
         >
-          {done ? "Markerad som klar ✓" : busy ? "Sparar…" : "Jag har gjort uppdraget"}
+          {done
+            ? autoCompleted
+              ? "Klart automatiskt ✓"
+              : "Markerad som klar ✓"
+            : busy
+            ? "Sparar…"
+            : tracked
+            ? "Markera som klar manuellt"
+            : "Jag har gjort uppdraget"}
         </button>
       </div>
     </div>

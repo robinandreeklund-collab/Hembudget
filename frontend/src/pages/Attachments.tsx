@@ -115,7 +115,7 @@ export default function Attachments() {
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight">
           <Paperclip className="w-6 h-6" />
           Bildunderlag
         </h1>

@@ -31,11 +31,11 @@ export function BackendSetup({ error }: { error?: string }) {
   }
 
   return (
-    <div className="h-full grid place-items-center bg-gradient-to-br from-slate-50 to-brand-50 p-6">
+    <div className="h-full grid place-items-center bg-paper p-6">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-[32rem] max-w-full space-y-4 border border-slate-200">
         <div className="flex items-center gap-2 text-brand-600">
           <Server className="w-5 h-5" />
-          <h1 className="text-xl font-semibold">Koppla mot backend</h1>
+          <h1 className="serif text-2xl leading-tight">Koppla mot backend</h1>
         </div>
         <p className="text-sm text-slate-600">
           Frontenden behöver veta var backend-servern finns. Den här rutan

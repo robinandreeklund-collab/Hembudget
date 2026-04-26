@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, BookOpen, ChevronRight, GraduationCap, Users,
-  Lightbulb, MessageCircle,
+  ArrowLeft, ChevronRight, MessageCircle,
 } from "lucide-react";
 
 type Section = {
@@ -47,6 +46,12 @@ const SECTIONS: Section[] = [
         <p>
           Om du tappat koden — fråga din lärare. Hen kan visa en QR-kod att
           skanna.
+        </p>
+        <p>
+          Lärare har eget login med e-post och lösenord. Glömt lösen →
+          klicka "Glömt lösenord?" på inloggningssidan så skickar vi en
+          återställningslänk till mailen (länken gäller i 60 minuter).
+          Nya lärarkonton bekräftas via mail innan första inloggningen.
         </p>
       </>
     ),
@@ -153,6 +158,148 @@ const SECTIONS: Section[] = [
           Vanliga uppdrag: "sätt din budget", "importera månadens dokument",
           "spara 2 000 kr", "kategorisera alla köp". Systemet uppdaterar
           statusen automatiskt när du jobbat vidare.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-modules",
+    title: "Din kursplan (moduler)",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Din lärare bygger upp en kursplan med <strong>moduler</strong> —
+          mini-kurser om 4–7 steg vardera. Du hittar dem under
+          <em> Din kursplan</em> i menyn.
+        </p>
+        <p>Varje steg är ett av fem:</p>
+        <ul>
+          <li><strong>Läs</strong> — text att läsa, klicka "klar" när du är färdig</li>
+          <li><strong>Titta</strong> — video (oftast YouTube) plus klar-knapp</li>
+          <li><strong>Reflektera</strong> — skriv ett svar på en öppen fråga (minst 10 tecken)</li>
+          <li><strong>Quiz</strong> — flerval. Du får direkt rätt/fel + förklaring. Är det fel kan du fråga Ekon om en pedagogisk förklaring.</li>
+          <li><strong>Uppdrag</strong> — gör något i appen (sätt budget, kategorisera, etc.)</li>
+        </ul>
+        <p>
+          När du klarar steg fylls din <strong>mastery</strong> per kompetens
+          (synlig på dashboarden). När hela modulen är klar markeras den
+          grön och nästa öppnas.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-quiz",
+    title: "Quiz: rätt, fel och Ekons förklaring",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          När du svarar på ett quiz får du direkt rätt/fel — den valda
+          ringen blir grön eller röd. Förklaringstexten från frågans
+          författare visas under.
+        </p>
+        <p>
+          Om du svarade fel och din lärare har AI på får du en knapp
+          "<strong>Fråga Ekon varför ditt svar inte stämmer</strong>". Då
+          streamar Claude en pedagogisk förklaring som tar in just ditt
+          val, inte bara generella rätta svaret.
+        </p>
+        <p>
+          Du kan svara om — mastery räknar dock första försöket. Läraren
+          kan se att du svarade om och vid behov rätta auto-grading
+          (t.ex. om frågan var dåligt formulerad).
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-mastery",
+    title: "Mastery & milstolpar",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          På dashboarden ser du din <strong>mastery</strong> per kompetens
+          — staplar mellan 0 % och 100 %. Den fylls upp när du klarar steg
+          som tränar respektive kompetens.
+        </p>
+        <p>
+          Tickmarks på 25 / 50 / 75 / 100 % visar nästa milstolpe. Under
+          stapeln står "Nästa: 50 %, 3 steg kvar" så du vet vad som krävs.
+          När du når 75 % på en kompetens räknas den som "mästrad" och du
+          får en prestation.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-achievements",
+    title: "Prestationer & streaks",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Prestationer</strong> i menyn ser du badges du
+          tjänat och vilka som finns kvar att jaga:
+        </p>
+        <ul>
+          <li>🎯 Första steget</li>
+          <li>📚 Första modulen klar</li>
+          <li>✍️ Tio reflektioner skickade</li>
+          <li>🏆 Tre kompetenser mästrade (≥75%)</li>
+          <li>🔥 Sju dagar i rad med klart steg (streak)</li>
+          <li>💯 Quiz på första försöket</li>
+        </ul>
+        <p>
+          Streaken räknar konsekutiva dagar med minst ett klart steg.
+          Tappar du en dag börjar räkningen om — men din längsta serie
+          historiskt finns alltid kvar.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-ask-ekon",
+    title: "Fråga Ekon (AI-coach)",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Knappen <strong>Fråga Ekon</strong> nere i högra hörnet öppnar
+          en chat med en AI-coach (Claude Sonnet). Den anpassar svaret
+          till var du är i kursplanen — har du låg mastery på området
+          frågar Ekon snarare tillbaka för att få dig att tänka själv,
+          har du högre mastery svarar den direkt.
+        </p>
+        <p>
+          Multi-turn: du kan följdfråga inom samma samtal. Klicka på
+          plus-knappen för att starta ett nytt. Trådarna sparas så du
+          kan komma tillbaka.
+        </p>
+        <p>
+          Ekon ger inte personliga råd om vad du ska köpa eller spara —
+          den hjälper dig <em>förstå</em>.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "student-peer-review",
+    title: "Kamratrespons",
+    group: "student",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Kamratrespons</strong> får du läsa en anonym
+          reflektion från en klasskamrat och skriva en kort återkoppling.
+          Du ser inte vem du svarar — och eleven du recenserar ser inte
+          att det var du.
+        </p>
+        <p>
+          När någon ger dig kamratrespons syns den under reflektionen i
+          modulen. Läraren ser båda namnen i moderationsvyn.
         </p>
       </>
     ),
@@ -308,6 +455,171 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: "teacher-modules",
+    title: "Moduler & kursplan",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Kursmoduler</strong> bygger du kursplanen elev för
+          elev eller för hela klassen. En modul är en serie steg av fem typer:
+        </p>
+        <ul>
+          <li><strong>Läs</strong> — markdown-text</li>
+          <li><strong>Titta</strong> — YouTube/Vimeo-embed</li>
+          <li><strong>Reflektera</strong> — öppen fråga med rubric-bedömning</li>
+          <li><strong>Quiz</strong> — flerval med direkt rätt/fel + AI-förklaring vid fel</li>
+          <li><strong>Uppdrag</strong> — koppla till ett uppdrag i plattformen</li>
+        </ul>
+        <p>
+          Skapa från scratch eller klona en system-mall (t.ex. "Din första
+          månad") och anpassa. Tilldela till elever via knappen på modulen.
+          När eleven öppnar modulen byggs framsteg upp per steg.
+        </p>
+        <p>
+          Modulen kan publiceras som <strong>delad mall</strong> så andra
+          lärare i instansen kan klona den. Klick "Publicera" på din modul.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-reflections",
+    title: "Reflektioner & rubric",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Reflektioner</strong> hittar du elevernas svar på alla
+          reflect-steg, sorterade per modul. Du skriver feedback direkt och
+          ger ev. rubric-betyg per kriterium.
+        </p>
+        <p>
+          För återanvändning: under <strong>Rubric-mallar</strong> kan du
+          skapa namngivna kriteriematriser ("Djup", "Tydlighet", "Källor"
+          ×&nbsp;3 nivåer) och klicka in dem på reflect-steg när du bygger
+          moduler. Markera mallen som delad så kollegor kan klona den.
+        </p>
+        <p>
+          Om AI är aktiverat (super-admin sätter detta) kan Claude föreslå
+          rubric-betyg per kriterium med motivering — du skriver under eller
+          ändrar med två klick.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-quiz-override",
+    title: "Quiz-override",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Auto-grading på quiz är ibland fel — frågan var dåligt formulerad
+          eller eleven hade en bättre tolkning. På elevens detalj-vy kan du
+          välja "Rätta som rätt" på ett quiz-steg och skriva en kort
+          motivering.
+        </p>
+        <p>
+          Mastery räknar då lärarens override istället för auto-grade. Eleven
+          ser banner "Läraren har kommenterat" på sitt quiz-steg.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-time-on-task",
+    title: "Time on task",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Under <strong>Time on task</strong> ser du median-tid per steg över
+          alla dina elever, plus antal som börjat men inte avslutat ("fastnat").
+          Bra för att hitta steg som är för svåra eller otydliga.
+        </p>
+        <p>
+          Datan kommer från en heartbeat som elevens app pingar var 20:e
+          sekund medan ett steg är öppet. Avslutat steg = senaste heartbeat
+          minus första. Stuck = heartbeat finns men ingen completion.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-portfolio",
+    title: "Klass-portfolio (ZIP)",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Knappen <strong>Klass-portfolio (ZIP)</strong> i lärarpanelen
+          genererar en portfolio-PDF per aktiv elev och packar dem i ett
+          ZIP-arkiv (filnamn <code>klass_portfolio.zip</code>). Bra
+          underlag inför betygsperiod eller utvecklingssamtal.
+        </p>
+        <p>
+          Varje PDF innehåller elevens reflektioner, mastery-grafer, klara
+          moduler och uppdragsstatus. Tar några sekunder per elev — för en
+          klass på 30 räkna med ~30 sek.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-students-summary",
+    title: "AI-elevsammanfattning",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          På varje elevs detalj-vy finns en <strong>AI-lägesbild</strong>
+          som genereras med Claude Sonnet. Tre sektioner: styrkor, gap,
+          nästa steg. Bygger på mastery, senaste reflektioner och uppdrag.
+        </p>
+        <p>
+          Kräver att AI är aktiverat på ditt konto (super-admin styr detta).
+          Genereras on-demand när du klickar knappen — inga automatiska
+          körningar.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "teacher-super-admin",
+    title: "Super-admin & inställningar",
+    group: "teacher",
+    body: () => (
+      <>
+        <p>
+          Den första läraren som registrerar sig blir <strong>super-admin</strong>
+          automatiskt. I lärarpanelen syns då en extra knapp "🧠 AI-admin"
+          som leder till <code>/teacher/admin-ai</code>.
+        </p>
+        <p>Där styr super-admin:</p>
+        <ul>
+          <li>
+            <strong>AI-toggel per lärare</strong> — vilka av kollegorna som
+            får använda Claude-funktionerna (kostar pengar per anrop).
+          </li>
+          <li>
+            <strong>Anthropic API-nyckel</strong> — klistra in
+            <code> sk-ant-api03-…</code>. Lagras krypterat i master-DB.
+          </li>
+          <li>
+            <strong>SMTP-konfiguration</strong> — Gmail app-password eller
+            annan SMTP-server. Krävs för signup-mail, lösenords-återställning
+            och e-post-verifiering. Knappen "Skicka testmail" verifierar
+            inställningen utan att triggra ett riktigt signup.
+          </li>
+          <li>
+            <strong>Super-admin-toggel</strong> — utse fler super-admins.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     id: "teacher-families",
     title: "Familjer",
     group: "teacher",
@@ -415,14 +727,6 @@ const SECTIONS: Section[] = [
           Lärare ser bara sina egna elevers data. Meddelandetråden är
           1-till-1 och osynlig för andra.
         </p>
-        <p>
-          Koden är öppen källkod på{" "}
-          <a
-            href="https://github.com/robinandreeklund-collab/Hembudget"
-            target="_blank" rel="noreferrer"
-            className="text-brand-600 underline"
-          >GitHub</a>.
-        </p>
       </>
     ),
   },
@@ -445,49 +749,51 @@ export default function Docs() {
   }, []);
 
   const groupLabels = {
-    student: { label: "För elever", icon: GraduationCap },
-    teacher: { label: "För lärare", icon: Users },
-    pedagogy: { label: "Bakgrund & pedagogik", icon: Lightbulb },
+    student: { label: "För elever" },
+    teacher: { label: "För lärare" },
+    pedagogy: { label: "Bakgrund & pedagogik" },
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div className="min-h-screen bg-paper text-ink">
+      <header className="sticky top-0 z-30 bg-paper/95 backdrop-blur border-b border-rule">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <Link
             to="/"
-            className="flex items-center gap-2 text-slate-700 hover:text-brand-700"
+            className="text-sm nav-link inline-flex items-center gap-1"
           >
             <ArrowLeft className="w-4 h-4" /> Startsidan
           </Link>
-          <div className="flex items-center gap-2 text-brand-600 font-semibold">
-            <BookOpen className="w-5 h-5" /> Dokumentation
+          <div className="flex items-center gap-2">
+            <svg width="22" height="22" viewBox="0 0 40 40" aria-hidden="true">
+              <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
+              <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">Ek</text>
+            </svg>
+            <span className="serif text-lg">Dokumentation</span>
           </div>
           <div className="w-20" />
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-10 grid md:grid-cols-[240px_1fr] gap-8">
+      <div className="max-w-6xl mx-auto px-6 py-12 grid md:grid-cols-[240px_1fr] gap-10">
         {/* Sidomeny */}
-        <aside className="md:sticky md:top-20 self-start space-y-6">
+        <aside className="md:sticky md:top-20 self-start space-y-7">
           {(["student", "teacher", "pedagogy"] as const).map((group) => {
-            const { label, icon: Icon } = groupLabels[group];
+            const { label } = groupLabels[group];
             const items = SECTIONS.filter((s) => s.group === group);
             return (
               <div key={group}>
-                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500 font-semibold mb-2">
-                  <Icon className="w-3.5 h-3.5" /> {label}
-                </div>
-                <ul className="space-y-1">
+                <div className="eyebrow mb-3">{label}</div>
+                <ul className="space-y-1 border-l border-rule">
                   {items.map((s) => (
                     <li key={s.id}>
                       <a
                         href={`#${s.id}`}
                         onClick={() => setActiveSection(s.id)}
-                        className={`block rounded px-3 py-1.5 text-sm ${
+                        className={`block px-3 py-1.5 text-sm border-l-2 -ml-px transition-colors ${
                           activeSection === s.id
-                            ? "bg-brand-100 text-brand-800 font-medium"
-                            : "text-slate-700 hover:bg-slate-100"
+                            ? "border-ink text-ink font-semibold"
+                            : "border-transparent text-[#666] hover:text-ink"
                         }`}
                       >
                         {s.title}
@@ -498,10 +804,10 @@ export default function Docs() {
               </div>
             );
           })}
-          <div className="border-t pt-4">
+          <div className="border-t border-rule pt-4">
             <Link
               to="/messages"
-              className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+              className="text-sm nav-link inline-flex items-center gap-1"
             >
               <MessageCircle className="w-4 h-4" />
               Fråga din lärare
@@ -511,17 +817,17 @@ export default function Docs() {
         </aside>
 
         {/* Innehåll */}
-        <main className="space-y-12 prose prose-slate max-w-none">
+        <main className="space-y-14">
           {SECTIONS.map((s) => (
             <section
               key={s.id}
               id={s.id}
               className="scroll-mt-24"
             >
-              <h2 className="text-2xl font-bold text-slate-900 mb-3 border-b border-slate-200 pb-2">
+              <h2 className="serif text-2xl md:text-3xl leading-tight mb-4 pb-3 border-b border-rule">
                 {s.title}
               </h2>
-              <div className="space-y-3 text-slate-700 leading-relaxed">
+              <div className="space-y-4 body-prose text-[15px]">
                 {s.body()}
               </div>
             </section>
@@ -529,10 +835,12 @@ export default function Docs() {
         </main>
       </div>
 
-      <footer className="border-t border-slate-200 bg-slate-50 py-8 mt-16">
-        <div className="max-w-6xl mx-auto px-6 text-center text-sm text-slate-500">
-          Har du förslag på vad som kan förbättras i dokumentationen? Använd
-          meddelandefunktionen i appen eller öppna en issue på GitHub.
+      <footer className="border-t border-rule mt-16">
+        <div className="max-w-6xl mx-auto px-6 py-8 text-center text-sm text-[#888] serif-italic">
+          Har du förslag på vad som kan förbättras i dokumentationen? Skriv
+          till <a href="mailto:info@ekonomilabbet.org" className="nav-link not-italic">
+            info@ekonomilabbet.org
+          </a> eller använd meddelandefunktionen i appen.
         </div>
       </footer>
     </div>

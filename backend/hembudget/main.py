@@ -16,8 +16,9 @@ faulthandler.enable()
 
 from .api import (
     admin, ai, ai_admin, auth, backup, balances, budget, chat, elpris,
-    funds, ledger, loans, modules, reports, scenarios, school, settings_kv,
-    tax, transactions, transfers, upcoming, upload, utility,
+    email_auth, funds, landing, ledger, loans, modules, reports, scenarios,
+    school, settings_kv, smtp_admin, tax, transactions, transfers,
+    upcoming, upload, utility,
 )
 from .config import settings
 
@@ -89,13 +90,15 @@ def build_app() -> FastAPI:
         from starlette.middleware.base import BaseHTTPMiddleware
         from .api.deps import _token_info
         from .school.engines import (
-            master_session, scope_for_student, set_current_scope,
+            master_session, scope_for_student,
+            set_current_actor_student, set_current_scope,
         )
         from .school.models import Student
 
         class StudentScopeMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
                 set_current_scope(None)
+                set_current_actor_student(None)
                 auth = request.headers.get("authorization")
                 x_as = request.headers.get("x-as-student")
                 if auth and auth.lower().startswith("bearer "):
@@ -121,6 +124,7 @@ def build_app() -> FastAPI:
                                 stu = q.first()
                                 if stu:
                                     set_current_scope(scope_for_student(stu))
+                                    set_current_actor_student(stu.id)
                 return await call_next(request)
 
         app.add_middleware(StudentScopeMiddleware)
@@ -145,8 +149,11 @@ def build_app() -> FastAPI:
     app.include_router(utility.router)
     app.include_router(admin.router)
     app.include_router(school.router)
+    app.include_router(email_auth.router)
     app.include_router(modules.router)
     app.include_router(ai_admin.router)
+    app.include_router(smtp_admin.router)
+    app.include_router(landing.router)
     app.include_router(ai.router)
 
     @app.get("/healthz")
@@ -334,6 +341,14 @@ def _school_bootstrap() -> None:
             if nm > 0:
                 logging.getLogger(__name__).info(
                     "school: seeded %d system modules", nm,
+                )
+            # Seed landningssidans gallery-slots (utan bilder — super-
+            # admin laddar upp via /admin/landing/gallery)
+            from .school.landing_seed import seed_landing_assets
+            nl = seed_landing_assets(s)
+            if nl > 0:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d landing asset slots", nl,
                 )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")

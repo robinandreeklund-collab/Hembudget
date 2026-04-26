@@ -33,6 +33,13 @@ export function useAuth() {
     onboarding_completed: boolean;
     family_id: number | null;
   } | null>(null);
+  // Lärar-metadata (is_family_account etc.) — laddas när token+role är
+  // teacher. Används för att växla copy mellan "Lärarpanel" och
+  // "Familjepanel" i Sidebar/Brand utan att smuggla info i URL:en.
+  const [teacherMeta, setTeacherMeta] = useState<{
+    is_family_account: boolean;
+    name: string;
+  } | null>(null);
 
   // Hämta /student/me när token+role finns för att veta onboarding-status
   useEffect(() => {
@@ -49,6 +56,21 @@ export function useAuth() {
         .catch(() => undefined);
     } else {
       setStudentMeta(null);
+    }
+  }, [token, role]);
+
+  useEffect(() => {
+    if (token && role === "teacher") {
+      api<{ is_family_account: boolean; name: string }>("/teacher/me")
+        .then((m) =>
+          setTeacherMeta({
+            is_family_account: Boolean(m.is_family_account),
+            name: m.name,
+          }),
+        )
+        .catch(() => undefined);
+    } else {
+      setTeacherMeta(null);
     }
   }, [token, role]);
 
@@ -231,6 +253,7 @@ export function useAuth() {
     schoolStatus,
     studentMeta,
     refreshStudentMeta,
+    teacherMeta,
     loading,
     backendError,
     login,

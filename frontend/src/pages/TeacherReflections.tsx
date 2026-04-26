@@ -156,14 +156,14 @@ export default function TeacherReflections() {
       <div className="max-w-6xl mx-auto p-6 space-y-4">
         <Link
           to="/teacher"
-          className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+          className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Lärarpanel
         </Link>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-6 h-6 text-brand-600" />
-            <h1 className="text-2xl font-semibold">Elevernas reflektioner</h1>
+            <h1 className="serif text-3xl leading-tight">Elevernas reflektioner</h1>
           </div>
           <label className="text-sm flex items-center gap-2 text-slate-700">
             <Filter className="w-4 h-4 text-slate-500" />
@@ -177,7 +177,7 @@ export default function TeacherReflections() {
         </div>
 
         {err && (
-          <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
             {err}
           </div>
         )}
@@ -224,7 +224,7 @@ export default function TeacherReflections() {
               </ul>
             </aside>
 
-            <main className="bg-white rounded-xl border p-5 space-y-4">
+            <main className="bg-white border-[1.5px] border-rule p-5 space-y-4">
               {active ? (
                 <>
                   <div>
@@ -340,7 +340,7 @@ export default function TeacherReflections() {
                     <button
                       onClick={save}
                       disabled={busy || !feedback.trim()}
-                      className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50"
+                      className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
                     >
                       {active.teacher_feedback
                         ? busy

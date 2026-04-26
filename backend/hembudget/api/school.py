@@ -98,6 +98,7 @@ class TeacherAuthOut(BaseModel):
     teacher_id: int
     name: str
     email: str
+    is_family_account: bool = False
 
 
 class StudentIn(BaseModel):
@@ -327,23 +328,28 @@ def bootstrap_teacher(
                 status.HTTP_410_GONE, "Teachers already exist",
             )
         # Bootstrap-läraren är alltid super-admin — det är den enda lärare
-        # som kan tilldela AI-rättigheter till övriga lärare.
+        # som kan tilldela AI-rättigheter till övriga lärare. Räknas
+        # email-verifierad direkt (vi litar på att env-var-admin har
+        # rätt mail).
         teacher = Teacher(
             email=payload.email.lower(),
             name=payload.name,
             password_hash=hash_password(payload.password),
             is_super_admin=True,
+            email_verified_at=datetime.utcnow(),
         )
         s.add(teacher)
         s.flush()
         tid = teacher.id
         tname = teacher.name
         temail = teacher.email
+        tfam = teacher.is_family_account
 
     token = random_token()
     register_token(token, role="teacher", teacher_id=tid)
     return TeacherAuthOut(
         token=token, teacher_id=tid, name=tname, email=temail,
+        is_family_account=tfam,
     )
 
 
@@ -367,13 +373,24 @@ def teacher_login(
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, "Invalid credentials",
             )
+        # Blockera login om e-post inte är verifierad. Bootstrap- och
+        # demo-lärare samt gamla konton (backfill vid migration) är
+        # redan verifierade, så detta träffar bara nya open-signup-
+        # lärare som glömt klicka länken.
+        if teacher.email_verified_at is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "email_unverified",
+            )
         tid = teacher.id
         tname = teacher.name
         temail = teacher.email
+        tfam = teacher.is_family_account
     token = random_token()
     register_token(token, role="teacher", teacher_id=tid)
     return TeacherAuthOut(
         token=token, teacher_id=tid, name=tname, email=temail,
+        is_family_account=tfam,
     )
 
 
@@ -1068,6 +1085,11 @@ class DashboardOvershootRow(BaseModel):
     category_hint: Optional[str] = None
 
 
+class InactivityNudgeOut(BaseModel):
+    days_away: int
+    last_active: str  # ISO-datum
+
+
 class StudentDashboardOut(BaseModel):
     year_month: str
     net_income: int
@@ -1082,6 +1104,9 @@ class StudentDashboardOut(BaseModel):
     personality: str
     profession: str
     display_name: str
+    # Sätts om eleven inte har klarat ett steg på >= 5 dagar MEN har
+    # minst ett historiskt klart steg. Frontend visar en välkomst-banner.
+    inactivity_nudge: Optional[InactivityNudgeOut] = None
 
 
 @router.get("/student/dashboard", response_model=StudentDashboardOut)
@@ -1214,6 +1239,26 @@ def student_dashboard(
 
     balance = net_income - total_spent - savings_done
 
+    # Inaktivitets-nudge: var eleven borta ≥ 5 dagar?
+    nudge: Optional[InactivityNudgeOut] = None
+    with master_session() as s:
+        last_prog = (
+            s.query(StudentStepProgress)
+            .filter(
+                StudentStepProgress.student_id == info.student_id,
+                StudentStepProgress.completed_at.isnot(None),
+            )
+            .order_by(StudentStepProgress.completed_at.desc())
+            .first()
+        )
+        if last_prog and last_prog.completed_at:
+            days = (datetime.utcnow() - last_prog.completed_at).days
+            if days >= 5:
+                nudge = InactivityNudgeOut(
+                    days_away=days,
+                    last_active=last_prog.completed_at.date().isoformat(),
+                )
+
     return StudentDashboardOut(
         year_month=ym,
         net_income=net_income,
@@ -1228,6 +1273,7 @@ def student_dashboard(
         personality=personality,
         profession=profession,
         display_name=display_name,
+        inactivity_nudge=nudge,
     )
 
 
@@ -1260,6 +1306,8 @@ class AssignmentStatusOut(AssignmentOut):
     status: str  # "not_started" | "in_progress" | "completed"
     progress: str
     detail: Optional[dict] = None
+    teacher_feedback: Optional[str] = None
+    teacher_feedback_at: Optional[datetime] = None
 
 
 def _assignment_to_out(a: Assignment) -> AssignmentOut:
@@ -1313,6 +1361,39 @@ def create_assignment(
     return out
 
 
+class AssignmentFeedbackIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    # Om True nollställs manually_completed_at så eleven måste
+    # markera uppdraget som klart igen efter att ha läst feedbacken.
+    request_retry: bool = False
+
+
+@router.post("/teacher/assignments/{assignment_id}/feedback")
+def assignment_feedback(
+    assignment_id: int,
+    payload: AssignmentFeedbackIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Lärare lämnar skriftlig återkoppling på ett uppdrag. Eleven ser
+    texten i uppdrags-vyn. Om request_retry=True nollas status så
+    eleven ombeds att försöka igen."""
+    _require_school_mode()
+    with master_session() as s:
+        a = s.query(Assignment).filter(
+            Assignment.id == assignment_id,
+            Assignment.teacher_id == info.teacher_id,
+        ).first()
+        if not a:
+            raise HTTPException(
+                404, "Uppdrag finns ej eller tillhör inte dig",
+            )
+        a.teacher_feedback = payload.body.strip()
+        a.teacher_feedback_at = datetime.utcnow()
+        if payload.request_retry:
+            a.manually_completed_at = None
+    return {"ok": True}
+
+
 @router.get(
     "/teacher/assignments",
     response_model=list[AssignmentStatusOut],
@@ -1358,6 +1439,8 @@ def list_assignments(
                 status=status_val,
                 progress=progress,
                 detail=detail,
+                teacher_feedback=a.teacher_feedback,
+                teacher_feedback_at=a.teacher_feedback_at,
             ))
         return out
 
@@ -1509,6 +1592,8 @@ def student_my_assignments(
             out.append(AssignmentStatusOut(
                 **base.model_dump(),
                 status=res.status, progress=res.progress, detail=res.detail,
+                teacher_feedback=a.teacher_feedback,
+                teacher_feedback_at=a.teacher_feedback_at,
             ))
         return out
 
@@ -1602,56 +1687,61 @@ def create_batches(
 
         for student in students:
             try:
-                if not student.profile:
-                    _create_profile_for_student(s, student)
-                existing = s.query(ScenarioBatch).filter(
-                    ScenarioBatch.student_id == student.id,
-                    ScenarioBatch.year_month == payload.year_month,
-                ).first()
-                if existing and not payload.overwrite:
+                # SAVEPOINT per elev: om en specifik elev-batch failar
+                # (t.ex. unika constraint, integer-overflow, etc.) ska
+                # sessionen rollbacka isolerat så övriga elever lyckas
+                # och hela POST-svaret inte blir 500.
+                with s.begin_nested():
+                    if not student.profile:
+                        _create_profile_for_student(s, student)
+                    existing = s.query(ScenarioBatch).filter(
+                        ScenarioBatch.student_id == student.id,
+                        ScenarioBatch.year_month == payload.year_month,
+                    ).first()
+                    if existing and not payload.overwrite:
+                        results.append(CreateBatchResultRow(
+                            student_id=student.id,
+                            display_name=student.display_name,
+                            year_month=payload.year_month,
+                            status="exists", batch_id=existing.id,
+                            artifact_count=len(existing.artifacts),
+                        ))
+                        continue
+                    status_str = "overwritten" if existing else "created"
+                    batch = create_batch_for_student(
+                        s, student, payload.year_month,
+                        overwrite=payload.overwrite,
+                    )
+                    s.flush()
+                    # Auto-skapa import-uppdrag för månaden om det inte finns
+                    from ..teacher.assignments import (
+                        DEFAULT_ASSIGNMENT_FOR_NEW_BATCH,
+                    )
+                    exists_a = s.query(Assignment).filter(
+                        Assignment.student_id == student.id,
+                        Assignment.kind == "import_batch",
+                        Assignment.target_year_month == payload.year_month,
+                    ).first()
+                    if not exists_a:
+                        s.add(Assignment(
+                            teacher_id=info.teacher_id,
+                            student_id=student.id,
+                            title=(
+                                f"Importera dokument för {payload.year_month}"
+                            ),
+                            description=DEFAULT_ASSIGNMENT_FOR_NEW_BATCH[
+                                "description"
+                            ],
+                            kind="import_batch",
+                            target_year_month=payload.year_month,
+                        ))
                     results.append(CreateBatchResultRow(
                         student_id=student.id,
                         display_name=student.display_name,
                         year_month=payload.year_month,
-                        status="exists", batch_id=existing.id,
-                        artifact_count=len(existing.artifacts),
+                        status=status_str, batch_id=batch.id,
+                        artifact_count=len(batch.artifacts),
                     ))
-                    continue
-                status_str = "overwritten" if existing else "created"
-                batch = create_batch_for_student(
-                    s, student, payload.year_month,
-                    overwrite=payload.overwrite,
-                )
-                s.flush()
-                # Auto-skapa import-uppdrag för månaden om det inte finns
-                from ..teacher.assignments import (
-                    DEFAULT_ASSIGNMENT_FOR_NEW_BATCH,
-                )
-                exists_a = s.query(Assignment).filter(
-                    Assignment.student_id == student.id,
-                    Assignment.kind == "import_batch",
-                    Assignment.target_year_month == payload.year_month,
-                ).first()
-                if not exists_a:
-                    s.add(Assignment(
-                        teacher_id=info.teacher_id,
-                        student_id=student.id,
-                        title=(
-                            f"Importera dokument för {payload.year_month}"
-                        ),
-                        description=DEFAULT_ASSIGNMENT_FOR_NEW_BATCH[
-                            "description"
-                        ],
-                        kind="import_batch",
-                        target_year_month=payload.year_month,
-                    ))
-                results.append(CreateBatchResultRow(
-                    student_id=student.id,
-                    display_name=student.display_name,
-                    year_month=payload.year_month,
-                    status=status_str, batch_id=batch.id,
-                    artifact_count=len(batch.artifacts),
-                ))
             except Exception as e:
                 log.exception("Batch creation failed for %d", student.id)
                 results.append(CreateBatchResultRow(
@@ -2479,6 +2569,20 @@ def demo_status() -> dict:
         }
 
 
+@router.post("/admin/demo/rebuild")
+def admin_rebuild_demo(info: TokenInfo = Depends(require_teacher)) -> dict:
+    """Super-admin: trigga om demo-byggandet manuellt utan att vänta
+    på schemaläggaren (10 min). Använd om demo-data är trasigt eller
+    försvunnit efter en deploy."""
+    _require_school_mode()
+    with master_session() as s:
+        t = s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        if not t or not t.is_super_admin:
+            raise HTTPException(403, "Super-admin krävs")
+    from ..school.demo_seed import build_demo
+    return build_demo()
+
+
 @router.get("/demo/is-demo")
 def am_i_in_demo(info: TokenInfo = Depends(require_token)) -> dict:
     """Används av frontend för att visa demobanner ovanför allt UI."""
@@ -2523,13 +2627,18 @@ def list_all_batch_months(
 def student_list_batches(
     info: TokenInfo = Depends(require_token),
 ) -> list[ScenarioBatchOut]:
+    """Lista elevens egna batchar. Tillåter lärar-impersonation
+    (x-as-student-headern) så lärare kan kolla elevens vy utan att
+    smällas ut med 403."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    # Använd actor_student_id från middleware — fungerar för både
+    # elev-token och lärare med x-as-student.
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         batches = (
             s.query(ScenarioBatch)
-            .filter(ScenarioBatch.student_id == info.student_id)
+            .filter(ScenarioBatch.student_id == student_id)
             .order_by(ScenarioBatch.year_month.desc())
             .all()
         )
@@ -2618,6 +2727,16 @@ def import_artifact_endpoint(
         if not student:
             raise HTTPException(404, "Student not found")
         result = import_artifact(s, artifact, student)
+        from ..school.activity import log_activity as _act
+        _act(
+            "batch.imported",
+            f"Importerade {artifact.kind} ({batch.year_month})",
+            payload={
+                "batch_id": batch.id, "artifact_id": artifact.id,
+                "kind": artifact.kind, "year_month": batch.year_month,
+            },
+            student_id=student.id,
+        )
         return result
 
 
@@ -2650,6 +2769,18 @@ def import_all_endpoint(
         for art in sorted_arts:
             r = import_artifact(s, art, student)
             results.append({"artifact_id": art.id, "kind": art.kind, **r})
+        if results:
+            from ..school.activity import log_activity as _act
+            _act(
+                "batch.imported",
+                f"Importerade alla {len(results)} dokument för "
+                f"{batch.year_month}",
+                payload={
+                    "batch_id": batch.id, "year_month": batch.year_month,
+                    "count": len(results),
+                },
+                student_id=student.id,
+            )
     return {"results": results}
 
 
@@ -2743,6 +2874,43 @@ def school_status() -> dict:
     return info
 
 
+@router.get("/public/stats")
+def public_stats() -> dict:
+    """Aggregerade, icke-PII-siffror för landningssidan. Fallback till
+    0 om school-läget inte är aktiverat så anropet alltid är säkert."""
+    if not school_enabled():
+        return {
+            "teachers": 0, "students": 0,
+            "modules_completed": 0, "reflections_written": 0,
+        }
+    with master_session() as s:
+        from ..school.models import (
+            StudentModule as _SM,
+            StudentStepProgress as _P,
+            ModuleStep as _Step,
+        )
+        teachers = s.query(Teacher).filter(
+            Teacher.is_demo.is_(False),
+            Teacher.active.is_(True),
+        ).count()
+        students = s.query(Student).filter(Student.active.is_(True)).count()
+        modules_completed = s.query(_SM).filter(
+            _SM.completed_at.isnot(None)
+        ).count()
+        reflections_written = (
+            s.query(_P).join(_Step, _P.step_id == _Step.id).filter(
+                _Step.kind == "reflect",
+                _P.completed_at.isnot(None),
+            ).count()
+        )
+    return {
+        "teachers": teachers,
+        "students": students,
+        "modules_completed": modules_completed,
+        "reflections_written": reflections_written,
+    }
+
+
 @router.get("/teacher/me", response_model=TeacherAuthOut)
 def teacher_me(info: TokenInfo = Depends(require_teacher)) -> TeacherAuthOut:
     _require_school_mode()
@@ -2752,6 +2920,7 @@ def teacher_me(info: TokenInfo = Depends(require_teacher)) -> TeacherAuthOut:
             raise HTTPException(404, "Teacher not found")
         return TeacherAuthOut(
             token=info.token, teacher_id=t.id, name=t.name, email=t.email,
+            is_family_account=t.is_family_account,
         )
 
 

@@ -15,6 +15,7 @@ from ..categorize.engine import normalize_merchant
 from ..categorize.rules import create_rule_from_correction
 from ..db.models import Account, Category, Import, LockedPeriod, Transaction, User
 from ..llm.client import LMStudioClient
+from ..school.activity import log_activity as _log_activity
 from ..transfers.detector import TransferDetector
 from .deps import db, llm_client, require_auth
 from .schemas import (
@@ -476,10 +477,12 @@ def update_transaction(
         elif not new_flag and tx.is_transfer:
             TransferDetector(session).unlink(tx.id)
 
+    recategorized = False
     if "category_id" in fields and fields["category_id"] is not None:
         tx.category_id = fields["category_id"]
         tx.user_verified = True
         tx.is_transfer = False       # kategorisering motsäger transfer
+        recategorized = True
         if create_rule and tx.normalized_merchant:
             create_rule_from_correction(
                 session,
@@ -492,6 +495,17 @@ def update_transaction(
             continue
         setattr(tx, k, v)
     session.flush()
+    if recategorized:
+        cat = session.get(Category, tx.category_id) if tx.category_id else None
+        _log_activity(
+            "transaction.recategorized",
+            f"Kategoriserade om transaktion ({cat.name if cat else 'okänd'})",
+            payload={
+                "tx_id": tx.id,
+                "category_id": tx.category_id,
+                "amount": float(tx.amount),
+            },
+        )
     return tx
 
 
@@ -501,6 +515,11 @@ def link_transfer(payload: TransferLinkIn, session: Session = Depends(db)) -> di
         TransferDetector(session).link_manual(payload.tx_a_id, payload.tx_b_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    _log_activity(
+        "transfer.linked",
+        "Länkade två transaktioner som överföring",
+        payload={"tx_a_id": payload.tx_a_id, "tx_b_id": payload.tx_b_id},
+    )
     return {"ok": True}
 
 
@@ -659,6 +678,14 @@ def create_manual_transaction(
     TransferDetector(session).detect_internal_transfers()
     session.flush()
 
+    _log_activity(
+        "transaction.created",
+        f"Lade till manuell transaktion ({float(amount):+.0f} kr)",
+        payload={
+            "tx_id": tx.id, "amount": float(amount),
+            "account_id": account_id, "date": date_s,
+        },
+    )
     return tx
 
 

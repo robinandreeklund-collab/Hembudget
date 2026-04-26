@@ -37,6 +37,28 @@ def run_migrations(engine: Engine) -> list[str]:
     """Apply all pending migrations. Returns list of applied changes."""
     applied: list[str] = []
 
+    # tenant_id på alla scope-tabeller — krävs för delad Postgres
+    # (DB2-migrationen) men läggs även till i SQLite-fil-per-scope så
+    # samma kod-path fungerar oavsett DB-backend. NULL = "äldre rad
+    # innan migrationen, tillhör den scope-fil den ligger i".
+    _scope_tables = [
+        "users", "accounts", "categories", "transactions", "rules",
+        "budgets", "goals", "subscriptions", "scenarios", "imports",
+        "chat_messages", "loans", "loan_payments", "loan_schedule_entries",
+        "upcoming_transactions", "upcoming_transaction_lines",
+        "transaction_splits", "tax_events", "fund_holdings",
+        "fund_holding_snapshots", "upcoming_payments", "locked_periods",
+        "dismissed_transfer_suggestions", "utility_readings",
+        "app_settings", "audit_logs",
+    ]
+    for tbl in _scope_tables:
+        if not _table_exists(engine, tbl):
+            continue
+        cols = _columns(engine, tbl)
+        if "tenant_id" not in cols:
+            _add_column(engine, tbl, "tenant_id VARCHAR(40)")
+            applied.append(f"{tbl}.tenant_id")
+
     # transactions.is_transfer
     tx_cols = _columns(engine, "transactions")
     if "is_transfer" not in tx_cols:

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Landing-demos · Ekonomilabbet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#111217;--paper:#fbfaf6;--rule:#e7e3d7;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:880px;margin:0 auto;padding:60px 24px;}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
+  h1{font-family:Spectral,serif;font-weight:800;font-size:44px;letter-spacing:-.015em;
+    line-height:1.05;margin:8px 0 6px;}
+  .lead{font-size:17px;line-height:1.55;color:#444;max-width:560px;}
+
+  .group{margin-top:42px;border-top:1px solid var(--rule);padding-top:28px;}
+  .group-title{font-family:Spectral,serif;font-size:22px;font-weight:800;
+    letter-spacing:-.01em;margin:0 0 18px;}
+  ul{list-style:none;padding:0;margin:0;display:grid;gap:10px;}
+  ul.cols{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));}
+  a.tile{
+    display:block;border:1.5px solid var(--ink);background:#fff;padding:18px 20px;
+    color:var(--ink);text-decoration:none;
+    transition:transform .15s,box-shadow .15s,background .15s;
+  }
+  a.tile:hover{transform:translateY(-3px);
+    box-shadow:0 10px 24px rgba(0,0,0,.1);background:#fffef5;}
+  a.tile .num{
+    font-family:Spectral,serif;font-style:italic;font-size:13px;color:#888;
+    display:block;margin-bottom:6px;
+  }
+  a.tile .title{font-family:Spectral,serif;font-weight:600;font-size:18px;
+    line-height:1.2;}
+  a.tile .desc{font-size:13px;color:#555;line-height:1.45;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Landing-demos · Ekonomilabbet</div>
+  <h1>Designprototyper.</h1>
+  <p class="lead">Statiska HTML-koncept för landningssidan. demo3 är den nuvarande
+    "vinnaren" och redan migrerad till React-appen. Prof-A/B/C är förslag på hur
+    vi kan ersätta nuvarande prof-figur med något mer polerat.</p>
+
+  <div class="group">
+    <h2 class="group-title">Landningssidekoncept</h2>
+    <ul class="cols">
+      <li>
+        <a class="tile" href="demo1-neon-lab.html">
+          <span class="num">Demo 1</span>
+          <span class="title">Neon-laboratorium</span>
+          <span class="desc">Mörk gradient, neon-accent, "tech"-känsla.</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile" href="demo2-cartoon-prof.html">
+          <span class="num">Demo 2</span>
+          <span class="title">Tecknad professor</span>
+          <span class="desc">Stark karaktär, tecknad illustration.</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile" href="demo3-periodic.html">
+          <span class="num">Demo 3 ★</span>
+          <span class="title">Periodiska systemet</span>
+          <span class="desc">Paper-stil, 32 cellers begreppskarta. Vald.</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile" href="demo4-split-screen.html">
+          <span class="num">Demo 4</span>
+          <span class="title">Split-screen</span>
+          <span class="desc">Lärar-/elev-kolumner sida vid sida.</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="group">
+    <h2 class="group-title">Professor-förslag</h2>
+    <p class="lead" style="margin-bottom:18px;">Tre alternativ till nuvarande
+      prof-figur i demo3-hero. Klicka för att se varje i kontext.</p>
+    <ul class="cols">
+      <li>
+        <a class="tile" href="prof-a-lab.html">
+          <span class="num">Alternativ A</span>
+          <span class="title">Lab assistant</span>
+          <span class="desc">Illustrerad i bläckstil — figur i lab-rock som pekar mot tabellen.</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile" href="prof-b-mascot.html">
+          <span class="num">Alternativ B</span>
+          <span class="title">Typografisk mascott</span>
+          <span class="desc">Sigill med E + marginalanteckning. Inget tecknat alls.</span>
+        </a>
+      </li>
+      <li>
+        <a class="tile" href="prof-c-illustrated.html">
+          <span class="num">Alternativ C</span>
+          <span class="title">Illustrerad karaktär</span>
+          <span class="desc">Tre poser som cyklar. Mer redaktionell än rolig.</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

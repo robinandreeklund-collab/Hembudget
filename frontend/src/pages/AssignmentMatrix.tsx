@@ -41,17 +41,17 @@ export default function AssignmentMatrix() {
   const { columns, rows } = data;
 
   return (
-    <div className="p-6 max-w-none space-y-4">
+    <div className="p-4 md:p-6 max-w-none space-y-4">
       <Link
         to="/teacher"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Lärarpanel
       </Link>
 
       <div className="flex items-center gap-2">
         <Grid3x3 className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Klassöversikt</h1>
+        <h1 className="serif text-3xl leading-tight">Klassöversikt</h1>
       </div>
       <p className="text-sm text-slate-600">
         Elever på rader, uppdrag i kolumner. Grön = klar, gul = pågår, grå =

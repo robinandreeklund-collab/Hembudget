@@ -109,7 +109,7 @@ export default function Messages() {
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-6 h-6 text-brand-600" />
-            <h1 className="text-2xl font-bold">Meddela din lärare</h1>
+            <h1 className="serif text-3xl leading-tight">Meddela din lärare</h1>
           </div>
           <p className="text-sm text-slate-600">
             Ställ en fråga, be om hjälp eller ge feedback. Din lärare svarar
@@ -129,7 +129,7 @@ export default function Messages() {
             <div className="p-3 border-b bg-white sticky top-0">
               <Link
                 to="/teacher"
-                className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+                className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
               >
                 <ArrowLeft className="w-4 h-4" /> Lärarpanel
               </Link>
@@ -261,7 +261,7 @@ export default function Messages() {
                 sending || !newMessage.trim() ||
                 (isTeacher && activeStudent === null)
               }
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-1 disabled:opacity-50"
+              className="btn-dark rounded-md px-4 py-2 flex items-center gap-1 disabled:opacity-50"
             >
               <Send className="w-4 h-4" /> Skicka
             </button>

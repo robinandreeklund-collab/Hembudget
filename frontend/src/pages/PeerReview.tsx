@@ -76,16 +76,16 @@ export default function PeerReview() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <Link
         to="/dashboard"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Dashboard
       </Link>
       <div className="flex items-center gap-2">
         <MessageSquare className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Kamratrespons</h1>
+        <h1 className="serif text-3xl leading-tight">Kamratrespons</h1>
       </div>
       <p className="text-sm text-slate-700">
         Läs en annan elevs reflektion och ge konstruktiv feedback. Allt
@@ -94,7 +94,7 @@ export default function PeerReview() {
       </p>
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
@@ -117,7 +117,7 @@ export default function PeerReview() {
           </button>
         </div>
       ) : (
-        <section className="bg-white rounded-xl border p-5 space-y-4">
+        <section className="bg-white border-[1.5px] border-rule p-5 space-y-4">
           <div className="text-xs text-slate-500">
             {target.module_title} · {target.step_title}
           </div>
@@ -148,14 +148,14 @@ export default function PeerReview() {
               <button
                 onClick={submit}
                 disabled={busy || body.trim().length < 10}
-                className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1"
+                className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1"
               >
                 <Send className="w-4 h-4" />
                 {busy ? "Skickar…" : "Skicka"}
               </button>
               <button
                 onClick={loadNext}
-                className="text-sm text-slate-600 hover:text-brand-700"
+                className="text-sm text-slate-600 hover:text-ink"
               >
                 Hoppa över
               </button>
@@ -165,7 +165,7 @@ export default function PeerReview() {
       )}
 
       {received.length > 0 && (
-        <section className="bg-white rounded-xl border p-5 space-y-3">
+        <section className="bg-white border-[1.5px] border-rule p-5 space-y-3">
           <h2 className="font-semibold">
             Anonym feedback på dina reflektioner ({received.length})
           </h2>

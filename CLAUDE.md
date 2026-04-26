@@ -105,12 +105,37 @@ Sätta via Cloud Run — använd `--update-env-vars`/`--update-secrets`, aldrig
 |---|---|---|
 | `HEMBUDGET_SCHOOL_MODE` | `1` för Ekonomilabbet | alltid i prod |
 | `HEMBUDGET_SERVE_STATIC` | `1` för att serva `frontend/dist` från samma container | alltid i prod |
-| `HEMBUDGET_DATA_DIR` | Persistens-mount (typ `/mnt/school-data`) | alltid i prod |
+| `HEMBUDGET_DATABASE_URL` | Cloud SQL Postgres-connection-string (sätts som Cloud Run-secret av `deploy.sh`). När satt persisteras allt — master + scope-data — i en gemensam Postgres med tenant_id-isolering. När osatt fallback till SQLite-fil-per-scope under `HEMBUDGET_DATA_DIR`. | krävs i prod |
+| `HEMBUDGET_DATA_DIR` | Sökväg för throw-away-data (cache, uploads) — endast SQLite-fallback om `DATABASE_URL` saknas | alltid i prod |
 | `HEMBUDGET_BOOTSTRAP_SECRET` | Skyddar första lärarregistreringen | alltid |
 | `HEMBUDGET_BOOTSTRAP_TEACHER_EMAIL`/`_PASSWORD`/`_NAME` | Auto-skapa första läraren | valfritt |
 | `ANTHROPIC_API_KEY` | Aktiverar `/ai/*`-endpoints | valfritt — utan = AI tyst av |
 | `TURNSTILE_SITE_KEY` | Publik Cloudflare Turnstile-nyckel | valfritt |
 | `TURNSTILE_SECRET` | Privat Turnstile-nyckel | valfritt — utan = bot-check off |
+| `HEMBUDGET_SMTP_HOST` | SMTP-server (Gmail: `smtp.gmail.com`) | krävs för signup + reset |
+| `HEMBUDGET_SMTP_PORT` | SMTP-port (587 STARTTLS, 465 SSL) | default 587 |
+| `HEMBUDGET_SMTP_USER` | SMTP-användare (`info@ekonomilabbet.org`) | krävs om SMTP på |
+| `HEMBUDGET_SMTP_PASSWORD` | Gmail **app password** (16 tecken) — sätts som Cloud Run-secret | krävs om SMTP på |
+| `HEMBUDGET_SMTP_STARTTLS` | STARTTLS på 587 (default `true`) | valfritt |
+| `HEMBUDGET_MAIL_FROM` | Avsändar-mail (`info@ekonomilabbet.org`) | krävs om SMTP på |
+| `HEMBUDGET_MAIL_FROM_NAME` | Visningsnamn (default `Ekonomilabbet`) | valfritt |
+| `HEMBUDGET_PUBLIC_BASE_URL` | URL som används i mail-länkar (`https://ekonomilabbet.org`) | rekommenderas — utan byggs länkarna från requesten |
+
+**Sätta Gmail-lösenordet som secret första gången:**
+```bash
+# Skapa secret i Secret Manager
+printf "dinAppPassword16teck" | gcloud secrets create hembudget-smtp-password \
+  --data-file=- --project=hembudget
+# Ge Cloud Run-SA åtkomst
+gcloud secrets add-iam-policy-binding hembudget-smtp-password \
+  --member="serviceAccount:$(gcloud projects describe hembudget \
+    --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor" --project=hembudget
+# Peka in till Cloud Run
+gcloud run services update hembudget-demo --region=europe-north1 \
+  --update-secrets=HEMBUDGET_SMTP_PASSWORD=hembudget-smtp-password:latest
+```
+Gmail kräver ett *app password* (google.com → Säkerhet → 2-stegs → App-lösenord). Normalt Gmail-lösen funkar INTE via SMTP.
 
 ## Kataloger
 

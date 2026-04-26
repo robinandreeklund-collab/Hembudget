@@ -37,6 +37,20 @@ class Settings(BaseSettings):
 
     session_timeout_minutes: int = 30
 
+    # --- SMTP (school-läge: email-verifiering + lösenords-återställning) ---
+    # Utan smtp_host satt = email-funktionerna tysta av (endpoints 503:ar).
+    # Prod använder Gmail via app password — se CLAUDE.md-env-tabellen.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    mail_from: str = ""
+    mail_from_name: str = "Ekonomilabbet"
+    # URL som används i mail-länkar. Sätts i prod till https://ekonomilabbet.org.
+    # Utan värde läser email-modulen från requesten i första hand.
+    public_base_url: str = ""
+
     @property
     def db_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)

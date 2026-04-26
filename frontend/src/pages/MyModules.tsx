@@ -43,17 +43,17 @@ export default function MyModules() {
   }, []);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
         <GraduationCap className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Din kursplan</h1>
+        <h1 className="serif text-3xl leading-tight">Din kursplan</h1>
       </div>
       <p className="text-sm text-slate-700">
         Gå igenom modulerna i ordning — läs, reflektera, svara på frågor
         och gör uppdrag. Din lärare ser när du är klar.
       </p>
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}

@@ -104,7 +104,7 @@ export default function Utility() {
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight">
           <Activity className="w-6 h-6" />
           Förbrukning
         </h1>
@@ -317,7 +317,7 @@ export default function Utility() {
                               "py-1.5 px-2 text-right " +
                               (v === 0
                                 ? "text-slate-400"
-                                : "cursor-pointer hover:bg-brand-50 hover:text-brand-700")
+                                : "cursor-pointer hover:bg-paper hover:text-ink")
                             }
                             onClick={() => {
                               if (v > 0) setBreakdownCell({ category: c, month: m });
@@ -1152,7 +1152,7 @@ function BreakdownRow({
         {item.has_invoice_pdf && (
           <button
             onClick={openInvoice}
-            className="text-xs text-brand-600 hover:underline shrink-0"
+            className="text-xs nav-link shrink-0"
             title="Öppna original-fakturan i ny flik"
           >
             📎 Visa faktura
@@ -1185,7 +1185,7 @@ function BreakdownRow({
         {item.can_move ? (
           <button
             onClick={() => setEditing(!editing)}
-            className="text-xs text-brand-600 hover:underline shrink-0"
+            className="text-xs nav-link shrink-0"
           >
             {editing ? "Avbryt" : "Flytta"}
           </button>

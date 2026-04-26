@@ -71,7 +71,7 @@ export function FamilyManager({
         <button
           onClick={create}
           disabled={busy || !newName.trim()}
-          className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm flex items-center gap-1 disabled:opacity-50"
+          className="btn-dark rounded-md px-3 py-1.5 text-sm flex items-center gap-1 disabled:opacity-50"
         >
           <Plus className="w-4 h-4" /> Skapa
         </button>

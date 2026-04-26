@@ -118,11 +118,13 @@ export async function api<T = unknown>(
     );
   }
   if (!res.ok) {
-    // 401 = ogiltig/utgången token. 403 = giltig token men fel roll
-    // (t.ex. gammal student-token mot ny school-mode-deploy där
-    // teacher-endpoint kräver teacher-roll). Båda → rensa allt och
-    // tvinga ny login så användaren slipper byta browser.
-    if ((res.status === 401 || res.status === 403) && token) {
+    // 401 = ogiltig/utgången token → rensa allt + reload så användaren
+    // tvingas logga in igen. 403 däremot är ETT NORMALFALL i
+    // skolläget — t.ex. lärare som klickar på en student-endpoint via
+    // impersonation, eller mutationer som inte tillåts utan student-
+    // roll. Vi vill INTE logga ut på 403; UI:n får visa felmeddelandet
+    // och låta användaren navigera tillbaka.
+    if (res.status === 401 && token) {
       clearToken();
       clearRole();
       setAsStudent(null);
@@ -153,7 +155,8 @@ export async function uploadFile<T = unknown>(
   if (asStudent) headers.set("X-As-Student", String(asStudent));
   const res = await fetch(`${apiBase()}${path}`, { method: "POST", body: form, headers });
   if (!res.ok) {
-    if ((res.status === 401 || res.status === 403) && token) {
+    // Bara 401 räknas som "logga ut", se kommentar i api() ovan.
+    if (res.status === 401 && token) {
       clearToken();
       clearRole();
       setAsStudent(null);

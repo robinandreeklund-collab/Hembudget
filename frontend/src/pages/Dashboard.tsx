@@ -211,7 +211,7 @@ export default function Dashboard() {
     <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <h1 className="serif text-3xl leading-tight">Dashboard</h1>
           <div className="text-sm text-slate-700">
             {hasAnyData ? `${availableMonths.length} månader med data` : "Ingen data importerad ännu"}
           </div>
@@ -410,7 +410,7 @@ export default function Dashboard() {
                             "",
                         });
                       }}
-                      className="text-xs text-brand-600 hover:underline"
+                      className="text-xs nav-link"
                       title="Justera ingående saldo + startdatum om saldot inte stämmer mot banken"
                     >
                       Justera

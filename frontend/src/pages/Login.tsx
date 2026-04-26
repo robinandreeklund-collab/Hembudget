@@ -80,7 +80,7 @@ export default function Login() {
   }
 
   return (
-    <div className="h-full grid place-items-center bg-gradient-to-br from-slate-50 to-brand-50">
+    <div className="h-full grid place-items-center bg-paper">
       <form
         onSubmit={handle}
         className="bg-white rounded-2xl shadow-lg p-8 w-[26rem] space-y-4 border border-slate-200"
@@ -93,7 +93,7 @@ export default function Login() {
           ) : (
             <Lock className="w-5 h-5" />
           )}
-          <h1 className="text-xl font-semibold">
+          <h1 className="serif text-2xl leading-tight">
             {schoolMode ? "Ekonomilabbet" : "Hembudget"}
           </h1>
         </div>

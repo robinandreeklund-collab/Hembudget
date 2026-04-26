@@ -12,8 +12,13 @@ dependencies = [
     "uvicorn[standard]>=0.27",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    # Postgres-driver för Cloud SQL (master + scope i prod). I dev
+    # och pytest används SQLite så modulen importeras bara när
+    # HEMBUDGET_DATABASE_URL är satt.
+    "psycopg2-binary>=2.9",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
+    "email-validator>=2.0",
     "sqlcipher3-binary>=0.5.2; platform_system != 'Windows'",
     "openai>=1.30",
     "pandas>=2.2",

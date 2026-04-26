@@ -109,7 +109,7 @@ export default function ImportPage() {
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-3xl">
-      <h1 className="text-2xl font-semibold">Importera CSV</h1>
+      <h1 className="serif text-3xl leading-tight">Importera CSV</h1>
 
       {accounts.length > 0 && (
         <Card title="Konto-inställningar">
@@ -582,7 +582,7 @@ function ManualTxForm({ account }: { account: Account }) {
     <div className="mt-2 pt-2 border-t">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="text-xs text-brand-600 hover:underline"
+        className="text-xs nav-link"
       >
         {open ? "− Dölj manuell transaktion" : "+ Lägg till manuell transaktion"}
       </button>

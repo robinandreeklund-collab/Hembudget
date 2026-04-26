@@ -175,7 +175,7 @@ export default function Settings() {
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-2xl">
-      <h1 className="text-2xl font-semibold">Inställningar</h1>
+      <h1 className="serif text-3xl leading-tight">Inställningar</h1>
 
       <Card title="System">
         <div className="text-sm space-y-1">
@@ -331,7 +331,7 @@ export default function Settings() {
                         }
                       }}
                       disabled={restoreBackupMut.isPending}
-                      className="text-xs text-brand-600 hover:underline mr-3 disabled:opacity-50"
+                      className="text-xs nav-link mr-3 disabled:opacity-50"
                     >
                       Återställ
                     </button>

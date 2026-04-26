@@ -50,6 +50,25 @@ def scope_context(scope_key: str | None) -> Iterator[None]:
         _current_scope.reset(token)
 
 
+# Aktör-student-id för aktivitetsloggning. Sätts i StudentScopeMiddleware
+# för elev-tokens; läraren som impersonerar (x-as-student) hamnar också
+# här så audit-spåret tillskrivs eleven (det är trots allt i elevens DB
+# läraren agerar). För familje-scope är detta vilken specifik elev/
+# vårdnadshavare som loggat in just nu — viktigt eftersom flera personer
+# delar samma scope-DB.
+_current_actor_student: ContextVar[int | None] = ContextVar(
+    "current_actor_student", default=None,
+)
+
+
+def set_current_actor_student(student_id: int | None) -> None:
+    _current_actor_student.set(student_id)
+
+
+def get_current_actor_student() -> int | None:
+    return _current_actor_student.get()
+
+
 # --- Bekvämlighet: scope-nyckel från Student-objekt ---
 
 def scope_for_student(student) -> str:
@@ -102,6 +121,30 @@ def _master_db_path() -> Path:
     return _school_root() / "master.db"
 
 
+def _master_db_url() -> str:
+    """Vilken DB-URL master-engine ska använda.
+
+    Prioritet:
+    1. HEMBUDGET_DATABASE_URL — riktig managed Postgres (Cloud SQL i prod).
+       Detta är vad vi vill ha: data persisterar mellan deploys, automatisk
+       backup, point-in-time-restore.
+    2. Fallback: SQLite-fil i HEMBUDGET_DATA_DIR — används lokalt och i
+       pytest. SQLite-filen försvinner vid Cloud Run-restart om volymen
+       inte är monterad.
+    """
+    import os
+    url = os.environ.get("HEMBUDGET_DATABASE_URL", "").strip()
+    if url:
+        # SQLAlchemy använder "postgresql+psycopg2://" men gcloud genererar
+        # "postgresql://"-URL:er. Acceptera båda.
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        if url.startswith("postgresql://") and "+psycopg2" not in url:
+            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url
+    return f"sqlite:///{_master_db_path().as_posix()}"
+
+
 def init_master_engine() -> Engine:
     """Skapa master-engine + kör create_all för MasterBase. Idempotent."""
     global _master_engine, _master_session
@@ -109,14 +152,24 @@ def init_master_engine() -> Engine:
         return _master_engine
     from .models import MasterBase
 
-    url = f"sqlite:///{_master_db_path().as_posix()}"
-    engine = create_engine(url, future=True)
+    url = _master_db_url()
+    is_sqlite = url.startswith("sqlite:")
+    engine_kwargs: dict = {"future": True}
+    if not is_sqlite:
+        # Postgres: pre-ping så stale connections från Cloud SQL inte
+        # smäller. Pool små eftersom Cloud Run kör en instans.
+        engine_kwargs.update(
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800,
+        )
+    engine = create_engine(url, **engine_kwargs)
 
-    @event.listens_for(engine, "connect")
-    def _set_pragmas(dbapi_conn, _):
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys = ON")
-        cur.close()
+    if is_sqlite:
+        @event.listens_for(engine, "connect")
+        def _set_pragmas(dbapi_conn, _):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA foreign_keys = ON")
+            cur.close()
 
     MasterBase.metadata.create_all(engine)
     _run_master_migrations(engine)
@@ -133,15 +186,19 @@ def _run_master_migrations(engine: Engine) -> None:
     `create_all()` lägger inte till nya kolumner i en befintlig tabell, så
     när nya fält läggs på Teacher/Family/Student måste vi lägga till dem
     här. Idempotent — säker att köra varje uppstart.
+
+    Stödjer både SQLite (pytest, lokalt) och Postgres (prod) — använder
+    SQLAlchemy-inspector så ingen DB-specifik PRAGMA behövs.
     """
-    from sqlalchemy import text as _text
+    from sqlalchemy import inspect as _inspect, text as _text
+
+    inspector = _inspect(engine)
 
     def _cols(table: str) -> set[str]:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                _text(f"PRAGMA table_info({table})"),
-            ).fetchall()
-        return {r[1] for r in rows}
+        try:
+            return {c["name"] for c in inspector.get_columns(table)}
+        except Exception:
+            return set()
 
     def _add(table: str, col_sql: str) -> None:
         with engine.begin() as conn:
@@ -158,6 +215,27 @@ def _run_master_migrations(engine: Engine) -> None:
         _add("teachers", "ai_input_tokens INTEGER NOT NULL DEFAULT 0")
     if "ai_output_tokens" not in t_cols:
         _add("teachers", "ai_output_tokens INTEGER NOT NULL DEFAULT 0")
+    a_cols = _cols("assignments")
+    if "teacher_feedback" not in a_cols:
+        _add("assignments", "teacher_feedback TEXT")
+    if "teacher_feedback_at" not in a_cols:
+        _add("assignments", "teacher_feedback_at DATETIME")
+
+    if "email_verified_at" not in t_cols:
+        # SQLite tillåter inte non-constant default med ALTER TABLE,
+        # så vi lämnar NULL som default. Befintliga lärare blir ej-
+        # verifierade rent tekniskt — men backfill:en nedan sätter
+        # dem verifierade eftersom de redan fungerar (inloggat konto).
+        _add("teachers", "email_verified_at DATETIME")
+        # Backfill: alla existerande lärare (före den här migrationen)
+        # räknas verifierade — annars skulle super-admins låsas ute.
+        with engine.begin() as conn:
+            conn.execute(_text(
+                "UPDATE teachers SET email_verified_at = CURRENT_TIMESTAMP "
+                "WHERE email_verified_at IS NULL"
+            ))
+    if "is_family_account" not in t_cols:
+        _add("teachers", "is_family_account BOOLEAN NOT NULL DEFAULT 0")
 
 
 @contextmanager
@@ -186,8 +264,80 @@ def _scope_db_path(scope_key: str) -> Path:
     return _school_root() / "students" / f"{scope_key}.db"
 
 
+# Delad Postgres-engine när HEMBUDGET_DATABASE_URL är satt. Då samlas
+# all scope-data i en enda Postgres med tenant_id-isolering, och
+# fil-per-scope-cachen nedan används aldrig.
+_shared_scope_engine: Engine | None = None
+_shared_scope_session: sessionmaker[Session] | None = None
+_seeded_tenants: set[str] = set()
+
+
+def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
+    """Lazy-init en gemensam Postgres-engine för ALLA scope-keys.
+    Bara när HEMBUDGET_DATABASE_URL är satt."""
+    global _shared_scope_engine, _shared_scope_session
+    if _shared_scope_engine is not None:
+        assert _shared_scope_session is not None
+        return _shared_scope_engine, _shared_scope_session
+
+    from ..db import models as _models  # noqa: F401  (registrera modeller)
+    from ..db.base import Base
+
+    url = _master_db_url()  # samma DB som master — separata tabellset
+    engine_kwargs: dict = {"future": True}
+    if url.startswith("postgresql"):
+        engine_kwargs.update(
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800,
+        )
+    engine = create_engine(url, **engine_kwargs)
+    Base.metadata.create_all(engine)
+
+    _shared_scope_engine = engine
+    _shared_scope_session = sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False,
+    )
+    return engine, _shared_scope_session
+
+
+def _seed_tenant_if_needed(scope_key: str) -> None:
+    """Säkerställ att en ny scope (t.ex. en just-skapad elev) har
+    default-kategorier + regler i den delade Postgres. Idempotent
+    via in-memory-cache + DB-check."""
+    if scope_key in _seeded_tenants:
+        return
+    assert _shared_scope_session is not None
+    from ..db.models import Category
+    with scope_context(scope_key):
+        with _shared_scope_session() as s:
+            existing = s.query(Category).first()
+            if existing is None:
+                try:
+                    from ..categorize.rules import seed_categories_and_rules
+                    seed_categories_and_rules(s)
+                    s.commit()
+                except Exception:
+                    s.rollback()
+                    log.exception(
+                        "Failed seeding categories for tenant %s", scope_key,
+                    )
+    _seeded_tenants.add(scope_key)
+
+
 def get_scope_engine(scope_key: str) -> Engine:
-    """Skapa (eller återanvänd cachead) engine för en scope-nyckel."""
+    """Skapa (eller återanvänd cachead) engine för en scope-nyckel.
+
+    - Postgres-läge: returnerar samma delade engine för alla scopes;
+      tenant-isolering sker via tenant_id-kolumn + session-events i
+      db/base.py.
+    - SQLite-läge: en fil per scope (oförändrat — pytest + dev).
+    """
+    import os
+    if os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+        engine, _ = _init_shared_scope_engine()
+        _seed_tenant_if_needed(scope_key)
+        return engine
+
     if scope_key in _scope_engines:
         return _scope_engines[scope_key]
 
@@ -227,6 +377,20 @@ def get_scope_engine(scope_key: str) -> Engine:
 
 
 def get_scope_session(scope_key: str) -> sessionmaker[Session]:
+    """Returnerar sessionmaker för en scope.
+
+    - Postgres-läge: alla scopes delar samma sessionmaker; isolering
+      sker via tenant_id-event-listeners.
+    - SQLite-läge: en sessionmaker per scope-fil.
+    """
+    import os
+    if os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+        if _shared_scope_session is None:
+            _init_shared_scope_engine()
+        _seed_tenant_if_needed(scope_key)
+        assert _shared_scope_session is not None
+        return _shared_scope_session
+
     if scope_key not in _scope_sessions:
         get_scope_engine(scope_key)
     return _scope_sessions[scope_key]

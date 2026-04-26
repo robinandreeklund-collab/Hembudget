@@ -3,7 +3,458 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; }
-body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+body {
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Paper-designsystemets återanvändbara klasser. Alla har samma
+   1.5px svart border + paper-bakgrund som demo3 etablerade. */
+@layer components {
+  .serif { font-family: "Spectral", Georgia, serif; font-weight: 800; letter-spacing: -0.015em; }
+  .serif-italic { font-family: "Spectral", Georgia, serif; font-style: italic; font-weight: 400; }
+  .eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: #888;
+    font-weight: 600;
+  }
+  .lead { font-size: 17px; line-height: 1.55; color: #333; }
+  .body-prose { line-height: 1.65; color: #333; }
+  .kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #f1eee3;
+    border: 1px solid theme("colors.rule");
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* Sektionsdivider: ord centrerat med streck på båda sidor */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #999;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .section-divider::before,
+  .section-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: theme("colors.rule");
+  }
+
+  /* Knappar */
+  .btn-dark {
+    background: theme("colors.ink");
+    color: #fff;
+    transition: background 0.15s, transform 0.1s;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-dark:hover { background: #000; }
+  .btn-dark:active { transform: translateY(1px); }
+  .btn-outline {
+    border: 1px solid theme("colors.rule");
+    background: #fff;
+    transition: background 0.15s, border-color 0.15s;
+    font-weight: 600;
+    color: theme("colors.ink");
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-outline:hover { background: #f5f1e3; border-color: theme("colors.ink"); }
+
+  /* Nav-länk med animerad underline */
+  .nav-link {
+    color: theme("colors.ink");
+    position: relative;
+    transition: color 0.15s;
+    text-decoration: none;
+  }
+  .nav-link:hover { color: #444; }
+  .nav-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -4px;
+    height: 1.5px;
+    width: 0;
+    background: theme("colors.ink");
+    transition: width 0.2s;
+  }
+  .nav-link:hover::after { width: 100%; }
+
+  /* Cell ur periodiska systemet (32-grid) */
+  .elem {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border: 1.5px solid theme("colors.ink");
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px 7px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  /* Långa namn ska klippas med ellipsis istället för att kvika ut
+     ur cellen. Tooltip + heatmap är inte text-noder så de påverkas inte. */
+  .elem .name,
+  .elem .val {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .elem:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+    background: #fffef5;
+    z-index: 31;
+  }
+  .elem:focus-visible {
+    outline: 2px solid theme("colors.ink");
+    outline-offset: 2px;
+    z-index: 31;
+  }
+  .elem .num {
+    font-size: 10px;
+    color: #666;
+    display: block;
+    flex-shrink: 0;
+  }
+  /* Mitten-segmentet: sym + name. display:block + min-width:0 så
+     ellipsen i .name kan trigga (en flex/block-baby med default
+     min-width:auto skulle annars inte krympa under sin egen bredd). */
+  .elem .elem-body {
+    display: block;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .elem .sym {
+    display: block;
+    font-family: "Spectral", serif;
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1;
+  }
+  .elem .name {
+    display: block;
+    font-size: 9.5px;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .elem .val {
+    font-size: 9px;
+    color: #888;
+    display: block;
+    flex-shrink: 0;
+  }
+  .elem.grund { background: theme("colors.elem-grund"); }
+  .elem.fordj { background: theme("colors.elem-fordj"); }
+  .elem.expert { background: theme("colors.elem-expert"); }
+  .elem.konto { background: theme("colors.elem-konto"); }
+  .elem.risk { background: theme("colors.elem-risk"); }
+  .elem.special { background: theme("colors.ink"); color: #fff; border-color: theme("colors.ink"); }
+  .elem.special .num,
+  .elem.special .name,
+  .elem.special .val { color: #d8d5c6; }
+  @media (max-width: 767px) {
+    .elem .sym { font-size: 26px; }
+    .elem .name { font-size: 11px; }
+    .elem .val { font-size: 10px; }
+    .elem .num { font-size: 11px; }
+  }
+
+  /* Heatmap-overlay på celler (toggle på body.heatmap-on) */
+  .elem .heatmap {
+    position: absolute;
+    inset: 0;
+    background: #10b981;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+  }
+  body.heatmap-on .elem .heatmap { opacity: calc(var(--h, 0) * 0.45); }
+
+  /* Tooltip på celler */
+  .elem-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: theme("colors.ink");
+    color: #fff;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 30;
+  }
+  .elem-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: theme("colors.ink");
+  }
+  .elem:hover .elem-tooltip,
+  .elem:focus-visible .elem-tooltip { opacity: 1; }
+  /* Flip-variant — JSX sätter klassen .below på tooltip-spans i översta
+     raden så de visas under cellen istället för över. Use !important för
+     att undvika cascade-konflikter med base-rule:n ovan. */
+  .elem-tooltip.below {
+    bottom: auto !important;
+    top: calc(100% + 8px) !important;
+  }
+  .elem-tooltip.below::after {
+    top: auto !important;
+    bottom: 100% !important;
+    border-top-color: transparent !important;
+    border-bottom-color: theme("colors.ink") !important;
+  }
+  /* Bakåtkompat — om någon stoppar in .flip-tooltip på själva cellen */
+  .elem.flip-tooltip .elem-tooltip {
+    bottom: auto !important;
+    top: calc(100% + 8px) !important;
+  }
+  .elem.flip-tooltip .elem-tooltip::after {
+    top: auto !important;
+    bottom: 100% !important;
+    border-top-color: transparent !important;
+    border-bottom-color: theme("colors.ink") !important;
+  }
+
+  /* Feature-chip — mini-cell ur periodiska systemet, används som ikon */
+  .feature-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: 1.5px solid theme("colors.ink");
+    background: #fff;
+    font-family: "Spectral", serif;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .feature-chip.grund { background: theme("colors.elem-grund"); }
+  .feature-chip.fordj { background: theme("colors.elem-fordj"); }
+  .feature-chip.expert { background: theme("colors.elem-expert"); }
+  .feature-chip.konto { background: theme("colors.elem-konto"); }
+  .feature-chip.risk { background: theme("colors.elem-risk"); }
+  .feature-chip.special { background: theme("colors.ink"); color: #fff; }
+
+  .feature-card {
+    border: 1.5px solid theme("colors.ink");
+    background: #fff;
+    padding: 16px;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  @media (min-width: 768px) {
+    .feature-card { padding: 20px; }
+  }
+  .feature-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+    background: #fffef5;
+  }
+
+  /* Mockup-byggblock (flow-section) */
+  .mock {
+    border: 1.5px solid theme("colors.ink");
+    background: #fff;
+    padding: 18px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .mock-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    border-bottom: 1px dashed theme("colors.rule");
+  }
+  .mock-row:last-child { border-bottom: none; }
+  .mock-num { font-family: "Spectral", serif; font-weight: 800; }
+  .mock-bar {
+    height: 8px;
+    background: #f1eee3;
+    border: 1px solid theme("colors.rule");
+    position: relative;
+    border-radius: 2px;
+  }
+  .mock-bar > span {
+    position: absolute;
+    inset: 0;
+    background: theme("colors.ink");
+    border-radius: 1px;
+  }
+  .mock-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid theme("colors.ink");
+    background: #fff;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .mock-pill.ok { background: theme("colors.elem-konto"); }
+  .mock-pill.no { background: theme("colors.elem-risk"); }
+
+  .flow-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border: 2px solid theme("colors.ink");
+    background: theme("colors.ink");
+    color: #fff;
+    font-family: "Spectral", serif;
+    font-weight: 800;
+    font-size: 22px;
+    border-radius: 50%;
+  }
+
+  /* Professor + speech-bubble */
+  .prof-wrap {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  @media (max-width: 767px) { .prof-wrap { display: none; } }
+  .prof-bubble {
+    position: relative;
+    background: #fff;
+    border: 1.5px solid theme("colors.ink");
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 13px;
+    max-width: 240px;
+    line-height: 1.35;
+    box-shadow: 0 2px 0 theme("colors.ink");
+  }
+  .prof-bubble::after {
+    content: "";
+    position: absolute;
+    right: -7px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+    width: 11px;
+    height: 11px;
+    background: #fff;
+    border-right: 1.5px solid theme("colors.ink");
+    border-top: 1.5px solid theme("colors.ink");
+  }
+  .prof-svg {
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 2px 0 rgba(17, 18, 23, 0.15));
+  }
+  @keyframes prof-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .prof-svg { animation: prof-bob 4s ease-in-out infinite; }
+  }
+
+  /* Drift-partiklar */
+  .particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: theme("colors.ink");
+    opacity: 0.15;
+    pointer-events: none;
+  }
+  @keyframes drift {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(var(--dx), var(--dy)); }
+  }
+  .drifting {
+    animation: drift var(--dur, 8s) linear infinite alternate;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drifting { animation: none; }
+  }
+
+  /* FAQ — paper-stil <details>/<summary> */
+  details.faq {
+    border-top: 1px solid theme("colors.rule");
+    padding: 18px 0;
+  }
+  details.faq:last-of-type { border-bottom: 1px solid theme("colors.rule"); }
+  details.faq > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    font-family: "Spectral", serif;
+    font-weight: 600;
+    font-size: 18px;
+    color: theme("colors.ink");
+    padding: 4px 0;
+  }
+  details.faq > summary::-webkit-details-marker { display: none; }
+  details.faq > summary .arrow {
+    width: 16px;
+    height: 16px;
+    border-right: 1.5px solid theme("colors.ink");
+    border-bottom: 1.5px solid theme("colors.ink");
+    transform: rotate(45deg);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    margin-top: -3px;
+  }
+  details.faq[open] > summary .arrow {
+    transform: rotate(225deg);
+    margin-top: 3px;
+  }
+  details.faq > .answer {
+    margin-top: 10px;
+    line-height: 1.65;
+    color: #333;
+    font-size: 15px;
+  }
+
+  /* Global focus-stil — synlig svart ring */
+  *:focus-visible {
+    outline: 2px solid theme("colors.ink");
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
 
 /* Landing page animations */
 @keyframes fadein {

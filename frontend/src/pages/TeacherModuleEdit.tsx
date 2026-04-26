@@ -126,13 +126,13 @@ export default function TeacherModuleEdit() {
       <div className="max-w-6xl mx-auto space-y-4">
         <Link
           to="/teacher/modules"
-          className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+          className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Alla moduler
         </Link>
 
         {/* Modul-header */}
-        <div className="bg-white rounded-xl border p-5 space-y-3">
+        <div className="bg-white border-[1.5px] border-rule p-5 space-y-3">
           <input
             value={mod.title}
             onChange={(e) => setMod({ ...mod, title: e.target.value })}
@@ -171,7 +171,7 @@ export default function TeacherModuleEdit() {
 
         {/* Steg-editor */}
         <div className="grid md:grid-cols-[260px_1fr] gap-4">
-          <aside className="bg-white rounded-xl border p-3 h-fit">
+          <aside className="bg-white border-[1.5px] border-rule p-3 h-fit">
             <div className="font-semibold text-sm mb-2 text-slate-700">
               Steg ({mod.steps.length})
             </div>
@@ -217,7 +217,7 @@ export default function TeacherModuleEdit() {
                 onDelete={() => removeStep(active.id)}
               />
             ) : (
-              <div className="bg-white rounded-xl border p-8 text-center text-slate-500">
+              <div className="bg-white border-[1.5px] border-rule p-8 text-center text-slate-500">
                 Välj ett steg i listan eller lägg till ett nytt.
               </div>
             )}
@@ -251,7 +251,7 @@ function StepEditor({
   }
 
   return (
-    <div className="bg-white rounded-xl border p-5 space-y-4">
+    <div className="bg-white border-[1.5px] border-rule p-5 space-y-4">
       <div className="flex items-center gap-2">
         <span className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-600 rounded px-2 py-1">
           {KIND_LABELS[local.kind].icon} {KIND_LABELS[local.kind].label}
@@ -356,7 +356,7 @@ function StepEditor({
 
       <button
         onClick={save}
-        className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 inline-flex items-center gap-1"
+        className="btn-dark rounded-md px-4 py-2 inline-flex items-center gap-1"
       >
         <Save className="w-4 h-4" /> Spara
       </button>
@@ -493,7 +493,7 @@ function QuizEditor({
               },
             })
           }
-          className="text-sm text-brand-600 hover:underline"
+          className="text-sm nav-link"
         >
           + Lägg till alternativ
         </button>
@@ -551,7 +551,7 @@ function RubricEditor({
         </div>
         <button
           onClick={addCrit}
-          className="text-xs text-brand-600 hover:underline"
+          className="text-xs nav-link"
         >
           + Lägg till kriterium
         </button>
@@ -620,7 +620,7 @@ function RubricEditor({
               };
               setRubric(n);
             }}
-            className="text-xs text-brand-600 hover:underline"
+            className="text-xs nav-link"
           >
             + Lägg till nivå
           </button>

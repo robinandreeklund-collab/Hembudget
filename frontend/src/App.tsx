@@ -30,17 +30,25 @@ import EkoDashboard from "./pages/EkoDashboard";
 import AssignmentMatrix from "./pages/AssignmentMatrix";
 import MortgageDecision from "./pages/MortgageDecision";
 import Messages from "./pages/Messages";
-import Landing from "./pages/Landing";
+import LandingSwitch from "./pages/LandingSwitch";
 import LoginChoice from "./pages/LoginChoice";
 import TeacherLogin from "./pages/TeacherLogin";
+import TeacherSignup from "./pages/TeacherSignup";
+import ParentSignup from "./pages/ParentSignup";
+import VerifyEmail from "./pages/VerifyEmail";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import StudentLogin from "./pages/StudentLogin";
 import DemoChoice from "./pages/DemoChoice";
 import Docs from "./pages/Docs";
+import MyAchievements from "./pages/MyAchievements";
 import MyModules from "./pages/MyModules";
 import ModuleView from "./pages/ModuleView";
 import TeacherModules from "./pages/TeacherModules";
 import TeacherModuleEdit from "./pages/TeacherModuleEdit";
 import TeacherReflections from "./pages/TeacherReflections";
+import TeacherRubrics from "./pages/TeacherRubrics";
+import TeacherTimeOnTask from "./pages/TeacherTimeOnTask";
 import PeerReview from "./pages/PeerReview";
 import AdminAI from "./pages/AdminAI";
 import { DemoBanner } from "./components/DemoBanner";
@@ -55,16 +63,21 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<LandingSwitch />} />
         <Route path="/login" element={<LoginChoice />} />
         <Route path="/login/teacher" element={<TeacherLogin />} />
+        <Route path="/signup/teacher" element={<TeacherSignup />} />
+        <Route path="/signup/parent" element={<ParentSignup />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/login/student" element={<StudentLogin />} />
         <Route path="/demo" element={<DemoChoice />} />
         <Route path="/docs" element={<Docs />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
         <Route path="/login/legacy" element={<Login />} />
-        <Route path="*" element={<Landing />} />
+        <Route path="*" element={<LandingSwitch />} />
       </Routes>
     );
   }
@@ -101,6 +114,8 @@ export default function App() {
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
               <Route path="/teacher/reflections" element={<TeacherReflections />} />
+              <Route path="/teacher/rubrics" element={<TeacherRubrics />} />
+              <Route path="/teacher/time-on-task" element={<TeacherTimeOnTask />} />
               <Route path="/teacher/admin-ai" element={<AdminAI />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/docs" element={<Docs />} />
@@ -121,9 +136,12 @@ export default function App() {
               <Route path="/docs" element={<Docs />} />
               <Route path="/modules" element={<MyModules />} />
               <Route path="/modules/:moduleId" element={<ModuleView />} />
+              <Route path="/achievements" element={<MyAchievements />} />
               <Route path="/teacher/modules" element={<TeacherModules />} />
               <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
               <Route path="/teacher/reflections" element={<TeacherReflections />} />
+              <Route path="/teacher/rubrics" element={<TeacherRubrics />} />
+              <Route path="/teacher/time-on-task" element={<TeacherTimeOnTask />} />
               <Route path="/teacher/admin-ai" element={<AdminAI />} />
               <Route path="/peer-review" element={<PeerReview />} />
               <Route path="/my-batches" element={<MyBatches />} />

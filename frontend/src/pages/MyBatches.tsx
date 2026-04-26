@@ -122,10 +122,10 @@ export default function MyBatches() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-2">
         <Inbox className="w-6 h-6 text-brand-600" />
-        <h1 className="text-2xl font-semibold">Dina dokument</h1>
+        <h1 className="serif text-3xl leading-tight">Dina dokument</h1>
       </div>
       <p className="text-sm text-slate-700">
         Här samlas dokumenten som din lärare skickat ut. Ladda ner och titta
@@ -160,7 +160,7 @@ export default function MyBatches() {
       </div>
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}

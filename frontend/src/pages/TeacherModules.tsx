@@ -156,17 +156,17 @@ export default function TeacherModules() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <Link
         to="/teacher"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Lärarpanel
       </Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Library className="w-6 h-6 text-brand-600" />
-          <h1 className="text-2xl font-semibold">Kursmoduler</h1>
+          <h1 className="serif text-3xl leading-tight">Kursmoduler</h1>
         </div>
         <div className="flex gap-2">
           {aiEnabled && (
@@ -180,14 +180,14 @@ export default function TeacherModules() {
           )}
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 flex items-center gap-2"
+            className="btn-dark rounded-md px-4 py-2 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Ny modul
           </button>
         </div>
       </div>
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
@@ -215,7 +215,7 @@ export default function TeacherModules() {
                 </div>
                 <button
                   onClick={() => clone(t.id)}
-                  className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm flex items-center gap-1"
+                  className="btn-dark rounded-md px-3 py-1.5 text-sm flex items-center gap-1"
                 >
                   <Copy className="w-3.5 h-3.5" /> Använd mall
                 </button>
@@ -258,7 +258,7 @@ export default function TeacherModules() {
               </div>
               <Link
                 to={`/teacher/modules/${m.id}`}
-                className="p-2 text-slate-500 hover:text-brand-700"
+                className="p-2 text-slate-500 hover:text-ink"
                 title="Redigera"
               >
                 <Edit2 className="w-4 h-4" />
@@ -363,7 +363,7 @@ export default function TeacherModules() {
                   <button
                     onClick={acceptAiDraft}
                     disabled={aiBusy}
-                    className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2 disabled:opacity-50"
+                    className="btn-dark rounded-md px-4 py-2 flex items-center gap-2 disabled:opacity-50"
                   >
                     {aiBusy && <Loader2 className="w-4 h-4 animate-spin" />}
                     Skapa modulen

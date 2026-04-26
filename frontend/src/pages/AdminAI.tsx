@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Brain, Check, Key, Loader2, ShieldCheck, Trash2, X, Zap,
+  ArrowLeft, Brain, Check, Image, Key, Loader2, Mail, Send, ShieldCheck,
+  Trash2, Upload, X, Zap,
 } from "lucide-react";
-import { api, ApiError } from "@/api/client";
+import { api, ApiError, getApiBase, getToken } from "@/api/client";
 
 type TeacherRow = {
   id: number;
@@ -164,10 +165,10 @@ export default function AdminAI() {
   }
   if (err) {
     return (
-      <div className="p-6 max-w-3xl mx-auto space-y-3">
+      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-3">
         <Link
           to="/teacher"
-          className="text-sm text-brand-600 hover:underline flex items-center gap-1"
+          className="text-sm nav-link flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka
         </Link>
@@ -183,15 +184,15 @@ export default function AdminAI() {
   const totalReq = rows.reduce((s, r) => s + r.ai_requests_count, 0);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <div>
         <Link
           to="/teacher"
-          className="text-sm text-brand-600 hover:underline flex items-center gap-1"
+          className="text-sm nav-link flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka till lärarvyn
         </Link>
-        <h1 className="text-2xl font-semibold mt-2 flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight mt-2">
           <Brain className="w-6 h-6 text-brand-600" />
           AI-administration
         </h1>
@@ -267,7 +268,7 @@ export default function AdminAI() {
             <button
               onClick={saveKey}
               disabled={keyBusy || !newKey.trim()}
-              className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+              className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
             >
               {keyBusy ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -299,6 +300,15 @@ export default function AdminAI() {
           )}
         </div>
       </section>
+
+      {/* SMTP-konfiguration */}
+      <SmtpSection />
+
+      {/* Landningssidans skärmdumpar */}
+      <LandingGallerySection />
+
+      {/* Landningssidans variant (A/B-test) */}
+      <LandingVariantSection />
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Totalt antal anrop" value={totalReq.toLocaleString("sv-SE")} />
@@ -417,5 +427,676 @@ function ToggleButton({
       )}
       {active ? labelOn : labelOff}
     </button>
+  );
+}
+
+// ---------- SMTP-konfiguration (super-admin) ----------
+
+type SmtpConfig = {
+  configured: boolean;
+  source: string;        // "db" | "env" | ""
+  host: string;
+  port: number;
+  user: string;
+  password_set: boolean;
+  password_preview: string;
+  starttls: boolean;
+  mail_from: string;
+  mail_from_name: string;
+  public_base_url: string;
+};
+
+function SmtpSection() {
+  const [cfg, setCfg] = useState<SmtpConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [testTo, setTestTo] = useState("");
+
+  // Form-state
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState(587);
+  const [user, setUser] = useState("");
+  const [password, setPassword] = useState("");
+  const [starttls, setStarttls] = useState(true);
+  const [mailFrom, setMailFrom] = useState("");
+  const [fromName, setFromName] = useState("Ekonomilabbet");
+  const [baseUrl, setBaseUrl] = useState("");
+
+  function syncForm(c: SmtpConfig) {
+    setHost(c.host);
+    setPort(c.port);
+    setUser(c.user);
+    // Behåll lösenordsfältet tomt — visning är 'password_preview'
+    setPassword("");
+    setStarttls(c.starttls);
+    setMailFrom(c.mail_from);
+    setFromName(c.mail_from_name);
+    setBaseUrl(c.public_base_url);
+  }
+
+  async function load() {
+    try {
+      const c = await api<SmtpConfig>("/admin/smtp/config");
+      setCfg(c);
+      syncForm(c);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) {
+        // Inte super-admin — visa inget
+        setCfg(null);
+      } else {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function save() {
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      const body: Record<string, unknown> = {
+        host, port, user, starttls,
+        mail_from: mailFrom,
+        mail_from_name: fromName,
+        public_base_url: baseUrl,
+      };
+      // Skicka bara password om användaren skrivit något — annars
+      // behåller backend befintligt.
+      if (password.trim()) body.password = password.trim();
+      const c = await api<SmtpConfig>("/admin/smtp/config", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setCfg(c);
+      syncForm(c);
+      setMsg("Sparat. Testa via 'Skicka testmail' nedan.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    if (!confirm("Rensa SMTP-config? Faller tillbaka till env-vars om sådana finns.")) return;
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      const c = await api<SmtpConfig>("/admin/smtp/config", { method: "DELETE" });
+      setCfg(c);
+      syncForm(c);
+      setMsg("Rensat.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    if (!testTo.trim()) return;
+    setBusy(true); setMsg(null); setErr(null);
+    try {
+      await api("/admin/smtp/test", {
+        method: "POST",
+        body: JSON.stringify({ to: testTo.trim() }),
+      });
+      setMsg(`Testmail skickat till ${testTo.trim()}. Kolla inkorgen.`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        setErr("SMTP är inte konfigurerat — fyll i config först.");
+      } else if (e instanceof ApiError && e.status === 502) {
+        // Backend skickar { detail: { message, hint } } så super-admin
+        // ser exakt vad SMTP-servern svarade och hur det kan fixas.
+        const body = e.body as { detail?: { message?: string; hint?: string } } | undefined;
+        const detail = body?.detail;
+        const message = detail?.message ?? "Kunde inte skicka mail (okänt fel)";
+        const hint = detail?.hint;
+        setErr(hint ? `${message}\n\n→ ${hint}` : message);
+      } else {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (cfg === null) {
+    return null; // Inte super-admin eller fel — tysta
+  }
+
+  return (
+    <section className="bg-white border-[1.5px] border-rule p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Mail className="w-5 h-5" />
+        <h2 className="serif text-xl">SMTP-konfiguration</h2>
+      </div>
+      <div className="text-sm text-[#444] space-y-1">
+        <div>
+          Status:{" "}
+          {cfg.configured ? (
+            <span className="font-medium text-emerald-700">
+              Konfigurerad
+              {cfg.password_set && ` (lösenord ${cfg.password_preview})`}
+            </span>
+          ) : (
+            <span className="font-medium text-amber-700">Saknas</span>
+          )}
+        </div>
+        {cfg.source && (
+          <div className="text-xs text-[#888]">
+            Källa: {cfg.source === "db"
+              ? "sparad via detta formulär"
+              : "miljövariabler (HEMBUDGET_SMTP_*)"}
+          </div>
+        )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <FormField label="SMTP-host">
+          <input
+            type="text"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            placeholder="smtp.gmail.com"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Port">
+          <input
+            type="number"
+            value={port}
+            onChange={(e) => setPort(parseInt(e.target.value, 10) || 587)}
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Användare">
+          <input
+            type="text"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            placeholder="info@ekonomilabbet.org"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField
+          label={cfg.password_set ? "Nytt lösenord (lämna tomt för oförändrat)" : "Lösenord (Gmail app-password)"}
+        >
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={cfg.password_set ? "•••• •••• (skriv för att ändra)" : "abcdefghijklmnop"}
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Mail-from-adress">
+          <input
+            type="email"
+            value={mailFrom}
+            onChange={(e) => setMailFrom(e.target.value)}
+            placeholder="info@ekonomilabbet.org"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="Avsändarnamn">
+          <input
+            type="text"
+            value={fromName}
+            onChange={(e) => setFromName(e.target.value)}
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none"
+          />
+        </FormField>
+        <FormField label="Publik bas-URL (för mail-länkar)">
+          <input
+            type="url"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://ekonomilabbet.org"
+            className="w-full border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+        </FormField>
+        <FormField label="STARTTLS">
+          <label className="flex items-center gap-2 text-sm py-2">
+            <input
+              type="checkbox"
+              checked={starttls}
+              onChange={(e) => setStarttls(e.target.checked)}
+            />
+            Använd STARTTLS (rekommenderat för port 587)
+          </label>
+        </FormField>
+      </div>
+
+      <details className="border-l-[3px] border-ink pl-4 py-1">
+        <summary className="cursor-pointer eyebrow">
+          Konfigurera Gmail (vanligaste fallet)
+        </summary>
+        <div className="mt-3 body-prose text-sm space-y-2">
+          <p>
+            Gmail kräver ett <strong>app-password</strong> (16 tecken,
+            inga mellanslag). Vanligt Gmail-lösen funkar INTE via SMTP.
+          </p>
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>Slå på 2-stegs-verifiering på Google-kontot om du inte redan har det.</li>
+            <li>
+              Gå till{" "}
+              <a
+                href="https://myaccount.google.com/apppasswords"
+                target="_blank"
+                rel="noreferrer"
+                className="nav-link"
+              >
+                myaccount.google.com/apppasswords
+              </a>
+            </li>
+            <li>Skapa ett nytt app-password (välj "Mail" + "Övrigt: Ekonomilabbet").</li>
+            <li>
+              Fyll i nedan: host <span className="kbd">smtp.gmail.com</span>,
+              port <span className="kbd">587</span>, STARTTLS PÅ, användare =
+              full mail-adress (info@…), lösenord = de 16 tecknen utan
+              mellanslag.
+            </li>
+            <li>Klicka <strong>Spara config</strong> och sen <strong>Skicka testmail</strong>.</li>
+          </ol>
+          <p className="text-xs text-[#888] serif-italic mt-2">
+            Får du fel? Felmeddelandet under testmail-knappen visar exakt
+            vad SMTP-servern svarade med en hint om hur det fixas.
+          </p>
+        </div>
+      </details>
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={save}
+          disabled={busy || !host.trim() || !user.trim() || !mailFrom.trim()}
+          className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Spara config
+        </button>
+        {cfg.source === "db" && (
+          <button
+            onClick={clear}
+            disabled={busy}
+            className="btn-outline rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" /> Rensa DB-config
+          </button>
+        )}
+      </div>
+
+      <div className="pt-3 border-t border-rule">
+        <div className="eyebrow mb-2">Testa SMTP</div>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="email"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="din-mail@example.com"
+            className="flex-1 min-w-[240px] border-[1.5px] border-rule px-3 py-2 text-sm focus:border-ink outline-none font-mono"
+          />
+          <button
+            onClick={sendTest}
+            disabled={busy || !testTo.trim() || !cfg.configured}
+            className="btn-outline rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            Skicka testmail
+          </button>
+        </div>
+        <p className="text-xs text-[#888] mt-2">
+          Skickar ett kort testmail med aktiv config. Verifierar att Gmail
+          app-password fungerar utan att triggra ett riktigt signup-flöde.
+        </p>
+      </div>
+
+      {msg && (
+        <div className="text-xs bg-paper border border-rule p-2 text-[#444]">
+          {msg}
+        </div>
+      )}
+      {err && (
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-2 whitespace-pre-line">
+          {err}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FormField({
+  label, children,
+}: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="eyebrow mb-1">{label}</div>
+      {children}
+    </label>
+  );
+}
+
+
+// ---------- Landningssidans gallery ----------
+
+type LandingAsset = {
+  id: number;
+  slot: string;
+  title: string;
+  body: string;
+  chip: string;
+  chip_color: string;
+  sort_order: number;
+  has_image: boolean;
+  image_url: string | null;
+};
+
+function LandingGallerySection() {
+  const [assets, setAssets] = useState<LandingAsset[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function reload() {
+    try {
+      const rows = await api<LandingAsset[]>("/admin/landing/gallery");
+      setAssets(rows);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  if (err) {
+    return (
+      <section className="bg-white rounded-xl border border-slate-200 p-4">
+        <h2 className="font-medium mb-2 flex items-center gap-2">
+          <Image className="w-4 h-4" /> Landningssidans skärmdumpar
+        </h2>
+        <div className="text-xs text-rose-700">{err}</div>
+      </section>
+    );
+  }
+
+  if (assets === null) {
+    return (
+      <section className="bg-white rounded-xl border border-slate-200 p-4">
+        <h2 className="font-medium mb-2 flex items-center gap-2">
+          <Image className="w-4 h-4" /> Landningssidans skärmdumpar
+        </h2>
+        <div className="text-xs text-slate-500 flex items-center gap-2">
+          <Loader2 className="w-3 h-3 animate-spin" /> Laddar…
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+      <div>
+        <h2 className="font-medium flex items-center gap-2">
+          <Image className="w-4 h-4" /> Landningssidans skärmdumpar
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          Sex slots i "Vyerna"-galleriet på landningssidan. Ladda upp en
+          PNG/JPEG (max 5 MB) per slot. Tomma slots visas som
+          placeholder-kort.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {assets.map((a) => (
+          <LandingAssetEditor
+            key={a.id}
+            asset={a}
+            onSaved={reload}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LandingAssetEditor({
+  asset, onSaved,
+}: { asset: LandingAsset; onSaved: () => void }) {
+  const [title, setTitle] = useState(asset.title);
+  const [body, setBody] = useState(asset.body);
+  const [chip, setChip] = useState(asset.chip);
+  const [chipColor, setChipColor] = useState(asset.chip_color);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const previewUrl = file
+    ? URL.createObjectURL(file)
+    : asset.has_image && asset.image_url
+    ? `${getApiBase()}${asset.image_url}?v=${asset.id}-${asset.title}`
+    : null;
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try {
+      const form = new FormData();
+      form.set("title", title);
+      form.set("body", body);
+      form.set("chip", chip);
+      form.set("chip_color", chipColor);
+      form.set("sort_order", String(asset.sort_order));
+      if (file) form.set("image", file);
+      const tok = getToken();
+      const r = await fetch(
+        `${getApiBase()}/admin/landing/gallery/${asset.id}`,
+        {
+          method: "PUT",
+          body: form,
+          headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+        },
+      );
+      if (!r.ok) {
+        let detail = `${r.status}`;
+        try {
+          const j = await r.json();
+          detail = j.detail || detail;
+        } catch {/* */}
+        throw new Error(detail);
+      }
+      setFile(null);
+      setMsg("Sparat ✓");
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearImage() {
+    if (!confirm(`Ta bort bild från "${asset.title}"?`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api(`/admin/landing/gallery/${asset.id}/image`, {
+        method: "DELETE",
+      });
+      setFile(null);
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs eyebrow">{asset.slot}</div>
+        {asset.has_image && (
+          <button
+            onClick={clearImage}
+            disabled={busy}
+            className="text-xs text-rose-700 hover:underline disabled:opacity-50"
+          >
+            Ta bort bild
+          </button>
+        )}
+      </div>
+      <div className="aspect-[4/3] bg-slate-50 border border-slate-200 rounded overflow-hidden flex items-center justify-center">
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt={title}
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <div className="text-xs text-slate-400 text-center px-3">
+            Ingen bild uppladdad — visas som placeholder på landningssidan.
+          </div>
+        )}
+      </div>
+      <label className="block text-xs">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          className="block w-full text-xs"
+        />
+      </label>
+      <div className="grid grid-cols-3 gap-2">
+        <input
+          value={chip}
+          onChange={(e) => setChip(e.target.value.slice(0, 4))}
+          placeholder="Chip"
+          className="border border-slate-300 rounded px-2 py-1 text-sm"
+        />
+        <select
+          value={chipColor}
+          onChange={(e) => setChipColor(e.target.value)}
+          className="border border-slate-300 rounded px-2 py-1 text-sm col-span-2"
+        >
+          <option value="grund">grund</option>
+          <option value="fordj">fordj</option>
+          <option value="expert">expert</option>
+          <option value="konto">konto</option>
+          <option value="risk">risk</option>
+          <option value="special">special</option>
+        </select>
+      </div>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Titel"
+        className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+      />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Beskrivande text"
+        rows={2}
+        className="w-full border border-slate-300 rounded px-2 py-1 text-sm"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={save}
+          disabled={busy}
+          className="flex items-center gap-1 bg-ink text-white text-sm rounded px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+          {file ? "Ladda upp + spara" : "Spara"}
+        </button>
+        {msg && (
+          <span className="text-xs text-slate-600">{msg}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Landings-variant (A/B-test) ----------
+
+function LandingVariantSection() {
+  const [variant, setVariant] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ variant: string }>("/landing/variant")
+      .then((r) => setVariant(r.variant))
+      .catch(() => setVariant("default"));
+  }, []);
+
+  async function setTo(v: "default" | "c") {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ variant: string }>("/admin/landing/variant", {
+        method: "PUT",
+        body: JSON.stringify({ variant: v }),
+      });
+      setVariant(r.variant);
+      setMsg(
+        `Aktiv variant: ${r.variant === "c" ? "Variant C (SaaS-stil)" : "Standard (paper-stil)"}.`,
+      );
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+      <div>
+        <h2 className="font-medium flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4" /> Landningssidans variant (A/B)
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          Två landings-designer finns. Standard är paper-stilen vi byggt
+          tillsammans; Variant C är SaaS/dashboard-stilen som testas mot
+          en annan tonalitet. Toggle-bytet slår igenom direkt — inga
+          revision-byten behövs.
+        </p>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="text-sm">
+          <span className="text-slate-500">Aktiv:</span>{" "}
+          {variant === null ? (
+            <span className="text-slate-400">laddar…</span>
+          ) : (
+            <span className="font-medium">
+              {variant === "c" ? "Variant C (SaaS)" : "Standard (paper)"}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setTo("default")}
+          disabled={busy || variant === "default"}
+          className="btn-outline rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          Sätt Standard
+        </button>
+        <button
+          type="button"
+          onClick={() => setTo("c")}
+          disabled={busy || variant === "c"}
+          className="btn-dark rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          Sätt Variant C
+        </button>
+        {busy && (
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> Sparar…
+          </span>
+        )}
+        {msg && <span className="text-xs text-slate-600">{msg}</span>}
+      </div>
+      <p className="text-xs text-slate-500">
+        Tips: öppna ekonomilabbet.org i en privat flik efter byte för
+        att slippa cachning.
+      </p>
+    </section>
   );
 }

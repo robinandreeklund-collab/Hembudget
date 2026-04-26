@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -54,12 +55,58 @@ class Teacher(MasterBase):
     ai_requests_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # NULL = ej verifierad (open-signup-lärare som inte klickat länk än).
+    # Bootstrap-läraren + demo-läraren sätts verifierade direkt vid skapelse.
+    # Login blockeras för lärare med NULL (förutom super-admin).
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Familjekonto: tekniskt samma som ett vanligt lärarkonto, men signupen
+    # gick via /signup/parent. Påverkar copy + default-moduler i UI:n
+    # (Sidebar visar "Familjepanel", elever kallas "barn", osv). Samma
+    # databas-modell, ingen extra tabell — bara en pedagogisk flagga.
+    is_family_account: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
 
     students: Mapped[list["Student"]] = relationship(back_populates="teacher")
     families: Mapped[list["Family"]] = relationship(back_populates="teacher")
+
+
+class EmailToken(MasterBase):
+    """Engångs-token för e-post-verifiering och lösenords-återställning.
+
+    Vi lagrar endast SHA-256-hash av tokenvärdet — själva strängen syns
+    bara i mailet. Om DB:n läcker kan angriparen inte använda dem.
+
+    kind:
+      "verify" — klick i mailet sätter Teacher.email_verified_at
+      "reset"  — klick i mailet leder till ny-lösenord-form
+    """
+    __tablename__ = "email_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_email_token_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, index=True,
+    )
+    used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
 
 
 class Family(MasterBase):
@@ -198,7 +245,9 @@ class StudentDataGenerationRun(MasterBase):
         nullable=False, index=True,
     )
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)  # YYYY-MM
-    seed: Mapped[int] = mapped_column(Integer, nullable=False)
+    # BigInteger eftersom seed:s är hela uint32-rangen (0..2**32-1)
+    # och Postgres INTEGER bara går till 2**31-1 ≈ 2.1 mrd.
+    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     stats: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(
@@ -234,7 +283,9 @@ class ScenarioBatch(MasterBase):
         nullable=False, index=True,
     )
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)
-    seed: Mapped[int] = mapped_column(Integer, nullable=False)
+    # BigInteger eftersom seed:s är hela uint32-rangen (0..2**32-1)
+    # och Postgres INTEGER bara går till 2**31-1 ≈ 2.1 mrd.
+    seed: Mapped[int] = mapped_column(BigInteger, nullable=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -314,6 +365,13 @@ class Assignment(MasterBase):
     # där servern inte kan avgöra status automatiskt. När satt
     # returneras status="completed" oavsett vad checkern säger.
     manually_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Lärarens kommentar på elevens inlämning. När satt ber läraren
+    # eleven försöka igen; frontend visar texten som "rätta mig"-
+    # banner och tillåter ny markering-som-klar.
+    teacher_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    teacher_feedback_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -492,6 +550,39 @@ class StudentModule(MasterBase):
     )
 
 
+class StudentStepHeartbeat(MasterBase):
+    """Spårar när eleven är aktiv på ett steg. opened_at = första heartbeaten,
+    last_heartbeat_at = senaste. Duration (last - opened) används av lärar-UI
+    för att se vilka steg som fastnar.
+
+    Separat tabell från StudentStepProgress för att kunna logga även steg
+    där eleven aldrig klickade "klar" (fastnade/gav upp).
+    """
+    __tablename__ = "student_step_heartbeats"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "step_id",
+            name="uq_student_step_heartbeat",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    step_id: Mapped[int] = mapped_column(
+        ForeignKey("module_steps.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+
+
 class StudentStepProgress(MasterBase):
     """Elevens framsteg på ett enskilt steg. data lagrar svar/reflektion."""
     __tablename__ = "student_step_progress"
@@ -521,6 +612,31 @@ class StudentStepProgress(MasterBase):
     # Criterion-definition ligger i ModuleStep.params.rubric.
     rubric_scores: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class StudentAchievement(MasterBase):
+    """Badge/prestation som en elev har tjänat. Unik per (student, key);
+    samma prestation kan inte delas ut två gånger.
+
+    key = kort stabil identifierare som mappas till metadata i
+    `school/achievements.py::ACHIEVEMENTS` (titel, emoji, beskrivning).
+    """
+    __tablename__ = "student_achievements"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "key", name="uq_student_achievement",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    key: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    earned_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
 
@@ -600,6 +716,81 @@ class ModuleStepCompetency(MasterBase):
     weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
 
 
+class AskAiThread(MasterBase):
+    """En AskAI-chattråd mellan en elev/lärare och Claude. Varje tråd
+    har flera meddelanden — möjliggör multi-turn där modellen "minns"
+    tidigare frågor i samma session."""
+    __tablename__ = "ask_ai_threads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # student_id är primärt ägare-fält; lärare kan ha egna trådar med
+    # teacher_id istället.
+    student_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    title: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    module_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("modules.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class AskAiMessage(MasterBase):
+    """Ett meddelande i en AskAI-tråd. role = "user" eller "assistant"."""
+    __tablename__ = "ask_ai_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[int] = mapped_column(
+        ForeignKey("ask_ai_threads.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class RubricTemplate(MasterBase):
+    """Återanvändbar rubric-mall som en lärare kan koppla på valfritt
+    reflect-steg istället för att sätta om kriterier manuellt.
+
+    criteria lagras som lista av {key, name, levels:[...]} — samma format
+    som ModuleStep.params.rubric.
+
+    teacher_id=NULL + is_shared=True = systemmall, visas för alla lärare.
+    """
+    __tablename__ = "rubric_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=True, index=True,
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Lista av {"key": "...", "name": "...", "levels": ["...", ...]}
+    criteria: Mapped[list] = mapped_column(JSON, nullable=False)
+    # Om True syns mallen för andra lärare (via /teacher/rubric-templates)
+    is_shared: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppConfig(MasterBase):
     """Lärarens globala inställningar — skattesatser, budgetstartmånad etc.
     Key-value-form så vi slipper migrera schemat vid varje nytt fält.
@@ -610,4 +801,82 @@ class AppConfig(MasterBase):
     value: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class LandingAsset(MasterBase):
+    """Skärmdumpar + texter för landningssidans Vyerna-galleri.
+
+    Sex fasta slot:ar seedas vid uppstart (slot = "dashboard",
+    "modules", "mastery", "portfolio", "ai", "time-on-task"). Super-
+    admin kan ladda upp/byta bilden via /admin/landing/gallery och
+    redigera title/body utan deploy. Image_blob lagras direkt i
+    master-DB:n så det följer med backupen — ingen separat fil-store
+    behövs.
+
+    Bilder serveras via en publik /landing/gallery/{id}/image-endpoint
+    så landningssidan kan visa dem utan auth.
+    """
+    __tablename__ = "landing_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Stabil slot-nyckel ("dashboard", "modules", osv) — låter UI:n
+    # placera specifika bilder i specifika kort. Unik så vi aldrig
+    # dubblerar slots av misstag.
+    slot: Mapped[str] = mapped_column(
+        String(40), nullable=False, unique=True,
+    )
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    chip: Mapped[str] = mapped_column(String(8), nullable=False, default="")
+    chip_color: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="grund",
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Bild + mimetype. NULL betyder "ingen uppladdad bild — visa
+    # placeholder-kortet på landningssidan".
+    image_blob: Mapped[Optional[bytes]] = mapped_column(
+        LargeBinary, nullable=True,
+    )
+    image_mime: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class StudentActivity(MasterBase):
+    """Audit-spår för meningsfulla handlingar eleven gör i scope-DB:n.
+
+    Skapas av endpoints i transactions/budget/loans/imports osv via
+    helper:n `school.activity::log_activity`. Lärare ser flödet under
+    StudentDetail → "Senaste aktivitet" och kan på så sätt följa elevens
+    arbete utan att behöva impersonera.
+
+    Inga PII-värden lagras i payload — bara siffror och rubriker (ex.
+    "kategoriserade 4 transaktioner i 2025-08"). Hela elevens scope-DB
+    har redan persondata och raderas vid /reset.
+
+    Vi sparar inte här någon koppling till en Assignment — använd
+    matrix-endpointen för det. Aktivitetsflödet är en separat tidslinje.
+    """
+    __tablename__ = "student_activities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Stabil sträng-identifierare. Mappas till människo-läsbar text i
+    # frontend (StudentDetail.tsx). Exempel:
+    # "transaction.created", "budget.set", "loan.created",
+    # "transaction.recategorized", "transfer.linked", "batch.imported"
+    kind: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    # Sammanfattande rubrik som visas direkt i flödet utan klick.
+    summary: Mapped[str] = mapped_column(String(240), nullable=False)
+    # Frivilliga strukturerade detaljer (belopp, antal, månad osv).
+    payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
     )

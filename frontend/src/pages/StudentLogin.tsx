@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, GraduationCap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
+import { AuthShell, PaperButton } from "@/components/paper";
 
 export default function StudentLogin() {
   const { studentLogin, schoolStatus } = useAuth();
@@ -30,54 +30,46 @@ export default function StudentLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-emerald-50 grid place-items-center p-6">
-      <div className="w-full max-w-md">
-        <Link
-          to="/"
-          className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" /> Tillbaka
-        </Link>
-        <form
-          onSubmit={handle}
-          className="bg-white rounded-2xl shadow-xl p-8 space-y-5 border border-slate-200"
-        >
-          <div className="flex items-center gap-2 text-brand-600">
-            <GraduationCap className="w-6 h-6" />
-            <h1 className="text-xl font-semibold">Elevinloggning</h1>
+    <AuthShell
+      eyebrow="Ekonomilabbet"
+      title="Elevinloggning"
+      intro="Ange din 6-teckens kod som din lärare har gett dig."
+    >
+      <form onSubmit={handle} className="space-y-4">
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="ABC123"
+          autoFocus
+          maxLength={6}
+          className="w-full px-3 py-4 border-[1.5px] border-rule bg-white text-ink focus:border-ink outline-none font-mono tracking-[0.4em] text-center text-2xl placeholder:text-[#bbb]"
+        />
+        <Turnstile
+          siteKey={siteKey}
+          onToken={setTurnstileToken}
+          onExpire={() => setTurnstileToken(null)}
+        />
+        {err && (
+          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
+            {err}
           </div>
-          <p className="text-sm text-slate-600">
-            Ange din 6-teckens kod som din lärare har gett dig.
-          </p>
-          <input
-            type="text"
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="ABC123"
-            autoFocus
-            maxLength={6}
-            className="w-full px-3 py-4 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none font-mono tracking-[0.4em] text-center text-2xl"
-          />
-          <Turnstile
-            siteKey={siteKey}
-            onToken={setTurnstileToken}
-            onExpire={() => setTurnstileToken(null)}
-          />
-          {err && <div className="text-sm text-rose-600">{err}</div>}
-          <button
-            disabled={busy || code.length < 4}
-            className="w-full bg-brand-600 hover:bg-brand-700 text-white rounded-lg py-3 font-medium disabled:opacity-50 text-lg"
-          >
-            {busy ? "Loggar in…" : "Logga in"}
-          </button>
-          <div className="text-center text-sm text-slate-500 pt-2 border-t">
-            Är du lärare eller skolledare?{" "}
-            <Link to="/login/teacher" className="text-brand-600 hover:underline">
-              Lärarinloggning
-            </Link>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+        <PaperButton
+          type="submit"
+          disabled={busy || code.length < 4}
+          size="lg"
+          className="w-full justify-center disabled:opacity-50"
+        >
+          {busy ? "Loggar in…" : "Logga in"}
+        </PaperButton>
+        <div className="text-center text-sm text-[#666] pt-3 border-t border-rule">
+          Är du lärare eller skolledare?{" "}
+          <Link to="/login/teacher" className="nav-link">
+            Lärarinloggning
+          </Link>
+        </div>
+      </form>
+    </AuthShell>
   );
 }

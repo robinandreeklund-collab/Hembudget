@@ -3,11 +3,14 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import String, create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase, Mapped, Session, mapped_column, sessionmaker,
+    with_loader_criteria,
+)
 from sqlalchemy.pool import NullPool
 
 from ..config import settings
@@ -17,6 +20,68 @@ log = logging.getLogger(__name__)
 
 class Base(DeclarativeBase):
     pass
+
+
+class TenantMixin:
+    """Markör för alla scope-DB-tabeller som behöver isolera per elev/
+    familj när de delar en gemensam Postgres i prod.
+
+    `tenant_id` matchar scope-nyckeln (`s_<id>` eller `f_<id>`) som
+    StudentScopeMiddleware sätter via ContextVar. Två globala SQLAlchemy-
+    eventer (definierade nedan) sätter automatiskt tenant_id på INSERT
+    och adderar `WHERE tenant_id = ?` till alla SELECT så endpoint-koden
+    inte behöver veta om det.
+
+    I lokal SQLite-fil-per-scope-läge (pytest, dev) är hela filen redan
+    tenant-isolerad så eventerna blir effektivt no-op:s — alla rader i
+    en fil har samma tenant_id eftersom samma scope skrev dem.
+    """
+    tenant_id: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True, index=True,
+    )
+
+
+def _current_tenant() -> Optional[str]:
+    """Aktuell scope-nyckel (s_<id> | f_<id>) eller None om ingen
+    scope-context är satt (master-DB-anrop, demo-läge, etc.)."""
+    try:
+        from ..school.engines import get_current_scope
+        return get_current_scope()
+    except Exception:
+        return None
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _scope_select_filter(state):
+    """Auto-filter alla SELECT på tenant_id om en scope-context är
+    aktiv. Påverkar bara entiteter som ärver TenantMixin (= scope-DB-
+    modellerna), så master-DB-queries går orörda."""
+    if not state.is_select:
+        return
+    if state.is_relationship_load:
+        return
+    tenant = _current_tenant()
+    if tenant is None:
+        return
+    state.statement = state.statement.options(
+        with_loader_criteria(
+            TenantMixin,
+            lambda cls: cls.tenant_id == tenant,
+            include_aliases=True,
+        ),
+    )
+
+
+@event.listens_for(Session, "before_flush")
+def _scope_insert_populate(session, _ctx, _instances):
+    """Sätt tenant_id automatiskt på alla nya rader om context har
+    en scope-nyckel. Manuellt satta värden respekteras."""
+    tenant = _current_tenant()
+    if tenant is None:
+        return
+    for obj in session.new:
+        if isinstance(obj, TenantMixin) and obj.tenant_id is None:
+            obj.tenant_id = tenant
 
 
 _engine: Engine | None = None

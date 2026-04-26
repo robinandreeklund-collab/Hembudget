@@ -195,7 +195,7 @@ export default function Salaries() {
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight">
           <Briefcase className="w-6 h-6" />
           Lön
         </h1>
@@ -876,7 +876,7 @@ function SalaryRow({
         </div>
         <button
           onClick={() => setEditing((v) => !v)}
-          className="text-xs text-brand-600 hover:underline shrink-0"
+          className="text-xs nav-link shrink-0"
         >
           {editing ? "Stäng" : "Redigera"}
         </button>

@@ -135,17 +135,17 @@ export default function AllBatches() {
   ).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-4">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
       <Link
         to="/teacher"
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Lärarpanel
       </Link>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Inbox className="w-6 h-6 text-brand-600" />
-          <h1 className="text-2xl font-semibold">Månadens PDF:er – alla elever</h1>
+          <h1 className="serif text-3xl leading-tight">Månadens PDF:er – alla elever</h1>
         </div>
         <select
           value={selectedMonth}
@@ -163,7 +163,7 @@ export default function AllBatches() {
       </div>
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-200 rounded p-3 text-sm">
+        <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
           {err}
         </div>
       )}
@@ -181,8 +181,8 @@ export default function AllBatches() {
       {loading ? (
         <div className="text-slate-500">Laddar…</div>
       ) : (
-        <div className="bg-white rounded-xl border overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-xl border overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-slate-50 text-left">
               <tr>
                 <th className="p-3">Elev</th>

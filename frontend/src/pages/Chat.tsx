@@ -192,7 +192,7 @@ export default function Chat() {
   return (
     <div className="p-6 flex flex-col h-full">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">AI-chatt</h1>
+        <h1 className="serif text-3xl leading-tight">AI-chatt</h1>
         <div className="flex items-center gap-3 text-sm">
           {msgs.length > 0 && (
             <button
@@ -234,7 +234,7 @@ export default function Chat() {
                     key={q}
                     type="button"
                     onClick={() => sendMut.mutate(q)}
-                    className="block text-left w-full px-3 py-1.5 rounded border border-slate-200 hover:border-brand-400 hover:bg-brand-50 text-slate-700 transition"
+                    className="block text-left w-full px-3 py-1.5 rounded border border-slate-200 hover:border-brand-400 hover:bg-paper text-slate-700 transition"
                   >
                     {q}
                   </button>

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, BookOpenCheck, Brain, Briefcase, CheckCircle2, Eye, FileText,
-  ListChecks, Loader2, Plus, Sparkles, Target, Users, XCircle,
+  Activity, ArrowLeft, BookOpenCheck, Brain, Briefcase, CheckCircle2, Eye,
+  FileText, ListChecks, Loader2, Plus, Sparkles, Target, Users, XCircle,
 } from "lucide-react";
 import { api, ApiError, getApiBase, getToken } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,6 +43,8 @@ const ASSIGNMENT_KINDS = [
   { value: "categorize_all", label: "Kategorisera alla transaktioner" },
   { value: "save_amount", label: "Spara X kr" },
   { value: "mortgage_decision", label: "Bolåne-beslut (rörlig vs bunden)" },
+  { value: "link_transfer", label: "Länka överföringar (X st)" },
+  { value: "add_upcoming", label: "Lägg till kommande räkningar (X st)" },
   { value: "free_text", label: "Annan uppgift (manuell)" },
 ];
 
@@ -68,6 +70,22 @@ export default function StudentDetail() {
     reason: string;
     step_count: number;
   }>>([]);
+  const [moduleProgress, setModuleProgress] = useState<Array<{
+    id: number;
+    module_id: number;
+    module_title: string;
+    module_summary: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    step_count: number;
+    completed_step_count: number;
+    steps: Array<{
+      id: number; sort_order: number; kind: string; title: string;
+      completed_at: string | null;
+      auto_status: "not_started" | "in_progress" | "completed" | null;
+      auto_progress: string | null;
+    }>;
+  }>>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newKind, setNewKind] = useState("free_text");
   const [newTitle, setNewTitle] = useState("");
@@ -82,6 +100,20 @@ export default function StudentDetail() {
     is_match: boolean; confidence: number; explanation: string;
   }>>({});
   const [aiBusyRow, setAiBusyRow] = useState<number | null>(null);
+  const [aiThreads, setAiThreads] = useState<Array<{
+    id: number; title: string | null; module_id: number | null;
+    created_at: string; updated_at: string; message_count: number;
+  }>>([]);
+  const [openThread, setOpenThread] = useState<{
+    id: number; title: string | null; messages: Array<{
+      id: number; role: string; content: string; created_at: string;
+    }>;
+  } | null>(null);
+  const [activity, setActivity] = useState<Array<{
+    id: number; kind: string; summary: string;
+    payload: Record<string, unknown> | null;
+    occurred_at: string;
+  }>>([]);
 
   useEffect(() => {
     api<{ ai_enabled: boolean }>("/admin/ai/me")
@@ -143,7 +175,28 @@ export default function StudentDetail() {
     api<typeof recommendations>(`/teacher/students/${sid}/recommendations`)
       .then(setRecommendations)
       .catch(() => setRecommendations([]));
+    api<typeof moduleProgress>(`/teacher/students/${sid}/modules`)
+      .then(setModuleProgress)
+      .catch(() => setModuleProgress([]));
+    api<typeof aiThreads>(`/ai/teacher/students/${sid}/threads`)
+      .then(setAiThreads)
+      .catch(() => setAiThreads([]));
+    api<{ items: typeof activity }>(`/teacher/students/${sid}/activity?limit=30`)
+      .then((r) => setActivity(r.items))
+      .catch(() => setActivity([]));
   }, [sid]);
+
+  async function openAiThread(id: number) {
+    try {
+      const t = await api<{
+        id: number; title: string | null;
+        messages: Array<{ id: number; role: string; content: string; created_at: string }>;
+      }>(`/ai/teacher/students/${sid}/threads/${id}`);
+      setOpenThread(t);
+    } catch {
+      setOpenThread(null);
+    }
+  }
 
   async function assignRec(moduleId: number) {
     await api(`/teacher/modules/${moduleId}/assign`, {
@@ -175,6 +228,9 @@ export default function StudentDetail() {
               principal: parseInt(newMortgagePrincipal, 10),
               horizon_months: parseInt(newMortgageHorizon, 10),
             }
+          : (newKind === "link_transfer" || newKind === "add_upcoming")
+            && newAmount
+          ? { target_count: parseInt(newAmount, 10) }
           : null,
       }),
     });
@@ -212,16 +268,16 @@ export default function StudentDetail() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
       <button
         onClick={() => navigate("/teacher")}
-        className="text-sm text-slate-600 hover:text-brand-700 flex items-center gap-1"
+        className="text-sm text-slate-600 hover:text-ink flex items-center gap-1"
       >
         <ArrowLeft className="w-4 h-4" /> Tillbaka till elevlistan
       </button>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="serif text-3xl leading-tight">
           <Users className="w-6 h-6 text-brand-600" />
           Elev #{sid}
         </h1>
@@ -234,7 +290,7 @@ export default function StudentDetail() {
           </button>
           <button
             onClick={viewAs}
-            className="bg-brand-600 hover:bg-brand-700 text-white rounded px-4 py-2 flex items-center gap-2"
+            className="btn-dark rounded-md px-4 py-2 flex items-center gap-2"
           >
             <Eye className="w-4 h-4" /> Titta som denna elev
           </button>
@@ -294,7 +350,7 @@ export default function StudentDetail() {
                 </div>
                 <button
                   onClick={() => assignRec(r.module_id)}
-                  className="bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 text-sm"
+                  className="btn-dark rounded-md px-3 py-1.5 text-sm"
                 >
                   Tilldela
                 </button>
@@ -303,6 +359,9 @@ export default function StudentDetail() {
           </ul>
         </section>
       )}
+
+      {/* AI-sammanfattning */}
+      <AiStudentSummarySection studentId={sid} />
 
       {/* Mastery */}
       {mastery.length > 0 && (
@@ -314,6 +373,195 @@ export default function StudentDetail() {
         </section>
       )}
 
+      {/* Modul-progression — task-steg auto-spårade mot scope-DB */}
+      {moduleProgress.length > 0 && (
+        <section className="bg-white border border-rule rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <ListChecks className="w-5 h-5 text-ink" /> Modul-progression
+          </h2>
+          <p className="text-sm text-[#666]">
+            Task-steg utvärderas live mot elevens huvudbok. Du ser
+            samma status som eleven utan att eleven behöver klicka klar.
+          </p>
+          <ul className="space-y-3">
+            {moduleProgress.map((m) => {
+              const pct = m.step_count > 0
+                ? Math.round((m.completed_step_count / m.step_count) * 100)
+                : 0;
+              return (
+                <li
+                  key={m.id}
+                  className="border border-rule rounded-md p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">
+                        {m.module_title}
+                      </div>
+                      <div className="text-xs text-[#666] mt-0.5">
+                        {m.completed_step_count}/{m.step_count} steg klara
+                        {m.completed_at ? " · klar" : m.started_at ? " · pågår" : " · ej påbörjad"}
+                      </div>
+                    </div>
+                    <div className="text-sm tabular-nums text-[#444] shrink-0">
+                      {pct}%
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-paper rounded overflow-hidden">
+                    <div
+                      className="h-full bg-ink"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <ul className="text-xs space-y-1 mt-2">
+                    {m.steps.map((s) => {
+                      const dotColor = s.completed_at
+                        ? "bg-emerald-600"
+                        : s.auto_status === "in_progress"
+                        ? "bg-amber-500"
+                        : "bg-rule";
+                      return (
+                        <li
+                          key={s.id}
+                          className="flex items-center gap-2"
+                        >
+                          <span
+                            className={
+                              "inline-block w-2 h-2 rounded-full " + dotColor
+                            }
+                          />
+                          <span className="truncate flex-1">
+                            <span className="text-[#999] mr-1">
+                              [{s.kind}]
+                            </span>
+                            {s.title}
+                          </span>
+                          {s.kind === "task" && s.auto_progress && (
+                            <span className="text-[#666] shrink-0">
+                              {s.auto_progress}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {/* AI-konversationer — vad eleven har frågat Claude */}
+      {aiThreads.length > 0 && (
+        <section className="bg-white border border-rule rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Brain className="w-5 h-5 text-ink" /> AI-konversationer
+          </h2>
+          <p className="text-sm text-[#666]">
+            Vad eleven har frågat AI:n. Klicka på en tråd för att läsa
+            hela konversationen — viktigt för bedömning och
+            missbruksskydd.
+          </p>
+          <ul className="space-y-1.5">
+            {aiThreads.map((t) => (
+              <li
+                key={t.id}
+                className="border border-rule rounded-md px-3 py-2 flex items-center gap-3 hover:bg-paper cursor-pointer"
+                onClick={() => openAiThread(t.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {t.title || "(utan titel)"}
+                  </div>
+                  <div className="text-xs text-[#666]">
+                    {new Date(t.updated_at).toLocaleString("sv-SE")} ·
+                    {" "}{t.message_count} meddelanden
+                  </div>
+                </div>
+                <Eye className="w-4 h-4 text-[#888] shrink-0" />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Modal: full AI-tråd */}
+      {openThread && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/50 flex items-center justify-center p-4"
+          onClick={() => setOpenThread(null)}
+        >
+          <div
+            className="bg-white border border-rule rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-5 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-rule pb-3">
+              <h3 className="font-semibold text-lg">
+                {openThread.title || "(utan titel)"}
+              </h3>
+              <button
+                onClick={() => setOpenThread(null)}
+                className="text-[#666] hover:text-ink text-xl leading-none"
+                aria-label="Stäng"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3">
+              {openThread.messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={
+                    "border rounded-md p-3 text-sm whitespace-pre-wrap " +
+                    (m.role === "user"
+                      ? "border-rule bg-paper"
+                      : "border-rule bg-white")
+                  }
+                >
+                  <div className="text-xs eyebrow mb-1">
+                    {m.role === "user" ? "Eleven" : "AI"} ·
+                    {" "}{new Date(m.created_at).toLocaleString("sv-SE")}
+                  </div>
+                  <div className="text-ink">{m.content}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Aktivitetsflöde — vad eleven gjort i scope-DB:n */}
+      {activity.length > 0 && (
+        <section className="bg-white border border-rule rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Activity className="w-5 h-5 text-ink" /> Senaste aktivitet
+          </h2>
+          <p className="text-sm text-[#666]">
+            Tidslinje över elevens handlingar — transaktioner, budget, lån
+            och kategorisering. Fångas automatiskt utan att eleven behöver
+            rapportera.
+          </p>
+          <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+            {activity.map((a) => (
+              <li
+                key={a.id}
+                className="flex items-start gap-3 border-b border-rule/50 pb-1.5 last:border-0"
+              >
+                <span className="text-xs eyebrow shrink-0 mt-0.5 w-28">
+                  {new Date(a.occurred_at).toLocaleString("sv-SE", {
+                    month: "2-digit", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit",
+                  })}
+                </span>
+                <span className="text-sm flex-1">{a.summary}</span>
+                <span className="text-xs text-[#999] shrink-0">{a.kind}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Uppdrag */}
       <section className="bg-white border rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
@@ -322,7 +570,7 @@ export default function StudentDetail() {
           </h2>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="text-sm bg-brand-600 hover:bg-brand-700 text-white rounded px-3 py-1.5 flex items-center gap-1"
+            className="text-sm btn-dark rounded-md px-3 py-1.5 flex items-center gap-1"
           >
             <Plus className="w-4 h-4" /> Nytt uppdrag
           </button>
@@ -366,6 +614,19 @@ export default function StudentDetail() {
                 value={newAmount}
                 onChange={(e) => setNewAmount(e.target.value)}
                 placeholder="Belopp att spara (kr)"
+                className="w-full border rounded px-2 py-1.5"
+              />
+            )}
+            {(newKind === "link_transfer" || newKind === "add_upcoming") && (
+              <input
+                type="number"
+                value={newAmount}
+                onChange={(e) => setNewAmount(e.target.value)}
+                placeholder={
+                  newKind === "link_transfer"
+                    ? "Antal överföringar att länka"
+                    : "Antal kommande räkningar"
+                }
                 className="w-full border rounded px-2 py-1.5"
               />
             )}
@@ -458,10 +719,11 @@ export default function StudentDetail() {
             </div>
             {facit.rows.length > 0 && (
               <details className="text-sm">
-                <summary className="cursor-pointer text-slate-600 hover:text-brand-700">
+                <summary className="cursor-pointer text-slate-600 hover:text-ink">
                   Visa alla ({facit.rows.length} transaktioner)
                 </summary>
-                <table className="w-full mt-2 text-xs">
+                <div className="overflow-x-auto -mx-2 md:mx-0 mt-2">
+                <table className="w-full text-xs min-w-[640px]">
                   <thead>
                     <tr className="text-slate-500 text-left">
                       <th className="py-1">Datum</th>
@@ -531,6 +793,7 @@ export default function StudentDetail() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </details>
             )}
           </>
@@ -575,5 +838,102 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-slate-500">{label}</div>
       <div className="font-medium">{value}</div>
     </div>
+  );
+}
+
+
+type SummaryOut = {
+  student_id: number;
+  strengths: string;
+  gaps: string;
+  next_steps: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+};
+
+function AiStudentSummarySection({ studentId }: { studentId: number }) {
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [summary, setSummary] = useState<SummaryOut | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ ai_enabled: boolean }>("/admin/ai/me")
+      .then((r) => setAiEnabled(Boolean(r.ai_enabled)))
+      .catch(() => setAiEnabled(false));
+  }, []);
+
+  async function run() {
+    setBusy(true); setErr(null);
+    try {
+      const s = await api<SummaryOut>(
+        `/ai/teacher/students/${studentId}/summary`,
+        { method: "POST" },
+      );
+      setSummary(s);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503)
+        setErr("AI-funktioner är inte påslagna för ditt konto.");
+      else setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!aiEnabled) return null;
+
+  return (
+    <section className="bg-gradient-to-br from-purple-50 to-slate-50 border border-purple-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-purple-600" />
+          AI-lägesbild
+        </h2>
+        <button
+          onClick={run}
+          disabled={busy}
+          className="text-sm bg-purple-600 hover:bg-purple-700 text-white rounded px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Sparkles className="w-4 h-4" />
+          )}
+          {summary ? "Generera ny" : "Generera lägesbild"}
+        </button>
+      </div>
+      {err && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded p-2">
+          {err}
+        </div>
+      )}
+      {summary && (
+        <div className="space-y-3 text-sm text-slate-800">
+          <div>
+            <div className="font-semibold text-emerald-800 mb-0.5">Styrkor</div>
+            <div className="whitespace-pre-wrap">{summary.strengths}</div>
+          </div>
+          <div>
+            <div className="font-semibold text-amber-800 mb-0.5">Gap</div>
+            <div className="whitespace-pre-wrap">{summary.gaps}</div>
+          </div>
+          <div>
+            <div className="font-semibold text-brand-800 mb-0.5">Nästa steg</div>
+            <div className="whitespace-pre-wrap">{summary.next_steps}</div>
+          </div>
+          <div className="text-xs text-slate-500">
+            Genererad med Claude Sonnet · {summary.input_tokens} in /{" "}
+            {summary.output_tokens} ut tokens
+          </div>
+        </div>
+      )}
+      {!summary && !err && !busy && (
+        <p className="text-sm text-slate-600">
+          AI-genererad lägesbild över elevens styrkor, gap och föreslagna
+          nästa steg. Baserad på mastery, reflektioner och uppdrag.
+        </p>
+      )}
+    </section>
   );
 }

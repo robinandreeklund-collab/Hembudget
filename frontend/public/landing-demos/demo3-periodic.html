@@ -12,10 +12,76 @@
     --ink:#111217; --paper:#fbfaf6; --rule:#e7e3d7;
     --grund:#5b8def; --fordj:#f2994a; --expert:#9b51e0; --konto:#27ae60; --risk:#eb5757;
   }
-  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
-  .serif{font-family:'Spectral',Georgia,serif;font-weight:800;letter-spacing:-.01em;}
+  html,body{background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    text-rendering:optimizeLegibility;}
+  .serif{font-family:'Spectral',Georgia,serif;font-weight:800;letter-spacing:-.015em;}
+  .serif-italic{font-family:'Spectral',Georgia,serif;font-style:italic;font-weight:400;}
   .rule{border-color:var(--rule);}
-  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee3;border:1px solid var(--rule);padding:1px 6px;border-radius:4px;font-size:12px;}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1eee3;border:1px solid var(--rule);padding:1px 6px;border-radius:4px;font-size:12px;font-weight:600;}
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
+  .lead{font-size:17px;line-height:1.55;color:#333;}
+  .body-prose{line-height:1.65;color:#333;}
+  /* Feature-chip — mini-version av en periodic-cell, används som
+     ikon-ersättning på feature- och flow-korten */
+  .feature-chip{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:42px;height:42px;border:1.5px solid var(--ink);background:#fff;
+    font-family:'Spectral',serif;font-weight:800;font-size:18px;
+    line-height:1;flex-shrink:0;
+  }
+  .feature-chip.grund{background:#eef3ff;}
+  .feature-chip.fordj{background:#fff3e6;}
+  .feature-chip.expert{background:#f3eaff;}
+  .feature-chip.konto{background:#e8f7ef;}
+  .feature-chip.risk{background:#fdecec;}
+  .feature-chip.special{background:var(--ink);color:#fff;}
+  .feature-card{
+    border:1.5px solid var(--ink);background:#fff;padding:20px;
+    transition:transform .15s,box-shadow .15s,background .15s;
+  }
+  .feature-card:hover{transform:translateY(-3px);
+    box-shadow:0 10px 24px rgba(0,0,0,.1);background:#fffef5;}
+
+  /* Flow-mockups (paper-style mini-vyer som visar steget) */
+  .mock{
+    border:1.5px solid var(--ink);background:#fff;padding:18px;
+    font-size:13px;line-height:1.4;
+  }
+  .mock-row{display:flex;justify-content:space-between;align-items:baseline;
+    padding:6px 0;border-bottom:1px dashed var(--rule);}
+  .mock-row:last-child{border-bottom:none;}
+  .mock-num{font-family:'Spectral',serif;font-weight:800;}
+  .mock-bar{height:8px;background:#f1eee3;border:1px solid var(--rule);position:relative;
+    border-radius:2px;}
+  .mock-bar > span{position:absolute;inset:0;background:var(--ink);border-radius:1px;}
+  .mock-pill{display:inline-block;padding:2px 8px;border:1px solid var(--ink);
+    background:#fff;font-size:11px;letter-spacing:.04em;}
+  .mock-pill.ok{background:#e8f7ef;}
+  .mock-pill.no{background:#fdecec;}
+  .flow-num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:56px;height:56px;border:2px solid var(--ink);background:var(--ink);color:#fff;
+    font-family:'Spectral',serif;font-weight:800;font-size:22px;border-radius:50%;
+  }
+  /* FAQ — native <details>/<summary> men med custom triangel + paper-stil */
+  details.faq{border-top:1px solid var(--rule);padding:18px 0;}
+  details.faq:last-of-type{border-bottom:1px solid var(--rule);}
+  details.faq > summary{
+    list-style:none;cursor:pointer;display:flex;justify-content:space-between;
+    align-items:center;gap:18px;font-family:'Spectral',serif;font-weight:600;
+    font-size:18px;color:var(--ink);padding:4px 0;
+  }
+  details.faq > summary::-webkit-details-marker{display:none;}
+  details.faq > summary .arrow{
+    width:16px;height:16px;border-right:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);
+    transform:rotate(45deg);transition:transform .2s;flex-shrink:0;margin-top:-3px;
+  }
+  details.faq[open] > summary .arrow{transform:rotate(225deg);margin-top:3px;}
+  details.faq > .answer{margin-top:10px;line-height:1.65;color:#333;font-size:15px;}
+  /* Sektionsskiljelinje (centrerad ornament-streck) */
+  .section-divider{display:flex;align-items:center;gap:10px;color:#999;font-size:11px;letter-spacing:.18em;text-transform:uppercase;}
+  .section-divider:before,.section-divider:after{content:"";flex:1;height:1px;background:var(--rule);}
   .elem{
     position:relative;aspect-ratio:1/1;border:1.5px solid var(--ink);background:#fff;
     display:flex;flex-direction:column;justify-content:space-between;padding:6px 7px;cursor:pointer;
@@ -26,6 +92,14 @@
   .elem .sym{font-family:'Spectral',serif;font-weight:800;font-size:22px;line-height:1;margin-top:4px;}
   .elem .name{font-size:9.5px;color:#444;text-transform:uppercase;letter-spacing:.04em;}
   .elem .val{font-size:9px;color:#888;}
+  /* Mobil: 4 kolumner istället för 8 så cellerna går att läsa.
+     Bumpa även sym/name/val något så de andas.  */
+  @media (max-width:767px){
+    .elem .sym{font-size:26px;}
+    .elem .name{font-size:11px;}
+    .elem .val{font-size:10px;}
+    .elem .num{font-size:11px;}
+  }
   .elem.grund{background:#eef3ff;}
   .elem.fordj{background:#fff3e6;}
   .elem.expert{background:#f3eaff;}
@@ -42,8 +116,80 @@
     white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:30;
   }
   .elem:hover .tooltip{opacity:1;}
+  .elem:focus-visible .tooltip{opacity:1;}
   .tooltip:after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
     border:5px solid transparent;border-top-color:var(--ink);}
+  /* Översta raden: flippa tooltipen ner istället för upp så den inte
+     klipps mot sectionkanten. Täcker desktop-row-1 (1-8) och mobil
+     rad 1-2 (samma indexar). */
+  .elem:nth-child(-n+8) .tooltip{
+    bottom:auto;top:calc(100% + 8px);
+  }
+  .elem:nth-child(-n+8) .tooltip:after{
+    top:auto;bottom:100%;
+    border-top-color:transparent;border-bottom-color:var(--ink);
+  }
+  .elem:focus{outline:2px solid var(--ink);outline-offset:2px;}
+  /* Heatmap-lager ovanpå cellerna — styr via CSS-variabeln --h (0-1) */
+  .elem .heatmap{
+    position:absolute;inset:0;background:#10b981;opacity:0;
+    transition:opacity .3s;pointer-events:none;mix-blend-mode:multiply;
+  }
+  body.heatmap-on .elem .heatmap{opacity:calc(var(--h, 0) * 0.45);}
+  /* Partikelsystem bakom hero */
+  .particle{position:absolute;width:4px;height:4px;border-radius:50%;
+    background:var(--ink);opacity:.15;pointer-events:none;}
+  @keyframes drift{
+    0%{transform:translate(0,0);}
+    100%{transform:translate(var(--dx),var(--dy));}
+  }
+  .drifting{animation:drift var(--dur,8s) linear infinite alternate;}
+  /* Mini-modal */
+  .cellmodal{
+    position:fixed;inset:0;background:rgba(17,18,23,.55);display:none;
+    align-items:center;justify-content:center;z-index:40;padding:16px;
+  }
+  .cellmodal.open{display:flex;}
+  .cellmodal .card{
+    background:#fff;border-radius:12px;padding:24px 28px;max-width:440px;width:100%;
+    box-shadow:0 20px 40px rgba(0,0,0,.2);
+  }
+  /* prefers-reduced-motion slår av drift + blinking */
+  @media (prefers-reduced-motion: reduce){
+    .drifting{animation:none;}
+    .blink{animation:none;}
+  }
+  /* Knappar + nav-länkar */
+  .btn-dark{background:var(--ink);color:#fff;transition:background .15s, transform .1s;font-weight:600;}
+  .btn-dark:hover{background:#000;}
+  .btn-dark:active{transform:translateY(1px);}
+  .btn-outline{border:1px solid var(--rule);background:#fff;transition:background .15s, border-color .15s;font-weight:600;}
+  .btn-outline:hover{background:#f5f1e3;border-color:var(--ink);}
+  .nav-link{color:var(--ink);position:relative;transition:color .15s;text-decoration:none;}
+  .nav-link:hover{color:#444;}
+  .nav-link:after{content:"";position:absolute;left:0;bottom:-4px;height:1.5px;width:0;background:var(--ink);transition:width .2s;}
+  .nav-link:hover:after{width:100%;}
+  *:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px;}
+
+  /* Professor + speech-bubble */
+  .prof-wrap{display:flex;align-items:flex-end;justify-content:flex-end;gap:10px;margin-bottom:10px;}
+  .prof-bubble{
+    position:relative;background:#fff;border:1.5px solid var(--ink);
+    border-radius:12px;padding:8px 12px;font-size:13px;max-width:240px;
+    line-height:1.35;box-shadow:0 2px 0 var(--ink);
+  }
+  .prof-bubble:after{
+    content:"";position:absolute;right:-7px;top:50%;transform:translateY(-50%) rotate(45deg);
+    width:11px;height:11px;background:#fff;border-right:1.5px solid var(--ink);
+    border-top:1.5px solid var(--ink);
+  }
+  .prof-svg{width:96px;height:96px;flex-shrink:0;filter:drop-shadow(0 2px 0 rgba(17,18,23,.15));}
+  @media (max-width:767px){.prof-wrap{display:none;}}
+  /* Subtil idle-andning på prof-svg när inte reduced-motion */
+  @keyframes prof-bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
+  @media (prefers-reduced-motion: no-preference){
+    .prof-svg{animation:prof-bob 4s ease-in-out infinite;}
+  }
 </style>
 </head>
 <body>
@@ -56,11 +202,15 @@
       <span class="serif text-xl">Ekonomilabbet</span>
     </a>
     <nav class="hidden md:flex items-center gap-7 text-sm">
-      <a>Kursplan</a><a>Läroplan</a><a>Forskning</a><a>För lärare</a><a>För skolor</a>
+      <a href="#funktioner" class="nav-link">Funktioner</a>
+      <a href="#flow" class="nav-link">Så funkar det</a>
+      <a href="#pricing" class="nav-link">Pris</a>
+      <a href="#faq" class="nav-link">FAQ</a>
+      <a href="#kontakt" class="nav-link">Kontakt</a>
     </nav>
     <div class="flex gap-2">
-      <a class="text-sm px-4 py-2 border rule rounded-md">Elevlogin</a>
-      <a class="text-sm px-4 py-2 bg-[var(--ink)] text-white rounded-md">Lärarkonto</a>
+      <a href="/login/student" class="btn-outline text-sm px-4 py-2 rounded-md">Elevlogin</a>
+      <a href="/login/teacher" class="btn-dark text-sm px-4 py-2 rounded-md">Lärarkonto</a>
     </div>
   </div>
 </header>
@@ -68,18 +218,23 @@
 <!-- HERO -->
 <section class="max-w-7xl mx-auto px-6 pt-16 pb-12 grid md:grid-cols-[1fr_1.4fr] gap-12 items-start">
   <div>
-    <div class="text-xs uppercase tracking-[0.2em] text-[#888] mb-5">Ekonomilabbet · utgåva 2026</div>
+    <div class="eyebrow mb-5">Ekonomilabbet · utgåva 2026</div>
     <h1 class="serif text-5xl md:text-6xl leading-[1.02]">
       Det periodiska<br/>systemet för pengar.
     </h1>
-    <p class="mt-6 text-lg text-[#333] max-w-md">
+    <p class="mt-6 lead max-w-md">
       Från <span class="kbd">Lö</span> (lön) till <span class="kbd">Rb</span> (räntebindning) —
       32 grundbegrepp som en 16-åring behöver för att inte krocka med vuxenlivet.
       Hovra över en cell. Klassen ser resten.
     </p>
     <div class="mt-8 flex flex-wrap gap-3">
-      <a class="px-5 py-3 bg-[var(--ink)] text-white rounded-md font-semibold">Prova experimentet</a>
-      <a class="px-5 py-3 border rule rounded-md font-semibold">Ladda ner läroplans­matrisen (PDF)</a>
+      <a href="/login/teacher" class="btn-dark px-5 py-3 rounded-md">Prova experimentet</a>
+      <a href="#" class="btn-outline px-5 py-3 rounded-md">Ladda ner läroplans­matrisen (PDF)</a>
+      <button id="heatmap-toggle" type="button"
+        class="btn-outline px-5 py-3 rounded-md"
+        aria-pressed="false">
+        Lägg på klassens värmekarta
+      </button>
     </div>
 
     <div class="mt-10 text-sm space-y-3">
@@ -94,20 +249,27 @@
 
   <!-- Periodic grid -->
   <div class="relative">
-    <!-- Prof peeking top right -->
-    <svg viewBox="0 0 120 120" class="absolute -top-6 -right-4 w-28 h-28 z-10">
-      <g>
-        <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" stroke-width="3"/>
-        <path d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z" fill="#fff" stroke="#111" stroke-width="3"/>
-        <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
-        <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
-        <circle cx="48" cy="68" r="3" fill="#111"/><circle cx="72" cy="68" r="3" fill="#111"/>
-        <path d="M48 88 Q60 96 72 88" stroke="#111" stroke-width="2.5" fill="none"/>
-        <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" stroke-width="2.5"/>
-      </g>
-    </svg>
+    <!-- Professor med pratbubbla — peekar in från höger ovanför tabellen -->
+    <div class="prof-wrap" aria-hidden="true">
+      <div class="prof-bubble">
+        Hovra över en cell — eleven ser samma karta som du.
+      </div>
+      <svg id="prof-svg" class="prof-svg" viewBox="0 0 120 120">
+        <g>
+          <ellipse cx="60" cy="70" rx="36" ry="38" fill="#ffd7b0" stroke="#111" stroke-width="3"/>
+          <path d="M24 50 Q10 10 40 30 Q30 -5 60 20 Q90 -5 80 30 Q110 10 96 50 Q105 70 80 60 L40 60 Q15 70 24 50Z" fill="#fff" stroke="#111" stroke-width="3"/>
+          <circle cx="48" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <circle cx="72" cy="68" r="8" fill="#fff" stroke="#111" stroke-width="2.5"/>
+          <circle id="eye-l" cx="48" cy="68" r="3" fill="#111"/>
+          <circle id="eye-r" cx="72" cy="68" r="3" fill="#111"/>
+          <path d="M48 88 Q60 96 72 88" stroke="#111" stroke-width="2.5" fill="none"/>
+          <path d="M30 58 L40 50 M90 58 L80 50" stroke="#111" stroke-width="2.5"/>
+        </g>
+      </svg>
+    </div>
 
-    <div class="grid grid-cols-8 gap-1.5">
+    <div id="grid" class="grid grid-cols-4 md:grid-cols-8 gap-1.5" role="grid"
+         aria-label="Periodiska systemet för pengar — 32 begrepp">
       <!-- Row 1: first 8 -->
       <div class="elem grund"><span class="num">1</span><div><div class="sym">Lö</div><div class="name">Lön</div></div><div class="val">brutto · netto</div>
         <div class="tooltip">Lön = bruttolön minus skatt = det du faktiskt får</div>
@@ -182,42 +344,733 @@
     </div>
 
     <!-- caption -->
-    <div class="mt-4 text-xs text-[#777] italic">Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.</div>
+    <div class="mt-4 text-xs text-[#777] serif-italic">Prototyp · 32 celler motsvarar 12 kompetenser + 20 stödbegrepp i kursplan 2026.</div>
+  </div>
+</section>
+
+<!-- FEATURES (9 funktioner — varje en mini-cell ur periodic-tabellen) -->
+<section id="funktioner" class="border-t rule">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Funktionerna</div>
+    <div class="max-w-3xl mb-12">
+      <h2 class="serif text-4xl md:text-5xl leading-[1.05]">
+        Allt en lärare behöver för att göra ekonomi begripligt.
+      </h2>
+      <p class="mt-4 lead">
+        Från första lönen till bolåne-beslut. Varje funktion är ett
+        element i kursplanen — eleven övar genom att göra, inte genom
+        att läsa om det.
+      </p>
+    </div>
+
+    <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip grund" aria-hidden="true">Pf</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Unik elev-profil</h3>
+            <p class="mt-2 body-prose text-sm">Varje elev får slumpat yrke, lön, stad och livssituation. Ingen i klassen har samma utgångsläge.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip konto" aria-hidden="true">Ku</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Riktiga PDF:er</h3>
+            <p class="mt-2 body-prose text-sm">Läraren genererar kontoutdrag, lönespec, lånebesked och kreditkortsfakturor som eleverna själva importerar.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip grund" aria-hidden="true">Bu</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Budget mot verklighet</h3>
+            <p class="mt-2 body-prose text-sm">Eleven sätter månadsbudget från Konsumentverkets 2026-siffror — sedan jämförs den mot faktiska köp.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip fordj" aria-hidden="true">Bl</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Bolåne-beslut</h3>
+            <p class="mt-2 body-prose text-sm">Historiska räntor från Riksbanken. Eleven väljer rörlig eller bunden — systemet visar facit efter horisonten.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip risk" aria-hidden="true">Ov</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Livet händer</h3>
+            <p class="mt-2 body-prose text-sm">Diskmaskin går sönder. Sjukdagar sänker lönen. Julshopping exploderar. Eleverna övar på det oväntade.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip grund" aria-hidden="true">Hu</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Familjer</h3>
+            <p class="mt-2 body-prose text-sm">Två elever kan dela ekonomi — sambo-hushåll med gemensam budget, räkningar och sparmål.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip special" aria-hidden="true">Rp</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Lärarens översikt</h3>
+            <p class="mt-2 body-prose text-sm">Klassmatris med status per elev och uppdrag. Facit för varje kategorisering — grönt eller rött på en blick.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip special" aria-hidden="true">AI</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Fråga Ekon (AI)</h3>
+            <p class="mt-2 body-prose text-sm">Multi-turn coach på Claude Sonnet. Anpassar språket till elevens mastery — mer Socrates där grunden saknas.</p>
+          </div>
+        </div>
+      </li>
+      <li class="feature-card">
+        <div class="flex items-start gap-4">
+          <span class="feature-chip fordj" aria-hidden="true">Sp</span>
+          <div>
+            <h3 class="serif text-xl leading-snug">Sparmål &amp; uppdrag</h3>
+            <p class="mt-2 body-prose text-sm">Tydliga uppdrag: "spara 2 000 kr", "balansera månaden", "kategorisera alla köp". Status uppdateras live.</p>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- FLOW (5 numrerade steg, alternerande layout) -->
+<section id="flow" class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Så funkar det</div>
+    <div class="max-w-3xl mb-14">
+      <h2 class="serif text-4xl md:text-5xl leading-[1.05]">Fem nyckelmoment.</h2>
+      <p class="mt-4 lead">Det här är vad eleverna och läraren faktiskt gör — i ordning, månad för månad.</p>
+    </div>
+
+    <div class="space-y-16">
+      <!-- 01: Dashboard -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <div class="flow-num mb-5">1</div>
+          <h3 class="serif text-3xl leading-tight">Eleven får en egen vardag.</h3>
+          <p class="mt-3 body-prose">Yrke, lön, bostad, lån — allt slumpas unikt per elev. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid.</p>
+        </div>
+        <div class="mock">
+          <div class="eyebrow mb-3">Anna · barista · Stockholm</div>
+          <div class="mock-row"><span>Nettolön nov</span><span class="mock-num">23 450 kr</span></div>
+          <div class="mock-row"><span>Hyra</span><span class="mock-num">−9 200 kr</span></div>
+          <div class="mock-row"><span>Mat &amp; dryck</span><span class="mock-num">−3 870 kr</span></div>
+          <div class="mock-row"><span>Sparande</span><span class="mock-num">+1 500 kr</span></div>
+          <div class="mock-row"><span class="font-semibold">Saldo idag</span><span class="mock-num">8 880 kr</span></div>
+        </div>
+      </div>
+
+      <!-- 02: PDFs (omvänd ordning) -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div class="md:order-2">
+          <div class="flow-num mb-5">2</div>
+          <h3 class="serif text-3xl leading-tight">Riktiga dokument att jobba med.</h3>
+          <p class="mt-3 body-prose">Läraren trycker "generera" — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv.</p>
+        </div>
+        <div class="mock md:order-1">
+          <div class="eyebrow mb-3">Generering 2026-11</div>
+          <ul class="space-y-2">
+            <li class="flex items-center gap-3"><span class="feature-chip konto" style="width:32px;height:32px;font-size:13px;">Ku</span><span class="flex-1">Kontoutdrag · 23 transaktioner</span><span class="mock-pill ok">PDF</span></li>
+            <li class="flex items-center gap-3"><span class="feature-chip grund" style="width:32px;height:32px;font-size:13px;">Lö</span><span class="flex-1">Lönespec · november</span><span class="mock-pill ok">PDF</span></li>
+            <li class="flex items-center gap-3"><span class="feature-chip fordj" style="width:32px;height:32px;font-size:13px;">Bl</span><span class="flex-1">Lånebesked · 18,4 kvkm</span><span class="mock-pill ok">PDF</span></li>
+            <li class="flex items-center gap-3"><span class="feature-chip risk" style="width:32px;height:32px;font-size:13px;">Kk</span><span class="flex-1">Kortfaktura · −2 340 kr</span><span class="mock-pill ok">PDF</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 03: Budget vs verkligheten -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <div class="flow-num mb-5">3</div>
+          <h3 class="serif text-3xl leading-tight">Budget möter verklighet.</h3>
+          <p class="mt-3 body-prose">Eleven sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt.</p>
+        </div>
+        <div class="mock">
+          <div class="eyebrow mb-3">Budget vs faktiskt · november</div>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs mb-1"><span>Mat (planerat 4 000)</span><span class="mock-num">3 870 kr</span></div>
+              <div class="mock-bar"><span style="width:97%"></span></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1"><span>Nöje (planerat 1 500)</span><span class="mock-num">2 410 kr</span></div>
+              <div class="mock-bar"><span style="width:100%;background:var(--risk);"></span></div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs mb-1"><span>Hushåll (planerat 800)</span><span class="mock-num">3 200 kr</span></div>
+              <div class="mock-bar"><span style="width:100%;background:var(--risk);"></span></div>
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-[#777] serif-italic">Diskmaskinen sa upp sig den 14:e.</p>
+        </div>
+      </div>
+
+      <!-- 04: Bolåne-beslut -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div class="md:order-2">
+          <div class="flow-num mb-5">4</div>
+          <h3 class="serif text-3xl leading-tight">Verkliga ekonomiska val.</h3>
+          <p class="mt-3 body-prose">Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden. Konsekvenser görs synliga.</p>
+        </div>
+        <div class="mock md:order-1">
+          <div class="eyebrow mb-3">Bolåne-uppdrag · 36 mån horisont</div>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="border rule p-3"><div class="text-[#888]">Rörlig (eleven valde)</div><div class="mock-num text-2xl mt-1">3,25 %</div><div class="mt-2 text-[#666]">Snitt över perioden: 3,8 %</div></div>
+            <div class="border rule p-3"><div class="text-[#888]">3 år bunden</div><div class="mock-num text-2xl mt-1">3,90 %</div><div class="mt-2 text-[#666]">Fixerad hela perioden</div></div>
+          </div>
+          <div class="mt-3 mock-pill ok">Rörlig vann: −18 240 kr</div>
+        </div>
+      </div>
+
+      <!-- 05: Lärarens översikt -->
+      <div class="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <div class="flow-num mb-5">5</div>
+          <h3 class="serif text-3xl leading-tight">Läraren ser hela klassen.</h3>
+          <p class="mt-3 body-prose">Matris över alla elever och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Allt en lärare behöver för att följa upp.</p>
+        </div>
+        <div class="mock">
+          <div class="eyebrow mb-3">Klass NA22 · 5 elever</div>
+          <table class="w-full text-xs">
+            <tr class="text-[#888]"><th class="text-left font-normal py-1">Elev</th><th class="text-left font-normal">Budget</th><th class="text-left font-normal">Bolån</th><th class="text-left font-normal">Mastery</th></tr>
+            <tr class="border-t rule"><td class="py-1.5">Anna</td><td><span class="mock-pill ok">klar</span></td><td><span class="mock-pill ok">klar</span></td><td class="mock-num">82 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Bahar</td><td><span class="mock-pill ok">klar</span></td><td><span class="mock-pill no">pågår</span></td><td class="mock-num">71 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Carl</td><td><span class="mock-pill no">pågår</span></td><td><span class="mock-pill">väntar</span></td><td class="mock-num">54 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Disa</td><td><span class="mock-pill ok">klar</span></td><td><span class="mock-pill ok">klar</span></td><td class="mock-num">90 %</td></tr>
+            <tr class="border-t rule"><td class="py-1.5">Erik</td><td><span class="mock-pill no">pågår</span></td><td><span class="mock-pill no">pågår</span></td><td class="mock-num">63 %</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCREENSHOT GALLERY (6 vyer som platshållare tills riktiga PNGs finns) -->
+<section id="vyer" class="border-t rule">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Vyerna</div>
+    <div class="max-w-3xl mb-10">
+      <h2 class="serif text-4xl md:text-5xl leading-[1.05]">Sex skärmar lärare och elever rör sig i.</h2>
+      <p class="mt-4 lead">Riktiga skärmdumpar kommer här efter pilotfasens första klass — tills dess konceptbilder.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <article class="feature-card aspect-[4/3] flex flex-col justify-between">
+        <span class="feature-chip special" aria-hidden="true">Lä</span>
+        <div>
+          <h3 class="serif text-xl leading-snug">Lärarens dashboard</h3>
+          <p class="mt-2 body-prose text-sm">Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm.</p>
+        </div>
+      </article>
+      <article class="feature-card aspect-[4/3] flex flex-col justify-between">
+        <span class="feature-chip grund" aria-hidden="true">Mo</span>
+        <div>
+          <h3 class="serif text-xl leading-snug">Elevens kursplan</h3>
+          <p class="mt-2 body-prose text-sm">Moduler steg för steg: läs, reflektera, quiz och uppdrag.</p>
+        </div>
+      </article>
+      <article class="feature-card aspect-[4/3] flex flex-col justify-between">
+        <span class="feature-chip fordj" aria-hidden="true">Ms</span>
+        <div>
+          <h3 class="serif text-xl leading-snug">Mastery-grafen</h3>
+          <p class="mt-2 body-prose text-sm">Per-kompetens mastery, milstolpar och nästa-steg-hint.</p>
+        </div>
+      </article>
+      <article class="feature-card aspect-[4/3] flex flex-col justify-between">
+        <span class="feature-chip special" aria-hidden="true">Pf</span>
+        <div>
+          <h3 class="serif text-xl leading-snug">Portfolio-PDF</h3>
+          <p class="mt-2 body-prose text-sm">Exporteras per elev eller som ZIP för hela klassen.</p>
+        </div>
+      </article>
+      <article class="feature-card aspect-[4/3] flex flex-col justify-between">
+        <span class="feature-chip special" aria-hidden="true">AI</span>
+        <div>
+          <h3 class="serif text-xl leading-snug">Fråga Ekon</h3>
+          <p class="mt-2 body-prose text-sm">Multi-turn AI-coach som anpassar svaren till elevens nivå.</p>
+        </div>
+      </article>
+      <article class="feature-card aspect-[4/3] flex flex-col justify-between">
+        <span class="feature-chip risk" aria-hidden="true">Tt</span>
+        <div>
+          <h3 class="serif text-xl leading-snug">Time on task</h3>
+          <p class="mt-2 body-prose text-sm">Se vilka steg som fastnar för eleverna i din klass.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- SOCIAL PROOF (pilotskolor — platshållare tills riktiga logos finns) -->
+<section id="social" class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-14">
+    <div class="section-divider mb-8">I pilotprojekt tillsammans med</div>
+    <ul class="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4 text-center">
+      <li class="serif text-lg text-[#555]">Exempel­skolan</li>
+      <li class="serif text-lg text-[#555]">Ekonomi­linjen Malmö</li>
+      <li class="serif text-lg text-[#555]">Linné­skolan</li>
+      <li class="serif text-lg text-[#555]">Musik­gymnasiet</li>
+      <li class="serif text-lg text-[#555]">Fjäll­gymnasiet</li>
+    </ul>
+    <p class="mt-6 text-xs text-[#999] text-center serif-italic">
+      Riktiga logotyper läggs till efter pilotfasen.
+    </p>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Pris</div>
+    <div class="max-w-3xl mb-12">
+      <h2 class="serif text-4xl md:text-5xl leading-[1.05]">Enkel prismodell.</h2>
+      <p class="mt-4 lead">Gratis under pilotåret 2026. Ingen bindningstid, inga dolda kostnader. Från 2027 sätts en per-elev-avgift i dialog med pilotskolorna.</p>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-5 max-w-3xl">
+      <!-- Aktuell plan: stark -->
+      <article class="border-[2.5px] border-[var(--ink)] bg-[var(--paper)] p-7 relative">
+        <span class="absolute -top-3 left-5 px-2 py-0.5 bg-[var(--ink)] text-white text-xs uppercase tracking-[0.18em]">Pilot 2026</span>
+        <div class="serif text-5xl mt-3 leading-none">0 kr</div>
+        <p class="mt-2 text-sm text-[#555]">Hela plattformen, utan tak.</p>
+        <ul class="mt-5 space-y-2 text-sm body-prose">
+          <li class="flex items-start gap-2"><span class="serif">·</span> Obegränsat antal elever</li>
+          <li class="flex items-start gap-2"><span class="serif">·</span> AI-funktioner (Claude Sonnet)</li>
+          <li class="flex items-start gap-2"><span class="serif">·</span> Portfolio-PDF + ZIP-export</li>
+          <li class="flex items-start gap-2"><span class="serif">·</span> Support via mail</li>
+        </ul>
+      </article>
+
+      <!-- Framtida plan: dämpad -->
+      <article class="border-[1.5px] border-[var(--rule)] bg-white p-7">
+        <span class="eyebrow">Från 2027</span>
+        <div class="serif text-5xl mt-3 leading-none">Per-elev</div>
+        <p class="mt-2 text-sm text-[#555]">Nivå sätts tillsammans med pilotskolorna — troligen 50–150 kr/elev/läsår.</p>
+        <ul class="mt-5 space-y-2 text-sm body-prose">
+          <li class="flex items-start gap-2"><span class="serif">·</span> Samma plattform, ingen funktionsnedskärning</li>
+          <li class="flex items-start gap-2"><span class="serif">·</span> Tak för AI-användning</li>
+          <li class="flex items-start gap-2"><span class="serif">·</span> Dedikerad support</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" class="border-t rule">
+  <div class="max-w-3xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">FAQ</div>
+    <h2 class="serif text-4xl md:text-5xl leading-[1.05] mb-10">Vanliga frågor.</h2>
+
+    <details class="faq">
+      <summary>Vad kostar Ekonomilabbet?<span class="arrow"></span></summary>
+      <div class="answer">Gratis under pilotåret 2026. Inga dolda kostnader. Från 2027 tas en per-elev-avgift ut, nivån bestäms tillsammans med pilotskolorna.</div>
+    </details>
+    <details class="faq">
+      <summary>Är det GDPR-säkert?<span class="arrow"></span></summary>
+      <div class="answer">Ja. All elevdata sparas i svensk molntjänst (Google Cloud Run, europe-north1). Vi delar inga personuppgifter med tredje part. AI-anropen anonymiseras — Claude ser aldrig elevers namn eller personnummer.</div>
+    </details>
+    <details class="faq">
+      <summary>Vad behöver vi installera?<span class="arrow"></span></summary>
+      <div class="answer">Inget. Ekonomilabbet är en webbapp. Läraren skapar konto, lägger in eleverna och eleverna loggar in med en 6-teckenskod eller QR-kod. Ingen installation, ingen app-store.</div>
+    </details>
+    <details class="faq">
+      <summary>Går det att använda utan AI?<span class="arrow"></span></summary>
+      <div class="answer">Absolut. Alla pedagogiska flöden (moduler, reflektioner, quiz, rubric, portfolio) fungerar utan AI. AI är en ren extra-funktion som kan aktiveras per lärare.</div>
+    </details>
+    <details class="faq">
+      <summary>Kan elever komma åt varandras data?<span class="arrow"></span></summary>
+      <div class="answer">Nej. Varje elev har en egen krypterad SQLite-DB på servern, ingen cross-access även om de råkar i samma klass. Läraren ser alla sina elever men aldrig någon annan lärares.</div>
+    </details>
+    <details class="faq">
+      <summary>Vad händer med elevernas data när året är slut?<span class="arrow"></span></summary>
+      <div class="answer">Ingenting tvångsmässigt — datan är kvar tills läraren tar bort kontot. Vi exporterar gärna hela klassen till ZIP så du har en kopia innan du raderar.</div>
+    </details>
+    <details class="faq">
+      <summary>Vilken AI-modell används?<span class="arrow"></span></summary>
+      <div class="answer">Claude Haiku 4.5 för snabba uppgifter (kategori-check, feedback-förslag) och Claude Sonnet 4.6 för djupare uppgifter (rubric, elev-Q&amp;A, modul-generering). Prompt-caching används för kostnadskontroll.</div>
+    </details>
+    <details class="faq">
+      <summary>Kan jag importera befintliga moduler från andra system?<span class="arrow"></span></summary>
+      <div class="answer">Inte som automatisk import än. Moduler skapas i plattformen eller klonas från systemmallar/andra lärares delade moduler. Säg till oss vad ni använder — vi bygger importen om det finns efterfrågan.</div>
+    </details>
+  </div>
+</section>
+
+<!-- FOUNDER QUOTE -->
+<section class="border-t rule">
+  <div class="max-w-3xl mx-auto px-6 py-20 text-center">
+    <div class="serif text-7xl leading-none text-[var(--ink)] opacity-15 select-none">"</div>
+    <blockquote class="serif-italic text-2xl md:text-[28px] leading-snug mt-2 text-[#222]">
+      Ekonomilabbet började som ett verktyg för min egen ekonomi. Nu
+      kan det också hjälpa unga att förstå pengar, beslut och vardags­
+      ekonomi på riktigt — på ett sätt som känns konkret och användbart.
+    </blockquote>
+    <div class="mt-6 eyebrow">— Grundaren</div>
+  </div>
+</section>
+
+<!-- WHY (problem-statistik) -->
+<section id="why" class="border-t rule">
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-10">Problemet</div>
+    <div class="grid md:grid-cols-[1.1fr_1fr] gap-12 items-start">
+      <div>
+        <h2 class="serif text-4xl md:text-5xl leading-[1.05]">
+          Ekonomi är ett livskunskaps­ämne.<br/>
+          Och det saknas i skolan.
+        </h2>
+        <p class="mt-5 lead max-w-md">
+          Svenska unga lämnar gymnasiet utan grund­läggande kunskaper om
+          skatt, sparande, lån och budget. Verkligheten möter dem först
+          när de flyttar hemifrån — ofta för sent.
+        </p>
+        <div class="mt-8 border-l-[3px] border-[var(--ink)] pl-5 py-1 max-w-md">
+          <div class="serif-italic text-lg leading-snug">
+            Lär genom att göra — inte genom att läsa om det.
+          </div>
+          <p class="mt-2 text-sm body-prose">
+            Eleven får egen simulerad inkomst, egna räkningar, egen lön
+            varje månad. Varje val har konsekvenser som syns direkt i
+            budgeten.
+          </p>
+        </div>
+      </div>
+
+      <!-- Tre statistik-kort i samma "outlined cell"-språk som periodic-griden -->
+      <ul class="grid gap-3">
+        <li class="border-[1.5px] border-[var(--ink)] bg-white p-5 flex items-baseline gap-5">
+          <span class="serif text-5xl leading-none shrink-0">4 av 10</span>
+          <span class="body-prose">unga klarar inte en oväntad räkning på 2 000 kr.</span>
+        </li>
+        <li class="border-[1.5px] border-[var(--ink)] bg-white p-5 flex items-baseline gap-5">
+          <span class="serif text-5xl leading-none shrink-0">60 %</span>
+          <span class="body-prose">av elever har aldrig läst en lönespecifikation.</span>
+        </li>
+        <li class="border-[1.5px] border-[var(--ink)] bg-white p-5 flex items-baseline gap-5">
+          <span class="serif text-5xl leading-none shrink-0">1 h</span>
+          <span class="body-prose">räcker för att prova grunderna i Ekonomilabbet.</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- STATS TICKER (hämtar /public/stats; renderas tomt om backend saknas) -->
+<section id="stats" class="border-t rule bg-white">
+  <div class="max-w-7xl mx-auto px-6 py-14">
+    <div class="section-divider mb-10">I produktion just nu</div>
+    <div id="stats-grid" class="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-8">
+      <!-- 4 platshållare som JS:en byter ut. Visas dolt tills datan kommer. -->
+      <div class="text-center stat-cell" data-key="teachers">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Lärare</div>
+      </div>
+      <div class="text-center stat-cell" data-key="students">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Elever</div>
+      </div>
+      <div class="text-center stat-cell" data-key="modules_completed">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Avklarade moduler</div>
+      </div>
+      <div class="text-center stat-cell" data-key="reflections_written">
+        <div class="serif text-4xl md:text-5xl stat-num">—</div>
+        <div class="eyebrow mt-2">Reflektioner</div>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- DETAIL STRIP -->
 <section class="border-t rule bg-white">
-  <div class="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-10">
-    <div>
-      <div class="serif text-xl">En cell, en kompetens.</div>
-      <p class="mt-2 text-[#444]">Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.</p>
-    </div>
-    <div>
-      <div class="serif text-xl">Lärare rättar i rader.</div>
-      <p class="mt-2 text-[#444]">Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.</p>
-    </div>
-    <div>
-      <div class="serif text-xl">Hela klassen i en bild.</div>
-      <p class="mt-2 text-[#444]">Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet.</p>
+  <div class="max-w-7xl mx-auto px-6 py-20">
+    <div class="section-divider mb-12">Logiken</div>
+    <div class="grid md:grid-cols-3 gap-x-12 gap-y-10">
+      <div>
+        <div class="eyebrow mb-2">01</div>
+        <h3 class="serif text-2xl leading-[1.15]">En cell, en kompetens.</h3>
+        <p class="mt-3 body-prose">Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som MasteryChart redan gör.</p>
+      </div>
+      <div>
+        <div class="eyebrow mb-2">02</div>
+        <h3 class="serif text-2xl leading-[1.15]">Lärare rättar i rader.</h3>
+        <p class="mt-3 body-prose">Reflektioner batchas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick.</p>
+      </div>
+      <div>
+        <div class="eyebrow mb-2">03</div>
+        <h3 class="serif text-2xl leading-[1.15]">Hela klassen i en bild.</h3>
+        <p class="mt-3 body-prose">Din klass-översikt lägger elevernas mastery som ett värmekarta-lager ovanpå systemet — toggla i hero-vyn ovan.</p>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- CTA -->
-<section class="max-w-7xl mx-auto px-6 py-20 text-center">
-  <h2 class="serif text-4xl md:text-5xl">Kursplanen din kemi­lärare aldrig fick.</h2>
-  <p class="mt-4 text-[#555] max-w-xl mx-auto">Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir super-admin.</p>
+<section class="max-w-7xl mx-auto px-6 py-24 text-center">
+  <div class="eyebrow mb-4">Kom igång</div>
+  <h2 class="serif text-4xl md:text-5xl leading-[1.05]">Kursplanen din kemi­lärare aldrig fick.</h2>
+  <p class="mt-5 lead max-w-xl mx-auto">Gratis under pilotåret. Ingen bindningstid. Bootstrap-lärare blir super-admin.</p>
   <div class="mt-7 flex justify-center gap-3 flex-wrap">
-    <a class="px-6 py-3.5 bg-[var(--ink)] text-white rounded-md font-semibold">Starta labbet</a>
-    <a class="px-6 py-3.5 border rule rounded-md font-semibold">Boka introduktion</a>
+    <a href="/login/teacher" class="btn-dark px-6 py-3.5 rounded-md">Starta labbet</a>
+    <a href="mailto:info@ekonomilabbet.org?subject=Boka%20introduktion" class="btn-outline px-6 py-3.5 rounded-md">Boka introduktion</a>
   </div>
 </section>
 
-<footer class="border-t rule max-w-7xl mx-auto px-6 py-10 text-sm text-[#777] flex flex-wrap justify-between gap-4">
-  <div>© 2026 Ekonomilabbet · Utvecklad i samarbete med lärare</div>
-  <div class="flex gap-4"><a>Integritet</a><a>Tillgänglighet</a><a>info@ekonomilabbet.org</a></div>
+<!-- KONTAKT -->
+<section id="kontakt" class="border-t rule bg-white">
+  <div class="max-w-3xl mx-auto px-6 py-16 text-center">
+    <div class="section-divider mb-8">Kontakt</div>
+    <h2 class="serif text-3xl md:text-4xl leading-[1.05]">Frågor, förslag eller samarbeten?</h2>
+    <p class="mt-4 lead">
+      Vi hjälper gärna till om du vill komma igång i din klass, har önskemål
+      om nya funktioner, eller vill utforska samarbeten med skolor, kommuner
+      eller lärarorganisationer.
+    </p>
+    <a href="mailto:info@ekonomilabbet.org"
+       class="btn-dark inline-block mt-7 px-6 py-3.5 rounded-md font-mono text-sm">
+      info@ekonomilabbet.org
+    </a>
+    <p class="text-xs text-[#888] mt-4 serif-italic">Vi svarar oftast inom ett par arbetsdagar.</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="border-t rule">
+  <div class="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-3 gap-10 text-sm">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <svg width="22" height="22" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="#111217" stroke-width="2"/><text x="20" y="26" text-anchor="middle" font-family="Spectral" font-weight="800" font-size="18">Ek</text></svg>
+        <span class="serif text-lg">Ekonomilabbet</span>
+      </div>
+      <p class="text-[#666] body-prose">
+        En öppen utbildningsplattform för privatekonomi. Byggd i samarbete
+        med svenska lärare.
+      </p>
+    </div>
+    <div>
+      <div class="eyebrow mb-3">Sidan</div>
+      <ul class="space-y-1.5">
+        <li><a href="#funktioner" class="nav-link">Funktioner</a></li>
+        <li><a href="#flow" class="nav-link">Så funkar det</a></li>
+        <li><a href="#pricing" class="nav-link">Pris</a></li>
+        <li><a href="#faq" class="nav-link">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="eyebrow mb-3">Kontakt &amp; juridik</div>
+      <ul class="space-y-1.5">
+        <li><a href="mailto:info@ekonomilabbet.org" class="nav-link">info@ekonomilabbet.org</a></li>
+        <li><a href="#" class="nav-link">Integritet</a></li>
+        <li><a href="#" class="nav-link">Tillgänglighet</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t rule">
+    <div class="max-w-7xl mx-auto px-6 py-5 text-xs text-[#888] flex flex-wrap justify-between gap-3">
+      <div>© 2026 Ekonomilabbet · Utvecklad i samarbete med lärare</div>
+      <div class="serif-italic">Prototyp — utgåva 2026</div>
+    </div>
+  </div>
 </footer>
+
+<!-- Mini-modal som visas när en cell klickas -->
+<div id="cellmodal" class="cellmodal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="card">
+    <div id="m-sym" class="serif text-4xl"></div>
+    <div id="m-name" class="text-lg font-semibold mt-1"></div>
+    <div id="m-val" class="text-sm text-[#666] mt-0.5"></div>
+    <p id="m-tip" class="mt-3 text-[#333]"></p>
+    <div id="m-module" class="mt-4 text-xs text-[#888]"></div>
+    <button id="m-close" class="mt-5 px-4 py-2 bg-[var(--ink)] text-white rounded text-sm">Stäng</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* --- Aria + tangentbordsnav + klick på celler --- */
+  const grid = document.getElementById('grid');
+  const elems = grid ? Array.from(grid.querySelectorAll('.elem')) : [];
+  // Deterministiska heatmap-värden per cell-position (0..1) så klassens
+  // "värmekarta" alltid ser likadan ut — demo utan backend.
+  const heat = [
+    .92,.74,.88,.82,.71,.66,.54,.48,
+    .38,.32,.64,.58,.22,.18,.41,.36,
+    .52,.46,.42,.28,.26,.14,.50,.71,
+    .67,.55,.34,.12,.08,.44,.62,.58,
+  ];
+  elems.forEach((el, i) => {
+    el.setAttribute('role', 'gridcell');
+    el.setAttribute('tabindex', '0');
+    const nameEl = el.querySelector('.name');
+    const valEl = el.querySelector('.val');
+    const tip = el.querySelector('.tooltip');
+    const label =
+      (nameEl ? nameEl.textContent : '') +
+      (valEl ? ', ' + valEl.textContent : '') +
+      (tip ? '. ' + tip.textContent : '');
+    el.setAttribute('aria-label', label.trim());
+    // Heatmap-overlay (tom div per cell, opacitet styrs av CSS-variabel)
+    const h = document.createElement('span');
+    h.className = 'heatmap';
+    el.appendChild(h);
+    el.style.setProperty('--h', heat[i] ?? 0);
+  });
+  // Enter/mellanslag = öppna modal; pil = flytta fokus
+  grid && grid.addEventListener('keydown', (e) => {
+    const cur = document.activeElement;
+    const idx = elems.indexOf(cur);
+    if (idx < 0) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openModal(elems[idx]);
+    } else if (['ArrowRight','ArrowLeft','ArrowUp','ArrowDown'].includes(e.key)) {
+      e.preventDefault();
+      const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      const dy = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+      const next = idx + dx + dy * 8;
+      if (elems[next]) elems[next].focus();
+    }
+  });
+  elems.forEach(el => el.addEventListener('click', () => openModal(el)));
+
+  /* --- Modal --- */
+  const modal = document.getElementById('cellmodal');
+  const mSym = document.getElementById('m-sym');
+  const mName = document.getElementById('m-name');
+  const mVal = document.getElementById('m-val');
+  const mTip = document.getElementById('m-tip');
+  const mModule = document.getElementById('m-module');
+  document.getElementById('m-close').onclick = closeModal;
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+  function openModal(el){
+    const sym = el.querySelector('.sym');
+    const name = el.querySelector('.name');
+    const val = el.querySelector('.val');
+    const tip = el.querySelector('.tooltip');
+    mSym.textContent = sym ? sym.textContent : '';
+    mName.textContent = name ? name.textContent : '';
+    mVal.textContent = val ? val.textContent : '';
+    mTip.textContent = tip ? tip.textContent : '';
+    mModule.textContent = 'Tränas i modulen "Din första månad" · steg 1–7';
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+  function closeModal(){
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  /* --- Heatmap-toggle --- */
+  const ht = document.getElementById('heatmap-toggle');
+  ht && ht.addEventListener('click', () => {
+    const on = document.body.classList.toggle('heatmap-on');
+    ht.setAttribute('aria-pressed', on ? 'true' : 'false');
+    ht.textContent = on
+      ? 'Ta bort klassens värmekarta'
+      : 'Lägg på klassens värmekarta';
+  });
+
+  /* --- Professor: ögonen följer musen --- */
+  const svg = document.getElementById('prof-svg');
+  const el = document.getElementById('eye-l');
+  const er = document.getElementById('eye-r');
+  if (svg && el && er && !reduce) {
+    window.addEventListener('mousemove', (e) => {
+      const r = svg.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / 200));
+      const dy = Math.max(-1, Math.min(1, (e.clientY - cy) / 200));
+      el.setAttribute('cx', String(48 + dx * 2));
+      el.setAttribute('cy', String(68 + dy * 2));
+      er.setAttribute('cx', String(72 + dx * 2));
+      er.setAttribute('cy', String(68 + dy * 2));
+    });
+  }
+
+  /* --- Stats-ticker: hämta /public/stats och count-up-animera --- */
+  (function loadStats(){
+    const cells = document.querySelectorAll('.stat-cell');
+    if (!cells.length) return;
+    fetch('/public/stats', { headers: { 'Accept': 'application/json' }})
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        cells.forEach(cell => {
+          const key = cell.getAttribute('data-key');
+          const target = Number(data[key]) || 0;
+          const numEl = cell.querySelector('.stat-num');
+          if (!numEl) return;
+          if (reduce || target === 0) {
+            numEl.textContent = target.toLocaleString('sv-SE');
+            return;
+          }
+          // 800 ms easeOutCubic count-up
+          const start = performance.now();
+          const dur = 800;
+          (function step(now){
+            const t = Math.min(1, (now - start) / dur);
+            const eased = 1 - Math.pow(1 - t, 3);
+            numEl.textContent = Math.round(target * eased).toLocaleString('sv-SE');
+            if (t < 1) requestAnimationFrame(step);
+          })(start);
+        });
+      })
+      .catch(() => { /* tysta — sektionen behåller "—" */ });
+  })();
+
+  /* --- Drivande partiklar bakom hero (egen wrapper för att inte
+         klippa tooltip-popovers på cellerna) --- */
+  if (!reduce) {
+    const hero = document.querySelector('section');
+    if (hero) {
+      hero.style.position = 'relative';
+      const layer = document.createElement('div');
+      layer.style.cssText =
+        'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;';
+      hero.prepend(layer);
+      for (let i = 0; i < 18; i++) {
+        const p = document.createElement('span');
+        p.className = 'particle drifting';
+        const top = Math.random() * 100;
+        const left = Math.random() * 100;
+        const dx = (Math.random() - 0.5) * 120;
+        const dy = (Math.random() - 0.5) * 120;
+        const dur = 6 + Math.random() * 8;
+        p.style.top = top + '%';
+        p.style.left = left + '%';
+        p.style.setProperty('--dx', dx + 'px');
+        p.style.setProperty('--dy', dy + 'px');
+        p.style.setProperty('--dur', dur + 's');
+        layer.appendChild(p);
+      }
+    }
+  }
+})();
+</script>
 
 </body>
 </html>

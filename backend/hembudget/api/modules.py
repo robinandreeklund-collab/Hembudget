@@ -5,18 +5,21 @@ och elever (gå igenom moduler steg för steg).
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+log = logging.getLogger(__name__)
+
 from ..school import is_enabled as school_enabled
 from ..school.engines import master_session
 from ..school.models import (
     Competency, Module, ModuleStep, ModuleStepCompetency,
-    PeerFeedback, Student, StudentModule, StudentProfile,
-    StudentStepProgress,
+    PeerFeedback, RubricTemplate, Student, StudentModule, StudentProfile,
+    StudentStepHeartbeat, StudentStepProgress, Teacher,
 )
 from .deps import TokenInfo, require_teacher, require_token
 
@@ -26,6 +29,33 @@ router = APIRouter(tags=["modules"])
 def _require_school_mode() -> None:
     if not school_enabled():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "School mode disabled")
+
+
+def _resolve_student_actor(info: TokenInfo) -> int:
+    """Returnera student_id för anropet:
+    - Elev-token: info.student_id direkt.
+    - Lärare med x-as-student-impersonation: middleware har redan
+      satt actor_student_id i ContextVar:n efter att verifierat att
+      eleven tillhör läraren. Vi läser den.
+
+    Höjer 403 om ingen student-kontext finns.
+
+    Anledning till helpern: en lärare som klickar runt i sin elev-vy
+    via impersonation måste kunna läsa /student/* endpoints. Tidigare
+    krävde de hårt info.role == "student", vilket fick lärare att
+    tappa token+session och flygas tillbaka till landningssidan så
+    fort de öppnade en modul."""
+    if info.role == "student" and info.student_id:
+        return info.student_id
+    if info.role == "teacher":
+        from ..school.engines import get_current_actor_student
+        sid = get_current_actor_student()
+        if sid is not None:
+            return sid
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Saknar student-kontext (sätt x-as-student för lärar-impersonation)",
+    )
 
 
 # ---------- Schemas ----------
@@ -81,11 +111,50 @@ class StudentModuleOut(BaseModel):
     completed_step_count: int
 
 
+class PeerFeedbackAnon(BaseModel):
+    """Anonym peer-feedback på reflektion. Skickas tillbaka till eleven
+    som fick den (utan reviewer-identitet)."""
+    id: int
+    body: str
+    created_at: datetime
+
+
 class StudentStepOut(BaseModel):
     step: ModuleStepOut
     completed_at: Optional[datetime]
     data: Optional[dict]
     teacher_feedback: Optional[str]
+    peer_feedback: list[PeerFeedbackAnon] = []
+    # För task-steg med assignment_kind: live-status från elevens scope-
+    # DB. None om steget inte är ett spårat task-steg.
+    auto_status: Optional[str] = None     # "not_started"|"in_progress"|"completed"
+    auto_progress: Optional[str] = None   # ex. "3/5 dokument importerade"
+
+
+class TeacherStepStatusOut(BaseModel):
+    """Lärarens vy på ett enskilt steg för en specifik elev."""
+    id: int
+    sort_order: int
+    kind: str
+    title: str
+    completed_at: Optional[datetime]
+    auto_status: Optional[str] = None
+    auto_progress: Optional[str] = None
+
+
+class TeacherStudentModuleOut(BaseModel):
+    """En elevs modul-progression sett ur lärarens perspektiv. Task-steg
+    har live-status från elevens scope-DB."""
+    id: int
+    module_id: int
+    module_title: str
+    module_summary: Optional[str]
+    sort_order: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    step_count: int
+    completed_step_count: int
+    steps: list[TeacherStepStatusOut]
 
 
 class AssignStudentsIn(BaseModel):
@@ -111,6 +180,108 @@ def _step_to_out(s: ModuleStep) -> ModuleStepOut:
         id=s.id, module_id=s.module_id, sort_order=s.sort_order,
         kind=s.kind, title=s.title, content=s.content, params=s.params,
     )
+
+
+def _evaluate_task_step(
+    session, step: ModuleStep, student_id: int,
+) -> tuple[Optional[str], Optional[str]]:
+    """Kör scope-DB-koll för task-steg och returnerar (status, progress).
+
+    - Hittar matchande Assignment via params.module_step_id (skapas vid
+      modul-tilldelning, se assign_module).
+    - Om status="completed" OCH eleven inte redan har en
+      StudentStepProgress med completed_at satt → sätt completed_at, och
+      trigga achievement-evaluering. Detta gör att task-steg "checks itself
+      off" så fort kravet uppfylls i huvudboken — eleven behöver inte
+      manuellt klicka klar.
+    - Returnerar (None, None) om steget inte är ett spårat task-steg.
+    """
+    if step.kind != "task":
+        return None, None
+    params = step.params or {}
+    a_kind = params.get("assignment_kind")
+    if not a_kind:
+        return None, None
+    from ..school.models import Assignment as _A
+    student = session.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        return None, None
+    # Hitta matchande Assignment via params.module_step_id
+    candidates = session.query(_A).filter(
+        _A.student_id == student_id,
+        _A.kind == a_kind,
+    ).all()
+    assignment = next(
+        (a for a in candidates
+         if isinstance(a.params, dict)
+         and a.params.get("module_step_id") == step.id),
+        None,
+    )
+    if not assignment:
+        return None, None
+    try:
+        from ..teacher.assignments import evaluate as _ev
+        res = _ev(assignment, student)
+    except Exception:
+        log.exception("auto-evaluate task-steg %s misslyckades", step.id)
+        return None, None
+    # Auto-completion när scope-DB säger "completed"
+    if res.status == "completed":
+        prog = session.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id == student_id,
+            StudentStepProgress.step_id == step.id,
+        ).first()
+        if prog is None:
+            prog = StudentStepProgress(
+                student_id=student_id,
+                step_id=step.id,
+                completed_at=datetime.utcnow(),
+                data={"auto_completed": True, "progress": res.progress},
+            )
+            session.add(prog)
+            session.flush()
+            _maybe_complete_module_and_grant(session, step.module_id, student_id)
+        elif prog.completed_at is None:
+            prog.completed_at = datetime.utcnow()
+            d = dict(prog.data or {})
+            d["auto_completed"] = True
+            d["progress"] = res.progress
+            prog.data = d
+            session.flush()
+            _maybe_complete_module_and_grant(session, step.module_id, student_id)
+    return res.status, res.progress
+
+
+def _maybe_complete_module_and_grant(
+    session, module_id: int, student_id: int,
+) -> None:
+    """Markera modulen som klar om alla steg är klara, sen kör achievements."""
+    sm = session.query(StudentModule).filter(
+        StudentModule.student_id == student_id,
+        StudentModule.module_id == module_id,
+    ).first()
+    if not sm:
+        return
+    total_steps = session.query(ModuleStep).filter(
+        ModuleStep.module_id == module_id
+    ).count()
+    completed = session.query(StudentStepProgress).filter(
+        StudentStepProgress.student_id == student_id,
+        StudentStepProgress.step_id.in_(
+            session.query(ModuleStep.id).filter(
+                ModuleStep.module_id == module_id
+            )
+        ),
+        StudentStepProgress.completed_at.isnot(None),
+    ).count()
+    if total_steps > 0 and completed >= total_steps and not sm.completed_at:
+        sm.completed_at = datetime.utcnow()
+    session.flush()
+    try:
+        from ..school import achievements as ach
+        ach.evaluate_and_grant(session, student_id)
+    except Exception:
+        log.exception("achievement-eval misslyckades efter auto-complete")
 
 
 # ---------- Lärarens modul-hantering ----------
@@ -400,15 +571,32 @@ def assign_module(
     payload: AssignStudentsIn,
     info: TokenInfo = Depends(require_teacher),
 ) -> dict:
-    """Tilldela en modul till en eller flera elever."""
+    """Tilldela en modul till en eller flera elever.
+
+    Sidoeffekt: alla task-steg med params.assignment_kind får ett
+    Assignment-row skapat åt eleven om det inte redan finns. Det betyder
+    att task-stegen utvärderas live mot elevens scope-DB av
+    teacher/assignments.py::evaluate(), och syns i lärarens uppdragsvy
+    automatiskt.
+    """
+    from ..school.models import Assignment as _A
     _require_school_mode()
     assigned = 0
+    auto_assignments = 0
     with master_session() as s:
         m = s.query(Module).filter(Module.id == module_id).first()
         if not m:
             raise HTTPException(404, "Module not found")
         if m.teacher_id not in (None, info.teacher_id):
             raise HTTPException(403, "Not your module")
+        # Plocka ut task-steg med assignment_kind så vi kan auto-skapa
+        # Assignments per elev nedan.
+        task_steps = [
+            st for st in m.steps
+            if st.kind == "task"
+            and isinstance(st.params, dict)
+            and st.params.get("assignment_kind")
+        ]
         for sid in payload.student_ids:
             stu = s.query(Student).filter(
                 Student.id == sid,
@@ -434,7 +622,47 @@ def assign_module(
                 student_id=sid, module_id=module_id, sort_order=next_so,
             ))
             assigned += 1
-    return {"assigned": assigned}
+            # Auto-skapa Assignment per task-steg med assignment_kind.
+            # Idempotent: hoppa över om eleven redan har ett uppdrag
+            # som matchar (kind, module_id, step_id) — sparat i params.
+            for st in task_steps:
+                kind = str(st.params["assignment_kind"])
+                # Letar match via params.module_step_id för att inte
+                # krocka med manuellt skapade uppdrag av samma kind.
+                already = s.query(_A).filter(
+                    _A.teacher_id == info.teacher_id,
+                    _A.student_id == sid,
+                    _A.kind == kind,
+                ).all()
+                hit = next(
+                    (a for a in already
+                     if isinstance(a.params, dict)
+                     and a.params.get("module_step_id") == st.id),
+                    None,
+                )
+                if hit:
+                    continue
+                desc_text = (st.content or "")[:400]
+                s.add(_A(
+                    teacher_id=info.teacher_id,
+                    student_id=sid,
+                    title=f"Modul: {m.title} · {st.title}",
+                    description=desc_text or st.title,
+                    kind=kind,
+                    target_year_month=None,
+                    params={
+                        "module_id": module_id,
+                        "module_step_id": st.id,
+                        # Bevara övriga params (t.ex. amount, principal)
+                        # om sådana ligger på steget.
+                        **{
+                            k: v for k, v in st.params.items()
+                            if k != "assignment_kind"
+                        },
+                    },
+                ))
+                auto_assignments += 1
+    return {"assigned": assigned, "auto_assignments": auto_assignments}
 
 
 @router.post("/teacher/modules/{module_id}/unassign")
@@ -479,6 +707,13 @@ class CompetencyMasteryOut(BaseModel):
     mastery: float  # 0.0–1.0
     evidence_count: int
     latest_evidence_at: Optional[datetime] = None
+    # Nästa tröskel (0.25 / 0.50 / 0.75 / 1.0). None om eleven redan
+    # är på 100 %.
+    next_threshold: Optional[float] = None
+    # Antal steg i pågående moduler som tränar denna kompetens men som
+    # eleven inte slutfört än. Hjälper UI:t visa "N steg kvar till
+    # nästa milstolpe".
+    steps_remaining: int = 0
 
 
 @router.get("/school/competencies", response_model=list[CompetencyOut])
@@ -584,6 +819,50 @@ def list_step_competencies(
         ]
 
 
+MILESTONES = (0.25, 0.50, 0.75, 1.0)
+
+
+def _next_threshold(mastery: float) -> Optional[float]:
+    for t in MILESTONES:
+        if mastery < t:
+            return t
+    return None
+
+
+def _compute_steps_remaining_by_competency(
+    s, student_id: int,
+) -> dict[int, int]:
+    """Antal step-kopplingar per kompetens som eleven inte slutfört än,
+    inom modulerna hen är tilldelad. Bara ett approximativt mått men
+    räcker för UI-motivation."""
+    from ..school.models import StudentModule as _SM
+    assigned_module_ids = [
+        sm.module_id for sm in s.query(_SM).filter(
+            _SM.student_id == student_id
+        ).all()
+    ]
+    if not assigned_module_ids:
+        return {}
+    rows = (
+        s.query(ModuleStepCompetency, ModuleStep)
+        .join(ModuleStep, ModuleStepCompetency.step_id == ModuleStep.id)
+        .filter(ModuleStep.module_id.in_(assigned_module_ids))
+        .all()
+    )
+    completed_step_ids = {
+        p.step_id for p in s.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id == student_id,
+            StudentStepProgress.completed_at.isnot(None),
+        ).all()
+    }
+    remaining: dict[int, int] = {}
+    for msc, step in rows:
+        if step.id in completed_step_ids:
+            continue
+        remaining[msc.competency_id] = remaining.get(msc.competency_id, 0) + 1
+    return remaining
+
+
 def _compute_mastery_for_student(
     s, student_id: int,
 ) -> dict[int, tuple[float, int, Optional[datetime]]]:
@@ -620,8 +899,15 @@ def _compute_mastery_for_student(
             if step.kind == "quiz":
                 # Mastery baseras på första försöket så eleven inte kan
                 # "trappa upp" sin mastery genom att svara om tills rätt.
+                # Lärarens override (data.teacher_override.correct) vinner
+                # dock — lärare kan rätta auto-grading när frågan var
+                # dåligt formulerad.
                 d = prog.data or {}
-                success = 1.0 if d.get("first_correct", d.get("correct")) else 0.0
+                to = d.get("teacher_override")
+                if isinstance(to, dict) and "correct" in to:
+                    success = 1.0 if to.get("correct") else 0.0
+                else:
+                    success = 1.0 if d.get("first_correct", d.get("correct")) else 0.0
             bucket["earned_weight"] += msc.weight * success
             bucket["count"] += 1
             if not bucket["latest"] or prog.completed_at > bucket["latest"]:
@@ -644,11 +930,13 @@ def student_mastery(
     info: TokenInfo = Depends(require_token),
 ) -> list[CompetencyMasteryOut]:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     out: list[CompetencyMasteryOut] = []
     with master_session() as s:
-        mastery_by_cid = _compute_mastery_for_student(s, info.student_id)
+        mastery_by_cid = _compute_mastery_for_student(s, student_id)
+        remaining_by_cid = _compute_steps_remaining_by_competency(
+            s, student_id,
+        )
         comps = s.query(Competency).all()
         for c in comps:
             m = mastery_by_cid.get(c.id, (0.0, 0, None))
@@ -661,10 +949,107 @@ def student_mastery(
                 mastery=round(m[0], 3),
                 evidence_count=m[1],
                 latest_evidence_at=m[2],
+                next_threshold=_next_threshold(m[0]),
+                steps_remaining=remaining_by_cid.get(c.id, 0),
             ))
         # Sortera: mest bevisade först, sedan nivå
         out.sort(key=lambda r: (-r.evidence_count, r.competency.level, r.competency.name))
     return out
+
+
+@router.get("/student/achievements")
+def student_achievements(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Alla prestationer eleven har tjänat + aktuell streak-info."""
+    _require_school_mode()
+    student_id = _resolve_student_actor(info)
+    from ..school import achievements as ach
+    with master_session() as s:
+        earned = ach.list_earned(s, student_id)
+        current, longest = ach.compute_streak(s, student_id)
+    # Inkludera även "ej-tjänade" så eleven ser vad som finns att få
+    earned_keys = {e["key"] for e in earned}
+    available = [
+        {"key": k, **meta, "earned": k in earned_keys}
+        for k, meta in ach.ACHIEVEMENTS.items()
+    ]
+    return {
+        "earned": earned,
+        "available": available,
+        "streak": {"current": current, "longest": longest},
+    }
+
+
+@router.get("/teacher/students/{student_id}/achievements")
+def teacher_student_achievements(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    from ..school import achievements as ach
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Elev finns ej eller tillhör inte dig")
+        earned = ach.list_earned(s, student_id)
+        current, longest = ach.compute_streak(s, student_id)
+    return {
+        "earned": earned,
+        "streak": {"current": current, "longest": longest},
+    }
+
+
+@router.get("/teacher/students/{student_id}/activity")
+def teacher_student_activity(
+    student_id: int,
+    limit: int = 50,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Tidslinje över elevens senaste handlingar i scope-DB:n
+    (transaktioner, budget, lån, importer, kategorisering osv).
+
+    Audit-spåret skrivs av endpoints i transactions/budget/loans/imports
+    via `school.activity::log_activity`. Tabellen växer monotont — vi
+    cap:ar svaret men sparar aldrig något."""
+    from ..school.models import StudentActivity
+    _require_school_mode()
+    limit = max(1, min(limit, 500))
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Elev finns ej eller tillhör inte dig")
+        rows = (
+            s.query(StudentActivity)
+            .filter(StudentActivity.student_id == student_id)
+            # SQLite CURRENT_TIMESTAMP har bara sekund-precision, så
+            # två events i samma sekund måste tiebreakas på id annars
+            # blir ordningen ostabil.
+            .order_by(
+                StudentActivity.occurred_at.desc(),
+                StudentActivity.id.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+        return {
+            "items": [
+                {
+                    "id": r.id,
+                    "kind": r.kind,
+                    "summary": r.summary,
+                    "payload": r.payload,
+                    "occurred_at": r.occurred_at.isoformat(),
+                }
+                for r in rows
+            ],
+        }
 
 
 @router.get(
@@ -685,6 +1070,9 @@ def teacher_student_mastery(
         if not stu:
             raise HTTPException(404, "Student not found")
         mastery_by_cid = _compute_mastery_for_student(s, student_id)
+        remaining_by_cid = _compute_steps_remaining_by_competency(
+            s, student_id,
+        )
         comps = s.query(Competency).all()
         out = [
             CompetencyMasteryOut(
@@ -696,6 +1084,10 @@ def teacher_student_mastery(
                 mastery=round(mastery_by_cid.get(c.id, (0.0, 0, None))[0], 3),
                 evidence_count=mastery_by_cid.get(c.id, (0.0, 0, None))[1],
                 latest_evidence_at=mastery_by_cid.get(c.id, (0.0, 0, None))[2],
+                next_threshold=_next_threshold(
+                    mastery_by_cid.get(c.id, (0.0, 0, None))[0]
+                ),
+                steps_remaining=remaining_by_cid.get(c.id, 0),
             )
             for c in comps
         ]
@@ -802,6 +1194,47 @@ def give_feedback(
         prog.feedback_at = datetime.utcnow()
         if payload.rubric_scores is not None:
             prog.rubric_scores = payload.rubric_scores
+    return {"ok": True}
+
+
+class QuizOverrideIn(BaseModel):
+    correct: bool
+    note: str = ""
+
+
+@router.post("/teacher/progress/{progress_id}/quiz-override")
+def quiz_override(
+    progress_id: int,
+    payload: QuizOverrideIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Lärare rättar auto-grading av en quiz-fråga. Används t.ex. när
+    frågan var dåligt formulerad och eleven egentligen hade rätt.
+
+    data.teacher_override = {correct, note, at, teacher_id} respekteras
+    av mastery-formeln (ersätter data.first_correct).
+    """
+    _require_school_mode()
+    with master_session() as s:
+        prog = s.query(StudentStepProgress).filter(
+            StudentStepProgress.id == progress_id
+        ).first()
+        if not prog:
+            raise HTTPException(404, "Progress not found")
+        stu = s.query(Student).filter(Student.id == prog.student_id).first()
+        if not stu or stu.teacher_id != info.teacher_id:
+            raise HTTPException(403, "Inte din elev")
+        step = s.query(ModuleStep).filter(ModuleStep.id == prog.step_id).first()
+        if not step or step.kind != "quiz":
+            raise HTTPException(400, "Steget är inte en quiz")
+        data = dict(prog.data or {})
+        data["teacher_override"] = {
+            "correct": bool(payload.correct),
+            "note": payload.note.strip(),
+            "at": datetime.utcnow().isoformat(),
+            "teacher_id": info.teacher_id,
+        }
+        prog.data = data
     return {"ok": True}
 
 
@@ -943,10 +1376,9 @@ def student_recommendations(
     info: TokenInfo = Depends(require_token),
 ) -> list[RecommendationOut]:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
-        return _recommend_modules_for_student(s, info.student_id)
+        return _recommend_modules_for_student(s, student_id)
 
 
 @router.get(
@@ -1000,11 +1432,10 @@ def peer_review_next(
     samma modul, andra elever hos samma lärare, och endast för steg
     där läraren aktiverat peer_review=true i params."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     import random
     with master_session() as s:
-        me = s.query(Student).filter(Student.id == info.student_id).first()
+        me = s.query(Student).filter(Student.id == student_id).first()
         if not me:
             raise HTTPException(404, "Student not found")
         # Hitta progress-rader från andra elever hos samma lärare, på
@@ -1093,8 +1524,7 @@ def peer_review_received(
     """Peer-feedback jag fått från andra elever — anonymt (inget
     reviewer-namn visas)."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     out: list[PeerFeedbackReceived] = []
     with master_session() as s:
         rows = (
@@ -1104,7 +1534,7 @@ def peer_review_received(
                 PeerFeedback.target_progress_id == StudentStepProgress.id,
             )
             .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
-            .filter(StudentStepProgress.student_id == info.student_id)
+            .filter(StudentStepProgress.student_id == student_id)
             .order_by(PeerFeedback.created_at.desc())
             .all()
         )
@@ -1216,10 +1646,9 @@ def student_portfolio_pdf(info: TokenInfo = Depends(require_token)):
     from fastapi.responses import Response
     from ..teacher.portfolio_pdf import build_portfolio_pdf
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
-        data = _collect_portfolio(s, info.student_id)
+        data = _collect_portfolio(s, student_id)
     if not data or not data.get("profile"):
         raise HTTPException(404, "Elev eller profil saknas")
     pdf = build_portfolio_pdf(**data)
@@ -1262,6 +1691,68 @@ def teacher_portfolio_pdf(
     )
 
 
+# ---------- Lärarens vy på en elevs moduler ----------
+
+@router.get(
+    "/teacher/students/{student_id}/modules",
+    response_model=list[TeacherStudentModuleOut],
+)
+def teacher_student_modules(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> list[TeacherStudentModuleOut]:
+    """Lista en elevs moduler med per-steg-status. Task-steg
+    auto-utvärderas mot elevens scope-DB så lärare ser live-progress
+    (t.ex. "3/5 dokument importerade") även innan eleven loggat in på
+    just det steget."""
+    _require_school_mode()
+    out: list[TeacherStudentModuleOut] = []
+    with master_session() as s:
+        stu = s.query(Student).filter(
+            Student.id == student_id,
+            Student.teacher_id == info.teacher_id,
+        ).first()
+        if not stu:
+            raise HTTPException(404, "Student not found")
+        rows = (
+            s.query(StudentModule)
+            .filter(StudentModule.student_id == student_id)
+            .order_by(StudentModule.sort_order)
+            .all()
+        )
+        for sm in rows:
+            m = s.query(Module).filter(Module.id == sm.module_id).first()
+            if not m:
+                continue
+            steps_out: list[TeacherStepStatusOut] = []
+            done_count = 0
+            for st in m.steps:
+                auto_status, auto_progress = _evaluate_task_step(
+                    s, st, student_id,
+                )
+                prog = s.query(StudentStepProgress).filter(
+                    StudentStepProgress.student_id == student_id,
+                    StudentStepProgress.step_id == st.id,
+                ).first()
+                completed_at = prog.completed_at if prog else None
+                if completed_at:
+                    done_count += 1
+                steps_out.append(TeacherStepStatusOut(
+                    id=st.id, sort_order=st.sort_order, kind=st.kind,
+                    title=st.title, completed_at=completed_at,
+                    auto_status=auto_status, auto_progress=auto_progress,
+                ))
+            out.append(TeacherStudentModuleOut(
+                id=sm.id, module_id=m.id,
+                module_title=m.title, module_summary=m.summary,
+                sort_order=sm.sort_order,
+                started_at=sm.started_at, completed_at=sm.completed_at,
+                step_count=len(m.steps), completed_step_count=done_count,
+                steps=steps_out,
+            ))
+    return out
+
+
 # ---------- Elevens kursplan ----------
 
 @router.get("/student/modules", response_model=list[StudentModuleOut])
@@ -1269,13 +1760,12 @@ def student_modules(
     info: TokenInfo = Depends(require_token),
 ) -> list[StudentModuleOut]:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     out: list[StudentModuleOut] = []
     with master_session() as s:
         rows = (
             s.query(StudentModule)
-            .filter(StudentModule.student_id == info.student_id)
+            .filter(StudentModule.student_id == student_id)
             .order_by(StudentModule.sort_order)
             .all()
         )
@@ -1287,7 +1777,7 @@ def student_modules(
             completed = (
                 s.query(StudentStepProgress)
                 .filter(
-                    StudentStepProgress.student_id == info.student_id,
+                    StudentStepProgress.student_id == student_id,
                     StudentStepProgress.step_id.in_(step_ids),
                     StudentStepProgress.completed_at.isnot(None),
                 )
@@ -1310,21 +1800,26 @@ def student_module_detail(
     info: TokenInfo = Depends(require_token),
 ) -> ModuleDetailOut:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         sm = s.query(StudentModule).filter(
-            StudentModule.student_id == info.student_id,
+            StudentModule.student_id == student_id,
             StudentModule.module_id == module_id,
         ).first()
         if not sm:
-            raise HTTPException(404, "Modulen är inte tilldelad dig")
+            raise HTTPException(404, "Modulen är inte tilldelad")
         m = s.query(Module).filter(Module.id == module_id).first()
         if not m:
             raise HTTPException(404, "Module not found")
-        # Markera modulen som startad om första gången
-        if not sm.started_at:
+        # Markera modulen som startad om första gången — bara om eleven
+        # själv öppnar (inte när läraren impersonerar och kollar).
+        if not sm.started_at and info.role == "student":
             sm.started_at = datetime.utcnow()
+        # Auto-utvärdera alla task-steg så att modul-vyn visar korrekt
+        # antal-klara direkt om eleven precis fyllt budget/importerat osv.
+        for st in m.steps:
+            if st.kind == "task":
+                _evaluate_task_step(s, st, student_id)
         base = _module_to_out(m)
         return ModuleDetailOut(
             **base.model_dump(),
@@ -1338,28 +1833,49 @@ def student_step_progress(
     info: TokenInfo = Depends(require_token),
 ) -> StudentStepOut:
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         st = s.query(ModuleStep).filter(ModuleStep.id == step_id).first()
         if not st:
             raise HTTPException(404, "Step not found")
         # Säkerställ att eleven är tilldelad modulen
         sm = s.query(StudentModule).filter(
-            StudentModule.student_id == info.student_id,
+            StudentModule.student_id == student_id,
             StudentModule.module_id == st.module_id,
         ).first()
         if not sm:
-            raise HTTPException(403, "Modulen är inte tilldelad dig")
+            raise HTTPException(404, "Modulen är inte tilldelad")
+        # Auto-utvärdera task-steg mot elevens scope-DB innan vi läser
+        # progress — gör att UI:t alltid ser senaste live-status.
+        auto_status, auto_progress = _evaluate_task_step(
+            s, st, student_id,
+        )
         prog = s.query(StudentStepProgress).filter(
-            StudentStepProgress.student_id == info.student_id,
+            StudentStepProgress.student_id == student_id,
             StudentStepProgress.step_id == step_id,
         ).first()
+        peer: list[PeerFeedbackAnon] = []
+        if prog:
+            rows = (
+                s.query(PeerFeedback)
+                .filter(PeerFeedback.target_progress_id == prog.id)
+                .order_by(PeerFeedback.created_at.desc())
+                .all()
+            )
+            peer = [
+                PeerFeedbackAnon(
+                    id=p.id, body=p.body, created_at=p.created_at,
+                )
+                for p in rows
+            ]
         return StudentStepOut(
             step=_step_to_out(st),
             completed_at=prog.completed_at if prog else None,
             data=prog.data if prog else None,
             teacher_feedback=prog.teacher_feedback if prog else None,
+            peer_feedback=peer,
+            auto_status=auto_status,
+            auto_progress=auto_progress,
         )
 
 
@@ -1466,10 +1982,406 @@ def student_complete_step(
         sm_done = total_steps > 0 and completed >= total_steps
         if sm_done and not sm.completed_at:
             sm.completed_at = datetime.utcnow()
+
+        # Flush så att evaluate_and_grant ser den precis uppdaterade
+        # StudentModule.completed_at (sessionen har autoflush=False).
+        s.flush()
+
+        # Utvärdera achievements mot det nya tillståndet. Idempotent.
+        from ..school import achievements as ach
+        new_keys = ach.evaluate_and_grant(s, info.student_id)
+        new_items = [ach.describe(k) for k in new_keys]
+
         return {
             "ok": True,
             "step_done": True,
             "module_done": sm_done,
             "progress": f"{completed}/{total_steps}",
             "data": data,
+            "new_achievements": [i for i in new_items if i],
         }
+
+
+# ---------- Rubric-mallar ----------
+
+class RubricCriterion(BaseModel):
+    key: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1, max_length=160)
+    levels: list[str] = Field(min_length=2, max_length=6)
+
+
+class RubricTemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    description: Optional[str] = None
+    criteria: list[RubricCriterion] = Field(min_length=1, max_length=20)
+    is_shared: bool = False
+
+
+class RubricTemplateOut(BaseModel):
+    id: int
+    teacher_id: Optional[int]
+    owner_name: Optional[str]
+    name: str
+    description: Optional[str]
+    criteria: list[dict]
+    is_shared: bool
+    is_mine: bool
+    created_at: datetime
+
+
+def _rubric_to_out(
+    rt: RubricTemplate, teacher_id: Optional[int], owner_name: Optional[str],
+) -> RubricTemplateOut:
+    return RubricTemplateOut(
+        id=rt.id,
+        teacher_id=rt.teacher_id,
+        owner_name=owner_name,
+        name=rt.name,
+        description=rt.description,
+        criteria=list(rt.criteria or []),
+        is_shared=rt.is_shared,
+        is_mine=(teacher_id is not None and rt.teacher_id == teacher_id),
+        created_at=rt.created_at,
+    )
+
+
+@router.get("/teacher/rubric-templates", response_model=list[RubricTemplateOut])
+def list_rubric_templates(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[RubricTemplateOut]:
+    """Egna mallar + delade från andra lärare + systemmallar (teacher_id=NULL)."""
+    _require_school_mode()
+    out: list[RubricTemplateOut] = []
+    with master_session() as s:
+        # Hämta teacher-namn i ett svep för alla som äger mallar vi visar
+        rows = (
+            s.query(RubricTemplate)
+            .filter(
+                (RubricTemplate.teacher_id == info.teacher_id)
+                | (RubricTemplate.is_shared.is_(True))
+                | (RubricTemplate.teacher_id.is_(None))
+            )
+            .order_by(RubricTemplate.name)
+            .all()
+        )
+        owner_ids = {r.teacher_id for r in rows if r.teacher_id}
+        owners = {
+            t.id: t.name for t in s.query(Teacher).filter(
+                Teacher.id.in_(owner_ids) if owner_ids else False,
+            ).all()
+        } if owner_ids else {}
+        for r in rows:
+            owner = owners.get(r.teacher_id) if r.teacher_id else None
+            out.append(_rubric_to_out(r, info.teacher_id, owner))
+    return out
+
+
+@router.post("/teacher/rubric-templates", response_model=RubricTemplateOut)
+def create_rubric_template(
+    payload: RubricTemplateIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> RubricTemplateOut:
+    _require_school_mode()
+    with master_session() as s:
+        rt = RubricTemplate(
+            teacher_id=info.teacher_id,
+            name=payload.name.strip(),
+            description=(payload.description or "").strip() or None,
+            criteria=[c.model_dump() for c in payload.criteria],
+            is_shared=payload.is_shared,
+        )
+        s.add(rt)
+        s.flush()
+        owner = (
+            s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        )
+        return _rubric_to_out(
+            rt, info.teacher_id, owner.name if owner else None,
+        )
+
+
+@router.patch(
+    "/teacher/rubric-templates/{template_id}",
+    response_model=RubricTemplateOut,
+)
+def update_rubric_template(
+    template_id: int,
+    payload: RubricTemplateIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> RubricTemplateOut:
+    _require_school_mode()
+    with master_session() as s:
+        rt = s.query(RubricTemplate).filter(
+            RubricTemplate.id == template_id,
+        ).first()
+        if not rt:
+            raise HTTPException(404, "Mall finns ej")
+        if rt.teacher_id != info.teacher_id:
+            raise HTTPException(
+                403, "Du kan bara redigera egna mallar (klona om du vill ändra).",
+            )
+        rt.name = payload.name.strip()
+        rt.description = (payload.description or "").strip() or None
+        rt.criteria = [c.model_dump() for c in payload.criteria]
+        rt.is_shared = payload.is_shared
+        owner = (
+            s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        )
+        return _rubric_to_out(
+            rt, info.teacher_id, owner.name if owner else None,
+        )
+
+
+@router.delete("/teacher/rubric-templates/{template_id}")
+def delete_rubric_template(
+    template_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    _require_school_mode()
+    with master_session() as s:
+        rt = s.query(RubricTemplate).filter(
+            RubricTemplate.id == template_id,
+        ).first()
+        if not rt:
+            raise HTTPException(404, "Mall finns ej")
+        if rt.teacher_id != info.teacher_id:
+            raise HTTPException(403, "Bara ägaren kan radera sin mall")
+        s.delete(rt)
+    return {"ok": True}
+
+
+@router.post(
+    "/teacher/rubric-templates/{template_id}/clone",
+    response_model=RubricTemplateOut,
+)
+def clone_rubric_template(
+    template_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> RubricTemplateOut:
+    """Kopiera en delad/systemmall till en privat version eleven äger
+    och kan redigera utan att påverka originalet."""
+    _require_school_mode()
+    with master_session() as s:
+        src = s.query(RubricTemplate).filter(
+            RubricTemplate.id == template_id,
+        ).first()
+        if not src:
+            raise HTTPException(404, "Mall finns ej")
+        # Kloning är tillåten för egen, delad, eller systemmall
+        if (
+            src.teacher_id is not None
+            and src.teacher_id != info.teacher_id
+            and not src.is_shared
+        ):
+            raise HTTPException(403, "Mallen är inte delad")
+        new_rt = RubricTemplate(
+            teacher_id=info.teacher_id,
+            name=f"{src.name} (kopia)",
+            description=src.description,
+            criteria=list(src.criteria or []),
+            is_shared=False,
+        )
+        s.add(new_rt)
+        s.flush()
+        owner = (
+            s.query(Teacher).filter(Teacher.id == info.teacher_id).first()
+        )
+        return _rubric_to_out(
+            new_rt, info.teacher_id, owner.name if owner else None,
+        )
+
+
+# ---------- Time-on-task ----------
+
+class HeartbeatIn(BaseModel):
+    step_id: int
+
+
+@router.post("/student/step-heartbeat")
+def step_heartbeat(
+    payload: HeartbeatIn,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Frontend pingar var 20:e sekund medan eleven är på ett steg. Skapar
+    en rad första gången (opened_at = nu) och uppdaterar last_heartbeat_at
+    vid efterföljande anrop. Kostar nära ingenting och ger lärar-UI
+    data för att se vilka steg som fastnar."""
+    _require_school_mode()
+    if info.role != "student":
+        raise HTTPException(403, "Not a student token")
+    with master_session() as s:
+        # Validera att steget ingår i en modul eleven är tilldelad
+        step = s.query(ModuleStep).filter(ModuleStep.id == payload.step_id).first()
+        if not step:
+            raise HTTPException(404, "Step not found")
+        sm = s.query(StudentModule).filter(
+            StudentModule.student_id == info.student_id,
+            StudentModule.module_id == step.module_id,
+        ).first()
+        if not sm:
+            raise HTTPException(403, "Modulen är inte tilldelad dig")
+
+        hb = s.query(StudentStepHeartbeat).filter(
+            StudentStepHeartbeat.student_id == info.student_id,
+            StudentStepHeartbeat.step_id == payload.step_id,
+        ).first()
+        now = datetime.utcnow()
+        if hb is None:
+            s.add(StudentStepHeartbeat(
+                student_id=info.student_id,
+                step_id=payload.step_id,
+                opened_at=now,
+                last_heartbeat_at=now,
+            ))
+        else:
+            hb.last_heartbeat_at = now
+    return {"ok": True}
+
+
+class TimeOnStepRow(BaseModel):
+    step_id: int
+    step_title: str
+    module_id: int
+    module_title: str
+    n_completed: int
+    median_minutes: Optional[float]
+    n_stuck: int  # elever med heartbeat men ingen completion
+
+
+@router.get(
+    "/teacher/time-on-task",
+    response_model=list[TimeOnStepRow],
+)
+def teacher_time_on_task(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[TimeOnStepRow]:
+    """Median-tid per steg över alla elever. Grund för lärar-vy:n som
+    visar vilka steg som fastnar."""
+    _require_school_mode()
+    out: list[TimeOnStepRow] = []
+    with master_session() as s:
+        # Hämta alla elever till läraren
+        stu_ids = [
+            r[0] for r in s.query(Student.id).filter(
+                Student.teacher_id == info.teacher_id,
+            ).all()
+        ]
+        if not stu_ids:
+            return out
+        # Alla moduler + steg som lärarens elever är tilldelade
+        mod_ids = {
+            r[0] for r in s.query(StudentModule.module_id).filter(
+                StudentModule.student_id.in_(stu_ids)
+            ).all()
+        }
+        if not mod_ids:
+            return out
+        steps = s.query(ModuleStep).filter(
+            ModuleStep.module_id.in_(mod_ids),
+        ).all()
+        modules = {
+            m.id: m for m in s.query(Module).filter(
+                Module.id.in_(mod_ids)
+            ).all()
+        }
+        # Heartbeats + completions
+        hbs = s.query(StudentStepHeartbeat).filter(
+            StudentStepHeartbeat.student_id.in_(stu_ids),
+        ).all()
+        progs = s.query(StudentStepProgress).filter(
+            StudentStepProgress.student_id.in_(stu_ids),
+            StudentStepProgress.completed_at.isnot(None),
+        ).all()
+        hb_by_key = {(h.student_id, h.step_id): h for h in hbs}
+        prog_by_key = {(p.student_id, p.step_id): p for p in progs}
+
+        for step in steps:
+            durations_min: list[float] = []
+            n_stuck = 0
+            for sid in stu_ids:
+                hb = hb_by_key.get((sid, step.id))
+                prog = prog_by_key.get((sid, step.id))
+                if hb and prog and prog.completed_at:
+                    dt = (prog.completed_at - hb.opened_at).total_seconds() / 60
+                    if 0.1 < dt < 24 * 60:  # ignorera sopor-data
+                        durations_min.append(dt)
+                elif hb and not prog:
+                    # Heartbeat finns, men ingen completion = stuck
+                    n_stuck += 1
+            durations_min.sort()
+            median = None
+            if durations_min:
+                n = len(durations_min)
+                mid = n // 2
+                median = (
+                    durations_min[mid]
+                    if n % 2 == 1
+                    else (durations_min[mid - 1] + durations_min[mid]) / 2
+                )
+            mod = modules.get(step.module_id)
+            out.append(TimeOnStepRow(
+                step_id=step.id,
+                step_title=step.title,
+                module_id=step.module_id,
+                module_title=mod.title if mod else "—",
+                n_completed=len(durations_min),
+                median_minutes=round(median, 1) if median else None,
+                n_stuck=n_stuck,
+            ))
+    # Sortera: fastnade elever först (det lärare bryr sig om)
+    out.sort(key=lambda r: (-r.n_stuck, -(r.median_minutes or 0)))
+    return out
+
+
+# ---------- Bulk-portfolio (klass-ZIP) ----------
+
+@router.get("/teacher/portfolio-bundle.zip")
+def teacher_portfolio_bundle(
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Bygger en ZIP med en portfolio-PDF per elev som tillhör läraren.
+    Tar ett litet tag med många elever, men all PDF-generering är
+    synkron och sekventiell — inga trådar behövs."""
+    _require_school_mode()
+    from fastapi.responses import Response
+    from ..teacher.portfolio_pdf import build_portfolio_pdf
+    import io
+    import zipfile
+    with master_session() as s:
+        students = s.query(Student).filter(
+            Student.teacher_id == info.teacher_id,
+            Student.active.is_(True),
+        ).all()
+        if not students:
+            raise HTTPException(404, "Inga elever")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(
+            buf, mode="w", compression=zipfile.ZIP_DEFLATED,
+        ) as zf:
+            for stu in students:
+                try:
+                    data = _collect_portfolio(s, stu.id)
+                    if not data or not data.get("profile"):
+                        continue
+                    pdf = build_portfolio_pdf(**data)
+                    # Filnamn: "portfolio_12_Anna_Andersson.pdf"
+                    safe = "".join(
+                        c if c.isalnum() or c in "-_" else "_"
+                        for c in stu.display_name
+                    )
+                    zf.writestr(
+                        f"portfolio_{stu.id}_{safe}.pdf", pdf,
+                    )
+                except Exception:
+                    log.exception(
+                        "portfolio-bundle: elev %s misslyckades", stu.id,
+                    )
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition":
+                'attachment; filename="klass_portfolio.zip"',
+        },
+    )

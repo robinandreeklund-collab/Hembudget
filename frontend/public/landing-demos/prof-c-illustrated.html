@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Prof-C · Illustrerad karaktär</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#111217;--paper:#fbfaf6;--rule:#e7e3d7;--accent:#fdecec;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:880px;margin:0 auto;padding:60px 24px;}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:#888;font-weight:600;}
+  h1{font-family:Spectral,serif;font-weight:800;font-size:40px;letter-spacing:-.015em;
+    line-height:1.05;margin:8px 0 6px;}
+  .lead{font-size:16px;line-height:1.55;color:#444;max-width:540px;}
+
+  .stage{
+    margin-top:36px;display:grid;grid-template-columns:auto 1fr;gap:32px;
+    align-items:end;border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);padding:36px 0;
+  }
+  .pose-stack{position:relative;width:220px;height:300px;}
+  .pose{
+    position:absolute;inset:0;opacity:0;transition:opacity .8s ease-in-out;
+  }
+  .pose.active{opacity:1;}
+  .pose-controls{
+    position:absolute;bottom:-28px;left:0;right:0;display:flex;
+    gap:6px;justify-content:center;
+  }
+  .pose-controls button{
+    width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink);
+    background:#fff;cursor:pointer;padding:0;
+  }
+  .pose-controls button.active{background:var(--ink);}
+
+  .bubble{
+    background:#fff;border:1.5px solid var(--ink);padding:14px 18px;
+    font-family:Spectral,serif;font-style:italic;font-size:17px;line-height:1.4;
+    width:fit-content;max-width:380px;box-shadow:3px 3px 0 var(--ink);
+    position:relative;
+  }
+  .bubble:before{
+    content:"";position:absolute;left:-9px;bottom:18px;width:14px;height:14px;
+    background:#fff;border-left:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);
+    transform:rotate(45deg);
+  }
+
+  /* Mini-grid */
+  .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;}
+  .cell{
+    aspect-ratio:1;border:1.5px solid var(--ink);background:#fff;
+    padding:6px 8px;display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .cell .n{font-size:9px;color:#888;}
+  .cell .s{font-family:Spectral,serif;font-weight:800;font-size:22px;line-height:1;}
+  .cell .l{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:.05em;}
+  .grund{background:#eef3ff;}.fordj{background:#fff3e6;}.konto{background:#e8f7ef;}
+
+  .right-side{display:flex;flex-direction:column;gap:18px;}
+
+  .pros{margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:36px;
+    border-top:1px solid var(--rule);padding-top:28px;}
+  .col h3{font-family:Spectral,serif;font-size:18px;margin:0 0 8px;font-weight:600;}
+  .col p,.col li{font-size:14px;line-height:1.55;color:#333;}
+  .nav{display:flex;gap:18px;margin-top:32px;font-size:13px;}
+  .nav a{color:var(--ink);text-decoration:none;border-bottom:1.5px solid var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="label">Demo C av 3</div>
+  <h1>Illustrerad karaktär — tre poser, paper-elegant.</h1>
+  <p class="lead">En mer figurativ karaktär ritad i samma grafiska språk men med en konsekvent silhuett. Tre poser (introduktion, pekar, tänker) cyklas långsamt eller väljs manuellt med prickarna. Lite mer "redaktionell illustration" än rolig tecknad.</p>
+
+  <div class="stage">
+    <div class="pose-stack" id="stack">
+      <!-- Pose 1: stilla, händer i fickorna -->
+      <svg class="pose active" data-pose="0" viewBox="0 0 220 300" aria-hidden="true">
+        <!-- Lab-rock kropp (lång) -->
+        <path d="M70 130 L65 270 L155 270 L150 130 Q110 115 70 130 Z"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Knappar -->
+        <circle cx="110" cy="160" r="2" fill="#111"/>
+        <circle cx="110" cy="190" r="2" fill="#111"/>
+        <circle cx="110" cy="220" r="2" fill="#111"/>
+        <!-- Krage V -->
+        <path d="M93 130 L110 152 L127 130" fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Armar i fickor -->
+        <line x1="70" y1="155" x2="80" y2="210" stroke="#111" stroke-width="1.5"/>
+        <line x1="150" y1="155" x2="140" y2="210" stroke="#111" stroke-width="1.5"/>
+        <rect x="70" y="205" width="22" height="12" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <rect x="128" y="205" width="22" height="12" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Hals -->
+        <line x1="100" y1="115" x2="100" y2="130" stroke="#111" stroke-width="1.5"/>
+        <line x1="120" y1="115" x2="120" y2="130" stroke="#111" stroke-width="1.5"/>
+        <!-- Huvud -->
+        <ellipse cx="110" cy="80" rx="32" ry="36" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Hår (slätare denna gång — sidoavsats + page) -->
+        <path d="M78 65 Q82 38 110 38 Q138 38 142 65 Q140 50 130 48 Q122 42 110 44 Q98 42 90 48 Q80 50 78 65"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Glasögon (rektangulära, mer redaktionellt) -->
+        <rect x="86" y="74" width="14" height="9" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
+        <rect x="120" y="74" width="14" height="9" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="100" y1="78" x2="120" y2="78" stroke="#111" stroke-width="1.5"/>
+        <!-- Mun (neutral) -->
+        <line x1="100" y1="100" x2="120" y2="100" stroke="#111" stroke-width="1.5"/>
+      </svg>
+
+      <!-- Pose 2: pekar -->
+      <svg class="pose" data-pose="1" viewBox="0 0 220 300" aria-hidden="true">
+        <path d="M70 130 L65 270 L155 270 L150 130 Q110 115 70 130 Z"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <circle cx="110" cy="160" r="2" fill="#111"/>
+        <circle cx="110" cy="190" r="2" fill="#111"/>
+        <circle cx="110" cy="220" r="2" fill="#111"/>
+        <path d="M93 130 L110 152 L127 130" fill="none" stroke="#111" stroke-width="1.5"/>
+        <!-- Höger arm pekar uppåt-ut -->
+        <line x1="150" y1="155" x2="195" y2="125" stroke="#111" stroke-width="1.5"/>
+        <line x1="195" y1="125" x2="210" y2="120" stroke="#111" stroke-width="1.5"/>
+        <circle cx="210" cy="120" r="2.5" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="70" y1="155" x2="80" y2="215" stroke="#111" stroke-width="1.5"/>
+        <rect x="70" y="210" width="22" height="12" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <line x1="100" y1="115" x2="100" y2="130" stroke="#111" stroke-width="1.5"/>
+        <line x1="120" y1="115" x2="120" y2="130" stroke="#111" stroke-width="1.5"/>
+        <ellipse cx="110" cy="80" rx="32" ry="36" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <path d="M78 65 Q82 38 110 38 Q138 38 142 65 Q140 50 130 48 Q122 42 110 44 Q98 42 90 48 Q80 50 78 65"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <rect x="86" y="74" width="14" height="9" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
+        <rect x="120" y="74" width="14" height="9" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="100" y1="78" x2="120" y2="78" stroke="#111" stroke-width="1.5"/>
+        <!-- Lite leende -->
+        <path d="M100 100 Q110 105 120 100" fill="none" stroke="#111" stroke-width="1.5"/>
+      </svg>
+
+      <!-- Pose 3: hand vid hakan, tänker -->
+      <svg class="pose" data-pose="2" viewBox="0 0 220 300" aria-hidden="true">
+        <path d="M70 130 L65 270 L155 270 L150 130 Q110 115 70 130 Z"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <circle cx="110" cy="160" r="2" fill="#111"/>
+        <circle cx="110" cy="190" r="2" fill="#111"/>
+        <circle cx="110" cy="220" r="2" fill="#111"/>
+        <path d="M93 130 L110 152 L127 130" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="70" y1="155" x2="80" y2="215" stroke="#111" stroke-width="1.5"/>
+        <rect x="70" y="210" width="22" height="12" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <!-- Höger arm böjd, hand vid hakan -->
+        <line x1="150" y1="155" x2="135" y2="125" stroke="#111" stroke-width="1.5"/>
+        <line x1="135" y1="125" x2="125" y2="105" stroke="#111" stroke-width="1.5"/>
+        <circle cx="125" cy="103" r="3" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="100" y1="115" x2="100" y2="130" stroke="#111" stroke-width="1.5"/>
+        <line x1="120" y1="115" x2="120" y2="130" stroke="#111" stroke-width="1.5"/>
+        <ellipse cx="110" cy="80" rx="32" ry="36" fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <path d="M78 65 Q82 38 110 38 Q138 38 142 65 Q140 50 130 48 Q122 42 110 44 Q98 42 90 48 Q80 50 78 65"
+          fill="#fff" stroke="#111" stroke-width="1.5"/>
+        <rect x="86" y="74" width="14" height="9" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
+        <rect x="120" y="74" width="14" height="9" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
+        <line x1="100" y1="78" x2="120" y2="78" stroke="#111" stroke-width="1.5"/>
+        <!-- Mun lite åt sidan (tänkande) -->
+        <line x1="98" y1="100" x2="115" y2="98" stroke="#111" stroke-width="1.5"/>
+        <!-- Liten tankebubbla bredvid huvud -->
+        <circle cx="160" cy="50" r="2" fill="#111"/>
+        <circle cx="170" cy="42" r="3" fill="none" stroke="#111" stroke-width="1.5"/>
+        <circle cx="183" cy="32" r="6" fill="none" stroke="#111" stroke-width="1.5"/>
+      </svg>
+
+      <div class="pose-controls" id="dots">
+        <button class="active" data-pose="0" aria-label="Pose 1"></button>
+        <button data-pose="1" aria-label="Pose 2"></button>
+        <button data-pose="2" aria-label="Pose 3"></button>
+      </div>
+    </div>
+
+    <div class="right-side">
+      <div class="bubble" id="bubble">
+        Hovra över en cell — eleverna ser samma karta som du.
+      </div>
+      <div class="mini">
+        <div class="cell grund"><span class="n">1</span><span class="s">Lö</span><span class="l">Lön</span></div>
+        <div class="cell grund"><span class="n">2</span><span class="s">Sk</span><span class="l">Skatt</span></div>
+        <div class="cell grund"><span class="n">3</span><span class="s">Bu</span><span class="l">Budget</span></div>
+        <div class="cell konto"><span class="n">4</span><span class="s">Ku</span><span class="l">Konto</span></div>
+        <div class="cell fordj"><span class="n">5</span><span class="s">Sp</span><span class="l">Spara</span></div>
+        <div class="cell fordj"><span class="n">6</span><span class="s">Bl</span><span class="l">Bolån</span></div>
+        <div class="cell konto"><span class="n">7</span><span class="s">Sa</span><span class="l">Saldo</span></div>
+        <div class="cell grund"><span class="n">8</span><span class="s">Ka</span><span class="l">Kategori</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pros">
+    <div class="col">
+      <h3>Plus</h3>
+      <ul>
+        <li>Behåller en karaktär — bra för yngre elever</li>
+        <li>Tre poser ger variation utan att kännas rörlig/distraherande</li>
+        <li>Mer "redaktionell" än rolig tecknad — passar gymnasieton</li>
+        <li>Pratbubblan med tjock svart skugga matchar serif-rubrikerna</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>Minus</h3>
+      <ul>
+        <li>3× SVG-kod (~150 rader) — högsta underhållskostnad av de tre</li>
+        <li>Ändras kläderna måste 3 SVGs uppdateras</li>
+        <li>Tar mest plats vertikalt (300 px hög)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="nav">
+    <a href="prof-a-lab.html">A. Lab assistant</a>
+    <a href="prof-b-mascot.html">B. Typografisk mascott</a>
+    <a href="prof-c-illustrated.html">C. Illustrerad karaktär</a>
+    <a href="demo3-periodic.html">↩ Tillbaka till demo3</a>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const stack = document.getElementById('stack');
+    const dots = document.querySelectorAll('#dots button');
+    const poses = stack.querySelectorAll('.pose');
+    let idx = 0;
+    function show(i){
+      poses.forEach(p => p.classList.remove('active'));
+      dots.forEach(d => d.classList.remove('active'));
+      poses[i].classList.add('active');
+      dots[i].classList.add('active');
+      idx = i;
+    }
+    dots.forEach(d => d.addEventListener('click', () => {
+      show(parseInt(d.dataset.pose, 10));
+    }));
+    // Auto-cycle var 5:e sekund (paus om reduced-motion)
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setInterval(() => show((idx + 1) % poses.length), 5000);
+    }
+  })();
+</script>
+</body>
+</html>

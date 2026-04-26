@@ -64,7 +64,7 @@ export default function Scenarios() {
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-4xl">
-      <h1 className="text-2xl font-semibold">Scenarioanalys</h1>
+      <h1 className="serif text-3xl leading-tight">Scenarioanalys</h1>
 
       <div className="flex gap-2">
         {(["mortgage", "savings_goal", "move"] as Kind[]).map((k) => (
