@@ -278,3 +278,132 @@ identisk med dagens.
 DB-filen växer. Lägg en städnings-jobb som downsampleear quoter äldre
 än 90 dagar till 1 quote/dag (close).
 
+## 13. Handelsflöde — köp och sälj
+
+### Aktiekonto
+
+V1 använder befintlig `isk`-kontotyp. Eleven kan ha flera ISK-konton
+(t.ex. ett "ISK Aktier" + befintligt "ISK Fonder"). Backend-validering:
+en `StockHolding` får bara höra till ett konto med
+`account.kind == 'isk'`.
+
+V2-möjlighet: ny kontotyp `depa` (vanlig depå med kapitalvinstskatt
+på K4-blankett) — knyts till befintlig `TaxEvent.kind = "k4_sale"`.
+Pedagogiskt värdefullt för Företagsekonomi 2 men inte nödvändigt
+först.
+
+### Köp-flödet (marknadsorder, V1)
+
+1. Eleven öppnar aktiens detaljsida → klickar "Köp"
+2. Modal: antal aktier (eller belopp i SEK med auto-konvertering),
+   visar:
+   - Aktuell kurs (från `LatestStockQuote`) + tidsstämpel
+   - Beräknat courtage
+   - Total kostnad
+   - Likvid efter köp
+   - Disclaimer: "Pris kan variera tills order utförs"
+3. Eleven klickar "Bekräfta köp"
+4. Backend:
+   - Validerar: börsen öppen (kolla `MarketCalendar`), saldo räcker,
+     antal > 0
+   - Hämtar **senaste** `LatestStockQuote` (inte den eleven såg —
+     ärligare)
+   - Beräknar courtage (se nedan)
+   - Skapar `StockTransaction` (append)
+   - Uppdaterar `StockHolding` (insert eller update + ny snittkurs)
+   - Skapar en `Transaction` på ISK-kontot: `amount = -total`,
+     `category = "Aktieköp"`, `is_investment = True` (ny flagga eller
+     använd `metadata`-fältet)
+   - Returnerar uppdaterat innehav + ny likvid + executed_at + quote_id
+5. Frontend visar bekräftelse: "Köpte 10 Volvo B för 245,50 kr/st.
+   Courtage 6,14 kr. Totalt 2 461,14 kr."
+
+### Sälj-flödet
+
+Samma som köp, fast omvänt:
+- Validera att eleven har minst `quantity` aktier i `StockHolding`
+- Beräkna realiserad vinst/förlust (`realized_pnl = (sell_price -
+  avg_cost) * quantity - courtage`)
+- Sätt eventuellt `TaxEvent.kind = "k4_sale"` om kontot är `depa`
+  (V2)
+- Uppdatera `StockHolding.quantity` (radera raden om kvantitet = 0)
+
+### Snittkurs-beräkning (avg_cost)
+
+Standard "viktat genomsnitt":
+```
+ny_avg_cost = (gammal_quantity * gammal_avg_cost
+             + ny_quantity * ny_pris
+             + nytt_courtage) / (gammal_quantity + ny_quantity)
+```
+
+Ändras inte vid sälj — säljpriset jämförs mot snittkursen för att
+beräkna realiserad vinst/förlust.
+
+## 14. Courtage — Avanza Mini
+
+Ni vill matcha Avanza. Avanza har flera klasser; **Mini Courtage** är
+default för småsparare och rimligast för pedagogik:
+
+```
+courtage = max(1.00, 0.0025 * affärsbelopp)
+        # 1 kr minimum, annars 0,25 % av belopp
+```
+
+(Avanzas riktiga "Mini" är just 1 kr min, 0,25 %, ingen takgräns för
+mini. Andra klasser som Start/Småspar har högre minimi men lägre
+procent. Håll det enkelt: en formel, en klass.)
+
+Lagra courtage *som ett separat fält* på `StockTransaction` —
+**inte** baka in i `total_amount`. Det är kritiskt för att eleven
+ska kunna se "jag betalade X kr i avgifter under året" — pedagogiskt
+bra och stöder läraruppdrag som "Räkna ut din total-courtage".
+
+Lägg också en envvar `HEMBUDGET_COURTAGE_MODEL` (default `mini`) så
+att läraren kan byta till `start` (39 kr fast) eller `none` (för
+övningsklass) — alla tre formler implementeras i en `compute_courtage`
+helper.
+
+## 15. Börstider och kalendar
+
+Stockholmsbörsen (Nasdaq Stockholm Main Market):
+- Mån–fre 09:00–17:30 CET/CEST
+- Stängd: nyårsdag, trettondag, långfredag, annandag påsk, första
+  maj, Kristi himmelsfärd, midsommarafton (faktiskt **stängd hela
+  dagen** sedan 2021), julafton, juldagen, annandag jul, nyårsafton
+- Vissa dagar med tidigare stängning (sällsynt)
+
+Implementation:
+- `MarketCalendar`-tabell seedad för 2 år framåt
+- En helper `is_market_open(at: datetime) -> bool` används både i
+  bakgrundsjobbet (skip polling när stängt) och i orderväg (avvisa
+  order när stängt)
+- Frontend visar tydligt: badge **"Börsen öppen — stänger 17:30"**
+  eller **"Börsen stängd — öppnar måndag 09:00"**
+
+Pedagogisk vinst: elever lär sig att börsen inte är öppen 24/7. Det
+är en reell insikt som många unga saknar.
+
+## 16. Köp utanför börstid?
+
+Två val:
+- **Strikt:** Avvisa orderförsöket helt. Pedagogiskt rent. Visar
+  konsekvenser av börstid.
+- **Mjukt:** Acceptera order, märk som `pending`, utför vid nästa
+  öppning till då gällande pris. Realistiskt mot Avanza.
+
+**Rekommendation V1:** Strikt. Det förenklar kraftigt (ingen
+order-kö-motor) och är pedagogiskt tydligare. V2 kan lägga till
+pending-orders.
+
+## 17. Pedagogisk märkning av varje köp/sälj
+
+Varje `StockTransaction` får ett valfritt fält `student_rationale`
+(text) — eleven kan skriva "Köper för att Q4-rapporten såg bra ut"
+**innan** köpet bekräftas. Inte påtvingat, men:
+- Lärare kan tilldela uppdrag "Skriv motivering för varje köp"
+- AI kan analysera mönster över tid
+- Vid revision kan eleven själv se sina tidigare resonemang
+
+Det här är vad som gör skillnad mellan "spel" och "lärande".
+
