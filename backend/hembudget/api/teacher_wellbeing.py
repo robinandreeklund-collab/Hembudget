@@ -7,8 +7,11 @@ Två endpoints med olika synvinklar:
 """
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -401,3 +404,113 @@ def list_class_events(
             "events": [_class_event_to_out(r).model_dump() for r in rows],
             "count": len(rows),
         }
+
+
+class DistributeOut(BaseModel):
+    event_id: int
+    students_targeted: int
+    student_events_created: int
+    status: str
+
+
+@router.post(
+    "/teacher/class-events/{event_id}/distribute",
+    response_model=DistributeOut,
+)
+def distribute_class_event(
+    event_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> DistributeOut:
+    """Distribuera ett draft-klassevent till alla elever (eller en
+    specifik klass om class_label är satt). Skapar en StudentEvent i
+    varje elevs scope.
+
+    Idempotent: events i status='distributed' kan inte distribueras
+    igen — kasta 400.
+    """
+    from datetime import datetime as _dt
+
+    from ..db.base import session_scope
+    from ..db.models import StudentEvent
+    from ..school.engines import scope_context, scope_for_student
+    from ..school.social_models import TeacherClassEvent
+
+    with master_session() as ms:
+        ev = ms.get(TeacherClassEvent, event_id)
+        if ev is None:
+            raise HTTPException(404, "Class event saknas")
+        if ev.teacher_id != info.teacher_id:
+            raise HTTPException(403, "Du äger inte detta event")
+        if ev.status != "draft":
+            raise HTTPException(
+                400, f"Eventet är redan {ev.status}, kan inte distribueras igen",
+            )
+
+        # Hämta målgruppen
+        students_q = ms.query(Student).filter(
+            Student.teacher_id == info.teacher_id,
+        )
+        if ev.class_label:
+            students_q = students_q.filter(Student.class_label == ev.class_label)
+        students = students_q.all()
+        if not students:
+            raise HTTPException(400, "Inga elever i målgruppen")
+
+        # Spara metadata vi behöver innan vi byter scope
+        event_data = {
+            "code": f"class_event_{ev.id}",
+            "title": ev.title,
+            "description": ev.description,
+            "category": ev.category,
+            "cost": ev.cost,
+            "proposed_date": ev.proposed_date,
+            "deadline": ev.deadline,
+        }
+        targeted = len(students)
+
+    created = 0
+    for st in students:
+        scope_key = scope_for_student(st)
+        try:
+            with scope_context(scope_key):
+                with session_scope() as scope:
+                    new_event = StudentEvent(
+                        event_code=event_data["code"],
+                        title=event_data["title"],
+                        description=(
+                            f"[Klassen] {event_data['description']}"
+                        ),
+                        category=event_data["category"],
+                        cost=event_data["cost"],
+                        proposed_date=event_data["proposed_date"],
+                        deadline=event_data["deadline"],
+                        source="teacher_triggered",
+                        status="pending",
+                        social_invite_allowed=False,
+                        declinable=True,
+                    )
+                    scope.add(new_event)
+                    scope.flush()
+                    created += 1
+        except Exception:
+            # Fail-soft per elev — om ett scope kraschar fortsätt
+            # till nästa.
+            log.exception(
+                "class-event distribution misslyckades för student %s",
+                st.id,
+            )
+
+    # Uppdatera master-eventet
+    with master_session() as ms:
+        ev = ms.get(TeacherClassEvent, event_id)
+        if ev is not None:
+            ev.status = "distributed"
+            ev.distributed_at = _dt.utcnow()
+            ms.flush()
+
+    return DistributeOut(
+        event_id=event_id,
+        students_targeted=targeted,
+        student_events_created=created,
+        status="distributed",
+    )
