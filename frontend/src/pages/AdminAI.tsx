@@ -301,6 +301,9 @@ export default function AdminAI() {
         </div>
       </section>
 
+      {/* Finnhub-nyckel för aktiekurser */}
+      <FinnhubSection />
+
       {/* SMTP-konfiguration */}
       <SmtpSection />
 
@@ -1097,6 +1100,214 @@ function LandingVariantSection() {
         Tips: öppna ekonomilabbet.org i en privat flik efter byte för
         att slippa cachning.
       </p>
+    </section>
+  );
+}
+
+// ---------- Finnhub (aktiekurser) ----------
+
+type FinnhubKeyStatus = {
+  configured: boolean;
+  source: string;     // "db" | "env" | ""
+  preview: string;
+};
+
+type FinnhubTestResult = {
+  ok: boolean;
+  ticker?: string;
+  last?: number;
+  change_pct?: number | null;
+  ts?: string;
+  error?: string;
+};
+
+function FinnhubSection() {
+  const [status, setStatus] = useState<FinnhubKeyStatus | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<FinnhubTestResult | null>(null);
+
+  async function reload() {
+    try {
+      const r = await api<FinnhubKeyStatus>("/admin/ai/finnhub-key");
+      setStatus(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  async function save() {
+    if (!newKey.trim() || newKey.trim().length < 10) {
+      setMsg("Nyckeln ser för kort ut. Hämta från finnhub.io/dashboard.");
+      return;
+    }
+    setBusy(true); setMsg(null); setTestResult(null);
+    try {
+      const r = await api<FinnhubKeyStatus>("/admin/ai/finnhub-key", {
+        method: "POST",
+        body: JSON.stringify({ key: newKey.trim() }),
+      });
+      setStatus(r);
+      setNewKey("");
+      setMsg("Nyckel sparad. Klicka 'Testa nyckel' för att verifiera.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm(
+      "Radera Finnhub-nyckeln? Aktiekurserna faller tillbaka till mock-" +
+      "providern (slumpgenererade testpriser) tills en ny nyckel " +
+      "läggs in eller FINNHUB_API_KEY-env är satt.",
+    )) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api<FinnhubKeyStatus>("/admin/ai/finnhub-key", {
+        method: "DELETE",
+      });
+      setStatus(r);
+      setMsg("Nyckeln raderad.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testKey() {
+    setBusy(true); setMsg(null); setTestResult(null);
+    try {
+      const r = await api<FinnhubTestResult>("/admin/ai/finnhub-test", {
+        method: "POST",
+      });
+      setTestResult(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Key className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">Finnhub API-nyckel (aktiekurser)</h2>
+      </div>
+      <div className="text-sm text-slate-700 space-y-1">
+        <div>
+          Status:{" "}
+          {status?.configured ? (
+            <span className="font-medium text-emerald-700">
+              Konfigurerad {status.preview && `(${status.preview})`}
+            </span>
+          ) : (
+            <span className="font-medium text-amber-700">
+              Saknas — kurser visas från mock-data tills nyckel läggs in
+            </span>
+          )}
+        </div>
+        {status?.source && (
+          <div className="text-xs text-slate-500">
+            Källa:{" "}
+            {status.source === "db"
+              ? "sparad via detta formulär"
+              : "FINNHUB_API_KEY (miljövariabel)"}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-slate-600">
+          {status?.configured ? "Byt nyckel" : "Lägg in nyckel"}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder="t.ex. cnp9j8pr01qkvl4t1l3gcnp9j8pr01qkvl4t1l40"
+            className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm font-mono"
+            disabled={busy}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button
+            onClick={save}
+            disabled={busy || !newKey.trim()}
+            className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+          >
+            {busy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            Spara
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          Skapa gratis konto på{" "}
+          <a
+            href="https://finnhub.io/register"
+            target="_blank" rel="noreferrer"
+            className="underline text-brand-700"
+          >
+            finnhub.io
+          </a>
+          {" "}— gratis nivå räcker (60 anrop/min, vi använder ~30/poll).
+          Nyckeln lagras i master-DB och används av aktiepollern.
+        </p>
+        <div className="flex gap-2 items-center flex-wrap">
+          {status?.configured && (
+            <button
+              onClick={testKey}
+              disabled={busy}
+              className="text-xs bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-md disabled:opacity-50"
+            >
+              Testa nyckel (hämta VOLV-B.ST)
+            </button>
+          )}
+          {status?.source === "db" && (
+            <button
+              onClick={remove}
+              disabled={busy}
+              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 disabled:opacity-50"
+            >
+              <Trash2 className="w-3 h-3" />
+              Radera sparad nyckel
+            </button>
+          )}
+        </div>
+        {testResult && (
+          <div className={`text-xs rounded p-2 ${
+            testResult.ok
+              ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+              : "bg-rose-50 border border-rose-200 text-rose-900"
+          }`}>
+            {testResult.ok ? (
+              <>
+                ✓ Fungerar! {testResult.ticker} = {testResult.last} SEK
+                {testResult.change_pct !== null && testResult.change_pct !== undefined && (
+                  <> ({testResult.change_pct >= 0 ? "+" : ""}{testResult.change_pct.toFixed(2)} %)</>
+                )}
+                {testResult.ts && <> · {new Date(testResult.ts).toLocaleString("sv-SE")}</>}
+              </>
+            ) : (
+              <>✗ {testResult.error}</>
+            )}
+          </div>
+        )}
+        {msg && (
+          <div className="text-xs bg-slate-50 border border-slate-200 rounded p-2 text-slate-700">
+            {msg}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
