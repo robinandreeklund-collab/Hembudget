@@ -249,7 +249,65 @@ class Loan(TenantMixin, Base):
         ForeignKey("categories.id"), nullable=True
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Pedagogiska fält för kreditmotorn (privatlån/SMS-lån)
+    # loan_kind: "mortgage" | "private" | "sms" | "car" | "student" | "other"
+    loan_kind: Mapped[str] = mapped_column(String(20), default="mortgage", nullable=False)
+    # Snabblån/SMS-lån — lärar-UI färgmärker rött och varnar.
+    is_high_cost_credit: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    # Pedagogiskt: lagra ansökningsdatum separat så lärare ser
+    # vad eleven *sökte* (inte bara när lånet startade).
+    applied_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Kreditscoren när ansökan godkändes — för retro-analys.
+    score_at_application: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CreditApplication(TenantMixin, Base):
+    """Audit-spår för alla kreditansökningar — även de som avslogs eller
+    eleven själv tackade nej. Pedagogiskt värdefullt: läraren ser hur
+    eleven resonerade kring kredit över tid.
+
+    result:
+      "approved"  — bank godkände
+      "declined"  — bank avslog
+      "accepted"  — eleven accepterade ett godkänt erbjudande (lån skapas)
+      "rejected"  — eleven tackade nej till ett godkänt erbjudande
+      "abandoned" — eleven stängde modalen mitt i
+    """
+    __tablename__ = "credit_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # "private" | "sms"
+    requested_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    requested_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    purpose: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    score_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    decline_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    simulated_lender: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    offered_rate: Mapped[Optional[float]] = mapped_column(nullable=True)
+    offered_monthly_payment: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True,
+    )
+    triggered_by_tx_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )
+    # Loan som skapades vid acceptans — null för avslag/abandoned.
+    resulting_loan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("loans.id"), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
 
 
 class LoanPayment(TenantMixin, Base):
