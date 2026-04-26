@@ -156,6 +156,46 @@ def test_persist_creates_row(session):
     assert rows[0].total_score == r.total_score
 
 
+def test_accepted_events_raise_social(session):
+    """Accepterat social-event med +3 social → social-dim +3."""
+    from datetime import datetime, date as _d
+    from hembudget.db.models import StudentEvent
+    s = session
+    s.add(StudentEvent(
+        event_code="bio", title="Bio", description="d", category="social",
+        cost=Decimal("180"),
+        deadline=_d(2026, 4, 30),
+        status="accepted",
+        decided_at=datetime(2026, 4, 15, 10, 0, 0),
+        impact_applied={"economy": 0, "health": 0, "social": 3, "leisure": 2, "safety": 0},
+    ))
+    s.flush()
+    r = calculate_wellbeing(s, "2026-04")
+    assert r.social >= 53  # 50 + 3
+    assert r.events_accepted == 1
+
+
+def test_many_declines_lower_social(session):
+    """3+ declined social-events i samma månad → social sjunker."""
+    from datetime import datetime, date as _d
+    from hembudget.db.models import StudentEvent
+    s = session
+    for i in range(4):
+        s.add(StudentEvent(
+            event_code=f"x{i}", title="X", description="d",
+            category="social", cost=Decimal("100"),
+            deadline=_d(2026, 4, 30),
+            status="declined",
+            decided_at=datetime(2026, 4, 10 + i, 10, 0, 0),
+            impact_applied={"social": -1, "economy": 0, "health": 0,
+                            "leisure": 0, "safety": 0},
+        ))
+    s.flush()
+    r = calculate_wellbeing(s, "2026-04")
+    assert r.social < 50
+    assert r.events_declined == 4
+
+
 def test_persist_updates_existing(session):
     r = calculate_wellbeing(session, "2026-04")
     persist_wellbeing(session, r)

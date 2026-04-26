@@ -256,9 +256,54 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             f"Du har en realistisk budget i nivå med Konsumentverket — bra grund.",
         ))
 
-    # --- SOCIAL + FRITID (placeholder i fas 1, fylls av events i fas 3) ---
-    social = 50  # Neutral — events kommer i fas 3
+    # --- SOCIAL + FRITID (V2: events räknas in från fas 3) ---
+    from ..db.models import StudentEvent
+    # Hämta events beslutade denna månad (accepted+declined räknas)
+    from datetime import datetime as _dt
+    y, m = year_month.split("-")
+    month_start = date(int(y), int(m), 1)
+    if int(m) == 12:
+        month_end = date(int(y) + 1, 1, 1)
+    else:
+        month_end = date(int(y), int(m) + 1, 1)
+
+    decided_events = (
+        session.query(StudentEvent)
+        .filter(
+            StudentEvent.decided_at >= _dt.combine(month_start, _dt.min.time()),
+            StudentEvent.decided_at < _dt.combine(month_end, _dt.min.time()),
+            StudentEvent.status.in_({"accepted", "declined"}),
+        )
+        .all()
+    )
+    n_accepted = sum(1 for e in decided_events if e.status == "accepted")
+    n_declined = sum(1 for e in decided_events if e.status == "declined")
+
+    social = 50
     leisure = 50
+    for e in decided_events:
+        impact = e.impact_applied or {}
+        social += int(impact.get("social", 0))
+        leisure += int(impact.get("leisure", 0))
+
+    if n_accepted + n_declined > 0:
+        ratio_accept = n_accepted / max(1, n_accepted + n_declined)
+        if ratio_accept >= 0.6:
+            factors.append(WellbeingFactor(
+                "social",
+                +5,
+                f"Du accepterade {n_accepted} av {n_accepted + n_declined} "
+                "förslag denna månad — engagerad social aktivitet.",
+            ))
+            social += 5
+        elif ratio_accept <= 0.2 and n_declined >= 3:
+            factors.append(WellbeingFactor(
+                "social",
+                -5,
+                f"Du nekade {n_declined} av {n_accepted + n_declined} "
+                "förslag — isolering har en kostnad.",
+            ))
+            social -= 5
 
     # --- KLAMP + TOTAL ---
     economy = max(0, min(100, economy))
@@ -276,6 +321,8 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
     result.total_score = total
     result.factors = factors
     result.budget_violations = n_violations
+    result.events_accepted = n_accepted
+    result.events_declined = n_declined
     return result
 
 
