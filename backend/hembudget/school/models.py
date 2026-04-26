@@ -886,3 +886,7 @@ class StudentActivity(MasterBase):
 # MarketCalendar) — importeras här så att MasterBase.metadata känner
 # till dem vid create_all.
 from . import stock_models as _stock_models  # noqa: E402, F401
+
+# EventTemplate (delade event-mallar för Wellbeing-events) — samma
+# import-trick.
+from . import event_models as _event_models  # noqa: E402, F401
