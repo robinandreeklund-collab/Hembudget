@@ -162,6 +162,7 @@ const FEATURES: Array<{
 export default function LandingVariantC() {
   return (
     <div
+      className="vc-root"
       style={{
         width: "100%",
         minHeight: "100vh",
@@ -306,6 +307,16 @@ function SharedStyles() {
       }
       @media (max-width: 420px) {
         .vc-periodic-grid { grid-template-columns: repeat(4, 1fr) !important; }
+      }
+      /* Mobile-padding för alla sektioner i Variant C — override:ar
+         inline-paddings från komponentinnerligheten (kräver !important
+         pga inline-spec). Vertikalt halveras nästan, horisontellt 16px.*/
+      @media (max-width: 768px) {
+        .vc-root section:not(.vc-hero-section) {
+          padding: 40px 16px !important;
+        }
+        .vc-root header { padding-left: 16px !important; padding-right: 16px !important; }
+        .vc-root footer > div:first-child { padding-left: 16px !important; padding-right: 16px !important; }
       }
     `}</style>
   );
