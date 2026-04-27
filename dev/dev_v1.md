@@ -7,6 +7,28 @@ lägger till nästa idé eller skärper sektioner som blivit otydliga.
 
 Ingen kod skrivs här — bara analys, datamodeller, risker, faseordning.
 
+## Revisioner efter användardiskussion 1
+
+Efter första genomläsningen sa användaren följande som påverkar planen:
+
+1. **Avtal för alla 17 yrken** (inte 6–8). Konkret mappning under
+   idé 1.
+2. **Satisfaction 0–100 + 5-rond lönesamtal**: bekräftat.
+3. **Bank ≠ redovisningssystem — flytta INTE kontoutdraget**.
+   Banken är en separat värld som genererar dokument; eleven
+   exporterar dem ur banken till "Dina dokument" och importerar
+   sedan till plattformen (= redovisningssystemet). **Lönespec
+   hamnar inte i banken** — den hör till en NY undersida
+   `/arbetsgivare` som samlar lönespec, lönesamtal, avtal,
+   satisfaction och frågor.
+4. **Lönehöjning verkar nästa månad**, inte omedelbart. Lönespec-
+   generatorn läser senaste `gross_salary_monthly` vid run, så
+   det blir naturligt så länge vi uppdaterar fältet efter avslutat
+   samtal — och nästa månads lönespec visar nya beloppet.
+
+Detaljer i sektionerna nedan har uppdaterats därefter; flagg "**REV1**"
+markerar text som ändrats efter första genomgången.
+
 ## Status
 
 | Idé | Status |
@@ -130,20 +152,64 @@ en gång per simulerad arbetsvecka, med rate-limit max 1 per dygn.
 Frågan kan skjutas upp en gång — om eleven ignorerar den helt räknas
 det som "−1 visat lite engagemang".
 
-### 1.4 Pedagogiskt UI
+### 1.4 Pedagogiskt UI — den nya `/arbetsgivare`-vyn
 
-Ny vy `/workplace` (eller integrerad i `/dashboard`-elev-kort):
-- Stor satisfaction-mätare (radial chart, 0–100)
-- Trend de senaste 30 dagarna
-- Lista över senaste 10 events med klickbar `reason_md`
-- Knapp "Visa kollektivavtal" → modal med `summary_md` + länk till PDF
-- Tjänstepensionssats per månad (kr) med koppling vidare till
-  pensions-modulen (förberedelse — pension-modulen byggs senare)
+**REV1** Tidigare hade jag tänkt en separat `/workplace`-vy bara för
+satisfaction. Användarens önskan: konsolidera ALLT som rör
+arbetsgivaren under EN undersida `/arbetsgivare`. Den blir hub för
+idé 1 + idé 2 + lönespec. Banken behåller bank-saker (kontoutdrag,
+kreditkortsfaktura, lånebesked, kommande betalningar). Lönespecar
+hamnar INTE i banken eller `/my-batches`.
 
-Lärar-vy `/teacher/students/:id` får ett satisfaction-kort:
-- Aktuellt värde + trend
-- Eventlogg (samma som elev ser, plus möjlighet att lägga till
-  manuell delta med motivering)
+`/arbetsgivare` består av flera flikar:
+
+```
+/arbetsgivare
+├── Översikt          (default-tab)
+│     - Vem är min arbetsgivare (employer-namn, ort, bransch)
+│     - Min satisfaction-score (radial chart 0–100, trend 30d)
+│     - Lönespec senaste månaden (sammanfattning)
+│     - Aktuell bruttolön + tjänstepensionssats
+│     - 2 senaste events från eventloggen
+│
+├── Lönespec          (BatchArtifact-kind="lonespec")
+│     - Lista över historiska lönespecar
+│     - Klick → preview (samma flow som /my-batches inline-preview)
+│     - "Importera lön till bokföringen"-knapp per rad → kör
+│       befintlig _import_lonespec via /arbetsgivare/import-lonespec
+│
+├── Kollektivavtal    (CollectiveAgreement för mitt yrke)
+│     - Avtals-summary_md
+│     - Centrala data: revisionsökning %, semesterdagar, övertid,
+│       sjuklön-trappa, tjänstepensions-system + procentsats
+│     - Länk till officiella PDF (extern)
+│     - "Småföretag utan avtal"-läge: lagstadgade golv
+│
+├── Lönesamtal        (idé 2)
+│     - Status (har du gjort årets samtal?)
+│     - Briefing → samtal → sammanfattning (se idé 2)
+│     - Historik: tidigare samtal med transkript
+│
+├── Frågor            (WorkplaceQuestion)
+│     - Slumpade frågor som skickas regelbundet (push via Sidebar-badge)
+│     - Eleven kan dra "Visa fler" om hen vill ha extra svarstillfällen
+│
+└── Eventlogg         (EmployerSatisfactionEvent)
+      - Komplett historik av deltas + reason_md
+      - Filter per kind (sjuk/VAB/fråga/lärare-manuell)
+```
+
+Vyn ska kännas som "ditt jobb" — en jobbig kontorslook, t.ex. ljust
+beige header, allvarlig typografi, employer-loggan som placeholder
+med första bokstaven.
+
+Lärar-vy `/teacher/students/:id` får motsvarande arbetsgivare-kort
+som länkar till elevens `/arbetsgivare` (i lärarens impersonations-
+vy):
+- Aktuell satisfaction + trend
+- Status på årets lönesamtal (gjort/inte gjort/under avtals-norm)
+- Eventlogg (samma som elev ser, plus knapp "Lägg till manuell
+  delta" med motivering)
 
 ### 1.5 Kursmodul
 
@@ -160,20 +226,43 @@ En ny systemmodul "Arbete och avtal" seedas via `module_seed.py` med
 
 ### 1.6 Avtals-data — varifrån
 
-Officiella avtal finns publicerade fritt:
-- IF Metall: industrins kollektivavtal
-- Unionen + Sveriges Ingenjörer: tjänstemannaavtalet
-- Kommunal: HÖK kommun/region
-- Vision + Vårdförbundet: vårdpersonal
-- Handels: detaljhandeln
-- HRF: hotell- och restaurangbranschen
-- Småföretag utan avtal: "fri lönesättning, ingen tjänstepension,
-  semesterlagen 25 dagar minimum" — pedagogiskt intressant kontrast
+**REV1** Avtal ska finnas för ALLA 17 genererade yrken (i
+`profile_fixtures.py`). Varje yrke får antingen ett kollektivavtal
+eller markeras explicit "småföretag utan avtal" (där vi använder
+arbetstidslagen + semesterlagen som golv). Konkret mappning:
 
-För V1 räcker 6–8 avtal som täcker våra 17 yrken. Resten markeras
-"avtal saknas". Avtals-summary skrivs av oss som en faktagranskad
-lättläst version (~300–400 ord per avtal) med länk till officiella PDF
-för djupdykning.
+| Yrke | Avtal | Förbund / arbetsgivarpart |
+|---|---|---|
+| Undersköterska | HÖK Kommunal | Kommunal / SKR |
+| Lärare F-3 | HÖK Lärarna | Lärarförbundet+LR / SKR |
+| IT-konsult | Tjänstemannaavtalet IT | Unionen+Akavia / IT&Telekom |
+| Sjuksköterska | HÖK Vård | Vårdförbundet / SKR |
+| Snickare | Byggavtalet | Byggnads / Byggföretagen |
+| Frisör | Frisöravtalet *eller* småföretag | Handels / Frisörföretagarna |
+| Bilmekaniker | Motorbranschavtalet | IF Metall / Motorbranschens |
+| Butiksmedarbetare | Detaljhandelsavtalet | Handels / Svensk Handel |
+| Elektriker | Installationsavtalet | Elektrikerna / Installatörsföretagen |
+| Ekonomiassistent | Tjänstemannaavtalet | Unionen / Almega/Svenskt Näringsliv |
+| Projektledare | Tjänstemannaavtalet | Unionen+Akavia / branschspecifikt |
+| Marknadsassistent | Tjänstemannaavtalet | Unionen / Almega |
+| Säljare | Tjänstemannaavtalet *eller* Detaljhandel | Unionen / Handels |
+| Kock | Gröna Riks (HRF) *eller* småföretag | HRF / Visita |
+| Barnskötare | HÖK Kommunal | Kommunal / SKR |
+| Barista | Gröna Riks (HRF) *eller* småföretag | HRF / Visita |
+| Förskollärare | HÖK Lärarna | Lärarförbundet / SKR |
+
+För yrken där vissa employers saknar avtal (t.ex. "Frisör — Egen
+verksamhet", "Kock — Egen verksamhet") använder
+`ProfessionAgreement` `agreement_id=NULL` + `notes="småföretag,
+fri lönesättning"`. Eleven ser fortfarande satisfaction-score, men
+revisionsökning + tjänstepension är inte avtalsdriven.
+
+**Avtals-omfång V1**: ~10 avtals-summaries totalt (HÖK Kommunal,
+HÖK Lärarna, HÖK Vård, Tjänstemanna IT, Tjänstemanna generell,
+Bygg, Motorbranschen, Detaljhandel, Installation, Gröna Riks).
+Plus en "småföretag-text" som förklarar lagstadgade golv. Varje
+summary ~300–400 ord, länk till officiella PDF för djupdykning,
+faktagranskad innan release.
 
 ### 1.7 Risker
 
