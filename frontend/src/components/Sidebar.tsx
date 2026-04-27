@@ -73,6 +73,7 @@ const TEACHER_ITEMS: NavItem[] = [
   { to: "/teacher/reflections", label: "Reflektioner", icon: PenSquare },
   { to: "/teacher/rubrics", label: "Rubric-mallar", icon: ListChecks },
   { to: "/teacher/time-on-task", label: "Time on task", icon: Clock },
+  { to: "/teacher/negotiations", label: "Lönesamtal", icon: Briefcase },
   { to: "/teacher/all-batches", label: "Alla PDF:er", icon: Files },
   { to: "/messages", label: "Meddelanden", icon: MessageCircle },
 ];

@@ -1354,6 +1354,131 @@ EMPLOYER_TEMPLATE = {
 }
 
 
+SALARY_NEGOTIATION_TEMPLATE = {
+    "title": "Förhandla din lön",
+    "summary": (
+        "Lönesamtalet är en av de viktigaste 30-minutersna i ditt "
+        "arbetsliv. Här lär du dig att förbereda argument, läsa "
+        "motpartens 'nej' och hänvisa till ditt kollektivavtal — "
+        "med ett 5-ronds samtal mot AI-chefen Maria."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett lönesamtal?",
+            "content": (
+                "Ett lönesamtal är ett strukturerat möte mellan dig och "
+                "din chef där ni går igenom dina prestationer och kommer "
+                "överens om en lönehöjning för året framåt.\n\n"
+                "Tre viktiga saker att veta:\n\n"
+                "1. **Avtalets revisionsutrymme** är ramen. Är det "
+                "3 % i år så är 3 % det förväntade — men du kan "
+                "förhandla ±1–2 procentenheter.\n\n"
+                "2. **Argument > känslor.** 'Jag är värd det' är "
+                "svagt. 'Jag tog över ansvar X i juni och projekt Y "
+                "kom in på tid' är starkt.\n\n"
+                "3. **Hot funkar inte.** Säger du 'annars säger jag "
+                "upp mig' utan en faktisk plan håller chefen sitt "
+                "bud — eller blir hen sur."
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Lönerevisionsutrymme — hur funkar det?",
+            "content": (
+                "I de flesta avtal finns en **central pott** som "
+                "förhandlas mellan facket och arbetsgivar-organi-"
+                "sationen. Den centralt avtalade procenten (t.ex. "
+                "3 %) är inte automatisk höjning — den är ett "
+                "snitt som ska fördelas i hela kollektivet.\n\n"
+                "Dvs: om alla får 3 % blir det fackets pott. Men "
+                "din chef kan välja att ge **dig** mer (4 %) om "
+                "någon annan får mindre (2 %) — så länge "
+                "totalsumman blir 3 % på avdelningen.\n\n"
+                "**Det här är samtalet:** övertyga chefen att DU "
+                "är den som ska få mer än snittet.\n\n"
+                "Öppna /arbetsgivare → fliken **Kollektivavtal** "
+                "för att se din ram."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Förbered 3 argument inför samtalet",
+            "content": (
+                "Innan du startar lönesamtalet, skriv ner i dina egna "
+                "anteckningar 3 konkreta argument. Förslag:\n\n"
+                "- Vad har du levererat som chefen kanske inte minns?\n"
+                "- Vilken kompetens har du tagit på dig (kurser, "
+                "  ansvar, certifieringar)?\n"
+                "- Vad säger marknadsdata om din roll? (SCB.se eller "
+                "  jobbportalers lönedata)\n\n"
+                "Bra argument är **specifika** och **mätbara** — inte "
+                "'jag är hängiven', utan 'projekt X kom in 2 veckor "
+                "före deadline med uppskattning från kund Y'."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "prepare_negotiation_arguments",
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Genomför ditt lönesamtal",
+            "content": (
+                "Gå till /arbetsgivare → fliken **Lönesamtal**. "
+                "Du har 5 ronder med Maria (HR-chef). Börja med "
+                "ditt starkaste argument. Lyssna på hennes svar — "
+                "ofta säger hon vad som är OK eller inte OK i "
+                "förhandlingen.\n\n"
+                "Acceptera när du tycker du landat bra, eller pressa "
+                "tills sista ronden om du tror du kan få mer."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "complete_salary_negotiation",
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad gick bra? Vad skulle du göra annorlunda?",
+            "content": (
+                "När samtalet är klart, reflektera över ditt eget "
+                "agerande. Skriv 3–5 meningar:\n\n"
+                "- Vilka argument flyttade chefen mest?\n"
+                "- Var det något du sa som backade dig?\n"
+                "- Hur skulle du formulera om dig nästa år?"
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Förhandlingstaktik",
+            "content": "Vilket alternativ är **mest sannolikt** att ge dig högre lön?",
+            "params": {
+                "question": (
+                    "Du är på lönesamtal och har fått 2,8 % i bud. "
+                    "Avtalet ger 3 %. Vad är bäst att säga?"
+                ),
+                "options": [
+                    "'Jag säger upp mig om jag inte får 5 %.'",
+                    "'Avtalet ger 3 % — varför ligger ni under?'",
+                    "'Jag har jobbat hårt, jag förtjänar mer.'",
+                    "'OK, jag tar 2,8 %.'",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Att hänvisa till avtalet är konkret och svårt "
+                    "att avfärda — chefen måste förklara varför du "
+                    "ligger under norm. 'Jag är värd det' är "
+                    "subjektivt; hot om uppsägning utan plan funkar "
+                    "inte; och att direkt acceptera ger ingen "
+                    "förhandlingsfördel."
+                ),
+            },
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -1378,6 +1503,7 @@ def seed_system_modules(master_session) -> int:
         STOCKS_TEMPLATE,
         CREDIT_TEMPLATE,
         EMPLOYER_TEMPLATE,
+        SALARY_NEGOTIATION_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue
