@@ -1478,3 +1478,229 @@ def wellbeing_invite_motivation(
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
     )
+
+
+# ---------- AI-chatt: extern Claude + dagsgräns per elev ----------
+
+CHAT_THREAD_TITLE = "AI-chatt"
+
+
+def _chat_actor_filter(info: TokenInfo) -> dict:
+    """Returnerar filter-dict för att hitta/skapa chatten för aktören."""
+    if info.role == "student" and info.student_id:
+        return {"student_id": info.student_id, "teacher_id": None}
+    if info.role == "teacher" and info.teacher_id:
+        return {"student_id": None, "teacher_id": info.teacher_id}
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Okänd roll")
+
+
+def _get_or_create_chat_thread(s, info: TokenInfo) -> AskAiThread:
+    f = _chat_actor_filter(info)
+    q = s.query(AskAiThread).filter(AskAiThread.title == CHAT_THREAD_TITLE)
+    if f["student_id"] is not None:
+        q = q.filter(AskAiThread.student_id == f["student_id"])
+    if f["teacher_id"] is not None:
+        q = q.filter(AskAiThread.teacher_id == f["teacher_id"])
+    existing = q.order_by(AskAiThread.updated_at.desc()).first()
+    if existing:
+        return existing
+    thread = AskAiThread(
+        title=CHAT_THREAD_TITLE,
+        student_id=f["student_id"],
+        teacher_id=f["teacher_id"],
+    )
+    s.add(thread)
+    s.flush()
+    return thread
+
+
+def _quota_for_actor(s, info: TokenInfo) -> tuple[int, int]:
+    """(used_today, limit) — limit kommer från lärarens ai_chat_daily_quota.
+    Eleven räknas mot sin egen kvot (lärarens setting tillämpas på alla
+    elever lika). Lärare får dubbla kvoten så de kan testa själva."""
+    teacher_id = _teacher_id_for_info(info)
+    teacher = s.get(Teacher, teacher_id)
+    base_limit = int(teacher.ai_chat_daily_quota or 0) if teacher else 0
+    if info.role == "teacher":
+        # Läraren får större marginal för utvärdering — 3× elevkvoten.
+        limit = base_limit * 3 if base_limit > 0 else 0
+    else:
+        limit = base_limit
+
+    # Räkna användarmeddelanden (role=user) i AKTÖRENS chat-tråd idag.
+    from datetime import date as _date, datetime as _dt, time as _time
+    today_start = _dt.combine(_date.today(), _time.min)
+    f = _chat_actor_filter(info)
+    q = (
+        s.query(AskAiMessage)
+        .join(AskAiThread, AskAiMessage.thread_id == AskAiThread.id)
+        .filter(
+            AskAiMessage.role == "user",
+            AskAiMessage.created_at >= today_start,
+            AskAiThread.title == CHAT_THREAD_TITLE,
+        )
+    )
+    if f["student_id"] is not None:
+        q = q.filter(AskAiThread.student_id == f["student_id"])
+    if f["teacher_id"] is not None:
+        q = q.filter(AskAiThread.teacher_id == f["teacher_id"])
+    used = q.count()
+    return used, limit
+
+
+class ChatStatusOut(BaseModel):
+    ai_enabled: bool
+    available: bool
+    daily_quota: int
+    used_today: int
+    remaining_today: int
+    role: str  # "student" | "teacher"
+
+
+@router.get("/chat/status", response_model=ChatStatusOut)
+def chat_status(info: TokenInfo = Depends(require_token)) -> ChatStatusOut:
+    """Visar elev/lärare om AI-chatten är aktiv + dagskvot kvar."""
+    if not school_enabled():
+        # I desktop-läge är chatten inte den här (LM Studio används).
+        return ChatStatusOut(
+            ai_enabled=False, available=False,
+            daily_quota=0, used_today=0, remaining_today=0,
+            role=info.role,
+        )
+    teacher_id = _teacher_id_for_info(info)
+    with master_session() as s:
+        teacher = s.get(Teacher, teacher_id)
+        ai_on = bool(teacher and teacher.ai_enabled)
+        used, limit = _quota_for_actor(s, info)
+    return ChatStatusOut(
+        ai_enabled=ai_on,
+        available=ai_on and ai_core.is_available() and limit > 0,
+        daily_quota=limit,
+        used_today=used,
+        remaining_today=max(0, limit - used),
+        role=info.role,
+    )
+
+
+class ChatMessageOut(BaseModel):
+    role: str
+    content: str
+    created_at: str
+
+
+@router.get("/chat/messages")
+def chat_messages(info: TokenInfo = Depends(require_token)) -> dict:
+    """Senaste 50 meddelandena i aktörens AI-chatt-tråd."""
+    _require_school()
+    with master_session() as s:
+        thread = _get_or_create_chat_thread(s, info)
+        msgs = (
+            s.query(AskAiMessage)
+            .filter(AskAiMessage.thread_id == thread.id)
+            .order_by(AskAiMessage.created_at.asc())
+            .limit(50)
+            .all()
+        )
+        return {
+            "thread_id": thread.id,
+            "messages": [
+                ChatMessageOut(
+                    role=m.role, content=m.content,
+                    created_at=m.created_at.isoformat(),
+                ).model_dump()
+                for m in msgs
+            ],
+        }
+
+
+class ChatSendIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ChatSendOut(BaseModel):
+    answer: str
+    used_today: int
+    remaining_today: int
+
+
+@router.post("/chat/send", response_model=ChatSendOut)
+def chat_send(
+    payload: ChatSendIn,
+    request: Request,
+    info: TokenInfo = Depends(require_token),
+) -> ChatSendOut:
+    _require_school()
+    check_rate_limit(request, "ai-chat-send", RULES_STUDENT_ASK)
+    teacher_id = _teacher_id_for_info(info)
+    _gate_ai(teacher_id)
+
+    with master_session() as s:
+        thread = _get_or_create_chat_thread(s, info)
+        used, limit = _quota_for_actor(s, info)
+        if limit <= 0:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "AI-chatt är inte aktiverad. Be din lärare slå på den.",
+            )
+        if used >= limit:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"Dagsgränsen är nådd ({limit} frågor). "
+                "Kom tillbaka i morgon eller be din lärare höja kvoten.",
+            )
+        history = [
+            {"role": m.role, "content": m.content}
+            for m in (
+                s.query(AskAiMessage)
+                .filter(AskAiMessage.thread_id == thread.id)
+                .order_by(AskAiMessage.created_at.asc())
+                .all()
+            )
+        ]
+        # Logga elevens fråga FÖRE Claude-anropet — så loggen finns även
+        # om Claude kraschar.
+        s.add(AskAiMessage(
+            thread_id=thread.id, role="user", content=payload.content,
+        ))
+        thread.updated_at = datetime.utcnow()
+
+    result = ai_core.answer_chat_message(
+        history=history,
+        new_message=payload.content,
+        teacher_id=teacher_id,
+    )
+    if result is None:
+        last = ai_core.get_last_error()
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare.",
+        )
+
+    with master_session() as s:
+        thread = _get_or_create_chat_thread(s, info)
+        s.add(AskAiMessage(
+            thread_id=thread.id, role="assistant", content=result.text,
+        ))
+        thread.updated_at = datetime.utcnow()
+        used, limit = _quota_for_actor(s, info)
+
+    return ChatSendOut(
+        answer=result.text,
+        used_today=used,
+        remaining_today=max(0, limit - used),
+    )
+
+
+@router.delete("/chat/messages")
+def chat_clear(info: TokenInfo = Depends(require_token)) -> dict:
+    """Rensar aktörens AI-chatt-tråd. Påverkar inte dagskvoten."""
+    _require_school()
+    with master_session() as s:
+        thread = _get_or_create_chat_thread(s, info)
+        deleted = (
+            s.query(AskAiMessage)
+            .filter(AskAiMessage.thread_id == thread.id)
+            .delete()
+        )
+        return {"deleted": int(deleted)}

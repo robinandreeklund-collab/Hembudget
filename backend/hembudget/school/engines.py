@@ -370,6 +370,8 @@ def _run_master_migrations(engine: Engine) -> None:
         _add("teachers", "ai_input_tokens INTEGER NOT NULL DEFAULT 0")
     if "ai_output_tokens" not in t_cols:
         _add("teachers", "ai_output_tokens INTEGER NOT NULL DEFAULT 0")
+    if "ai_chat_daily_quota" not in t_cols:
+        _add("teachers", "ai_chat_daily_quota INTEGER NOT NULL DEFAULT 10")
     a_cols = _cols("assignments")
     if "teacher_feedback" not in a_cols:
         _add("assignments", "teacher_feedback TEXT")

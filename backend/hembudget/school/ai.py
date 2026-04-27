@@ -602,6 +602,83 @@ Riktlinjer:
 - Säg aldrig vilket numrerat alternativ som var rätt — förklara konceptet istället, eleven ser ändå facit i UI:t."""
 
 
+CHAT_SYSTEM_PROMPT = """Du är en vänlig ekonomi-coach för svenska gymnasie-elever.
+Du svarar på frågor om personlig ekonomi, budget, lön, skatt, lån, sparande
+och investeringar. Eleven jobbar med Ekonomilabbet-plattformen.
+
+Riktlinjer:
+- Svenska, lättläst, målgrupp 16–19 år. Max ~200 ord per svar.
+- Svara konkret och pedagogiskt. Använd vardagsexempel (Swish, Spotify,
+  lön från extrajobb, ICA-konto, ISK, busskort).
+- Du har INTE tillgång till elevens egen data — om eleven frågar
+  "vad har jag på kontot" så förklara att du inte ser det och
+  hänvisa till plattformens egna vyer (Dashboard, Kontoutdrag).
+- Ge INTE personlig finansiell rådgivning ("köp aktien X"). Förklara
+  istället hur eleven själv kan tänka kring beslutet.
+- Inga emojis. Max en punktlista om det hjälper. Svara aldrig på
+  något som bryter mot svensk ekonomi-/konsumentlagstiftning."""
+
+
+def answer_chat_message(
+    *,
+    history: list[dict],
+    new_message: str,
+    teacher_id: int | None = None,
+) -> Optional["AIResult"]:
+    """Multi-turn chat med Claude. `history` = lista av {role, content} dicts
+    med tidigare 'user'- och 'assistant'-meddelanden. `new_message` = elevens
+    senaste meddelande.
+
+    Vi anropar messages.create direkt så modellen ser hela tråden — utan
+    detta skulle den glömma kontexten mellan frågor."""
+    client = _get_client()
+    if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad (ANTHROPIC_API_KEY saknas)")
+        return None
+    # Begränsa historik till de senaste 20 meddelanden så input-tokens
+    # inte växer obegränsat per session.
+    recent = history[-20:]
+    msgs = [
+        {"role": h["role"], "content": h["content"]}
+        for h in recent
+        if h.get("content") and h.get("role") in ("user", "assistant")
+    ]
+    msgs.append({"role": "user", "content": new_message})
+    try:
+        resp = client.messages.create(
+            model=MODEL_HAIKU,  # Haiku räcker för korta Q&A — billigt
+            max_tokens=600,
+            system=[
+                {
+                    "type": "text",
+                    "text": CHAT_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            messages=msgs,
+        )
+        text_parts: list[str] = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        text = "\n".join(text_parts).strip()
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+        _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        _set_last_error(None)
+        return AIResult(
+            text=text, input_tokens=in_tok, output_tokens=out_tok,
+            cache_read_tokens=cr, cache_creation_tokens=cc,
+        )
+    except Exception as exc:
+        log.exception("ai: chat-anrop misslyckades")
+        _set_last_error(f"{type(exc).__name__}: {exc}")
+        return None
+
+
 def answer_student_question(
     *,
     question: str,

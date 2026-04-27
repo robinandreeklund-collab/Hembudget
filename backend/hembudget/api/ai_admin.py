@@ -60,10 +60,31 @@ class TeacherAIRow(BaseModel):
     ai_requests_count: int
     ai_input_tokens: int
     ai_output_tokens: int
+    ai_chat_daily_quota: int = 10
 
 
 class ToggleIn(BaseModel):
     enabled: bool
+
+
+class QuotaIn(BaseModel):
+    daily_quota: int = 10
+
+
+def _to_teacher_ai_row(t: Teacher) -> TeacherAIRow:
+    return TeacherAIRow(
+        id=t.id,
+        email=t.email,
+        name=t.name,
+        active=t.active,
+        is_super_admin=t.is_super_admin,
+        is_demo=t.is_demo,
+        ai_enabled=t.ai_enabled,
+        ai_requests_count=t.ai_requests_count,
+        ai_input_tokens=t.ai_input_tokens,
+        ai_output_tokens=t.ai_output_tokens,
+        ai_chat_daily_quota=int(t.ai_chat_daily_quota or 0),
+    )
 
 
 @router.get("/status", response_model=AIStatusOut)
@@ -89,6 +110,7 @@ def list_teachers(
                 ai_requests_count=t.ai_requests_count,
                 ai_input_tokens=t.ai_input_tokens,
                 ai_output_tokens=t.ai_output_tokens,
+                ai_chat_daily_quota=int(t.ai_chat_daily_quota or 0),
             )
             for t in teachers
         ]
@@ -106,18 +128,30 @@ def toggle_ai(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Lärare finns ej")
         t.ai_enabled = payload.enabled
         s.flush()
-        return TeacherAIRow(
-            id=t.id,
-            email=t.email,
-            name=t.name,
-            active=t.active,
-            is_super_admin=t.is_super_admin,
-            is_demo=t.is_demo,
-            ai_enabled=t.ai_enabled,
-            ai_requests_count=t.ai_requests_count,
-            ai_input_tokens=t.ai_input_tokens,
-            ai_output_tokens=t.ai_output_tokens,
+        return _to_teacher_ai_row(t)
+
+
+@router.post("/teachers/{teacher_id}/chat-quota", response_model=TeacherAIRow)
+def set_chat_quota(
+    teacher_id: int,
+    payload: QuotaIn,
+    _: TokenInfo = Depends(_require_super_admin),
+) -> TeacherAIRow:
+    """Sätt dagskvot för AI-chatten per elev under denna lärare.
+    0 = chatten avstängd. Värdet tillämpas omedelbart vid nästa
+    /ai/chat/status-anrop."""
+    if payload.daily_quota < 0 or payload.daily_quota > 200:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Dagskvot måste vara 0–200",
         )
+    with master_session() as s:
+        t = s.get(Teacher, teacher_id)
+        if not t:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Lärare finns ej")
+        t.ai_chat_daily_quota = payload.daily_quota
+        s.flush()
+        return _to_teacher_ai_row(t)
 
 
 @router.post("/teachers/{teacher_id}/super", response_model=TeacherAIRow)
@@ -137,18 +171,7 @@ def toggle_super(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Lärare finns ej")
         t.is_super_admin = payload.enabled
         s.flush()
-        return TeacherAIRow(
-            id=t.id,
-            email=t.email,
-            name=t.name,
-            active=t.active,
-            is_super_admin=t.is_super_admin,
-            is_demo=t.is_demo,
-            ai_enabled=t.ai_enabled,
-            ai_requests_count=t.ai_requests_count,
-            ai_input_tokens=t.ai_input_tokens,
-            ai_output_tokens=t.ai_output_tokens,
-        )
+        return _to_teacher_ai_row(t)
 
 
 # ---------- API-nyckel-hantering ----------

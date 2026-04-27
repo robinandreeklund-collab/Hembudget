@@ -100,6 +100,11 @@ class TeacherAuthOut(BaseModel):
     name: str
     email: str
     is_family_account: bool = False
+    # AI-funktioner: True om super-admin slagit på Anthropic-anrop
+    # för det här lärarkontot. Frontend använder denna flagga för att
+    # visa eller dölja AI-chatt och andra AI-beroende UI-delar.
+    ai_enabled: bool = False
+    ai_chat_daily_quota: int = 0
 
 
 class StudentIn(BaseModel):
@@ -3412,6 +3417,8 @@ def teacher_me(info: TokenInfo = Depends(require_teacher)) -> TeacherAuthOut:
         return TeacherAuthOut(
             token=info.token, teacher_id=t.id, name=t.name, email=t.email,
             is_family_account=t.is_family_account,
+            ai_enabled=bool(t.ai_enabled),
+            ai_chat_daily_quota=int(t.ai_chat_daily_quota or 0),
         )
 
 

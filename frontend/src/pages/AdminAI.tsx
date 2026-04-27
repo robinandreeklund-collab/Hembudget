@@ -17,6 +17,7 @@ type TeacherRow = {
   ai_requests_count: number;
   ai_input_tokens: number;
   ai_output_tokens: number;
+  ai_chat_daily_quota: number;
 };
 
 type Status = { client_available: boolean };
@@ -127,6 +128,25 @@ export default function AdminAI() {
         {
           method: "POST",
           body: JSON.stringify({ enabled: !t.ai_enabled }),
+        },
+      );
+      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setToggling(null);
+    }
+  }
+
+  async function setChatQuota(t: TeacherRow, value: number) {
+    const key = `quota-${t.id}`;
+    setToggling(key);
+    try {
+      const updated = await api<TeacherRow>(
+        `/admin/ai/teachers/${t.id}/chat-quota`,
+        {
+          method: "POST",
+          body: JSON.stringify({ daily_quota: value }),
         },
       );
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
@@ -335,6 +355,9 @@ export default function AdminAI() {
               <th className="text-right px-4 py-2">Anrop</th>
               <th className="text-right px-4 py-2">In / Ut</th>
               <th className="text-center px-4 py-2">AI</th>
+              <th className="text-center px-4 py-2" title="AI-chatt frågor/dag per elev">
+                Chat-kvot
+              </th>
               <th className="text-center px-4 py-2">Super</th>
             </tr>
           </thead>
@@ -364,6 +387,13 @@ export default function AdminAI() {
                     onClick={() => toggleAi(t)}
                     labelOn="AI på"
                     labelOff="AI av"
+                  />
+                </td>
+                <td className="px-4 py-2 text-center">
+                  <ChatQuotaInput
+                    value={t.ai_chat_daily_quota}
+                    busy={toggling === `quota-${t.id}`}
+                    onChange={(v) => setChatQuota(t, v)}
                   />
                 </td>
                 <td className="px-4 py-2 text-center">
@@ -698,6 +728,44 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function ChatQuotaInput({
+  value, busy, onChange,
+}: {
+  value: number;
+  busy: boolean;
+  onChange: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState<string>(String(value));
+  useEffect(() => { setDraft(String(value)); }, [value]);
+  function commit() {
+    const n = parseInt(draft, 10);
+    if (Number.isNaN(n) || n < 0 || n > 200) {
+      setDraft(String(value));
+      return;
+    }
+    if (n !== value) onChange(n);
+  }
+  return (
+    <input
+      type="number"
+      min={0}
+      max={200}
+      value={draft}
+      disabled={busy}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className={`w-16 text-center border rounded px-1 py-0.5 text-xs ${
+        busy ? "opacity-50" : ""
+      }`}
+      title="Frågor/dag per elev (0 = chatt avstängd)"
+    />
+  );
+}
+
 
 function ToggleButton({
   active, loading, onClick, labelOn, labelOff,

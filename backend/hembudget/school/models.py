@@ -57,6 +57,12 @@ class Teacher(MasterBase):
     ai_requests_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Dagsgräns för AI-chatt-meddelanden per elev. Super-admin kan höja.
+    # 0 = AI-chatt avstängd även om ai_enabled=True. Default 10 = lagom
+    # för en lektion utan att eleven kan "kosta ihjäl" Anthropic-kontot.
+    ai_chat_daily_quota: Mapped[int] = mapped_column(
+        Integer, default=10, nullable=False,
+    )
     # NULL = ej verifierad (open-signup-lärare som inte klickat länk än).
     # Bootstrap-läraren + demo-läraren sätts verifierade direkt vid skapelse.
     # Login blockeras för lärare med NULL (förutom super-admin).

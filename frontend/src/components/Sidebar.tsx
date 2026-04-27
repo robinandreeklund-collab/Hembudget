@@ -55,10 +55,12 @@ const ALL_ITEMS: NavItem[] = [
   { to: "/settings", label: "Inställningar", icon: Cog },
 ];
 
-// Elev-vyn döljer importera/AI-chat/inställningar och lägger till
-// Dina dokument-sidan. Lärare-impersonation visar fortfarande hela
+// Elev-vyn döljer importera/inställningar och lägger till Dina dokument
+// och AI-chatt-sidor. Lärare-impersonation visar fortfarande hela
 // menyn så de kan se elevens hela värld.
-const STUDENT_HIDDEN = new Set(["/import", "/chat", "/settings"]);
+// /chat visas alltid för elever — sidan själv visar "Ej aktiverat"-
+// state om lärarens ai_enabled är av eller dagskvoten är 0.
+const STUDENT_HIDDEN = new Set(["/import", "/settings"]);
 
 interface NotificationCounts {
   messages: number;
