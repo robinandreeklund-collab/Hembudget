@@ -633,14 +633,27 @@ function Header() {
           <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: -0.2 }}>
             Ekonomilabbet
           </span>
+          <span
+            className="vc-mono"
+            style={{
+              fontSize: 10,
+              color: "#64748b",
+              padding: "2px 6px",
+              background: "#f1f5f9",
+              borderRadius: 4,
+              marginLeft: 4,
+            }}
+          >
+            v.2026
+          </span>
         </Link>
         <nav style={{ display: "flex", gap: 4 }} className="vc-nav vc-nav-desktop">
           {([
             { label: "Översikt", href: "#oversikt", external: false },
             { label: "Funktioner", href: "#funktioner", external: false },
             { label: "Pris", href: "#pris", external: false },
-            { label: "FAQ", href: "#faq", external: false },
             { label: "Dokumentation", href: "/docs", external: true },
+            { label: "FAQ", href: "#faq", external: false },
           ] as Array<{ label: string; href: string; external: boolean }>).map(
             (t, i) =>
               t.external ? (
@@ -691,7 +704,10 @@ function Header() {
             <path d="m20 20-3.5-3.5" />
           </svg>
           <span style={{ flex: 1, textAlign: "left" }}>Sök i kursplanen…</span>
-          <span className="vc-kbd">⌘K</span>
+          <span style={{ display: "inline-flex", gap: 2 }}>
+            <span className="vc-kbd">⌘</span>
+            <span className="vc-kbd">K</span>
+          </span>
         </button>
         <div className="vc-login-desktop" style={{ display: "flex", gap: 10 }}>
           <Link
@@ -701,13 +717,13 @@ function Header() {
           >
             Logga in
           </Link>
-          <Link
-            to="/signup/teacher"
+          <a
+            href="mailto:info@ekonomilabbet.org?subject=Boka%20demo"
             className="vc-btn vc-btn-primary"
             style={{ textDecoration: "none" }}
           >
-            Kom igång →
-          </Link>
+            Boka demo →
+          </a>
         </div>
         <button
           type="button"
@@ -824,14 +840,14 @@ function Header() {
             >
               Logga in
             </Link>
-            <Link
-              to="/signup/teacher"
+            <a
+              href="mailto:info@ekonomilabbet.org?subject=Boka%20demo"
               onClick={closeMobile}
               className="vc-btn vc-btn-primary"
               style={{ textAlign: "center", textDecoration: "none", justifyContent: "center" }}
             >
-              Kom igång →
-            </Link>
+              Boka demo →
+            </a>
           </div>
         </div>
       )}
