@@ -446,7 +446,12 @@ function SignConfirmView({ token }: { token: string }) {
 }
 
 
-type BankTab = "statements" | "upcoming" | "scheduled";
+type BankTab =
+  | "statements"
+  | "upcoming"
+  | "scheduled"
+  | "reminders"
+  | "credit";
 
 
 function BankDashboard() {
@@ -459,28 +464,253 @@ function BankDashboard() {
           Du är inloggad. Sessionen är giltig i 15 minuter.
         </div>
       </div>
-      <div className="flex gap-2 border-b">
-        {(["statements", "upcoming", "scheduled"] as BankTab[]).map(
-          (t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3 py-2 text-sm border-b-2 ${
-                tab === t
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              {t === "statements" && "Kontoutdrag"}
-              {t === "upcoming" && "Kommande betalningar"}
-              {t === "scheduled" && "Schemalagda"}
-            </button>
-          ),
-        )}
+      <div className="flex gap-2 border-b overflow-x-auto">
+        {(
+          ["statements", "upcoming", "scheduled", "reminders", "credit"] as BankTab[]
+        ).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-3 py-2 text-sm border-b-2 whitespace-nowrap ${
+              tab === t
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            {t === "statements" && "Kontoutdrag"}
+            {t === "upcoming" && "Kommande"}
+            {t === "scheduled" && "Schemalagda"}
+            {t === "reminders" && "Påminnelser"}
+            {t === "credit" && "EkonomiSkalan"}
+          </button>
+        ))}
       </div>
       {tab === "statements" && <StatementsTab />}
       {tab === "upcoming" && <UpcomingPaymentsTab />}
       {tab === "scheduled" && <ScheduledPaymentsTab />}
+      {tab === "reminders" && <RemindersTab />}
+      {tab === "credit" && <CreditScoreTab />}
+    </div>
+  );
+}
+
+
+// ---------- Påminnelser-flik ----------
+
+interface ReminderRow {
+  id: number;
+  reminder_no: number;
+  issued_date: string;
+  late_fee: number;
+  upcoming_name: string;
+  fee_upcoming_id: number | null;
+  settled_at: string | null;
+}
+
+
+function RemindersTab() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["bank-reminders"],
+    queryFn: () =>
+      api<{ reminders: ReminderRow[]; count: number }>("/bank/reminders"),
+  });
+  const runMut = useMutation({
+    mutationFn: () =>
+      api<{ triggered: number; checked_overdue: number }>(
+        "/bank/reminders/run",
+        { method: "POST" },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bank-reminders"] }),
+  });
+
+  if (q.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar…</div></Card>;
+  }
+  const rows = q.data?.reminders ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-slate-500">
+          Påminnelser triggas automatiskt när fakturor passerar
+          förfallodag. Trycker du <strong>Kontrollera</strong> så
+          eskaleras eventuella nya nivåer (1 → 2 → 3 → 4 'Kronofogden').
+        </div>
+        <button
+          onClick={() => runMut.mutate()}
+          disabled={runMut.isPending}
+          className="text-xs border border-slate-300 rounded px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {runMut.isPending ? "Kollar…" : "Kontrollera"}
+        </button>
+      </div>
+      {runMut.data && (
+        <div className="text-xs text-slate-700 border-l-2 border-slate-300 pl-2">
+          {runMut.data.triggered} ny(a) påminnelse(r) av{" "}
+          {runMut.data.checked_overdue} kontrollerade fakturor.
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <Card>
+          <div className="text-sm text-slate-700">
+            Inga påminnelser. Bra jobbat — du har betalat i tid.
+          </div>
+        </Card>
+      ) : (
+        <Card title={`Påminnelser (${rows.length})`}>
+          <ul className="divide-y divide-slate-200 text-sm">
+            {rows.map((r) => (
+              <li key={r.id} className="py-2 flex items-center gap-3">
+                <ReminderBadge level={r.reminder_no} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">
+                    {r.upcoming_name}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {r.issued_date} · Påminnelseavgift {Math.round(r.late_fee)} kr
+                    {r.fee_upcoming_id && (
+                      <> · faktura {r.fee_upcoming_id} skapad</>
+                    )}
+                  </div>
+                </div>
+                {r.settled_at ? (
+                  <span className="text-xs text-emerald-700">Betald</span>
+                ) : (
+                  <span className="text-xs text-rose-700">Obetald</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
+function ReminderBadge({ level }: { level: number }) {
+  const tone =
+    level >= 4 ? "bg-rose-700 text-white" :
+    level >= 3 ? "bg-rose-100 text-rose-800" :
+    level >= 2 ? "bg-amber-100 text-amber-800" :
+    "bg-amber-50 text-amber-700";
+  const label = level >= 4 ? "Inkasso" : `Påminnelse ${level}`;
+  return (
+    <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${tone}`}>
+      {label}
+    </span>
+  );
+}
+
+
+// ---------- EkonomiSkalan-flik ----------
+
+interface CreditScoreOut {
+  score: number;
+  grade: string;
+  factors: Record<string, unknown>;
+  reasons_md: string;
+  computed_at: string;
+}
+
+
+function CreditScoreTab() {
+  const q = useQuery({
+    queryKey: ["bank-credit-score"],
+    queryFn: () => api<CreditScoreOut>("/bank/credit-score"),
+  });
+
+  if (q.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Räknar fram score…</div></Card>;
+  }
+  if (q.error || !q.data) {
+    return (
+      <Card>
+        <div className="text-sm text-rose-700">
+          Kunde inte beräkna kreditbetyg: {String(q.error)}
+        </div>
+      </Card>
+    );
+  }
+  const cs = q.data;
+  const tone =
+    cs.score >= 800 ? "border-emerald-400 bg-emerald-50" :
+    cs.score >= 720 ? "border-emerald-300 bg-emerald-50/50" :
+    cs.score >= 640 ? "border-slate-300 bg-slate-50" :
+    cs.score >= 560 ? "border-amber-400 bg-amber-50" :
+    "border-rose-400 bg-rose-50";
+
+  return (
+    <div className="space-y-3">
+      <div className={`border-l-4 rounded-md p-4 ${tone}`}>
+        <div className="text-xs uppercase tracking-wide text-slate-500">
+          EkonomiSkalan
+        </div>
+        <div className="flex items-baseline gap-3 mt-1">
+          <div className="text-5xl serif font-semibold">{cs.score}</div>
+          <div className="text-base text-slate-600">/ 850 · grad {cs.grade}</div>
+        </div>
+        <div className="text-xs text-slate-500 mt-1">
+          Beräknat {cs.computed_at}
+        </div>
+      </div>
+      <Card title="Vad påverkar din score?">
+        <div className="text-sm text-slate-800">
+          <MarkdownLite text={cs.reasons_md} />
+        </div>
+      </Card>
+      <Card title="Faktor-detaljer (rådata)">
+        <pre className="text-xs text-slate-700 overflow-x-auto">
+          {JSON.stringify(cs.factors, null, 2)}
+        </pre>
+      </Card>
+    </div>
+  );
+}
+
+
+/** Minimal markdown-renderare lokalt (inget beroende på @/components) */
+function MarkdownLite({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-1">
+      {lines.map((line, i) => {
+        if (line.startsWith("## ")) {
+          return (
+            <h3 key={i} className="text-base font-semibold mt-2">
+              {line.slice(3)}
+            </h3>
+          );
+        }
+        if (line.startsWith("- ")) {
+          // Hantera **bold** inline
+          const inner = line.slice(2);
+          return (
+            <div key={i} className="text-sm flex gap-1.5">
+              <span className="text-slate-400">•</span>
+              <span dangerouslySetInnerHTML={{
+                __html: inner.replace(
+                  /\*\*([^*]+)\*\*/g,
+                  "<strong>$1</strong>",
+                ),
+              }} />
+            </div>
+          );
+        }
+        return (
+          <div
+            key={i}
+            className="text-sm"
+            dangerouslySetInnerHTML={{
+              __html: line.replace(
+                /\*\*([^*]+)\*\*/g,
+                "<strong>$1</strong>",
+              ),
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
