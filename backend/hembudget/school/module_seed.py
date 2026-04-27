@@ -1479,6 +1479,120 @@ SALARY_NEGOTIATION_TEMPLATE = {
 }
 
 
+BANK_TEMPLATE = {
+    "title": "Banken — så funkar pengaflöden",
+    "summary": (
+        "Banken är där dina pengar faktiskt rör sig. Här lär du dig "
+        "hur kontoutdrag, signering med BankID och försenade "
+        "betalningar fungerar — och hur ditt agerande påverkar "
+        "kreditbetyget."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett kontoutdrag?",
+            "content": (
+                "Kontoutdraget är bankens lista över allt som hänt på "
+                "ditt konto under en månad: löner in, fakturor ut, "
+                "korttransaktioner, ränta. Banken skickar det till dig "
+                "i slutet av månaden — sedan är det DITT jobb att "
+                "föra in det i din bokföring.\n\n"
+                "I /bank → fliken **Kontoutdrag** ser du månads-PDF:erna "
+                "som banken genererat. Klicka **Exportera** på en rad "
+                "för att flytta den till **Dina dokument**, sedan "
+                "importerar du till bokföringen från /my-batches."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Exportera ditt senaste kontoutdrag",
+            "content": (
+                "Logga in i /bank med din PIN. Gå till fliken "
+                "Kontoutdrag och tryck Exportera på det senaste. "
+                "Sedan: gå till /my-batches och importera till "
+                "bokföringen."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "export_kontoutdrag",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Signering, BankID, och varför du aldrig delar PIN",
+            "content": (
+                "BankID kombinerar **något du har** (din telefon) med "
+                "**något du vet** (din PIN). Om du delar PIN med någon "
+                "kan de logga in som du — banken har ingen säker "
+                "metod att veta om det är du eller någon annan.\n\n"
+                "**Säkerhetsregler:**\n"
+                "- Banken ringer aldrig och ber om din PIN\n"
+                "- Polisen ringer aldrig och ber om din PIN\n"
+                "- Familjemedlemmar ska inte heller använda din PIN\n"
+                "- Om du tappat PIN: lärare nollställer i Inställningar"
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Signera dina kommande fakturor",
+            "content": (
+                "Gå till /bank → Kommande betalningar. Markera de "
+                "fakturor du vill betala, välj konto (lönekonto), och "
+                "tryck Signera. BankID-flödet startar. Schemaläggs i "
+                "fliken **Schemalagda** tills förfallodag — då dras "
+                "pengarna automatiskt om saldot räcker."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "sign_payments",
+            },
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad händer vid sen betalning?",
+            "content": (
+                "En faktura går 5 dagar över förfallodagen utan att "
+                "betalas. Vad händer?"
+            ),
+            "params": {
+                "question": (
+                    "Vilket är den vanligaste konsekvensen av en sen "
+                    "betalning på 5 dagar i Sverige?"
+                ),
+                "options": [
+                    "Inget händer — fordringsägaren glömmer.",
+                    "Påminnelseavgift på ~60 kr läggs på.",
+                    "Du blir omedelbart svartlistad.",
+                    "Polisen kontaktas.",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Efter 5 dagar kommer vanligtvis en påminnelse-"
+                    "faktura med en avgift på ~60 kr. Eskalation "
+                    "fortsätter: 14 dagar = ny avgift (120 kr), "
+                    "30 dagar = inkasso-varning. Vid riktigt långa "
+                    "förseningar (45+ dagar) kan ärendet gå till "
+                    "Kronofogden — DET påverkar kreditbetyget hårt "
+                    "och kan ligga kvar i 3 år."
+                ),
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Hur skulle du hantera ett halvt års sen hyra?",
+            "content": (
+                "Tänk dig att du blivit av med jobbet och inte kan "
+                "betala hyran. Skriv 5-7 meningar:\n\n"
+                "- Vad är ditt FÖRSTA telefonsamtal?\n"
+                "- Hur prioriterar du vilka räkningar att betala?\n"
+                "- Vad gör du för att skydda din kreditvärdighet?\n"
+                "- När börjar du tänka på att låna?"
+            ),
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -1504,6 +1618,7 @@ def seed_system_modules(master_session) -> int:
         CREDIT_TEMPLATE,
         EMPLOYER_TEMPLATE,
         SALARY_NEGOTIATION_TEMPLATE,
+        BANK_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue

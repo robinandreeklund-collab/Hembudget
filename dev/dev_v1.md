@@ -33,11 +33,27 @@ markerar text som ändrats efter första genomgången.
 
 | Idé | Status |
 |---|---|
-| 1. Arbetsgivar-nöjdhetsfaktor + kollektivavtal | utkast |
-| 2. Lönesamtal (AI-förhandling) | utkast |
-| 3. Banken (BankID-flöde + signering) | utkast |
-| 4. Bank-features (kontoutdrag, kommande, lån) | utkast |
-| Fas-plan + sekvensering | utkast |
+| 1. Arbetsgivar-nöjdhetsfaktor + kollektivavtal | **levererad** (PR 1+2) |
+| 2. Lönesamtal (AI-förhandling) | **levererad** (PR 3+4) |
+| 3. Banken (BankID-flöde + signering) | **levererad** (PR 5+6) |
+| 4. Bank-features (påminnelser, kreditbetyg) | **levererad** (PR 7) |
+| Fas-plan + sekvensering | klar |
+
+### Leveransdiagram
+
+| PR | Status | Commits |
+|---|---|---|
+| PR 1 (idé 1 backend) | ✅ | C1 datamodell · C2 avtals-seed (5 delar) · C3 frågor (7 delar) · C4 endpoints (5 delar) |
+| PR 2 (idé 1 frontend) | ✅ | F2a-f /arbetsgivare-flikar |
+| PR 3 (idé 2 backend) | ✅ | B3a-e: lönesamtals-modell, AI, endpoints, lönespec-commit |
+| PR 4 (idé 2 frontend) | ✅ | 4a lönespec-flik · 4b chat-vy · 4c lärar-vy + module |
+| PR 5 (BankID) | ✅ | 5a modeller · 5b endpoints · 5c frontend |
+| PR 6 (bank-flow) | ✅ | 6a kontoutdrag-export · 6b ScheduledPayment · 6c frontend |
+| PR 7 (kredit/lån) | ✅ | 7a påminnelser · 7b EkonomiSkalan · 7c frontend · 7d kursmodul |
+
+**Totalt** ~50 commits. Alla på branchen
+`claude/learning-platform-analysis-1bvcx`. Backend-tester gröna i
+varje PR (737 → 747 → 760+ tester).
 
 ---
 
