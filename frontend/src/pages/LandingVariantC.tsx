@@ -212,6 +212,7 @@ export default function LandingVariantC() {
       <EmployerSection theme={THEME} />
       <SalaryTalkSection theme={THEME} />
       <BankSection theme={THEME} />
+      <SocraticAISection theme={THEME} />
       <Logic />
       <Problem />
       <Pricing />
@@ -6898,6 +6899,127 @@ function BankSection({ theme }: { theme: Theme }) {
             </div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- SocraticAISection (v5) — AI:n frågar mer än den svarar ----------
+
+function SocraticAISection({ theme }: { theme: Theme }) {
+  const exchanges = [
+    {
+      q: '"Är det dumt att jag spenderade 1200 kr på sneakers?"',
+      a: "Vad var ditt mål med sparandet den här månaden? Och hur känns det nu i efterhand — bra, neutralt, tomt?",
+    },
+    {
+      q: '"Kan AI:n säga om jag har råd med konsertbiljetten?"',
+      a: "Vi kan kolla tillsammans. Vad är din buffert just nu? Och vad är det som gör konserten viktig — vänskapen, musiken, något annat?",
+    },
+    {
+      q: '"Borde jag ha kreditkort?"',
+      a: "Vad skulle du vilja kunna göra med ett kreditkort som du inte kan idag? Och vad händer om du inte kan betala hela summan en månad?",
+    },
+  ];
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#0f172a",
+        color: "#fff",
+      }}
+    >
+      <SectionHeader
+        cell={{ sym: "Ai", n: "07", label: "Sokrates" }}
+        eyebrow="Sokratisk AI"
+        theme={theme}
+        dark
+      >
+        AI:n <em style={{ color: "#fbbf24", fontStyle: "italic" }}>frågar</em>{" "}
+        mer än den svarar.
+      </SectionHeader>
+      <p
+        style={{
+          maxWidth: 680,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#94a3b8",
+        }}
+      >
+        Den rekommenderar aldrig — den hjälper eleven se mönster. Inspirerad av
+        Sokrates och John Rawls "veil of ignorance": bedöm beslutet utan att
+        veta din egen position.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
+          maxWidth: 820,
+        }}
+      >
+        {exchanges.map((e, i) => (
+          <div
+            key={i}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: 28,
+              padding: 24,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 12,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+                color: "#64748b",
+                letterSpacing: 1,
+                writingMode: "vertical-rl",
+                transform: "rotate(180deg)",
+              }}
+            >
+              EX · {String(i + 1).padStart(2, "0")}
+            </div>
+            <div>
+              <div
+                style={{
+                  fontSize: 16,
+                  color: "#fbbf24",
+                  fontStyle: "italic",
+                  marginBottom: 12,
+                  fontFamily: theme.serifFont,
+                }}
+              >
+                {e.q}
+              </div>
+              <div
+                style={{
+                  fontSize: 15.5,
+                  color: "#e2e8f0",
+                  lineHeight: 1.55,
+                  fontFamily: theme.serifFont,
+                }}
+              >
+                <span
+                  style={{
+                    color: "#dc4c2b",
+                    marginRight: 8,
+                    fontFamily: "ui-monospace, monospace",
+                    fontSize: 11,
+                  }}
+                >
+                  AI →
+                </span>
+                {e.a}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
