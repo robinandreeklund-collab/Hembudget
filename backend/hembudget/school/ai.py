@@ -679,6 +679,155 @@ def answer_chat_message(
         return None
 
 
+# ---------- Lönesamtal (idé 2 i dev_v1.md) ----------
+
+NEGOTIATION_SYSTEM_TEMPLATE = """Du är HR-chefen Maria på {employer}. \
+Du har precis fått {student_name} på lönesamtal. Hen är {profession} \
+och har varit anställd i {years} år.
+
+Faktagrund för dig (eleven ser INTE detta direkt):
+- Aktuell bruttolön: {salary} kr/mån
+- Kollektivavtal: {agreement_name} med revisionsutrymme {pct}% i år
+- Satisfaction-score från arbetsplats-events: {score}/100 ({trend})
+- Senaste 3 events: {events_summary}
+
+Dina principer:
+- Du är generös men inom ramen — du kan ge ±2 procentenheter över \
+avtals-norm vid hög satisfaction (≥75); ±1 under vid låg (<40).
+- Du bemöter argumentet, inte personen.
+- Du säger ALDRIG vad avtalet sätter — eleven ska själv hänvisa \
+till det.
+- Om eleven ger sakliga argument (marknadsdata, prestation, ny \
+kompetens) → flyttar du dig 0,5–1 pp.
+- Om eleven hotar säga upp sig utan plan, säg lugnt: 'det vore \
+tråkigt, men beslutet är ditt' och håll ditt bud.
+- Du avslutar varje rond med ett konkret bud i procent.
+- Max 150 ord per svar. Ingen emoji. Ingen markdown-rubrik. \
+Ingen punktlista om det inte gör det tydligare.
+
+Detta är rond {round_no} av {max_rounds}. Sista ronden = ditt slutbud."""
+
+
+def negotiate_salary_round(
+    *,
+    history: list[dict],
+    new_message: str,
+    student_name: str,
+    profession: str,
+    employer: str,
+    salary: int,
+    years: int,
+    agreement_name: str,
+    avtal_pct: float,
+    satisfaction_score: int,
+    satisfaction_trend: str,
+    recent_events: list[str],
+    round_no: int,
+    max_rounds: int,
+    teacher_id: int | None = None,
+    max_tokens: int = 600,
+) -> Optional[AIResult]:
+    """En rond i lönesamtalet — multi-turn med Claude Haiku.
+
+    `history` = lista av {role, content} för tidigare ronder
+    (interleavade student/employer-meddelanden). Vi bygger system-
+    prompten med all kontext (avtal, satisfaction, events) så
+    modellen vet exakt vilken ram hen förhandlar inom — utan att
+    avslöja tal till eleven."""
+    client = _get_client()
+    if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad (ANTHROPIC_API_KEY saknas)")
+        return None
+
+    events_summary = "; ".join(recent_events[-3:]) if recent_events else "inga"
+
+    system = NEGOTIATION_SYSTEM_TEMPLATE.format(
+        student_name=student_name,
+        profession=profession,
+        employer=employer,
+        salary=salary,
+        years=max(0, years),
+        agreement_name=agreement_name,
+        pct=avtal_pct,
+        score=satisfaction_score,
+        trend=satisfaction_trend,
+        events_summary=events_summary,
+        round_no=round_no,
+        max_rounds=max_rounds,
+    )
+
+    # Historik som turn-by-turn-meddelanden. Eleven = "user",
+    # AI = "assistant". Vi inkluderar bara ronder som faktiskt
+    # finns för att hålla input-tokens nere.
+    msgs: list[dict] = []
+    for h in history[-2 * max_rounds :]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            msgs.append({"role": h["role"], "content": h["content"]})
+    msgs.append({"role": "user", "content": new_message})
+
+    try:
+        resp = client.messages.create(
+            model=MODEL_HAIKU,
+            max_tokens=max_tokens,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            messages=msgs,
+        )
+        text_parts: list[str] = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        text = "\n".join(text_parts).strip()
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+        _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        _set_last_error(None)
+        return AIResult(
+            text=text, input_tokens=in_tok, output_tokens=out_tok,
+            cache_read_tokens=cr, cache_creation_tokens=cc,
+        )
+    except Exception as exc:
+        log.exception("ai: negotiate_salary_round misslyckades")
+        _set_last_error(f"{type(exc).__name__}: {exc}")
+        return None
+
+
+def extract_proposed_pct(text: str) -> float | None:
+    """Heuristisk extraktion av AI:ns bud i procent.
+
+    Söker efter mönster som '3,5 %', '3.5%', '3 procent'. Vi
+    accepterar -10 till +20 (resten är troligen brus eller
+    referens till avtalets historik). None om inget hittas.
+    """
+    import re
+    # Mönster: ett tal (med valfri decimaldel) följt av % eller "procent"
+    pat = re.compile(
+        r"(\d+(?:[.,]\d+)?)\s*(?:%|procent)",
+        re.IGNORECASE,
+    )
+    candidates: list[float] = []
+    for m in pat.finditer(text or ""):
+        raw = m.group(1).replace(",", ".")
+        try:
+            v = float(raw)
+        except ValueError:
+            continue
+        if -10 <= v <= 20:
+            candidates.append(v)
+    if not candidates:
+        return None
+    # Sista nämnda = oftast slutbudet i ronden
+    return candidates[-1]
+
+
 def answer_student_question(
     *,
     question: str,
