@@ -261,3 +261,114 @@ def test_other_teacher_cannot_set_delta(fx, monkeypatch) -> None:
         headers={"Authorization": f"Bearer {other_tok}"},
     )
     assert r.status_code == 403
+
+
+# ---------- Lönesamtal (idé 2) ----------
+
+def test_start_negotiation_creates_session_with_avtal_norm(fx) -> None:
+    client, _, stu, *_ = fx
+    r = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["negotiation"]["status"] == "active"
+    assert data["negotiation"]["profession"] == "Undersköterska"
+    assert data["negotiation"]["avtal_code"] == "hok_kommunal_2026"
+    # Avtals-norm-pct ska komma från meta för 2026 (3.1)
+    assert data["negotiation"]["avtal_norm_pct"] == 3.1
+    # Briefing innehåller pedagogisk text
+    assert "lönesamtal" in data["briefing_md"].lower()
+    assert data["negotiation"]["max_rounds"] == 5
+
+
+def test_start_returns_existing_active_session(fx) -> None:
+    client, _, stu, *_ = fx
+    r1 = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    r2 = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    # Samma session — ingen ny skapad
+    assert r1["negotiation"]["id"] == r2["negotiation"]["id"]
+
+
+def test_complete_without_offer_marks_abandoned(fx) -> None:
+    client, _, stu, _tid, sid = fx
+    n = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    nid = n["negotiation"]["id"]
+    r = client.post(
+        f"/employer/negotiation/{nid}/complete",
+        json={"accept_offer": False},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["final_pct"] is None
+    assert data["final_salary"] is None
+    # Profile får INGEN pending_salary
+    from hembudget.school.models import StudentProfile
+    with master_session() as s:
+        p = s.query(StudentProfile).filter(
+            StudentProfile.student_id == sid
+        ).first()
+        assert p.pending_salary_monthly is None
+
+
+def test_send_message_to_completed_returns_400(fx) -> None:
+    client, _, stu, *_ = fx
+    n = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    nid = n["negotiation"]["id"]
+    client.post(
+        f"/employer/negotiation/{nid}/complete",
+        json={"accept_offer": False},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    r = client.post(
+        f"/employer/negotiation/{nid}/message",
+        json={"message": "Jag har gjort ett bra jobb i år."},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 400
+
+
+def test_teacher_can_force_reset_active_session(fx) -> None:
+    client, tch, stu, _tid, sid = fx
+    client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    r = client.post(
+        f"/teacher/employer/{sid}/negotiation/reset",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reset_count"] == 1
+    # Eleven kan nu starta ny
+    r2 = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.status_code == 200
+
+
+def test_teacher_negotiations_list_empty_initially(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/teacher/employer/negotiations",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["below_norm_count"] == 0
+    assert data["rows"] == []
