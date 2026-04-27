@@ -71,6 +71,7 @@ type Tab = "overview" | "market" | "portfolio" | "orders" | "ledger";
 export default function Investments() {
   const [tab, setTab] = useState<Tab>("overview");
   const [tradeModal, setTradeModal] = useState<{ ticker: string; side: "buy" | "sell" } | null>(null);
+  const [detailTicker, setDetailTicker] = useState<string | null>(null);
 
   const universeQ = useQuery({
     queryKey: ["stocks-universe"],
@@ -163,6 +164,7 @@ export default function Investments() {
           stocks={stocks}
           watchlist={watchlist}
           onTrade={(t) => setTradeModal({ ticker: t, side: "buy" })}
+          onDetail={setDetailTicker}
           marketOpen={market?.open ?? false}
         />
       )}
@@ -170,6 +172,7 @@ export default function Investments() {
         <PortfolioTab
           portfolio={portfolio}
           onTrade={(t, s) => setTradeModal({ ticker: t, side: s })}
+          onDetail={setDetailTicker}
           marketOpen={market?.open ?? false}
         />
       )}
@@ -184,6 +187,15 @@ export default function Investments() {
           holding={portfolio?.holdings.find((h) => h.ticker === tradeModal.ticker)}
           cashBalance={portfolio?.cash_balance ?? 0}
           onClose={() => setTradeModal(null)}
+          marketOpen={market?.open ?? false}
+        />
+      )}
+
+      {detailTicker && (
+        <StockDetailModal
+          ticker={detailTicker}
+          onClose={() => setDetailTicker(null)}
+          onTrade={(t, s) => setTradeModal({ ticker: t, side: s })}
           marketOpen={market?.open ?? false}
         />
       )}
@@ -420,11 +432,13 @@ function MarketTab({
   stocks,
   watchlist,
   onTrade,
+  onDetail,
   marketOpen,
 }: {
   stocks: Stock[];
   watchlist: Set<string>;
   onTrade: (ticker: string) => void;
+  onDetail: (ticker: string) => void;
   marketOpen: boolean;
 }) {
   const qc = useQueryClient();
@@ -566,7 +580,9 @@ function MarketTab({
               return (
                 <div
                   key={s.ticker}
-                  className="flex items-center justify-between border-b last:border-0 py-2"
+                  className="flex items-center justify-between border-b last:border-0 py-2 hover:bg-slate-50 cursor-pointer"
+                  onClick={() => onDetail(s.ticker)}
+                  title="Klicka för detaljerad info, graf och nyckeltal"
                 >
                   <div className="flex-1">
                     <div className="font-medium flex items-center gap-2">
@@ -610,9 +626,10 @@ function MarketTab({
                     )}
                   </div>
                   <button
-                    onClick={() =>
-                      watchMut.mutate({ ticker: s.ticker, add: !onWatch })
-                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      watchMut.mutate({ ticker: s.ticker, add: !onWatch });
+                    }}
                     className="p-1 hover:bg-slate-100 rounded mr-2"
                     title={onWatch ? "Ta bort från watchlist" : "Lägg till i watchlist"}
                   >
@@ -623,7 +640,7 @@ function MarketTab({
                     />
                   </button>
                   <button
-                    onClick={() => onTrade(s.ticker)}
+                    onClick={(e) => { e.stopPropagation(); onTrade(s.ticker); }}
                     disabled={s.last === undefined}
                     title={!marketOpen ? "Börsen är stängd — ordern läggs i kö och utförs vid öppning" : undefined}
                     className="bg-brand-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
@@ -645,10 +662,12 @@ function MarketTab({
 function PortfolioTab({
   portfolio,
   onTrade,
+  onDetail,
   marketOpen,
 }: {
   portfolio: Portfolio;
   onTrade: (ticker: string, side: "buy" | "sell") => void;
+  onDetail: (ticker: string) => void;
   marketOpen: boolean;
 }) {
   if (portfolio.holdings.length === 0) {
@@ -680,7 +699,11 @@ function PortfolioTab({
             const fmtNative = (v: number): string =>
               isUsd ? `$${v.toFixed(2)}` : formatSEK(v);
             return (
-            <tr key={h.ticker} className="border-b last:border-0">
+            <tr
+              key={h.ticker}
+              className="border-b last:border-0 hover:bg-slate-50 cursor-pointer"
+              onClick={() => onDetail(h.ticker)}
+            >
               <td className="py-2">
                 <div className="font-medium flex items-center gap-2">
                   {h.ticker}
@@ -718,14 +741,14 @@ function PortfolioTab({
               </td>
               <td className="text-right space-x-1">
                 <button
-                  onClick={() => onTrade(h.ticker, "buy")}
+                  onClick={(e) => { e.stopPropagation(); onTrade(h.ticker, "buy"); }}
                   className="px-2 py-1 text-xs rounded bg-emerald-600 text-white"
                   title={!marketOpen ? "Marknaden stängd — läggs i kö" : undefined}
                 >
                   Köp
                 </button>
                 <button
-                  onClick={() => onTrade(h.ticker, "sell")}
+                  onClick={(e) => { e.stopPropagation(); onTrade(h.ticker, "sell"); }}
                   className="px-2 py-1 text-xs rounded bg-amber-600 text-white"
                   title={!marketOpen ? "Marknaden stängd — läggs i kö" : undefined}
                 >
@@ -740,6 +763,291 @@ function PortfolioTab({
     </Card>
   );
 }
+
+// --- Stock Detail Modal ---
+
+interface FundamentalEntry {
+  value: number;
+  explainer: string;
+}
+
+interface StockDetail {
+  ticker: string;
+  name: string;
+  sector: string;
+  currency: string;
+  exchange: string;
+  last_price: number | null;
+  change_pct: number | null;
+  ts: string | null;
+  history: { date: string; last: number }[];
+  fundamentals: {
+    market_cap?: FundamentalEntry;
+    pe_ratio?: FundamentalEntry;
+    dividend_yield?: FundamentalEntry;
+    beta?: FundamentalEntry;
+    fifty_two_week_high?: FundamentalEntry;
+    fifty_two_week_low?: FundamentalEntry;
+    earnings_growth?: FundamentalEntry;
+    summary?: string;
+    industry?: string;
+    full_name?: string;
+  };
+}
+
+
+function StockDetailModal({
+  ticker,
+  onClose,
+  onTrade,
+  marketOpen,
+}: {
+  ticker: string;
+  onClose: () => void;
+  onTrade: (ticker: string, side: "buy" | "sell") => void;
+  marketOpen: boolean;
+}) {
+  const detailQ = useQuery({
+    queryKey: ["stock-detail", ticker],
+    queryFn: () => api<StockDetail>(`/stocks/${ticker}/detail`),
+  });
+
+  const d = detailQ.data;
+  const isUsd = d?.currency === "USD";
+  const fmt = (v: number): string =>
+    isUsd ? `$${v.toFixed(2)}` : formatSEK(v);
+
+  const fmtBig = (n: number): string => {
+    if (n >= 1e12) return `${(n / 1e12).toFixed(2)} T`;
+    if (n >= 1e9) return `${(n / 1e9).toFixed(2)} mdr`;
+    if (n >= 1e6) return `${(n / 1e6).toFixed(0)} M`;
+    return n.toLocaleString("sv-SE");
+  };
+
+  const minPrice = d && d.history.length
+    ? Math.min(...d.history.map((p) => p.last))
+    : 0;
+  const maxPrice = d && d.history.length
+    ? Math.max(...d.history.map((p) => p.last))
+    : 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="serif text-2xl">{d?.name ?? ticker}</h2>
+            <div className="text-sm text-slate-600">
+              {ticker} · {d?.sector ?? "Okänd sektor"}
+              {isUsd && (
+                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                  USD
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-800">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {detailQ.isLoading && (
+          <div className="text-sm text-slate-500">Hämtar info…</div>
+        )}
+
+        {d && (
+          <>
+            {/* Pris + förändring */}
+            <div className="flex items-baseline gap-3">
+              <div className="text-3xl serif">
+                {d.last_price !== null ? fmt(d.last_price) : "—"}
+              </div>
+              {d.change_pct !== null && d.change_pct !== undefined && (
+                <div
+                  className={`text-sm font-medium ${
+                    d.change_pct >= 0 ? "text-emerald-700" : "text-red-700"
+                  }`}
+                >
+                  {d.change_pct >= 0 ? "+" : ""}{d.change_pct.toFixed(2)} % i dag
+                </div>
+              )}
+            </div>
+
+            {/* Graf 1 år */}
+            {d.history.length > 1 && (
+              <div>
+                <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+                  <span>Senaste {d.history.length} dagar</span>
+                  <span>
+                    Min {fmt(minPrice)} · Max {fmt(maxPrice)}
+                  </span>
+                </div>
+                <div className="h-32 border-t border-b border-slate-100">
+                  <svg
+                    viewBox="0 0 600 100"
+                    preserveAspectRatio="none"
+                    className="w-full h-full"
+                  >
+                    <polyline
+                      fill="none"
+                      stroke="#4f46e5"
+                      strokeWidth="1.5"
+                      points={d.history.map((p, i) => {
+                        const x = (i / Math.max(1, d.history.length - 1)) * 600;
+                        const range = maxPrice - minPrice || 1;
+                        const y = 100 - ((p.last - minPrice) / range) * 90 - 5;
+                        return `${x},${y}`;
+                      }).join(" ")}
+                    />
+                  </svg>
+                </div>
+              </div>
+            )}
+            {d.history.length <= 1 && (
+              <div className="text-xs text-slate-500 italic border-l-2 border-slate-200 pl-2">
+                Ingen historik ännu — graf byggs upp över tid när pollern
+                kör (var 5:e min under börstid).
+              </div>
+            )}
+
+            {/* Fundamenta-grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {d.fundamentals.market_cap && (
+                <FundamentalCard
+                  label="Marknadsvärde"
+                  value={fmtBig(d.fundamentals.market_cap.value) + (isUsd ? " $" : " kr")}
+                  explainer={d.fundamentals.market_cap.explainer}
+                />
+              )}
+              {d.fundamentals.pe_ratio && (
+                <FundamentalCard
+                  label="P/E-tal"
+                  value={d.fundamentals.pe_ratio.value.toFixed(1)}
+                  explainer={d.fundamentals.pe_ratio.explainer}
+                />
+              )}
+              {d.fundamentals.dividend_yield && (
+                <FundamentalCard
+                  label="Utdelning"
+                  value={`${d.fundamentals.dividend_yield.value.toFixed(2)} %`}
+                  explainer={d.fundamentals.dividend_yield.explainer}
+                />
+              )}
+              {d.fundamentals.beta && (
+                <FundamentalCard
+                  label="Beta"
+                  value={d.fundamentals.beta.value.toFixed(2)}
+                  explainer={d.fundamentals.beta.explainer}
+                />
+              )}
+              {d.fundamentals.fifty_two_week_high && (
+                <FundamentalCard
+                  label="52v högsta"
+                  value={fmt(d.fundamentals.fifty_two_week_high.value)}
+                  explainer={d.fundamentals.fifty_two_week_high.explainer}
+                />
+              )}
+              {d.fundamentals.fifty_two_week_low && (
+                <FundamentalCard
+                  label="52v lägsta"
+                  value={fmt(d.fundamentals.fifty_two_week_low.value)}
+                  explainer={d.fundamentals.fifty_two_week_low.explainer}
+                />
+              )}
+              {d.fundamentals.earnings_growth !== undefined && d.fundamentals.earnings_growth && (
+                <FundamentalCard
+                  label="Vinsttillväxt"
+                  value={`${d.fundamentals.earnings_growth.value > 0 ? "+" : ""}${d.fundamentals.earnings_growth.value} %`}
+                  explainer={d.fundamentals.earnings_growth.explainer}
+                />
+              )}
+            </div>
+
+            {/* Bolagsbeskrivning */}
+            {d.fundamentals.summary && (
+              <div className="border-l-2 border-amber-300 pl-3 py-1">
+                <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">
+                  Om bolaget
+                  {d.fundamentals.industry && (
+                    <span className="ml-2 normal-case text-slate-700">
+                      · {d.fundamentals.industry}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-700 leading-snug">
+                  {d.fundamentals.summary}
+                </p>
+              </div>
+            )}
+
+            {Object.keys(d.fundamentals).length === 0 && (
+              <div className="text-sm text-slate-500 italic">
+                Ingen fundamental data tillgänglig — Yahoo Finance kan
+                vara nere eller blockera anropet.
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Köp/Sälj-knappar */}
+        <div className="flex gap-2 pt-2 border-t">
+          <button
+            onClick={() => {
+              onTrade(ticker, "buy");
+              onClose();
+            }}
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-4 py-2 text-sm"
+          >
+            Köp {ticker}
+            {!marketOpen && (
+              <span className="text-[10px] block opacity-80">(läggs i kö)</span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              onTrade(ticker, "sell");
+              onClose();
+            }}
+            className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm"
+          >
+            Sälj {ticker}
+            {!marketOpen && (
+              <span className="text-[10px] block opacity-80">(läggs i kö)</span>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function FundamentalCard({
+  label, value, explainer,
+}: {
+  label: string;
+  value: string;
+  explainer: string;
+}) {
+  return (
+    <div
+      className="bg-slate-50 border border-slate-200 rounded p-2"
+      title={explainer}
+    >
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="font-semibold text-slate-800">{value}</div>
+    </div>
+  );
+}
+
 
 // --- Orders (kö) ---
 

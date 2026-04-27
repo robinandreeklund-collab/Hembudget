@@ -119,6 +119,74 @@ def get_history(
         }
 
 
+@router.get("/{ticker}/detail")
+def get_stock_detail(ticker: str) -> dict:
+    """Detaljerad pedagogisk info per aktie.
+
+    Kombinerar:
+    - Vår egen StockMaster-metadata (sector, currency, exchange)
+    - Senaste kurs (LatestStockQuote)
+    - Fundamentals från yfinance: market_cap, P/E, utdelning, beta,
+      52v high/low, business summary
+    - 1 års historik från vår egen StockQuote-tabell
+
+    Pedagogiskt: alla metrics har 'explainer'-text som lärar UI:n
+    visar som tooltip — eleven lär sig vad varje siffra betyder.
+    """
+    from ..school.stock_models import LatestStockQuote, StockMaster, StockQuote
+    from ..stocks.details import fetch_stock_fundamentals
+
+    with master_session() as s:
+        stock = (
+            s.query(StockMaster)
+            .filter(StockMaster.ticker == ticker)
+            .first()
+        )
+        if not stock:
+            raise HTTPException(404, f"Aktien {ticker} finns inte")
+
+        latest = (
+            s.query(LatestStockQuote)
+            .filter(LatestStockQuote.ticker == ticker)
+            .first()
+        )
+        # 1 års historik (downsamplead till en rad per dag som finns)
+        cutoff = datetime.utcnow() - timedelta(days=365)
+        history_rows = (
+            s.query(StockQuote)
+            .filter(
+                StockQuote.ticker == ticker,
+                StockQuote.ts >= cutoff,
+            )
+            .order_by(StockQuote.ts.asc())
+            .all()
+        )
+        # Plocka en quote per dag (sista) för ren graf
+        by_date: dict = {}
+        for r in history_rows:
+            by_date[r.ts.date().isoformat()] = float(r.last)
+        history = [
+            {"date": d, "last": v}
+            for d, v in sorted(by_date.items())
+        ]
+
+    # Fundamentals — tyst fail-soft om yfinance failar.
+    fundamentals = fetch_stock_fundamentals(ticker)
+
+    return {
+        "ticker": ticker,
+        "name": stock.name,
+        "sector": stock.sector,
+        "currency": stock.currency,
+        "exchange": stock.exchange,
+        "last_price": float(latest.last) if latest else None,
+        "change_pct": latest.change_pct if latest else None,
+        "ts": latest.ts.isoformat() if latest and latest.ts else None,
+        "history": history,
+        "fundamentals": fundamentals,
+    }
+
+
 @router.get("/fx/usd-sek")
 def fx_usd_sek() -> dict:
     """Aktuell USD/SEK-kurs + 30 dagars historik för pedagogisk graf.
