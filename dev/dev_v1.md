@@ -911,18 +911,12 @@ Om kostnad/tid blir trångt:
 - [x] Lönesamtal påverkar nästa månad via `pending_salary_monthly`
       (2.5 punkt 4)
 
-**Nya öppna frågor som dykt upp under REV1:**
+**Nya öppna frågor som dykt upp under REV1 — alla klarerade:**
 
-- [ ] Ska `WorkplaceQuestion`-frågorna pushas via Sidebar-badge eller
-      ankomma som en lugn lista i `/arbetsgivare`-fliken? Mitt råd:
-      lugn lista + en daglig påminnelse på Dashboard om olästa frågor
-      finns. Inga modal-popups som avbryter.
-- [ ] När en lärare reset:ar bank-PIN — ska samma flagga också
-      reset:a Workplace-streak? Mitt råd: nej, separata system.
-- [ ] Ska vi visa **kontant** vad lönesamtalet höjer skatten med (eleven
-      ser brutto +1500 men netto +870 efter kommunalskatt + statlig
-      brytpunkt)? Mitt råd: ja — det är kärnan i pedagogiken kring
-      brytpunkt 2026 (~613 900 kr/år). Lägg in i PR 4-summeringen.
-
-När dessa tre svaren ges går jag igång med PR 1.
+- [x] Workplace-frågor i lugn lista + daglig påminnelse på Dashboard,
+      inga avbrytande modaler
+- [x] Bank-PIN-reset påverkar inte workplace-streak (separata system)
+- [x] Brutto- och netto-jämförelse visas i lönesamtals-summeringen så
+      eleven ser hur kommunalskatt + statlig brytpunkt 2026 (~613 900
+      kr/år) påverkar reell lönehöjning
 
