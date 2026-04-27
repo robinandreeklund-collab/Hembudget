@@ -274,6 +274,7 @@ export default function ScrollStoryDemo() {
           </HorizontalGallery>
 
           <WeekStory week={WEEKS[2]} />
+          <BentoFinale />
         </>
       )}
       <FinalCTA />
@@ -1530,6 +1531,440 @@ function LossAversionCard() {
         som Kahneman/Tversky beskrev.
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// EkonomiSkalanCard, TeacherViewCard — extra mockup-kort som syns
+// i Bento-finalen.
+// ─────────────────────────────────────────────────────────────
+function EkonomiSkalanCard() {
+  const score = 680;
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>EkonomiSkalan</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 16px", color: "#0f172a" }}>
+        Kreditbetyg · {score}
+      </h4>
+      <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "0 12px" }}>
+        <svg viewBox="0 0 240 130" style={{ width: "100%" }}>
+          <defs>
+            <linearGradient id="ekFinale" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#dc4c2b" />
+              <stop offset="40%" stopColor="#fbbf24" />
+              <stop offset="100%" stopColor="#10b981" />
+            </linearGradient>
+          </defs>
+          <path d="M 30 110 A 90 90 0 0 1 210 110" fill="none" stroke="#f1f5f9" strokeWidth="14" strokeLinecap="round" />
+          <path
+            d="M 30 110 A 90 90 0 0 1 210 110"
+            fill="none"
+            stroke="url(#ekFinale)"
+            strokeWidth="14"
+            strokeLinecap="round"
+            strokeDasharray={`${((score - 300) / 550) * 282} 282`}
+          />
+          <text x="120" y="92" textAnchor="middle" fontSize="38" fontWeight="700" fill="#0f172a" fontFamily="ui-monospace, monospace">
+            {score}
+          </text>
+          <text x="120" y="112" textAnchor="middle" fontSize="10" fill="#64748b" fontFamily="ui-monospace, monospace" letterSpacing="1.5">
+            GRAD B+
+          </text>
+        </svg>
+      </div>
+      <ul
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          fontSize: 11.5,
+          fontFamily: "ui-monospace, monospace",
+          lineHeight: 1.85,
+          color: "#475569",
+        }}
+      >
+        <li style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>Inga sena betalningar</span>
+          <span style={{ color: "#10b981" }}>+32</span>
+        </li>
+        <li style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>Privatlån (lugnt val)</span>
+          <span style={{ color: "#dc4c2b" }}>−20</span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+function TeacherViewCard() {
+  return (
+    <div
+      style={{
+        ...CARD_BASE,
+        background: "#0f172a",
+        color: "#fff",
+        border: "1px solid rgba(251,191,36,0.25)",
+      }}
+    >
+      <CardEyebrow>
+        <span style={{ color: "#fbbf24" }}>● /teacher · klass 9C</span>
+      </CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 4px", color: "#fff" }}>
+        Linda · IT-konsult
+      </h4>
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: "ui-monospace, monospace",
+          color: "#64748b",
+          letterSpacing: 0.5,
+          marginBottom: 16,
+        }}
+      >
+        3 veckor · alla val loggade
+      </div>
+      <ul
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          fontFamily: "ui-monospace, monospace",
+          fontSize: 12.5,
+          color: "#cbd5e1",
+          lineHeight: 1.95,
+          flex: 1,
+        }}
+      >
+        <li>Time on task: <span style={{ color: "#fff" }}>22 min 41 s</span></li>
+        <li>Beslut loggade: <span style={{ color: "#fff" }}>9</span></li>
+        <li>Wellbeing-trend: <span style={{ color: "#10b981" }}>54 → 65 → 45 → 61</span></li>
+        <li style={{ color: "#fbbf24" }}>● privatlån (lugnt val)</li>
+        <li style={{ color: "#fbbf24" }}>● lönesamtal: 3,2 % höjning</li>
+        <li style={{ color: "#10b981" }}>● 2 ISK-överföringar</li>
+      </ul>
+      <div
+        style={{
+          marginTop: 12,
+          paddingTop: 12,
+          borderTop: "1px dashed rgba(255,255,255,0.1)",
+          fontSize: 11.5,
+          color: "#94a3b8",
+          fontStyle: "italic",
+          fontFamily: '"Source Serif 4", Georgia, serif',
+        }}
+      >
+        Allt loggat. Allt i samma vy som klassen.
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// BentoFinale — alla skärmar samlade i ett grid med Wellbeing i
+// centrum. Sektionen pinnas och scrubas så cellerna fade:ar in
+// stagger, och central-pentagonen morphar långsamt mellan v3:s
+// kris- och insikts-värden.
+// ─────────────────────────────────────────────────────────────
+function BentoFinale() {
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const cellsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const polyRef = useRef<SVGPolygonElement | null>(null);
+  const dotsRef = useRef<SVGGElement | null>(null);
+  const scoreRef = useRef<SVGTextElement | null>(null);
+  const reduced = useReducedMotion();
+
+  const v3Crisis = WEEKS[2].chapters[0].wb;
+  const v3Insight = WEEKS[2].chapters[2].wb;
+
+  useEffect(() => {
+    if (reduced || !sectionRef.current) return;
+    registerScrollTrigger();
+    const ctx = gsap.context(() => {
+      // Cellerna scrubas in stagger
+      const cells = cellsRef.current.filter(Boolean) as HTMLDivElement[];
+      gsap.from(cells, {
+        opacity: 0,
+        y: 40,
+        scale: 0.92,
+        ease: "power2.out",
+        duration: 1,
+        stagger: 0.08,
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top 70%",
+          end: "top 10%",
+          scrub: 1,
+        },
+      });
+
+      // Central pentagon morphar fram-och-tillbaka mellan kris och insikt
+      const wb = { ...v3Insight };
+      const updatePoly = () => {
+        if (polyRef.current) polyRef.current.setAttribute("points", polyFor(wb));
+        if (dotsRef.current) {
+          DIMS.forEach((d, i) => {
+            const [x, y] = point(i, wb[d.key]);
+            const c = dotsRef.current!.children[i] as SVGCircleElement | undefined;
+            if (c) {
+              c.setAttribute("cx", String(x));
+              c.setAttribute("cy", String(y));
+            }
+          });
+        }
+        if (scoreRef.current) scoreRef.current.textContent = String(wellbeingScore(wb));
+      };
+      updatePoly();
+      gsap.to(wb, {
+        ek: v3Crisis.ek,
+        hl: v3Crisis.hl,
+        sb: v3Crisis.sb,
+        fr: v3Crisis.fr,
+        tr: v3Crisis.tr,
+        duration: 1,
+        ease: "sine.inOut",
+        yoyo: true,
+        repeat: -1,
+        onUpdate: updatePoly,
+      });
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced, v3Crisis, v3Insight]);
+
+  const cardWrap = (idx: number, gridArea: string, child: React.ReactNode) => (
+    <div
+      ref={(el) => (cellsRef.current[idx] = el)}
+      style={{ gridArea, minHeight: 0, minWidth: 0 }}
+    >
+      {child}
+    </div>
+  );
+
+  return (
+    <section
+      ref={sectionRef}
+      style={{
+        background: "#fafaf9",
+        padding: "min(96px, 10vh) min(48px, 4vw)",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        gap: 32,
+      }}
+    >
+      <div style={{ maxWidth: 1200, margin: "0 auto", width: "100%", flex: "0 0 auto" }}>
+        <div className="ssd-eyebrow" style={{ marginBottom: 12 }}>
+          Allt sammanlagt · 3 veckor i en vy
+        </div>
+        <h2 className="ssd-h2" style={{ marginBottom: 12 }}>
+          Det är en plattform — inte en video.
+        </h2>
+        <p
+          style={{
+            fontSize: 16,
+            lineHeight: 1.55,
+            color: "#475569",
+            maxWidth: 640,
+            marginBottom: 0,
+          }}
+        >
+          Allt eleven gjort fångas — varje val, varje mätare, varje konsekvens.
+          I mitten: Wellbeing-pentagonen, som rör sig mellan kris och insikt.
+        </p>
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          maxWidth: 1200,
+          width: "100%",
+          margin: "0 auto",
+          display: "grid",
+          gap: 14,
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gridTemplateRows: "repeat(3, minmax(180px, 1fr))",
+          gridTemplateAreas: `
+            "pay  port  evt  eko"
+            "bank cent  cent  sat"
+            "echo cent  cent  teach"
+          `,
+        }}
+        className="ssd-bento-grid"
+      >
+        <style>{`
+          .ssd-bento-grid > div > * {
+            height: 100% !important;
+            flex: unset !important;
+          }
+          @media (max-width: 900px) {
+            .ssd-bento-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+              grid-template-rows: auto !important;
+              grid-template-areas: none !important;
+            }
+            .ssd-bento-grid > div {
+              grid-area: auto !important;
+              min-height: 320px;
+            }
+            .ssd-bento-grid > .ssd-bento-center {
+              grid-column: span 2 !important;
+              min-height: 420px !important;
+            }
+          }
+        `}</style>
+
+        {cardWrap(0, "pay", <PayslipCard />)}
+        {cardWrap(1, "port", <PortfolioCard />)}
+        {cardWrap(2, "evt", (
+          <EventLogCard
+            rows={[
+              { ts: "v1 · mån", text: "Lönehöjning 3,2 %", delta: "+1 184", tone: "good" },
+              { ts: "v2 · ons", text: "Tandläkare", delta: "−2 400", tone: "bad" },
+              { ts: "v3 · mån", text: "Hyran missar", delta: "−1 200", tone: "bad" },
+              { ts: "v3 · ons", text: "Privatlån", delta: "−460/mån", tone: "neutral" },
+            ]}
+          />
+        ))}
+        {cardWrap(3, "eko", <EkonomiSkalanCard />)}
+        {cardWrap(4, "bank", (
+          <BankDocCard
+            title="Faktura · Tandläkare"
+            issuer="Folktandvården"
+            amount="2 400 kr"
+            due="14 nov 2026"
+          />
+        ))}
+        {cardWrap(5, "sat", <SatisfactionCard from={62} to={72} />)}
+        {cardWrap(6, "echo", (
+          <EchoCard
+            quote='"Hur hamnade du där?"'
+            response="Hyran gick inte ihop. Vad i dina vanor får du flytta så det inte upprepas?"
+          />
+        ))}
+        {cardWrap(7, "teach", <TeacherViewCard />)}
+
+        {/* Centrum: Wellbeing-pentagon (2x2) */}
+        <div
+          ref={(el) => (cellsRef.current[8] = el)}
+          className="ssd-bento-center"
+          style={{
+            gridArea: "cent",
+            background:
+              "radial-gradient(ellipse at center, #1e293b 0%, #0f172a 60%, #020617 100%)",
+            color: "#fff",
+            border: "1px solid rgba(251,191,36,0.25)",
+            borderRadius: 14,
+            padding: "26px 22px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <CardEyebrow>
+            <span style={{ color: "#fbbf24" }}>● Wellbeing · livet i siffror</span>
+          </CardEyebrow>
+          <div style={{ flex: 1, width: "100%", display: "grid", placeItems: "center" }}>
+            <svg viewBox="0 0 400 400" style={{ width: "100%", maxWidth: 380 }}>
+              {[0.25, 0.5, 0.75, 1].map((r, i) => (
+                <polygon
+                  key={i}
+                  points={DIMS.map((_, j) => {
+                    const a = angleAt(j);
+                    return `${CX + Math.cos(a) * R * r},${CY + Math.sin(a) * R * r}`;
+                  }).join(" ")}
+                  fill="none"
+                  stroke="rgba(255,255,255,0.08)"
+                  strokeWidth="1"
+                />
+              ))}
+              {DIMS.map((_, i) => {
+                const [x, y] = point(i, 100);
+                return (
+                  <line
+                    key={i}
+                    x1={CX}
+                    y1={CY}
+                    x2={x}
+                    y2={y}
+                    stroke="rgba(255,255,255,0.06)"
+                    strokeWidth="1"
+                  />
+                );
+              })}
+              <polygon
+                ref={polyRef}
+                points={polyFor(v3Insight)}
+                fill="rgba(251,191,36,0.20)"
+                stroke="#fbbf24"
+                strokeWidth="2.6"
+              />
+              <g ref={dotsRef}>
+                {DIMS.map((d, i) => {
+                  const [x, y] = point(i, v3Insight[d.key]);
+                  return <circle key={i} cx={x} cy={y} r="5.5" fill="#fbbf24" />;
+                })}
+              </g>
+              {DIMS.map((d, i) => {
+                const a = angleAt(i);
+                const lr = R + 30;
+                return (
+                  <text
+                    key={i}
+                    x={CX + Math.cos(a) * lr}
+                    y={CY + Math.sin(a) * lr + 4}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fontWeight="600"
+                    fill="#cbd5e1"
+                    fontFamily="ui-monospace, monospace"
+                  >
+                    {d.label}
+                  </text>
+                );
+              })}
+              <text
+                ref={scoreRef}
+                x={CX}
+                y={CY - 4}
+                textAnchor="middle"
+                fontSize="64"
+                fontWeight="700"
+                fill="#fff"
+              >
+                {wellbeingScore(v3Insight)}
+              </text>
+              <text
+                x={CX}
+                y={CY + 26}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#94a3b8"
+                fontFamily="ui-monospace, monospace"
+                letterSpacing="2"
+              >
+                WELLBEING
+              </text>
+            </svg>
+          </div>
+          <div
+            style={{
+              fontSize: 12.5,
+              color: "#94a3b8",
+              fontStyle: "italic",
+              fontFamily: '"Source Serif 4", Georgia, serif',
+              textAlign: "center",
+              maxWidth: 420,
+              marginTop: 10,
+            }}
+          >
+            Pentagonen rör sig mellan v3:s krismåndag och insikts-fredag —
+            samma elev, samma vecka, två tillstånd.
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
