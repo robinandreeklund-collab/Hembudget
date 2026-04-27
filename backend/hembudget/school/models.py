@@ -5,17 +5,19 @@ inte elev-data och student-DB:ar innehåller inte lärare/elever.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
     JSON,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -250,6 +252,18 @@ class StudentProfile(MasterBase):
 
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Lönesamtals-resultat: ny lön committas inte direkt — den lagras
+    # här tills lönespec-generatorn körs för en månad >= effective_from,
+    # då skrivs gross_salary_monthly om och pending-fälten nollas. Det
+    # speglar verkligheten där samtalet sker en månad och nya lönen syns
+    # på nästa lönespec.
+    pending_salary_monthly: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    pending_effective_from: Mapped[Optional[date]] = deferred(mapped_column(
+        Date, nullable=True,
+    ))
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
@@ -924,3 +938,8 @@ from . import event_models as _event_models  # noqa: E402, F401
 
 # Sociala mekanismer (ClassEventInvite, ClassDisplaySettings).
 from . import social_models as _social_models  # noqa: E402, F401
+
+# Arbetsgivar-dynamik (CollectiveAgreement, ProfessionAgreement,
+# EmployerSatisfaction[+Event], WorkplaceQuestion[+Answer]) — idé 1
+# i dev_v1.md.
+from . import employer_models as _employer_models  # noqa: E402, F401

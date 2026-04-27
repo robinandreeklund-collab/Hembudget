@@ -407,6 +407,13 @@ def _run_master_migrations(engine: Engine) -> None:
             _add("student_profiles", "cost_split_preference VARCHAR(20)")
         if "cost_split_decided_at" not in sp_cols:
             _add("student_profiles", "cost_split_decided_at DATETIME")
+        # Lönesamtal (idé 2 i dev_v1.md): pending salary sätts vid
+        # avslutat samtal, committas av lönespec-generatorn när
+        # effective_from passerats.
+        if "pending_salary_monthly" not in sp_cols:
+            _add("student_profiles", "pending_salary_monthly INTEGER")
+        if "pending_effective_from" not in sp_cols:
+            _add("student_profiles", "pending_effective_from DATE")
 
     # ALTER COLUMN TYPE: konvertera INTEGER → BIGINT på seed-kolumner
     # som lagrar uint32-värden (kan vara > 2^31-1). create_all ändrar
