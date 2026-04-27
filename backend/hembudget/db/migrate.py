@@ -185,15 +185,41 @@ def run_migrations(engine: Engine) -> list[str]:
         applied.append("upcoming_payments (table)")
 
     # Migrera existerande matched_transaction_id till upcoming_payments
-    # så vi har EN källa av sanning (ingen dubbelräkning)
+    # så vi har EN källa av sanning (ingen dubbelräkning).
+    # SQLite stödjer 'INSERT OR IGNORE'; Postgres kräver
+    # 'ON CONFLICT DO NOTHING'. Vi använder dialekt-aware syntax.
     if _table_exists(engine, "upcoming_payments"):
-        with engine.begin() as conn:
-            conn.execute(text("""
-                INSERT OR IGNORE INTO upcoming_payments (upcoming_id, transaction_id)
-                SELECT id, matched_transaction_id
-                FROM upcoming_transactions
-                WHERE matched_transaction_id IS NOT NULL
-            """))
+        is_postgres = engine.dialect.name == "postgresql"
+        # Antag att (upcoming_id, transaction_id) har en unique constraint
+        # eller index — annars måste man specificera ON CONFLICT-target.
+        # För säkerhets skull använd DO NOTHING utan target på Postgres
+        # och låt en eventuell krash fångas av try/except — Postgres
+        # accepterar 'ON CONFLICT DO NOTHING' utan target om constraint
+        # finns på UNIQUE-kolumnerna.
+        if is_postgres:
+            stmt = (
+                "INSERT INTO upcoming_payments (upcoming_id, transaction_id) "
+                "SELECT id, matched_transaction_id "
+                "FROM upcoming_transactions "
+                "WHERE matched_transaction_id IS NOT NULL "
+                "ON CONFLICT DO NOTHING"
+            )
+        else:
+            stmt = (
+                "INSERT OR IGNORE INTO upcoming_payments "
+                "(upcoming_id, transaction_id) "
+                "SELECT id, matched_transaction_id "
+                "FROM upcoming_transactions "
+                "WHERE matched_transaction_id IS NOT NULL"
+            )
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception:
+            log.exception(
+                "scope-migration: kunde inte migrera matched_transaction_id "
+                "till upcoming_payments — fortsätter ändå",
+            )
 
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):
@@ -288,8 +314,10 @@ def run_migrations(engine: Engine) -> list[str]:
     # (ränta + amortering i en och samma bankpost). Gammal UNIQUE-constraint
     # stoppar detta — byggs om till composite unique på (transaction_id,
     # payment_type). SQLite stödjer inte ALTER DROP CONSTRAINT så vi gör
-    # table-rebuild.
-    if _table_exists(engine, "loan_payments"):
+    # table-rebuild. Postgres stödjer ALTER ... DROP CONSTRAINT direkt
+    # och PRAGMA-anrop kraschar med syntaxfel — så hela blocket är
+    # SQLite-only.
+    if engine.dialect.name == "sqlite" and _table_exists(engine, "loan_payments"):
         with engine.begin() as conn:
             # Hitta alla unique-index på tabellen
             idx_rows = conn.execute(
@@ -353,8 +381,8 @@ def run_migrations(engine: Engine) -> list[str]:
 
     # loan_schedule_entries: släpp unique på matched_transaction_id av
     # samma skäl (en bankpost matchar både amort + ränta). SQLite kräver
-    # table-rebuild.
-    if _table_exists(engine, "loan_schedule_entries"):
+    # table-rebuild via PRAGMA — hela blocket är SQLite-only.
+    if engine.dialect.name == "sqlite" and _table_exists(engine, "loan_schedule_entries"):
         with engine.begin() as conn:
             idx_rows = conn.execute(
                 text("PRAGMA index_list(loan_schedule_entries)")
