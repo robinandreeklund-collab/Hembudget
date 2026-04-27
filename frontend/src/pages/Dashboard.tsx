@@ -652,81 +652,109 @@ export default function Dashboard() {
       {/* Elpris-widgeten flyttad till /utility — naturlig plats där
           eleven också ser sin förbrukning. */}
 
-      {netWorthQ.data && netWorthQ.data.points.length > 0 && (
-        <Card
-          title="Nettoförmögenhet (12 mån)"
-          action={
-            (() => {
-              const pts = netWorthQ.data.points;
-              const latest = pts[pts.length - 1];
-              return (
+      {netWorthQ.data && (() => {
+        const pts = netWorthQ.data.points;
+        const latest = pts.length ? pts[pts.length - 1] : null;
+        const hasAnyData = pts.some(
+          (p) => p.assets !== 0 || p.debt !== 0,
+        );
+        return (
+          <Card
+            title="Nettoförmögenhet (12 mån)"
+            action={
+              latest && (
                 <span className="text-sm font-semibold">
                   {formatSEK(latest.net_worth)}
                 </span>
-              );
-            })()
-          }
-        >
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={netWorthQ.data.points}>
-              <XAxis
-                dataKey="date"
-                tickFormatter={(v) => v.slice(0, 7)}
-                tick={{ fontSize: 11 }}
-              />
-              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-              <Tooltip
-                formatter={(v: number) => formatSEK(v)}
-                labelFormatter={(v) => `Slutet av ${v}`}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="assets"
-                name="Tillgångar"
-                stroke="#10b981"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="debt"
-                name="Skuld"
-                stroke="#ef4444"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="net_worth"
-                name="Netto"
-                stroke="#4f46e5"
-                strokeWidth={3}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="text-xs text-slate-700 mt-2">
-            Tillgångar = summa alla bankkonton. Skuld = aktuellt lånesaldo
-            (approximation — historisk låneutveckling kommer i framtida version).
-          </div>
-        </Card>
-      )}
+              )
+            }
+          >
+            {hasAnyData ? (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={pts}>
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v) => v.slice(0, 7)}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                    <Tooltip
+                      formatter={(v: number) => formatSEK(v)}
+                      labelFormatter={(v) => `Slutet av ${v}`}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="assets"
+                      name="Tillgångar"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="debt"
+                      name="Skuld"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="net_worth"
+                      name="Netto"
+                      stroke="#4f46e5"
+                      strokeWidth={3}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="text-xs text-slate-700 mt-2">
+                  Tillgångar = summa alla bankkonton. Skuld = aktuellt
+                  lånesaldo (approximation — historisk låneutveckling kommer
+                  i framtida version).
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-slate-700 leading-relaxed">
+                Inga konton eller lån registrerade ännu. När du importerar
+                ditt första kontoutdrag eller lånebesked från{" "}
+                <a href="/my-batches" className="text-brand-700 underline">
+                  Dina dokument
+                </a>{" "}
+                börjar din nettoförmögenhet räknas månad för månad.
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       <Card title="Kassaflödesprognos (6 mån)">
-        {fc.length === 0 ? (
-          <div className="text-sm text-slate-700">Behöver minst 2 månaders historik.</div>
+        {fc.length === 0 ||
+        fc.every((p) => p.income === 0 && p.expenses === 0) ? (
+          <div className="text-sm text-slate-700 leading-relaxed">
+            Prognosen baseras på snittet av föregående månaders inkomster
+            och utgifter. Importera minst en hel månad — när nästa månad
+            börjar har systemet underlag för att projicera framåt 6 månader.
+          </div>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={fc}>
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-              <Tooltip formatter={(v: number) => formatSEK(v)} />
-              <Legend />
-              <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} />
-              <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} />
-              <Line type="monotone" dataKey="net" stroke="#4f46e5" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+          <>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={fc}>
+                <XAxis dataKey="month" />
+                <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                <Tooltip formatter={(v: number) => formatSEK(v)} />
+                <Legend />
+                <Line type="monotone" dataKey="income" name="Inkomst" stroke="#10b981" strokeWidth={2} />
+                <Line type="monotone" dataKey="expenses" name="Utgift" stroke="#ef4444" strokeWidth={2} />
+                <Line type="monotone" dataKey="net" name="Netto" stroke="#4f46e5" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+            <div className="text-xs text-slate-700 mt-2">
+              Prognosen är ett snitt av historiska månader — den blir bättre
+              ju fler hela månader du importerat.
+            </div>
+          </>
         )}
       </Card>
 
