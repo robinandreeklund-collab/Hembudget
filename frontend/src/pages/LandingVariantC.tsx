@@ -211,6 +211,7 @@ export default function LandingVariantC() {
       <LifeSimSection theme={THEME} />
       <EmployerSection theme={THEME} />
       <SalaryTalkSection theme={THEME} />
+      <BankSection theme={THEME} />
       <Logic />
       <Problem />
       <Pricing />
@@ -6135,6 +6136,767 @@ function SalaryTalkSection({ theme }: { theme: Theme }) {
             37 000 → <strong style={{ color: "#10b981" }}>38 295</strong>
           </div>
           <div style={{ color: "#94a3b8" }}>+ 1 295 kr/mån</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- BankSection (v5) — flow + EkonomilabbetID + EkonomiSkalan + konsekvenskedja ----------
+
+function BankSection({ theme }: { theme: Theme }) {
+  const [bScore, setBScore] = useState(680);
+
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#fafaf9",
+      }}
+    >
+      <NewSectionHeader
+        cell={{ sym: "Bk", n: "11", label: "Banken" }}
+        eyebrow="Banken som ett eget rum"
+        theme={theme}
+      >
+        Pengar flyttas inte i en budget-app.
+        <br />
+        De flyttas i{" "}
+        <em style={{ color: theme.accent, fontStyle: "italic" }}>banken.</em>
+      </NewSectionHeader>
+      <p
+        style={{
+          maxWidth: 760,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#475569",
+        }}
+      >
+        Banken är inte redovisningssystemet. I verkligheten laddar du ner ett
+        kontoutdrag från banken, sparar PDF:en, och importerar sedan till
+        bokföringen. Vi simulerar precis det flödet — med EkonomilabbetID,
+        signering av kommande betalningar, saldokontroll och konsekvenser som
+        syns i EkonomiSkalan.
+      </p>
+
+      {/* Flödesschemat */}
+      <div
+        style={{
+          background: "#fff",
+          border: `1px solid ${theme.rule}`,
+          borderRadius: 14,
+          padding: "28px 32px",
+          marginBottom: 18,
+        }}
+      >
+        <div className={theme.eyebrow} style={{ marginBottom: 18 }}>
+          Det stora flödesschemat · tre platser, en kedja
+        </div>
+        <div
+          className="vc-bank-flow"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr auto 1fr",
+            gap: 18,
+            alignItems: "stretch",
+          }}
+        >
+          <style>{`
+            @media (max-width: 768px) {
+              .vc-bank-flow { grid-template-columns: 1fr !important; }
+              .vc-bank-flow > div:nth-child(2),
+              .vc-bank-flow > div:nth-child(4) {
+                transform: rotate(90deg);
+                margin: 0 auto;
+              }
+              .vc-bank-features { grid-template-columns: 1fr !important; }
+              .vc-bank-cqgrid { grid-template-columns: repeat(2, 1fr) !important; }
+            }
+            @media (max-width: 540px) {
+              .vc-bank-cqgrid { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+          <div style={{ background: "#0f172a", color: "#fff", borderRadius: 12, padding: 22 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 1,
+                color: "#fbbf24",
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              ● /bank
+            </div>
+            <h4 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 12px", color: "#fff" }}>
+              Banken genererar
+            </h4>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                fontSize: 12.5,
+                lineHeight: 1.85,
+                color: "#cbd5e1",
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              <li>· Kontoutdrag (PDF)</li>
+              <li>· Kreditkortsfaktura</li>
+              <li>· Lånebesked</li>
+              <li>· Påminnelser</li>
+            </ul>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: 64 }}>
+            <div style={{ textAlign: "center" }}>
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <path
+                  d="M8 20 H32 M26 14 L32 20 L26 26"
+                  stroke="#0f172a"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div
+                style={{
+                  fontSize: 9.5,
+                  fontFamily: "ui-monospace, monospace",
+                  color: "#64748b",
+                  letterSpacing: 0.8,
+                  marginTop: 4,
+                }}
+              >
+                EXPORTERA
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#fef3c7",
+              borderRadius: 12,
+              padding: 22,
+              border: "1px solid rgba(120,53,15,.2)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 1,
+                color: "#92400e",
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              ● /my-batches
+            </div>
+            <h4 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 12px", color: "#0f172a" }}>
+              Mellanlager
+            </h4>
+            <p
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#78350f",
+                margin: 0,
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              Eleven förhandsgranskar PDF:en innan import. Lönespec hör inte
+              hit — den landar på /arbetsgivare.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minWidth: 64 }}>
+            <div style={{ textAlign: "center" }}>
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <path
+                  d="M8 20 H32 M26 14 L32 20 L26 26"
+                  stroke="#0f172a"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div
+                style={{
+                  fontSize: 9.5,
+                  fontFamily: "ui-monospace, monospace",
+                  color: "#64748b",
+                  letterSpacing: 0.8,
+                  marginTop: 4,
+                }}
+              >
+                IMPORTERA
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#fff",
+              border: `1px solid ${theme.rule}`,
+              borderRadius: 12,
+              padding: 22,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 1,
+                color: theme.accent,
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              ● /transactions
+            </div>
+            <h4 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 12px", color: "#0f172a" }}>
+              Bokföringen
+            </h4>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                fontSize: 12.5,
+                lineHeight: 1.85,
+                color: "#475569",
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              <li>· Huvudbok</li>
+              <li>· Kontoplan</li>
+              <li>· Balansräkning</li>
+              <li>· Avstämning</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* 3 feature-kort */}
+      <div
+        className="vc-bank-features"
+        style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 18 }}
+      >
+        {/* EkonomilabbetID */}
+        <div
+          style={{
+            background: "#0f172a",
+            color: "#fff",
+            borderRadius: 14,
+            padding: 24,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+              flexWrap: "wrap",
+              gap: 6,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 1.2,
+                color: "#fbbf24",
+                textTransform: "uppercase",
+              }}
+            >
+              EkonomilabbetID-flödet
+            </span>
+            <span
+              style={{
+                fontSize: 10.5,
+                fontFamily: "ui-monospace, monospace",
+                color: "#64748b",
+              }}
+            >
+              session 14:32 → exp. 14:47
+            </span>
+          </div>
+          <h4 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 16px", color: "#fff" }}>
+            QR på desktop, PIN på mobil.
+          </h4>
+
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 10,
+              padding: 14,
+              marginBottom: 14,
+              position: "relative",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                aspectRatio: "1 / 1",
+                background: "#fff",
+                backgroundImage:
+                  "radial-gradient(#0f172a 35%, transparent 36%), radial-gradient(#0f172a 35%, transparent 36%)",
+                backgroundSize: "12px 12px, 12px 12px",
+                backgroundPosition: "0 0, 6px 6px",
+                border: "6px solid #fff",
+                boxShadow: "0 0 0 1px #cbd5e1",
+                borderRadius: 4,
+                position: "relative",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  inset: "40% 40%",
+                  background: "#fbbf24",
+                  border: "2px solid #0f172a",
+                  borderRadius: 4,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                color: "#0f172a",
+                lineHeight: 1.6,
+              }}
+            >
+              <div style={{ color: "#64748b", marginBottom: 4 }}>SCANNA</div>
+              <div>Eklabb-app</div>
+              <div style={{ marginTop: 8, color: "#10b981" }}>● väntar på telefon</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontSize: 12.5,
+              lineHeight: 1.55,
+              color: "#94a3b8",
+              fontStyle: "italic",
+              fontFamily: theme.serifFont,
+              marginTop: "auto",
+            }}
+          >
+            "Något du har" (telefon) + "något du vet" (4-siffrig PIN).
+            Pedagogiskt speglar vi den riktiga säkerhetslogiken — minus
+            produktionssäkerheten.
+          </div>
+        </div>
+
+        {/* Scheduled payments */}
+        <div
+          style={{
+            background: "#fff",
+            border: `1px solid ${theme.rule}`,
+            borderRadius: 14,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+            }}
+          >
+            <span className={theme.eyebrow}>Signera kommande</span>
+            <span
+              style={{
+                fontSize: 10.5,
+                padding: "3px 8px",
+                borderRadius: 100,
+                background: "#fef3c7",
+                color: "#78350f",
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 0.5,
+              }}
+            >
+              3 OBETALDA
+            </span>
+          </div>
+          <h4 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 18px", color: "#0f172a" }}>
+            Saldokontroll vid signering.
+          </h4>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+            {[
+              { name: "Hyran · Stockholmshem", amt: "8 500 kr", due: "fredag · 1 feb", ok: true },
+              { name: "El · Vattenfall", amt: "690 kr", due: "mån · 4 feb", ok: true },
+              { name: "Tre · mobil", amt: "299 kr", due: "tor · 7 feb", ok: false },
+            ].map((p, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 12px",
+                  background: "#fafaf9",
+                  border: `1px solid ${theme.rule}`,
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#0f172a", marginBottom: 2 }}>
+                    {p.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#64748b",
+                      fontFamily: "ui-monospace, monospace",
+                    }}
+                  >
+                    {p.due}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontFamily: "ui-monospace, monospace",
+                      fontWeight: 600,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {p.amt}
+                  </span>
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 4,
+                      border: "1.5px solid",
+                      borderColor: p.ok ? "#10b981" : "#cbd5e1",
+                      background: p.ok ? "#10b981" : "#fff",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 9,
+                      color: "#fff",
+                    }}
+                  >
+                    {p.ok ? "✓" : ""}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              background: "rgba(220,76,43,0.06)",
+              border: "1px solid rgba(220,76,43,0.2)",
+              borderRadius: 8,
+              padding: "10px 12px",
+              marginBottom: 14,
+              fontSize: 12,
+              color: "#7f1d1d",
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>OBS — du har 800 kr kvar efter dessa.</strong> Om något
+            oväntat händer innan 7 feb kan signeringen failas.
+          </div>
+
+          <button
+            type="button"
+            style={{
+              width: "100%",
+              padding: "11px 14px",
+              borderRadius: 8,
+              background: "#0f172a",
+              color: "#fff",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13.5,
+              fontWeight: 500,
+              fontFamily: "inherit",
+            }}
+          >
+            Signera 2 markerade · EklabbID →
+          </button>
+        </div>
+
+        {/* EkonomiSkalan */}
+        <div
+          style={{
+            background: "linear-gradient(180deg, #fff 0%, #fef3c7 100%)",
+            border: `1px solid ${theme.rule}`,
+            borderRadius: 14,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+            }}
+          >
+            <span className={theme.eyebrow}>EkonomiSkalan</span>
+            <span
+              style={{
+                fontSize: 10.5,
+                padding: "3px 8px",
+                borderRadius: 100,
+                background: "#fff",
+                color: "#475569",
+                border: "1px solid #cbd5e1",
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 0.5,
+              }}
+            >
+              300–850
+            </span>
+          </div>
+          <h4 style={{ fontSize: 18, fontWeight: 600, margin: "0 0 14px", color: "#0f172a" }}>
+            Betyg som rör sig med vanorna.
+          </h4>
+
+          <div style={{ position: "relative", marginBottom: 14 }}>
+            <svg viewBox="0 0 240 130" style={{ width: "100%", display: "block" }}>
+              <defs>
+                <linearGradient id="vc-ek-scale" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#dc4c2b" />
+                  <stop offset="40%" stopColor="#fbbf24" />
+                  <stop offset="100%" stopColor="#10b981" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M 30 110 A 90 90 0 0 1 210 110"
+                fill="none"
+                stroke="#f1f5f9"
+                strokeWidth="14"
+                strokeLinecap="round"
+              />
+              <path
+                d="M 30 110 A 90 90 0 0 1 210 110"
+                fill="none"
+                stroke="url(#vc-ek-scale)"
+                strokeWidth="14"
+                strokeLinecap="round"
+                strokeDasharray={`${((bScore - 300) / 550) * 282} 282`}
+              />
+              <text
+                x="120"
+                y="92"
+                textAnchor="middle"
+                fontSize="36"
+                fontWeight="700"
+                fill="#0f172a"
+                fontFamily="ui-monospace, monospace"
+              >
+                {bScore}
+              </text>
+              <text
+                x="120"
+                y="112"
+                textAnchor="middle"
+                fontSize="10"
+                fill="#64748b"
+                fontFamily="ui-monospace, monospace"
+                letterSpacing="1.5"
+              >
+                GRAD B+
+              </text>
+            </svg>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+            {[
+              { label: "Inga sena betalningar", sign: "+", val: "32", color: "#10b981" },
+              { label: "Buffert: 1,5 mån", sign: "+", val: "12", color: "#10b981" },
+              { label: "Skuldkvot 0,4", sign: "−", val: "8", color: "#dc4c2b" },
+            ].map((f, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 12,
+                  fontFamily: "ui-monospace, monospace",
+                  color: "#475569",
+                }}
+              >
+                <span>{f.label}</span>
+                <span style={{ color: f.color, fontWeight: 600 }}>
+                  {f.sign}
+                  {f.val}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              paddingTop: 14,
+              borderTop: "1px dashed rgba(120,53,15,.25)",
+              display: "flex",
+              gap: 6,
+              fontSize: 11.5,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setBScore(Math.max(420, bScore - 35))}
+              style={{
+                flex: 1,
+                padding: "7px 10px",
+                borderRadius: 6,
+                cursor: "pointer",
+                background: "#fff",
+                border: "1px solid rgba(120,53,15,.25)",
+                color: "#7f1d1d",
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              Sen betalning
+            </button>
+            <button
+              type="button"
+              onClick={() => setBScore(Math.min(800, bScore + 22))}
+              style={{
+                flex: 1,
+                padding: "7px 10px",
+                borderRadius: 6,
+                cursor: "pointer",
+                background: "#fff",
+                border: "1px solid rgba(120,53,15,.25)",
+                color: "#065f46",
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              Bygg buffert
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Konsekvenskedjan */}
+      <div
+        style={{
+          background: "#0f172a",
+          color: "#fff",
+          borderRadius: 14,
+          padding: "28px 32px",
+        }}
+      >
+        <div className={theme.eyebrow} style={{ marginBottom: 14, color: "#94a3b8" }}>
+          Konsekvenskedjan · obetald faktura över tid
+        </div>
+        <h3
+          style={{
+            fontSize: 22,
+            fontWeight: 600,
+            letterSpacing: -0.3,
+            margin: "0 0 22px",
+            color: "#fff",
+            maxWidth: 760,
+            lineHeight: 1.3,
+          }}
+        >
+          En glömd faktura idag är en betalningsanmärkning om{" "}
+          <em style={{ color: "#fbbf24", fontStyle: "italic" }}>tre år.</em>
+        </h3>
+
+        <div
+          className="vc-bank-cqgrid"
+          style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}
+        >
+          {[
+            {
+              day: "DAG 0",
+              title: "Förfallodatum + 5 dagar",
+              cost: "+ 60 kr",
+              delta: "−5",
+              tone: "#fbbf24",
+              desc: "Påminnelse 1 genereras som PDF i dina dokument.",
+            },
+            {
+              day: "DAG 14",
+              title: "Påminnelse 2",
+              cost: "+ 120 kr",
+              delta: "−12",
+              tone: "#f59e0b",
+              desc: "Avgift adderas som ny UpcomingTransaction.",
+            },
+            {
+              day: "DAG 30",
+              title: "Inkasso",
+              cost: "+ 180 kr",
+              delta: "−25",
+              tone: "#dc4c2b",
+              desc: '"Ärendet kan skickas till inkasso" — eleven får brev.',
+            },
+            {
+              day: "DAG 45",
+              title: "Kronofogden",
+              cost: "BETALN.ANMÄRKN.",
+              delta: "−95",
+              tone: "#7f1d1d",
+              desc: "EkonomiSkalan rasar. Anmärkningen följer eleven i 3 år.",
+            },
+          ].map((s, i) => (
+            <div
+              key={i}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: `1px solid ${s.tone}33`,
+                borderRadius: 10,
+                padding: 18,
+                position: "relative",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontFamily: "ui-monospace, monospace",
+                  letterSpacing: 1,
+                  color: s.tone,
+                  marginBottom: 8,
+                  fontWeight: 600,
+                }}
+              >
+                ● {s.day}
+              </div>
+              <h5 style={{ fontSize: 14, fontWeight: 600, margin: "0 0 4px", color: "#fff" }}>
+                {s.title}
+              </h5>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontFamily: "ui-monospace, monospace",
+                  color: s.tone,
+                  marginBottom: 10,
+                }}
+              >
+                {s.cost} · EkonomiSkalan {s.delta}
+              </div>
+              <p style={{ fontSize: 11.5, lineHeight: 1.5, color: "#94a3b8", margin: 0 }}>
+                {s.desc}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
