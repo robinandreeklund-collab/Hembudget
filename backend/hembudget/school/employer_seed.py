@@ -2218,6 +2218,312 @@ WORKPLACE_QUESTIONS: list[dict] = [
         "tags": ["kommunikation", "kund", "ton"],
         "difficulty": 1,
     },
+    {
+        "code": "training_request_001",
+        "scenario_md": (
+            "Du vill gå en kurs som kostar 18 000 kr som skulle göra "
+            "dig bättre på jobbet. Hur tar du upp det med chefen?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bokar möte, presenterar kursen + hur den hjälper "
+                    "dina arbetsuppgifter, och frågar om budget."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Strukturerad förfrågan med business case. Chefer "
+                    "säger oftare ja när kopplingen till jobbet är "
+                    "tydlig."
+                ),
+            },
+            {
+                "text": (
+                    "Skickar ett snabbt mejl: 'jag vill gå denna kurs, "
+                    "OK?'"
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Funkar för billiga kurser men 18 000 kr kräver "
+                    "förklaring. Chefen får jobba mer för att fatta "
+                    "beslut → större risk för nej."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och går kursen privat på din semester."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Du missar både ekonomiskt stöd och möjligheten att "
+                    "kursen räknas som arbetstid. Många bolag betalar "
+                    "gärna när det syns."
+                ),
+            },
+            {
+                "text": (
+                    "Kräver kursen som villkor för att stanna kvar."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Hot funkar sällan om du inte är extremt svår "
+                    "att ersätta. Kan ge nej och försämrad relation."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Fortbildning är en investering — för dig OCH företaget. "
+            "Visa kopplingen och chansen ökar markant. Föreslå även "
+            "gärna 'bunden tid' (du stannar minst X månader efter)."
+        ),
+        "tags": ["fortbildning", "kommunikation", "förhandling"],
+        "difficulty": 2,
+    },
+    {
+        "code": "lost_motivation_001",
+        "scenario_md": (
+            "Du har tappat lust för jobbet. Gör fortfarande dina "
+            "uppgifter men kreativiteten är borta. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar med chefen och föreslår att få göra något "
+                    "nytt — projekt, område eller utbildning."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Ärligt + lösningsfokuserat. Chefer vill behålla "
+                    "engagerade medarbetare och brukar hitta saker."
+                ),
+            },
+            {
+                "text": (
+                    "Säger upp dig och hoppas hitta något bättre."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Ibland rätt — men prova internlösning först. "
+                    "Många byter jobb innan de provat förändring "
+                    "internt."
+                ),
+            },
+            {
+                "text": (
+                    "Fortsätter på som vanligt, kör på tills det "
+                    "blir bättre."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Tappad motivation går sällan över av sig själv. "
+                    "Risken: prestationen sjunker så mycket att "
+                    "chefen agerar först."
+                ),
+            },
+            {
+                "text": (
+                    "Bokar med företagshälsovård för att kolla att "
+                    "det inte är utbrändhet."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Bra om du känner dig trött eller nedstämd — "
+                    "tidig kontakt förebygger sjukskrivning. "
+                    "Företagshälsovården är gratis för dig."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tappad motivation är en signal, inte ett karaktärsfel. "
+            "Möjliga orsaker: fel uppgifter, dålig chef, privatlivet, "
+            "begynnande utbrändhet. Prata, prova förändring, sök hjälp."
+        ),
+        "tags": ["motivation", "arbetsmiljö", "kommunikation"],
+        "difficulty": 3,
+    },
+    {
+        "code": "noisy_colleague_001",
+        "scenario_md": (
+            "En kollega pratar i hög volym i telefon vid sitt skrivbord — "
+            "och du sitter mittemot. Det stör koncentrationen. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger lugnt: 'hej, kan du ta dina samtal i mötesrummet? "
+                    "Det är svårt att fokusera.'"
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Direkt + vänligt. De flesta inser direkt och "
+                    "går iväg. Konflikten blir inte en konflikt."
+                ),
+            },
+            {
+                "text": (
+                    "Skickar passiv-aggressivt SMS från jobbtelefonen: "
+                    "'kan du sänka rösten?'"
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Att skicka SMS i samma rum är konstigt. Personen "
+                    "blir förvirrad och kanske kränkt."
+                ),
+            },
+            {
+                "text": (
+                    "Klagar för chefen utan att först prata med kollegan."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Eskalerar i onödan. Liknande problem brukar lösas "
+                    "med ett kort samtal — försök först."
+                ),
+            },
+            {
+                "text": (
+                    "Sätter på hörlurar och låter det vara."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Funkar kortsiktigt. Men problemet kvarstår och "
+                    "andra kollegor blir nog också störda."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Småirritationer på kontoret löses med korta vänliga samtal. "
+            "Reglen: 'fråga först, eskalera om det inte hjälper'. "
+            "Vänd inte direkt till chefen för småsaker."
+        ),
+        "tags": ["kommunikation", "kollegial", "kontoret"],
+        "difficulty": 1,
+    },
+    {
+        "code": "meeting_changed_001",
+        "scenario_md": (
+            "Du har förberett en presentation i två dagar. På morgonen "
+            "skriver chefen i Teams att mötet flyttats två veckor — "
+            "nytt datum och delvis ny inriktning. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tackar för informationen, frågar kort vad som "
+                    "ändrats i inriktningen, och hanterar ändringen."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Smidigt + proffsigt. Förändringar är vardag i "
+                    "arbetslivet — den som inte tar dem personligt "
+                    "uppfattas som senior."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver tillbaka argt: 'jag har lagt två dagar "
+                    "på det här, oacceptabelt!'"
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Ditt arbete är inte bortkastat — du presenterar "
+                    "samma material senare. Att gå i taket signalerar "
+                    "låg stresshantering."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och gör om hela presentationen från "
+                    "noll utan att fråga vad som faktiskt ändrats."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Onödigt arbete. En kort fråga 'vad är de viktigaste "
+                    "ändringarna?' sparar dig timmar."
+                ),
+            },
+            {
+                "text": (
+                    "Tackar och föreslår 'kan vi ta en kort avstämning "
+                    "imorgon så jag förstår nya inriktningen?'"
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bästa svaret: visar både samarbetsvilja och "
+                    "tydlig planering. Du tar dialog till handling."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Förändringar i schema och scope sker hela tiden. Den som "
+            "tar dem som personliga affronter blir tröttsam att jobba "
+            "med. Den som ser dem som information och planerar om "
+            "blir uppskattad."
+        ),
+        "tags": ["kommunikation", "förändring", "professionalism"],
+        "difficulty": 1,
+    },
+    {
+        "code": "skyddsombud_001",
+        "scenario_md": (
+            "Du och flera kollegor lider av nackvärk — stolarna är dåliga. "
+            "Chefen säger 'vi har inte budget i år'. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar med skyddsombudet — det är dem som har "
+                    "mandat att kräva utredning av arbetsmiljön."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Helt rätt. Skyddsombudet har juridisk makt att "
+                    "kräva åtgärd och kan ringa Arbetsmiljöverket "
+                    "om chefen inte agerar."
+                ),
+            },
+            {
+                "text": (
+                    "Ger upp — chefen har bestämt."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Arbetsmiljöansvaret är arbetsgivarens enligt "
+                    "AML. 'Ingen budget' är inte ett giltigt skäl "
+                    "att strunta i ergonomiska brister."
+                ),
+            },
+            {
+                "text": (
+                    "Köper en egen stol och tar med till jobbet."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Löser DITT problem men inte de andras. Och "
+                    "avlastar chefen från sitt ansvar."
+                ),
+            },
+            {
+                "text": (
+                    "Anmäler direkt till Arbetsmiljöverket utan att "
+                    "kontakta skyddsombud först."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Du kan göra det, men skyddsombudet är effektivare "
+                    "första steget. AMV är myndighet — eskalering."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Skyddsombud finns på alla arbetsplatser med 5+ anställda "
+            "och är facklig representant för arbetsmiljön. Hen kan "
+            "kräva åtgärd, stoppa farligt arbete (skyddsstopp) och "
+            "kontakta Arbetsmiljöverket. Använd dem!"
+        ),
+        "tags": ["arbetsmiljö", "skyddsombud", "rättigheter"],
+        "difficulty": 3,
+    },
 ]
 
 
