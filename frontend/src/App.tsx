@@ -22,6 +22,7 @@ import TeacherCredit from "./pages/TeacherCredit";
 import TeacherInvestments from "./pages/TeacherInvestments";
 import TeacherWellbeing from "./pages/TeacherWellbeing";
 import Salaries from "./pages/Salaries";
+import Arbetsgivare from "./pages/Arbetsgivare";
 import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
 import TibberCallback from "./pages/TibberCallback";
@@ -150,6 +151,7 @@ export default function App() {
           <Route path="/transfers" element={<Transfers />} />
           <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/salaries" element={<Salaries />} />
+          <Route path="/arbetsgivare" element={<Arbetsgivare />} />
           <Route path="/attachments" element={<Attachments />} />
           <Route path="/utility" element={<Utility />} />
           <Route path="/tax" element={<Tax />} />
