@@ -1916,6 +1916,308 @@ WORKPLACE_QUESTIONS: list[dict] = [
         "tags": ["lojalitet", "ledarskap", "social"],
         "difficulty": 1,
     },
+    {
+        "code": "whistleblow_001",
+        "scenario_md": (
+            "Du ser att företaget systematiskt fakturerar kunder för "
+            "tjänster som inte levererats. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Dokumenterar exempel skriftligt och rapporterar "
+                    "till chefen + ekonomichefen. Ber om åtgärd."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Internt larm är första steget enligt "
+                    "visselblåsarlagen. Skriftlig dokumentation "
+                    "skyddar dig juridiskt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — det är inte din avdelning."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att veta om bedrägeri och vara passiv kan göra "
+                    "dig medskyldig juridiskt. Lagen kräver inte "
+                    "anmälan, men starkt rekommenderat."
+                ),
+            },
+            {
+                "text": (
+                    "Anmäler direkt till Skatteverket eller polisen "
+                    "utan att försöka internt först."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "OK i extrema fall. Visselblåsarlagen skyddar dig, "
+                    "men intern eskalering är oftast bättre — "
+                    "snabbare och mindre konflikt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger upp dig och letar nytt jobb istället."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Du löser inte problemet — kunderna fortsätter "
+                    "luras. Och du förlorar rätten till skydd som "
+                    "visselblåsare när du sagt upp dig."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Visselblåsarlagen (2021:890) skyddar dig från repressalier "
+            "när du i god tro rapporterar oegentligheter. Steg: "
+            "intern kanal → tillsynsmyndighet → media (sista utvägen). "
+            "Företag med 50+ anställda måste ha visselblåsar-funktion."
+        ),
+        "tags": ["ärlighet", "juridik", "ansvar"],
+        "difficulty": 5,
+    },
+    {
+        "code": "new_boss_001",
+        "scenario_md": (
+            "Du har fått ny chef. På första mötet vill hen göra "
+            "stora förändringar i hur ditt team jobbar. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Lyssnar nyfiket, ställer frågor, ger fakta om "
+                    "varför nuvarande sätt funkar — utan att bli "
+                    "defensiv."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bra första intryck: visar att du är samarbets-"
+                    "villig men har egna kunskaper att bidra med."
+                ),
+            },
+            {
+                "text": (
+                    "Säger 'såhär gör vi' och förklarar att förändringen "
+                    "inte behövs."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Defensiv start ger nya chefen intryck att teamet "
+                    "är förändringsobenäget. Hen kan börja byta ut folk."
+                ),
+            },
+            {
+                "text": (
+                    "Håller med om allt, även det du tycker är dåligt."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Slätt ja-säjeri är värdelöst för chefen — hen "
+                    "behöver veta vad som funkar och inte."
+                ),
+            },
+            {
+                "text": (
+                    "Bokar ett enskilt möte efter och delar långt skriftligt "
+                    "PM med dina synpunkter."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Mycket bra. Privat samtal + skriftlig argumentation "
+                    "ger chefen det hen behöver för att fatta ett klokt "
+                    "beslut."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Ny chef = osäkerhet på båda håll. Bästa strategin: visa "
+            "kompetens och samarbetsvilja samtidigt. Dela kunskap utan "
+            "att blockera."
+        ),
+        "tags": ["ledarskap", "kommunikation", "förändring"],
+        "difficulty": 3,
+    },
+    {
+        "code": "customer_overstep_001",
+        "scenario_md": (
+            "En kund kräver något utanför vad ni avtalat — och hotar "
+            "att gå någon annanstans om hen inte får det. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger 'jag kollar med min chef och återkommer' "
+                    "och eskalerar internt."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bra. Du fattar inte stora beslut själv på "
+                    "kundens hot. Köper tid + lägger ansvaret rätt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger ja för att inte tappa kunden — du löser "
+                    "det internt sen."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Du lovar något företaget kanske inte kan hålla. "
+                    "Slutar dåligt för alla."
+                ),
+            },
+            {
+                "text": (
+                    "Säger nej direkt och tackar för affären."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Förlorar kunden i onödan. Hot är ofta förhandling "
+                    "— eskalera, prata, hitta lösning."
+                ),
+            },
+            {
+                "text": (
+                    "Säger 'jag förstår — låt mig se vad vi kan göra "
+                    "inom avtalet, så återkommer jag senast i morgon'."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Klassisk kundhantering: validera känslan, klargör "
+                    "ramen, leverera tidssatt återkoppling."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Aldrig fatta stora beslut under kundhot. 'Jag återkommer' "
+            "är en magisk fras. Eskalera till chef, hitta lösning som "
+            "alla kan stå för."
+        ),
+        "tags": ["kund", "kommunikation", "gränser"],
+        "difficulty": 3,
+    },
+    {
+        "code": "quiet_colleague_001",
+        "scenario_md": (
+            "En kollega har blivit tystare på sista tiden — kommer "
+            "till möten men säger inget, gör jobbet men ler aldrig. "
+            "Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bjuder ut på en kort fikapaus och frågar 'jag har "
+                    "märkt det här — hur har du det?'"
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Att fråga utan att tränga sig på är guld. Många "
+                    "som mår dåligt bara behöver en allierad."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — det är inte din sak att lägga sig i."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "OK om ni inte är nära. Men passivitet kan göra att "
+                    "kollegan blir mer isolerad."
+                ),
+            },
+            {
+                "text": (
+                    "Skvallrar med andra: 'har du märkt hur konstig X "
+                    "blivit?'"
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att prata om någon som mår dåligt bakom hens rygg "
+                    "är direkt skadligt. Skvaller är giftigt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger till chefen att kollegan kanske mår dåligt."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "OK om du sett tydliga tecken på arbetsmiljö-"
+                    "problem. Bättre att först prata med kollegan själv."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Att se att en kollega inte mår bra är en gåva — om du "
+            "agerar omtänksamt. Mått av närhet + 'är allt OK?' kan vara "
+            "vad som behövs. Skyldighet finns: arbetsmiljölagen ser "
+            "även till psykisk hälsa."
+        ),
+        "tags": ["arbetsmiljö", "kollegial", "social"],
+        "difficulty": 2,
+    },
+    {
+        "code": "email_tone_customer_001",
+        "scenario_md": (
+            "Du ska skicka en faktura till en kund som är två månader "
+            "sen med betalning. Hur formulerar du mejlet?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Hej X, jag bifogar fakturan från oktober som ännu "
+                    "inte är betald. Hör av dig om något är oklart."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Sakligt + neutralt + öppnar för dialog. Funkar "
+                    "i 90 % av fallen — folk har ofta bara glömt."
+                ),
+            },
+            {
+                "text": (
+                    "DENNA FAKTURA ÄR FÖRSENAD! BETALA OMGÅENDE!"
+                ),
+                "delta": -5,
+                "explanation": (
+                    "Versaler + utropstecken förstör relationen. "
+                    "Och kunden kan klaga till din chef."
+                ),
+            },
+            {
+                "text": (
+                    "Hej, ber så mycket om ursäkt om jag stör — bara "
+                    "ifall du kanske har glömt fakturan från oktober?"
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Övertydlig artighet signalerar svaghet och osäkerhet. "
+                    "Sakligt > underdånigt."
+                ),
+            },
+            {
+                "text": (
+                    "Påminner via SMS istället eftersom det är "
+                    "snabbare."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Ofta mer påträngande än mejl. Skriftlig kanal "
+                    "ger spårbarhet — skriv mejl först."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Affärsmejl är saklig prosa — varken arg eller "
+            "underdånig. 'Hej, här är fakturan, hör av dig om något "
+            "är oklart' är en formel som funkar nästan alltid."
+        ),
+        "tags": ["kommunikation", "kund", "ton"],
+        "difficulty": 1,
+    },
 ]
 
 
