@@ -1315,6 +1315,298 @@ WORKPLACE_QUESTIONS: list[dict] = [
         "tags": ["omdöme", "tidshantering"],
         "difficulty": 1,
     },
+    {
+        "code": "angry_email_001",
+        "scenario_md": (
+            "En kund har skrivit ett otrevligt mejl klockan 22:30. Du "
+            "är arg. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Skriver inget i kväll. Sover på det och svarar "
+                    "lugnt nästa morgon."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "24-timmars-regeln: vrede + tangentbord = saker "
+                    "du ångrar. Att vänta är professionalism."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver tillbaka direkt och säger ifrån — kunden "
+                    "ska inte tro hen kan tala såhär."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Argt mejl kvällstid är klassiskt karriärsskott. "
+                    "Tonen kan bli fel och svaret hamnar i kundens "
+                    "skrivbordlåda för all framtid."
+                ),
+            },
+            {
+                "text": (
+                    "Vidarebefordrar mejlet till chefen utan kommentar."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "OK, men bättre att visa att du själv kan hantera. "
+                    "Skriv 'tar tag i det imorgon, ville du veta'."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver ett utkast i kväll men låter det ligga "
+                    "i utkast-mappen tills imorgon morgon."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Funkar — energi avladdad, men formulering granskas "
+                    "i klart huvud. Kom ihåg att läsa om innan skick."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Arga mejl bör aldrig skickas i affekt. Skriv utkast om du "
+            "måste för att lugna dig — men skicka först nästa morgon, "
+            "efter en granskning."
+        ),
+        "tags": ["kommunikation", "omdöme", "kund"],
+        "difficulty": 2,
+    },
+    {
+        "code": "boss_made_mistake_001",
+        "scenario_md": (
+            "Du upptäcker att din chef gjort ett räknefel som påverkar "
+            "ett kundförslag. Felet är inte upptäckt än. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger det enskilt till chefen så hen kan rätta "
+                    "själv: 'jag tror jag hittat ett fel, kan jag visa?'"
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Diskret + respektfullt. Chefen får rätta innan "
+                    "fel sprids vidare."
+                ),
+            },
+            {
+                "text": (
+                    "Påpekar felet på nästa team-möte inför alla."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Att korrigera chefen offentligt skadar deras "
+                    "auktoritet onödigt. Bättre privat först."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — chefen får ta konsekvenserna själv."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Du har sett felet — om det går till kund och "
+                    "kraschar är du också ansvarig. Att vara tyst är "
+                    "inte neutralt."
+                ),
+            },
+            {
+                "text": (
+                    "Rättar felet själv utan att säga något."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "OK om det är trivialt och chefen har bett dig "
+                    "kontrollera. Annars: säg till så hen ser sin "
+                    "egen blind spot."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Att hjälpa chefen rätta ett misstag är gränsen mellan "
+            "junior och senior. Diskret, respektfullt, lösningsfokus."
+        ),
+        "tags": ["feedback", "kommunikation", "ansvar"],
+        "difficulty": 3,
+    },
+    {
+        "code": "time_reporting_001",
+        "scenario_md": (
+            "Du jobbade 6 timmar idag men din kollega säger 'rapportera "
+            "8 — alla gör det när vi har slack'. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Rapporterar 6 timmar. Det är vad du jobbat."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Tidsrapporten är ett dokument. Felaktig rapportering "
+                    "är bedrägeri mot arbetsgivaren — på riktigt."
+                ),
+            },
+            {
+                "text": (
+                    "Rapporterar 8 — du har för avsikt att kompensera "
+                    "med extra tid nästa vecka."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Avsikt räknas inte. Rapporten är fel idag och "
+                    "stämmer inte med faktiskt arbete."
+                ),
+            },
+            {
+                "text": (
+                    "Pratar med chefen om kollegans förslag — du tycker "
+                    "det är fel."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Modigt och rätt om kulturen blivit dålig. Men "
+                    "fråga inte ut kollegan — adressera systemet."
+                ),
+            },
+            {
+                "text": (
+                    "Rapporterar 7 som kompromiss — varken sant eller "
+                    "lika fult som 8."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "En halv lögn är fortfarande en lögn. Tidsrapporter "
+                    "har juridisk vikt."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tidsrapporter är arbetsgivarens bokföringsunderlag. Falsk "
+            "rapportering kan leda till uppsägning av personliga skäl "
+            "och i värsta fall polisanmälan vid större belopp."
+        ),
+        "tags": ["ärlighet", "tidsrapportering"],
+        "difficulty": 2,
+    },
+    {
+        "code": "wfh_request_001",
+        "scenario_md": (
+            "Du behöver ta in ett paket nästa onsdag som bara levereras "
+            "klockan 13:00. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Frågar chefen i god tid om att jobba hemifrån "
+                    "onsdag — kort förklaring."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Förvarning ger chefen kontroll. Få chefer säger nej "
+                    "om det är en sällsynt händelse."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och stannar hemma onsdag — chefen "
+                    "märker inte ändå."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Olovlig hemifrån-arbete utan godkännande är "
+                    "olovlig frånvaro. Du bryter förtroende i smyg."
+                ),
+            },
+            {
+                "text": (
+                    "Tar en halvdag semester och planerar runt det."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Funkar — semester är din egen tid. Lite onödigt "
+                    "kanske om hemifrån-jobb är vanligt på företaget."
+                ),
+            },
+            {
+                "text": (
+                    "Ber en granne ta paketet."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Smart — ingen krockar med jobbet alls. Förutsätter "
+                    "att grannen vill."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Privata ärenden under arbetsdagar händer alla. Hantera dem "
+            "transparent: fråga, semestra, eller flytta tiden. "
+            "Smyga-bort är genvägen som kostar i längden."
+        ),
+        "tags": ["kommunikation", "tidshantering"],
+        "difficulty": 1,
+    },
+    {
+        "code": "new_colleague_001",
+        "scenario_md": (
+            "En ny person börjar i teamet idag. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tar initiativ att hälsa, visar runt på "
+                    "fikarummet och bjuder med på lunch."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Inkluderande beteende är guld. Den nya minns dig, "
+                    "och chefen ser att du bidrar till kulturen."
+                ),
+            },
+            {
+                "text": (
+                    "Nickar artigt men håller dig till ditt."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Inte negativt, men du missar en chans att bygga "
+                    "team. Senior-medarbetare aktivt välkomnar."
+                ),
+            },
+            {
+                "text": (
+                    "Ignorerar tills den nya kommer fram själv."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Att lägga ansvar på nya att 'krångla in sig' är "
+                    "kall kultur. Många slutar pga sånt."
+                ),
+            },
+            {
+                "text": (
+                    "Skämtar om svårighetsgraden i jobbet för att "
+                    "skrämma personen lite."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Klassisk hierarki-rit som inte hör hemma 2026. "
+                    "Skapar oönskad stress hos nya."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Första veckan formar känslan av en arbetsplats. Att aktivt "
+            "välkomna kostar 5 minuter och bygger lojalitet — både för "
+            "den nya och för dig som visat ledarskap."
+        ),
+        "tags": ["lojalitet", "ledarskap", "social"],
+        "difficulty": 1,
+    },
 ]
 
 
