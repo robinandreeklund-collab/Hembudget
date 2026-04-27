@@ -1243,6 +1243,117 @@ CREDIT_TEMPLATE = {
 }
 
 
+EMPLOYER_TEMPLATE = {
+    "title": "Arbete och avtal",
+    "summary": (
+        "Lär dig hur arbetslivet faktiskt fungerar: vad ett kollektivavtal "
+        "är, vad ditt yrke har för spelregler, hur tjänstepensionen "
+        "byggs upp och varför ditt agerande på jobbet följer dig "
+        "längre än du tror."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett kollektivavtal?",
+            "content": (
+                "Ett kollektivavtal är en överenskommelse mellan facket "
+                "och arbetsgivar-organisationen om dina villkor — lön, "
+                "övertid, semester, tjänstepension. Du är skyddad av "
+                "avtalet om din arbetsgivare har tecknat det.\n\n"
+                "Cirka 9 av 10 svenska arbetstagare omfattas av "
+                "kollektivavtal. På små företag utan avtal regleras "
+                "din lön bara av semesterlagen + sjuklönelagen — det "
+                "är minimum, inte maximum.\n\n"
+                "Öppna fliken **Kollektivavtal** under /arbetsgivare "
+                "för att se exakt vilket avtal som gäller dig och "
+                "vad det betyder för din lön och pension."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Slå upp ditt eget avtal",
+            "content": (
+                "Gå till /arbetsgivare → fliken **Kollektivavtal**. "
+                "Läs avtalet som matchar ditt yrke. Kolla särskilt "
+                "tjänstepensionssatsen — varje procent där blir "
+                "hundratusentals kronor över ett arbetsliv."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "open_employer_agreement",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Tjänstepension — den dolda lönen",
+            "content": (
+                "Tjänstepensionen är pengar din arbetsgivare betalar "
+                "in till din pension UTÖVER din månadslön. Du ser "
+                "den inte på lönespecen, men över 30–40 års jobb "
+                "blir den ofta lika stor som hela den allmänna "
+                "pensionen.\n\n"
+                "Vanliga system:\n"
+                "- **ITP1** (privat tjänsteman): 4,5 % av brutto under "
+                "  7,5 IBB, 30 % över\n"
+                "- **AKAP-KR / KAP-KL** (kommun/region): 6 % under, "
+                "  31,5 % över\n"
+                "- **SAF-LO** (LO-anslutna): 4,5 % under, 30 % över\n\n"
+                "Småföretag utan avtal? **Ingen tjänstepension**. "
+                "Då måste du spara själv (ISK eller kapitalförsäkring) "
+                "för att kompensera."
+            ),
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad gör du när din kollega ber dig täcka för henom?",
+            "content": (
+                "Tänk dig att en kollega ber dig täcka för henom under "
+                "ett pass — utan att hen sjukanmäler sig. Vad svarar "
+                "du? Skriv 3–5 meningar om hur du resonerar och varför."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Svara på 3 frågor från arbetsgivaren",
+            "content": (
+                "Gå till /arbetsgivare → fliken **Frågor**. Svara på "
+                "3 frågor från din arbetsgivare. Varje svar påverkar "
+                "din satisfaction-score. Tänk över alternativen — "
+                "det 'rätta' valet är inte alltid det snabbaste."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "answer_workplace_questions",
+                "target_count": 3,
+            },
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad sa avtalet?",
+            "content": "Vilket av följande gäller för ditt avtal?",
+            "params": {
+                "question": (
+                    "Hur många semesterdagar har du grundläggande "
+                    "rätt till enligt semesterlagen?"
+                ),
+                "options": [
+                    "20 dagar",
+                    "25 dagar",
+                    "28 dagar",
+                    "30 dagar",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Semesterlagen ger 25 dagar som minimum — alla "
+                    "kollektivavtal i Sverige följer minst detta. "
+                    "Många avtal ger mer från 40 års ålder."
+                ),
+            },
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -1266,6 +1377,7 @@ def seed_system_modules(master_session) -> int:
         SYSTEM_TOUR_TEMPLATE,
         STOCKS_TEMPLATE,
         CREDIT_TEMPLATE,
+        EMPLOYER_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue
