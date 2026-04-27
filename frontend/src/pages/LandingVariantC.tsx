@@ -206,6 +206,7 @@ export default function LandingVariantC() {
       <WellbeingSection theme={THEME} />
       <AccountingSection theme={THEME} />
       <ThreeModesSection theme={THEME} />
+      <StocksSection theme={THEME} />
       <Moments />
       <Logic />
       <Problem />
@@ -3425,6 +3426,779 @@ function ThreeModesSection({ theme }: { theme: Theme }) {
             </button>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- StocksSection (v5) — Nasdaq + loss-aversion + månadsrapport ----------
+
+function StocksSection({ theme }: { theme: Theme }) {
+  const [selectedStock, setSelectedStock] = useState(0);
+  const [scenario, setScenario] = useState<"loss" | "gain">("loss");
+
+  const stocks = [
+    { ticker: "VOLV-B", name: "Volvo B", price: 312.4, change: -2.1, color: "#dc4c2b" },
+    { ticker: "ERIC-B", name: "Ericsson B", price: 78.65, change: 1.8, color: "#10b981" },
+    { ticker: "HM-B", name: "H&M B", price: 178.2, change: -0.6, color: "#dc4c2b" },
+    { ticker: "INVE-B", name: "Investor B", price: 285.0, change: 0.4, color: "#10b981" },
+    { ticker: "SEB-A", name: "SEB A", price: 162.85, change: -1.2, color: "#dc4c2b" },
+  ];
+  const cur = stocks[selectedStock];
+  const tradeAmount = 10;
+  const tradeValue = cur.price * tradeAmount;
+  const courtage = Math.max(1, tradeValue * 0.0025);
+  const total = tradeValue + courtage;
+
+  const portfolioValue = 24500;
+  const change24h = scenario === "loss" ? -3.2 : 3.2;
+  const moveKr = portfolioValue * (change24h / 100);
+  const trygghetImpact =
+    scenario === "loss"
+      ? Math.round((moveKr / portfolioValue) * 100 * 2.0 * 0.6)
+      : Math.round((moveKr / portfolioValue) * 100 * 1.0 * 0.6);
+  const baseTrygghet = 62;
+  const newTrygghet = Math.max(0, Math.min(100, baseTrygghet + trygghetImpact));
+
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#fafaf9",
+      }}
+    >
+      <SectionHeader
+        cell={{ sym: "Ak", n: "04", label: "Aktier" }}
+        eyebrow="Aktiesimulatorn"
+        theme={theme}
+      >
+        Riktiga aktier, simulerade pengar —{" "}
+        <em style={{ color: theme.accent, fontStyle: "italic" }}>
+          känslan är på riktigt.
+        </em>
+      </SectionHeader>
+      <p
+        style={{
+          maxWidth: 720,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#475569",
+        }}
+      >
+        Eleven öppnar ett ISK, väljer från 30 svenska large-caps (Volvo,
+        Ericsson, H&M, SEB, Investor…), handlar mot riktiga kurser med ~15 min
+        försening. Avanza Mini-courtage. Marknaden stänger 17:30. Och — det
+        här är poängen — varje köp och sälj påverkar Wellbeing. Inte i ett
+        separat spel. I samma huvudbok som lönen, hyran och bufferten.
+      </p>
+
+      {/* Trading view + portfölj */}
+      <div
+        style={{
+          background: "#fff",
+          border: `1px solid ${theme.rule}`,
+          borderRadius: 14,
+          overflow: "hidden",
+          marginBottom: 28,
+        }}
+      >
+        <div
+          style={{
+            padding: "14px 20px",
+            borderBottom: `1px solid ${theme.rule}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "#fafaf9",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+                letterSpacing: 1,
+                color: "#475569",
+                textTransform: "uppercase",
+              }}
+            >
+              NASDAQ STOCKHOLM
+            </div>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                color: "#10b981",
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "#10b981",
+                  boxShadow: "0 0 0 3px rgba(16,185,129,0.18)",
+                }}
+              />
+              ÖPPEN · STÄNGER 17:30
+            </span>
+          </div>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 10.5,
+              color: "#94a3b8",
+              letterSpacing: 0.5,
+            }}
+          >
+            FÖRSENING ~15 MIN · KÄLLA: yfinance
+          </div>
+        </div>
+
+        <div
+          className="vc-stocks-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 1fr",
+            minHeight: 360,
+          }}
+        >
+          <style>{`
+            @media (max-width: 768px) {
+              .vc-stocks-grid { grid-template-columns: 1fr !important; }
+              .vc-stocks-list { border-right: 0 !important; border-bottom: 1px solid #e2e8f0 !important; }
+              .vc-stocks-loss-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
+              .vc-stocks-mreport-grid { grid-template-columns: 1fr !important; }
+              .vc-stocks-laq-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
+            }
+          `}</style>
+          <div
+            className="vc-stocks-list"
+            style={{ borderRight: `1px solid ${theme.rule}`, padding: "16px 0" }}
+          >
+            {stocks.map((s, i) => (
+              <button
+                key={s.ticker}
+                type="button"
+                onClick={() => setSelectedStock(i)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  padding: "12px 22px",
+                  cursor: "pointer",
+                  background: selectedStock === i ? "#fef3c7" : "transparent",
+                  border: "none",
+                  borderLeft:
+                    selectedStock === i
+                      ? `3px solid ${theme.accent}`
+                      : "3px solid transparent",
+                  fontFamily: "inherit",
+                  textAlign: "left",
+                  transition: "all .12s",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 7,
+                      background: "#0f172a",
+                      color: "#fef3c7",
+                      display: "grid",
+                      placeItems: "center",
+                      fontFamily: "ui-monospace, monospace",
+                      fontWeight: 700,
+                      fontSize: 11,
+                    }}
+                  >
+                    {s.ticker.split("-")[0].slice(0, 2)}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
+                      {s.name}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: "#64748b",
+                        fontFamily: "ui-monospace, monospace",
+                      }}
+                    >
+                      {s.ticker}.ST
+                    </div>
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div
+                    style={{
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      fontFamily: "ui-monospace, monospace",
+                    }}
+                  >
+                    {s.price.toFixed(2)} kr
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11.5,
+                      color: s.color,
+                      fontFamily: "ui-monospace, monospace",
+                    }}
+                  >
+                    {s.change > 0 ? "▲" : "▼"} {Math.abs(s.change).toFixed(1)} %
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ padding: 26, background: "#fafaf9" }}>
+            <div className={theme.eyebrow} style={{ marginBottom: 8 }}>
+              Köp · Marknadsorder
+            </div>
+            <h3
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                margin: "0 0 6px",
+              }}
+            >
+              {cur.name}
+            </h3>
+            <div
+              style={{
+                fontSize: 26,
+                fontFamily: "ui-monospace, monospace",
+                fontWeight: 700,
+                color: "#0f172a",
+                marginBottom: 4,
+              }}
+            >
+              {cur.price.toFixed(2)}{" "}
+              <span style={{ fontSize: 14, color: "#64748b" }}>kr</span>
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                color: cur.color,
+                fontFamily: "ui-monospace, monospace",
+                marginBottom: 22,
+              }}
+            >
+              {cur.change > 0 ? "▲" : "▼"} {Math.abs(cur.change).toFixed(1)} %
+              senaste timmen
+            </div>
+
+            <div
+              style={{
+                background: "#fff",
+                border: `1px solid ${theme.rule}`,
+                borderRadius: 8,
+                padding: 16,
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 13,
+                lineHeight: 1.9,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
+                <span>Antal</span>
+                <strong style={{ color: "#0f172a" }}>{tradeAmount} st</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
+                <span>Affärsbelopp</span>
+                <strong style={{ color: "#0f172a" }}>{tradeValue.toFixed(2)} kr</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "#475569" }}>
+                <span>Courtage (Mini · 0,25 %)</span>
+                <strong style={{ color: "#0f172a" }}>{courtage.toFixed(2)} kr</strong>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: 8,
+                  paddingTop: 8,
+                  borderTop: `1px solid ${theme.rule}`,
+                  color: "#0f172a",
+                }}
+              >
+                <span>Totalt</span>
+                <strong style={{ color: theme.accent }}>{total.toFixed(2)} kr</strong>
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 14,
+                padding: "10px 14px",
+                background: "#fef3c7",
+                border: "1px solid rgba(120,53,15,.2)",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "#78350f",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>Innan eleven klickar:</strong> hen skriver en kort
+              motivering. "Q4-rapporten såg bra ut." Den sparas i ledgern —
+              läraren kan fråga om den senare.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Loss aversion */}
+      <div
+        style={{
+          background: "#0f172a",
+          color: "#fff",
+          borderRadius: 14,
+          padding: "32px 36px",
+          marginBottom: 28,
+        }}
+      >
+        <div
+          className="vc-stocks-loss-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 48,
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+                letterSpacing: 1.2,
+                color: "#fbbf24",
+                textTransform: "uppercase",
+                marginBottom: 12,
+              }}
+            >
+              Loss aversion · Kahneman/Tversky
+            </div>
+            <h3
+              style={{
+                fontSize: 26,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                lineHeight: 1.25,
+                margin: "0 0 14px",
+                fontFamily: theme.serifFont,
+              }}
+            >
+              En förlust på 1 % gör{" "}
+              <em style={{ color: "#fbbf24" }}>dubbelt så ont</em> som en vinst
+              på 1 % känns bra.
+            </h3>
+            <p
+              style={{
+                fontSize: 14.5,
+                lineHeight: 1.6,
+                color: "#cbd5e1",
+                margin: "0 0 18px",
+              }}
+            >
+              Wellbeing-Trygghet räknar in portföljens 24h-rörelse med λ ≈ 2.0.
+              Om eleven inte känner smärtan av en förlust — i siffror, på sin
+              egen mätare — kan hen aldrig lära sig att skilja känsloreaktion
+              från klokt beslut.
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setScenario("loss")}
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  background: scenario === "loss" ? "#dc4c2b" : "transparent",
+                  border:
+                    scenario === "loss"
+                      ? "1px solid #dc4c2b"
+                      : "1px solid rgba(255,255,255,0.2)",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  fontFamily: "inherit",
+                }}
+              >
+                Portföljen ner 3,2 %
+              </button>
+              <button
+                type="button"
+                onClick={() => setScenario("gain")}
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  background: scenario === "gain" ? "#10b981" : "transparent",
+                  border:
+                    scenario === "gain"
+                      ? "1px solid #10b981"
+                      : "1px solid rgba(255,255,255,0.2)",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  fontFamily: "inherit",
+                }}
+              >
+                Portföljen upp 3,2 %
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 12,
+              padding: 24,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 10.5,
+                letterSpacing: 1,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                marginBottom: 14,
+              }}
+            >
+              Wellbeing · Trygghet
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 12,
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 56,
+                  fontWeight: 700,
+                  letterSpacing: -1.5,
+                  color: scenario === "loss" ? "#dc4c2b" : "#10b981",
+                  transition: "color .3s",
+                  fontFamily: "ui-monospace, monospace",
+                }}
+              >
+                {newTrygghet}
+              </span>
+              <span
+                style={{
+                  fontSize: 18,
+                  color: "#64748b",
+                  fontFamily: "ui-monospace, monospace",
+                }}
+              >
+                / 100
+              </span>
+              <span
+                style={{
+                  fontSize: 13,
+                  marginLeft: "auto",
+                  color: scenario === "loss" ? "#dc4c2b" : "#10b981",
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 600,
+                }}
+              >
+                {trygghetImpact > 0 ? "+" : ""}
+                {trygghetImpact}
+              </span>
+            </div>
+            <div
+              style={{
+                height: 6,
+                background: "rgba(255,255,255,0.08)",
+                borderRadius: 3,
+                overflow: "hidden",
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  width: `${newTrygghet}%`,
+                  height: "100%",
+                  background: scenario === "loss" ? "#dc4c2b" : "#10b981",
+                  transition: "all .4s cubic-bezier(.2,.7,.3,1)",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "#cbd5e1",
+                fontFamily: theme.serifFont,
+                fontStyle: "italic",
+              }}
+            >
+              {scenario === "loss"
+                ? '"AAPL och Volvo B drog ner portföljen med 784 kr. Det kostade dig 4 Trygghet-poäng — dubbelt så mycket som en lika stor vinst hade gett."'
+                : '"Portföljen upp 784 kr. Trygghet steg 2 poäng. En lika stor förlust hade kostat 4 — det är loss aversion i en mätare."'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Månadsrapport — Aktie-eftertanke */}
+      <div
+        style={{
+          background: "#fff",
+          border: `1px solid ${theme.rule}`,
+          borderRadius: 14,
+          padding: "32px 36px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            marginBottom: 24,
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
+          <div>
+            <div className={theme.eyebrow} style={{ marginBottom: 8 }}>
+              Månadsrapport · Aktie-eftertanke
+            </div>
+            <h3
+              style={{
+                fontSize: 24,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                lineHeight: 1.25,
+                margin: 0,
+                maxWidth: 540,
+              }}
+            >
+              60 dagar senare — den brutala spegeln som{" "}
+              <em style={{ color: theme.accent, fontStyle: "italic" }}>
+                driver lärande.
+              </em>
+            </h3>
+          </div>
+          <span
+            style={{
+              padding: "6px 12px",
+              background: "#fef3c7",
+              border: "1px solid rgba(120,53,15,.2)",
+              borderRadius: 100,
+              fontSize: 11,
+              fontFamily: "ui-monospace, monospace",
+              color: "#78350f",
+              letterSpacing: 0.5,
+            }}
+          >
+            OKTOBER 2026
+          </span>
+        </div>
+
+        <div
+          className="vc-stocks-mreport-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 14,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              background: "rgba(16,185,129,0.06)",
+              border: "1px solid rgba(16,185,129,0.25)",
+              borderRadius: 10,
+              padding: 20,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 10.5,
+                letterSpacing: 1,
+                color: "#10b981",
+                textTransform: "uppercase",
+                marginBottom: 8,
+                fontWeight: 600,
+              }}
+            >
+              ● Bästa beslut
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: "#0f172a" }}>
+              Sålde Investor B på topp
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "#475569",
+                fontFamily: "ui-monospace, monospace",
+                marginBottom: 12,
+              }}
+            >
+              5 st @ 285,00 kr · realiserat{" "}
+              <strong style={{ color: "#10b981" }}>+ 412 kr</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: "#065f46",
+                fontStyle: "italic",
+                fontFamily: theme.serifFont,
+              }}
+            >
+              "Idag står den i 268 kr. Om du väntat hade du förlorat 85 kr. Bra
+              läsning av rapporten."
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "rgba(220,76,43,0.06)",
+              border: "1px solid rgba(220,76,43,0.25)",
+              borderRadius: 10,
+              padding: 20,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 10.5,
+                letterSpacing: 1,
+                color: "#dc4c2b",
+                textTransform: "uppercase",
+                marginBottom: 8,
+                fontWeight: 600,
+              }}
+            >
+              ● Sämsta beslut
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: "#0f172a" }}>
+              Sålde Volvo B i panik
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "#475569",
+                fontFamily: "ui-monospace, monospace",
+                marginBottom: 12,
+              }}
+            >
+              10 st @ 267,00 kr · realiserat{" "}
+              <strong style={{ color: "#dc4c2b" }}>− 148 kr</strong>
+            </div>
+            <div
+              style={{
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: "#7f1d1d",
+                fontStyle: "italic",
+                fontFamily: theme.serifFont,
+              }}
+            >
+              "Idag står den i 312 kr. Om du väntat hade du haft + 450 kr. Din
+              förlust var marknaden — eller var det?"
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="vc-stocks-laq-grid"
+          style={{
+            background: "#0f172a",
+            color: "#fff",
+            borderRadius: 10,
+            padding: "22px 26px",
+            display: "grid",
+            gridTemplateColumns: "auto 1fr auto",
+            gap: 28,
+            alignItems: "center",
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              background: "rgba(251,191,36,0.12)",
+              border: "2px solid #fbbf24",
+              display: "grid",
+              placeItems: "center",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 24,
+              fontWeight: 700,
+              color: "#fbbf24",
+            }}
+          >
+            1.8×
+          </div>
+          <div>
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 10.5,
+                letterSpacing: 1,
+                color: "#fbbf24",
+                textTransform: "uppercase",
+                marginBottom: 4,
+              }}
+            >
+              Din loss-aversion-quotient
+            </div>
+            <div style={{ fontSize: 15, lineHeight: 1.55, color: "#e2e8f0" }}>
+              Du säljer 1,8× oftare i förlust än i vinst. Du säljer för snabbt
+              när det går ner, för långsamt när det går upp. Klassiskt
+              nybörjarmönster — och fixbart.
+            </div>
+          </div>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+              color: "#94a3b8",
+              letterSpacing: 0.5,
+              textAlign: "right",
+            }}
+          >
+            4 sälj i förlust
+            <br />2 sälj i vinst
+          </div>
+        </div>
+
+        <p
+          style={{
+            marginTop: 22,
+            fontSize: 13.5,
+            lineHeight: 1.6,
+            color: "#475569",
+            fontStyle: "italic",
+            maxWidth: 720,
+          }}
+        >
+          Inget facit. Bara en spegel som visar mönstren — så att eleven nästa
+          månad kan se om hen rör sig mot kvoten 1.0, eller djupare in i
+          mönstret. Det är livslära, inte räknelära.
+        </p>
       </div>
     </section>
   );
