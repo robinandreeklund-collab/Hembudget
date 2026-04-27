@@ -15,7 +15,7 @@
  * Reduced-motion: hela tidslinjen ersätts av en enkel vertikal kort-
  * lista där varje kapitel visas statiskt.
  */
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import gsap from "gsap";
 import { QRCodeSVG } from "qrcode.react";
@@ -2635,7 +2635,421 @@ function PlaceholderZone() {
   );
 }
 
-// ─── Slide-data för deep dive (data-driven så det är lätt att utöka) ───
+// ─── Slide 3: Aktier & loss aversion ───────────────────────────
+function StocksSlideVisual() {
+  const stocks = [
+    { ticker: "VOLV-B", price: 312.4, change: -2.1 },
+    { ticker: "ERIC-B", price: 78.65, change: 1.8 },
+    { ticker: "INVE-B", price: 285.0, change: 0.4 },
+    { ticker: "SEB-A", price: 162.85, change: -1.2 },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Tickerlist */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 18,
+        }}
+      >
+        <div className="ssd-mono" style={{ fontSize: 10.5, color: "#fbbf24", letterSpacing: 1.4, marginBottom: 10 }}>
+          ● NASDAQ STOCKHOLM · ÖPPEN
+        </div>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {stocks.map((s) => (
+            <li
+              key={s.ticker}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "6px 10px",
+                background: "rgba(0,0,0,0.25)",
+                borderRadius: 6,
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 13,
+                color: "#e2e8f0",
+              }}
+            >
+              <span>{s.ticker}</span>
+              <span style={{ display: "flex", gap: 12 }}>
+                <strong style={{ color: "#fff" }}>{s.price.toFixed(2)}</strong>
+                <span style={{ color: s.change > 0 ? "#10b981" : "#dc4c2b", minWidth: 56, textAlign: "right" }}>
+                  {s.change > 0 ? "▲" : "▼"} {Math.abs(s.change).toFixed(1)} %
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Stock chart med röd dip */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 18,
+        }}
+      >
+        <div className="ssd-mono" style={{ fontSize: 10.5, color: "#94a3b8", letterSpacing: 1.4, marginBottom: 10 }}>
+          PORTFÖLJ · 24h
+        </div>
+        <svg viewBox="0 0 320 80" style={{ width: "100%", display: "block" }}>
+          <polyline
+            points="0,42 32,38 64,40 96,30 128,25 160,28 192,42 224,58 256,68 288,64 320,60"
+            fill="none"
+            stroke="#dc4c2b"
+            strokeWidth="2.4"
+          />
+          <polyline
+            points="0,42 32,38 64,40 96,30 128,25 160,28 192,42 224,58 256,68 288,64 320,60 320,80 0,80"
+            fill="rgba(220,76,43,0.12)"
+            stroke="none"
+          />
+        </svg>
+        <div style={{ fontSize: 11, color: "#dc4c2b", fontFamily: "ui-monospace, monospace", marginTop: 6 }}>
+          ▼ 3,2 % · −784 kr realiserat
+        </div>
+      </div>
+
+      {/* Loss aversion comparison */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(220,76,43,0.06)",
+          border: "1px solid rgba(220,76,43,0.25)",
+          borderRadius: 12,
+          padding: 18,
+        }}
+      >
+        <div className="ssd-mono" style={{ fontSize: 10.5, color: "#dc4c2b", letterSpacing: 1.4, marginBottom: 10 }}>
+          LOSS AVERSION · λ ≈ 2,0
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "ui-monospace, monospace", marginBottom: 4 }}>
+              VINST +3,2 %
+            </div>
+            <div style={{ height: 14, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
+              <div style={{ height: "100%", width: "32%", background: "#10b981" }} />
+            </div>
+            <div style={{ fontSize: 11, color: "#10b981", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>
+              Trygghet +2
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "ui-monospace, monospace", marginBottom: 4 }}>
+              FÖRLUST −3,2 %
+            </div>
+            <div style={{ height: 14, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
+              <div style={{ height: "100%", width: "64%", background: "#dc4c2b" }} />
+            </div>
+            <div style={{ fontSize: 11, color: "#dc4c2b", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>
+              Trygghet −4 (2× hårdare)
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Slide 4: Arbetsgivar-relationen ──────────────────────────
+function EmployerSlideVisual() {
+  const events = [
+    { ts: "Idag · 14:32", text: "Bra svar på passerkort-fråga", delta: "+4", tone: "good" as const },
+    { ts: "I går", text: "Sjukanmälan dag 1", delta: "0", tone: "neutral" as const },
+    { ts: "fre 15 jan", text: "VAB 1 dag", delta: "0", tone: "neutral" as const },
+    { ts: "tis 12 jan", text: "Initiativ på arbetsplatsmöte", delta: "+2", tone: "good" as const },
+  ];
+  const toneColor = { good: "#10b981", bad: "#dc4c2b", neutral: "#64748b" };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Satisfaction radial + sparkline */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 20,
+          display: "grid",
+          gridTemplateColumns: "auto 1fr",
+          gap: 20,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ position: "relative", width: 130, height: 130 }}>
+          <svg viewBox="0 0 130 130">
+            <circle cx="65" cy="65" r="55" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="11" />
+            <circle
+              cx="65"
+              cy="65"
+              r="55"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="11"
+              strokeDasharray={`${(72 / 100) * 345.5} 345.5`}
+              strokeLinecap="round"
+              transform="rotate(-90 65 65)"
+            />
+          </svg>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              flexDirection: "column",
+              fontFamily: "ui-monospace, monospace",
+            }}
+          >
+            <div style={{ fontSize: 32, fontWeight: 700, color: "#fff", lineHeight: 1 }}>72</div>
+            <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: 1, marginTop: 2 }}>SATISF.</div>
+          </div>
+        </div>
+        <div>
+          <div className="ssd-mono" style={{ fontSize: 10.5, color: "#fbbf24", letterSpacing: 1.4, marginBottom: 8 }}>
+            ● STIGER
+          </div>
+          <svg viewBox="0 0 220 60" style={{ width: "100%", height: 60 }}>
+            <polyline
+              points="0,38 22,42 44,40 66,46 88,44 110,38 132,32 154,30 176,28 198,24 220,22"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2"
+            />
+            <circle cx="220" cy="22" r="3" fill="#10b981" />
+          </svg>
+          <div style={{ fontSize: 11, color: "#10b981", fontFamily: "ui-monospace, monospace", marginTop: 6 }}>
+            62 → 72 över 30d
+          </div>
+        </div>
+      </div>
+
+      {/* Eventlogg */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 18,
+        }}
+      >
+        <div className="ssd-mono" style={{ fontSize: 10.5, color: "#fbbf24", letterSpacing: 1.4, marginBottom: 10 }}>
+          EVENTLOGG · 4 SENASTE
+        </div>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+          {events.map((e, i) => (
+            <li
+              key={i}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto",
+                gap: 10,
+                alignItems: "center",
+                padding: "6px 0",
+                borderBottom: i < events.length - 1 ? "1px dashed rgba(255,255,255,0.08)" : "none",
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 12,
+              }}
+            >
+              <span style={{ color: "#94a3b8", minWidth: 92 }}>{e.ts}</span>
+              <span style={{ color: "#e2e8f0" }}>{e.text}</span>
+              <span style={{ color: toneColor[e.tone], fontWeight: 600 }}>{e.delta}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* 17 yrken-grid */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 16,
+        }}
+      >
+        <div className="ssd-mono" style={{ fontSize: 10.5, color: "#94a3b8", letterSpacing: 1.4, marginBottom: 10 }}>
+          17 YRKEN · KOLLEKTIVAVTAL
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(9, 1fr)", gap: 4 }}>
+          {["Us","Lf","It","Sj","Sn","Fr","Bm","Bu","El","Ea","Pl","Ma","Sä","Ko","Bk","Ba","Fö"].map((sym, i) => {
+            const active = sym === "It";
+            return (
+              <div
+                key={i}
+                style={{
+                  aspectRatio: "1 / 1",
+                  background: active ? "#fbbf24" : "rgba(255,255,255,0.05)",
+                  color: active ? "#0f172a" : "#cbd5e1",
+                  borderRadius: 5,
+                  display: "grid",
+                  placeItems: "center",
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 700,
+                  fontSize: 11,
+                  border: active ? "1px solid #fbbf24" : "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                {sym}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Slide 5: Lärarens vy ─────────────────────────────────────
+function TeacherSlideVisual() {
+  // Mastery värmekarta — 6 elever × 8 kompetenser
+  const heatmap = Array.from({ length: 6 }, (_, r) =>
+    Array.from({ length: 8 }, (_, c) => {
+      // Pseudo-deterministisk fill 30-95
+      const v = ((r * 7 + c * 11) % 65) + 30;
+      return v;
+    }),
+  );
+  const colorFor = (v: number) =>
+    v >= 80 ? "#10b981" : v >= 60 ? "#fbbf24" : v >= 40 ? "#f59e0b" : "#dc4c2b";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Mastery värmekarta */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 18,
+        }}
+      >
+        <div className="ssd-mono" style={{ fontSize: 10.5, color: "#fbbf24", letterSpacing: 1.4, marginBottom: 12 }}>
+          MASTERY · KLASS 9C
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "auto repeat(8, 1fr)",
+            gap: 4,
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 10,
+            color: "#94a3b8",
+          }}
+        >
+          <div />
+          {["Lö","Sk","Bu","Ku","Ka","Sp","Hu","AI"].map((s) => (
+            <div key={s} style={{ textAlign: "center", padding: 2 }}>{s}</div>
+          ))}
+          {heatmap.map((row, r) => (
+            <React.Fragment key={r}>
+              <div style={{ paddingRight: 8, color: "#cbd5e1" }}>E{r + 1}</div>
+              {row.map((v, c) => (
+                <div
+                  key={c}
+                  style={{
+                    aspectRatio: "1 / 1",
+                    background: colorFor(v),
+                    borderRadius: 3,
+                    opacity: 0.85,
+                  }}
+                  title={`${v}%`}
+                />
+              ))}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Time-on-task + decision-log + flag */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 12,
+          padding: 18,
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 16,
+        }}
+      >
+        <div>
+          <div className="ssd-mono" style={{ fontSize: 10.5, color: "#94a3b8", letterSpacing: 1.4, marginBottom: 8 }}>
+            TIME ON TASK
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "ui-monospace, monospace", lineHeight: 1 }}>
+            22 m 41 s
+          </div>
+          <div style={{ fontSize: 11, color: "#10b981", fontFamily: "ui-monospace, monospace", marginTop: 6 }}>
+            ↗ 18 % över medel
+          </div>
+        </div>
+        <div>
+          <div className="ssd-mono" style={{ fontSize: 10.5, color: "#94a3b8", letterSpacing: 1.4, marginBottom: 8 }}>
+            BESLUT LOGGADE
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "ui-monospace, monospace", lineHeight: 1 }}>
+            9
+          </div>
+          <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "ui-monospace, monospace", marginTop: 6 }}>
+            Ekonomi · sociala · trygghet
+          </div>
+        </div>
+      </div>
+
+      {/* Flag */}
+      <div
+        data-anim
+        style={{
+          background: "rgba(220,76,43,0.06)",
+          border: "1px solid rgba(220,76,43,0.25)",
+          borderRadius: 12,
+          padding: "14px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: "rgba(220,76,43,0.12)",
+            border: "1px solid rgba(220,76,43,0.3)",
+            display: "grid",
+            placeItems: "center",
+            color: "#dc4c2b",
+            fontSize: 18,
+          }}
+        >
+          ⚑
+        </div>
+        <div>
+          <div className="ssd-mono" style={{ fontSize: 10.5, color: "#dc4c2b", letterSpacing: 1.4, marginBottom: 2 }}>
+            UPPMÄRKSAMHET
+          </div>
+          <div style={{ fontSize: 13.5, color: "#fee2e2", lineHeight: 1.4 }}>
+            Linda valde privatlån (lugnt). Notera Wellbeing-trenden — boka uppföljning?
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Slide-data för deep dive (data-driven, lätt att utöka) ───
 const DEEP_DIVE_SLIDES: DeepDiveSlideData[] = [
   {
     id: "salary",
@@ -2652,6 +3066,30 @@ const DEEP_DIVE_SLIDES: DeepDiveSlideData[] = [
     body:
       "EkonomilabbetID: QR på desktop, PIN på mobil. Saldokontroll vid signering. EkonomiSkalan rör sig med vanorna. Pengarna flyttas i banken — bokföringen tar emot.",
     Visual: BankSlideVisual,
+  },
+  {
+    id: "stocks",
+    eyebrow: "Del 03 · /investments",
+    title: "Aktier — och en mätare som känner",
+    body:
+      "30 svenska large-caps mot riktiga kurser. Avanza Mini-courtage. Och Wellbeing-Trygghet räknar in 24h-rörelsen med λ ≈ 2,0 — en förlust gör dubbelt så ont som motsvarande vinst, exakt som Kahneman beskrev.",
+    Visual: StocksSlideVisual,
+  },
+  {
+    id: "employer",
+    eyebrow: "Del 04 · /arbetsgivare",
+    title: "Arbetslivet är inte ett vakuum",
+    body:
+      "17 yrken med riktiga kollektivavtal. Slumpade arbetsplats-frågor (max 1 per dygn) flyttar nöjdhetsfaktorn 0–100. Sjukanmälan dag 8+ utan intyg, för sen ankomst, bra svar — chefen ser allt.",
+    Visual: EmployerSlideVisual,
+  },
+  {
+    id: "teacher",
+    eyebrow: "Del 05 · /teacher",
+    title: "Lärarens vy: hela klassen i en bild",
+    body:
+      "Mastery-värmekarta över alla elever × alla kompetenser. Time-on-task. Beslutslogg. Röd flagga vid kritiska val (SMS-lån, kronofogden, isolering). Inte ett separat verktyg — i samma vy som klassen.",
+    Visual: TeacherSlideVisual,
   },
 ];
 
