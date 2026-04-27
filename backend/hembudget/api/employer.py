@@ -26,6 +26,8 @@ from ..school.employer_models import (
     EmployerSatisfaction,
     EmployerSatisfactionEvent,
     ProfessionAgreement,
+    WorkplaceQuestion,
+    WorkplaceQuestionAnswer,
 )
 from ..school.models import Student, StudentProfile
 from .deps import TokenInfo, require_token
@@ -327,4 +329,183 @@ def list_events(
                 for r in rows
             ],
             total=total,
+        )
+
+
+# ---------- Workplace-frågor ----------
+
+class QuestionOptionOut(BaseModel):
+    """Skickas till eleven UTAN delta + explanation — skulle annars
+    avslöja vad som är 'rätt' svar innan eleven valt.
+    """
+    index: int
+    text: str
+
+
+class QuestionOut(BaseModel):
+    id: int
+    code: str
+    scenario_md: str
+    options: list[QuestionOptionOut]
+    difficulty: int
+    tags: Optional[list] = None
+
+
+class QuestionAnswerIn(BaseModel):
+    question_id: int
+    chosen_index: int
+
+
+class QuestionAnswerOut(BaseModel):
+    delta_applied: int
+    chosen_explanation: str
+    correct_path_md: str
+    new_score: int
+    new_trend: str
+
+
+def _pick_next_question(
+    s: Session, student_id: int,
+) -> Optional[WorkplaceQuestion]:
+    """Plocka en obesvarad fråga åt eleven.
+
+    Strategi: lägsta `difficulty` först bland obesvarade, deterministiskt
+    sortera på id efter det så samma elev får samma ordning vid samma
+    DB-state. Detta gör testning förutsägbar.
+    """
+    answered_ids = {
+        a.question_id for a in (
+            s.query(WorkplaceQuestionAnswer.question_id)
+            .filter(WorkplaceQuestionAnswer.student_id == student_id)
+            .all()
+        )
+    }
+    q = s.query(WorkplaceQuestion)
+    if answered_ids:
+        q = q.filter(~WorkplaceQuestion.id.in_(answered_ids))
+    return (
+        q.order_by(
+            WorkplaceQuestion.difficulty.asc(),
+            WorkplaceQuestion.id.asc(),
+        )
+        .first()
+    )
+
+
+@router.get("/questions/next", response_model=Optional[QuestionOut])
+def next_question(
+    info: TokenInfo = Depends(require_token),
+) -> Optional[QuestionOut]:
+    """Returnera nästa obesvarade arbetsplats-fråga för aktuell elev.
+
+    Returnerar null om alla frågor besvarats — UI:n visar då 'inga
+    fler frågor just nu'. Pedagogiskt: vi avslöjar inte deltas eller
+    explanations innan eleven valt.
+    """
+    _require_school()
+    student_id = _resolve_student_id(info)
+
+    with master_session() as s:
+        q = _pick_next_question(s, student_id)
+        if q is None:
+            return None
+        opts_raw = q.options or []
+        return QuestionOut(
+            id=q.id,
+            code=q.code,
+            scenario_md=q.scenario_md,
+            options=[
+                QuestionOptionOut(index=i, text=str(o.get("text", "")))
+                for i, o in enumerate(opts_raw)
+            ],
+            difficulty=q.difficulty,
+            tags=q.tags,
+        )
+
+
+@router.post("/questions/answer", response_model=QuestionAnswerOut)
+def answer_question(
+    payload: QuestionAnswerIn,
+    info: TokenInfo = Depends(require_token),
+) -> QuestionAnswerOut:
+    """Eleven svarar på en fråga. Vi:
+
+    1. Validerar att frågan finns och eleven inte redan svarat
+    2. Plockar valt alternativ + dess delta + explanation
+    3. Skapar event via _apply_delta (justerar score + trend)
+    4. Skapar WorkplaceQuestionAnswer-rad (länkad till event)
+    5. Returnerar feedback (delta + explanation + correct_path)
+    """
+    _require_school()
+    student_id = _resolve_student_id(info)
+
+    with master_session() as s:
+        q = s.get(WorkplaceQuestion, payload.question_id)
+        if q is None:
+            raise HTTPException(404, "Frågan finns inte")
+
+        # Idempotens: om redan svarat, returnera tidigare resultat
+        existing = (
+            s.query(WorkplaceQuestionAnswer)
+            .filter(
+                WorkplaceQuestionAnswer.student_id == student_id,
+                WorkplaceQuestionAnswer.question_id == q.id,
+            )
+            .first()
+        )
+        if existing:
+            opts = q.options or []
+            chosen_explanation = ""
+            if 0 <= existing.chosen_index < len(opts):
+                chosen_explanation = str(
+                    opts[existing.chosen_index].get("explanation", "")
+                )
+            sat = _ensure_satisfaction(s, student_id)
+            return QuestionAnswerOut(
+                delta_applied=existing.delta_applied,
+                chosen_explanation=chosen_explanation,
+                correct_path_md=q.correct_path_md,
+                new_score=sat.score,
+                new_trend=sat.trend,
+            )
+
+        opts = q.options or []
+        if not (0 <= payload.chosen_index < len(opts)):
+            raise HTTPException(400, "Ogiltigt val (chosen_index)")
+        chosen = opts[payload.chosen_index]
+        delta = int(chosen.get("delta", 0))
+        explanation = str(chosen.get("explanation", ""))
+
+        # Pedagogisk reason_md = elevens val + kort förklaring + tagg
+        reason_md = (
+            f"**Du svarade**: {chosen.get('text', '')}\n\n"
+            f"{explanation}"
+        )
+        event = _apply_delta(
+            s, student_id,
+            kind="question_answered",
+            delta=delta,
+            reason_md=reason_md,
+            meta={
+                "question_id": q.id,
+                "question_code": q.code,
+                "chosen_index": payload.chosen_index,
+            },
+        )
+        s.add(WorkplaceQuestionAnswer(
+            student_id=student_id,
+            question_id=q.id,
+            chosen_index=payload.chosen_index,
+            delta_applied=delta,
+            event_id=event.id,
+        ))
+        s.flush()
+
+        sat = _ensure_satisfaction(s, student_id)
+        return QuestionAnswerOut(
+            delta_applied=delta,
+            chosen_explanation=explanation,
+            correct_path_md=q.correct_path_md,
+            new_score=sat.score,
+            new_trend=sat.trend,
         )
