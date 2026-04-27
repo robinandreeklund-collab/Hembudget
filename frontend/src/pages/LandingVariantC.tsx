@@ -205,10 +205,10 @@ export default function LandingVariantC() {
       <ManifestoSection theme={THEME} />
       <WellbeingSection theme={THEME} />
       <AccountingSection theme={THEME} />
+      <ThreeModesSection theme={THEME} />
       <Moments />
       <Logic />
       <Problem />
-      <ThreeWays />
       <Pricing />
       <Faq />
       <Cta />
@@ -1611,206 +1611,6 @@ function Problem() {
             </div>
           ))}
         </div>
-      </div>
-    </section>
-  );
-}
-
-// ---------- Three ways to use ----------
-
-function ThreeWays() {
-  type Way = {
-    kicker: string;
-    title: string;
-    items: string[];
-    cta: string;
-    href: string;
-    soon?: boolean;
-    lead?: string;
-  };
-  const ways: Way[] = [
-    {
-      kicker: "För skolan",
-      title: "Ett labb i klassrummet",
-      items: [
-        "Bjud in en hel klass via 6-tecken-koder — ingen e-post per elev krävs.",
-        "Tilldela samma modul till alla, eller skräddarsy per elev. Mastery-grafen visar var klassen fastnar.",
-        "Portfolio-PDF per elev eller hela klassen som ZIP — perfekt som bedömningsunderlag.",
-        "AI-coachen anpassar sig efter elevens nivå utan att läraren behöver konfigurera något.",
-      ],
-      cta: "Skapa lärarkonto →",
-      href: "/signup/teacher",
-    },
-    {
-      kicker: "För hemmet",
-      title: "Samtalet om pengar — i lugnt format",
-      items: [
-        "Skapa konton för dina barn på två minuter. Varje barn får en egen sandlåda — riktiga pengar är aldrig inblandade.",
-        "Du följer med i samma vy som läraren har: vad har barnet gjort, vad har det fastnat på, vad har det frågat AI:n.",
-        "Modulerna täcker kontoutdrag, bolån, kreditkort, sparande och familjebudget — bygg upp ett gemensamt språk hemma.",
-        'AI-coachen svarar på "varför betalar man skatt?" utan att vänta på er nästa middag.',
-      ],
-      cta: "Skapa familjekonto →",
-      href: "/signup/parent",
-    },
-    {
-      kicker: "Kommer 2026",
-      title: "Hela familjens riktiga ekonomi — på ett ställe",
-      lead: "Inspirerat av riktiga bokföringssystem — men enklare, roligare och faktiskt begripligt. Tänk Visma eller Fortnox, fast för köksbordet.",
-      items: [
-        "Anslut bankkonton, kreditkort och lån via Tink (PSD2). Vi kategoriserar varje transaktion automatiskt — inga manuella Excel-kolumner.",
-        "Ladda upp era fakturor — el, vatten, hyra, försäkringar. Vi läser av förbrukning, datum och belopp och knyter dem till rätt kategori.",
-        "Bygg månadsbudget för kommande period på minuter. Varje månad balanseras automatiskt i en huvudbok — debet och kredit på riktigt.",
-        'Fråga AI-coachen direkt: "Vad spenderade vi mest på i mars?", "Hur mycket går till prenumerationer?" — den läser hela familjens ekonomi och svarar i klartext.',
-        "Barnet ser sina sparmål bredvid familjens budget — utan beloppen om ni inte vill. Ni bestämmer vad som syns.",
-        "Bank-grade kryptering, svensk personuppgiftsbehandling. Datan stannar hos er och raderas på en knapptryckning.",
-      ],
-      cta: "Sätt upp på väntelistan →",
-      href: "mailto:info@ekonomilabbet.org?subject=V%C3%A4ntelista%20Ekonomilabbet%202026",
-      soon: true,
-    },
-  ];
-  return (
-    <section
-      id="malgrupper"
-      style={{
-        padding: "64px 24px",
-        borderTop: "1px solid #e2e8f0",
-        maxWidth: 1200,
-        margin: "0 auto",
-      }}
-    >
-      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
-        Tre sätt att använda
-      </div>
-      <h2 className="vc-h2">
-        Klassrummet, köksbordet — och snart{" "}
-        <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>
-          er riktiga ekonomi.
-        </em>
-      </h2>
-      <p
-        style={{
-          fontSize: 15,
-          color: "#475569",
-          marginTop: 16,
-          marginBottom: 36,
-          maxWidth: 680,
-          lineHeight: 1.6,
-        }}
-      >
-        Ekonomilabbet är byggt så att en lärare kan följa en hel klass och
-        en förälder kan följa sina egna barn — i samma verktyg, med samma
-        moduler och samma trygga sandlåda. 2026 öppnar vi en tredje vy:
-        er riktiga familjeekonomi, säkert kopplad och visualiserad i
-        samma karta.
-      </p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 18,
-        }}
-      >
-        {ways.map((c, i) => (
-          <article
-            key={i}
-            style={{
-              background: c.soon ? "linear-gradient(180deg, #fff 0%, #fef3c7 100%)" : "#fff",
-              border: c.soon ? "1px dashed #0f172a" : "1px solid #e2e8f0",
-              borderRadius: 10,
-              padding: 28,
-              position: "relative",
-            }}
-          >
-            {c.soon && (
-              <span
-                style={{
-                  position: "absolute",
-                  top: -10,
-                  right: 18,
-                  background: "#0f172a",
-                  color: "#fff",
-                  padding: "3px 9px",
-                  borderRadius: 100,
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  letterSpacing: 0.6,
-                  fontFamily: 'ui-monospace, "SF Mono", monospace',
-                  textTransform: "uppercase",
-                }}
-              >
-                ● Kommer snart
-              </span>
-            )}
-            <div className="vc-eyebrow" style={{ marginBottom: 8 }}>
-              {c.kicker}
-            </div>
-            <h3
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                letterSpacing: -0.4,
-                marginBottom: 12,
-                lineHeight: 1.2,
-              }}
-            >
-              {c.title}.
-            </h3>
-            {c.lead && (
-              <p
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  color: "#64748b",
-                  marginBottom: 18,
-                  fontStyle: "italic",
-                }}
-              >
-                {c.lead}
-              </p>
-            )}
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 24px 0" }}>
-              {c.items.map((it, j) => (
-                <li
-                  key={j}
-                  style={{
-                    paddingLeft: 18,
-                    position: "relative",
-                    marginBottom: 10,
-                    fontSize: 14,
-                    lineHeight: 1.5,
-                    color: "#475569",
-                  }}
-                >
-                  <span
-                    style={{ position: "absolute", left: 0, color: "#dc4c2b" }}
-                  >
-                    —
-                  </span>
-                  {it}
-                </li>
-              ))}
-            </ul>
-            {c.soon ? (
-              <a
-                href={c.href}
-                className="vc-btn vc-btn-outline"
-                style={{ borderColor: "#0f172a", textDecoration: "none" }}
-              >
-                {c.cta}
-              </a>
-            ) : (
-              <Link
-                to={c.href}
-                className="vc-btn vc-btn-primary"
-                style={{ textDecoration: "none" }}
-              >
-                {c.cta}
-              </Link>
-            )}
-          </article>
-        ))}
       </div>
     </section>
   );
@@ -3454,6 +3254,175 @@ function AccountingSection({ theme }: { theme: Theme }) {
                 </li>
               ))}
             </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- ThreeModesSection (v5) — Skola / Hemma / Desktop ----------
+
+function ThreeModesSection({ theme }: { theme: Theme }) {
+  const modes: Array<{
+    kicker: string;
+    title: string;
+    desc: string;
+    stats: string[];
+    cta: string;
+    soon?: boolean;
+  }> = [
+    {
+      kicker: "Skolan",
+      title: "Klassrummet",
+      desc: "Multi-tenant labb. Lärare bjuder in en hel klass via 8-tecken-koder. Mastery-graf, portfolio-PDF, klass-ZIP.",
+      stats: ["Multi-tenant per skola", "AI-coach per elev", "Bedömningsunderlag som PDF"],
+      cta: "Skapa lärarkonto",
+    },
+    {
+      kicker: "Hemmet",
+      title: "Köksbordet",
+      desc: "Förälder + barn delar samma sandlåda. Modulerna är desamma som i skolan — riktiga pengar är aldrig inblandade.",
+      stats: ["Egen sandlåda per barn", "Gemensam vy med läraren", "AI-coach på familjens språk"],
+      cta: "Skapa familjekonto",
+    },
+    {
+      kicker: "Riktig ekonomi",
+      title: "Hembudget desktop",
+      desc: "Anslut riktiga bankkonton via Tink. Ladda upp fakturor. Krypterat lokalt med master-lösenord — datan lämnar aldrig din dator.",
+      stats: ["Tauri-app · macOS / Windows", "Krypterad lokalt med argon2id", "PSD2 + PDF-fakturaimport"],
+      cta: "Anmäl intresse",
+      soon: true,
+    },
+  ];
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#fff",
+      }}
+    >
+      <SectionHeader
+        cell={{ sym: "Lg", n: "03", label: "Lägen" }}
+        eyebrow="En motor, tre lägen"
+        theme={theme}
+      >
+        Klassrummet, köksbordet — och snart{" "}
+        <em style={{ color: theme.accent, fontStyle: "italic" }}>
+          er riktiga ekonomi.
+        </em>
+      </SectionHeader>
+      <p
+        style={{
+          maxWidth: 720,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#475569",
+        }}
+      >
+        Samma kodbas, samma datamodell, samma motor. Eleven lär sig på simulerad
+        data i klassrummet. Familjen övar på samma sandlåda hemma. När det är
+        dags för riktiga pengar finns desktop-appen — med exakt samma logik,
+        men din egen data, krypterad lokalt på din egen dator.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 18,
+        }}
+      >
+        {modes.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              position: "relative",
+              padding: 26,
+              background: m.soon
+                ? "linear-gradient(180deg, #fff 0%, #fef3c7 100%)"
+                : "#fff",
+              border: m.soon
+                ? `1px dashed ${theme.fg}`
+                : `1px solid ${theme.rule}`,
+              borderRadius: 12,
+            }}
+          >
+            {m.soon && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  right: 18,
+                  background: theme.fg,
+                  color: "#fef3c7",
+                  padding: "3px 10px",
+                  borderRadius: 100,
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: 0.6,
+                  fontFamily: "ui-monospace, monospace",
+                  textTransform: "uppercase",
+                }}
+              >
+                ● Kommer 2026
+              </span>
+            )}
+            <div className={theme.eyebrow} style={{ marginBottom: 8 }}>
+              {m.kicker}
+            </div>
+            <h3
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                marginBottom: 12,
+                lineHeight: 1.2,
+              }}
+            >
+              {m.title}.
+            </h3>
+            <p
+              style={{
+                fontSize: 14,
+                lineHeight: 1.55,
+                color: "#475569",
+                marginBottom: 18,
+              }}
+            >
+              {m.desc}
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 22px" }}>
+              {m.stats.map((s, j) => (
+                <li
+                  key={j}
+                  style={{
+                    fontSize: 12.5,
+                    color: "#0f172a",
+                    paddingLeft: 16,
+                    position: "relative",
+                    marginBottom: 5,
+                    fontFamily: "ui-monospace, monospace",
+                  }}
+                >
+                  <span style={{ position: "absolute", left: 0, color: theme.accent }}>·</span>
+                  {s}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className={`${theme.btn} ${m.soon ? "" : theme.btnPrimary}`}
+              style={
+                m.soon
+                  ? { borderColor: theme.fg, border: `1px solid ${theme.fg}` }
+                  : {}
+              }
+            >
+              {m.cta}
+              {m.soon ? " →" : ""}
+            </button>
           </div>
         ))}
       </div>
