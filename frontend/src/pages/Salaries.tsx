@@ -275,6 +275,7 @@ export default function Salaries() {
         accounts={accounts}
         users={users}
         onImported={invalidate}
+        schoolMode={schoolMode}
       />
 
       {/* Skatteprognos */}
@@ -978,10 +979,12 @@ function SalaryPdfUploader({
   accounts,
   users,
   onImported,
+  schoolMode = false,
 }: {
   accounts: Account[];
   users: HouseholdUser[];
   onImported: () => void;
+  schoolMode?: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   const [owner, setOwner] = useState<string>("");
@@ -1023,12 +1026,26 @@ function SalaryPdfUploader({
   return (
     <Card title="Ladda upp lönespec-PDF (auto-tolkning)">
       <div className="text-sm text-slate-700 mb-3">
-        Stöder <strong>INKAB</strong> (Nybergs Konstruktion),{" "}
-        <strong>Vättaporten AB</strong> och{" "}
-        <strong>Försäkringskassan</strong> (barnbidrag + föräldrapenning).
-        Extraherar brutto, skatt, extra skatt, förmån, netto, semester-
-        dagar och datum automatiskt. PDF:en länkas till raden så du kan
-        granska originalet senare.
+        {schoolMode ? (
+          <>
+            Ladda ner Ekonomilabbets lönespecar från
+            {" "}<strong>Dina dokument</strong> och släpp dem här. Stöder
+            kursens egna arbetsgivare samt
+            {" "}<strong>Försäkringskassan</strong> (barnbidrag och
+            föräldrapenning). Extraherar brutto, skatt, förmån och netto
+            automatiskt och länkar PDF:en till raden så du kan granska
+            originalet senare.
+          </>
+        ) : (
+          <>
+            Stöder <strong>INKAB</strong> (Nybergs Konstruktion),{" "}
+            <strong>Vättaporten AB</strong> och{" "}
+            <strong>Försäkringskassan</strong> (barnbidrag + föräldrapenning).
+            Extraherar brutto, skatt, extra skatt, förmån, netto, semester-
+            dagar och datum automatiskt. PDF:en länkas till raden så du kan
+            granska originalet senare.
+          </>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 text-sm">
         <label className="block">

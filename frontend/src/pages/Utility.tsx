@@ -17,6 +17,7 @@ import { Activity, RefreshCw, Trash2, Upload, X, Zap } from "lucide-react";
 import { api, formatSEK, getApiBase, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
 import { ElprisCard } from "@/components/ElprisCard";
+import { useAuth } from "@/hooks/useAuth";
 
 interface UtilityHistory {
   year: number;
@@ -72,6 +73,7 @@ const COLORS = [
 
 export default function Utility() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const [year, setYear] = useState(new Date().getFullYear());
   const [yoy, setYoy] = useState(false);
   const [breakdownCell, setBreakdownCell] = useState<{
@@ -138,10 +140,13 @@ export default function Utility() {
         </div>
       </div>
 
-      {/* Tibber real-time widget + PDF uploader (ovanför historiken) */}
-      <TibberWidget />
-      <UtilityPdfUploader onDone={invalidate} />
-      <RescanExistingButton onDone={invalidate} />
+      {/* Tibber real-time widget + PDF uploader (ovanför historiken).
+          TibberWidget och RescanExistingButton är desktop-funktioner
+          (Tibber-API + omläsning av tidigare uppladdade PDF:er) som
+          inte hör hemma i school-läget. */}
+      {!schoolMode && <TibberWidget />}
+      <UtilityPdfUploader onDone={invalidate} schoolMode={schoolMode} />
+      {!schoolMode && <RescanExistingButton onDone={invalidate} />}
       {/* TibberSettings flyttades till /settings — realtidsvärden visas
           ändå här om token är sparad. */}
 
@@ -150,12 +155,25 @@ export default function Utility() {
       ) : !data || data.categories.length === 0 ? (
         <Card>
           <div className="text-sm text-slate-700">
-            Ingen förbrukningsdata hittad för {year}. Säkerställ att
-            transaktioner är kategoriserade som <em>El</em>,{" "}
-            <em>Vatten/Avgift</em>, <em>Uppvärmning</em>, <em>Bredband</em>,{" "}
-            <em>Mobil</em> eller <em>Renhållning</em>. Fakturor från Hjo
-            Energi / Telinet parsas automatiskt på /upcoming med split-
-            rader — de räknas också här.
+            {schoolMode ? (
+              <>
+                Ingen förbrukningsdata hittad för {year} än. Ladda ner
+                kursens el-/bredbandsfakturor (Hjo Energi, Telinet) från
+                {" "}<strong>Dina dokument</strong> och släpp dem under
+                {" "}<a href="/upcoming" className="text-brand-700 underline">Kommande</a>
+                {" "}— då skapas split-rader (el, vatten, bredband)
+                automatiskt och visas här.
+              </>
+            ) : (
+              <>
+                Ingen förbrukningsdata hittad för {year}. Säkerställ att
+                transaktioner är kategoriserade som <em>El</em>,{" "}
+                <em>Vatten/Avgift</em>, <em>Uppvärmning</em>, <em>Bredband</em>,{" "}
+                <em>Mobil</em> eller <em>Renhållning</em>. Fakturor från Hjo
+                Energi / Telinet parsas automatiskt på /upcoming med split-
+                rader — de räknas också här.
+              </>
+            )}
           </div>
         </Card>
       ) : (
@@ -633,7 +651,13 @@ function RescanExistingButton({ onDone }: { onDone: () => void }) {
   );
 }
 
-function UtilityPdfUploader({ onDone }: { onDone: () => void }) {
+function UtilityPdfUploader({
+  onDone,
+  schoolMode = false,
+}: {
+  onDone: () => void;
+  schoolMode?: boolean;
+}) {
   const [results, setResults] = useState<
     Array<{ file: string; ok: boolean; data?: ParsePreview; error?: string }>
   >([]);
@@ -670,10 +694,23 @@ function UtilityPdfUploader({ onDone }: { onDone: () => void }) {
   return (
     <Card title="Ladda upp energi-/bredbandsfaktura (PDF)">
       <div className="text-sm text-slate-700 mb-2">
-        Stöd: <strong>Hjo Energi</strong>, <strong>Telinet</strong>,{" "}
-        <strong>Tibber</strong>, <strong>Vattenfall</strong>, <strong>E.ON</strong>,{" "}
-        <strong>Fortum</strong> + generisk extraktion av kWh/GB/m³ + kostnad.
-        Parsade rader syns i tabellen "Läsningar från fakturor & Tibber" nedan.
+        {schoolMode ? (
+          <>
+            Ladda ner Ekonomilabbets el-/bredbandsfakturor från
+            {" "}<strong>Dina dokument</strong> och släpp dem här. Stöder
+            kursens fakturor från <strong>Hjo Energi</strong> (el + vatten +
+            bredband) och <strong>Telinet</strong> (rörligt elavtal). Andra
+            energifakturor stöds inte i kursläget. Parsade rader syns i
+            tabellen nedan.
+          </>
+        ) : (
+          <>
+            Stöd: <strong>Hjo Energi</strong>, <strong>Telinet</strong>,{" "}
+            <strong>Tibber</strong>, <strong>Vattenfall</strong>, <strong>E.ON</strong>,{" "}
+            <strong>Fortum</strong> + generisk extraktion av kWh/GB/m³ + kostnad.
+            Parsade rader syns i tabellen "Läsningar från fakturor & Tibber" nedan.
+          </>
+        )}
       </div>
       <label className="flex items-center gap-2 border-2 border-dashed border-slate-300 rounded p-4 cursor-pointer hover:bg-slate-50">
         <Upload className="w-5 h-5 text-slate-600" />

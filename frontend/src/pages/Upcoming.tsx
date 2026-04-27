@@ -347,17 +347,29 @@ export default function Upcoming() {
         </Card>
       )}
 
-      <CreditCardInvoiceCard onDone={invalidate} />
+      <CreditCardInvoiceCard onDone={invalidate} schoolMode={schoolMode} />
 
       <Card title="Tolka fakturor automatiskt">
         <div className="text-sm text-slate-700 mb-3">
-          Dra och släpp fakturabilder. Systemet skickar varje bild till din lokala
-          LM Studio-modell som extraherar betalningsmottagare, belopp och förfallodag
-          helt automatiskt.{" "}
-          <strong>
-            Byt till en vision-kapabel modell i LM Studio först (t.ex. Qwen2.5-VL, Llava, Pixtral)
-          </strong>
-          .
+          {schoolMode ? (
+            <>
+              Dra och släpp Ekonomilabbets fakturor (Hjo Energi för el,
+              Telinet för bredband, demo-faktura för kreditkort osv.) — du
+              hittar dem under <strong>Dina dokument</strong>. Systemet
+              extraherar mottagare, belopp och förfallodag automatiskt.
+              Andra dokument än kursens stöds inte.
+            </>
+          ) : (
+            <>
+              Dra och släpp fakturabilder. Systemet skickar varje bild till din lokala
+              LM Studio-modell som extraherar betalningsmottagare, belopp och förfallodag
+              helt automatiskt.{" "}
+              <strong>
+                Byt till en vision-kapabel modell i LM Studio först (t.ex. Qwen2.5-VL, Llava, Pixtral)
+              </strong>
+              .
+            </>
+          )}
         </div>
 
         <div
@@ -1248,7 +1260,13 @@ interface PdfDiagnostic {
   textLength: number;
 }
 
-function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
+function CreditCardInvoiceCard({
+  onDone,
+  schoolMode = false,
+}: {
+  onDone: () => void;
+  schoolMode?: boolean;
+}) {
   const [jobs, setJobs] = useState<
     { file: File; status: "uploading" | "done" | "error"; message?: string }[]
   >([]);
@@ -1408,17 +1426,30 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
   return (
     <Card title="Läs in kreditkortsfaktura (PDF/bild)">
       <div className="text-sm text-slate-700 mb-3">
-        Dra in en eller flera Amex- eller SEB Kort-fakturor. Systemet läser BÅDE:
-        <ul className="list-disc pl-5 mt-1 space-y-0.5">
-          <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
-          <li>Alla enskilda köp → läggs in som transaktioner på kortkontot
-            (skapas automatiskt om det inte finns), kategoriseras av regelmotorn</li>
-        </ul>
-        <div className="mt-2 text-xs text-emerald-700">
-          <strong>PDF-fakturor (Amex, SEB Kort):</strong> parse:as deterministiskt
-          direkt från textlagret — ingen LLM, snabbt och exakt. Bilder och okända
-          PDF-format faller tillbaka på vision AI (Qwen2.5-VL, Pixtral).
-        </div>
+        {schoolMode ? (
+          <>
+            Dra in Ekonomilabbets demo-fakturor för kreditkort. Systemet
+            läser fakturasumma + förfallodag (hamnar under Kommande
+            fakturor) samt alla enskilda köp (läggs in som transaktioner
+            på kortkontot och kategoriseras automatiskt). Bara kursens
+            egna PDF-fakturor stöds — ladda ner dem från
+            {" "}<strong>Dina dokument</strong>.
+          </>
+        ) : (
+          <>
+            Dra in en eller flera Amex- eller SEB Kort-fakturor. Systemet läser BÅDE:
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
+              <li>Alla enskilda köp → läggs in som transaktioner på kortkontot
+                (skapas automatiskt om det inte finns), kategoriseras av regelmotorn</li>
+            </ul>
+            <div className="mt-2 text-xs text-emerald-700">
+              <strong>PDF-fakturor (Amex, SEB Kort):</strong> parse:as deterministiskt
+              direkt från textlagret — ingen LLM, snabbt och exakt. Bilder och okända
+              PDF-format faller tillbaka på vision AI (Qwen2.5-VL, Pixtral).
+            </div>
+          </>
+        )}
       </div>
 
       <div
