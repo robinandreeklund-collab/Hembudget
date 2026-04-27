@@ -207,6 +207,7 @@ export default function LandingVariantC() {
       <AccountingSection theme={THEME} />
       <ThreeModesSection theme={THEME} />
       <StocksSection theme={THEME} />
+      <CreditTriggerSection theme={THEME} />
       <Moments />
       <Logic />
       <Problem />
@@ -4199,6 +4200,544 @@ function StocksSection({ theme }: { theme: Theme }) {
           månad kan se om hen rör sig mot kvoten 1.0, eller djupare in i
           mönstret. Det är livslära, inte räknelära.
         </p>
+      </div>
+    </section>
+  );
+}
+
+// ---------- CreditTriggerSection (v5) — val under press ----------
+
+function CreditTriggerSection({ theme }: { theme: Theme }) {
+  const [choice, setChoice] = useState<"priv" | "sms" | "skip">("priv");
+  type Tone = "safe" | "warn" | "danger";
+  const choices: Record<
+    "priv" | "sms" | "skip",
+    {
+      label: string;
+      kicker: string;
+      tone: Tone;
+      borrow: string;
+      apr: string;
+      term: string;
+      monthly: string;
+      total: string;
+      tag: string;
+      note: string;
+      meta: string[];
+    }
+  > = {
+    priv: {
+      label: "Privatlån",
+      kicker: "Förstavalet",
+      tone: "safe",
+      borrow: "15 000 kr",
+      apr: "6,4 %",
+      term: "36 mån",
+      monthly: "460 kr/mån",
+      total: "16 560 kr",
+      tag: "Bankens process · kreditupplysning",
+      note: "Banken kollar din inkomst, dina lån och din buffert. Bättre ekonomi ger bättre ränta. Du läser villkoren innan du klickar.",
+      meta: [
+        "Kreditupplysning körs",
+        "Ränta beror på din score",
+        "Lånet hamnar i huvudboken",
+      ],
+    },
+    sms: {
+      label: "SMS-lån",
+      kicker: "Sista utvägen",
+      tone: "danger",
+      borrow: "5 000 kr",
+      apr: "117 %",
+      term: "30 dagar",
+      monthly: "5 950 kr i en klumpsumma",
+      total: "5 950 kr",
+      tag: "Snabbt · dyrt · sällan rätt",
+      note: "Inget kollas. Pengarna är inne på minuter — och försvinner med ränta och avgifter på 30 dagar. När det inte räcker tas ett nytt lån för att betala det första.",
+      meta: [
+        "Ingen kreditupplysning",
+        "Effektiv ränta 89–200 %",
+        "Skuldspiralen börjar här",
+      ],
+    },
+    skip: {
+      label: "Skjut upp räkningen",
+      kicker: 'Det "gratis" valet',
+      tone: "warn",
+      borrow: "0 kr",
+      apr: "—",
+      term: "tills den går till inkasso",
+      monthly: "60 kr påminnelse → 180 kr inkasso",
+      total: "+ ev. betalningsanmärkning",
+      tag: "Konsekvensen syns senare",
+      note: "Räkningen försvinner inte. Påminnelse, inkasso, och i värsta fall en betalningsanmärkning som följer dig i tre år — när du senare ska teckna abonnemang eller hyra lägenhet.",
+      meta: [
+        "Påminnelseavgift 60 kr",
+        "Inkasso efter 14 dagar",
+        "Betalningsanmärkning 3 år",
+      ],
+    },
+  };
+  const tones: Record<
+    Tone,
+    { fg: string; bg: string; border: string; accent: string; soft: string }
+  > = {
+    safe: {
+      fg: "#d1fae5",
+      bg: "rgba(16,185,129,0.08)",
+      border: "rgba(16,185,129,0.35)",
+      accent: "#10b981",
+      soft: "rgba(16,185,129,0.14)",
+    },
+    warn: {
+      fg: "#fef3c7",
+      bg: "rgba(251,191,36,0.08)",
+      border: "rgba(251,191,36,0.35)",
+      accent: "#fbbf24",
+      soft: "rgba(251,191,36,0.14)",
+    },
+    danger: {
+      fg: "#fee2e2",
+      bg: "rgba(220,76,43,0.08)",
+      border: "rgba(220,76,43,0.4)",
+      accent: "#dc4c2b",
+      soft: "rgba(220,76,43,0.14)",
+    },
+  };
+  const curC = choices[choice];
+  const tone = tones[curC.tone];
+
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#0f172a",
+        color: "#fff",
+      }}
+    >
+      <SectionHeader
+        cell={{ sym: "Kr", n: "05", label: "Kredit" }}
+        eyebrow="Val under press"
+        theme={theme}
+        dark
+      >
+        När ekonomin inte går ihop —{" "}
+        <em style={{ color: "#fbbf24", fontStyle: "italic" }}>
+          vad väljer eleven?
+        </em>
+      </SectionHeader>
+      <p
+        style={{
+          maxWidth: 720,
+          marginBottom: 36,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#94a3b8",
+        }}
+      >
+        Pengarna räcker inte. Hyran är på väg, autogirot går idag, och saldot
+        är 1 200 kr för lågt. Systemet pausar — och tvingar fram ett beslut.
+        Tre vägar finns. Alla tre kostar något. Den som är billigast på fredag
+        kan vara dyrast om ett år.
+      </p>
+
+      <div
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 14,
+          padding: "32px 36px",
+          marginBottom: 28,
+          color: "#fff",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          className="vc-credit-trigger"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            gap: 32,
+            alignItems: "center",
+          }}
+        >
+          <style>{`
+            @media (max-width: 768px) {
+              .vc-credit-trigger { grid-template-columns: 1fr !important; gap: 18px !important; }
+              .vc-credit-grid { grid-template-columns: 1fr !important; }
+              .vc-credit-detail { grid-template-columns: 1fr !important; gap: 18px !important; }
+            }
+          `}</style>
+          <div>
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+                letterSpacing: 1.2,
+                color: "#fbbf24",
+                textTransform: "uppercase",
+                marginBottom: 10,
+              }}
+            >
+              ● Systemet pausar transaktionen
+            </div>
+            <h3
+              style={{
+                fontSize: 28,
+                fontWeight: 600,
+                letterSpacing: -0.5,
+                lineHeight: 1.2,
+                margin: "0 0 12px",
+                fontFamily: theme.serifFont,
+              }}
+            >
+              "Din ekonomi går inte ihop."
+            </h3>
+            <p
+              style={{
+                fontSize: 14.5,
+                lineHeight: 1.55,
+                color: "#cbd5e1",
+                margin: 0,
+                maxWidth: 540,
+              }}
+            >
+              Hyran på 8 500 kr ska dras imorgon. Saldot är 7 300 kr. Du saknar
+              <strong style={{ color: "#fff" }}> 1 200 kr</strong>. Vad gör du?
+            </p>
+          </div>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 13,
+              lineHeight: 1.85,
+              background: "rgba(0,0,0,0.3)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10,
+              padding: "16px 20px",
+              minWidth: 220,
+            }}
+          >
+            <div
+              style={{
+                color: "#94a3b8",
+                marginBottom: 6,
+                fontSize: 11,
+                letterSpacing: 1,
+              }}
+            >
+              LÖNEKONTO
+            </div>
+            <div style={{ color: "#e2e8f0" }}>
+              Saldo: <strong style={{ color: "#fff" }}>+ 7 300 kr</strong>
+            </div>
+            <div style={{ color: "#e2e8f0" }}>
+              Hyra: <span style={{ color: "#fbbf24" }}>− 8 500 kr</span>
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                paddingTop: 6,
+                borderTop: "1px solid rgba(255,255,255,.1)",
+                color: "#e2e8f0",
+              }}
+            >
+              Saknas: <strong style={{ color: "#dc4c2b" }}>− 1 200 kr</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="vc-credit-grid"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 14,
+          marginBottom: 28,
+        }}
+      >
+        {(Object.entries(choices) as Array<[
+          "priv" | "sms" | "skip",
+          (typeof choices)["priv"],
+        ]>).map(([key, c]) => {
+          const t = tones[c.tone];
+          const active = choice === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setChoice(key)}
+              style={{
+                textAlign: "left",
+                cursor: "pointer",
+                padding: 22,
+                background: active ? t.bg : "rgba(255,255,255,0.03)",
+                border: active
+                  ? `2px solid ${t.accent}`
+                  : "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 12,
+                transition: "all .15s",
+                color: "#fff",
+                fontFamily: "inherit",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 14,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "ui-monospace, monospace",
+                    fontSize: 10.5,
+                    letterSpacing: 1,
+                    color: t.accent,
+                    textTransform: "uppercase",
+                    fontWeight: 600,
+                  }}
+                >
+                  {c.kicker}
+                </span>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: t.accent,
+                    boxShadow: active ? `0 0 0 4px ${t.soft}` : "none",
+                  }}
+                />
+              </div>
+              <h4
+                style={{
+                  fontSize: 19,
+                  fontWeight: 600,
+                  letterSpacing: -0.3,
+                  margin: "0 0 6px",
+                  color: "#fff",
+                }}
+              >
+                {c.label}
+              </h4>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#94a3b8",
+                  fontFamily: "ui-monospace, monospace",
+                  marginBottom: 14,
+                }}
+              >
+                {c.tag}
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 10,
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 12.5,
+                }}
+              >
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 10.5, letterSpacing: 0.5 }}>
+                    RÄNTA
+                  </div>
+                  <strong style={{ color: "#e2e8f0" }}>{c.apr}</strong>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 10.5, letterSpacing: 0.5 }}>
+                    LÖPTID
+                  </div>
+                  <strong style={{ color: "#e2e8f0" }}>{c.term}</strong>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="vc-credit-detail"
+        style={{
+          background: tone.bg,
+          border: `1px solid ${tone.border}`,
+          borderRadius: 14,
+          padding: "28px 32px",
+          display: "grid",
+          gridTemplateColumns: "1.4fr 1fr",
+          gap: 36,
+          alignItems: "start",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+              letterSpacing: 1.2,
+              color: tone.accent,
+              textTransform: "uppercase",
+              marginBottom: 10,
+              fontWeight: 600,
+            }}
+          >
+            Vald väg · {curC.label}
+          </div>
+          <h3
+            style={{
+              fontSize: 24,
+              fontWeight: 600,
+              letterSpacing: -0.4,
+              lineHeight: 1.3,
+              margin: "0 0 14px",
+              color: "#fff",
+              fontFamily: theme.serifFont,
+            }}
+          >
+            {curC.note}
+          </h3>
+          <ul
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {curC.meta.map((m, i) => (
+              <li
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "center",
+                  fontSize: 13.5,
+                  color: tone.fg,
+                  fontFamily: "ui-monospace, monospace",
+                }}
+              >
+                <span
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.3)",
+                    border: `1px solid ${tone.border}`,
+                    color: tone.accent,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  {i + 1}
+                </span>
+                {m}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div
+          style={{
+            background: "rgba(0,0,0,0.3)",
+            borderRadius: 10,
+            padding: 22,
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 13,
+            lineHeight: 1.9,
+            border: `1px solid ${tone.border}`,
+            color: "#e2e8f0",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10.5,
+              letterSpacing: 1,
+              color: "#94a3b8",
+              marginBottom: 10,
+              textTransform: "uppercase",
+            }}
+          >
+            Vad det kostar
+          </div>
+          <div>
+            Lånat: <strong style={{ color: "#fff" }}>{curC.borrow}</strong>
+          </div>
+          <div>
+            Att betala: <strong style={{ color: "#fff" }}>{curC.monthly}</strong>
+          </div>
+          <div>
+            Total kostnad:{" "}
+            <strong style={{ color: tone.accent }}>{curC.total}</strong>
+          </div>
+          <div
+            style={{
+              marginTop: 10,
+              paddingTop: 10,
+              borderTop: `1px solid ${tone.border}`,
+              fontStyle: "italic",
+              color: tone.fg,
+              fontFamily: theme.serifFont,
+              fontSize: 13.5,
+            }}
+          >
+            {curC.tone === "safe" && "Lugnt val. Ränta i normalsegmentet."}
+            {curC.tone === "danger" &&
+              "Pengarna är inne på minuter. Skulden växer lika snabbt."}
+            {curC.tone === "warn" && "Räkningen försvinner inte. Den blir bara dyrare."}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 32,
+          paddingTop: 32,
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 32,
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+              letterSpacing: 1.2,
+              color: "#fbbf24",
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            Konsekvenserna kvarstår
+          </div>
+          <p
+            style={{
+              fontSize: 15,
+              lineHeight: 1.55,
+              margin: 0,
+              color: "#cbd5e1",
+              maxWidth: 760,
+            }}
+          >
+            Lånet blir en rad i huvudboken med ett amorteringsschema.
+            Påminnelseavgiften blir en transaktion. SMS-lånet blir en månadsavi
+            i 30 dagar — och en följdfråga från AI-coachen:{" "}
+            <em style={{ color: "#fbbf24" }}>
+              "Hur hamnade du här? Vad kunde du gjort annorlunda?"
+            </em>
+          </p>
+        </div>
       </div>
     </section>
   );
