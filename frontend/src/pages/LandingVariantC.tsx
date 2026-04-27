@@ -806,41 +806,66 @@ function Hero() {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const reduced = useReducedMotion();
 
-  // GSAP: pin hero while scrolling + scrub-animera kursplan-kortet.
-  // Bara desktop (≥ 900px) — mobil får native scroll. Reduced-motion
-  // respekteras helt.
+  // GSAP: pin hero while scrolling + scrub-animera kursplan-kortet +
+  // counter-up för stats. Bara desktop (≥ 900px) för pin/scrub — mobil
+  // får native scroll. Counter-up körs på alla bredder (men hoppas över
+  // vid reduced-motion).
   useEffect(() => {
     if (reduced) return;
-    if (typeof window === "undefined" || window.innerWidth < 900) return;
-    if (!sectionRef.current || !cardRef.current) return;
+    if (typeof window === "undefined") return;
+    if (!sectionRef.current) return;
     registerScrollTrigger();
+    const isDesktop = window.innerWidth >= 900;
 
     const ctx = gsap.context(() => {
-      const pinTrig = ScrollTrigger.create({
-        trigger: sectionRef.current,
-        start: "top top",
-        end: "+=70%",
-        pin: true,
-        pinSpacing: true,
-        anticipatePin: 1,
-      });
-      const fadeTw = gsap.to(cardRef.current, {
-        scale: 0.86,
-        opacity: 0.5,
-        y: -20,
-        rotateX: 6,
-        ease: "none",
-        scrollTrigger: {
+      if (isDesktop && cardRef.current) {
+        ScrollTrigger.create({
           trigger: sectionRef.current,
           start: "top top",
           end: "+=70%",
-          scrub: 0.6,
+          pin: true,
+          pinSpacing: true,
+          anticipatePin: 1,
+        });
+        gsap.to(cardRef.current, {
+          scale: 0.86,
+          opacity: 0.5,
+          y: -20,
+          rotateX: 6,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top top",
+            end: "+=70%",
+            scrub: 0.6,
+          },
+        });
+      }
+
+      // Counter-up: alla [data-vc-stat]-element animerar text 0 → num.
+      ScrollTrigger.create({
+        trigger: sectionRef.current,
+        start: "top 80%",
+        once: true,
+        onEnter: () => {
+          const root = sectionRef.current;
+          if (!root) return;
+          const els = root.querySelectorAll<HTMLElement>("[data-vc-stat]");
+          els.forEach((el) => {
+            const target = Number(el.dataset.num) || 0;
+            const suffix = el.dataset.suffix ?? "";
+            const obj = { v: 0 };
+            gsap.to(obj, {
+              v: target,
+              duration: 1.4,
+              ease: "power2.out",
+              onUpdate: () => {
+                el.textContent = `${Math.round(obj.v)}${suffix}`;
+              },
+            });
+          });
         },
       });
-      return () => {
-        pinTrig.kill();
-        fadeTw.scrollTrigger?.kill();
-      };
     }, sectionRef);
 
     return () => ctx.revert();
@@ -935,7 +960,8 @@ function Hero() {
             och (snart) er riktiga ekonomi.
           </p>
 
-          {/* Stats-rad enligt v5 */}
+          {/* Stats-rad enligt v5 — siffrorna animeras 0 → mål via GSAP
+              counter-up i useEffect:en ovan. */}
           <div
             style={{
               display: "flex",
@@ -947,16 +973,21 @@ function Hero() {
             }}
           >
             {[
-              { num: "32", label: "grundbegrepp" },
-              { num: "80+", label: "mikrouppgifter" },
-              { num: "6", label: "kategorier" },
+              { num: 32, suffix: "", label: "grundbegrepp" },
+              { num: 80, suffix: "+", label: "mikrouppgifter" },
+              { num: 6, suffix: "", label: "kategorier" },
             ].map((s) => (
               <div
                 key={s.label}
                 style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}
               >
-                <span style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, color: "#0f172a" }}>
-                  {s.num}
+                <span
+                  data-vc-stat
+                  data-num={s.num}
+                  data-suffix={s.suffix}
+                  style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, color: "#0f172a" }}
+                >
+                  0{s.suffix}
                 </span>
                 <span style={{ fontSize: 12, color: "#64748b" }}>{s.label}</span>
               </div>
