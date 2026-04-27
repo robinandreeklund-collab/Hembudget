@@ -66,7 +66,7 @@ interface MarketStatus {
   next_open: string | null;
 }
 
-type Tab = "overview" | "market" | "portfolio" | "ledger";
+type Tab = "overview" | "market" | "portfolio" | "orders" | "ledger";
 
 export default function Investments() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -136,7 +136,7 @@ export default function Investments() {
       </div>
 
       <div className="flex gap-2 border-b">
-        {(["overview", "market", "portfolio", "ledger"] as Tab[]).map((t) => (
+        {(["overview", "market", "portfolio", "orders", "ledger"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -149,6 +149,7 @@ export default function Investments() {
             {t === "overview" && "Översikt"}
             {t === "market" && `Marknad (${stocks.length})`}
             {t === "portfolio" && `Portfölj (${portfolio?.holdings.length ?? 0})`}
+            {t === "orders" && "Ordrar"}
             {t === "ledger" && `Order-historik (${ledger.length})`}
           </button>
         ))}
@@ -172,6 +173,7 @@ export default function Investments() {
           marketOpen={market?.open ?? false}
         />
       )}
+      {tab === "orders" && <OrdersTab />}
       {tab === "ledger" && <LedgerTab rows={ledger} />}
 
       {tradeModal && (
@@ -622,8 +624,8 @@ function MarketTab({
                   </button>
                   <button
                     onClick={() => onTrade(s.ticker)}
-                    disabled={!marketOpen || s.last === undefined}
-                    title={!marketOpen ? "Börsen är stängd — handel öppnar igen vid nästa börstid" : undefined}
+                    disabled={s.last === undefined}
+                    title={!marketOpen ? "Börsen är stängd — ordern läggs i kö och utförs vid öppning" : undefined}
                     className="bg-brand-600 text-white px-3 py-1.5 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {marketOpen ? "Köp" : "Stängd"}
@@ -717,15 +719,15 @@ function PortfolioTab({
               <td className="text-right space-x-1">
                 <button
                   onClick={() => onTrade(h.ticker, "buy")}
-                  disabled={!marketOpen}
-                  className="px-2 py-1 text-xs rounded bg-emerald-600 text-white disabled:opacity-50"
+                  className="px-2 py-1 text-xs rounded bg-emerald-600 text-white"
+                  title={!marketOpen ? "Marknaden stängd — läggs i kö" : undefined}
                 >
                   Köp
                 </button>
                 <button
                   onClick={() => onTrade(h.ticker, "sell")}
-                  disabled={!marketOpen}
-                  className="px-2 py-1 text-xs rounded bg-amber-600 text-white disabled:opacity-50"
+                  className="px-2 py-1 text-xs rounded bg-amber-600 text-white"
+                  title={!marketOpen ? "Marknaden stängd — läggs i kö" : undefined}
                 >
                   Sälj
                 </button>
@@ -738,6 +740,178 @@ function PortfolioTab({
     </Card>
   );
 }
+
+// --- Orders (kö) ---
+
+interface PendingOrder {
+  id: number;
+  account_id: number;
+  ticker: string;
+  side: "buy" | "sell";
+  quantity: number;
+  reference_price: number;
+  status: "pending" | "executed" | "cancelled";
+  requested_at: string;
+  executed_at: string | null;
+  executed_price: number | null;
+  locked_amount: number;
+  cancel_reason: string | null;
+  student_rationale: string | null;
+}
+
+
+function OrdersTab() {
+  const qc = useQueryClient();
+  // Refetch:ar var 30:e sek så executade ordrar dyker upp utan reload.
+  // GET-anropet trigger:ar också lazy-execution på backend.
+  const ordersQ = useQuery({
+    queryKey: ["stocks-orders"],
+    queryFn: () => api<{ orders: PendingOrder[]; count: number }>("/stocks/orders"),
+    refetchInterval: 30_000,
+  });
+  const cancelMut = useMutation({
+    mutationFn: (o: PendingOrder) =>
+      api(
+        `/stocks/orders/${o.id}?account_id=${o.account_id}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stocks-orders"] });
+      qc.invalidateQueries({ queryKey: ["stocks-portfolio"] });
+    },
+  });
+
+  const orders = ordersQ.data?.orders ?? [];
+  const pending = orders.filter((o) => o.status === "pending");
+  const completed = orders.filter((o) => o.status !== "pending");
+
+  if (orders.length === 0) {
+    return (
+      <Card>
+        <div className="text-sm text-slate-500">
+          Du har inga köordrar. När du försöker handla utanför börstid
+          kan du lägga ordern i kö här.
+        </div>
+      </Card>
+    );
+  }
+
+  const fmt = (o: PendingOrder, value: number) =>
+    o.ticker.endsWith(".ST")
+      ? formatSEK(value)
+      : `$${value.toFixed(2)}`;
+
+  return (
+    <div className="space-y-4">
+      {pending.length > 0 && (
+        <Card title={`Pending ordrar (${pending.length})`}>
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-600 border-b">
+              <tr>
+                <th className="py-2">Ticker</th>
+                <th>Sida</th>
+                <th>Antal</th>
+                <th>Refpris</th>
+                <th>Lagd</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pending.map((o) => (
+                <tr key={o.id} className="border-b last:border-0">
+                  <td className="py-2 font-medium">{o.ticker}</td>
+                  <td>
+                    <span
+                      className={
+                        o.side === "buy"
+                          ? "text-emerald-700 font-medium"
+                          : "text-amber-700 font-medium"
+                      }
+                    >
+                      {o.side === "buy" ? "Köp" : "Sälj"}
+                    </span>
+                  </td>
+                  <td>{o.quantity}</td>
+                  <td>{fmt(o, o.reference_price)}</td>
+                  <td className="text-xs text-slate-500">
+                    {new Date(o.requested_at).toLocaleString("sv-SE")}
+                  </td>
+                  <td className="text-right">
+                    <button
+                      onClick={() => cancelMut.mutate(o)}
+                      disabled={cancelMut.isPending}
+                      className="px-2 py-1 text-xs rounded border text-slate-700 hover:bg-slate-50"
+                    >
+                      Avbryt
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-3 text-xs text-slate-600 italic border-l-2 border-amber-300 pl-2">
+            Ordern utförs automatiskt så fort marknaden öppnar — priset
+            blir det första pollade kursvärdet (kan skilja från refpriset
+            ovan). USA-aktier handlas via NYSE/NASDAQ men exekveras under
+            Stockholm-börsens öppettider i denna pedagogiska simulator.
+          </div>
+        </Card>
+      )}
+
+      {completed.length > 0 && (
+        <Card title={`Tidigare ordrar (${completed.length})`}>
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-600 border-b">
+              <tr>
+                <th className="py-2">Ticker</th>
+                <th>Sida</th>
+                <th>Antal</th>
+                <th>Status</th>
+                <th>Pris</th>
+                <th>Tid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {completed.map((o) => (
+                <tr key={o.id} className="border-b last:border-0">
+                  <td className="py-2 font-medium">{o.ticker}</td>
+                  <td>{o.side === "buy" ? "Köp" : "Sälj"}</td>
+                  <td>{o.quantity}</td>
+                  <td>
+                    {o.status === "executed" ? (
+                      <span className="text-emerald-700">Utförd</span>
+                    ) : (
+                      <span className="text-rose-700">
+                        Avbruten
+                        {o.cancel_reason && (
+                          <span className="text-xs text-slate-500 ml-1">
+                            ({o.cancel_reason})
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {o.executed_price !== null
+                      ? fmt(o, o.executed_price)
+                      : "—"}
+                  </td>
+                  <td className="text-xs text-slate-500">
+                    {(o.executed_at ?? o.requested_at) &&
+                      new Date(
+                        o.executed_at ?? o.requested_at,
+                      ).toLocaleString("sv-SE")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 
 // --- Ledger ---
 
@@ -853,14 +1027,27 @@ function TradeModal({
   const total = side === "buy" ? gross + courtage : gross - courtage;
 
   const tradeMut = useMutation({
-    mutationFn: (body: { account_id: number; quantity: number; student_rationale: string }) =>
-      api(`/stocks/${ticker}/${side}`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+    mutationFn: (body: {
+      account_id: number; quantity: number; student_rationale: string;
+      side?: string;
+    }) => {
+      // Marknaden öppen → direkt-handel. Stängd → lägg i kö.
+      if (marketOpen) {
+        return api(`/stocks/${ticker}/${side}`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      } else {
+        return api(`/stocks/${ticker}/queue`, {
+          method: "POST",
+          body: JSON.stringify({ ...body, side }),
+        });
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["stocks-portfolio"] });
       qc.invalidateQueries({ queryKey: ["stocks-ledger"] });
+      qc.invalidateQueries({ queryKey: ["stocks-orders"] });
       qc.invalidateQueries({ queryKey: ["balances"] });
       onClose();
     },
@@ -870,7 +1057,6 @@ function TradeModal({
   });
 
   const canTrade =
-    marketOpen &&
     validQty &&
     stock?.last !== undefined &&
     accountId !== null &&
@@ -969,8 +1155,15 @@ function TradeModal({
         )}
 
         {!marketOpen && (
-          <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-            Börsen är stängd. Du kan inte handla just nu.
+          <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 space-y-1">
+            <div>
+              <strong>Marknaden är stängd just nu.</strong> Du kan lägga
+              ordern i kö så utförs den automatiskt vid nästa öppning.
+            </div>
+            <div className="text-xs italic">
+              Priset blir det första som finns när marknaden öppnar — kan
+              skilja sig från {formatSEK(price)} som visas nu.
+            </div>
           </div>
         )}
         {error && (
@@ -998,7 +1191,9 @@ function TradeModal({
             }`}
           >
             {tradeMut.isPending
-              ? "Genomför…"
+              ? "Skickar…"
+              : !marketOpen
+              ? (side === "buy" ? "Lägg köp i kö" : "Lägg sälj i kö")
               : side === "buy"
               ? "Bekräfta köp"
               : "Bekräfta sälj"}

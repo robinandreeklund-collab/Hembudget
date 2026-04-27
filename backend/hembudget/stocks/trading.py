@@ -33,6 +33,7 @@ class TradeError(Exception):
 @dataclass
 class TradeResult:
     transaction_id: int
+    stock_transaction_id: Optional[int]
     side: str
     ticker: str
     quantity: int
@@ -209,7 +210,8 @@ def buy_stock(
     scope_session.flush()
 
     return TradeResult(
-        transaction_id=st.id,
+        transaction_id=cash_tx.id,
+        stock_transaction_id=st.id,
         side="buy",
         ticker=ticker,
         quantity=quantity,
@@ -337,7 +339,8 @@ def sell_stock(
         holding_avg_cost_after = Decimal(holding.avg_cost)
 
     return TradeResult(
-        transaction_id=st.id,
+        transaction_id=cash_tx.id,
+        stock_transaction_id=st.id,
         side="sell",
         ticker=ticker,
         quantity=quantity,

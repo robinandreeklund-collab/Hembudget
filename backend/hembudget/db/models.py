@@ -763,6 +763,62 @@ class StockWatchlist(TenantMixin, Base):
     )
 
 
+class PendingOrder(TenantMixin, Base):
+    """Köorder för aktiehandel — utförs när marknaden öppnar.
+
+    Pedagogiskt: eleven kan planera order utanför börstid och se
+    EXAKT till vilket pris ordern blev utförd när marknaden öppnar.
+    Visar att timing är osäkert.
+
+    status:
+      'pending'   — väntar på marknaden
+      'executed'  — utförd vid öppning, executed_price + transaction_id satt
+      'cancelled' — eleven avbröt OR insufficient_funds OR insufficient_shares
+    """
+    __tablename__ = "pending_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String(4), nullable=False)  # 'buy' | 'sell'
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Prisreferens när ordern lades — bara informativt, vi använder
+    # senaste quote vid execution.
+    reference_price: Mapped[Decimal] = mapped_column(
+        Numeric(14, 4), nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    executed_price: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 4), nullable=True,
+    )
+    # Vid sälj: lock-quantity gör att samma andelar inte kan säljas
+    # två gånger via parallella pending-order. Vid köp: lock_amount
+    # SEK reserveras från cash så användaren inte kan dubbelköpa.
+    locked_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0"), nullable=False,
+    )
+    cancel_reason: Mapped[Optional[str]] = mapped_column(
+        String(80), nullable=True,
+    )
+    student_rationale: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Länk till den faktiska StockTransaction efter exekvering
+    stock_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("stock_transactions.id"), nullable=True,
+    )
+
+
 class WellbeingScore(TenantMixin, Base):
     """Sammansatt välbefinnande-poäng per månad. Pedagogisk mätare för
     att eleven ska se att ekonomi är medel, inte mål.

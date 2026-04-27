@@ -182,3 +182,96 @@ def remove_from_watchlist(payload: WatchlistIn, scope: Session = Depends(db)) ->
     )
     scope.flush()
     return {"ok": True, "deleted": int(deleted)}
+
+
+# --- Pending orders (kö) ---
+
+class QueueOrderIn(BaseModel):
+    account_id: int
+    side: str  # "buy" | "sell"
+    quantity: int = Field(gt=0)
+    student_rationale: Optional[str] = None
+
+
+@router.post("/{ticker}/queue")
+def queue(ticker: str, payload: QueueOrderIn, scope: Session = Depends(db)) -> dict:
+    """Lägg en kö-order — utförs när marknaden öppnar (eller direkt
+    om den redan är öppen vid nästa polltick)."""
+    from ..stocks.orders import queue_order
+    try:
+        with master_session() as ms:
+            order = queue_order(
+                scope_session=scope,
+                master_session=ms,
+                account_id=payload.account_id,
+                ticker=ticker,
+                side=payload.side,
+                quantity=payload.quantity,
+                student_rationale=payload.student_rationale,
+            )
+        return _order_dict(order)
+    except TradeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/orders")
+def list_pending_orders(
+    account_id: Optional[int] = None,
+    scope: Session = Depends(db),
+) -> dict:
+    """Lista pending + senaste executade/cancelled-ordrar.
+
+    Lazy execution: vi försöker exekvera pending-ordrar BARA om
+    marknaden är öppen NU. På så sätt utförs köordrar när eleven
+    nästa gång öppnar /investments — inget cron-jobb behövs.
+    """
+    from ..stocks.orders import execute_pending_orders, list_orders
+    with master_session() as ms:
+        try:
+            execute_pending_orders(scope_session=scope, master_session=ms)
+        except Exception:
+            pass  # fail-soft — listan visas oavsett
+    rows = list_orders(scope_session=scope, account_id=account_id, limit=100)
+    return {
+        "orders": [_order_dict(o) for o in rows],
+        "count": len(rows),
+    }
+
+
+@router.delete("/orders/{order_id}")
+def cancel_pending_order(
+    order_id: int,
+    account_id: int,
+    scope: Session = Depends(db),
+) -> dict:
+    """Avbryt en pending order. Eleven kan bara avbryta sina egna."""
+    from ..stocks.orders import cancel_order
+    try:
+        order = cancel_order(
+            scope_session=scope,
+            account_id=account_id,
+            order_id=order_id,
+        )
+        return _order_dict(order)
+    except TradeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+def _order_dict(o) -> dict:
+    return {
+        "id": o.id,
+        "account_id": o.account_id,
+        "ticker": o.ticker,
+        "side": o.side,
+        "quantity": o.quantity,
+        "reference_price": float(o.reference_price),
+        "status": o.status,
+        "requested_at": o.requested_at.isoformat() if o.requested_at else None,
+        "executed_at": o.executed_at.isoformat() if o.executed_at else None,
+        "executed_price": (
+            float(o.executed_price) if o.executed_price is not None else None
+        ),
+        "locked_amount": float(o.locked_amount),
+        "cancel_reason": o.cancel_reason,
+        "student_rationale": o.student_rationale,
+    }
