@@ -222,9 +222,58 @@ export default function ScrollStoryDemo() {
         <ReducedMotionStory />
       ) : (
         <>
-          {WEEKS.map((w) => (
-            <WeekStory key={w.number} week={w} />
-          ))}
+          <WeekStory week={WEEKS[0]} />
+          <HorizontalGallery
+            label="Vecka 1 i bilder"
+            intro="Snabb återblick på det du gjorde — lönen, ISK-köpet, bio-eventet. Skärmar du skulle se i din egen elev-vy."
+          >
+            <PayslipCard />
+            <PortfolioCard />
+            <WellbeingMiniCard
+              score={wellbeingScore(WEEKS[0].chapters[2].wb)}
+              wb={WEEKS[0].chapters[2].wb}
+              label="efter vecka 1"
+            />
+            <EventLogCard
+              rows={[
+                { ts: "mån 09:14", text: "Lönesamtal — 3,2 % höjning", delta: "+ 1 184 kr/mån", tone: "good" },
+                { ts: "ons 12:30", text: "Överföring till ISK", delta: "− 5 000 kr", tone: "neutral" },
+                { ts: "ons 12:31", text: "Köpte Volvo B + Ericsson B", delta: "− 4 290 kr", tone: "neutral" },
+                { ts: "fre 17:33", text: "Bio på Filmstaden — ja", delta: "− 180 kr", tone: "good" },
+              ]}
+            />
+            <EchoCard
+              quote='"Du sa ja till bion. Vad var viktigast — vänskapen eller filmen?"'
+              response="Notera vad som triggade beslutet. Var det FOMO eller en genuin lust att se folk?"
+            />
+          </HorizontalGallery>
+
+          <WeekStory week={WEEKS[1]} />
+          <HorizontalGallery
+            label="Vecka 2 i bilder"
+            intro="Det oväntade träffar tre gånger på en vecka. Så här ser konsekvenserna ut i systemet."
+          >
+            <SatisfactionCard from={62} to={72} />
+            <BankDocCard
+              title="Faktura · Tandläkare"
+              issuer="Folktandvården Stockholm"
+              amount="2 400 kr"
+              due="14 nov 2026"
+              warning="Bufferten räcker — knappt. En månad till och vi hade trillat under."
+            />
+            <LossAversionCard />
+            <WellbeingMiniCard
+              score={wellbeingScore(WEEKS[1].chapters[2].wb)}
+              wb={WEEKS[1].chapters[2].wb}
+              label="efter vecka 2"
+            />
+            <EchoCard
+              quote='"Aktierna föll 3,2 %. Hur kändes det?"'
+              response="Förlusten gör dubbelt så ont som motsvarande vinst hade gett. Det är inte i ditt huvud — det är i din kropp. Och i din mätare."
+            />
+          </HorizontalGallery>
+
+          <WeekStory week={WEEKS[2]} />
         </>
       )}
       <FinalCTA />
@@ -831,6 +880,656 @@ function ReducedMotionStory() {
         </ol>
       </div>
     </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// HorizontalGallery — interlude mellan veckor.
+// Pinnad sektion med horisontellt scroll-track som scrubbas vänster
+// → höger när användaren scrollar vertikalt. GSAP-mönster:
+// translateX:as från 0 till -(track.scrollWidth - viewportWidth).
+// ─────────────────────────────────────────────────────────────
+function HorizontalGallery({
+  label,
+  intro,
+  children,
+}: {
+  label: string;
+  intro: string;
+  children: React.ReactNode;
+}) {
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (reduced || !sectionRef.current || !trackRef.current) return;
+    registerScrollTrigger();
+    const track = trackRef.current;
+    const ctx = gsap.context(() => {
+      gsap.to(track, {
+        x: () => -(track.scrollWidth - window.innerWidth),
+        ease: "none",
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top top",
+          end: () => `+=${Math.max(track.scrollWidth - window.innerWidth, 1)}`,
+          pin: true,
+          scrub: 1,
+          invalidateOnRefresh: true,
+          anticipatePin: 1,
+        },
+      });
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced]);
+
+  // Reduced-motion: bara vertikal lista med samma kort.
+  if (reduced) {
+    return (
+      <section
+        style={{
+          padding: "48px 24px",
+          background: "#fafaf9",
+          color: "#0f172a",
+        }}
+      >
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          <div className="ssd-eyebrow" style={{ marginBottom: 8 }}>
+            {label}
+          </div>
+          <p style={{ fontSize: 15, color: "#475569", marginBottom: 24, maxWidth: 540 }}>
+            {intro}
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {children}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      ref={sectionRef}
+      style={{
+        height: "100vh",
+        background: "linear-gradient(180deg, #fafaf9 0%, #fef3c7 100%)",
+        color: "#0f172a",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* Vänster panel — fixed label medan tracket scrubbar */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "min(48px, 4vw)",
+          transform: "translateY(-50%)",
+          maxWidth: "min(280px, 28vw)",
+          zIndex: 5,
+        }}
+      >
+        <div
+          className="ssd-mono"
+          style={{
+            fontSize: 11,
+            letterSpacing: 1.6,
+            color: "#dc4c2b",
+            textTransform: "uppercase",
+            marginBottom: 12,
+            fontWeight: 600,
+          }}
+        >
+          ● Mellanakt
+        </div>
+        <h3
+          style={{
+            fontSize: "clamp(22px, 2.6vw, 30px)",
+            fontWeight: 600,
+            letterSpacing: -0.4,
+            lineHeight: 1.15,
+            margin: "0 0 12px",
+            color: "#0f172a",
+          }}
+        >
+          {label}
+        </h3>
+        <p
+          style={{
+            fontSize: 13.5,
+            lineHeight: 1.55,
+            color: "#475569",
+            margin: 0,
+          }}
+        >
+          {intro}
+        </p>
+        <div
+          className="ssd-mono ssd-bounce"
+          style={{
+            marginTop: 24,
+            fontSize: 11,
+            letterSpacing: 1.4,
+            color: "#94a3b8",
+            textTransform: "uppercase",
+          }}
+        >
+          ↓ scrolla — bilderna flyttar sig
+        </div>
+      </div>
+
+      {/* Horisontell track */}
+      <div
+        ref={trackRef}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          height: "100%",
+          gap: 24,
+          paddingLeft: "min(380px, 35vw)",
+          paddingRight: "8vw",
+          willChange: "transform",
+        }}
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
+// ─── Card-komponenter — varje kort är en mockup av en plattformsskärm ───
+//
+// Alla kort är 360-440px breda, har samma korthus-stil (vit kort, mjuk
+// skugga, runda hörn) och en eyebrow + titel + visual + meta-rad.
+
+const CARD_BASE: React.CSSProperties = {
+  flex: "0 0 420px",
+  height: "min(540px, 70vh)",
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 14,
+  padding: 22,
+  display: "flex",
+  flexDirection: "column",
+  boxShadow: "0 4px 14px rgba(15,23,42,0.06)",
+};
+
+function CardEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="ssd-mono"
+      style={{
+        fontSize: 10.5,
+        letterSpacing: 1.4,
+        color: "#64748b",
+        textTransform: "uppercase",
+        marginBottom: 8,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PayslipCard() {
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>Lönespec · november</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 4px", color: "#0f172a" }}>
+        Visma · IT-konsult
+      </h4>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+        Linda · pay-date 25 nov
+      </div>
+      <ul
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          fontFamily: "ui-monospace, monospace",
+          fontSize: 13,
+          lineHeight: 2,
+          color: "#0f172a",
+        }}
+      >
+        <li style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#475569" }}>Bruttolön</span>
+          <strong>38 295 kr</strong>
+        </li>
+        <li style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#475569" }}>Kommunalskatt 32 %</span>
+          <span style={{ color: "#dc4c2b" }}>− 12 254 kr</span>
+        </li>
+        <li style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#475569" }}>ITP1 (4,5 %)</span>
+          <span style={{ color: "#dc4c2b" }}>− 1 723 kr</span>
+        </li>
+        <li
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            paddingTop: 10,
+            marginTop: 10,
+            borderTop: "1px solid #e2e8f0",
+          }}
+        >
+          <strong>Nettolön</strong>
+          <strong style={{ color: "#10b981" }}>24 318 kr</strong>
+        </li>
+      </ul>
+      <div
+        style={{
+          marginTop: "auto",
+          paddingTop: 16,
+          fontSize: 12,
+          color: "#78350f",
+          background: "#fef3c7",
+          padding: "8px 12px",
+          borderRadius: 8,
+          fontStyle: "italic",
+        }}
+      >
+        Förhandlade upp 3,2 % från Maria. Syns från november-lönen.
+      </div>
+    </div>
+  );
+}
+
+function PortfolioCard() {
+  const stocks = [
+    { ticker: "VOLV-B", name: "Volvo B", qty: 10, price: 312.4, change: -2.1 },
+    { ticker: "ERIC-B", name: "Ericsson B", qty: 15, price: 78.65, change: 1.8 },
+    { ticker: "INVE-B", name: "Investor B", qty: 5, price: 285.0, change: 0.4 },
+  ];
+  const total = stocks.reduce((s, x) => s + x.qty * x.price, 0);
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>ISK · innehav</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 4px", color: "#0f172a" }}>
+        Aktiekonto
+      </h4>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+        3 innehav · totalt {total.toFixed(0)} kr
+      </div>
+      <ul
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          flex: 1,
+        }}
+      >
+        {stocks.map((s) => (
+          <li
+            key={s.ticker}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 12px",
+              background: "#fafaf9",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 7,
+                background: "#0f172a",
+                color: "#fef3c7",
+                display: "grid",
+                placeItems: "center",
+                fontFamily: "ui-monospace, monospace",
+                fontWeight: 700,
+                fontSize: 11,
+              }}
+            >
+              {s.ticker.split("-")[0].slice(0, 2)}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: "#0f172a" }}>{s.name}</div>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: "#64748b",
+                  fontFamily: "ui-monospace, monospace",
+                }}
+              >
+                {s.qty} st · {s.price.toFixed(2)} kr
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: 12,
+                fontFamily: "ui-monospace, monospace",
+                color: s.change > 0 ? "#10b981" : "#dc4c2b",
+                fontWeight: 600,
+              }}
+            >
+              {s.change > 0 ? "▲" : "▼"} {Math.abs(s.change).toFixed(1)} %
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 14,
+          borderTop: "1px solid #e2e8f0",
+          fontSize: 12,
+          color: "#475569",
+          fontStyle: "italic",
+        }}
+      >
+        Du köpte med 25 % av lönen. Bufferten är fortfarande två månadshyror.
+      </div>
+    </div>
+  );
+}
+
+function WellbeingMiniCard({ score, wb, label }: { score: number; wb: WBScores; label: string }) {
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>Wellbeing · {label}</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 16px", color: "#0f172a" }}>
+        Snapshot {score} / 100
+      </h4>
+      <div style={{ flex: 1, display: "grid", placeItems: "center" }}>
+        <svg viewBox="0 0 400 400" style={{ width: "100%", maxWidth: 280 }}>
+          {[0.25, 0.5, 0.75, 1].map((r, i) => (
+            <polygon
+              key={i}
+              points={DIMS.map((_, j) => {
+                const a = angleAt(j);
+                return `${CX + Math.cos(a) * R * r},${CY + Math.sin(a) * R * r}`;
+              }).join(" ")}
+              fill="none"
+              stroke="#e2e8f0"
+              strokeWidth="1"
+            />
+          ))}
+          <polygon
+            points={polyFor(wb)}
+            fill="rgba(251,191,36,0.20)"
+            stroke="#fbbf24"
+            strokeWidth="2.4"
+          />
+          {DIMS.map((d, i) => {
+            const [x, y] = point(i, wb[d.key]);
+            return <circle key={i} cx={x} cy={y} r="4.5" fill="#fbbf24" />;
+          })}
+          {DIMS.map((d, i) => {
+            const a = angleAt(i);
+            const lr = R + 28;
+            return (
+              <text
+                key={i}
+                x={CX + Math.cos(a) * lr}
+                y={CY + Math.sin(a) * lr + 4}
+                textAnchor="middle"
+                fontSize="10"
+                fontWeight="600"
+                fill="#475569"
+                fontFamily="ui-monospace, monospace"
+              >
+                {d.label}
+              </text>
+            );
+          })}
+          <text x={CX} y={CY - 4} textAnchor="middle" fontSize="46" fontWeight="700" fill="#0f172a">
+            {score}
+          </text>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function EventLogCard({
+  rows,
+}: {
+  rows: { ts: string; text: string; delta: string; tone: "good" | "bad" | "neutral" }[];
+}) {
+  const toneColor = { good: "#10b981", bad: "#dc4c2b", neutral: "#64748b" };
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>Eventlogg · senaste 5</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 16px", color: "#0f172a" }}>
+        Vad hände den här veckan
+      </h4>
+      <ul style={{ listStyle: "none", padding: 0, margin: 0, flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+        {rows.map((r, i) => (
+          <li
+            key={i}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto 1fr auto",
+              gap: 12,
+              alignItems: "baseline",
+              padding: "8px 0",
+              borderBottom: i < rows.length - 1 ? "1px dashed #e2e8f0" : "none",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 12.5,
+            }}
+          >
+            <span style={{ color: "#94a3b8", minWidth: 80 }}>{r.ts}</span>
+            <span style={{ color: "#0f172a", fontFamily: "inherit" }}>{r.text}</span>
+            <span style={{ color: toneColor[r.tone], fontWeight: 600 }}>{r.delta}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EchoCard({ quote, response }: { quote: string; response: string }) {
+  return (
+    <div
+      style={{
+        ...CARD_BASE,
+        background: "#0f172a",
+        color: "#fff",
+        border: "1px solid rgba(251,191,36,0.25)",
+      }}
+    >
+      <CardEyebrow>
+        <span style={{ color: "#fbbf24" }}>● Echo · sokratisk AI</span>
+      </CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 18px", color: "#fff" }}>
+        AI:n frågar mer än den svarar
+      </h4>
+      <div
+        style={{
+          fontSize: 16,
+          lineHeight: 1.5,
+          color: "#fbbf24",
+          fontStyle: "italic",
+          fontFamily: '"Source Serif 4", Georgia, serif',
+          marginBottom: 16,
+        }}
+      >
+        {quote}
+      </div>
+      <div
+        style={{
+          fontSize: 14.5,
+          lineHeight: 1.55,
+          color: "#e2e8f0",
+          fontFamily: '"Source Serif 4", Georgia, serif',
+          marginTop: "auto",
+        }}
+      >
+        <span
+          style={{
+            color: "#dc4c2b",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 11,
+            marginRight: 8,
+          }}
+        >
+          AI →
+        </span>
+        {response}
+      </div>
+    </div>
+  );
+}
+
+function SatisfactionCard({ from, to }: { from: number; to: number }) {
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>Arbetsgivare · satisfaction</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 16px", color: "#0f172a" }}>
+        {from} → {to}
+      </h4>
+      <div style={{ flex: 1, display: "grid", placeItems: "center" }}>
+        <svg viewBox="0 0 200 200" style={{ width: "100%", maxWidth: 200 }}>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#f1f5f9" strokeWidth="14" />
+          <circle
+            cx="100"
+            cy="100"
+            r="80"
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="14"
+            strokeDasharray={`${(to / 100) * 502.4} 502.4`}
+            strokeLinecap="round"
+            transform="rotate(-90 100 100)"
+          />
+          <text x="100" y="106" textAnchor="middle" fontSize="44" fontWeight="700" fill="#0f172a">
+            {to}
+          </text>
+        </svg>
+      </div>
+      <div
+        style={{
+          marginTop: 14,
+          fontSize: 12,
+          color: "#475569",
+          fontStyle: "italic",
+        }}
+      >
+        Bra svar på "Maria glömt passerkort". Chefen noterade.
+      </div>
+    </div>
+  );
+}
+
+function BankDocCard({
+  title,
+  amount,
+  issuer,
+  due,
+  warning,
+}: {
+  title: string;
+  amount: string;
+  issuer: string;
+  due: string;
+  warning?: string;
+}) {
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>Bank-dokument</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 4px", color: "#0f172a" }}>
+        {title}
+      </h4>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+        Från {issuer}
+      </div>
+      <div
+        style={{
+          background: "#fafaf9",
+          border: "1px dashed #cbd5e1",
+          borderRadius: 8,
+          padding: "20px 18px",
+          fontFamily: "ui-monospace, monospace",
+          fontSize: 13,
+          lineHeight: 1.9,
+          color: "#0f172a",
+          flex: 1,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#475569" }}>Belopp</span>
+          <strong style={{ color: "#dc4c2b", fontSize: 17 }}>{amount}</strong>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: "#475569" }}>Förfallodag</span>
+          <strong>{due}</strong>
+        </div>
+      </div>
+      {warning && (
+        <div
+          style={{
+            marginTop: 14,
+            fontSize: 12,
+            color: "#7f1d1d",
+            background: "rgba(220,76,43,.06)",
+            border: "1px solid rgba(220,76,43,.2)",
+            padding: "8px 12px",
+            borderRadius: 8,
+          }}
+        >
+          {warning}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LossAversionCard() {
+  return (
+    <div style={CARD_BASE}>
+      <CardEyebrow>Loss aversion · λ ≈ 2,0</CardEyebrow>
+      <h4 style={{ fontSize: 19, fontWeight: 600, margin: "0 0 16px", color: "#0f172a" }}>
+        En förlust gör dubbelt så ont
+      </h4>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, justifyContent: "center" }}>
+        <div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}>
+            VINST +3,2 %
+          </div>
+          <div style={{ height: 18, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: "32%", background: "#10b981" }} />
+          </div>
+          <div style={{ fontSize: 12, color: "#10b981", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>
+            Trygghet +2 poäng
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontFamily: "ui-monospace, monospace", letterSpacing: 1 }}>
+            FÖRLUST −3,2 %
+          </div>
+          <div style={{ height: 18, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: "64%", background: "#dc4c2b" }} />
+          </div>
+          <div style={{ fontSize: 12, color: "#dc4c2b", fontFamily: "ui-monospace, monospace", marginTop: 4 }}>
+            Trygghet −4 poäng (2× hårdare)
+          </div>
+        </div>
+      </div>
+      <div
+        style={{
+          marginTop: 16,
+          paddingTop: 14,
+          borderTop: "1px solid #e2e8f0",
+          fontSize: 12,
+          color: "#475569",
+          fontStyle: "italic",
+        }}
+      >
+        Wellbeing räknar in portföljens 24h-rörelse asymmetriskt — exakt
+        som Kahneman/Tversky beskrev.
+      </div>
+    </div>
   );
 }
 
