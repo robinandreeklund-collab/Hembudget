@@ -13,7 +13,7 @@
  *
  * Innehåll byggs ut sektion för sektion. Just nu: Header + Hero.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CELL_INFO, type CellInfo } from "@/data/landingCells";
 
@@ -62,8 +62,13 @@ const PERIODIC_CELLS: Cell[] = [
   { n: 28, sym: "Ak", name: "Aktie", desc: "split", cat: "fordj" },
   { n: 29, sym: "Sn", name: "SMS-lån", desc: "ränta", cat: "expert" },
   { n: 30, sym: "Bg", name: "Bra köp", desc: "jmf", cat: "konto" },
-  { n: 31, sym: "Ba", name: "BankID", desc: "PIN-scen.", cat: "risk" },
+  { n: 31, sym: "El", name: "EkonomilabbetID", desc: "PIN-scen.", cat: "risk" },
   { n: 32, sym: "Mo", name: "Modul", desc: "7 steg", cat: "prof" },
+  // Rad 5 — nya feature-områden i v5 (Ag/Ls/Bk/Ek).
+  { n: 33, sym: "Ag", name: "Arbetsgiv.", desc: "satisf.", cat: "fordj" },
+  { n: 34, sym: "Ls", name: "Lönesamtal", desc: "5 ronder", cat: "expert" },
+  { n: 35, sym: "Bk", name: "Banken", desc: "EklabbID", cat: "konto" },
+  { n: 36, sym: "Ek", name: "EkonomiSkalan", desc: "kreditb.", cat: "risk" },
 ];
 
 const PALETTE: Record<CellCat, { bg: string; fg: string; border: string }> = {
@@ -76,12 +81,12 @@ const PALETTE: Record<CellCat, { bg: string; fg: string; border: string }> = {
 };
 
 const CATEGORY_META: Record<CellCat, { label: string; count: number }> = {
-  grund: { label: "Grundkompetens", count: 8 },
-  fordj: { label: "Fördjupning", count: 8 },
-  expert: { label: "Expert", count: 4 },
-  konto: { label: "Konto & flöde", count: 4 },
-  risk: { label: "Riskgrupp", count: 4 },
-  prof: { label: "Professorns tillskott", count: 4 },
+  grund: { label: "Grundkompetens", count: 9 },
+  fordj: { label: "Fördjupning", count: 9 },
+  expert: { label: "Expert", count: 5 },
+  konto: { label: "Konto & flöde", count: 5 },
+  risk: { label: "Riskgrupp", count: 5 },
+  prof: { label: "Professorns tillskott", count: 3 },
 };
 
 // 9 features med målgrupp-tagg så tab-filtret fungerar.
@@ -155,6 +160,28 @@ const FEATURES: Array<{
     cat: "konto",
     audience: ["larare", "hem", "elev"],
   },
+  // De tre nya v5-områdena (Ag/Ls/Bk).
+  {
+    sym: "Ag",
+    title: "Arbetsgivare med personlighet",
+    desc: "17 yrken får riktiga kollektivavtal. Sjukanmälan, VAB och slumpade arbetsplats-frågor flyttar elevens nöjdhetsfaktor 0–100.",
+    cat: "fordj",
+    audience: ["larare", "elev"],
+  },
+  {
+    sym: "Ls",
+    title: "Förhandla lön mot AI",
+    desc: "5-rond lönesamtal med AI-chefen Maria. Slutbudet jämförs mot avtalets revisionsutrymme — och syns i nästa månads lönespec, inte direkt.",
+    cat: "expert",
+    audience: ["larare", "elev"],
+  },
+  {
+    sym: "Bk",
+    title: "Banken som ett eget rum",
+    desc: "EkonomilabbetID med QR + PIN, signering av kommande betalningar, och EkonomiSkalan som mäter hur sena betalningar påverkar elevens kreditbetyg.",
+    cat: "konto",
+    audience: ["larare", "hem", "elev"],
+  },
 ];
 
 // ---------- Root ----------
@@ -213,6 +240,18 @@ const FAQS = [
     q: "Kan elever eller barn komma åt varandras data?",
     a: "Nej. Varje elev/barn har en egen tenant-isolerad dataström, ingen cross-access. Den vuxna ser bara sina egna användare.",
   },
+  {
+    q: "Vad händer med elevernas data när året är slut?",
+    a: "Du som lärare/förälder bestämmer. Du kan exportera portfolio-PDF:er per elev eller hela klassen som ZIP, och sedan radera kontona. Datan tas bort permanent — vi behåller ingen kopia.",
+  },
+  {
+    q: "Vilken AI-modell används?",
+    a: "Claude Sonnet 4.6 för coachning och rubric-förslag, Haiku 4.5 för snabba interaktioner som lönesamtal. AI-anropen är gatade per lärarkonto och kan stängas av helt.",
+  },
+  {
+    q: "Kan jag importera befintliga moduler från andra system?",
+    a: "Inte i pilotåret. Modulerna är inbyggda i Ekonomilabbet och uppdateras tillsammans med läroplansförändringar. Egna uppdrag kan läggas in fritt — moduler som format kommer 2027.",
+  },
 ];
 
 const PROBLEM_STATS = [
@@ -269,6 +308,213 @@ const LOGIC = [
   },
 ];
 
+// Live-statistik visar siffror i nollläge tills pilotskolan startar.
+const STATS_LIVE: Array<{ num: string; label: string }> = [
+  { num: "0", label: "Lärare" },
+  { num: "5", label: "Elever" },
+  { num: "0", label: "Avklarade moduler" },
+  { num: "0", label: "Reflektioner" },
+];
+
+// Sex koncept-skärmar lärare och elever rör sig i.
+const SCREENS: Array<{ sym: string; title: string; desc: string }> = [
+  { sym: "Lä", title: "Lärarens dashboard", desc: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm." },
+  { sym: "Mo", title: "Elevens kursplan", desc: "Moduler steg för steg, klar, reflektera, quiz och uppdrag." },
+  { sym: "Ms", title: "Mastery-grafen", desc: "Per-kompetens mastery, milstolpar och nästa-steg-hint." },
+  { sym: "Pf", title: "Portfolio-PDF", desc: "Exporteras per elev eller som ZIP för hela klassen." },
+  { sym: "AI", title: "Echo", desc: "Multi-turn AI-coach som anpassar svaren till elevens nivå." },
+  { sym: "Tt", title: "Time on task", desc: "Se vilka steg som fastnar för eleverna i din klass." },
+];
+
+// Tema som delas av alla v5-sektioner. Klassnamn matchar SharedStyles nedan.
+type Theme = {
+  h2: string;
+  body: string;
+  eyebrow: string;
+  mono: string;
+  btn: string;
+  btnPrimary: string;
+  rule: string;
+  cardBg: string;
+  cardBg2: string;
+  fg: string;
+  muted: string;
+  accent: string;
+  radius: number;
+  serifFont: string;
+};
+
+const THEME: Theme = {
+  h2: "vc-h2",
+  body: "",
+  eyebrow: "vc-eyebrow-c",
+  mono: "vc-mono",
+  btn: "vc-btn",
+  btnPrimary: "vc-btn-primary",
+  rule: "#e2e8f0",
+  cardBg: "#fff",
+  cardBg2: "#fef3c7",
+  fg: "#0f172a",
+  muted: "#64748b",
+  accent: "#dc4c2b",
+  radius: 10,
+  serifFont: '"Source Serif 4", Georgia, serif',
+};
+
+// ─── Atomer ───────────────────────────────────────────────────────
+// EchoAvatar: AI-coach-avatar med koncentriska "ekot"-ringar runt en
+// glödande kärna. Ingen ansikte, ingen djur — läses som intelligens + ljud.
+function EchoAvatar({ size = 56 }: { size?: number }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: "50%",
+        position: "relative",
+        overflow: "hidden",
+        background:
+          "radial-gradient(circle at 35% 30%, #1e293b 0%, #0f172a 60%, #020617 100%)",
+        border: "1.5px solid rgba(251,191,36,0.35)",
+        boxShadow: hover
+          ? "0 0 0 3px rgba(251,191,36,0.15), 0 6px 20px -4px rgba(217,119,6,0.5)"
+          : "0 4px 14px -3px rgba(15,23,42,0.4)",
+        transition: "box-shadow .25s ease",
+        display: "grid",
+        placeItems: "center",
+      }}
+    >
+      <style>{`
+        @keyframes vc-echo-ripple {
+          0%   { transform: scale(0.4); opacity: 0.9; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+        @keyframes vc-echo-core {
+          0%, 100% { transform: scale(1);    filter: brightness(1); }
+          50%      { transform: scale(1.18); filter: brightness(1.3); }
+        }
+        .vc-echo-ring { animation: vc-echo-ripple 2.4s cubic-bezier(.2,.6,.2,1) infinite; }
+        .vc-echo-ring.r2 { animation-delay: 0.8s; }
+        .vc-echo-ring.r3 { animation-delay: 1.6s; }
+        .vc-echo-active .vc-echo-ring { animation-duration: 1.4s; }
+        .vc-echo-core { animation: vc-echo-core 2.2s ease-in-out infinite; }
+      `}</style>
+      <svg
+        viewBox="0 0 100 100"
+        width={size}
+        height={size}
+        className={hover ? "vc-echo-active" : ""}
+        style={{ display: "block", overflow: "visible" }}
+      >
+        <defs>
+          <radialGradient id="vc-echo-core-grad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#fef3c7" />
+            <stop offset="40%" stopColor="#fbbf24" />
+            <stop offset="80%" stopColor="#d97706" />
+            <stop offset="100%" stopColor="#92400e" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <g style={{ transformOrigin: "50px 50px" }}>
+          <circle className="vc-echo-ring" cx="50" cy="50" r="14" fill="none" stroke="#fbbf24" strokeWidth="1.2" style={{ transformOrigin: "50px 50px" }} />
+          <circle className="vc-echo-ring r2" cx="50" cy="50" r="14" fill="none" stroke="#fbbf24" strokeWidth="1.2" style={{ transformOrigin: "50px 50px" }} />
+          <circle className="vc-echo-ring r3" cx="50" cy="50" r="14" fill="none" stroke="#fbbf24" strokeWidth="1.2" style={{ transformOrigin: "50px 50px" }} />
+        </g>
+        <g className="vc-echo-core" style={{ transformOrigin: "50px 50px" }}>
+          <circle cx="50" cy="50" r="16" fill="url(#vc-echo-core-grad)" opacity="0.7" />
+          <circle cx="50" cy="50" r="9" fill="#fef3c7" />
+          <circle cx="50" cy="50" r="5" fill="#fff" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// SectionCellData: liten cell som inleder varje v5-sektion (Wb/Hb/Lg…).
+type SectionCellData = { sym: string; n: string; label: string };
+
+function SectionCell({ cell, dark }: { cell: SectionCellData; dark?: boolean }) {
+  const isDark = !!dark;
+  const bg = isDark ? "#0f172a" : "#fef3c7";
+  const fg = isDark ? "#fef3c7" : "#78350f";
+  const border = isDark ? "#0f172a" : "rgba(120,53,15,0.25)";
+  return (
+    <div
+      style={{
+        width: 64,
+        height: 64,
+        padding: 6,
+        background: bg,
+        color: fg,
+        border: `1px solid ${border}`,
+        borderRadius: 6,
+        position: "relative",
+        fontFamily: 'ui-monospace, "JetBrains Mono", monospace',
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+      }}
+    >
+      <div style={{ fontSize: 9, opacity: 0.7, letterSpacing: 0.5 }}>{cell.n}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1, textAlign: "left" }}>{cell.sym}</div>
+      <div style={{ fontSize: 8, opacity: 0.7, letterSpacing: 0.5, textTransform: "uppercase" }}>{cell.label}</div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  cell,
+  eyebrow,
+  children,
+  theme,
+  dark,
+}: {
+  cell: SectionCellData;
+  eyebrow: string;
+  children: ReactNode;
+  theme: Theme;
+  dark?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 24, marginBottom: 24 }}>
+      <SectionCell cell={cell} dark={dark} />
+      <div style={{ paddingTop: 4 }}>
+        <div className={theme.eyebrow} style={{ marginBottom: 12, color: dark ? "#94a3b8" : "#64748b" }}>
+          {eyebrow}
+        </div>
+        <h2 className={theme.h2} style={{ margin: 0, color: dark ? "#fff" : "#0f172a", maxWidth: 820 }}>
+          {children}
+        </h2>
+      </div>
+    </div>
+  );
+}
+
+// NewSectionCell/Header — separat namn för v5:s tre nya sektioner
+// (Employer/SalaryTalk/Bank). Identiskt utseende, behåller separation
+// så att v5-källkoden mappar 1:1.
+const NewSectionCell = SectionCell;
+const NewSectionHeader = SectionHeader;
+
+// Tillfällig referens — håller atomer/konstanter "använda" under fas 1
+// (atomerna konsumeras av sektionerna som byggs i fas 5–18). Tas bort
+// senast i fas 4 när Features renderar THEME + EchoAvatar.
+const __VC_PHASE1_SCAFFOLD = {
+  EchoAvatar,
+  SectionCell,
+  SectionHeader,
+  NewSectionCell,
+  NewSectionHeader,
+  THEME,
+  STATS_LIVE,
+  SCREENS,
+};
+void __VC_PHASE1_SCAFFOLD;
+
 function SharedStyles() {
   return (
     <style>{`
@@ -290,6 +536,7 @@ function SharedStyles() {
       .vc-tab-off { color: #64748b; }
       .vc-tab-off:hover { color: #0f172a; }
       .vc-eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
+      .vc-eyebrow-c { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
       .vc-hamburger { display: none; }
       .vc-periodic-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
       .vc-hero-section { padding: 32px 24px 16px; }
