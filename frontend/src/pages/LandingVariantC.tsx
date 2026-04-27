@@ -7588,8 +7588,41 @@ function PriceSection({ theme }: { theme: Theme }) {
 // ---------- FoundersQuoteSection (v5) — Robin Fröjd · Ekonomilabbet ----------
 
 function FoundersQuoteSection({ theme }: { theme: Theme }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const quoteRef = useRef<HTMLParagraphElement | null>(null);
+  const supportRef = useRef<HTMLDivElement | null>(null);
+  const reduced = useReducedMotion();
+
+  // Text-reveal: huvudcitatet maskeras vänster→höger med clip-path,
+  // sedan fade:ar de stödjande paragraferna in med stagger.
+  useEffect(() => {
+    if (reduced || !sectionRef.current) return;
+    registerScrollTrigger();
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({
+        scrollTrigger: { trigger: sectionRef.current, start: "top 70%", once: true },
+      });
+      if (quoteRef.current) {
+        tl.fromTo(
+          quoteRef.current,
+          { clipPath: "inset(0 100% 0 0)" },
+          { clipPath: "inset(0 0% 0 0)", duration: 2.0, ease: "power2.inOut" },
+        );
+      }
+      if (supportRef.current) {
+        tl.from(
+          supportRef.current.querySelectorAll("p"),
+          { opacity: 0, y: 16, duration: 0.7, stagger: 0.2, ease: "power2.out" },
+          "-=0.5",
+        );
+      }
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced]);
+
   return (
     <section
+      ref={sectionRef}
       style={{
         padding: "120px 24px",
         borderTop: `1px solid ${theme.rule}`,
@@ -7606,6 +7639,7 @@ function FoundersQuoteSection({ theme }: { theme: Theme }) {
         }}
       >
         <p
+          ref={quoteRef}
           style={{
             fontFamily: theme.serifFont,
             fontSize: 32,
@@ -7623,6 +7657,7 @@ function FoundersQuoteSection({ theme }: { theme: Theme }) {
         </p>
 
         <div
+          ref={supportRef}
           style={{
             marginTop: 36,
             fontSize: 15.5,
