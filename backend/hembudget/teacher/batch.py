@@ -78,6 +78,12 @@ def create_batch_for_student(
     if not student.profile:
         raise ValueError("Student saknar profil")
 
+    # Hämta lärarens email till PDF:erna (t.ex. "Frågor om din lön: ...")
+    # — annars hamnar en påhittad lon@arbetsgivare.se i lönespecen.
+    from .. school.models import Teacher as _Teacher
+    teacher = master_session.get(_Teacher, student.teacher_id)
+    teacher_email = teacher.email if teacher and teacher.email else "lärare@ekonomilabbet.org"
+
     existing = (
         master_session.query(ScenarioBatch)
         .filter(
@@ -212,7 +218,11 @@ def create_batch_for_student(
 
     # 1. Lönespec (alltid)
     if scenario.salary:
-        pdf = render_lonespec(scenario.salary, scenario)
+        pdf = render_lonespec(
+            scenario.salary, scenario,
+            student_name=student.display_name,
+            teacher_email=teacher_email,
+        )
         # Spara hela skattefördelningen så lönespec-importen kan skriva
         # den till UpcomingTransaction.notes (JSON) för /tax-vyn.
         sal = scenario.salary
@@ -237,7 +247,7 @@ def create_batch_for_student(
         sort_order += 1
 
     # 2. Kontoutdrag (alltid)
-    pdf = render_kontoutdrag(scenario)
+    pdf = render_kontoutdrag(scenario, student_name=student.display_name)
     master_session.add(BatchArtifact(
         batch_id=batch.id,
         kind="kontoutdrag",
@@ -273,7 +283,10 @@ def create_batch_for_student(
 
     # 4. Kreditkortsfaktura (om kortköp finns)
     if scenario.card_events:
-        pdf = render_kreditkort(scenario.card_events, scenario)
+        pdf = render_kreditkort(
+            scenario.card_events, scenario,
+            student_name=student.display_name,
+        )
         master_session.add(BatchArtifact(
             batch_id=batch.id,
             kind="kreditkort_faktura",

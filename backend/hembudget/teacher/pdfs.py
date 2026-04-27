@@ -88,10 +88,20 @@ def _employer_org_no(employer: str) -> str:
     return f"556{h % 1000:03d}-{h % 10000:04d}"
 
 
-def render_lonespec(salary: SalaryEvent, scenario: MonthScenario) -> bytes:
+def render_lonespec(
+    salary: SalaryEvent,
+    scenario: MonthScenario,
+    *,
+    student_name: str = "Eleven",
+    teacher_email: str = "lärare@ekonomilabbet.org",
+) -> bytes:
     """Lönespec i Skatteverket-/typisk arbetsgivar-stil:
     Header med arbetsgivare + org-nr, anställd-block, tabell med kolumner
     (Avdrag/Tillägg, Antal, A-pris, Belopp), semester-info, info-fot.
+
+    student_name: visas i 'Anställd:'-fältet.
+    teacher_email: visas i footer ('Frågor om din lön: …') så eleven
+    vet vart hen ska vända sig (= läraren, inte en påhittad arbetsgivare).
     """
     buf = io.BytesIO()
     doc = _build_doc(buf, f"Lönespec {scenario.year_month}")
@@ -134,7 +144,7 @@ def render_lonespec(salary: SalaryEvent, scenario: MonthScenario) -> bytes:
     employee_rows = [
         ["Arbetsgivare:", salary.employer, "Utbetalningsdag:", salary.pay_date.isoformat()],
         ["Befattning:", salary.profession, "Skattetabell:", "33"],
-        ["Anställd:", "Eleven", "Anställningsnr:", "ANS-1042"],
+        ["Anställd:", student_name, "Anställningsnr:", "ANS-1042"],
     ]
     e_table = Table(employee_rows, colWidths=[28 * mm, 56 * mm, 38 * mm, 50 * mm])
     e_table.setStyle(TableStyle([
@@ -229,7 +239,7 @@ def render_lonespec(salary: SalaryEvent, scenario: MonthScenario) -> bytes:
     story.append(Spacer(1, 14))
     story.append(Paragraph(
         f"<b>{salary.employer}</b> &nbsp;&nbsp; Org.nr {org_no} &nbsp;&nbsp; "
-        f"Frågor om din lön: lön@{salary.employer.lower().replace(' ', '')}.se",
+        f"Frågor om din lön: <b>{teacher_email}</b>",
         H_LABEL,
     ))
     story.append(Spacer(1, 4))
@@ -251,7 +261,11 @@ def _iban_from_account_no(account_no: str) -> str:
     return f"SE45 8000 {digits[0:4]} {digits[4:8]} {digits[8:12]}"
 
 
-def render_kontoutdrag(scenario: MonthScenario) -> bytes:
+def render_kontoutdrag(
+    scenario: MonthScenario,
+    *,
+    student_name: str = "Eleven",
+) -> bytes:
     """Kontoutdrag i Nordea/SEB-stil:
     Bank-header, kund-block med IBAN/BIC, period-info, saldo-summering,
     detaljerad transaktionstabell med bokföringsdag + beskrivning + belopp +
@@ -323,7 +337,7 @@ def render_kontoutdrag(scenario: MonthScenario) -> bytes:
 
     # Konto-block
     acct_rows = [
-        ["Kontoinnehavare:", "Eleven Andersson"],
+        ["Kontoinnehavare:", student_name],
         ["Kontonummer:", scenario.bank_account_no],
         ["IBAN:", iban],
         ["BIC:", "NDEASESS"],
@@ -451,6 +465,8 @@ def render_lanbesked(loan: LoanEvent, scenario: MonthScenario) -> bytes:
 
 def render_kreditkort(
     card_events: list[CardEvent], scenario: MonthScenario,
+    *,
+    student_name: str = "Eleven",
 ) -> bytes:
     """Kreditkortsfaktura i SEB Kort/Eurocard-stil:
     Header med kortutgivare, sammanställning-box (föregående saldo,
@@ -511,7 +527,7 @@ def render_kreditkort(
 
     # Kortinnehavare
     holder_rows = [
-        ["Kortinnehavare:", "Eleven Andersson"],
+        ["Kortinnehavare:", student_name],
         ["Kortnummer:", scenario.card_account_no],
         ["Kreditgräns:", "40 000,00 kr"],
     ]
