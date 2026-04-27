@@ -446,27 +446,479 @@ function SignConfirmView({ token }: { token: string }) {
 }
 
 
+type BankTab = "statements" | "upcoming" | "scheduled";
+
+
 function BankDashboard() {
+  const [tab, setTab] = useState<BankTab>("statements");
   return (
-    <Card title="Du är inloggad i banken">
-      <div className="flex items-start gap-3 mb-4">
-        <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-slate-700 leading-relaxed">
-          BankID-simuleringen är klar. I de följande commits (PR 6/7)
-          får denna vy:
-          <ul className="list-disc ml-5 mt-1 space-y-0.5 text-slate-600">
-            <li>Kontoutdrag (export → /my-batches → /transactions)</li>
-            <li>Kommande betalningar (signering med BankID)</li>
-            <li>Sena betalningar + påminnelser</li>
-            <li>Kreditbedömning (EkonomiSkalan)</li>
-            <li>Låneansökan</li>
-          </ul>
+    <div className="space-y-4">
+      <div className="flex items-start gap-3 border-l-4 border-emerald-400 bg-emerald-50/50 rounded-md p-3">
+        <ShieldCheck className="w-5 h-5 text-emerald-700 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-slate-700">
+          Du är inloggad. Sessionen är giltig i 15 minuter.
         </div>
       </div>
-      <div className="text-xs text-slate-500">
-        Sessionen är giltig i 15 minuter. Logga ut genom att stänga
-        fliken.
+      <div className="flex gap-2 border-b">
+        {(["statements", "upcoming", "scheduled"] as BankTab[]).map(
+          (t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 py-2 text-sm border-b-2 ${
+                tab === t
+                  ? "border-brand-600 text-brand-700"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {t === "statements" && "Kontoutdrag"}
+              {t === "upcoming" && "Kommande betalningar"}
+              {t === "scheduled" && "Schemalagda"}
+            </button>
+          ),
+        )}
+      </div>
+      {tab === "statements" && <StatementsTab />}
+      {tab === "upcoming" && <UpcomingPaymentsTab />}
+      {tab === "scheduled" && <ScheduledPaymentsTab />}
+    </div>
+  );
+}
+
+
+// ---------- Kontoutdrag-flik ----------
+
+interface BankArtifact {
+  artifact_id: number;
+  batch_id: number;
+  year_month: string;
+  kind: string;
+  title: string;
+  filename: string;
+  exported_to_my_batches: boolean;
+  exported_at: string | null;
+  imported_at: string | null;
+}
+
+
+function StatementsTab() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["bank-statements"],
+    queryFn: () => api<BankArtifact[]>("/bank/statements"),
+  });
+  const exportMut = useMutation({
+    mutationFn: (params: { batchId: number; artifactId: number }) =>
+      api(
+        `/bank/statements/${params.batchId}/${params.artifactId}/export`,
+        { method: "POST" },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bank-statements"] }),
+  });
+
+  if (q.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar…</div></Card>;
+  }
+  if (q.error) {
+    return (
+      <Card>
+        <div className="text-sm text-rose-700">
+          Kunde inte hämta dokument: {String(q.error)}
+        </div>
+      </Card>
+    );
+  }
+  const arts = q.data ?? [];
+  if (arts.length === 0) {
+    return (
+      <Card title="Inga dokument än">
+        <div className="text-sm text-slate-700 leading-relaxed">
+          Banken har inga kontoutdrag, kreditkortsfakturor eller
+          lånebesked för dig än. När din lärare genererar månadens
+          material syns dom här.
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <Card title={`Dokument från banken (${arts.length})`}>
+      <div className="text-xs text-slate-500 mb-3">
+        Banken har egna dokument — kontoutdrag, kreditkortsfakturor
+        och lånebesked. Exportera dem till <em>Dina dokument</em> så
+        kan du sedan importera till bokföringen från /my-batches.
+      </div>
+      <ul className="divide-y divide-slate-200">
+        {arts.map((a) => (
+          <li
+            key={a.artifact_id}
+            className="py-2 flex items-center gap-3 text-sm"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">
+                {a.year_month} · {a.title}
+              </div>
+              <div className="text-xs text-slate-500 truncate">
+                {a.filename} · {kindLabel(a.kind)}
+              </div>
+            </div>
+            {a.exported_to_my_batches ? (
+              <span className="text-xs text-emerald-700 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {a.imported_at ? "Importerad" : "Exporterad"}
+              </span>
+            ) : (
+              <button
+                onClick={() =>
+                  exportMut.mutate({
+                    batchId: a.batch_id,
+                    artifactId: a.artifact_id,
+                  })
+                }
+                disabled={exportMut.isPending}
+                className="text-xs bg-brand-600 text-white rounded px-3 py-1 hover:bg-brand-700 disabled:opacity-50"
+              >
+                Exportera
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 text-[11px] text-slate-500">
+        Efter export: gå till <a href="/my-batches" className="text-brand-700 underline">Dina dokument</a> för att importera till bokföringen.
       </div>
     </Card>
   );
+}
+
+
+function kindLabel(kind: string): string {
+  switch (kind) {
+    case "kontoutdrag": return "Kontoutdrag";
+    case "kreditkort_faktura": return "Kreditkortsfaktura";
+    case "lan_besked": return "Lånebesked";
+    default: return kind;
+  }
+}
+
+
+// ---------- Kommande betalningar ----------
+
+interface UpcomingPaymentRow {
+  upcoming_id: number;
+  name: string;
+  amount: number;
+  expected_date: string;
+  debit_account_id: number | null;
+  already_signed: boolean;
+  scheduled_payment_id: number | null;
+  scheduled_status: string | null;
+  scheduled_date: string | null;
+}
+
+
+interface AccountOut {
+  id: number;
+  name: string;
+  type: string;
+}
+
+
+function UpcomingPaymentsTab() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["bank-upcoming"],
+    queryFn: () => api<UpcomingPaymentRow[]>("/bank/upcoming-payments"),
+  });
+  const accountsQ = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api<AccountOut[]>("/accounts"),
+  });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [accountId, setAccountId] = useState<number | null>(null);
+
+  // Default-konto: första checking
+  useEffect(() => {
+    if (accountId === null && accountsQ.data) {
+      const checking = accountsQ.data.find((a) => a.type === "checking");
+      if (checking) setAccountId(checking.id);
+    }
+  }, [accountsQ.data, accountId]);
+
+  const [signing, setSigning] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
+
+  const initSign = useMutation({
+    mutationFn: () =>
+      api<InitSessionOut>("/bank/session/init", {
+        method: "POST",
+        body: JSON.stringify({
+          purpose: `sign_payment_batch:${[...selectedIds].join(",")}`,
+        }),
+      }),
+  });
+
+  async function signSelected() {
+    if (selectedIds.size === 0 || accountId === null) return;
+    setSigning(true);
+    setSignError(null);
+    try {
+      // 1. Init BankID-session — eleven måste bekräfta i annan tab
+      const sess = await initSign.mutateAsync();
+      // 2. Polla tills bekräftad (60 sek timeout)
+      const start = Date.now();
+      let confirmed = false;
+      while (Date.now() - start < 60_000) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const status = await api<SessionStatusOut>(
+          `/bank/session/${sess.token}`,
+        );
+        if (status.confirmed) {
+          confirmed = true;
+          break;
+        }
+        if (status.expired) {
+          throw new Error("BankID-sessionen löpte ut");
+        }
+      }
+      if (!confirmed) {
+        // Visa länken direkt så eleven kan öppna manuellt och bekräfta
+        const url = `${window.location.origin}${sess.qr_url}`;
+        throw new Error(
+          `Du behövde bekräfta i mobilen — öppna ${url} i ny tab och försök igen.`,
+        );
+      }
+      // 3. Signera batchen
+      await api("/bank/upcoming-payments/sign", {
+        method: "POST",
+        body: JSON.stringify({
+          upcoming_ids: [...selectedIds],
+          account_id: accountId,
+          bank_session_token: sess.token,
+        }),
+      });
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ["bank-upcoming"] });
+    } catch (e) {
+      setSignError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  if (q.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar…</div></Card>;
+  }
+  const rows = q.data ?? [];
+  const unsignedRows = rows.filter((r) => !r.already_signed);
+
+  if (unsignedRows.length === 0 && rows.length === 0) {
+    return (
+      <Card title="Inga obetalda fakturor">
+        <div className="text-sm text-slate-700">
+          Allt är betalt eller redan signerat. Bra jobbat!
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {unsignedRows.length > 0 && (
+        <Card title={`Att signera (${unsignedRows.length})`}>
+          <div className="text-xs text-slate-500 mb-3">
+            Markera fakturor du vill betala. När du signerar med BankID
+            schemaläggs de — pengarna dras från valt konto på
+            förfallodagen om saldot räcker.
+          </div>
+          <ul className="divide-y divide-slate-200 mb-3">
+            {unsignedRows.map((r) => (
+              <li
+                key={r.upcoming_id}
+                className="py-2 flex items-center gap-3 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(r.upcoming_id)}
+                  onChange={(e) => {
+                    const next = new Set(selectedIds);
+                    if (e.target.checked) next.add(r.upcoming_id);
+                    else next.delete(r.upcoming_id);
+                    setSelectedIds(next);
+                  }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="truncate">{r.name}</div>
+                  <div className="text-xs text-slate-500">
+                    Förfallodag {r.expected_date}
+                  </div>
+                </div>
+                <div className="text-right tabular-nums">
+                  {Math.round(r.amount).toLocaleString("sv-SE")} kr
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={accountId ?? ""}
+              onChange={(e) => setAccountId(parseInt(e.target.value, 10))}
+              className="border rounded px-2 py-1.5 text-sm"
+            >
+              <option value="" disabled>Välj konto</option>
+              {(accountsQ.data ?? [])
+                .filter((a) => a.type === "checking")
+                .map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+            </select>
+            <button
+              onClick={signSelected}
+              disabled={
+                signing ||
+                selectedIds.size === 0 ||
+                accountId === null
+              }
+              className="bg-brand-600 text-white rounded px-4 py-1.5 text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              {signing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+              {signing ? "Signerar med BankID…" : `Signera ${selectedIds.size} st`}
+            </button>
+            {signError && (
+              <div className="text-sm text-rose-700 w-full">
+                {signError}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+      {rows.filter((r) => r.already_signed).length > 0 && (
+        <Card title="Redan signerade">
+          <ul className="divide-y divide-slate-200 text-sm">
+            {rows.filter((r) => r.already_signed).map((r) => (
+              <li
+                key={r.upcoming_id}
+                className="py-2 flex items-center gap-3"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <div className="flex-1">
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-xs text-slate-500">
+                    Schemalagd {r.scheduled_date} · status {r.scheduled_status}
+                  </div>
+                </div>
+                <div className="tabular-nums">
+                  {Math.round(r.amount).toLocaleString("sv-SE")} kr
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
+// ---------- Schemalagda betalningar ----------
+
+interface ScheduledPaymentRow {
+  id: number;
+  upcoming_id: number;
+  name: string;
+  account_id: number;
+  amount: number;
+  scheduled_date: string;
+  status: string;
+  executed_at: string | null;
+  failure_reason: string | null;
+}
+
+
+function ScheduledPaymentsTab() {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["bank-scheduled"],
+    queryFn: () =>
+      api<{ scheduled_payments: ScheduledPaymentRow[]; count: number }>(
+        "/bank/scheduled-payments",
+      ),
+  });
+  const runMut = useMutation({
+    mutationFn: () =>
+      api<{ executed: number; failed: number; due_count: number }>(
+        "/bank/scheduled-payments/run-due",
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bank-scheduled"] });
+      qc.invalidateQueries({ queryKey: ["bank-upcoming"] });
+    },
+  });
+
+  if (q.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar…</div></Card>;
+  }
+  const rows = q.data?.scheduled_payments ?? [];
+  if (rows.length === 0) {
+    return (
+      <Card title="Inga schemalagda betalningar">
+        <div className="text-sm text-slate-700">
+          När du signerar fakturor i fliken <em>Kommande</em> hamnar de
+          här i kö tills förfallodagen kommer.
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <Card title={`Schemalagda betalningar (${rows.length})`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs text-slate-500">
+          Banken kör betalningar dagligen. Tryck här om du vill
+          köra körningen direkt (för demo).
+        </div>
+        <button
+          onClick={() => runMut.mutate()}
+          disabled={runMut.isPending}
+          className="text-xs border border-slate-300 rounded px-2 py-1 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {runMut.isPending ? "Kör…" : "Kör nu"}
+        </button>
+      </div>
+      {runMut.data && (
+        <div className="text-xs text-slate-700 mb-2 border-l-2 border-slate-300 pl-2">
+          Kördes: {runMut.data.executed} utförda, {runMut.data.failed} misslyckade,{" "}
+          {runMut.data.due_count} totalt på dagen.
+        </div>
+      )}
+      <ul className="divide-y divide-slate-200 text-sm">
+        {rows.map((r) => (
+          <li key={r.id} className="py-2 flex items-center gap-3">
+            <StatusDot status={r.status} />
+            <div className="flex-1 min-w-0">
+              <div className="truncate font-medium">{r.name}</div>
+              <div className="text-xs text-slate-500">
+                {r.scheduled_date} · {r.status}
+                {r.failure_reason && (
+                  <> · <span className="text-rose-700">{r.failure_reason}</span></>
+                )}
+              </div>
+            </div>
+            <div className="tabular-nums">
+              {Math.round(r.amount).toLocaleString("sv-SE")} kr
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+
+function StatusDot({ status }: { status: string }) {
+  const tone =
+    status === "executed" ? "bg-emerald-500" :
+    status === "failed_no_funds" ? "bg-rose-500" :
+    status === "scheduled" ? "bg-amber-500" :
+    "bg-slate-400";
+  return <span className={`inline-block w-2 h-2 rounded-full ${tone}`} />;
 }
