@@ -118,6 +118,13 @@ def create_batch_for_student(
         master_session.delete(existing)
         master_session.flush()
 
+    # Lönesamtals-commit (idé 2 i dev_v1.md): om eleven avslutat ett
+    # samtal med ny lön och effective_from <= första dagen i year_month,
+    # applicera nya lönen på profilen INNAN scenariot byggs. Lönespecen
+    # för månaden visar då den nya lönen — pedagogiskt synkat med
+    # verkligheten där samtalet sker en månad och lönen kommer nästa.
+    _commit_pending_salary_if_due(master_session, student.profile, year_month)
+
     seed = abs(hash((student.id, year_month, "batch_v1"))) & 0xFFFFFFFF
     scenario = build_scenario(
         student_id=student.id,
@@ -815,3 +822,40 @@ def _import_kreditkort(
             user_verified=False,
         ))
         stats["imported_tx"] += 1
+
+
+def _commit_pending_salary_if_due(
+    master_session: Session,
+    profile,
+    year_month: str,
+) -> None:
+    """Apply lönesamtals-höjning: om profile.pending_effective_from
+    <= första dagen i `year_month`, kopierar pending_salary_monthly
+    över till gross_salary_monthly + räknar om net + nollar
+    pending_*-fälten.
+
+    Idempotent: körs vid varje batch-render. Om pending saknas eller
+    inte hunnit aktiveras → ingen ändring.
+    """
+    pending = getattr(profile, "pending_salary_monthly", None)
+    eff_from = getattr(profile, "pending_effective_from", None)
+    if pending is None or eff_from is None:
+        return
+    from datetime import date
+    y, m = year_month.split("-")
+    month_first = date(int(y), int(m), 1)
+    if eff_from > month_first:
+        return  # Inte hunnit aktiveras än
+
+    # Nya bruttolönen tar över. Net räknas approximativt med samma
+    # effektiva skattesats — onboardingen körs inte om bara för en
+    # höjning. Skattekartan på /tax räknar exakt vid behov.
+    new_gross = int(pending)
+    tax_rate = float(getattr(profile, "tax_rate_effective", 0.27) or 0.27)
+    new_net = int(new_gross * (1 - tax_rate))
+
+    profile.gross_salary_monthly = new_gross
+    profile.net_salary_monthly = new_net
+    profile.pending_salary_monthly = None
+    profile.pending_effective_from = None
+    master_session.flush()
