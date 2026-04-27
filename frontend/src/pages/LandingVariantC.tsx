@@ -210,6 +210,7 @@ export default function LandingVariantC() {
       <CreditTriggerSection theme={THEME} />
       <LifeSimSection theme={THEME} />
       <EmployerSection theme={THEME} />
+      <SalaryTalkSection theme={THEME} />
       <Logic />
       <Problem />
       <Pricing />
@@ -5568,6 +5569,573 @@ function EmployerSection({ theme }: { theme: Theme }) {
             </div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- SalaryTalkSection (v5) — 5-rond förhandling + Marias faktagrund ----------
+
+function SalaryTalkSection({ theme }: { theme: Theme }) {
+  const [round, setRound] = useState(2);
+
+  const rounds: Array<{
+    no: number;
+    student: string;
+    employer: string;
+    pct: string;
+    kr: string;
+    highlight?: boolean;
+    future?: boolean;
+  }> = [
+    {
+      no: 1,
+      student:
+        '"Jag vill diskutera min lön. Jag har varit här i 1,5 år och tagit på mig leadrollen för Acme-projektet utan tillägg."',
+      employer:
+        "Tack för att du tar upp det. Berätta — vad har du i tankarna konkret? Och vad bygger du det på?",
+      pct: "2,5 %",
+      kr: "+ 925 kr",
+    },
+    {
+      no: 2,
+      student:
+        '"Marknadslönen för min roll ligger på 39 500 kr enligt Akavia 2026. Jag ligger 1 500 kr under. Jag vill upp till 39 500 kr — det är 4,5 %."',
+      employer:
+        "Marknadsdata är ett bra argument. Akaviaa siffran stämmer för seniora konsulter — du är på väg dit. Avtalet ger 2,5 %, jag kan sträcka mig till 3,2 % i år och titta igen i juli.",
+      pct: "3,2 %",
+      kr: "+ 1 184 kr",
+      highlight: true,
+    },
+    {
+      no: 3,
+      student:
+        '"Jag uppskattar det. Men leadrollen var inget jag valde — jag hoppade in när Erik slutade. Det är ett skäl för 4 %."',
+      employer:
+        "Det stämmer, och du gjorde det bra. Jag kan gå upp till 3,5 %. Mer än så kräver att vi formaliserar leadrollen — det gör vi i juli.",
+      pct: "3,5 %",
+      kr: "+ 1 295 kr",
+    },
+    { no: 4, student: "…", employer: "…", pct: "—", kr: "—", future: true },
+    { no: 5, student: "…", employer: "…", pct: "—", kr: "—", future: true },
+  ];
+
+  const curR = rounds[round - 1];
+
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#0f172a",
+        color: "#fff",
+      }}
+    >
+      <NewSectionHeader
+        cell={{ sym: "Ls", n: "10", label: "Lönesamtal" }}
+        eyebrow="Det enda samtalet på året"
+        theme={theme}
+        dark
+      >
+        Förhandling är inte konflikt.
+        <br />
+        Det är samtalet som{" "}
+        <em style={{ color: "#fbbf24", fontStyle: "italic" }}>flyttar din lön.</em>
+      </NewSectionHeader>
+      <p
+        style={{
+          maxWidth: 720,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#94a3b8",
+        }}
+      >
+        En gång om året möter eleven Maria — HR-chef, AI-driven, känner
+        kollektivavtalet, elevens nöjdhetsfaktor och lönehistorik. Fem ronder.
+        Eleven argumenterar, Maria svarar balanserat. Slutbudet jämförs mot
+        avtalets revisionsutrymme. Och syns i{" "}
+        <em style={{ color: "#fff", fontStyle: "normal", fontWeight: 500 }}>
+          nästa månads
+        </em>{" "}
+        lönespec — inte direkt.
+      </p>
+
+      <div
+        style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 14,
+          padding: "20px 24px",
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 14,
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              fontFamily: "ui-monospace, monospace",
+              letterSpacing: 1.2,
+              color: "#fbbf24",
+              textTransform: "uppercase",
+            }}
+          >
+            Lönesamtalet 2026 · 5 ronder
+          </span>
+          <span
+            style={{
+              fontSize: 11,
+              fontFamily: "ui-monospace, monospace",
+              color: "#64748b",
+            }}
+          >
+            modell: claude-haiku-4-5 · kostnad/session ≈ $0.015
+          </span>
+        </div>
+        <div
+          className="vc-salary-rounds"
+          style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}
+        >
+          <style>{`
+            @media (max-width: 768px) {
+              .vc-salary-rounds { grid-template-columns: repeat(2, 1fr) !important; }
+              .vc-salary-conv { grid-template-columns: 1fr !important; }
+              .vc-salary-outcome { grid-template-columns: 1fr !important; gap: 18px !important; text-align: center; }
+            }
+          `}</style>
+          {rounds.map((r, i) => {
+            const active = round === r.no;
+            const past = round > r.no;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => !r.future && setRound(r.no)}
+                style={{
+                  textAlign: "left",
+                  padding: 14,
+                  cursor: r.future ? "default" : "pointer",
+                  background: active
+                    ? "rgba(251,191,36,0.12)"
+                    : past
+                    ? "rgba(255,255,255,0.05)"
+                    : "transparent",
+                  border: active
+                    ? "2px solid #fbbf24"
+                    : past
+                    ? "1px solid rgba(255,255,255,0.1)"
+                    : "1px dashed rgba(255,255,255,0.08)",
+                  borderRadius: 10,
+                  transition: "all .15s",
+                  opacity: r.future ? 0.5 : 1,
+                  fontFamily: "inherit",
+                  color: "#fff",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontFamily: "ui-monospace, monospace",
+                      color: active ? "#fbbf24" : "#64748b",
+                      letterSpacing: 1,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ROND {String(r.no).padStart(2, "0")}
+                  </span>
+                  {past && !active && (
+                    <span style={{ color: "#10b981", fontSize: 11 }}>✓</span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    fontFamily: "ui-monospace, monospace",
+                    color: r.future ? "#475569" : "#fff",
+                    letterSpacing: -0.3,
+                  }}
+                >
+                  {r.pct}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "ui-monospace, monospace",
+                    color: r.future ? "#475569" : "#94a3b8",
+                    marginTop: 2,
+                  }}
+                >
+                  {r.kr}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div
+        className="vc-salary-conv"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.4fr 1fr",
+          gap: 18,
+          marginBottom: 18,
+        }}
+      >
+        {/* Conversation */}
+        <div
+          style={{
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 14,
+            padding: 28,
+          }}
+        >
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  background: "#dc4c2b",
+                  color: "#fff",
+                  display: "grid",
+                  placeItems: "center",
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                L
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
+                  Linda · IT-konsult
+                </div>
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontFamily: "ui-monospace, monospace",
+                    color: "#64748b",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  ROND {String(curR.no).padStart(2, "0")} · DU
+                </div>
+              </div>
+            </div>
+            <p
+              style={{
+                fontFamily: theme.serifFont,
+                fontSize: 17,
+                lineHeight: 1.5,
+                color: curR.future ? "#475569" : "#fbbf24",
+                fontStyle: "italic",
+                margin: 0,
+                paddingLeft: 42,
+              }}
+            >
+              {curR.student}
+            </p>
+          </div>
+
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  background: "rgba(251,191,36,0.15)",
+                  color: "#fbbf24",
+                  display: "grid",
+                  placeItems: "center",
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  border: "1px solid rgba(251,191,36,0.3)",
+                }}
+              >
+                M
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
+                  Maria · HR-chef, Visma
+                </div>
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    fontFamily: "ui-monospace, monospace",
+                    color: "#64748b",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  AI-PERSONA · CLAUDE HAIKU 4.5
+                </div>
+              </div>
+            </div>
+            <p
+              style={{
+                fontFamily: theme.serifFont,
+                fontSize: 17,
+                lineHeight: 1.55,
+                color: curR.future ? "#475569" : "#e2e8f0",
+                margin: 0,
+                paddingLeft: 42,
+              }}
+            >
+              {curR.future ? (
+                <span style={{ fontStyle: "italic" }}>Maria väntar på ditt svar…</span>
+              ) : (
+                <>
+                  <span
+                    style={{
+                      color: "#dc4c2b",
+                      fontFamily: "ui-monospace, monospace",
+                      fontSize: 11,
+                      marginRight: 8,
+                    }}
+                  >
+                    AI →
+                  </span>
+                  {curR.employer}
+                </>
+              )}
+            </p>
+
+            {!curR.future && (
+              <div
+                style={{
+                  marginTop: 18,
+                  marginLeft: 42,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  background: curR.highlight
+                    ? "rgba(251,191,36,0.12)"
+                    : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${
+                    curR.highlight ? "rgba(251,191,36,0.3)" : "rgba(255,255,255,0.1)"
+                  }`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontFamily: "ui-monospace, monospace",
+                  color: curR.highlight ? "#fbbf24" : "#94a3b8",
+                }}
+              >
+                <span>NUVARANDE BUD:</span>
+                <strong style={{ color: "#fff" }}>{curR.pct}</strong>
+                <span style={{ color: "#94a3b8" }}>·</span>
+                <span>{curR.kr}/mån</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Marias faktagrund */}
+        <div
+          style={{
+            background: "#fbbf24",
+            color: "#78350f",
+            borderRadius: 14,
+            padding: 24,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                marginBottom: 14,
+                color: "#92400e",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span style={{ width: 6, height: 6, background: "#92400e", borderRadius: "50%" }} />
+              Marias faktagrund
+              <span style={{ marginLeft: "auto", fontSize: 10, opacity: 0.7 }}>
+                cachad i system-prompt
+              </span>
+            </div>
+            <h4
+              style={{
+                fontSize: 16,
+                fontWeight: 700,
+                margin: "0 0 18px",
+                color: "#0f172a",
+                fontFamily: theme.serifFont,
+                fontStyle: "italic",
+              }}
+            >
+              "Eleven ser inte detta. Maria balanserar avtal, satisfaction och
+              budget — utgår från det här."
+            </h4>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                fontSize: 13,
+                lineHeight: 1.85,
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              <li>Aktuell lön: <strong>37 000 kr/mån</strong></li>
+              <li>Anställd: <strong>1 år 5 mån</strong></li>
+              <li>Avtal: Tjänstemanna IT</li>
+              <li>Revisionsutrymme: <strong>2,5 %</strong></li>
+              <li>Satisfaction: <strong>72 / 100 ↗</strong></li>
+              <li
+                style={{
+                  paddingTop: 6,
+                  marginTop: 6,
+                  borderTop: "1px dashed rgba(120,53,15,.3)",
+                }}
+              >
+                Förhandlingsutrymme:{" "}
+                <strong style={{ color: "#0f172a" }}>+2,5 % till +4,0 %</strong>
+              </li>
+              <li style={{ fontStyle: "italic", color: "#92400e" }}>
+                (hög satisf. = +1,5 pp över norm)
+              </li>
+            </ul>
+          </div>
+          <div
+            style={{
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: "1px dashed rgba(120,53,15,.3)",
+              fontSize: 12,
+              lineHeight: 1.55,
+              fontStyle: "italic",
+              fontFamily: theme.serifFont,
+            }}
+          >
+            Marias principer: bemöter argument, inte personen. Säger aldrig vad
+            avtalet ger — eleven måste själv hänvisa.
+          </div>
+        </div>
+      </div>
+
+      {/* Outcome strip */}
+      <div
+        className="vc-salary-outcome"
+        style={{
+          background: "rgba(16,185,129,0.06)",
+          border: "1px solid rgba(16,185,129,0.25)",
+          borderRadius: 14,
+          padding: "24px 28px",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
+          gap: 28,
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 12,
+            background: "rgba(16,185,129,0.15)",
+            border: "1px solid rgba(16,185,129,0.3)",
+            display: "grid",
+            placeItems: "center",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 22,
+            color: "#10b981",
+            fontWeight: 700,
+          }}
+        >
+          ↑
+        </div>
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontFamily: "ui-monospace, monospace",
+              letterSpacing: 1.2,
+              color: "#10b981",
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            ● Resultat · 3,5 % över avtalets 2,5 %
+          </div>
+          <h3
+            style={{
+              fontSize: 22,
+              fontWeight: 600,
+              letterSpacing: -0.3,
+              margin: "0 0 8px",
+              color: "#fff",
+            }}
+          >
+            Ny lön 38 295 kr — gäller från{" "}
+            <em style={{ color: "#fbbf24", fontStyle: "italic" }}>1 maj 2026.</em>
+          </h3>
+          <p
+            style={{
+              fontSize: 13.5,
+              color: "#cbd5e1",
+              margin: 0,
+              lineHeight: 1.55,
+              maxWidth: 640,
+            }}
+          >
+            Lönehöjningen verkar nästa månad. Mellan idag och första nya
+            utbetalning visar /arbetsgivare-översikten "Ny lön (gäller från
+            2026-05-01)" — pedagogiskt synkat med verkligheten där samtalet
+            sker i januari men utbetalningen kommer i februari.
+          </p>
+        </div>
+        <div
+          style={{
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 13,
+            lineHeight: 1.7,
+            color: "#e2e8f0",
+            background: "rgba(0,0,0,0.3)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 10,
+            padding: "14px 18px",
+            minWidth: 200,
+          }}
+        >
+          <div style={{ color: "#64748b", fontSize: 10.5, letterSpacing: 1, marginBottom: 4 }}>
+            FÖRE → EFTER
+          </div>
+          <div>
+            37 000 → <strong style={{ color: "#10b981" }}>38 295</strong>
+          </div>
+          <div style={{ color: "#94a3b8" }}>+ 1 295 kr/mån</div>
+        </div>
       </div>
     </section>
   );
