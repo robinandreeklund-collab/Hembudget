@@ -40,6 +40,39 @@ const KIND_LABEL: Record<string, string> = {
   kreditkort_faktura: "Kreditkortsfaktura",
 };
 
+// Var kommer dokumentet ifrån i simulationen? Speglar v5-flödet:
+// banken genererar kontoutdrag/faktura/lånebesked, arbetsgivaren
+// genererar lönespec.
+const KIND_SOURCE: Record<
+  string,
+  { label: string; bg: string; fg: string; border: string }
+> = {
+  lonespec: {
+    label: "Arbetsgivaren",
+    bg: "#fef3c7",
+    fg: "#78350f",
+    border: "rgba(120,53,15,.2)",
+  },
+  kontoutdrag: {
+    label: "Banken",
+    bg: "#0f172a",
+    fg: "#fef3c7",
+    border: "#0f172a",
+  },
+  lan_besked: {
+    label: "Banken",
+    bg: "#0f172a",
+    fg: "#fef3c7",
+    border: "#0f172a",
+  },
+  kreditkort_faktura: {
+    label: "Banken",
+    bg: "#0f172a",
+    fg: "#fef3c7",
+    border: "#0f172a",
+  },
+};
+
 export default function MyBatches() {
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [active, setActive] = useState<BatchDetail | null>(null);
@@ -187,6 +220,36 @@ export default function MyBatches() {
         <ol className="list-decimal ml-5 space-y-1">
           <li>Välj vilken månad du vill jobba med från månadslistan.</li>
           <li>
+            Varje dokument är märkt med var det kommer ifrån:{" "}
+            <span
+              className="font-mono"
+              style={{
+                background: "#0f172a",
+                color: "#fef3c7",
+                padding: "1px 6px",
+                borderRadius: 4,
+                fontSize: 11,
+              }}
+            >
+              Banken
+            </span>{" "}
+            (kontoutdrag, lånebesked, kreditkortsfaktura) och{" "}
+            <span
+              className="font-mono"
+              style={{
+                background: "#fef3c7",
+                color: "#78350f",
+                padding: "1px 6px",
+                borderRadius: 4,
+                fontSize: 11,
+                border: "1px solid rgba(120,53,15,.2)",
+              }}
+            >
+              Arbetsgivaren
+            </span>{" "}
+            (lönespec).
+          </li>
+          <li>
             Klicka på <strong>ögat</strong> för att förhandsgranska PDF:en
             direkt här i sidan — precis som du skulle gjort med en riktig
             faktura eller lönespec.
@@ -196,8 +259,9 @@ export default function MyBatches() {
             appen — då hamnar siffrorna på rätt plats i din ekonomi.
           </li>
           <li>
-            Tips: Klicka <strong>Importera alla</strong> om du vill göra det i
-            ett svep.
+            Tips: Klicka <strong>Importera kvarvarande</strong> om du vill ta
+            alla på en gång. När alla är importerade visas ett grönt
+            <strong> Allt importerat</strong>-märke.
           </li>
         </ol>
       </InfoBanner>
@@ -253,27 +317,36 @@ export default function MyBatches() {
           {/* Aktiv batch */}
           {active && (
             <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-3 min-w-0">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <h2 className="font-semibold text-lg">
                   {active.year_month} – {active.artifact_count} dokument
                 </h2>
-                <button
-                  onClick={importAll}
-                  disabled={importing !== null}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
-                >
-                  {importing === -1 ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  Importera alla
-                </button>
+                {active.imported_count >= active.artifact_count &&
+                active.artifact_count > 0 ? (
+                  <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded px-3 py-1.5 text-sm flex items-center gap-2 font-medium">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Allt importerat ({active.imported_count}/{active.artifact_count})
+                  </span>
+                ) : (
+                  <button
+                    onClick={importAll}
+                    disabled={importing !== null}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {importing === -1 ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    Importera {active.artifact_count - active.imported_count} kvarvarande
+                  </button>
+                )}
               </div>
 
               <ul className="divide-y divide-slate-200">
                 {active.artifacts.map((a) => {
                   const isPreviewing = previewArt?.id === a.id;
+                  const src = KIND_SOURCE[a.kind];
                   return (
                     <li
                       key={a.id}
@@ -289,8 +362,25 @@ export default function MyBatches() {
                         <div className="font-medium text-sm truncate">
                           {KIND_LABEL[a.kind] ?? a.kind} – {a.title}
                         </div>
-                        <div className="text-xs text-slate-500 truncate">
-                          {a.filename}
+                        <div className="text-xs text-slate-500 truncate flex items-center gap-2">
+                          {src && (
+                            <span
+                              style={{
+                                background: src.bg,
+                                color: src.fg,
+                                border: `1px solid ${src.border}`,
+                                padding: "1px 7px",
+                                borderRadius: 100,
+                                fontSize: 10.5,
+                                fontFamily: "ui-monospace, monospace",
+                                letterSpacing: 0.4,
+                                fontWeight: 500,
+                              }}
+                            >
+                              från {src.label}
+                            </span>
+                          )}
+                          <span className="truncate">{a.filename}</span>
                         </div>
                       </button>
                       {a.imported_at ? (
