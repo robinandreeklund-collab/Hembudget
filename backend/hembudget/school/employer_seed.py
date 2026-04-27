@@ -1551,6 +1551,315 @@ WORKPLACE_QUESTIONS: list[dict] = [
         "difficulty": 1,
     },
     {
+        "code": "bullying_001",
+        "scenario_md": (
+            "Du märker att en kollega systematiskt blir utesluten — "
+            "hen får inte mejl-trådar, inte inbjudningar till luncher, "
+            "blir avbruten på möten. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar enskilt med kollegan: 'jag har märkt det "
+                    "här — hur har du det?' och inkluderar aktivt själv."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Att se och fråga är ofta första steget. Många "
+                    "utestängda upplever sig osynliga; en allierad gör "
+                    "stor skillnad."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — du vill inte 'lägga dig i' "
+                    "gruppdynamiken."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Tystnad i mobbing är medverkan. Arbetsmiljölagen "
+                    "kräver att alla medverkar till god arbetsmiljö."
+                ),
+            },
+            {
+                "text": (
+                    "Eskalerar till HR med skriftlig dokumentation "
+                    "om mönstret du sett."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Mycket bra. Mobbing/kränkande särbehandling är "
+                    "ett arbetsmiljöansvar (AFS 2015:4). HR har "
+                    "skyldighet att utreda."
+                ),
+            },
+            {
+                "text": (
+                    "Hänger på de andra för att inte själv hamna utanför."
+                ),
+                "delta": -5,
+                "explanation": (
+                    "Klassiskt grupptryck-svar. Det gör dig till "
+                    "del av problemet och du tappar självaktning på köpet."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Mobbing på arbetsplatsen är allvarligt. Allmänna handlingar "
+            "som hjälper: fråga den drabbade, inkludera aktivt, "
+            "dokumentera mönster, anmäl till HR/skyddsombud. "
+            "Visselblåsarlagen skyddar dig om du anmäler i god tro."
+        ),
+        "tags": ["arbetsmiljö", "mobbing", "ledarskap"],
+        "difficulty": 4,
+    },
+    {
+        "code": "social_media_post_001",
+        "scenario_md": (
+            "Du har haft en jobbig dag på jobbet. Du vill skriva ett "
+            "Instagram-inlägg om hur dålig din chef är. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Skriver inget. Ringer en vän och pratar av dig "
+                    "muntligt istället."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Social media är permanent. En arg post idag kan "
+                    "kosta dig nästa jobb om 5 år. Muntlig avlastning "
+                    "lämnar inga spår."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver om det utan att namnge företaget — bara "
+                    "vänner ser det ändå."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Vänner screenshot:ar. Algoritmer indexerar. "
+                    "'Bara vänner' blir publikt fortare än du tror."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver i en privat chat med kollegan — vi måste "
+                    "kunna ventilera någonstans."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Ventilering är OK om det stannar privat. Men om "
+                    "chatten loggas eller delas vidare drabbas du."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver inlägget med chefens namn och bolagets "
+                    "namn så alla förstår."
+                ),
+                "delta": -6,
+                "explanation": (
+                    "Förtal + brott mot lojalitetsplikt. Direkt grund "
+                    "för uppsägning + risk för stämning."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Sociala medier är aldrig privat sfär när det gäller "
+            "arbetsgivare. Tumregel: skriv aldrig något om jobbet du "
+            "inte kan stå för i 10 år."
+        ),
+        "tags": ["sociala medier", "lojalitet", "omdöme"],
+        "difficulty": 2,
+    },
+    {
+        "code": "boss_calls_sunday_001",
+        "scenario_md": (
+            "Din chef ringer på söndag kväll och vill diskutera ett "
+            "icke-akut projekt. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tar samtalet kort: 'jag är ledig nu, kan vi "
+                    "ta det måndag morgon?'"
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Tydlig + respektfull gränssättning. Chefer "
+                    "respekterar oftast — det är dem som glömt att "
+                    "det är söndag."
+                ),
+            },
+            {
+                "text": (
+                    "Ignorerar samtalet helt utan att svara."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Stum-ignorering är passiv-aggressivt. Bättre att "
+                    "svara kort och hänvisa till nästa dag."
+                ),
+            },
+            {
+                "text": (
+                    "Tar samtalet och pratar i 45 minuter — det "
+                    "förväntas väl?"
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Du tänjer dina egna gränser och lär chefen att "
+                    "söndagar är OK. Mönstret växer."
+                ),
+            },
+            {
+                "text": (
+                    "Skickar SMS: 'jag är ledig — söker mig på telefon "
+                    "om det är akut, annars måndag'."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bästa svaret: säger att akut-fall är OK men "
+                    "icke-akut väntar. Klar och vänlig."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Work-life balance är ditt eget ansvar att försvara. "
+            "Vänligt och tydligt nej är en kunskap. Om chefen ofta "
+            "ringer ledig tid: prata om det i lönesamtalet."
+        ),
+        "tags": ["gränser", "work-life", "kommunikation"],
+        "difficulty": 2,
+    },
+    {
+        "code": "vacation_overlap_001",
+        "scenario_md": (
+            "Du och en kollega vill båda ha vecka 28 i juli. Företaget "
+            "behöver att en av er är på plats. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar med kollegan först: 'kan vi hitta en "
+                    "lösning innan chefen får välja?'"
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Mogen problemlösning. Ofta hittar två kollegor "
+                    "en kompromiss som chefen aldrig hade tänkt på."
+                ),
+            },
+            {
+                "text": (
+                    "Anmäler din semester först, snabbast först "
+                    "vinner."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "OK formellt, men dåligt för kollegial relation. "
+                    "Kollegan minns att du tävlade istället för att prata."
+                ),
+            },
+            {
+                "text": (
+                    "Hänvisar till semesterlagen och kräver att få "
+                    "din vecka."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Lagen ger dig rätt till 4 sammanhängande veckor "
+                    "men inte vilka veckor. Hård juridik = sliten "
+                    "atmosfär."
+                ),
+            },
+            {
+                "text": (
+                    "Erbjuder att alternera — du tar 28, kollegan tar "
+                    "bästa veckan nästa år."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Konkret kompromiss. Visar långsiktighet och "
+                    "fairness — det chefen vill se i seniora "
+                    "medarbetare."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Semestern är emotionell — folk planerar resor, släkt-"
+            "träffar. Lös det med samtal, inte med kapprustning. "
+            "Om ni inte kan komma överens: chefen avgör enligt "
+            "verksamhetens behov."
+        ),
+        "tags": ["semester", "konflikt", "kollegial"],
+        "difficulty": 2,
+    },
+    {
+        "code": "overworking_001",
+        "scenario_md": (
+            "Du har jobbat 50+ timmar varje vecka i sex veckor. Du "
+            "är trött och börjar göra fel. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bokar ett möte med chefen och säger 'jag behöver "
+                    "antingen mindre arbete eller mer hjälp — annars "
+                    "blir det fler fel'."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Att signalera utbrändhet TIDIGT är professionellt. "
+                    "Chefer minns vem som tar hand om sig — och tappar "
+                    "förtroende för den som kraschar utan varning."
+                ),
+            },
+            {
+                "text": (
+                    "Fortsätter köra på — 'man ska tåla', det är bara "
+                    "en period."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Klassisk väg till utbrändhet. När du kraschar "
+                    "blir frånvaron lång och kostsam för alla."
+                ),
+            },
+            {
+                "text": (
+                    "Sjukanmäler dig en vecka utan att förklara."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Du löser symptomet men inte orsaken. Nästa månad "
+                    "är du tillbaka i samma situation."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver ner allt du gör i en lista och visar "
+                    "chefen så hen själv kan prioritera bort."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Konkret + lösningsinriktat. Många chefer vet inte "
+                    "hur mycket du har på listan."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Utbrändhet är inte ett tecken på styrka eller "
+            "engagemang — det är en signal att systemet inte funkar. "
+            "Tidiga samtal förebygger långa frånvaro. Arbetsgivare "
+            "har lagstadgat ansvar för psykosocial arbetsmiljö."
+        ),
+        "tags": ["arbetsmiljö", "kommunikation", "gränser"],
+        "difficulty": 3,
+    },
+    {
         "code": "new_colleague_001",
         "scenario_md": (
             "En ny person börjar i teamet idag. Vad gör du?"
