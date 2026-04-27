@@ -202,6 +202,7 @@ export default function LandingVariantC() {
       <Header />
       <Hero />
       <Features />
+      <ManifestoSection theme={THEME} />
       <Moments />
       <Logic />
       <Problem />
@@ -508,7 +509,6 @@ const __VC_PHASE1_SCAFFOLD = {
   SectionHeader,
   NewSectionCell,
   NewSectionHeader,
-  THEME,
   STATS_LIVE,
   SCREENS,
 };
@@ -2494,6 +2494,122 @@ function Features() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+// ---------- ManifestoSection (v5) ----------
+
+function ManifestoSection({ theme }: { theme: Theme }) {
+  return (
+    <section
+      style={{
+        padding: "120px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: theme.cardBg2 || theme.cardBg,
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 880,
+          margin: "0 auto",
+          display: "grid",
+          gridTemplateColumns: "auto 1fr",
+          gap: 48,
+          alignItems: "start",
+        }}
+        className="vc-manifest-grid"
+      >
+        <style>{`
+          @media (max-width: 768px) {
+            .vc-manifest-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+            .vc-manifest-eyebrow { writing-mode: horizontal-tb !important; transform: none !important; }
+            .vc-manifest-cols { grid-template-columns: 1fr !important; gap: 24px !important; }
+          }
+        `}</style>
+        <div
+          className={`${theme.eyebrow} vc-manifest-eyebrow`}
+          style={{
+            writingMode: "vertical-rl",
+            transform: "rotate(180deg)",
+            fontSize: 11,
+            letterSpacing: 2,
+            paddingTop: 4,
+            color: theme.muted,
+          }}
+        >
+          MANIFEST · 2026
+        </div>
+        <div>
+          <p
+            style={{
+              fontFamily: theme.serifFont,
+              fontSize: 38,
+              lineHeight: 1.25,
+              fontWeight: 400,
+              letterSpacing: -0.5,
+              color: theme.fg,
+              margin: 0,
+              marginBottom: 36,
+              textWrap: "balance",
+            }}
+          >
+            <em style={{ color: theme.accent, fontStyle: "italic" }}>
+              Pengar är ett medel
+            </em>{" "}
+            för välmående — inte ett mål i sig själv.
+          </p>
+          <div
+            className="vc-manifest-cols"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 40,
+              paddingTop: 32,
+              borderTop: `1px solid ${theme.rule}`,
+            }}
+          >
+            <p
+              style={{
+                fontSize: 16,
+                lineHeight: 1.6,
+                color: theme.fg,
+                margin: 0,
+                fontFamily: theme.serifFont,
+              }}
+            >
+              Att maximera saldot till priset av sociala band och fritid är
+              inte ekonomisk framgång — det är en form av{" "}
+              <strong style={{ fontWeight: 600 }}>fattigdom</strong>. Att
+              spendera allt på upplevelser utan buffert är heller inte rikedom
+              — det är <strong style={{ fontWeight: 600 }}>skörhet</strong>.
+            </p>
+            <p
+              style={{
+                fontSize: 16,
+                lineHeight: 1.6,
+                color: theme.fg,
+                margin: 0,
+                fontFamily: theme.serifFont,
+              }}
+            >
+              Ekonomi är konsten att balansera <em>idag</em> mot{" "}
+              <em>imorgon</em>, <em>mig själv</em> mot{" "}
+              <em>mina relationer</em>, <em>planering</em> mot{" "}
+              <em>spontanitet</em>.
+              <br />
+              <br />
+              <span
+                className={theme.eyebrow}
+                style={{ fontSize: 11, color: theme.muted, letterSpacing: 1.5 }}
+              >
+                — Det här är vad Wellbeing Score mäter.
+              </span>
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );
