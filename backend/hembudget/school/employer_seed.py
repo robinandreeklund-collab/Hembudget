@@ -571,9 +571,153 @@ def seed_collective_agreements(session: Session) -> int:
     return added
 
 
-def seed_profession_agreements(session: Session) -> int:
-    """Mappa de 17 yrkena från profile_fixtures till avtal.
+# Yrke → avtal-mappning. Måste matcha Profession.title i
+# profile_fixtures.PROFESSIONS exakt. employer_pattern är substring som
+# matchas mot StudentProfile.employer; tom = default för yrket.
+# Specifika patterns kommer först (mer specifikt vinner — vi sorterar
+# i seedaren så att längre pattern matchas först).
+PROFESSION_MAPPINGS: list[dict] = [
+    # Vård och omsorg → Kommunal HÖK
+    {"profession": "Undersköterska", "agreement_code": "hok_kommunal_2026"},
+    {"profession": "Barnskötare", "agreement_code": "hok_kommunal_2026"},
 
-    Tom i C2a — fylls i C2c när alla avtal är seedade.
+    # Lärare → Lärar-HÖK
+    {"profession": "Lärare F-3", "agreement_code": "hok_larare_2026"},
+    {"profession": "Förskollärare", "agreement_code": "hok_larare_2026"},
+
+    # Sjukvård → Vårdförbundet HÖK
+    {"profession": "Sjuksköterska", "agreement_code": "hok_vard_2026"},
+
+    # IT-konsult → IT-tjänstemannaavtalet
+    {"profession": "IT-konsult", "agreement_code": "tjm_it_2026"},
+
+    # Bygg → Byggavtalet
+    {"profession": "Snickare", "agreement_code": "byggavtalet_2026"},
+
+    # El → Installationsavtalet
+    {"profession": "Elektriker", "agreement_code": "installation_2026"},
+
+    # Bil → Motorbranschavtalet
+    {"profession": "Bilmekaniker", "agreement_code": "motorbranschen_2026"},
+
+    # Detaljhandel → Handels (default), några employers helt utan avtal
+    {"profession": "Butiksmedarbetare", "agreement_code": "detaljhandel_2026"},
+
+    # Säljare: tjänstemanna-default; ICA/Bauhaus etc. har detaljhandel
+    {"profession": "Säljare", "agreement_code": "tjm_general_2026"},
+    {
+        "profession": "Säljare",
+        "employer_pattern": "ICA",
+        "agreement_code": "detaljhandel_2026",
+    },
+    {
+        "profession": "Säljare",
+        "employer_pattern": "Bauhaus",
+        "agreement_code": "detaljhandel_2026",
+    },
+    {
+        "profession": "Säljare",
+        "employer_pattern": "Elgiganten",
+        "agreement_code": "detaljhandel_2026",
+    },
+    {
+        "profession": "Säljare",
+        "employer_pattern": "Mediamarkt",
+        "agreement_code": "detaljhandel_2026",
+    },
+
+    # HRF — Kock + Barista (några specifika utan avtal)
+    {"profession": "Kock", "agreement_code": "grona_riks_2026"},
+    {
+        "profession": "Kock",
+        "employer_pattern": "Egen verksamhet",
+        "agreement_code": "smaforetag_inget_avtal",
+    },
+    {"profession": "Barista", "agreement_code": "grona_riks_2026"},
+
+    # Frisör — Cutters/Klippoteket har avtal, "Egen verksamhet" inte
+    {
+        "profession": "Frisör",
+        "agreement_code": "detaljhandel_2026",
+        "notes": "Frisörföretagarna ansluter till Handels-/Detaljhandelsavtalet",
+    },
+    {
+        "profession": "Frisör",
+        "employer_pattern": "Egen verksamhet",
+        "agreement_code": "smaforetag_inget_avtal",
+    },
+
+    # Tjänstemanna-yrken (Almega-area)
+    {"profession": "Ekonomiassistent", "agreement_code": "tjm_general_2026"},
+    {"profession": "Projektledare", "agreement_code": "tjm_general_2026"},
+    {"profession": "Marknadsassistent", "agreement_code": "tjm_general_2026"},
+]
+
+
+def seed_profession_agreements(session: Session) -> int:
+    """Idempotent seed av yrke→avtal-mappningar.
+
+    Sorterar mappningar så längre employer_pattern kommer först — gör
+    inga skillnad i seedningen i sig (vi adderar alla rader), men
+    läsare av tabellen som vill matcha 'mest specifik först' kan
+    sortera på `LENGTH(employer_pattern) DESC`.
+
+    Returnerar antal nya rader.
     """
-    return 0  # stub, fylls i C2c
+    # Bygg lookup code → CollectiveAgreement.id
+    code_to_id: dict[str, int] = {
+        ag.code: ag.id for ag in session.query(CollectiveAgreement).all()
+    }
+
+    existing = {
+        (pa.profession, pa.employer_pattern)
+        for pa in session.query(ProfessionAgreement).all()
+    }
+    added = 0
+    for m in PROFESSION_MAPPINGS:
+        prof = m["profession"]
+        pattern = m.get("employer_pattern", "")
+        key = (prof, pattern)
+        if key in existing:
+            continue
+        agreement_id = code_to_id.get(m["agreement_code"])
+        # Defensivt: om koden saknas (t.ex. seedet kördes innan
+        # avtalen) — hoppa över, kör om vid nästa boot.
+        if agreement_id is None and m["agreement_code"] != "smaforetag_inget_avtal":
+            continue
+        # För "småföretag" sätter vi agreement_id om den finns, annars
+        # behåller vi NULL — pedagogiskt OK eftersom UI:n hanterar
+        # båda fallen.
+        if m["agreement_code"] == "smaforetag_inget_avtal":
+            agreement_id = code_to_id.get("smaforetag_inget_avtal")
+        # Pension-rate: läs default från avtalets meta om finns
+        pension_pct = None
+        for ag in session.query(CollectiveAgreement).filter(
+            CollectiveAgreement.code == m["agreement_code"],
+        ).all():
+            pp = ag.meta.get("pension_pct") if ag.meta else None
+            if pp is not None:
+                pension_pct = Decimal(str(pp))
+                break
+        session.add(ProfessionAgreement(
+            profession=prof,
+            employer_pattern=pattern,
+            agreement_id=agreement_id,
+            pension_rate_pct=pension_pct,
+            notes=m.get("notes"),
+        ))
+        added += 1
+    session.flush()
+    return added
+
+
+def seed_all(session: Session) -> dict:
+    """Seedare för hela arbetsgivar-paketet. Kör i rätt ordning:
+    avtal först, sedan mappningar (som behöver avtals-IDn).
+    """
+    n_ag = seed_collective_agreements(session)
+    n_pm = seed_profession_agreements(session)
+    return {
+        "agreements_added": n_ag,
+        "profession_mappings_added": n_pm,
+    }
