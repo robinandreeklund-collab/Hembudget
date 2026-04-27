@@ -156,16 +156,28 @@ export default function Investments() {
         ))}
       </div>
 
-      {tab === "overview" && portfolio && (
-        <OverviewTab
-          portfolio={portfolio}
-          stocks={stocks}
-          watchlist={watchlist}
-          onTrade={(t) => setTradeModal({ ticker: t, side: "buy" })}
-          onDetail={setDetailTicker}
-          marketOpen={market?.open ?? false}
-          onChangeTab={setTab}
-        />
+      {tab === "overview" && (
+        portfolio ? (
+          <OverviewTab
+            portfolio={portfolio}
+            stocks={stocks}
+            watchlist={watchlist}
+            onTrade={(t) => setTradeModal({ ticker: t, side: "buy" })}
+            onDetail={setDetailTicker}
+            marketOpen={market?.open ?? false}
+            onChangeTab={setTab}
+          />
+        ) : portfolioQ.isError ? (
+          <Card>
+            <div className="text-sm text-rose-700">
+              Kunde inte hämta portföljen — {String(portfolioQ.error)}.
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <div className="text-sm text-slate-600">Laddar portfölj…</div>
+          </Card>
+        )
       )}
       {tab === "market" && (
         <MarketTab

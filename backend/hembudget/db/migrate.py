@@ -97,6 +97,11 @@ def run_migrations(engine: Engine) -> list[str]:
         "fund_holding_snapshots", "upcoming_payments", "locked_periods",
         "dismissed_transfer_suggestions", "utility_readings",
         "app_settings", "audit_logs",
+        # Aktiehandel — lades till efter den ursprungliga listan så vi
+        # backfillar tenant_id på prod-Postgres-installationer som var
+        # uppe innan dessa tabeller fanns.
+        "stock_holdings", "stock_transactions", "stock_watchlist",
+        "pending_orders",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):
@@ -105,6 +110,72 @@ def run_migrations(engine: Engine) -> list[str]:
         if "tenant_id" not in cols:
             _add_column(engine, tbl, "tenant_id VARCHAR(40)")
             applied.append(f"{tbl}.tenant_id")
+
+    # Backfill tenant_id på aktietabeller där det blivit NULL — kan ha
+    # hänt om tabellerna fanns innan migrate.py listade dem (data
+    # skapad utan att before_flush-event:n satte tenant_id, eller med
+    # äldre kod-path). Vi härleder rätt tenant via JOIN mot transactions
+    # / accounts — båda har korrekt tenant_id eftersom de är gamla i
+    # listan.
+    if _table_exists(engine, "stock_transactions"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE stock_transactions st SET tenant_id = t.tenant_id "
+                    "FROM transactions t "
+                    "WHERE st.transaction_id = t.id "
+                    "  AND st.tenant_id IS NULL "
+                    "  AND t.tenant_id IS NOT NULL"
+                ) if engine.dialect.name == "postgresql" else text(
+                    "UPDATE stock_transactions SET tenant_id = ("
+                    "  SELECT tenant_id FROM transactions "
+                    "  WHERE transactions.id = stock_transactions.transaction_id"
+                    ") WHERE tenant_id IS NULL AND transaction_id IS NOT NULL"
+                ))
+                applied.append("stock_transactions.tenant_id (backfill)")
+        except Exception:
+            log.exception("backfill stock_transactions.tenant_id failed")
+    if _table_exists(engine, "stock_holdings"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE stock_holdings sh SET tenant_id = a.tenant_id "
+                    "FROM accounts a "
+                    "WHERE sh.account_id = a.id "
+                    "  AND sh.tenant_id IS NULL "
+                    "  AND a.tenant_id IS NOT NULL"
+                ) if engine.dialect.name == "postgresql" else text(
+                    "UPDATE stock_holdings SET tenant_id = ("
+                    "  SELECT tenant_id FROM accounts "
+                    "  WHERE accounts.id = stock_holdings.account_id"
+                    ") WHERE tenant_id IS NULL"
+                ))
+                applied.append("stock_holdings.tenant_id (backfill)")
+        except Exception:
+            log.exception("backfill stock_holdings.tenant_id failed")
+    if _table_exists(engine, "pending_orders"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE pending_orders po SET tenant_id = a.tenant_id "
+                    "FROM accounts a "
+                    "WHERE po.account_id = a.id "
+                    "  AND po.tenant_id IS NULL "
+                    "  AND a.tenant_id IS NOT NULL"
+                ) if engine.dialect.name == "postgresql" else text(
+                    "UPDATE pending_orders SET tenant_id = ("
+                    "  SELECT tenant_id FROM accounts "
+                    "  WHERE accounts.id = pending_orders.account_id"
+                    ") WHERE tenant_id IS NULL"
+                ))
+                applied.append("pending_orders.tenant_id (backfill)")
+        except Exception:
+            log.exception("backfill pending_orders.tenant_id failed")
+    if _table_exists(engine, "stock_watchlist"):
+        # Watchlist har ingen account_id — kan inte enkelt backfillas
+        # (vet inte vilken scope rad tillhör). Den är icke-kritisk för
+        # portfölj/order-historik-buggen, så vi lämnar den.
+        pass
 
     # transactions.is_transfer
     tx_cols = _columns(engine, "transactions")
