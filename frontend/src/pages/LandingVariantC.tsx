@@ -1809,6 +1809,10 @@ function ManifestoSection({ theme }: { theme: Theme }) {
 function WellbeingSection({ theme }: { theme: Theme }) {
   const [hovered, setHovered] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const polyRef = useRef<SVGPolygonElement | null>(null);
+  const scoreTextRef = useRef<SVGTextElement | null>(null);
+  const reduced = useReducedMotion();
 
   const profiles = [
     {
@@ -1900,8 +1904,50 @@ function WellbeingSection({ theme }: { theme: Theme }) {
   };
   const polyPts = dims.map((d, i) => point(i, cur.pts[d.key]).join(",")).join(" ");
 
+  // GSAP scrub: när WellbeingSection kommer i view, rita in radarn och
+  // räkna upp poängen 0 → cur.score. Körs en gång per mount; React tar
+  // över textinnehållet vid profil-byte.
+  useEffect(() => {
+    if (reduced || !sectionRef.current) return;
+    registerScrollTrigger();
+    const ctx = gsap.context(() => {
+      ScrollTrigger.create({
+        trigger: sectionRef.current,
+        start: "top 70%",
+        once: true,
+        onEnter: () => {
+          if (polyRef.current) {
+            gsap.from(polyRef.current, {
+              scale: 0,
+              opacity: 0,
+              duration: 1.1,
+              transformOrigin: "200px 200px",
+              ease: "power3.out",
+            });
+          }
+          if (scoreTextRef.current) {
+            const target = Number(scoreTextRef.current.dataset.target) || 0;
+            const obj = { v: 0 };
+            gsap.to(obj, {
+              v: target,
+              duration: 1.4,
+              ease: "power2.out",
+              onUpdate: () => {
+                if (scoreTextRef.current) {
+                  scoreTextRef.current.textContent = String(Math.round(obj.v));
+                }
+              },
+            });
+          }
+        },
+      });
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced]);
+
   return (
     <section
+      ref={sectionRef}
       style={{
         padding: "96px 24px",
         borderTop: `1px solid ${theme.rule}`,
@@ -2032,6 +2078,7 @@ function WellbeingSection({ theme }: { theme: Theme }) {
                   );
                 })}
                 <polygon
+                  ref={polyRef}
                   points={polyPts}
                   fill="rgba(251,191,36,0.18)"
                   stroke="#fbbf24"
@@ -2072,6 +2119,8 @@ function WellbeingSection({ theme }: { theme: Theme }) {
                   );
                 })}
                 <text
+                  ref={scoreTextRef}
+                  data-target={cur.score}
                   x={cx}
                   y={cy - 6}
                   textAnchor="middle"
