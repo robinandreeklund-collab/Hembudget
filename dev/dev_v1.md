@@ -408,8 +408,22 @@ Ny vy `/salary-negotiation` (eller `/lonesamtal`):
    - 3–5 punkter feedback från AI ("Bra: du nämnde marknadsdata.
      Förbättring: du angav en hög siffra utan att backa upp")
    - Knapp "Visa kollektivavtalet" → modal från idé 1
-4. **Effekt**: `StudentProfile.gross_salary_monthly` uppdateras
-   omedelbart. Lönespec nästa månad reflekterar nya beloppet.
+4. **Effekt** (**REV1**): `StudentProfile.gross_salary_monthly`
+   uppdateras inte omedelbart i UI:n — eleven ska SE att lönen
+   ändras nästa lönespec, inte direkt. Datamodellen får två fält:
+   - `gross_salary_monthly` — aktuell lön (vad lönespec använder)
+   - `pending_salary_monthly` — kommande lön efter genomfört samtal
+   - `pending_effective_from` — datum (typiskt 1:a nästa månad)
+
+   När lönespec-generatorn körs (i batch.py för en månad ≥ pending_
+   effective_from) så committar den: `gross_salary = pending`,
+   nollar `pending_*`-fälten. Då dyker den nya lönen upp i
+   utbetalningen — pedagogiskt synkat med verkligheten där samtalet
+   sker i januari men utbetalningen kommer i februari.
+
+   Mellan samtalets-avslut och första nya utbetalning visar
+   `/arbetsgivare`-översikten "Ny lön: 38 500 kr (gäller från 2026-
+   05-01)" som tydligt avisering.
 
 ### 2.6 Lärar-vy
 
@@ -539,24 +553,72 @@ i master-DB. Eleven kan resetta via lärare.
 simulering, men logiken är likadan — något du har (telefon/QR) +
 något du vet (PIN/biometri).
 
-### 3.3 Kontoutdrag — flytta från Dina dokument till Banken
+### 3.3 Bankens dokument — eget system, separat från redovisningen
 
-Idag genererar `teacher/batch.py` ett kontoutdrag-PDF som blir en
-`BatchArtifact`. Eleven importerar manuellt under `/my-batches`.
+**REV1** Användarens insikt: bank ≠ redovisningssystem. I verkligheten
+laddar du ner ett kontoutdrag från banken, sparar PDF:en i din mapp,
+och importerar sedan till bokföringsprogrammet. Vi simulerar exakt det
+flödet:
 
-Nytt flöde:
-1. Vid generering: kontoutdraget skapas fortfarande som
-   `BatchArtifact(kind="kontoutdrag")` — INGEN ändring i batch-koden
-   för att inte bryta lärarens befintliga vy
-2. Banken-vyn listar de senaste kontoutdragen via en ny endpoint
-   `/bank/statements` som hämtar dessa artifacts
-3. Eleven trycker "Exportera till bokföringen" — backend kör samma
-   `import_artifact()` som /my-batches gör. Stat: importerad=True
-4. Eleven kan ALDRIG importera samma kontoutdrag två gånger (befintlig
-   idempotens). Knappen visas som "Redan exporterat" efter
+```
+[Generering]                  [Banken]                  [Mina dokument]            [Plattformen]
+                                                        (/my-batches)              (/transactions)
+BatchArtifact ─────►  /bank/statements (lista) ─►  exportera ─►  /my-batches  ─►  importera ─►  bokföring
+   (kind=kontoutdrag,                              (skapar
+    kind=kreditkort_faktura,                       kopia/länk
+    kind=lan_besked)                               i my-batches)
+```
 
-`/my-batches` får alla utom kontoutdrag — kvar är lönespec, lånebesked
-och kreditkortsfaktura (de som verkligen hör hemma i "papper i lådan").
+Tre-stegs-flödet är pedagogiskt eftersom det matchar verkligheten:
+
+1. **Generering**: `teacher/batch.py` fortsätter rendera
+   `BatchArtifact` med olika `kind`. **Ingen ändring i kärnan**, bara
+   omfördelning av VAR de visas.
+2. **Banken**: `/bank/statements`, `/bank/credit-card-invoices` och
+   `/bank/loan-notices` listar artifacts av motsvarande `kind` —
+   filtrerade så bara bank-relaterade dokument syns där (kontoutdrag,
+   kreditkortsfaktura, lånebesked).
+3. **Export från banken**: knapp "Exportera till mina dokument" på
+   varje rad → flagga `BatchArtifact.exported_to_my_batches=True`. Då
+   blir artefakten synlig i `/my-batches`.
+4. **Import till bokföringen**: eleven går till `/my-batches`,
+   förhandsgranskar (via befintlig inline-preview från #14), och
+   trycker "Importera" — befintliga `import_artifact()`-flödet körs.
+
+**Lönespec går INTE genom banken** — den hamnar direkt på
+`/arbetsgivare` (idé 1.4). Eleven importerar lön där via "Importera
+lön till bokföringen"-knappen som kör `_import_lonespec` direkt utan
+mellanlanding i `/my-batches`.
+
+Schema-tillägg på `BatchArtifact` (master-DB):
+
+```
+BatchArtifact (befintlig, lägg till)
+├── exported_to_my_batches  bool (default False)
+├── exported_at             datetime
+└── visible_in              str (computed/derived: "bank" | "arbetsgivare")
+```
+
+**REV1 — `/my-batches` blir mellanlager för bank-dokument**:
+listan visar bara artefakter med `exported_to_my_batches=True`.
+Eleven måste alltid passera bankens flöde först. Lönespec syns INTE
+i `/my-batches` (hör hemma på `/arbetsgivare`).
+
+**Idempotens på flera nivåer**:
+- Export från bank: idempotent (om redan exporterat → "Redan exporterat"
+  istället för knapp)
+- Import från my-batches: befintlig idempotens via tx-hash (ingen
+  ändring)
+
+**Migrations-fall för befintliga elever**:
+- Alla existerande BatchArtifacts (kontoutdrag/kreditkort/lånebesked)
+  som redan importerats: backfilla `exported_to_my_batches=True` i
+  migrationen så vyn fortsätter visa dem
+- BatchArtifacts som inte är importerade: backfilla `False` så de
+  hamnar bara i banken; eleven får exportera dem aktivt
+- Lönespecar (kind="lonespec"): markeras specifikt så de inte syns i
+  `/my-batches` — flytt till `/arbetsgivare` är ren UI-filter, inga
+  data flyttas
 
 ### 3.4 Kommande betalningar — signering + execution
 
