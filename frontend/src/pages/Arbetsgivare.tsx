@@ -153,7 +153,7 @@ export default function Arbetsgivare() {
         />
       )}
       {tab === "fragor" && <ComingSoon what="Frågor" />}
-      {tab === "events" && <ComingSoon what="Eventlogg" />}
+      {tab === "events" && <EventLogTab />}
     </div>
   );
 }
@@ -536,6 +536,122 @@ function AgreementMetaTable({ meta }: { meta: Record<string, unknown> }) {
       </tbody>
     </table>
   );
+}
+
+
+interface EventOut {
+  id: number;
+  ts: string;
+  kind: string;
+  delta_score: number;
+  reason_md: string;
+  meta: Record<string, unknown> | null;
+}
+
+
+function EventLogTab() {
+  const eventsQ = useQuery({
+    queryKey: ["employer-events"],
+    queryFn: () => api<{ events: EventOut[]; total: number }>(
+      "/employer/events?limit=50",
+    ),
+  });
+
+  if (eventsQ.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar…</div></Card>;
+  }
+  if (eventsQ.error) {
+    return (
+      <Card>
+        <div className="text-sm text-rose-700">
+          Kunde inte hämta eventlogg: {String(eventsQ.error)}
+        </div>
+      </Card>
+    );
+  }
+  const events = eventsQ.data?.events ?? [];
+
+  if (events.length === 0) {
+    return (
+      <Card>
+        <div className="text-sm text-slate-700">
+          Inga händelser ännu. Din satisfaction startar på 70 — den
+          rör sig när du svarar på frågor från arbetsgivaren, sjuk-
+          anmäler dig, eller när läraren registrerar något manuellt.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title={`Eventlogg (${events.length} händelser)`}>
+      <div className="text-xs text-slate-500 mb-3">
+        Varje rad förklarar varför din satisfaction-score rörde sig.
+        Senaste först.
+      </div>
+      <div className="space-y-2">
+        {events.map((e) => (
+          <EventRow key={e.id} event={e} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+
+function EventRow({ event }: { event: EventOut }) {
+  const positive = event.delta_score > 0;
+  const negative = event.delta_score < 0;
+  const tone = positive
+    ? "border-emerald-300 bg-emerald-50/40"
+    : negative
+      ? "border-rose-300 bg-rose-50/40"
+      : "border-slate-200 bg-slate-50";
+  const sign = positive ? "+" : "";
+  const date = new Date(event.ts).toLocaleString("sv-SE", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+  return (
+    <div className={`border-l-4 rounded-r-md p-3 ${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-xs text-slate-500">{date}</div>
+        <div
+          className={`text-sm font-semibold whitespace-nowrap ${
+            positive ? "text-emerald-700" : negative ? "text-rose-700" : "text-slate-600"
+          }`}
+        >
+          {sign}{event.delta_score} p
+        </div>
+      </div>
+      <div className="text-[10px] uppercase tracking-wide text-slate-500 mt-1">
+        {labelForKind(event.kind)}
+      </div>
+      <div className="text-sm text-slate-800 mt-1">
+        <MarkdownLite text={event.reason_md} />
+      </div>
+    </div>
+  );
+}
+
+
+function labelForKind(kind: string): string {
+  switch (kind) {
+    case "vab":
+      return "VAB";
+    case "sick":
+      return "Sjukanmälan";
+    case "question_answered":
+      return "Svar på fråga";
+    case "late":
+      return "Försening";
+    case "manual_teacher":
+      return "Läraren";
+    case "salary_negotiation_completed":
+      return "Lönesamtal";
+    default:
+      return kind;
+  }
 }
 
 
