@@ -5866,6 +5866,21 @@ function BankSection({ theme }: { theme: Theme }) {
         <div className={theme.eyebrow} style={{ marginBottom: 18 }}>
           Det stora flödesschemat · tre platser, en kedja
         </div>
+        <style>{`
+          @media (max-width: 768px) {
+            .vc-bank-flow { grid-template-columns: 1fr !important; }
+            .vc-bank-flow > div:nth-child(2),
+            .vc-bank-flow > div:nth-child(4) {
+              transform: rotate(90deg);
+              margin: 0 auto;
+            }
+            .vc-bank-features { grid-template-columns: 1fr !important; }
+            .vc-bank-cqgrid { grid-template-columns: repeat(2, 1fr) !important; }
+          }
+          @media (max-width: 540px) {
+            .vc-bank-cqgrid { grid-template-columns: 1fr !important; }
+          }
+        `}</style>
         <div
           className="vc-bank-flow"
           style={{
@@ -5875,21 +5890,6 @@ function BankSection({ theme }: { theme: Theme }) {
             alignItems: "stretch",
           }}
         >
-          <style>{`
-            @media (max-width: 768px) {
-              .vc-bank-flow { grid-template-columns: 1fr !important; }
-              .vc-bank-flow > div:nth-child(2),
-              .vc-bank-flow > div:nth-child(4) {
-                transform: rotate(90deg);
-                margin: 0 auto;
-              }
-              .vc-bank-features { grid-template-columns: 1fr !important; }
-              .vc-bank-cqgrid { grid-template-columns: repeat(2, 1fr) !important; }
-            }
-            @media (max-width: 540px) {
-              .vc-bank-cqgrid { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
           <div style={{ background: "#0f172a", color: "#fff", borderRadius: 12, padding: 22 }}>
             <div
               style={{
