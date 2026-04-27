@@ -534,6 +534,16 @@ function SharedStyles() {
         .vc-root header { padding-left: 16px !important; padding-right: 16px !important; }
         .vc-root footer > div:first-child { padding-left: 16px !important; padding-right: 16px !important; }
       }
+      /* Innehålls-constraint för alla v5-sektioner: section behåller
+         full-width bakgrund + padding, men direkta barn (h2/p/grids osv)
+         centreras vid maxWidth 1200. Inline-styles vinner över CSS, så
+         sektioner som redan satt en mindre maxWidth (Manifesto 880,
+         Founders 820) behåller sin egen gräns. Hero har redan inre
+         maxWidth-wrappers så regeln blir no-op där. */
+      .vc-root section > *:not(style):not(script) {
+        max-width: 1200px;
+        margin-inline: auto;
+      }
     `}</style>
   );
 }
