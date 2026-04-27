@@ -13,10 +13,12 @@
  *
  * Innehåll byggs ut sektion för sektion. Just nu: Header + Hero.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { CELL_INFO, type CellInfo } from "@/data/landingCells";
-import { registerScrollTrigger } from "@/hooks/useScrollAnimation";
+import { registerScrollTrigger, useReducedMotion } from "@/hooks/useScrollAnimation";
 
 // ---------- Delade data ----------
 
@@ -800,9 +802,52 @@ function Header() {
 function Hero() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [openCell, setOpenCell] = useState<CellInfo | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const reduced = useReducedMotion();
+
+  // GSAP: pin hero while scrolling + scrub-animera kursplan-kortet.
+  // Bara desktop (≥ 900px) — mobil får native scroll. Reduced-motion
+  // respekteras helt.
+  useEffect(() => {
+    if (reduced) return;
+    if (typeof window === "undefined" || window.innerWidth < 900) return;
+    if (!sectionRef.current || !cardRef.current) return;
+    registerScrollTrigger();
+
+    const ctx = gsap.context(() => {
+      const pinTrig = ScrollTrigger.create({
+        trigger: sectionRef.current,
+        start: "top top",
+        end: "+=70%",
+        pin: true,
+        pinSpacing: true,
+        anticipatePin: 1,
+      });
+      const fadeTw = gsap.to(cardRef.current, {
+        scale: 0.86,
+        opacity: 0.5,
+        y: -20,
+        rotateX: 6,
+        ease: "none",
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top top",
+          end: "+=70%",
+          scrub: 0.6,
+        },
+      });
+      return () => {
+        pinTrig.kill();
+        fadeTw.scrollTrigger?.kill();
+      };
+    }, sectionRef);
+
+    return () => ctx.revert();
+  }, [reduced]);
 
   return (
-    <section id="oversikt" className="vc-hero-section">
+    <section id="oversikt" className="vc-hero-section" ref={sectionRef}>
       {/* Status-strip — proof-row enligt v5 */}
       <div
         style={{
@@ -977,7 +1022,7 @@ function Hero() {
           </div>
         </div>
 
-        <div className="vc-card" style={{ padding: 22 }}>
+        <div ref={cardRef} className="vc-card" style={{ padding: 22, transformOrigin: "center top" }}>
           {/* Card-header med titel + Karta/Lista/Värmekarta-tabs */}
           <div
             style={{
