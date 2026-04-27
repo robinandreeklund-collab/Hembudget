@@ -10,8 +10,51 @@
  * Avtal, Eventlogg och Frågor fylls i F2b–F2e. Lönespec och
  * Lönesamtal hör till PR 4 (efter idé 2-backend).
  */
-import { Building2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Building2,
+  TrendingDown,
+  TrendingUp,
+  Minus,
+  AlertCircle,
+} from "lucide-react";
 import { useState } from "react";
+import { api, formatSEK } from "@/api/client";
+import { Card } from "@/components/Card";
+
+
+interface AgreementOut {
+  code: string;
+  name: string;
+  union: string;
+  employer_org: string;
+  summary_md: string;
+  source_url: string | null;
+  verified: boolean;
+  meta: Record<string, unknown>;
+}
+
+
+interface SatisfactionOut {
+  score: number;
+  trend: "rising" | "falling" | "stable";
+  last_event_at: string | null;
+}
+
+
+interface EmployerStatusOut {
+  student_id: number;
+  profession: string;
+  employer: string;
+  gross_salary_monthly: number;
+  pending_salary_monthly: number | null;
+  pending_effective_from: string | null;
+  pension_pct: number | null;
+  satisfaction: SatisfactionOut;
+  agreement: AgreementOut | null;
+  has_agreement: boolean;
+}
+
 
 type Tab =
   | "oversikt"
@@ -33,6 +76,11 @@ const TABS: { id: Tab; label: string; comingSoon?: boolean }[] = [
 
 export default function Arbetsgivare() {
   const [tab, setTab] = useState<Tab>("oversikt");
+
+  const statusQ = useQuery({
+    queryKey: ["employer-status"],
+    queryFn: () => api<EmployerStatusOut>("/employer/status"),
+  });
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5">
@@ -72,7 +120,19 @@ export default function Arbetsgivare() {
       </div>
 
       {/* Stub-tabbar; fylls i F2b–F2e */}
-      {tab === "oversikt" && <ComingSoon what="Översikt" />}
+      {tab === "oversikt" && (
+        statusQ.isLoading ? (
+          <Card><div className="text-sm text-slate-600">Laddar…</div></Card>
+        ) : statusQ.error ? (
+          <Card>
+            <div className="text-sm text-rose-700">
+              Kunde inte hämta status: {String(statusQ.error)}
+            </div>
+          </Card>
+        ) : statusQ.data ? (
+          <OverviewTab status={statusQ.data} />
+        ) : null
+      )}
       {tab === "lonespec" && (
         <ComingSoon
           what="Lönespec"
@@ -88,6 +148,189 @@ export default function Arbetsgivare() {
       )}
       {tab === "fragor" && <ComingSoon what="Frågor" />}
       {tab === "events" && <ComingSoon what="Eventlogg" />}
+    </div>
+  );
+}
+
+
+function OverviewTab({ status }: { status: EmployerStatusOut }) {
+  const score = status.satisfaction.score;
+  const trend = status.satisfaction.trend;
+  const pendingDelta =
+    status.pending_salary_monthly !== null
+      ? status.pending_salary_monthly - status.gross_salary_monthly
+      : null;
+  const pension =
+    status.pension_pct !== null
+      ? Math.round((status.gross_salary_monthly * status.pension_pct) / 100)
+      : null;
+
+  return (
+    <div className="space-y-4">
+      {/* Översta raden: arbetsgivar-id-kort + satisfaction-mätare */}
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
+        <Card>
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            Din arbetsgivare
+          </div>
+          <div className="text-2xl serif mt-1">{status.employer}</div>
+          <div className="text-sm text-slate-700 mt-1">
+            Du jobbar som <strong>{status.profession}</strong>.
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+            <Kpi
+              label="Aktuell bruttolön"
+              value={formatSEK(status.gross_salary_monthly)}
+              hint="per månad"
+            />
+            <Kpi
+              label="Tjänstepension"
+              value={pension !== null ? formatSEK(pension) : "—"}
+              hint={
+                status.pension_pct !== null
+                  ? `${status.pension_pct.toFixed(1)} % av brutto`
+                  : "saknas"
+              }
+            />
+            {status.pending_salary_monthly !== null && (
+              <Kpi
+                label="Ny lön (pågående)"
+                value={formatSEK(status.pending_salary_monthly)}
+                hint={
+                  status.pending_effective_from
+                    ? `gäller från ${status.pending_effective_from}`
+                    : "kommer nästa lönespec"
+                }
+                tone={pendingDelta && pendingDelta > 0 ? "good" : undefined}
+              />
+            )}
+          </div>
+        </Card>
+
+        <SatisfactionGauge score={score} trend={trend} />
+      </div>
+
+      {/* Avtals-banner */}
+      {status.has_agreement && status.agreement ? (
+        <AgreementBanner agreement={status.agreement} />
+      ) : (
+        <NoAgreementBanner />
+      )}
+
+      {/* Pedagogisk hint längst ner */}
+      <div className="text-xs text-slate-500 leading-snug">
+        Översikten visar nuläget. Detaljerade avtals-villkor finns i
+        fliken <em>Kollektivavtal</em>; varför din satisfaction-score
+        rör sig syns i <em>Eventlogg</em>; ditt nästa beslutstillfälle
+        finns i <em>Frågor</em>.
+      </div>
+    </div>
+  );
+}
+
+
+function Kpi({
+  label, value, hint, tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "good" | "bad";
+}) {
+  const color =
+    tone === "good"
+      ? "text-emerald-700"
+      : tone === "bad"
+        ? "text-rose-700"
+        : "text-slate-900";
+  return (
+    <div className="bg-white border rounded p-3">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className={`text-lg font-semibold mt-0.5 ${color}`}>{value}</div>
+      {hint && <div className="text-[11px] text-slate-500 mt-0.5">{hint}</div>}
+    </div>
+  );
+}
+
+
+function SatisfactionGauge({
+  score, trend,
+}: {
+  score: number;
+  trend: "rising" | "falling" | "stable";
+}) {
+  // Färg-tröskel: <25 = critical, <40 = low, <60 = neutral, ≥60 = good
+  const color =
+    score < 25
+      ? "text-rose-700 bg-rose-50 border-rose-200"
+      : score < 40
+        ? "text-amber-700 bg-amber-50 border-amber-200"
+        : score < 60
+          ? "text-slate-700 bg-slate-50 border-slate-200"
+          : "text-emerald-700 bg-emerald-50 border-emerald-200";
+  const TrendIcon =
+    trend === "rising" ? TrendingUp : trend === "falling" ? TrendingDown : Minus;
+  const trendLabel =
+    trend === "rising" ? "stiger" : trend === "falling" ? "sjunker" : "stabil";
+  return (
+    <div className={`border rounded-lg p-4 ${color}`}>
+      <div className="text-xs uppercase tracking-wide opacity-80">
+        Arbetsgivar-nöjdhet
+      </div>
+      <div className="flex items-baseline gap-2 mt-1">
+        <span className="text-5xl serif font-semibold">{score}</span>
+        <span className="text-sm opacity-80">/ 100</span>
+      </div>
+      <div className="flex items-center gap-1 text-xs mt-2 opacity-90">
+        <TrendIcon className="w-3.5 h-3.5" />
+        Trenden {trendLabel} (senaste 5 händelserna)
+      </div>
+    </div>
+  );
+}
+
+
+function AgreementBanner({ agreement }: { agreement: AgreementOut }) {
+  return (
+    <div className="border-l-4 border-brand-400 bg-brand-50 rounded-md p-3">
+      <div className="text-xs uppercase tracking-wide text-brand-700">
+        Ditt kollektivavtal
+      </div>
+      <div className="text-base font-semibold text-slate-900 mt-0.5">
+        {agreement.name}
+      </div>
+      <div className="text-sm text-slate-700">
+        {agreement.union} <span className="text-slate-400">↔</span>{" "}
+        {agreement.employer_org}
+      </div>
+      {!agreement.verified && (
+        <div className="flex items-center gap-1 text-xs text-amber-700 mt-1">
+          <AlertCircle className="w-3.5 h-3.5" />
+          Sammanfattningen är preliminär — väntar på faktagranskning.
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function NoAgreementBanner() {
+  return (
+    <div className="border-l-4 border-slate-300 bg-slate-50 rounded-md p-3">
+      <div className="text-xs uppercase tracking-wide text-slate-600">
+        Småföretag utan kollektivavtal
+      </div>
+      <div className="text-sm text-slate-700 mt-0.5 leading-relaxed">
+        Din arbetsplats omfattas inte av ett kollektivavtal. Det betyder
+        att lön, övertid och tjänstepension regleras direkt med chefen
+        — inte av centrala förhandlingar. Konsekvensen syns tydligast i
+        att <strong>tjänstepension saknas</strong> (förlorat värde
+        över ett arbetsliv kan bli sexsiffrigt). Läs mer i fliken{" "}
+        <em>Kollektivavtal</em>.
+      </div>
     </div>
   );
 }
