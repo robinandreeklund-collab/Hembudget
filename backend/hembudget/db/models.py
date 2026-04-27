@@ -943,6 +943,58 @@ class StudentEvent(TenantMixin, Base):
     )
 
 
+# ---------- Bank-flöde (idé 3 i dev_v1.md) ----------
+
+class ScheduledPayment(TenantMixin, Base):
+    """En signerad betalning som väntar på execution.
+
+    Eleven signerar en eller flera UpcomingTransactions i banken
+    via BankID-flödet → en ScheduledPayment skapas per faktura.
+    När scheduled_date passerats kör execution-jobbet:
+    - Saldo räcker → skapa Transaction, status='executed'
+    - Saldo räcker inte → status='failed_no_funds', triggar
+      påminnelse-flödet (PR 7).
+
+    Idempotent execution: om status redan är 'executed' händer
+    inget vid re-run (jobbet körs varje natt).
+    """
+    __tablename__ = "scheduled_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    # Kopia för spårbarhet — om upcoming.amount ändras ska
+    # signerad betalning hålla sin originalsumma.
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    scheduled_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True,
+    )
+    signed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    # BankSession.token (master-DB) — kopia, ingen FK eftersom det
+    # är cross-database
+    signed_via_session_token: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True,
+    )
+    # "scheduled" | "executed" | "failed_no_funds" | "rescheduled" | "cancelled"
+    status: Mapped[str] = mapped_column(
+        String(20), default="scheduled", nullable=False, index=True,
+    )
+    executed_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 def create_all() -> None:
     from .base import get_engine
 

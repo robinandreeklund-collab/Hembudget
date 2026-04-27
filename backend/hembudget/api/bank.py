@@ -25,6 +25,7 @@ import logging
 import re
 import secrets
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -32,11 +33,18 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..school import is_enabled as school_enabled
+from ..db.base import session_scope
+from ..db.models import (
+    Account,
+    ScheduledPayment,
+    Transaction,
+    UpcomingTransaction,
+)
 from ..school.bank_models import BankSession
 from ..school.engines import master_session
 from ..school.models import BatchArtifact, ScenarioBatch, Student
 from ..security.crypto import hash_password, verify_password
-from .deps import TokenInfo, require_token
+from .deps import TokenInfo, db as scope_db, require_token
 
 log = logging.getLogger(__name__)
 
@@ -333,6 +341,318 @@ def export_to_my_batches(
         art.exported_at = datetime.utcnow()
         s.flush()
         return {"ok": True}
+
+
+# ---------- Kommande betalningar — signera + execute ----------
+
+class UpcomingPaymentRow(BaseModel):
+    upcoming_id: int
+    name: str
+    amount: float
+    expected_date: str
+    debit_account_id: Optional[int] = None
+    already_signed: bool
+    scheduled_payment_id: Optional[int] = None
+    scheduled_status: Optional[str] = None
+    scheduled_date: Optional[str] = None
+
+
+class SignBatchIn(BaseModel):
+    upcoming_ids: list[int] = Field(min_length=1)
+    account_id: int
+    bank_session_token: str
+    # Default = upcoming.expected_date; överskrivs via override
+    override_date: Optional[str] = None  # ISO YYYY-MM-DD
+
+
+class SignBatchOut(BaseModel):
+    signed_count: int
+    scheduled_payment_ids: list[int]
+
+
+def _verify_bank_session(
+    info: TokenInfo, token: str, required_purpose_prefix: Optional[str] = None,
+) -> BankSession:
+    """Lita på sessionens existens och att den är confirmed inom 15 min.
+    Vi använder den som 'bevis' att eleven nyligen genomfört BankID."""
+    student_id = _student_from_info(info)
+    with master_session() as s:
+        sess = (
+            s.query(BankSession)
+            .filter(BankSession.token == token)
+            .first()
+        )
+        if not sess:
+            raise HTTPException(404, "BankID-sessionen finns inte")
+        if sess.student_id != student_id:
+            raise HTTPException(403, "Sessionen tillhör annan elev")
+        if not sess.confirmed_at:
+            raise HTTPException(401, "BankID-sessionen är inte bekräftad")
+        if sess.expires_at < datetime.utcnow():
+            raise HTTPException(410, "BankID-sessionen har löpt ut")
+        if required_purpose_prefix and not sess.purpose.startswith(
+            required_purpose_prefix
+        ):
+            raise HTTPException(
+                403,
+                f"Sessionens syfte ({sess.purpose}) tillåter inte detta",
+            )
+        # Detacha — vi behöver bara token-string utåt
+        return BankSession(
+            id=sess.id,
+            student_id=sess.student_id,
+            token=sess.token,
+            purpose=sess.purpose,
+            created_at=sess.created_at,
+            expires_at=sess.expires_at,
+            confirmed_at=sess.confirmed_at,
+            ip_address=sess.ip_address,
+        )
+
+
+@router.get(
+    "/upcoming-payments", response_model=list[UpcomingPaymentRow],
+)
+def list_upcoming_for_signing(
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> list[UpcomingPaymentRow]:
+    """Lista obetalda fakturor + redan signerade (status). Senast först.
+
+    Tar med matchade-fakturor som redan har en ScheduledPayment så
+    eleven ser status. Exkluderar matched_transaction_id IS NOT NULL
+    (= redan betalda i bokföringen).
+    """
+    _require_school()
+    _student_from_info(info)
+    rows = (
+        scope.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "bill",
+            UpcomingTransaction.matched_transaction_id.is_(None),
+        )
+        .order_by(UpcomingTransaction.expected_date.asc())
+        .all()
+    )
+    out: list[UpcomingPaymentRow] = []
+    for u in rows:
+        sched = (
+            scope.query(ScheduledPayment)
+            .filter(ScheduledPayment.upcoming_id == u.id)
+            .order_by(ScheduledPayment.id.desc())
+            .first()
+        )
+        out.append(UpcomingPaymentRow(
+            upcoming_id=u.id,
+            name=u.name,
+            amount=float(u.amount),
+            expected_date=u.expected_date.isoformat(),
+            debit_account_id=u.debit_account_id,
+            already_signed=sched is not None,
+            scheduled_payment_id=sched.id if sched else None,
+            scheduled_status=sched.status if sched else None,
+            scheduled_date=(
+                sched.scheduled_date.isoformat() if sched else None
+            ),
+        ))
+    return out
+
+
+@router.post("/upcoming-payments/sign", response_model=SignBatchOut)
+def sign_payment_batch(
+    payload: SignBatchIn,
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> SignBatchOut:
+    """Signera en batch av kommande betalningar.
+
+    Kräver bekräftad BankSession (verifieras via token). Skapar
+    ScheduledPayment per upcoming_id. Sparar bank_session_token
+    så audit-spåret är komplett.
+
+    Idempotent: redan signerade upcoming_ids hoppas över (inget fel).
+    """
+    _require_school()
+    _student_from_info(info)
+    _verify_bank_session(info, payload.bank_session_token)
+
+    acc = scope.get(Account, payload.account_id)
+    if not acc:
+        raise HTTPException(404, "Kontot finns inte")
+    if acc.type != "checking":
+        raise HTTPException(
+            400,
+            "Endast lönekonto/checkingkonto kan användas för betalning",
+        )
+
+    from datetime import date as _date
+    override: Optional[_date] = None
+    if payload.override_date:
+        try:
+            override = _date.fromisoformat(payload.override_date)
+        except ValueError:
+            raise HTTPException(400, "override_date måste vara YYYY-MM-DD")
+
+    created_ids: list[int] = []
+    for uid in payload.upcoming_ids:
+        u = scope.get(UpcomingTransaction, uid)
+        if not u or u.kind != "bill":
+            continue
+        if u.matched_transaction_id is not None:
+            continue
+        # Skippa redan signerade
+        existing = (
+            scope.query(ScheduledPayment)
+            .filter(
+                ScheduledPayment.upcoming_id == uid,
+                ScheduledPayment.status == "scheduled",
+            )
+            .first()
+        )
+        if existing:
+            continue
+        sched_date = override or u.expected_date
+        sp = ScheduledPayment(
+            upcoming_id=uid,
+            account_id=payload.account_id,
+            amount=u.amount,
+            scheduled_date=sched_date,
+            signed_via_session_token=payload.bank_session_token,
+            status="scheduled",
+        )
+        scope.add(sp)
+        scope.flush()
+        created_ids.append(sp.id)
+
+    return SignBatchOut(
+        signed_count=len(created_ids),
+        scheduled_payment_ids=created_ids,
+    )
+
+
+def _balance_for_account(scope, account_id: int) -> Decimal:
+    from sqlalchemy import func as sa_func
+    acc = scope.get(Account, account_id)
+    if acc is None:
+        return Decimal("0")
+    base = acc.opening_balance or Decimal("0")
+    q = scope.query(
+        sa_func.coalesce(sa_func.sum(Transaction.amount), 0),
+    ).filter(Transaction.account_id == account_id)
+    if acc.opening_balance_date is not None:
+        q = q.filter(Transaction.date >= acc.opening_balance_date)
+    total = q.scalar() or Decimal("0")
+    if not isinstance(total, Decimal):
+        total = Decimal(str(total))
+    return base + total
+
+
+@router.post("/scheduled-payments/run-due")
+def run_due_payments(
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Execute alla 'scheduled'-payments vars datum passerats.
+
+    Kallas lazy från frontend (varje gång eleven öppnar /bank/scheduled
+    eller /transactions). På Cloud Run kan vi även lägga till en
+    Cloud Scheduler-trigg en gång per dygn — men lazy räcker för
+    det pedagogiska flödet.
+
+    Per payment:
+    - Saldo räcker → skapa Transaction, status='executed',
+      matcha UpcomingTransaction
+    - Saldo räcker inte → status='failed_no_funds' (PR 7 triggar
+      påminnelse-flödet)
+
+    Returnerar {executed, failed, skipped}.
+    """
+    _require_school()
+    _student_from_info(info)
+    from datetime import date as _date
+    today = _date.today()
+    due = (
+        scope.query(ScheduledPayment)
+        .filter(
+            ScheduledPayment.status == "scheduled",
+            ScheduledPayment.scheduled_date <= today,
+        )
+        .all()
+    )
+    executed = 0
+    failed = 0
+    for sp in due:
+        bal = _balance_for_account(scope, sp.account_id)
+        if bal < sp.amount:
+            sp.status = "failed_no_funds"
+            sp.failure_reason = (
+                f"Saldo {int(bal)} kr räckte inte för {int(sp.amount)} kr"
+            )
+            sp.executed_at = datetime.utcnow()
+            failed += 1
+            continue
+        # Skapa transaktion (debet på lönekontot)
+        u = scope.get(UpcomingTransaction, sp.upcoming_id)
+        desc = u.name if u else f"Signerad betalning #{sp.id}"
+        # Hash för dedup vid rerun
+        import hashlib as _h
+        h = _h.sha256(
+            f"sched:{sp.id}:{sp.scheduled_date}:{sp.amount}".encode()
+        ).hexdigest()[:32]
+        tx = Transaction(
+            account_id=sp.account_id,
+            date=sp.scheduled_date,
+            amount=-sp.amount,
+            currency="SEK",
+            raw_description=desc,
+            is_transfer=False,
+            hash=h,
+        )
+        scope.add(tx)
+        scope.flush()
+        sp.executed_transaction_id = tx.id
+        sp.executed_at = datetime.utcnow()
+        sp.status = "executed"
+        if u:
+            u.matched_transaction_id = tx.id
+        executed += 1
+
+    return {
+        "executed": executed,
+        "failed": failed,
+        "skipped": 0,
+        "due_count": len(due),
+    }
+
+
+@router.get("/scheduled-payments")
+def list_scheduled_payments(
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Lista alla ScheduledPayments för aktuell elev — senaste först."""
+    _require_school()
+    _student_from_info(info)
+    rows = (
+        scope.query(ScheduledPayment)
+        .order_by(ScheduledPayment.scheduled_date.desc())
+        .all()
+    )
+    out = []
+    for sp in rows:
+        u = scope.get(UpcomingTransaction, sp.upcoming_id)
+        out.append({
+            "id": sp.id,
+            "upcoming_id": sp.upcoming_id,
+            "name": u.name if u else "—",
+            "account_id": sp.account_id,
+            "amount": float(sp.amount),
+            "scheduled_date": sp.scheduled_date.isoformat(),
+            "status": sp.status,
+            "executed_at": sp.executed_at.isoformat() if sp.executed_at else None,
+            "failure_reason": sp.failure_reason,
+        })
+    return {"scheduled_payments": out, "count": len(out)}
 
 
 @router.get("/session/{token}", response_model=SessionStatusOut)
