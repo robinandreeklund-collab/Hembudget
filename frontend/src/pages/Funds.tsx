@@ -23,6 +23,20 @@ interface Holding {
   last_update_date: string;
 }
 
+interface StockSummary {
+  ticker: string;
+  name: string;
+  quantity: number;
+  avg_cost: Num;
+  last_price: Num | null;
+  market_value: Num;
+  market_value_native: Num;
+  cost_basis: Num;
+  unrealized_pnl: Num;
+  currency: string;
+  sector: string;
+}
+
 interface Summary {
   account_id: number;
   account_name: string;
@@ -31,6 +45,8 @@ interface Summary {
   fund_count: number;
   last_update_date: string | null;
   holdings: Holding[];
+  stocks?: StockSummary[];
+  stocks_value?: Num;
 }
 
 interface HistoryPoint {
@@ -146,7 +162,7 @@ export default function FundsPage() {
 
           {summary && (
             <Card title={`${summary.account_name} — aktuella innehav`}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                 <Kpi label="Totalt värde" value={formatKr(summary.total_value)} />
                 <Kpi
                   label="Tillgängligt"
@@ -156,12 +172,92 @@ export default function FundsPage() {
                       : "—"
                   }
                 />
-                <Kpi label="Antal fonder" value={String(summary.fund_count)} />
+                <Kpi label="Fonder" value={String(summary.fund_count)} />
                 <Kpi
-                  label="Senast uppdaterad"
+                  label="Aktievärde"
+                  value={
+                    summary.stocks_value
+                      ? formatKr(summary.stocks_value)
+                      : "0 kr"
+                  }
+                />
+                <Kpi
+                  label="Senast"
                   value={summary.last_update_date ?? "—"}
                 />
               </div>
+
+              {summary.stocks && summary.stocks.length > 0 && (
+                <div className="mb-5 border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 text-sm font-medium border-b">
+                    Aktier ({summary.stocks.length})
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-slate-600 border-b">
+                      <tr>
+                        <th className="py-2 px-3">Aktie</th>
+                        <th className="py-2 px-2 text-right">Antal</th>
+                        <th className="py-2 px-2 text-right">Snittkurs</th>
+                        <th className="py-2 px-2 text-right">Senaste</th>
+                        <th className="py-2 px-2 text-right">Värde (SEK)</th>
+                        <th className="py-2 px-2 text-right">P/L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.stocks.map((s) => {
+                        const isUsd = s.currency === "USD";
+                        const fmtNative = (v: Num): string => {
+                          const n = Number(v);
+                          if (!Number.isFinite(n)) return "—";
+                          return isUsd
+                            ? `$${n.toFixed(2)}`
+                            : formatKr(n);
+                        };
+                        const pnl = Number(s.unrealized_pnl);
+                        return (
+                          <tr key={s.ticker} className="border-b last:border-0">
+                            <td className="py-2 px-3">
+                              <div className="font-medium flex items-center gap-2">
+                                {s.ticker}
+                                {isUsd && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                    USD
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {s.name} · {s.sector}
+                              </div>
+                            </td>
+                            <td className="px-2 text-right">{s.quantity}</td>
+                            <td className="px-2 text-right">
+                              {fmtNative(s.avg_cost)}
+                            </td>
+                            <td className="px-2 text-right">
+                              {s.last_price != null ? fmtNative(s.last_price) : "—"}
+                            </td>
+                            <td className="px-2 text-right font-medium">
+                              {formatKr(s.market_value)}
+                              {isUsd && (
+                                <div className="text-[10px] text-slate-500">
+                                  {fmtNative(s.market_value_native)}
+                                </div>
+                              )}
+                            </td>
+                            <td
+                              className={`px-2 text-right ${
+                                pnl >= 0 ? "text-emerald-700" : "text-red-700"
+                              }`}
+                            >
+                              {pnl >= 0 ? "+" : ""}{formatKr(pnl)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               {summary.holdings.length === 0 ? (
                 <div className="text-sm text-slate-700">
                   Inga innehav än. Ladda upp en skärmdump av fondvyn nedan.
