@@ -793,3 +793,94 @@ def yfinance_test(
         target_logger.removeHandler(handler)
 
     return {"ok": True, **result, "log": log_msgs[-30:]}
+
+
+@router.get("/db/inspect-stock-trades")
+def inspect_stock_trades(
+    student_id: int,
+    info: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Lista raw StockHolding + StockTransaction för en specifik elev.
+    Bypassar tenant-filter via direkt SQL-query mot scope-engine.
+    Hjälper debugga 'jag köpte men det syns inte i portfolio'."""
+    from sqlalchemy import text as _text
+    from ..school.engines import (
+        _shared_scope_engine, master_session, scope_for_student,
+        _scope_engines,
+    )
+    from ..school.models import Student
+
+    with master_session() as s:
+        student = s.query(Student).filter(Student.id == student_id).first()
+        if not student:
+            return {"error": f"Student {student_id} finns inte"}
+        scope_key = scope_for_student(student)
+
+    # Hitta engine — shared (Postgres) eller per-fil (SQLite)
+    engine = _shared_scope_engine or _scope_engines.get(scope_key)
+    if engine is None:
+        return {"error": f"Ingen scope-engine för {scope_key}"}
+
+    out: dict = {
+        "student_id": student_id,
+        "scope_key": scope_key,
+        "engine_type": engine.dialect.name,
+    }
+
+    # Räkna alla rader (utan tenant-filter) + filter per tenant
+    try:
+        with engine.connect() as conn:
+            # Cash tx (oberoende verifiering)
+            row = conn.execute(_text(
+                "SELECT COUNT(*), COALESCE(MIN(tenant_id), '?') "
+                "FROM transactions "
+                "WHERE raw_description LIKE 'Köp%' OR raw_description LIKE 'Sälj%'"
+            )).first()
+            out["cash_tx_count"] = row[0] if row else 0
+            out["cash_tx_sample_tenant"] = row[1] if row else None
+
+            row = conn.execute(_text(
+                "SELECT COUNT(*), COALESCE(MIN(tenant_id), '?') "
+                "FROM stock_transactions"
+            )).first()
+            out["stock_tx_count_total"] = row[0] if row else 0
+            out["stock_tx_sample_tenant"] = row[1] if row else None
+
+            row = conn.execute(_text(
+                "SELECT COUNT(*) FROM stock_transactions "
+                "WHERE tenant_id = :t"
+            ), {"t": scope_key}).first()
+            out["stock_tx_count_for_scope"] = row[0] if row else 0
+
+            row = conn.execute(_text(
+                "SELECT COUNT(*), COALESCE(MIN(tenant_id), '?') "
+                "FROM stock_holdings"
+            )).first()
+            out["stock_holding_count_total"] = row[0] if row else 0
+            out["stock_holding_sample_tenant"] = row[1] if row else None
+
+            row = conn.execute(_text(
+                "SELECT COUNT(*) FROM stock_holdings "
+                "WHERE tenant_id = :t"
+            ), {"t": scope_key}).first()
+            out["stock_holding_count_for_scope"] = row[0] if row else 0
+
+            # Sista 5 stock-transaktionerna oavsett scope
+            rows = conn.execute(_text(
+                "SELECT id, tenant_id, ticker, side, quantity, price, "
+                "executed_at FROM stock_transactions "
+                "ORDER BY id DESC LIMIT 5"
+            )).fetchall()
+            out["last_5_stock_tx"] = [
+                {
+                    "id": r[0], "tenant_id": r[1], "ticker": r[2],
+                    "side": r[3], "quantity": r[4],
+                    "price": float(r[5]),
+                    "executed_at": r[6].isoformat() if r[6] else None,
+                }
+                for r in rows
+            ]
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+
+    return out

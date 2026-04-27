@@ -454,6 +454,26 @@ function StocksDiagnosticsCard() {
     }
   }
 
+  const [studentId, setStudentId] = useState("");
+  const [tradeInspect, setTradeInspect] = useState<Record<string, unknown> | null>(null);
+
+  async function inspectTrades() {
+    if (!studentId) return;
+    setBusy(true);
+    setErr(null);
+    setTradeInspect(null);
+    try {
+      const res = await api<Record<string, unknown>>(
+        `/admin/ai/db/inspect-stock-trades?student_id=${studentId}`,
+      );
+      setTradeInspect(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
       <div className="flex items-center gap-2">
@@ -487,6 +507,19 @@ function StocksDiagnosticsCard() {
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testa YFinance"}
         </button>
+        <input
+          value={studentId}
+          onChange={(e) => setStudentId(e.target.value)}
+          placeholder="Elev-ID"
+          className="border rounded px-2 py-1 text-sm w-24"
+        />
+        <button
+          onClick={inspectTrades}
+          disabled={busy || !studentId}
+          className="border border-purple-300 hover:bg-purple-50 text-purple-800 rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Inspektera trades för elev"}
+        </button>
       </div>
       {err && (
         <div className="text-sm text-rose-600 border-l-2 border-rose-300 pl-3 py-1">
@@ -501,6 +534,11 @@ function StocksDiagnosticsCard() {
       {yfTest && (
         <pre className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
           YFinance-test: {JSON.stringify(yfTest, null, 2)}
+        </pre>
+      )}
+      {tradeInspect && (
+        <pre className="bg-purple-50 border border-purple-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          Trade-inspektion: {JSON.stringify(tradeInspect, null, 2)}
         </pre>
       )}
       {status && (
