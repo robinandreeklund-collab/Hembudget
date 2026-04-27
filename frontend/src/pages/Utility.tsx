@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, RefreshCw, Trash2, Upload, X, Zap } from "lucide-react";
 import { api, formatSEK, getApiBase, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
+import { ElprisCard } from "@/components/ElprisCard";
 
 interface UtilityHistory {
   year: number;
@@ -108,6 +109,12 @@ export default function Utility() {
           <Activity className="w-6 h-6" />
           Förbrukning
         </h1>
+        {/* Elpris-widget — flyttad från Dashboard, naturligare här */}
+      </div>
+
+      <ElprisCard />
+
+      <div className="flex items-center justify-end flex-wrap gap-2">
         <div className="flex items-center gap-3 text-sm">
           <label className="flex items-center gap-2">
             <input

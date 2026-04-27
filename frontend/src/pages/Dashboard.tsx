@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, Trash2, TrendingDown, TrendingUp, Users, Zap,
+  AlertTriangle, Trash2, TrendingDown, TrendingUp, Users,
 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
@@ -38,21 +38,6 @@ interface NetWorthPoint {
   assets: number;
   debt: number;
   net_worth: number;
-}
-
-interface ElprisHour {
-  start: string;
-  end: string;
-  sek_per_kwh: number;
-  sek_per_kwh_inc_vat: number;
-}
-
-interface ElprisDay {
-  date: string;
-  zone: string;
-  avg_sek_per_kwh_inc_vat: number;
-  cheapest_hours: Array<{ start: string; end: string; sek_per_kwh_inc_vat: number }>;
-  hours: ElprisHour[];
 }
 
 interface FamilyBreakdown {
@@ -171,13 +156,6 @@ export default function Dashboard() {
     queryKey: ["family", month],
     queryFn: () => api<FamilyBreakdown>(`/budget/family/${month}`),
     enabled: !!month,
-  });
-  const elprisZone = (localStorage.getItem("elpris_zone") || "SE3") as
-    | "SE1" | "SE2" | "SE3" | "SE4";
-  const elprisQ = useQuery({
-    queryKey: ["elpris", "today", elprisZone],
-    queryFn: () => api<ElprisDay>(`/elpris/today?zone=${elprisZone}`),
-    retry: false,
   });
   const usersQ = useQuery({
     queryKey: ["users"],
@@ -664,61 +642,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {elprisQ.data && elprisQ.data.hours.length > 0 && (
-        <Card
-          title={`Elpris idag — ${elprisQ.data.zone}`}
-          action={
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-700">Snitt</span>
-              <span className="font-semibold">
-                {(elprisQ.data.avg_sek_per_kwh_inc_vat * 100).toFixed(0)} öre/kWh
-              </span>
-              <select
-                value={elprisZone}
-                onChange={(e) => {
-                  localStorage.setItem("elpris_zone", e.target.value);
-                  location.reload();
-                }}
-                className="border rounded px-1.5 py-0.5 text-xs"
-              >
-                <option value="SE1">SE1</option>
-                <option value="SE2">SE2</option>
-                <option value="SE3">SE3</option>
-                <option value="SE4">SE4</option>
-              </select>
-            </div>
-          }
-        >
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart
-              data={elprisQ.data.hours.map((h) => ({
-                hour: new Date(h.start).getHours(),
-                öre: Math.round(h.sek_per_kwh_inc_vat * 100),
-              }))}
-            >
-              <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}`} />
-              <Tooltip
-                formatter={(v: number) => `${v} öre/kWh`}
-                labelFormatter={(h) => `Timme ${h}:00`}
-              />
-              <Bar dataKey="öre" fill="#4f46e5" radius={[2, 2, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-2 text-xs text-slate-600">
-            <Zap className="inline w-3.5 h-3.5 mr-1 text-amber-500" />
-            Billigaste timmar:{" "}
-            {elprisQ.data.cheapest_hours.map((h) => {
-              const hr = new Date(h.start).getHours();
-              return (
-                <span key={h.start} className="mx-1 font-mono">
-                  {String(hr).padStart(2, "0")}:00 ({(h.sek_per_kwh_inc_vat * 100).toFixed(0)}öre)
-                </span>
-              );
-            })}
-          </div>
-        </Card>
-      )}
+      {/* Elpris-widgeten flyttad till /utility — naturlig plats där
+          eleven också ser sin förbrukning. */}
 
       {netWorthQ.data && netWorthQ.data.points.length > 0 && (
         <Card
