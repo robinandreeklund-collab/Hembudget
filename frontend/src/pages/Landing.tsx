@@ -1539,7 +1539,112 @@ function StockEmotion() {
 }
 
 
-function EntreprenorSneak() { return null; }
+// ---------- Mitt företag-sneak (kommande modul) ----------
+
+function EntreprenorSneak() {
+  return (
+    <section id="foretag" className="border-t border-rule">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
+        <div className="flex items-baseline justify-between flex-wrap gap-3 mb-10">
+          <div className="section-divider">
+            Mitt företag · entreprenörskaps-modul
+          </div>
+          <span className="text-[10px] uppercase tracking-wider px-2 py-1 border border-ink rounded-sm bg-paper">
+            Kommande · sommar 2026
+          </span>
+        </div>
+
+        <div className="grid md:grid-cols-[1.1fr_1fr] gap-10 md:gap-14 items-start">
+          <div>
+            <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+              Driv ditt eget företag genom hela terminen.
+            </h2>
+            <p className="mt-5 lead max-w-md">
+              För FE1 / FE2 (företagsekonomi gymnasiet). Eleven driver
+              eget företag genom hela terminen — säljer, fakturerar,
+              hanterar moms, möter kunder som betalar för sent. Och
+              <em> samtidigt</em> lever sitt liv: lön ut, hyra in.
+            </p>
+            <div className="mt-8 border-l-[3px] border-ink pl-5 py-1 max-w-md">
+              <div className="serif-italic text-lg leading-snug">
+                Likviditet ≠ Lönsamhet.
+              </div>
+              <p className="mt-2 text-sm body-prose">
+                Q4-rapporten kan se bra ut samtidigt som hyran står
+                vid avgrunden. Eleven får leva båda samtidigt — lär
+                sig att se skillnaden.
+              </p>
+            </div>
+            <div className="mt-6 text-xs text-slate-600">
+              Inspirerat av Visma och Fortnox — fast enklare, roligare
+              och faktiskt begripligt för en 16-åring.
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="border-[1.5px] border-ink p-4 bg-white">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-700 mb-1">
+                Vecka 12
+              </div>
+              <h3 className="serif text-xl leading-snug">
+                Bra månad. Buffert växer.
+              </h3>
+              <p className="mt-1 text-sm body-prose">
+                Tre nya kunder — varav en är skeptisk till priset.
+                Företagets kassa upp 18 400 kr. Lönen från företaget
+                till dig själv kan du höja.
+              </p>
+            </div>
+            <div className="border-[1.5px] border-ink p-4 bg-white">
+              <div className="text-[10px] uppercase tracking-wider text-amber-700 mb-1">
+                Vecka 17
+              </div>
+              <h3 className="serif text-xl leading-snug">
+                Måste sänka lönen — eller sälja mer.
+              </h3>
+              <p className="mt-1 text-sm body-prose">
+                Kunderna betalar 30 dagar för sent. Hyran kan inte
+                vänta. Eleven väljer: sänka egen lön, dröja med
+                leverantörsfaktura, eller pressa kunderna.
+              </p>
+            </div>
+            <div className="border-[1.5px] border-ink p-4 bg-white">
+              <div className="text-[10px] uppercase tracking-wider text-rose-700 mb-1">
+                Vecka 22 · krishantering
+              </div>
+              <h3 className="serif text-xl leading-snug">
+                Din ekonomi går inte ihop.
+              </h3>
+              <p className="mt-1 text-sm body-prose">
+                Systemet pausar och tvingar fram ett beslut. Tre vägar
+                finns. Alla tre kostar något — och eleven måste
+                motivera sitt val. Reflektionen sparas i ledgern så
+                läraren kan fråga om den senare.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 pt-8 border-t border-rule grid md:grid-cols-2 gap-6 items-baseline">
+          <p className="body-prose">
+            Eleven känner skillnaden mellan att optimera för sig själv,
+            för företaget eller för helheten. Det är inte ett quiz —
+            det är en balansgång.
+          </p>
+          <div className="text-sm">
+            <a
+              href="#contact"
+              className="inline-flex items-center gap-2 border-[1.5px] border-ink px-4 py-2 hover:bg-paper"
+            >
+              Bli pilot­klass nästa termin
+              <span aria-hidden="true">→</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 
 function Gallery() {
