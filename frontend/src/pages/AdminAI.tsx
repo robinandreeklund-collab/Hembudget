@@ -394,7 +394,92 @@ export default function AdminAI() {
       </div>
 
       <DbMigrationsCard />
+
+      <StocksDiagnosticsCard />
     </div>
+  );
+}
+
+
+function StocksDiagnosticsCard() {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<Record<string, unknown> | null>(null);
+  const [pollResult, setPollResult] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function loadStatus() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await api<Record<string, unknown>>("/admin/ai/db/stocks-status");
+      setStatus(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pollNow() {
+    setBusy(true);
+    setErr(null);
+    setPollResult(null);
+    try {
+      const res = await api<Record<string, unknown>>("/admin/ai/db/stocks-poll-now", {
+        method: "POST",
+      });
+      setPollResult(res);
+      await loadStatus();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Database className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">Aktiekurs-diagnostik</h2>
+      </div>
+      <p className="text-sm text-slate-700">
+        Visa pollerstatus + tvinga manuell hämtning av kurser. Användbart
+        om eleven ser tomma kurser eller "marknaden stängd"-banner när
+        börsen borde vara öppen.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={loadStatus}
+          disabled={busy}
+          className="border border-slate-300 hover:bg-slate-50 rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Hämta status"}
+        </button>
+        <button
+          onClick={pollNow}
+          disabled={busy}
+          className="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Polla kurser nu"}
+        </button>
+      </div>
+      {err && (
+        <div className="text-sm text-rose-600 border-l-2 border-rose-300 pl-3 py-1">
+          {err}
+        </div>
+      )}
+      {pollResult && (
+        <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          Poll-resultat: {JSON.stringify(pollResult, null, 2)}
+        </pre>
+      )}
+      {status && (
+        <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          {JSON.stringify(status, null, 2)}
+        </pre>
+      )}
+    </section>
   );
 }
 

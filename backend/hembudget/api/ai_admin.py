@@ -622,3 +622,98 @@ def get_scope_columns(
             tbl: sorted(cols) for tbl, cols in _scope_columns.items()
         },
     }
+
+
+@router.get("/db/stocks-status")
+def stocks_diagnose(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Diagnostik för aktiekurs-poller. Visar:
+    - antal stocks i universum (StockMaster)
+    - antal kursrader i StockQuote (totalt + senaste 24 h)
+    - antal LatestStockQuote
+    - vilken provider som används
+    - is_market_open just nu
+    - dagens MarketCalendar-rad
+    - om Finnhub-key är konfigurerad
+    """
+    from datetime import datetime, timedelta
+    from ..school.engines import master_session
+    from ..school.stock_models import (
+        LatestStockQuote, MarketCalendar, StockMaster, StockQuote,
+    )
+    from ..stocks.calendar import is_market_open
+    from ..stocks.quote_providers import (
+        finnhub_key_configured, get_provider,
+    )
+
+    yesterday = datetime.utcnow() - timedelta(hours=24)
+    with master_session() as s:
+        n_stocks = s.query(StockMaster).count()
+        n_quotes_total = s.query(StockQuote).count()
+        n_quotes_24h = (
+            s.query(StockQuote)
+            .filter(StockQuote.ts >= yesterday)
+            .count()
+        )
+        n_latest = s.query(LatestStockQuote).count()
+        latest = (
+            s.query(StockQuote)
+            .order_by(StockQuote.ts.desc())
+            .first()
+        )
+        last_quote = {
+            "ticker": latest.ticker,
+            "ts": latest.ts.isoformat() if latest.ts else None,
+            "last": float(latest.last),
+            "source": latest.source,
+        } if latest else None
+        market_open = is_market_open(s)
+        from datetime import date as _d
+        today_cal = (
+            s.query(MarketCalendar)
+            .filter(
+                MarketCalendar.calendar_date == _d.today(),
+                MarketCalendar.exchange == "XSTO",
+            )
+            .first()
+        )
+        cal_row = {
+            "date": today_cal.calendar_date.isoformat(),
+            "status": today_cal.status,
+            "open_time": today_cal.open_time,
+            "close_time": today_cal.close_time,
+            "note": today_cal.note,
+        } if today_cal else None
+
+    return {
+        "stocks_in_universe": n_stocks,
+        "total_quotes": n_quotes_total,
+        "quotes_last_24h": n_quotes_24h,
+        "latest_quotes_table": n_latest,
+        "last_quote": last_quote,
+        "market_open_now": market_open,
+        "today_calendar": cal_row,
+        "provider": type(get_provider()).__name__,
+        "finnhub_key_configured": finnhub_key_configured(),
+    }
+
+
+@router.post("/db/stocks-poll-now")
+def stocks_poll_now(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Tvinga en kurs-poll direkt (även om börsen är stängd). Returnerar
+    antal hämtade rader + ev. fel."""
+    from ..school.engines import master_session
+    from ..stocks.poller import poll_quotes
+
+    with master_session() as s:
+        try:
+            res = poll_quotes(s, force=True)
+            return {"ok": True, **res}
+        except Exception as e:
+            return {
+                "ok": False,
+                "error": f"{type(e).__name__}: {e}",
+            }
