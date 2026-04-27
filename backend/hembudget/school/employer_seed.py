@@ -129,6 +129,147 @@ AGREEMENTS: list[dict] = [
         },
         "verified_at": None,
     },
+    {
+        "code": "hok_larare_2026",
+        "name": "HÖK 21 — Lärarna",
+        "union": "Lärarförbundet + Lärarnas Riksförbund (Sveriges Lärare)",
+        "employer_org": "SKR + Sobona",
+        "valid_from": date(2024, 4, 1),
+        "valid_to": date(2026, 3, 31),
+        "source_url": "https://www.sverigeslarare.se/avtal",
+        "summary_md": (
+            "## HÖK — Lärarna (Sveriges Lärare)\n\n"
+            "Ditt avtal som lärare i kommunal eller regional grund-, "
+            "gymnasie- eller särskola. Förbund: Sveriges Lärare "
+            "(sammanslagningen av Lärarförbundet och LR sedan 2023). "
+            "Motpart: SKR och Sobona.\n\n"
+            "**Lönerevision.** Generellt påslag + lokal pott. 2025 "
+            "~3,4 %, 2026 ~3,0 %. För lärare finns en uttalad "
+            "ambition att lyfta läraryrkets snittlön — ditt "
+            "lönesamtal kan ge mer än potten om du visar "
+            "professionell utveckling, kollegialt ledarskap eller "
+            "ämnesfördjupning.\n\n"
+            "**Semester.** 25 dagar grund; 31 dagar från 40 års "
+            "ålder; 32 dagar från 50. Lärarens semester ligger "
+            "till stor del förlagd över sommaren.\n\n"
+            "**Arbetstid.** Reglerad arbetstid: ca 1 360 h/år "
+            "(ferieanställning) eller 1 700 h/år (semester-"
+            "anställning). Förtroendetid utöver det.\n\n"
+            "**Sjuklön.** Identisk med Kommunal HÖK: dag 1 karens, "
+            "dag 2–14 80 %, FK från dag 15.\n\n"
+            "**Tjänstepension.** AKAP-KR (yngre) / KAP-KL (äldre). "
+            "6 % av brutto under 7,5 IBB; 31,5 % över."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.4, "2026": 3.0},
+            "vacation_days": 25,
+            "vacation_days_age_40": 31,
+            "vacation_days_age_50": 32,
+            "annual_hours_ferie": 1360,
+            "annual_hours_semester": 1700,
+            "overtime_pct": 50,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "AKAP-KR",
+            "pension_pct": 6.0,
+            "pension_pct_above_75ibb": 31.5,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "hok_vard_2026",
+        "name": "HÖK 22 — Vårdförbundet",
+        "union": "Vårdförbundet",
+        "employer_org": "SKR + Sobona",
+        "valid_from": date(2022, 4, 1),
+        "valid_to": date(2025, 3, 31),
+        "source_url": "https://www.vardforbundet.se/avtal",
+        "summary_md": (
+            "## HÖK — Vårdförbundet\n\n"
+            "Ditt avtal som sjuksköterska, barnmorska, biomedicinsk "
+            "analytiker eller röntgensjuksköterska anställd i region "
+            "eller kommunal vård. Förbund: Vårdförbundet. Motpart: "
+            "SKR och Sobona.\n\n"
+            "**Lönerevision.** Generellt + lokal pott. 2025 ~3,2 %, "
+            "2026 ~3,0 %. Avtalet har långsiktig löneutveckling "
+            "som mål — chefer kan ge tydliga lönelyft för "
+            "specialistutbildning eller nattens svåraste pass.\n\n"
+            "**Semester.** 25 dagar grund; 31 från 40; 32 från 50.\n\n"
+            "**OB-tillägg.** För kvällar, nätter, helger och röda "
+            "dagar tillkommer OB-tillägg utöver grundlön — kan "
+            "vara 10–100 % av timlönen beroende på tid. Här tjänar "
+            "många nattsjuksköterskor en betydande del av total-"
+            "lönen.\n\n"
+            "**Sjuklön.** Som övriga HÖK-avtal: karens dag 1, "
+            "80 % dag 2–14.\n\n"
+            "**Tjänstepension.** AKAP-KR / KAP-KL. 6 % under 7,5 "
+            "IBB, 31,5 % över."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.2, "2026": 3.0},
+            "vacation_days": 25,
+            "vacation_days_age_40": 31,
+            "vacation_days_age_50": 32,
+            "ob_evening_pct": 22,
+            "ob_night_pct": 50,
+            "ob_weekend_pct": 100,
+            "overtime_pct": 50,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "AKAP-KR",
+            "pension_pct": 6.0,
+            "pension_pct_above_75ibb": 31.5,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "tjm_general_2026",
+        "name": "Tjänstemannaavtalet (generellt) — Unionen / Almega",
+        "union": "Unionen + Akademikerförbunden",
+        "employer_org": "Almega",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.unionen.se/avtal",
+        "summary_md": (
+            "## Tjänstemannaavtalet (generellt)\n\n"
+            "Det breda tjänstemanna-avtalet för privatanställda inom "
+            "tjänstesektorn — projektledare, ekonomiassistent, "
+            "marknadsförare, säljare med tjänstemannaroll. Förbund: "
+            "Unionen, Akavia, Sveriges Ingenjörer. Motpart: Almega.\n\n"
+            "**Lönerevision.** Sifferlöst (eller siffersatt med ~3 % "
+            "i centrala potten). Lokal förhandling avgör hur fördelas. "
+            "Ditt lönesamtal är där höjningen sätts.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14, sedan FK.\n\n"
+            "**Övertid.** 50 % vardagar, 100 % helger. Många "
+            "tjänstemän är övertidsbefriade mot extra semester "
+            "(typiskt 3–5 dagar).\n\n"
+            "**Tjänstepension.** ITP1: 4,5 % av brutto under 7,5 "
+            "IBB, 30 % över. Du väljer förvaltare via Collectum."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "revision_note": "sifferlöst eller centralt ~3%",
+            "vacation_days": 25,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "ITP1",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
 ]
 
 
