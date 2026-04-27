@@ -279,6 +279,11 @@ export default function ScrollStoryDemo() {
           {/* Finale-swipe: dark week-bg → ljus bento-bg */}
           <CurveSwipe topColor="#0f172a" bottomColor="#fafaf9" />
           <BentoFinale />
+          {/* Akt 2 — vill du veta mer? + curve-swipe ner i deep-dive */}
+          <ContinueCue />
+          <CurveSwipe topColor="#fafaf9" bottomColor="#0f172a" />
+          <DeepDiveHorizontal slides={DEEP_DIVE_SLIDES} />
+          <PlaceholderZone />
         </>
       )}
       <FinalCTA />
@@ -2073,6 +2078,582 @@ function BentoFinale() {
     </section>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// ContinueCue — minimal "vill du veta mer?"-cue mellan bento och
+// deep-dive-akten. Får pulsserande scroll-pil precis som intron.
+// ─────────────────────────────────────────────────────────────
+function ContinueCue() {
+  return (
+    <section
+      style={{
+        minHeight: "60vh",
+        display: "grid",
+        placeItems: "center",
+        background: "#fafaf9",
+        padding: "48px 24px",
+      }}
+    >
+      <div style={{ textAlign: "center", maxWidth: 560 }}>
+        <div
+          className="ssd-mono"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            padding: "5px 12px",
+            background: "#0f172a",
+            color: "#fbbf24",
+            borderRadius: 100,
+            marginBottom: 24,
+            letterSpacing: 1.2,
+          }}
+        >
+          AKT 2 · DEEP DIVE
+        </div>
+        <h2 className="ssd-h2" style={{ marginBottom: 14 }}>
+          Vill du veta mer?
+        </h2>
+        <p style={{ fontSize: 16, lineHeight: 1.55, color: "#475569", marginBottom: 28 }}>
+          Vi delar upp systemet i delar — lönesamtalet, banken, aktierna, lärarvyn — och
+          går in i varje. Scrolla för att börja.
+        </p>
+        <div className="ssd-bounce" style={{ fontSize: 26, lineHeight: 1, color: "#0f172a" }}>
+          ↓
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// DeepDiveHorizontal — pinnad horisontell scroll genom plattformens
+// delar. Master-tween scrubbar tracket vänster→höger, varje slide
+// har en egen inre tidslinje som triggas via containerAnimation när
+// sliden centreras i viewporten.
+// ─────────────────────────────────────────────────────────────
+type DeepDiveSlideData = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  Visual: React.FC;
+};
+
+function DeepDiveHorizontal({ slides }: { slides: DeepDiveSlideData[] }) {
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (reduced || !sectionRef.current || !trackRef.current) return;
+    registerScrollTrigger();
+    const track = trackRef.current;
+    const ctx = gsap.context(() => {
+      const master = gsap.to(track, {
+        x: () => -(track.scrollWidth - window.innerWidth),
+        ease: "none",
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top top",
+          end: () => `+=${Math.max(track.scrollWidth - window.innerWidth, 1)}`,
+          pin: true,
+          scrub: 1,
+          invalidateOnRefresh: true,
+          anticipatePin: 1,
+        },
+      });
+
+      // Inre tidslinje per slide — element märkta [data-anim] fade:as
+      // in scrub-driven när sliden passerar viewportens centrum.
+      const slideEls = track.querySelectorAll<HTMLElement>("[data-slide]");
+      slideEls.forEach((slideEl) => {
+        const targets = slideEl.querySelectorAll<HTMLElement>("[data-anim]");
+        if (!targets.length) return;
+        gsap.fromTo(
+          targets,
+          { autoAlpha: 0, y: 28 },
+          {
+            autoAlpha: 1,
+            y: 0,
+            stagger: 0.12,
+            ease: "power2.out",
+            scrollTrigger: {
+              trigger: slideEl,
+              containerAnimation: master,
+              start: "left center",
+              end: "right center",
+              scrub: 1,
+            },
+          },
+        );
+      });
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced, slides]);
+
+  if (reduced) {
+    // Reduced-motion: vertikal staplad lista
+    return (
+      <section style={{ background: "#0f172a", color: "#fff", padding: "56px 24px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          <div className="ssd-eyebrow" style={{ color: "#fbbf24", marginBottom: 12 }}>
+            Akt 2 · Deep dive
+          </div>
+          <h2 className="ssd-h2" style={{ color: "#fff", marginBottom: 24 }}>
+            Plattformens delar
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            {slides.map((s) => (
+              <article
+                key={s.id}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 14,
+                  padding: 28,
+                }}
+              >
+                <div className="ssd-mono" style={{ fontSize: 11, color: "#fbbf24", letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 10 }}>
+                  {s.eyebrow}
+                </div>
+                <h3 style={{ fontSize: 22, fontWeight: 600, marginBottom: 12, color: "#fff" }}>{s.title}</h3>
+                <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "#cbd5e1", marginBottom: 18 }}>{s.body}</p>
+                <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 10, padding: 18 }}>
+                  <s.Visual />
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      ref={sectionRef}
+      style={{
+        height: "100vh",
+        background: "radial-gradient(ellipse at top, #1e293b 0%, #0f172a 60%, #020617 100%)",
+        color: "#fff",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        ref={trackRef}
+        style={{
+          display: "flex",
+          height: "100%",
+          willChange: "transform",
+        }}
+      >
+        {slides.map((s) => (
+          <DeepDiveSlide key={s.id} slide={s} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DeepDiveSlide({ slide }: { slide: DeepDiveSlideData }) {
+  return (
+    <article
+      data-slide={slide.id}
+      style={{
+        flex: "0 0 100vw",
+        height: "100%",
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.3fr)",
+        alignItems: "center",
+        gap: "min(48px, 4vw)",
+        padding: "0 min(72px, 6vw)",
+      }}
+      className="ssd-deep-slide"
+    >
+      <style>{`
+        @media (max-width: 900px) {
+          .ssd-deep-slide { grid-template-columns: 1fr !important; padding: 0 24px !important; gap: 24px !important; }
+        }
+      `}</style>
+      <header data-anim>
+        <div
+          className="ssd-mono"
+          style={{
+            fontSize: 11,
+            letterSpacing: 1.6,
+            color: "#fbbf24",
+            textTransform: "uppercase",
+            marginBottom: 14,
+            fontWeight: 600,
+          }}
+        >
+          {slide.eyebrow}
+        </div>
+        <h3
+          style={{
+            fontSize: "clamp(28px, 4vw, 48px)",
+            fontWeight: 700,
+            letterSpacing: -1,
+            lineHeight: 1.05,
+            margin: "0 0 18px",
+            color: "#fff",
+            maxWidth: 540,
+          }}
+        >
+          {slide.title}
+        </h3>
+        <p
+          style={{
+            fontSize: 16,
+            lineHeight: 1.55,
+            color: "#cbd5e1",
+            maxWidth: 480,
+            margin: 0,
+          }}
+        >
+          {slide.body}
+        </p>
+      </header>
+      <div data-anim>
+        <slide.Visual />
+      </div>
+    </article>
+  );
+}
+
+// ─── Slide 1: Lönesamtalet ─────────────────────────────────────
+function SalarySlideVisual() {
+  const rounds = [
+    { no: 1, pct: "2,5 %", kr: "+ 925 kr" },
+    { no: 2, pct: "3,2 %", kr: "+ 1 184 kr", hi: true },
+    { no: 3, pct: "3,5 %", kr: "+ 1 295 kr" },
+  ];
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 14,
+        padding: 24,
+      }}
+    >
+      <div
+        data-anim
+        className="ssd-mono"
+        style={{
+          fontSize: 10.5,
+          letterSpacing: 1.4,
+          color: "#fbbf24",
+          textTransform: "uppercase",
+          marginBottom: 14,
+          fontWeight: 600,
+        }}
+      >
+        Lönesamtalet 2026 · 5 ronder
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 18 }}>
+        {rounds.map((r) => (
+          <div
+            key={r.no}
+            data-anim
+            style={{
+              padding: 14,
+              background: r.hi ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.05)",
+              border: r.hi ? "2px solid #fbbf24" : "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10,
+            }}
+          >
+            <div
+              className="ssd-mono"
+              style={{
+                fontSize: 10.5,
+                letterSpacing: 1,
+                color: r.hi ? "#fbbf24" : "#64748b",
+                fontWeight: 600,
+              }}
+            >
+              ROND {String(r.no).padStart(2, "0")}
+            </div>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                fontFamily: "ui-monospace, monospace",
+                color: "#fff",
+                marginTop: 4,
+              }}
+            >
+              {r.pct}
+            </div>
+            <div style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", color: "#94a3b8" }}>
+              {r.kr}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        data-anim
+        style={{
+          background: "#fbbf24",
+          color: "#78350f",
+          borderRadius: 12,
+          padding: 18,
+          marginBottom: 14,
+        }}
+      >
+        <div
+          className="ssd-mono"
+          style={{
+            fontSize: 10.5,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+            color: "#92400e",
+            marginBottom: 10,
+          }}
+        >
+          ● Marias faktagrund
+        </div>
+        <ul
+          style={{
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 12.5,
+            lineHeight: 1.85,
+          }}
+        >
+          <li>Aktuell lön: <strong>37 000 kr/mån</strong></li>
+          <li>Avtal: Tjänstemanna IT · revision 2,5 %</li>
+          <li>Satisfaction: <strong>72 / 100 ↗</strong></li>
+          <li style={{ paddingTop: 6, marginTop: 6, borderTop: "1px dashed rgba(120,53,15,.3)" }}>
+            Förhandlingsutrymme: <strong style={{ color: "#0f172a" }}>+2,5 % till +4,0 %</strong>
+          </li>
+        </ul>
+      </div>
+
+      <div
+        data-anim
+        style={{
+          background: "rgba(16,185,129,0.06)",
+          border: "1px solid rgba(16,185,129,0.25)",
+          borderRadius: 10,
+          padding: "14px 16px",
+          fontFamily: "ui-monospace, monospace",
+          fontSize: 13,
+          color: "#d1fae5",
+        }}
+      >
+        ● Resultat: <strong style={{ color: "#fff" }}>3,5 %</strong> över avtalets 2,5 % ·
+        ny lön <strong style={{ color: "#10b981" }}>38 295 kr</strong> · gäller från 1 maj 2026
+      </div>
+    </div>
+  );
+}
+
+// ─── Slide 2: Banken & EkonomilabbetID ─────────────────────────
+function BankSlideVisual() {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1fr)",
+        gap: 14,
+      }}
+    >
+      {/* QR-card */}
+      <div
+        data-anim
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          padding: 20,
+          color: "#0f172a",
+        }}
+      >
+        <div
+          className="ssd-mono"
+          style={{
+            fontSize: 10.5,
+            letterSpacing: 1.4,
+            color: "#dc4c2b",
+            textTransform: "uppercase",
+            marginBottom: 12,
+            fontWeight: 600,
+          }}
+        >
+          ● EkonomilabbetID
+        </div>
+        <div
+          style={{
+            background: "#fff",
+            border: "4px solid #0f172a",
+            borderRadius: 8,
+            padding: 12,
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <QRCodeSVG
+            value="https://ekonomilabbet.org"
+            size={140}
+            bgColor="#ffffff"
+            fgColor="#0f172a"
+            level="M"
+          />
+        </div>
+        <div style={{ marginTop: 12, fontSize: 12, color: "#64748b", fontFamily: "ui-monospace, monospace" }}>
+          QR på desktop · PIN på mobil
+        </div>
+      </div>
+
+      {/* Right: signing + EkonomiSkalan */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div
+          data-anim
+          style={{
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 12,
+            padding: 18,
+          }}
+        >
+          <div className="ssd-mono" style={{ fontSize: 10.5, color: "#fbbf24", letterSpacing: 1.4, marginBottom: 10 }}>
+            SIGNERA KOMMANDE
+          </div>
+          {[
+            { name: "Hyran · Stockholmshem", amt: "8 500 kr", ok: true },
+            { name: "El · Vattenfall", amt: "690 kr", ok: true },
+            { name: "Tre · mobil", amt: "299 kr", ok: false },
+          ].map((p, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 0",
+                borderBottom: i < 2 ? "1px dashed rgba(255,255,255,0.08)" : "none",
+                fontSize: 13,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: "#fff" }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "ui-monospace, monospace" }}>{p.amt}</div>
+              </div>
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: 4,
+                  border: `1.5px solid ${p.ok ? "#10b981" : "#475569"}`,
+                  background: p.ok ? "#10b981" : "transparent",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 10,
+                  color: "#fff",
+                }}
+              >
+                {p.ok ? "✓" : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          data-anim
+          style={{
+            background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(251,191,36,0.06) 100%)",
+            border: "1px solid rgba(251,191,36,0.2)",
+            borderRadius: 12,
+            padding: 18,
+          }}
+        >
+          <div className="ssd-mono" style={{ fontSize: 10.5, color: "#fbbf24", letterSpacing: 1.4, marginBottom: 8 }}>
+            EKONOMISKALAN · 680
+          </div>
+          <svg viewBox="0 0 240 110" style={{ width: "100%", display: "block" }}>
+            <defs>
+              <linearGradient id="ekDeep" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#dc4c2b" />
+                <stop offset="40%" stopColor="#fbbf24" />
+                <stop offset="100%" stopColor="#10b981" />
+              </linearGradient>
+            </defs>
+            <path d="M 30 100 A 90 90 0 0 1 210 100" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="14" strokeLinecap="round" />
+            <path
+              d="M 30 100 A 90 90 0 0 1 210 100"
+              fill="none"
+              stroke="url(#ekDeep)"
+              strokeWidth="14"
+              strokeLinecap="round"
+              strokeDasharray={`${((680 - 300) / 550) * 282} 282`}
+            />
+            <text x="120" y="86" textAnchor="middle" fontSize="32" fontWeight="700" fill="#fff" fontFamily="ui-monospace, monospace">
+              680
+            </text>
+          </svg>
+          <div style={{ fontSize: 11.5, color: "#94a3b8", fontStyle: "italic", textAlign: "center" }}>
+            Lugnt val sänker bara med ~20 — sen byggs det upp igen
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// PlaceholderZone — tom vertikal sektion efter deep-dive. Här kan
+// framtida block läggas till; just nu en lugn andnings-zon.
+// ─────────────────────────────────────────────────────────────
+function PlaceholderZone() {
+  return (
+    <section
+      style={{
+        minHeight: "60vh",
+        display: "grid",
+        placeItems: "center",
+        background: "linear-gradient(180deg, #fafaf9 0%, #f0f9ff 100%)",
+        padding: "48px 24px",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ maxWidth: 540 }}>
+        <div className="ssd-eyebrow" style={{ marginBottom: 12 }}>
+          ⋯ Mer kommer
+        </div>
+        <p style={{ fontSize: 15, color: "#475569", lineHeight: 1.55, margin: 0 }}>
+          Här fortsätter berättelsen — fler systemdelar, fler skärmar, fler insikter.
+          Demon byggs ut steg för steg.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ─── Slide-data för deep dive (data-driven så det är lätt att utöka) ───
+const DEEP_DIVE_SLIDES: DeepDiveSlideData[] = [
+  {
+    id: "salary",
+    eyebrow: "Del 01 · /arbetsgivare",
+    title: "Lönesamtalet",
+    body:
+      "Eleven möter Maria — HR-chef på Claude Haiku. Fem ronder. Marias faktagrund — avtalet, satisfaction, lönehistorik — finns cachad i system-prompten. Eleven argumenterar, Maria balanserar.",
+    Visual: SalarySlideVisual,
+  },
+  {
+    id: "bank",
+    eyebrow: "Del 02 · /bank",
+    title: "Banken är ett eget rum",
+    body:
+      "EkonomilabbetID: QR på desktop, PIN på mobil. Saldokontroll vid signering. EkonomiSkalan rör sig med vanorna. Pengarna flyttas i banken — bokföringen tar emot.",
+    Visual: BankSlideVisual,
+  },
+];
 
 // ─────────────────────────────────────────────────────────────
 // Final CTA — efter pinnade zonen
