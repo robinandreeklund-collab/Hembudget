@@ -10,7 +10,7 @@
  * Avtal, Eventlogg och Frågor fylls i F2b–F2e. Lönespec och
  * Lönesamtal hör till PR 4 (efter idé 2-backend).
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   TrendingDown,
@@ -152,7 +152,7 @@ export default function Arbetsgivare() {
           note="Hör till PR 4 — kommer efter att lönesamtals-backenden är klar."
         />
       )}
-      {tab === "fragor" && <ComingSoon what="Frågor" />}
+      {tab === "fragor" && <QuestionsTab />}
       {tab === "events" && <EventLogTab />}
     </div>
   );
@@ -536,6 +536,194 @@ function AgreementMetaTable({ meta }: { meta: Record<string, unknown> }) {
       </tbody>
     </table>
   );
+}
+
+
+interface QuestionOptionOut {
+  index: number;
+  text: string;
+}
+
+
+interface QuestionOut {
+  id: number;
+  code: string;
+  scenario_md: string;
+  options: QuestionOptionOut[];
+  difficulty: number;
+  tags: string[] | null;
+}
+
+
+interface QuestionAnswerOut {
+  delta_applied: number;
+  chosen_explanation: string;
+  correct_path_md: string;
+  new_score: number;
+  new_trend: "rising" | "falling" | "stable";
+}
+
+
+function QuestionsTab() {
+  const qc = useQueryClient();
+  const nextQ = useQuery({
+    queryKey: ["employer-question-next"],
+    queryFn: () => api<QuestionOut | null>("/employer/questions/next"),
+  });
+  const [answer, setAnswer] = useState<QuestionAnswerOut | null>(null);
+
+  const answerMut = useMutation({
+    mutationFn: (params: { question_id: number; chosen_index: number }) =>
+      api<QuestionAnswerOut>("/employer/questions/answer", {
+        method: "POST",
+        body: JSON.stringify(params),
+      }),
+    onSuccess: (data) => {
+      setAnswer(data);
+      // Status + events ska reflektera den nya scoren
+      qc.invalidateQueries({ queryKey: ["employer-status"] });
+      qc.invalidateQueries({ queryKey: ["employer-events"] });
+    },
+  });
+
+  function chooseAndAnswer(qid: number, idx: number) {
+    if (answer) return;
+    answerMut.mutate({ question_id: qid, chosen_index: idx });
+  }
+
+  function nextQuestion() {
+    setAnswer(null);
+    qc.invalidateQueries({ queryKey: ["employer-question-next"] });
+  }
+
+  if (nextQ.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar fråga…</div></Card>;
+  }
+  if (nextQ.error) {
+    return (
+      <Card>
+        <div className="text-sm text-rose-700">
+          Kunde inte hämta fråga: {String(nextQ.error)}
+        </div>
+      </Card>
+    );
+  }
+
+  const q = nextQ.data;
+
+  if (!q) {
+    return (
+      <Card title="Inga fler frågor just nu">
+        <div className="text-sm text-slate-700 leading-relaxed">
+          Du har svarat på alla frågor som arbetsgivaren skickat ut. Nya
+          situationer dyker upp över tid — kom tillbaka senare.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card title={`Fråga från ${labelDifficulty(q.difficulty)}`}>
+        <div className="text-xs text-slate-500 mb-2">
+          {q.tags && q.tags.length > 0 && (
+            <span>
+              {q.tags.map((t) => (
+                <span
+                  key={t}
+                  className="inline-block bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 mr-1"
+                >
+                  {t}
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+        <div className="text-base text-slate-900 leading-relaxed mb-4">
+          <MarkdownLite text={q.scenario_md} />
+        </div>
+        <div className="space-y-2">
+          {q.options.map((opt) => {
+            const disabled = !!answer || answerMut.isPending;
+            return (
+              <button
+                key={opt.index}
+                onClick={() => chooseAndAnswer(q.id, opt.index)}
+                disabled={disabled}
+                className={`block w-full text-left rounded-md border px-3 py-2 text-sm transition ${
+                  disabled
+                    ? "border-slate-200 bg-slate-50 text-slate-500"
+                    : "border-slate-300 bg-white hover:border-brand-400 hover:bg-brand-50"
+                }`}
+              >
+                <span className="text-slate-500 mr-2">
+                  {String.fromCharCode(65 + opt.index)}.
+                </span>
+                {opt.text}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {answer && (
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <div
+              className={`text-base font-semibold ${
+                answer.delta_applied > 0
+                  ? "text-emerald-700"
+                  : answer.delta_applied < 0
+                    ? "text-rose-700"
+                    : "text-slate-700"
+              }`}
+            >
+              {answer.delta_applied > 0 ? "+" : ""}
+              {answer.delta_applied} poäng
+            </div>
+            <div className="text-xs text-slate-500">
+              Ny score: {answer.new_score}
+            </div>
+          </div>
+          <div className="text-sm text-slate-800 mb-3 leading-relaxed">
+            {answer.chosen_explanation}
+          </div>
+          <div className="border-t border-slate-200 pt-3">
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+              Pedagogisk reflektion
+            </div>
+            <div className="text-sm text-slate-700 mt-1 leading-relaxed">
+              <MarkdownLite text={answer.correct_path_md} />
+            </div>
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={nextQuestion}
+              className="px-3 py-1.5 rounded bg-brand-600 text-white text-sm hover:bg-brand-700"
+            >
+              Nästa fråga →
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {answerMut.error && (
+        <Card>
+          <div className="text-sm text-rose-700">
+            {String(answerMut.error)}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
+function labelDifficulty(d: number): string {
+  if (d <= 1) return "din arbetsgivare (lätt)";
+  if (d <= 2) return "din arbetsgivare";
+  if (d <= 3) return "din arbetsgivare (lite svårare)";
+  return "din arbetsgivare (svår)";
 }
 
 
