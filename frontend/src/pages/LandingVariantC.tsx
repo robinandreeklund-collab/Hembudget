@@ -204,6 +204,7 @@ export default function LandingVariantC() {
       <Features />
       <ManifestoSection theme={THEME} />
       <WellbeingSection theme={THEME} />
+      <AccountingSection theme={THEME} />
       <Moments />
       <Logic />
       <Problem />
@@ -3314,6 +3315,148 @@ function WellbeingSection({ theme }: { theme: Theme }) {
           — Pedagogisk grundprincip
         </footer>
       </blockquote>
+    </section>
+  );
+}
+
+// ---------- AccountingSection (v5) — dubbel bokföring ----------
+
+function AccountingSection({ theme }: { theme: Theme }) {
+  const features = [
+    {
+      sym: "Hb",
+      title: "Huvudbok",
+      desc: "Varje transaktion bokförs som debet och kredit. Ingen handvevad Excel — riktig dubbel bokföring som balanseras varje månad.",
+      items: [
+        "Importera kontoutdrag som PDF",
+        "Automatisk kategorisering",
+        "Bankavstämning vid månadsskifte",
+      ],
+    },
+    {
+      sym: "Kp",
+      title: "Kontoplan",
+      desc: "En förenklad svensk kontoplan anpassad för privatekonomi. 4-siffriga konton, kontogrupper, periodisering.",
+      items: [
+        "Tillgångar / skulder / inkomst / utgift",
+        "Egna konton för varje barn",
+        "Eget kapital över tid",
+      ],
+    },
+    {
+      sym: "Br",
+      title: "Balansräkning",
+      desc: "Vad äger ni, vad är ni skyldiga, vad har förändrats? Per månad, per kvartal, per år.",
+      items: [
+        "Tillgångar minus skulder",
+        "Resultatrapport varje månad",
+        "Trender över terminer och år",
+      ],
+    },
+  ];
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#fafaf9",
+      }}
+    >
+      <SectionHeader
+        cell={{ sym: "Hb", n: "02", label: "Huvudbok" }}
+        eyebrow="Under huven"
+        theme={theme}
+      >
+        Dubbel bokföring, från första{" "}
+        <em style={{ color: theme.accent, fontStyle: "italic" }}>fickpengen.</em>
+      </SectionHeader>
+      <p
+        style={{
+          maxWidth: 680,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#475569",
+        }}
+      >
+        Inspirerat av Visma och Fortnox — fast enklare, roligare och faktiskt
+        begripligt för en 13-åring. Eleven lär sig dubbel bokföring genom att
+        leva ett liv, inte genom att läsa om det.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 18,
+        }}
+      >
+        {features.map((f, i) => (
+          <div
+            key={i}
+            style={{
+              background: "#fff",
+              border: `1px solid ${theme.rule}`,
+              borderRadius: 12,
+              padding: 26,
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 8,
+                background: theme.fg,
+                color: "#fef3c7",
+                display: "grid",
+                placeItems: "center",
+                fontFamily: "ui-monospace, monospace",
+                fontWeight: 700,
+                fontSize: 17,
+                marginBottom: 18,
+              }}
+            >
+              {f.sym}
+            </div>
+            <h3
+              style={{
+                fontSize: 20,
+                fontWeight: 600,
+                letterSpacing: -0.3,
+                marginBottom: 10,
+              }}
+            >
+              {f.title}
+            </h3>
+            <p
+              style={{
+                fontSize: 14,
+                lineHeight: 1.55,
+                color: "#475569",
+                marginBottom: 14,
+              }}
+            >
+              {f.desc}
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {f.items.map((it, j) => (
+                <li
+                  key={j}
+                  style={{
+                    fontSize: 13,
+                    color: "#0f172a",
+                    paddingLeft: 16,
+                    position: "relative",
+                    marginBottom: 5,
+                  }}
+                >
+                  <span style={{ position: "absolute", left: 0, color: theme.accent }}>—</span>
+                  {it}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
