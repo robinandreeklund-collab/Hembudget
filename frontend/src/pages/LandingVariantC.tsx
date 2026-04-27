@@ -1101,67 +1101,6 @@ function Hero() {
               </div>
             </div>
           </div>
-
-          {/* Dela-QR — pekare till ekonomilabbet.org. Skanna med mobilen
-              för att skicka länken vidare till en kollega. */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              marginTop: 14,
-              padding: "14px 16px",
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 12,
-              boxShadow: "0 1px 3px rgba(15,23,42,0.04)",
-            }}
-          >
-            <div
-              style={{
-                background: "#fff",
-                border: "2px solid #0f172a",
-                borderRadius: 8,
-                padding: 6,
-                flexShrink: 0,
-                lineHeight: 0,
-              }}
-            >
-              <QRCodeSVG
-                value="https://ekonomilabbet.org"
-                size={64}
-                bgColor="#ffffff"
-                fgColor="#0f172a"
-                level="M"
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div
-                className="vc-mono"
-                style={{
-                  fontSize: 11,
-                  color: "#64748b",
-                  letterSpacing: 0.6,
-                  textTransform: "uppercase",
-                  marginBottom: 2,
-                }}
-              >
-                Dela · skanna med mobilen
-              </div>
-              <div style={{ fontSize: 13.5, color: "#0f172a", lineHeight: 1.4 }}>
-                Tipsa en kollega — leder direkt till{" "}
-                <a
-                  href="https://ekonomilabbet.org"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "#dc4c2b", textDecoration: "none", fontWeight: 500 }}
-                >
-                  ekonomilabbet.org
-                </a>
-                .
-              </div>
-            </div>
-          </div>
         </div>
 
         <div ref={cardRef} className="vc-card" style={{ padding: 22, transformOrigin: "center top" }}>
@@ -6403,24 +6342,20 @@ function BankSection({ theme }: { theme: Theme }) {
                 width: "100%",
                 aspectRatio: "1 / 1",
                 background: "#fff",
-                backgroundImage:
-                  "radial-gradient(#0f172a 35%, transparent 36%), radial-gradient(#0f172a 35%, transparent 36%)",
-                backgroundSize: "12px 12px, 12px 12px",
-                backgroundPosition: "0 0, 6px 6px",
                 border: "6px solid #fff",
                 boxShadow: "0 0 0 1px #cbd5e1",
                 borderRadius: 4,
-                position: "relative",
+                display: "grid",
+                placeItems: "center",
               }}
             >
-              <div
-                style={{
-                  position: "absolute",
-                  inset: "40% 40%",
-                  background: "#fbbf24",
-                  border: "2px solid #0f172a",
-                  borderRadius: 4,
-                }}
+              <QRCodeSVG
+                value="https://ekonomilabbet.org"
+                size={120}
+                bgColor="#ffffff"
+                fgColor="#0f172a"
+                level="M"
+                style={{ width: "100%", height: "auto", maxWidth: 140 }}
               />
             </div>
             <div
