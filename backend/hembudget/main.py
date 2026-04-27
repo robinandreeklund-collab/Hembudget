@@ -379,6 +379,15 @@ def _school_bootstrap() -> None:
                 logging.getLogger(__name__).info(
                     "school: seeded %d event templates", ne,
                 )
+            # Seed kollektivavtal + yrke→avtal-mappningar
+            # (idé 1 i dev_v1.md). Idempotent.
+            from .school.employer_seed import seed_all as seed_employer_all
+            ner = seed_employer_all(s)
+            if ner["agreements_added"] or ner["profession_mappings_added"]:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d agreements + %d profession mappings",
+                    ner["agreements_added"], ner["profession_mappings_added"],
+                )
             # Bootstrap: om LatestStockQuote är tom efter att StockMaster
             # har seedats, kör en force-poll så det finns kursdata direkt
             # vid boot — annars visar frontend tomma rader tills nästa
