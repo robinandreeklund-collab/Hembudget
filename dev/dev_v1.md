@@ -13,8 +13,8 @@ Ingen kod skrivs här — bara analys, datamodeller, risker, faseordning.
 |---|---|
 | 1. Arbetsgivar-nöjdhetsfaktor + kollektivavtal | utkast |
 | 2. Lönesamtal (AI-förhandling) | utkast |
-| 3. Banken (BankID-flöde + signering) | TODO |
-| 4. Bank-features (kontoutdrag, kommande, lån) | TODO |
+| 3. Banken (BankID-flöde + signering) | utkast |
+| 4. Bank-features (kontoutdrag, kommande, lån) | utkast |
 | Fas-plan + sekvensering | TODO |
 
 ---
@@ -372,5 +372,288 @@ lön":
 
 Totalt: ~31–35 h. Levereras i 1 PR efter idé 1 är ute, eftersom
 beroendet är hårt.
+
+---
+
+## Idé 3 — Banken (ny undersida + BankID-flöde + signering)
+
+**Pedagogisk kärna**: i verkligheten flyttas inte pengar i en
+budget-app — pengar flyttas i banken, med BankID, med saldo-kontroll,
+med konsekvenser. Vår nuvarande "kontoutdrag-PDF i Dina dokument →
+import"-flöde är ett pedagogiskt steg ifrån vekligheten. Banken-vyn
+slår igen det glappet:
+
+- Eleven loggar in i "banken" som en separat sak
+- Hen ser kontoutdrag direkt där (inte som en PDF att ladda ner)
+- Hen exporterar kontoutdrag → de hamnar i bokföringen (`/transactions`)
+- Hen exporterar kommande fakturor → signerar betalning + datum
+- Saldo-kontroll vid signering → måste flytta fakturan om det inte täcker
+- Sen betalning → påminnelse → påverkar kreditbedömning
+
+Det här är där "ekonomi blir verklig" — inte en formell labb.
+
+### 3.1 Stort flödesschema
+
+```
+   ┌──────────────┐                ┌──────────────┐
+   │  Banken      │                │  /transactions│
+   │  (ny vy)     │  ── export ──► │  (befintlig)  │
+   └──────┬───────┘                └──────────────┘
+          │
+          ▼
+   ┌──────────────┐                ┌──────────────┐
+   │  /upcoming   │  ── signera ─► │ ScheduledPay │
+   │  (befintlig) │                │ (ny tabell)   │
+   └──────────────┘                └──────┬───────┘
+                                          │
+                       ┌──────────────────┼──────────────────┐
+                       ▼                  ▼                  ▼
+                  betalas i tid    saldo saknas       sen betalning
+                       │                  │                  │
+                       ▼                  ▼                  ▼
+                  Transaction      blockera + flytta   PaymentReminder
+                                                       (artifact + delta)
+```
+
+### 3.2 BankID-simulering
+
+I verkligheten BankID = nyckelpar på telefon + biometri + bankens
+identitetsserver. Vi bygger en pedagogisk approximation:
+
+**Desktop-flödet**:
+1. Eleven trycker "Logga in i banken" på `/bank`
+2. UI:t visar en QR-kod (genererad från en `BankSession`-token)
+3. Eleven öppnar mobilen (eller en sekundär tab) och går till
+   `/bank/sign?token=...` — där matar hen in sitt EkonomilabbetID
+   (samma som student-koden, omdöpt i UI:n) och ett 4-siffrigt
+   PIN
+4. Server matchar: BankSession.confirmed=True
+5. Desktop pollar var 2:a sekund, ser confirmation, släpper in eleven
+
+**Mobil-flödet** (eleven redan på mobilen):
+- Direkt PIN-inmatning utan QR
+
+Datamodell:
+```
+BankSession (master-DB)
+├── id, student_id, token (UUID), pin_hash
+├── created_at, expires_at (15 min)
+├── confirmed_at, ip_address
+└── purpose ("login" | "sign_payment_batch:<id>" | "loan_application")
+```
+
+PIN-koden är 4 siffror, hashad med bcrypt. Sätts vid första inloggning
+(onboarding-steg som ber eleven välja). Lagras `Student.bank_pin_hash`
+i master-DB. Eleven kan resetta via lärare.
+
+**Pedagogiskt**: visa elever att riktiga BankID är säkrare än vår
+simulering, men logiken är likadan — något du har (telefon/QR) +
+något du vet (PIN/biometri).
+
+### 3.3 Kontoutdrag — flytta från Dina dokument till Banken
+
+Idag genererar `teacher/batch.py` ett kontoutdrag-PDF som blir en
+`BatchArtifact`. Eleven importerar manuellt under `/my-batches`.
+
+Nytt flöde:
+1. Vid generering: kontoutdraget skapas fortfarande som
+   `BatchArtifact(kind="kontoutdrag")` — INGEN ändring i batch-koden
+   för att inte bryta lärarens befintliga vy
+2. Banken-vyn listar de senaste kontoutdragen via en ny endpoint
+   `/bank/statements` som hämtar dessa artifacts
+3. Eleven trycker "Exportera till bokföringen" — backend kör samma
+   `import_artifact()` som /my-batches gör. Stat: importerad=True
+4. Eleven kan ALDRIG importera samma kontoutdrag två gånger (befintlig
+   idempotens). Knappen visas som "Redan exporterat" efter
+
+`/my-batches` får alla utom kontoutdrag — kvar är lönespec, lånebesked
+och kreditkortsfaktura (de som verkligen hör hemma i "papper i lådan").
+
+### 3.4 Kommande betalningar — signering + execution
+
+Nya tabeller (scope-DB):
+
+```
+ScheduledPayment (en signerad betalning)
+├── id, upcoming_id (→ UpcomingTransaction.id)
+├── account_id (→ Account, vilket konto pengarna dras från)
+├── amount (Decimal — kopia, för spårbarhet)
+├── scheduled_date
+├── signed_at, signed_via_session_id (→ BankSession)
+├── status ("scheduled"|"executed"|"failed_no_funds"|"rescheduled"|"cancelled")
+├── executed_transaction_id (→ Transaction, sätts vid execution)
+└── failure_reason (TEXT, NULL om OK)
+
+PaymentReminder (genereras vid sen betalning)
+├── id, upcoming_id, scheduled_payment_id
+├── reminder_no (1, 2, 3 — ökar)
+├── issued_date
+├── late_fee (Decimal — accumuleras: 60kr, 120kr, 180kr)
+├── artifact_id (→ BatchArtifact, PDF som hamnar i Dina dokument)
+└── settled_at (NULL om obetalt, sätts när elev sen betalar)
+```
+
+**Signerings-flöde**:
+1. På `/bank/upcoming` ser eleven alla `UpcomingTransaction(kind=bill)`
+   som inte är matchade och inte redan har en `ScheduledPayment`
+2. Hen markerar 1 eller flera, väljer datum + konto, trycker "Signera"
+3. BankID-flödet öppnas (`BankSession.purpose="sign_payment_batch:<n>"`)
+4. När bekräftat: backend skapar `ScheduledPayment`-rader
+
+**Execution-flöde** (jobb som körs varje natt):
+- För varje `ScheduledPayment(status="scheduled", scheduled_date<=today)`:
+  - Kolla saldo på `account_id`
+  - Tillräckligt → skapa `Transaction`, sätt status="executed",
+    matcha `UpcomingTransaction`
+  - Otillräckligt → status="failed_no_funds", trigga reminder-flödet
+    om förfallodatum passerat
+
+Implementation av "varje natt"-jobb: i lokal/desktop-app är det
+on-demand vid pageload. I Cloud Run kör vi en endpoint
+`/internal/run-scheduled-payments` (skyddad med shared secret) som
+Cloud Scheduler triggar 06:00 europe-stockholm.
+
+### 3.5 Påminnelse-flödet
+
+När en faktura inte betalas i tid:
+
+1. **Dag 0** (förfallodatum + 5 dagar buffer): genererar
+   `PaymentReminder(reminder_no=1, late_fee=60)`. PDF:en hamnar i
+   `/my-batches` (eller `/attachments`) som artifact. Eleven får en
+   notifikation.
+2. **Dag 14**: reminder_no=2, late_fee=120. Ny PDF.
+3. **Dag 30**: reminder_no=3, late_fee=180 + meddelande "ärendet kan
+   skickas till inkasso".
+4. **Dag 45**: påminnelse går till "Kronofogden" (simulerat) →
+   markant negativ delta på kreditbedömning.
+
+`late_fee` läggs till som extra `UpcomingTransaction(kind=bill,
+source="reminder")` som eleven måste signera separat.
+
+### 3.6 Kreditbedömning-koppling
+
+Idag: `CreditApplication`-flödet använder hårdkodade regler för
+godkännande. Med banken kommer en faktisk historik att finnas.
+
+Ny tabell (master-DB):
+```
+CreditScoreSnapshot (per elev, senast räknat)
+├── id, student_id, computed_at
+├── score (300–850 likt UC men eget skala-namn "EkonomiSkalan")
+├── factors (JSON: {late_payments: 3, reschedules: 1, debt_ratio: 0.4,
+│           savings_buffer_months: 1.5, satisfaction: 72, age_at_account: 18})
+├── grade ("A+"|"A"|"B"|"C"|"D")
+└── reasons_md (pedagogisk text per factor med vad det betyder)
+```
+
+Beräknas automatiskt vid varje `PaymentReminder.issued`-event och vid
+varje `CreditApplication.submitted`. Visa eleven på `/bank/credit-score`
+så hen ser hur sina vanor förändrar siffran.
+
+`CreditApplication`-handläggning byter regel: använd `CreditScoreSnapshot.
+score` istället för rule-baserad summa-koll.
+
+### 3.7 UI på `/bank`
+
+Vy-struktur:
+
+```
+/bank                    → Inloggning (BankID-flöde) eller dashboard
+/bank/dashboard          → Saldo per konto, senaste 5 transaktioner,
+                           kommande betalningar (5 närmaste), CTA till
+                           kontoutdrag
+/bank/statements         → Kontoutdrag-PDF:er + Exportera-knapp
+/bank/upcoming           → Lista över obetalda fakturor + signera
+/bank/scheduled          → Mina signerade betalningar (status, datum)
+/bank/loan-application   → Låneansökan (befintlig logik, flyttad hit)
+/bank/credit-score       → EkonomiSkalan + förklaring
+```
+
+Vyn ska kännas annorlunda än resten av appen — banker har en mer
+formell/safe-vibe. Använd en separat färgton (mörkblå header, vit
+yta), markera "Du är inloggad i banken" tydligt, sessionstid räknas
+ner.
+
+### 3.8 Kursmodul
+
+Ny modul "Banken — så funkar pengaflöden":
+
+1. `read` — Vad är ett kontoutdrag, hur läser jag rader
+2. `task` — Exportera ditt senaste kontoutdrag till bokföringen
+3. `read` — Signering, BankID, varför man inte ska ge bort PIN
+4. `task` — Signera dina kommande fakturor i banken
+5. `quiz` — 4 frågor om saldokontroll, sen betalning, kreditbedömning
+6. `reflect` — "En faktura passerar förfallodatum — vad gör du?"
+
+### 3.9 Risker
+
+- **Ökad kognitiv belastning**: två platser (banken + bokföringen)
+  istället för en. Mitigering: tydliga CTA:er, t.ex. på `/dashboard`
+  ett stort kort "3 fakturor väntar på signering — gå till banken".
+- **Eleven glömmer signera**: alla fakturor blir sena. Mitigering:
+  notifikation på Dashboard + Sidebar-badge för osignerade fakturor.
+- **PIN-glömska**: lärare måste kunna resetta. Lärare-knapp på
+  /teacher/students/:id "Återställ bank-PIN" → tvingar elev sätta ny
+  vid nästa inlogg.
+- **QR-koden funkar inte i mobiles utan kamera**: fallback "Logga in
+  med kod" → eleven läser av en 6-siffrig kod på desktop och knappar
+  in på mobilen. Räknas som "second factor" pedagogiskt.
+- **Cloud Scheduler-kostnad**: en ping per dygn → försumbart.
+- **Race condition vid signering**: två elever på samma familje-DB
+  signerar samma faktura. Lägg unique-constraint på
+  `(upcoming_id, status="scheduled")` så bara en kan vara aktiv.
+- **Saldo vid signering vs vid execution**: en faktura signeras med
+  täckning idag, men eleven hinner spendera bort det innan
+  scheduled_date. Då fail:as betalningen. Pedagogiskt: visa eleven
+  vid signering "OBS — du har 800 kr kvar efter denna betalning",
+  inte "förbjudet att signera om saldo blir under 500 kr".
+
+### 3.10 Insats (uppskattning)
+
+Stor. Bästa att splittas i tre delar:
+
+**3a — BankID + bank-skelett** (stor):
+- BankSession-tabell + endpoints + QR-flow + PIN-onboarding
+- /bank/dashboard + login-vyn
+- ~16–20 h
+
+**3b — Kontoutdrag + signering** (stor):
+- ScheduledPayment-tabell + endpoints + execution-jobb
+- /bank/statements + /bank/upcoming + /bank/scheduled
+- Cloud Scheduler-integration
+- Migrering: ta bort kontoutdrag från /my-batches
+- ~20–24 h
+
+**3c — Påminnelser + kreditbedömning** (medel):
+- PaymentReminder + CreditScoreSnapshot + scoring-funktion
+- PDF-mall för påminnelser
+- /bank/credit-score
+- Kursmodul-seedning
+- ~14–18 h
+
+Totalt: ~50–62 h. Levereras i 3 PR:ar — varje del fungerar i sig
+själv så testning kan ske stegvis.
+
+---
+
+## Idé 4 — Bank-features konsoliderade
+
+Den här är inte en separat feature utan en sammanfattning av vad
+`/bank` ska innehålla — i sin helhet, alla från idé 3:
+
+- **Kontoutdrag** (3.3): lista över historiska perioder, exportera
+  till `/transactions`
+- **Kommande betalningar** (3.4): obetalda fakturor, signering,
+  status på schemalagda
+- **Låneansökan** (existerande, flyttas): `/loans` blir kvar för
+  befintliga lån; ansökan-formuläret flyttas till `/bank/loan-application`
+  så hela "behöver låna pengar"-flödet sker inne i banken
+- **EkonomiSkalan** (3.6): kreditbetyg + faktor-förklaring
+
+**Migrationsfråga**: ska vi ta bort `/loans`-vyn helt och flytta in
+allt i `/bank`? Mitt råd: NEJ, behåll `/loans` som "min lånebok"
+(visar pågående lån, betalningsplan, tidsplan), och låt `/bank`
+hantera ansökan + ny-lån. Det matchar verkligheten: banken är där du
+går när du behöver låna; din egen översikt är något separat.
 
 ---
