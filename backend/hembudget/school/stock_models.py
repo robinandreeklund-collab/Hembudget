@@ -20,6 +20,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    BigInteger,
     Date,
     DateTime,
     Integer,
@@ -71,7 +72,8 @@ class StockQuote(MasterBase):
     last: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     bid: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
     ask: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4), nullable=True)
-    volume: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # BigInteger eftersom dagsvolym kan vara > 2^31 (AAPL etc.)
+    volume: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     change_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="yfinance", nullable=False)
     created_at: Mapped[datetime] = mapped_column(

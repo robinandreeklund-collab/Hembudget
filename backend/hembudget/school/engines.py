@@ -415,6 +415,11 @@ def _run_master_migrations(engine: Engine) -> None:
         for table, col in (
             ("student_generation_runs", "seed"),
             ("scenario_batches", "seed"),
+            # stock_quotes.volume — daglig aktievolym kan vara
+            # > 2^31 (AAPL etc), modellen säger BigInteger men
+            # befintlig prod-tabell kan ha INTEGER → 'integer out of
+            # range' vid stock-poller-insert.
+            ("stock_quotes", "volume"),
         ):
             try:
                 inspector2 = _inspect(engine)
