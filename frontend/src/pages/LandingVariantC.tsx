@@ -500,11 +500,10 @@ function SectionHeader({
 const NewSectionCell = SectionCell;
 const NewSectionHeader = SectionHeader;
 
-// Tillfällig referens — håller atomer/konstanter "använda" under fas 1
-// (atomerna konsumeras av sektionerna som byggs i fas 5–18). Tas bort
-// senast i fas 4 när Features renderar THEME + EchoAvatar.
+// Tillfällig referens — håller resterande atomer/konstanter "använda"
+// under fas 3 (konsumeras av sektionerna som byggs i fas 5–18). Tas
+// bort senast i fas 4 när Features renderar THEME.
 const __VC_PHASE1_SCAFFOLD = {
-  EchoAvatar,
   SectionCell,
   SectionHeader,
   NewSectionCell,
@@ -537,6 +536,7 @@ function SharedStyles() {
       .vc-tab-off:hover { color: #0f172a; }
       .vc-eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
       .vc-eyebrow-c { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
+      .vc-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.18); }
       .vc-hamburger { display: none; }
       .vc-periodic-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
       .vc-hero-section { padding: 32px 24px 16px; }
@@ -875,6 +875,29 @@ function Hero() {
 
   return (
     <section id="oversikt" className="vc-hero-section">
+      {/* Status-strip — proof-row enligt v5 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 18,
+          marginBottom: 28,
+          fontSize: 12.5,
+          color: "#64748b",
+          flexWrap: "wrap",
+          maxWidth: 1200,
+          marginLeft: "auto",
+          marginRight: "auto",
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span className="vc-dot" />
+          <span style={{ color: "#0f172a", fontWeight: 500 }}>Pilot · läsåret 26/27</span>
+        </span>
+        <span style={{ width: 1, height: 12, background: "#cbd5e1" }} />
+        <span>Kursplan-anpassad: SO · Hkk · Matematik</span>
+      </div>
+
       <div
         style={{
           display: "grid",
@@ -915,13 +938,13 @@ function Hero() {
                 borderRadius: "50%",
               }}
             />
-            EKONOMILABBET / UTGÅVA 2026
+            EKONOMI MED KONSEKVENSER
           </span>
           <h1 className="vc-h1">
-            Hushållsekonomi
+            Pengar är ett medel
             <br />
-            <span style={{ color: "#dc4c2b" }}>på riktigt</span> —<br />
-            för 13–19 år.
+            för <span style={{ color: "#dc4c2b" }}>välmående</span> —<br />
+            inte ett mål.
           </h1>
           <p
             style={{
@@ -929,14 +952,43 @@ function Hero() {
               lineHeight: 1.55,
               marginTop: 22,
               color: "#475569",
-              maxWidth: 460,
+              maxWidth: 480,
             }}
           >
-            Ett verktyg för lärare, föräldrar, elever och barn. 32
-            grundbegrepp, simulerade kontoutdrag, riktiga räntor, oväntade
-            utgifter — eleven övar genom att göra, inte genom att läsa
-            om det.
+            Ett pedagogiskt redovisningssystem för privatekonomi.
+            Huvudbok, kontoplan, balansräkning — och en livssimulator
+            ovanpå där den centrala mätaren inte är saldot, utan
+            välmående över fem dimensioner. För klassrummet, köksbordet
+            och (snart) er riktiga ekonomi.
           </p>
+
+          {/* Stats-rad enligt v5 */}
+          <div
+            style={{
+              display: "flex",
+              gap: 32,
+              marginTop: 28,
+              paddingTop: 24,
+              borderTop: "1px solid #e2e8f0",
+              flexWrap: "wrap",
+            }}
+          >
+            {[
+              { num: "32", label: "grundbegrepp" },
+              { num: "80+", label: "mikrouppgifter" },
+              { num: "6", label: "kategorier" },
+            ].map((s) => (
+              <div
+                key={s.label}
+                style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}
+              >
+                <span style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, color: "#0f172a" }}>
+                  {s.num}
+                </span>
+                <span style={{ fontSize: 12, color: "#64748b" }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 28, flexWrap: "wrap" }}>
             <Link
@@ -961,15 +1013,74 @@ function Hero() {
               Se hur det funkar
             </a>
           </div>
+
+          {/* Echo greeting — AI-coach-card enligt v5 */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              marginTop: 32,
+              padding: "14px 16px",
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 12,
+              boxShadow: "0 1px 3px rgba(15,23,42,0.04)",
+            }}
+          >
+            <EchoAvatar size={56} />
+            <div style={{ minWidth: 0 }}>
+              <div
+                className="vc-mono"
+                style={{
+                  fontSize: 11,
+                  color: "#64748b",
+                  letterSpacing: 0.6,
+                  textTransform: "uppercase",
+                  marginBottom: 2,
+                }}
+              >
+                Möt Echo · din AI-coach
+              </div>
+              <div style={{ fontSize: 13.5, color: "#0f172a", lineHeight: 1.4 }}>
+                Frågar mer än den svarar. Hjälper eleven att tänka, inte tycka.
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="vc-card" style={{ padding: 22 }}>
-          <div style={{ marginBottom: 18 }}>
-            <div className="vc-eyebrow" style={{ marginBottom: 4 }}>
-              KURSPLAN-KARTA
+          {/* Card-header med titel + Karta/Lista/Värmekarta-tabs */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 18,
+              flexWrap: "wrap",
+              gap: 12,
+            }}
+          >
+            <div>
+              <div className="vc-eyebrow" style={{ marginBottom: 4 }}>
+                KURSPLAN-KARTA
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>
+                Det periodiska systemet för pengar
+              </div>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>
-              Det periodiska systemet för pengar
+            <div
+              style={{
+                display: "flex",
+                gap: 4,
+                padding: 3,
+                background: "#f1f5f9",
+                borderRadius: 8,
+              }}
+            >
+              <button type="button" className="vc-tab vc-tab-on">Karta</button>
+              <button type="button" className="vc-tab vc-tab-off">Lista</button>
+              <button type="button" className="vc-tab vc-tab-off">Värmekarta</button>
             </div>
           </div>
 
