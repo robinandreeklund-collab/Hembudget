@@ -178,14 +178,19 @@ def fx_usd_sek() -> dict:
 
 @router.get("/market/status")
 def market_status() -> dict:
-    """Är börsen öppen just nu? + nästa öppning om stängd."""
+    """Är börsen öppen just nu? + nästa öppning om stängd.
+
+    Använder is_market_open() utan at-argument så servern hämtar
+    Stockholm-tid via _now_stockholm. Tidigare passades datetime.now()
+    (naiv UTC på Cloud Run) som tolkades som Stockholm-naiv → börsen
+    visades som stängd första 1-2 timmar varje dag.
+    """
     with master_session() as s:
-        now = datetime.now()
-        is_open = is_market_open(s, now)
-        nxt = next_open(s, now) if not is_open else None
+        is_open = is_market_open(s)
+        nxt = next_open(s) if not is_open else None
         return {
             "open": is_open,
-            "now": now.isoformat(),
+            "now": datetime.utcnow().isoformat(),
             "next_open": nxt.isoformat() if nxt else None,
         }
 
