@@ -128,9 +128,14 @@ def feedback_suggestion(
         teacher_id=teacher_id,
     )
     if result is None:
+        last = ai_core.get_last_error()
+        detail = (
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare."
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades — försök igen senare.",
+            detail,
         )
     return FeedbackSuggestionOut(
         suggestion=result.text,
@@ -196,9 +201,14 @@ def rubric_suggestion(
         teacher_id=teacher_id,
     )
     if result is None:
+        last = ai_core.get_last_error()
+        detail = (
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare."
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades — försök igen senare.",
+            detail,
         )
     # tool_use garanterar att result.data följer RUBRIC_TOOL_SCHEMA —
     # inga manuella json.loads som kan krascha.
@@ -345,9 +355,14 @@ def ask_student(
         teacher_id=teacher_id,
     )
     if result is None:
+        last = ai_core.get_last_error()
+        detail = (
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare."
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades — försök igen senare.",
+            detail,
         )
     _log_quick_ask_answer(thread_id, result.text)
     return AskOut(
@@ -537,9 +552,14 @@ def generate_module(
         teacher_id=teacher_id,
     )
     if result is None:
+        last = ai_core.get_last_error()
+        detail = (
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare."
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades — försök igen senare.",
+            detail,
         )
     return ModuleGenOut(
         raw=json.dumps(result.data, ensure_ascii=False),
@@ -586,9 +606,14 @@ def check_category(
         teacher_id=teacher_id,
     )
     if result is None:
+        last = ai_core.get_last_error()
+        detail = (
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare."
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades — försök igen senare.",
+            detail,
         )
     # tool_use-schemat garanterar nycklarna — ingen defensiv parse-logik.
     is_match = bool(result.data["is_match"])
@@ -759,9 +784,14 @@ def student_summary(
         teacher_id=teacher_id,
     )
     if result is None:
+        last = ai_core.get_last_error()
+        detail = (
+            f"AI-anropet misslyckades: {last}" if last
+            else "AI-anropet misslyckades — försök igen senare."
+        )
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades — försök igen senare.",
+            detail,
         )
     return StudentSummaryOut(
         student_id=student_id,
