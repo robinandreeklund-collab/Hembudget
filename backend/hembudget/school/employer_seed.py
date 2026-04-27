@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .employer_models import (
     CollectiveAgreement,
     ProfessionAgreement,
+    WorkplaceQuestion,
 )
 
 
@@ -711,13 +712,340 @@ def seed_profession_agreements(session: Session) -> int:
     return added
 
 
+# Slumpade arbetsplats-frågor som skickas till eleven från
+# arbetsgivaren. Pedagogiskt fokus: konkreta vardagssituationer där
+# eleven får träna omdöme. Inga politiska frågor, inga åldersolämpliga
+# ämnen. Varje option har ett delta som speglar HUR arbetsgivaren
+# typiskt skulle reagera — inte vad som är "moraliskt rätt".
+WORKPLACE_QUESTIONS: list[dict] = [
+    {
+        "code": "sick_call_in_001",
+        "scenario_md": (
+            "Du vaknar med halsont och feber. Klockan är 06:30 och ditt "
+            "arbetspass börjar 07:30. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": "Ringer chefen direkt och sjukanmäler dig.",
+                "delta": 2,
+                "explanation": (
+                    "Tidig sjukanmälan ger chefen tid att ordna ersättare. "
+                    "Det visar respekt för verksamheten och dina kollegor."
+                ),
+            },
+            {
+                "text": "Skickar ett SMS strax innan passet börjar.",
+                "delta": -2,
+                "explanation": (
+                    "Sent meddelande gör det svårt att ordna ersättning — "
+                    "kollegor blir överbelastade. Ring tidigt nästa gång."
+                ),
+            },
+            {
+                "text": "Går till jobbet ändå för att inte verka svag.",
+                "delta": -3,
+                "explanation": (
+                    "Smitta sprids till kollegor och kunder. Sjukfrånvaro "
+                    "är inte ett karaktärsfel — det är att skydda andra."
+                ),
+            },
+            {
+                "text": "Säger inget och hoppas att ingen märker.",
+                "delta": -5,
+                "explanation": (
+                    "Olovlig frånvaro är allvarligt. Det förstör tillit "
+                    "och kan leda till skriftlig varning eller uppsägning."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Bra praxis: ring (inte SMS) chefen så tidigt som möjligt. "
+            "Säg kort vad som hänt och när du tror du kan vara tillbaka. "
+            "Om du är borta över sju dagar krävs läkarintyg enligt "
+            "sjuklönelagen — då hör Försäkringskassan av sig."
+        ),
+        "tags": ["sjukfrånvaro", "kommunikation"],
+        "difficulty": 1,
+    },
+    {
+        "code": "vab_001",
+        "scenario_md": (
+            "Ditt barn på fyra år har magsjuka och kan inte gå till "
+            "förskolan. Du har ett viktigt möte 09:00 där du ska "
+            "presentera kvartalsrapporten. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Ringer chefen, förklarar situationen och föreslår "
+                    "att en kollega tar mötet eller att det skjuts upp."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "VAB är en lagstadgad rätt för dig som förälder. "
+                    "Att proaktivt föreslå lösning visar ansvar."
+                ),
+            },
+            {
+                "text": (
+                    "Lämnar barnet hos en granne du knappt känner och "
+                    "går till mötet."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Dåligt omdöme — barnet är sjukt och behöver dig. "
+                    "Och om grannen ringer dig under mötet ändå förlorar "
+                    "du fokus."
+                ),
+            },
+            {
+                "text": (
+                    "Sjukanmäler dig själv istället för att VAB:a, "
+                    "eftersom det 'ser bättre ut'."
+                ),
+                "delta": -5,
+                "explanation": (
+                    "Det är försäkringsbedrägeri — Försäkringskassan "
+                    "betalar ut fel ersättning. Kan leda till "
+                    "polisanmälan."
+                ),
+            },
+            {
+                "text": (
+                    "VAB:ar och skickar i förväg en utförlig skriftlig "
+                    "sammanfattning + alla siffror till chefen."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Bästa praxis: dokumentera så någon annan kan ta "
+                    "över. Visar professionalism trots oplanerad frånvaro."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "VAB (vård av barn) ger ersättning från Försäkringskassan upp "
+            "till 120 dagar per år och barn under 12. Du anmäler själv "
+            "till FK och berättar för chefen. Det är inte sjukfrånvaro — "
+            "det är en helt separat rätt."
+        ),
+        "tags": ["VAB", "föräldraskap", "kommunikation"],
+        "difficulty": 2,
+    },
+    {
+        "code": "late_meeting_001",
+        "scenario_md": (
+            "Tunnelbanan står stilla och du inser att du kommer 15 "
+            "minuter sent till ett team-möte. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Skickar ett snabbt meddelande i Teams: 'T-bana står, "
+                    "är där om 15 min.' Hoppar in när det går."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Förvarning gör att kollegorna kan börja utan dig "
+                    "eller skjuta upp dina punkter."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — slipper det krångliga och hoppas "
+                    "ingen märker."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Tystnad signalerar slarv. Mötesdeltagare väntar "
+                    "och blir frustrerade."
+                ),
+            },
+            {
+                "text": (
+                    "Skyller på kollegan när du kommer fram för att "
+                    "dölja förseningen."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att skylla på andra för egna förseningar är "
+                    "tillitskrossande. Kollegor noterar."
+                ),
+            },
+            {
+                "text": (
+                    "Tar en taxi på företagets kort utan att fråga."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Personliga utlägg på företagets pengar utan "
+                    "godkännande är gråzon — fråga först."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Punktlighet är en signal: 'jag respekterar din tid'. När "
+            "tåg eller buss står är det inte ditt fel — men det är ditt "
+            "ansvar att meddela. Kort SMS eller chatt-meddelande räcker."
+        ),
+        "tags": ["punktlighet", "kommunikation"],
+        "difficulty": 1,
+    },
+    {
+        "code": "honest_mistake_001",
+        "scenario_md": (
+            "Du har skickat fel siffror till en viktig kund. Det märks "
+            "först nästa dag, och bara du har sett felet. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Berättar för chefen direkt och föreslår en plan "
+                    "för att rätta till det."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Att äga sina misstag är en av de mest värdefulla "
+                    "egenskaperna. Chefer minns vem som är ärlig."
+                ),
+            },
+            {
+                "text": (
+                    "Försöker rätta till det själv utan att säga något, "
+                    "i hopp om att kunden inte märker."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Risken är att felet upptäcks ändå — och då blir "
+                    "du också den som dolde det. Dubbel förlust."
+                ),
+            },
+            {
+                "text": (
+                    "Skyller felet på en kollega som råkade kontrollera "
+                    "siffrorna."
+                ),
+                "delta": -6,
+                "explanation": (
+                    "Att skylla på oskyldiga är allvarligt. Om det "
+                    "kommer fram kan du sägas upp av personliga skäl."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och hoppas att kunden inte hör av sig."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Passivitet vid fel är samma sak som dölja. Det "
+                    "blir värre ju längre tid som går."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Ingen är felfri. Den som äger sina misstag tidigt får "
+            "förtroende. 'Jag har gjort fel — så här tänker jag rätta "
+            "det' är en mening som lyfter dig i chefens ögon."
+        ),
+        "tags": ["ärlighet", "ansvar"],
+        "difficulty": 2,
+    },
+    {
+        "code": "cover_for_colleague_001",
+        "scenario_md": (
+            "En kollega ber dig täcka för henom under hennes pass nästa "
+            "vecka — hon säger att hon är 'lite trött' och vill ta "
+            "ledigt utan att sjukanmäla sig. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger nej men föreslår att hon tar en semesterdag "
+                    "eller pratar med chefen istället."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Att hjälpa en kollega är fint — men inte genom "
+                    "att medverka till oärlighet mot arbetsgivaren."
+                ),
+            },
+            {
+                "text": (
+                    "Ja, du täcker för henne. Kollegial solidaritet är "
+                    "viktigt."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Du blir medskyldig till olovlig frånvaro. Om det "
+                    "uppdagas drabbas båda — och chefen tappar tillit "
+                    "till dig."
+                ),
+            },
+            {
+                "text": (
+                    "Säger ja och tar 500 kr av henne för besväret."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Du sätter dig i en utpressningsbar position och "
+                    "har dessutom medverkat till bedrägeri mot "
+                    "arbetsgivaren."
+                ),
+            },
+            {
+                "text": (
+                    "Skvallrar för chefen utan att prata med kollegan "
+                    "först."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Bättre att först säga till kollegan: 'jag tänker "
+                    "inte täcka för dig, prata med chefen'. Skvaller "
+                    "utan förvarning skadar relationen i onödan."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Lojalitet mot kollegor är viktigt — men inte gränslös. "
+            "Att hjälpa någon att ljuga gör dig medskyldig. Bättre att "
+            "vägledning: 'jag förstår att du behöver vila, men prata "
+            "med chefen om en ledig dag'."
+        ),
+        "tags": ["lojalitet", "ärlighet", "konflikt"],
+        "difficulty": 3,
+    },
+]
+
+
+def seed_workplace_questions(session: Session) -> int:
+    """Idempotent seed av arbetsplats-frågor. Returnerar antal nya rader."""
+    existing = {q.code for q in session.query(WorkplaceQuestion).all()}
+    added = 0
+    for q in WORKPLACE_QUESTIONS:
+        if q["code"] in existing:
+            continue
+        session.add(WorkplaceQuestion(
+            code=q["code"],
+            scenario_md=q["scenario_md"],
+            options=q["options"],
+            correct_path_md=q["correct_path_md"],
+            tags=q.get("tags"),
+            difficulty=q.get("difficulty", 1),
+        ))
+        added += 1
+    session.flush()
+    return added
+
+
 def seed_all(session: Session) -> dict:
     """Seedare för hela arbetsgivar-paketet. Kör i rätt ordning:
-    avtal först, sedan mappningar (som behöver avtals-IDn).
+    avtal först, sedan mappningar (som behöver avtals-IDn), sedan
+    arbetsplats-frågor (oberoende av övriga).
     """
     n_ag = seed_collective_agreements(session)
     n_pm = seed_profession_agreements(session)
+    n_q = seed_workplace_questions(session)
     return {
         "agreements_added": n_ag,
         "profession_mappings_added": n_pm,
+        "workplace_questions_added": n_q,
     }
