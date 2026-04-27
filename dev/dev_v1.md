@@ -15,7 +15,7 @@ Ingen kod skrivs här — bara analys, datamodeller, risker, faseordning.
 | 2. Lönesamtal (AI-förhandling) | utkast |
 | 3. Banken (BankID-flöde + signering) | utkast |
 | 4. Bank-features (kontoutdrag, kommande, lån) | utkast |
-| Fas-plan + sekvensering | TODO |
+| Fas-plan + sekvensering | utkast |
 
 ---
 
@@ -657,3 +657,96 @@ hantera ansökan + ny-lån. Det matchar verkligheten: banken är där du
 går när du behöver låna; din egen översikt är något separat.
 
 ---
+
+## Fas-plan + sekvensering
+
+Det totala arbetet är ~115–140 h fördelat över 8 PR:ar. Sekvensen
+nedan respekterar beroenden, optimerar för "varje fas är användbar
+även om vi stoppar där", och håller PR-storleken hanterbar.
+
+### Beroendekarta
+
+```
+  Idé 1                                Idé 3a  ──►  Idé 3b  ──►  Idé 3c
+   │                                                                  │
+   ▼                                                                  │
+  Idé 2 (förhandling)                                                 │
+                                                                      ▼
+                                                           Lyfter låneansökan
+                                                           in i /bank (idé 4)
+```
+
+Idé 1 är förutsättning för idé 2. Idé 3 är fristående från 1+2 men
+3a→3b→3c är hård kedja. Idé 4 är konsolidering — sker naturligt under
+3b/3c.
+
+### Föreslagen ordning
+
+| Fas | PR | Vad | Storlek | Beroende |
+|---|---|---|---|---|
+| **A** | 1 | Idé 1: datamodell + endpoints + avtals-seed | M | — |
+| **A** | 2 | Idé 1: UI (workplace, lärarkort, frågor) + module | M | PR 1 |
+| **B** | 3 | Idé 2: lönesamtal-backend + AI-prompt | S | PR 1 |
+| **B** | 4 | Idé 2: lönesamtal-UI + module | M | PR 3 |
+| **C** | 5 | Idé 3a: BankID-skelett + login + dashboard | L | — |
+| **C** | 6 | Idé 3b: kontoutdrag-export + signering + execution | L | PR 5 |
+| **C** | 7 | Idé 3c: påminnelser + kreditbedömning | M | PR 6 |
+| **C** | 8 | Idé 4: flytta låneansökan till /bank + konsolidering | S | PR 7 |
+
+Stomlekar: S = ≤8 h, M = 8–18 h, L = 18+ h.
+
+### Varför ordningen
+
+1. **A före B**: lönesamtal kräver avtal + satisfaction. Bygger man
+   B först står AI:n utan kontext.
+2. **A+B före C**: idé 3 är teknikbredd (auth-flow + scheduled jobs +
+   PDF-rendering) som inte ger pedagogisk värde direkt — vi vill att
+   eleven har "arbetsgivare som bryr sig" i sin värld INNAN vi
+   introducerar banken med dess konsekvenser. Annars blir
+   konsekvenserna kvalitetsstrip utan motvikt.
+3. **3c före 4**: kreditbetyget måste finnas innan låneansökan flyttas
+   in i /bank, annars är ansökan "hårdkodad logik från förr" — point
+   of /bank är att den vet vad eleven gjort.
+
+### Alternativa rutter
+
+Om kostnad/tid blir trångt:
+
+- **Hoppa över idé 2 helt**: lönesamtal är pedagogiskt vackert men
+  inte essentiellt. Idé 1 + 3 ger en helhet.
+- **Skippa BankID-QR-flow**, använd ren PIN-inlogg på desktop.
+  Sparar ~6 h på 3a. Kan ändå läras ut: "vi simulerar bara
+  något-du-vet, riktig BankID är något-du-har också".
+- **Lägg PaymentReminder utan kreditbedömning** (3c blir
+  3c-light): ~6 h sparat. Ansökan-flödet kvar i /loans tills senare.
+
+### Risker som påverkar hela planen
+
+- **Kostnad för AI**: lönesamtalet är inom budget (under en dollar
+  per klass/år). Om idé 1 expanderar workplace-frågor till
+  AI-genererade istället för seedade kan kostnaden balansera. Hård
+  gräns: alla AI-funktioner som expanderar måste passera
+  super-admin-quota-check.
+- **Avtals-faktariktighet**: krävs en mänsklig granskning innan idé 1
+  går till skarp drift. Boka 4–6 h med någon som kan kollektivavtal
+  (eller fackförbundens info-avdelning).
+- **Cloud Run-ensam-instans**: ScheduledPayment-execution kör som
+  Cloud Scheduler → endpoint, vi måste säkerställa att jobbet är
+  idempotent (kör om utan duplicerade transaktioner). Lös via
+  unique-constraint på `(scheduled_payment_id, status="executed")`.
+- **Migration-sprängning**: 7+ nya tabeller över alla idéer. Skriv
+  tester som verifierar att `db/migrate.py` + `_run_master_migrations`
+  inte skapar dubblerade kolumner när de körs idempotent.
+
+### Gating innan vi börjar
+
+Innan PR 1 påbörjas vill jag:
+- [ ] Bekräfta med dig vilka 6–8 kollektivavtal som ska seedas
+- [ ] Bekräfta att satisfaction-score 0–100 + 5-rond är rätt skalor
+- [ ] Bekräfta att vi vill lyfta kontoutdraget UR /my-batches (ej
+      bara duplicera) — eller om båda källorna ska finnas
+- [ ] Bekräfta att lönesamtalet ska ändra `gross_salary_monthly`
+      omedelbart, inte vid nästa simulerad januari
+
+När de är clearade går jag igång med PR 1.
+
