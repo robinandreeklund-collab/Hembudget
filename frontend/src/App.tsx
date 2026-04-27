@@ -47,6 +47,7 @@ import ResetPassword from "./pages/ResetPassword";
 import StudentLogin from "./pages/StudentLogin";
 import DemoChoice from "./pages/DemoChoice";
 import Docs from "./pages/Docs";
+import ScrollStoryDemo from "./pages/ScrollStoryDemo";
 import MyAchievements from "./pages/MyAchievements";
 import MyModules from "./pages/MyModules";
 import ModuleView from "./pages/ModuleView";
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/login/student" element={<StudentLogin />} />
         <Route path="/demo" element={<DemoChoice />} />
+        <Route path="/demo/scroll-story" element={<ScrollStoryDemo />} />
         <Route path="/docs" element={<Docs />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
@@ -121,6 +123,7 @@ export default function App() {
           <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
           <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
           <Route path="/messages" element={<Messages />} />
+          <Route path="/demo/scroll-story" element={<ScrollStoryDemo />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/modules" element={<MyModules />} />
           <Route path="/modules/:moduleId" element={<ModuleView />} />
