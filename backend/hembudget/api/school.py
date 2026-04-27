@@ -478,6 +478,87 @@ def _student_to_out(s: Student) -> StudentOut:
     )
 
 
+class StudentPulseRow(BaseModel):
+    """Minimal ekonomi-puls per elev så läraren snabbt ser vilka som
+    behöver hjälp. Visas inline i elev-tabellen.
+
+    flag tolkning:
+      - 'good' (grön): sparkvot >= 10 % OCH månadsnetto >= 0
+      - 'watch' (gul): månadsnetto >= 0 men sparkvot < 10 %
+      - 'alert' (röd): månadsnetto < 0 (eleven spenderar mer än hen
+        tjänar denna månad)
+      - 'no_data' (grå): ingen budget/transaktion för månaden
+    """
+    student_id: int
+    flag: str  # "good" | "watch" | "alert" | "no_data"
+    month_balance: float  # income - expenses, kan vara negativt
+    savings_rate_pct: float  # 0-100, eller 0 om income==0
+
+
+@router.get(
+    "/teacher/students/pulse", response_model=list[StudentPulseRow],
+)
+def students_pulse(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[StudentPulseRow]:
+    """Snabb ekonomi-status per elev för läraren — minimalt så hen
+    direkt ser vilka som ligger i röd zon (utgifter > inkomster) eller
+    bara nätt-och-jämnt klarar månaden (sparkvot < 10 %)."""
+    _require_school_mode()
+    from datetime import date as _d
+    from ..budget.monthly import MonthlyBudgetService
+    from ..db.base import session_scope as _ss
+    from ..school.engines import get_scope_engine, scope_context, scope_for_student
+
+    today = _d.today()
+    month = f"{today.year}-{today.month:02d}"
+
+    rows: list[StudentPulseRow] = []
+    with master_session() as s:
+        students = (
+            s.query(Student)
+            .filter(Student.teacher_id == info.teacher_id)
+            .all()
+        )
+        for st in students:
+            # Säkerställ scope-engine + öppna scope-session
+            try:
+                get_scope_engine(scope_for_student(st))
+                with scope_context(scope_for_student(st)):
+                    with _ss() as scope_s:
+                        summary = MonthlyBudgetService(scope_s).summary(month)
+                        income = float(summary.income)
+                        expenses = float(summary.expenses)
+                        bal = income - expenses
+                        rate = (
+                            float(summary.savings_rate) * 100
+                            if summary.savings_rate else 0.0
+                        )
+                        if income <= 0 and expenses <= 0:
+                            flag = "no_data"
+                        elif bal < 0:
+                            flag = "alert"
+                        elif rate < 10:
+                            flag = "watch"
+                        else:
+                            flag = "good"
+                        rows.append(StudentPulseRow(
+                            student_id=st.id,
+                            flag=flag,
+                            month_balance=round(bal, 2),
+                            savings_rate_pct=round(rate, 1),
+                        ))
+            except Exception:
+                # Scope-DB inte initierad eller annat — markera som
+                # no_data så läraren inte får 500.
+                log.exception("pulse: scope-query failed for student %s", st.id)
+                rows.append(StudentPulseRow(
+                    student_id=st.id, flag="no_data",
+                    month_balance=0.0, savings_rate_pct=0.0,
+                ))
+    return rows
+
+
 @router.get("/teacher/students", response_model=list[StudentWithRunsOut])
 def list_students(
     info: TokenInfo = Depends(require_teacher),

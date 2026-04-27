@@ -35,6 +35,13 @@ type Student = {
   has_profile: boolean;
 };
 
+type PulseRow = {
+  student_id: number;
+  flag: "good" | "watch" | "alert" | "no_data";
+  month_balance: number;
+  savings_rate_pct: number;
+};
+
 type GenerateRow = {
   student_id: number;
   display_name: string;
@@ -94,6 +101,7 @@ export default function Teacher() {
   const [generating, setGenerating] = useState(false);
   const [lastRun, setLastRun] = useState<GenerateRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [pulse, setPulse] = useState<Record<number, PulseRow>>({});
 
   async function reload() {
     setLoading(true);
@@ -104,6 +112,15 @@ export default function Teacher() {
       ]);
       setStudents(list);
       setFamilies(fams);
+      // Ekonomi-puls — körs separat och fail-soft så listan visas
+      // även om pulse-endpointen ger 500.
+      api<PulseRow[]>("/teacher/students/pulse")
+        .then((rows) => {
+          const m: Record<number, PulseRow> = {};
+          for (const r of rows) m[r.student_id] = r;
+          setPulse(m);
+        })
+        .catch(() => setPulse({}));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -478,12 +495,30 @@ export default function Teacher() {
                     />
                   </td>
                   <td className="p-3 font-medium">
-                    <Link
-                      to={`/teacher/students/${s.id}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {s.display_name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <PulseDot pulse={pulse[s.id]} />
+                      <Link
+                        to={`/teacher/students/${s.id}`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {s.display_name}
+                      </Link>
+                    </div>
+                    {pulse[s.id] && pulse[s.id].flag !== "no_data" && (
+                      <div className="mt-1 text-[11px] text-slate-500 ml-5">
+                        Netto denna mån:{" "}
+                        <span className={
+                          pulse[s.id].month_balance >= 0
+                            ? "text-emerald-700 font-medium"
+                            : "text-rose-700 font-medium"
+                        }>
+                          {pulse[s.id].month_balance >= 0 ? "+" : ""}
+                          {pulse[s.id].month_balance.toLocaleString("sv-SE")} kr
+                        </span>
+                        {" · sparkvot "}
+                        {pulse[s.id].savings_rate_pct.toFixed(0)} %
+                      </div>
+                    )}
                     {!s.has_profile && (
                       <div className="mt-1 inline-flex items-center gap-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
                         <AlertTriangle className="w-3 h-3" />
@@ -815,5 +850,42 @@ function SmtpStatusCallout() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+function PulseDot({ pulse }: { pulse?: PulseRow }) {
+  if (!pulse) {
+    return (
+      <span
+        className="w-2.5 h-2.5 rounded-full bg-slate-200 shrink-0"
+        title="Beräknar..."
+      />
+    );
+  }
+  const colors: Record<string, { bg: string; title: string }> = {
+    good: {
+      bg: "bg-emerald-500",
+      title: `Bra: sparkvot ${pulse.savings_rate_pct.toFixed(0)} % · netto +${pulse.month_balance.toLocaleString("sv-SE")} kr`,
+    },
+    watch: {
+      bg: "bg-amber-400",
+      title: `Bevakas: låg sparkvot (${pulse.savings_rate_pct.toFixed(0)} %) men netto positivt`,
+    },
+    alert: {
+      bg: "bg-rose-500",
+      title: `Behöver hjälp: utgifter > inkomster (${pulse.month_balance.toLocaleString("sv-SE")} kr)`,
+    },
+    no_data: {
+      bg: "bg-slate-200",
+      title: "Ingen data för månaden",
+    },
+  };
+  const c = colors[pulse.flag] ?? colors.no_data;
+  return (
+    <span
+      className={`w-2.5 h-2.5 rounded-full ${c.bg} shrink-0`}
+      title={c.title}
+    />
   );
 }
