@@ -1298,9 +1298,112 @@ function SalaryNegotiation() {
   );
 }
 
-// Stub-funktioner för L2/L3/L4 — fylls i följande commits så
-// typecheck håller mellan stegen.
-function BankSimulation() { return null; }
+// ---------- Banken-sektion ----------
+
+function BankSimulation() {
+  return (
+    <section id="banken" className="border-t border-rule">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
+        <div className="section-divider mb-10">
+          Banken är inte bokföringen
+        </div>
+        <div className="grid md:grid-cols-[1fr_1.2fr] gap-10 md:gap-14 items-start">
+          <div>
+            <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
+              Bank, redovisning, konsekvens.
+              <br />
+              Tre system — som i verkligheten.
+            </h2>
+            <p className="mt-5 lead max-w-md">
+              Eleven loggar in i banken med simulerat BankID, exporterar
+              kontoutdrag till sina dokument, och importerar sedan till
+              bokföringssystemet. Tre steg, exakt som hemma. Bank-saker
+              hör inte hemma i bokföringen — de möts på vägen.
+            </p>
+            <div className="mt-8 grid grid-cols-3 gap-3 max-w-md">
+              <div className="border-[1.5px] border-ink p-3 bg-white">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                  Steg 1
+                </div>
+                <div className="serif text-base mt-1">Banken</div>
+                <div className="text-xs body-prose mt-1">
+                  Logga in med BankID
+                </div>
+              </div>
+              <div className="border-[1.5px] border-ink p-3 bg-white">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                  Steg 2
+                </div>
+                <div className="serif text-base mt-1">Dokument</div>
+                <div className="text-xs body-prose mt-1">
+                  Exportera PDF:er
+                </div>
+              </div>
+              <div className="border-[1.5px] border-ink p-3 bg-white">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                  Steg 3
+                </div>
+                <div className="serif text-base mt-1">Bokför</div>
+                <div className="text-xs body-prose mt-1">
+                  Importera till systemet
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="border-[1.5px] border-ink p-5 bg-paper">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+                BankID-simulering
+              </div>
+              <h3 className="serif text-2xl leading-snug">
+                Något du har — något du vet.
+              </h3>
+              <p className="mt-2 text-sm body-prose">
+                QR-flöde + 4-siffrig PIN. Pedagogisk metafor: telefonen
+                (något du har) + PIN (något du vet). Eleven förstår
+                varför man aldrig delar PIN — banken ringer aldrig och
+                frågar.
+              </p>
+            </div>
+            <div className="border-[1.5px] border-ink p-5 bg-paper">
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+                Signera betalningar
+              </div>
+              <h3 className="serif text-2xl leading-snug">
+                Saldot räknar — i realtid.
+              </h3>
+              <p className="mt-2 text-sm body-prose">
+                Eleven signerar fakturor i banken. På förfallodagen
+                körs betalningen <em>om</em> saldot räcker. Räcker det
+                inte triggas påminnelse-flödet: 60 → 120 → 180 kr →
+                Kronofogden. Pedagogiskt skarpt.
+              </p>
+            </div>
+            <div className="border-[1.5px] border-ink p-5 bg-paper">
+              <div className="flex items-baseline justify-between mb-2">
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                  EkonomiSkalan — kreditbetyg
+                </div>
+                <div className="serif text-3xl font-semibold">724</div>
+              </div>
+              <h3 className="serif text-2xl leading-snug">
+                Varje sen betalning syns.
+              </h3>
+              <p className="mt-2 text-sm body-prose">
+                300–850 skala (likt UC). Sena betalningar, skuldkvot,
+                buffert och arbetsgivar-nöjdhet räknas in — varje faktor
+                med transparent delta. Eleven kan räkna efter.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
 function StockEmotion() { return null; }
 function EntreprenorSneak() { return null; }
 
