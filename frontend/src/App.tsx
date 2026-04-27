@@ -97,89 +97,66 @@ export default function App() {
     );
   }
 
-  // Lärare utan vald elev → bara lärarpanelen syns (ingen sidebar mot elevdata)
-  const teacherRootOnly = role === "teacher" && !asStudent;
+  // Lärar-vyn använder nu samma sidebar som resten av plattformen
+  // (sektioner: Lärarverktyg + Eget konto). Tidigare doldes hela
+  // sidebaren när läraren inte valt elev — då var knappraden i
+  // Teacher.tsx enda navigationen, vilket var inkonsekvent.
 
   return (
     <div className="h-full flex flex-col">
       <DemoBanner />
       <div className="flex-1 flex flex-col md:flex-row min-h-0">
-      {!teacherRootOnly && <Sidebar />}
+      <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        {!teacherRootOnly && <MobileTopBar />}
+        <MobileTopBar />
         {role === "teacher" && asStudent && <ImpersonationBanner />}
         <Routes>
-          {teacherRootOnly ? (
-            <>
-              <Route path="/teacher" element={<Teacher />} />
-              <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
-              <Route path="/teacher/all-batches" element={<AllBatches />} />
-              <Route path="/teacher/modules" element={<TeacherModules />} />
-              <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
-              <Route path="/teacher/reflections" element={<TeacherReflections />} />
-              <Route path="/teacher/rubrics" element={<TeacherRubrics />} />
-              <Route path="/teacher/time-on-task" element={<TeacherTimeOnTask />} />
-              <Route path="/teacher/admin-ai" element={<AdminAI />} />
-              <Route path="/teacher/investments" element={<TeacherInvestments />} />
-              <Route path="/teacher/credit" element={<TeacherCredit />} />
-              <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="/docs" element={<Docs />} />
-              <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
-              <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="*" element={<Navigate to="/teacher" replace />} />
-            </>
-          ) : (
-            <>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/teacher" element={<Teacher />} />
-              <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
-              <Route path="/teacher/all-batches" element={<AllBatches />} />
-              <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
-              <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
-              <Route path="/messages" element={<Messages />} />
-              <Route path="/docs" element={<Docs />} />
-              <Route path="/modules" element={<MyModules />} />
-              <Route path="/modules/:moduleId" element={<ModuleView />} />
-              <Route path="/achievements" element={<MyAchievements />} />
-              <Route path="/teacher/modules" element={<TeacherModules />} />
-              <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
-              <Route path="/teacher/reflections" element={<TeacherReflections />} />
-              <Route path="/teacher/rubrics" element={<TeacherRubrics />} />
-              <Route path="/teacher/time-on-task" element={<TeacherTimeOnTask />} />
-              <Route path="/teacher/admin-ai" element={<AdminAI />} />
-              <Route path="/teacher/investments" element={<TeacherInvestments />} />
-              <Route path="/teacher/credit" element={<TeacherCredit />} />
-              <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
-              <Route path="/peer-review" element={<PeerReview />} />
-              <Route path="/my-batches" element={<MyBatches />} />
-              {/* Dashboard är nu gemensam för elev + lärare-impersonering.
-                  De pedagogiska EkoDashboard-bitarna (greeting, budget-bars,
-                  oväntade utgifter, uppdrag, streak, mastery) ligger som
-                  StudentPedagogyCards-komponent högst upp i Dashboard.tsx
-                  så elev + lärar-vy aldrig divergerar. */}
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/transactions" element={<Transactions />} />
-              <Route path="/import" element={<Import />} />
-              <Route path="/budget" element={<Budget />} />
-              <Route path="/chat" element={<Chat />} />
-              <Route path="/scenarios" element={<Scenarios />} />
-              <Route path="/loans" element={<Loans />} />
-              <Route path="/funds" element={<Funds />} />
-              <Route path="/investments" element={<Investments />} />
-              <Route path="/transfers" element={<Transfers />} />
-              <Route path="/upcoming" element={<Upcoming />} />
-              <Route path="/salaries" element={<Salaries />} />
-              <Route path="/attachments" element={<Attachments />} />
-              <Route path="/utility" element={<Utility />} />
-              <Route path="/tax" element={<Tax />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/Callback" element={<TibberCallback />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </>
-          )}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/teacher" element={<Teacher />} />
+          <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
+          <Route path="/teacher/all-batches" element={<AllBatches />} />
+          <Route path="/teacher/matrix" element={<AssignmentMatrix />} />
+          <Route path="/mortgage/:assignmentId" element={<MortgageDecision />} />
+          <Route path="/messages" element={<Messages />} />
+          <Route path="/docs" element={<Docs />} />
+          <Route path="/modules" element={<MyModules />} />
+          <Route path="/modules/:moduleId" element={<ModuleView />} />
+          <Route path="/achievements" element={<MyAchievements />} />
+          <Route path="/teacher/modules" element={<TeacherModules />} />
+          <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
+          <Route path="/teacher/reflections" element={<TeacherReflections />} />
+          <Route path="/teacher/rubrics" element={<TeacherRubrics />} />
+          <Route path="/teacher/time-on-task" element={<TeacherTimeOnTask />} />
+          <Route path="/teacher/admin-ai" element={<AdminAI />} />
+          <Route path="/teacher/investments" element={<TeacherInvestments />} />
+          <Route path="/teacher/credit" element={<TeacherCredit />} />
+          <Route path="/teacher/wellbeing" element={<TeacherWellbeing />} />
+          <Route path="/peer-review" element={<PeerReview />} />
+          <Route path="/my-batches" element={<MyBatches />} />
+          {/* Dashboard är nu gemensam för elev + lärare-impersonering.
+              De pedagogiska EkoDashboard-bitarna (greeting, budget-bars,
+              oväntade utgifter, uppdrag, streak, mastery) ligger som
+              StudentPedagogyCards-komponent högst upp i Dashboard.tsx
+              så elev + lärar-vy aldrig divergerar. */}
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/import" element={<Import />} />
+          <Route path="/budget" element={<Budget />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/scenarios" element={<Scenarios />} />
+          <Route path="/loans" element={<Loans />} />
+          <Route path="/funds" element={<Funds />} />
+          <Route path="/investments" element={<Investments />} />
+          <Route path="/transfers" element={<Transfers />} />
+          <Route path="/upcoming" element={<Upcoming />} />
+          <Route path="/salaries" element={<Salaries />} />
+          <Route path="/attachments" element={<Attachments />} />
+          <Route path="/utility" element={<Utility />} />
+          <Route path="/tax" element={<Tax />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/Callback" element={<TibberCallback />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
       </div>
