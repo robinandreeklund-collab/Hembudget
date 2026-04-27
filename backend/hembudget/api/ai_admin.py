@@ -717,3 +717,79 @@ def stocks_poll_now(
                 "ok": False,
                 "error": f"{type(e).__name__}: {e}",
             }
+
+
+@router.post("/db/yfinance-test")
+def yfinance_test(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Testa yfinance-providern direkt mot 3 svenska + 3 USA-aktier
+    + USD/SEK-kursen. Visar exakt vad som returneras eller failar."""
+    import logging as _logging
+    log_msgs: list[str] = []
+
+    class _CaptureHandler(_logging.Handler):
+        def emit(self, record):
+            log_msgs.append(f"{record.levelname}: {record.getMessage()}")
+
+    handler = _CaptureHandler()
+    handler.setLevel(_logging.DEBUG)
+    target_logger = _logging.getLogger("hembudget.stocks.quote_providers")
+    target_logger.addHandler(handler)
+    target_logger.setLevel(_logging.DEBUG)
+
+    result: dict = {"yfinance_available": False}
+    try:
+        try:
+            import yfinance as yf  # type: ignore
+            result["yfinance_available"] = True
+            result["yfinance_version"] = getattr(yf, "__version__", "?")
+        except ImportError as e:
+            result["import_error"] = f"{type(e).__name__}: {e}"
+            return {"ok": False, **result, "log": log_msgs}
+
+        from ..stocks.quote_providers import (
+            YFinanceProvider, fetch_fx_rate_yfinance,
+        )
+        provider = YFinanceProvider()
+        sthlm_test = ["VOLV-B.ST", "ERIC-B.ST", "HM-B.ST"]
+        us_test = ["AAPL", "MSFT", "TSLA"]
+
+        try:
+            sthlm_quotes = provider.fetch_quotes(sthlm_test)
+            result["stockholm_quotes"] = [
+                {
+                    "ticker": q.ticker,
+                    "last": float(q.last),
+                    "change_pct": q.change_pct,
+                }
+                for q in sthlm_quotes
+            ]
+            result["stockholm_count"] = len(sthlm_quotes)
+        except Exception as e:
+            result["stockholm_error"] = f"{type(e).__name__}: {e}"
+
+        try:
+            us_quotes = provider.fetch_quotes(us_test)
+            result["us_quotes"] = [
+                {
+                    "ticker": q.ticker,
+                    "last": float(q.last),
+                    "change_pct": q.change_pct,
+                }
+                for q in us_quotes
+            ]
+            result["us_count"] = len(us_quotes)
+        except Exception as e:
+            result["us_error"] = f"{type(e).__name__}: {e}"
+
+        try:
+            fx = fetch_fx_rate_yfinance("USD", "SEK")
+            result["usd_sek_rate"] = float(fx) if fx else None
+        except Exception as e:
+            result["fx_error"] = f"{type(e).__name__}: {e}"
+
+    finally:
+        target_logger.removeHandler(handler)
+
+    return {"ok": True, **result, "log": log_msgs[-30:]}

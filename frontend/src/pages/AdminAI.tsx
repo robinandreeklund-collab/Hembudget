@@ -405,6 +405,7 @@ function StocksDiagnosticsCard() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [pollResult, setPollResult] = useState<Record<string, unknown> | null>(null);
+  const [yfTest, setYfTest] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   async function loadStatus() {
@@ -430,6 +431,22 @@ function StocksDiagnosticsCard() {
       });
       setPollResult(res);
       await loadStatus();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testYf() {
+    setBusy(true);
+    setErr(null);
+    setYfTest(null);
+    try {
+      const res = await api<Record<string, unknown>>("/admin/ai/db/yfinance-test", {
+        method: "POST",
+      });
+      setYfTest(res);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -463,6 +480,13 @@ function StocksDiagnosticsCard() {
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Polla kurser nu"}
         </button>
+        <button
+          onClick={testYf}
+          disabled={busy}
+          className="border border-amber-300 hover:bg-amber-50 text-amber-800 rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testa YFinance"}
+        </button>
       </div>
       {err && (
         <div className="text-sm text-rose-600 border-l-2 border-rose-300 pl-3 py-1">
@@ -472,6 +496,11 @@ function StocksDiagnosticsCard() {
       {pollResult && (
         <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
           Poll-resultat: {JSON.stringify(pollResult, null, 2)}
+        </pre>
+      )}
+      {yfTest && (
+        <pre className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          YFinance-test: {JSON.stringify(yfTest, null, 2)}
         </pre>
       )}
       {status && (
