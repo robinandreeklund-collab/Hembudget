@@ -18,7 +18,6 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { QRCodeSVG } from "qrcode.react";
 import { registerScrollTrigger, useReducedMotion } from "@/hooks/useScrollAnimation";
 
@@ -131,11 +130,6 @@ const REDUCED_THEME = {
   accent: "#dc4c2b",
   amber: "#fbbf24",
 };
-
-// Scaffold — polyFor och START konsumeras av PinnedStory:s timeline
-// i fas 2. Tas bort när tidslinjen är wired.
-const __SSD_SCAFFOLD = { polyFor, START };
-void __SSD_SCAFFOLD;
 
 export default function ScrollStoryDemo() {
   const reduced = useReducedMotion();
@@ -259,25 +253,122 @@ function IntroFrame() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Pinned scroll storytelling — placeholder; fylls i Fas 2.
+// Pinned scroll storytelling — 7 kapitel, GSAP scrub-tidslinje
 // ─────────────────────────────────────────────────────────────
 function PinnedStory() {
   const sectionRef = useRef<HTMLDivElement | null>(null);
+  const polyRef = useRef<SVGPolygonElement | null>(null);
+  const dotsRef = useRef<SVGGElement | null>(null);
+  const scoreRef = useRef<SVGTextElement | null>(null);
+  const teacherViewRef = useRef<HTMLDivElement | null>(null);
+  const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
+  const counterRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!sectionRef.current) return;
+    if (!sectionRef.current || !polyRef.current) return;
     registerScrollTrigger();
     const el = sectionRef.current;
+
     const ctx = gsap.context(() => {
-      ScrollTrigger.create({
-        trigger: el,
-        start: "top top",
-        end: "+=400%",
-        pin: true,
-        scrub: 1.2,
-        anticipatePin: 1,
+      // Wellbeing-state — animeras med GSAP, onUpdate skriver ut nya poly-points.
+      const wb = { ...START };
+      const updatePoly = () => {
+        if (polyRef.current) {
+          polyRef.current.setAttribute("points", polyFor(wb));
+        }
+        if (dotsRef.current) {
+          DIMS.forEach((d, i) => {
+            const [x, y] = point(i, wb[d.key]);
+            const c = dotsRef.current!.children[i] as SVGCircleElement | undefined;
+            if (c) {
+              c.setAttribute("cx", String(x));
+              c.setAttribute("cy", String(y));
+            }
+          });
+        }
+        if (scoreRef.current) {
+          scoreRef.current.textContent = String(wellbeingScore(wb));
+        }
+      };
+      updatePoly();
+
+      // Master-tidslinje pinnad mot sektionen. End=400% ger ~4 viewport-höjder
+      // av scroll, scrub=1.2 → filmisk smoothness.
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: el,
+          start: "top top",
+          end: "+=400%",
+          pin: true,
+          scrub: 1.2,
+          anticipatePin: 1,
+          onUpdate: (self) => {
+            if (progressBarRef.current) {
+              progressBarRef.current.style.width = `${self.progress * 100}%`;
+            }
+            if (counterRef.current) {
+              const idx = Math.min(
+                CHAPTERS.length - 1,
+                Math.floor(self.progress * CHAPTERS.length),
+              );
+              counterRef.current.textContent =
+                `Kapitel ${idx + 1} / ${CHAPTERS.length}`;
+            }
+          },
+        },
       });
+
+      // Varje kapitel pågår ~1 enhet på tidslinjen → 7 kapitel = total 7 enheter.
+      // Före varje kapitel: bleknar föregående ut, nästa in. Wellbeing morphar
+      // till kapitlets målvärden.
+      CHAPTERS.forEach((c, i) => {
+        const stepEl = stepRefs.current[i];
+        if (!stepEl) return;
+        const t = i;
+        // Fade in current step
+        tl.fromTo(
+          stepEl,
+          { autoAlpha: 0, y: 24 },
+          { autoAlpha: 1, y: 0, duration: 0.4, ease: "power2.out" },
+          t,
+        );
+        // Wellbeing morph mot kapitel-mål
+        tl.to(
+          wb,
+          {
+            ek: c.wb.ek,
+            hl: c.wb.hl,
+            sb: c.wb.sb,
+            fr: c.wb.fr,
+            tr: c.wb.tr,
+            duration: 0.8,
+            ease: "power2.inOut",
+            onUpdate: updatePoly,
+          },
+          t,
+        );
+        // Fade out before next chapter (utom sista)
+        if (i < CHAPTERS.length - 1) {
+          tl.to(
+            stepEl,
+            { autoAlpha: 0, y: -24, duration: 0.4, ease: "power2.in" },
+            t + 0.7,
+          );
+        }
+      });
+
+      // Lärarvy fade in i sista kapitlet
+      if (teacherViewRef.current) {
+        tl.fromTo(
+          teacherViewRef.current,
+          { autoAlpha: 0, x: 60 },
+          { autoAlpha: 1, x: 0, duration: 0.6, ease: "power3.out" },
+          CHAPTERS.length - 1,
+        );
+      }
     }, sectionRef);
+
     return () => ctx.revert();
   }, []);
 
@@ -286,36 +377,389 @@ function PinnedStory() {
       ref={sectionRef}
       style={{
         height: "100vh",
-        background: "#0f172a",
+        background:
+          "radial-gradient(ellipse at top, #1e293b 0%, #0f172a 50%, #020617 100%)",
         color: "#fff",
         position: "relative",
         overflow: "hidden",
       }}
     >
+      {/* Progress-stripe i toppen */}
       <div
         style={{
           position: "absolute",
-          inset: 0,
-          display: "grid",
-          placeItems: "center",
-          padding: 24,
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: "rgba(255,255,255,0.08)",
+          zIndex: 5,
+        }}
+      >
+        <div
+          ref={progressBarRef}
+          style={{
+            height: "100%",
+            width: "0%",
+            background:
+              "linear-gradient(90deg, #fbbf24 0%, #dc4c2b 100%)",
+            transition: "width .1s linear",
+          }}
+        />
+      </div>
+
+      {/* Kapitelräknare (övre vänstra) */}
+      <div
+        style={{
+          position: "absolute",
+          top: 24,
+          left: 24,
+          fontFamily: "ui-monospace, monospace",
+          fontSize: 11,
+          letterSpacing: 1.4,
+          color: "#94a3b8",
+          textTransform: "uppercase",
+          zIndex: 5,
+        }}
+      >
+        <div ref={counterRef}>Kapitel 1 / 7</div>
+      </div>
+
+      {/* Bakgrundsavatar — student vid skrivbord (subtilt) */}
+      <DeskScene />
+
+      {/* Centrum: Wellbeing-pentagon */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(420px, 60vw)",
+          aspectRatio: "1 / 1",
+          opacity: 0.95,
+        }}
+      >
+        <svg viewBox="0 0 400 400" style={{ width: "100%", height: "100%" }}>
+          {/* Koncentriska ringar */}
+          {[0.25, 0.5, 0.75, 1].map((r, i) => (
+            <polygon
+              key={i}
+              points={DIMS.map((_, j) => {
+                const a = angleAt(j);
+                return `${CX + Math.cos(a) * R * r},${CY + Math.sin(a) * R * r}`;
+              }).join(" ")}
+              fill="none"
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth="1"
+            />
+          ))}
+          {/* Axlar */}
+          {DIMS.map((_, i) => {
+            const [x, y] = point(i, 100);
+            return (
+              <line
+                key={i}
+                x1={CX}
+                y1={CY}
+                x2={x}
+                y2={y}
+                stroke="rgba(255,255,255,0.06)"
+                strokeWidth="1"
+              />
+            );
+          })}
+          {/* Data-polygon (animeras) */}
+          <polygon
+            ref={polyRef}
+            points={polyFor(START)}
+            fill="rgba(251,191,36,0.18)"
+            stroke="#fbbf24"
+            strokeWidth="2.4"
+          />
+          {/* Hörn-dots (animeras) */}
+          <g ref={dotsRef}>
+            {DIMS.map((d, i) => {
+              const [x, y] = point(i, START[d.key]);
+              return (
+                <circle key={i} cx={x} cy={y} r="5" fill="#fbbf24" />
+              );
+            })}
+          </g>
+          {/* Etiketter */}
+          {DIMS.map((d, i) => {
+            const a = angleAt(i);
+            const lr = R + 30;
+            const lx = CX + Math.cos(a) * lr;
+            const ly = CY + Math.sin(a) * lr + 4;
+            return (
+              <text
+                key={i}
+                x={lx}
+                y={ly}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="600"
+                fill="#cbd5e1"
+                fontFamily="ui-monospace, monospace"
+              >
+                {d.label}
+              </text>
+            );
+          })}
+          {/* Score i mitten (animeras) */}
+          <text
+            ref={scoreRef}
+            x={CX}
+            y={CY - 4}
+            textAnchor="middle"
+            fontSize="56"
+            fontWeight="700"
+            fill="#fff"
+          >
+            {wellbeingScore(START)}
+          </text>
+          <text
+            x={CX}
+            y={CY + 22}
+            textAnchor="middle"
+            fontSize="11"
+            fill="#94a3b8"
+            fontFamily="ui-monospace, monospace"
+            letterSpacing="2"
+          >
+            WELLBEING
+          </text>
+        </svg>
+      </div>
+
+      {/* Kapitelkort — alla renderas, GSAP fade:ar mellan dem */}
+      <div
+        style={{
+          position: "absolute",
+          left: "min(56px, 5vw)",
+          bottom: "min(72px, 7vh)",
+          maxWidth: "min(440px, 80vw)",
+          zIndex: 4,
+        }}
+      >
+        {CHAPTERS.map((c, i) => (
+          <div
+            key={c.id}
+            ref={(el) => (stepRefs.current[i] = el)}
+            style={{
+              position: i === 0 ? "relative" : "absolute",
+              top: i === 0 ? "auto" : 0,
+              left: i === 0 ? "auto" : 0,
+              opacity: i === 0 ? 1 : 0,
+              background: "rgba(15,23,42,0.85)",
+              backdropFilter: "blur(8px)",
+              border: "1px solid rgba(251,191,36,0.25)",
+              borderRadius: 14,
+              padding: "20px 22px",
+              maxWidth: 440,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+                letterSpacing: 1.2,
+                color: "#fbbf24",
+                marginBottom: 8,
+                textTransform: "uppercase",
+                fontWeight: 600,
+              }}
+            >
+              ● {c.range}
+            </div>
+            <h3
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                margin: "0 0 10px",
+                color: "#fff",
+                lineHeight: 1.2,
+              }}
+            >
+              {c.title}
+            </h3>
+            <p
+              style={{
+                fontSize: 14.5,
+                lineHeight: 1.55,
+                color: "#cbd5e1",
+                margin: 0,
+              }}
+            >
+              {c.body}
+            </p>
+            {c.delta && (
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: "1px dashed rgba(255,255,255,0.1)",
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 12.5,
+                  color: "#10b981",
+                  letterSpacing: 0.4,
+                }}
+              >
+                → {c.delta}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Lärarvy (fade in i sista kapitlet) */}
+      <div
+        ref={teacherViewRef}
+        style={{
+          position: "absolute",
+          right: "min(40px, 4vw)",
+          top: "min(56px, 8vh)",
+          width: "min(280px, 38vw)",
+          opacity: 0,
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 12,
+          padding: "16px 18px",
+          backdropFilter: "blur(6px)",
+          zIndex: 4,
         }}
       >
         <div
           style={{
-            textAlign: "center",
-            maxWidth: 600,
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 10.5,
+            letterSpacing: 1.2,
+            color: "#94a3b8",
+            marginBottom: 10,
+            textTransform: "uppercase",
           }}
         >
-          <div className="ssd-eyebrow" style={{ color: "#94a3b8", marginBottom: 16 }}>
-            Scrolla — storyn kommer i nästa commit
-          </div>
-          <h2 className="ssd-h2" style={{ color: "#fff" }}>
-            Pinnad scroll-zon (Fas 2)
-          </h2>
+          /teacher · översikt · klass 9C
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 12 }}>
+          Linda · IT-konsult
+        </div>
+        <ul
+          style={{
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 12,
+            color: "#cbd5e1",
+            lineHeight: 1.85,
+          }}
+        >
+          <li>Time on task: <span style={{ color: "#fff" }}>4 min 12 s</span></li>
+          <li>Beslut loggade: <span style={{ color: "#fff" }}>7</span></li>
+          <li>Wellbeing-trend: <span style={{ color: "#10b981" }}>−4 → +6</span></li>
+          <li style={{ color: "#fbbf24" }}>● privatlån (lugnt val)</li>
+          <li style={{ color: "#10b981" }}>● 2 sparkonto-överföringar</li>
+        </ul>
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: "1px dashed rgba(255,255,255,0.1)",
+            fontSize: 11.5,
+            fontStyle: "italic",
+            color: "#94a3b8",
+            lineHeight: 1.4,
+          }}
+        >
+          Allt loggat. Allt i samma vy som klassen.
         </div>
       </div>
     </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// DeskScene — abstrakt SVG-bakgrund med skrivbord + laptop
+// ─────────────────────────────────────────────────────────────
+function DeskScene() {
+  return (
+    <svg
+      viewBox="0 0 1200 800"
+      preserveAspectRatio="xMidYMid slice"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        opacity: 0.08,
+        zIndex: 1,
+      }}
+    >
+      {/* Skrivbord */}
+      <line
+        x1="0"
+        y1="620"
+        x2="1200"
+        y2="620"
+        stroke="#fbbf24"
+        strokeWidth="1.5"
+      />
+      {/* Laptop */}
+      <rect
+        x="540"
+        y="540"
+        width="160"
+        height="100"
+        rx="6"
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth="1.5"
+      />
+      <line x1="540" y1="640" x2="700" y2="640" stroke="#fbbf24" strokeWidth="1.5" />
+      <line x1="510" y1="650" x2="730" y2="650" stroke="#fbbf24" strokeWidth="1.5" />
+      {/* Telefon */}
+      <rect
+        x="730"
+        y="595"
+        width="40"
+        height="60"
+        rx="6"
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth="1.5"
+      />
+      {/* Mugg */}
+      <rect
+        x="450"
+        y="600"
+        width="50"
+        height="40"
+        rx="2"
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M500 615 Q510 615 510 625 Q510 635 500 635"
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth="1.5"
+      />
+      {/* Skrivbordslampa */}
+      <line x1="380" y1="620" x2="380" y2="540" stroke="#fbbf24" strokeWidth="1.5" />
+      <path d="M360 540 L400 540 L390 510 L370 510 Z" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+      {/* Avatar — siluett av en person */}
+      <circle cx="620" cy="430" r="32" fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+      <path
+        d="M580 540 Q580 470 620 470 Q660 470 660 540"
+        fill="none"
+        stroke="#fbbf24"
+        strokeWidth="1.5"
+      />
+    </svg>
   );
 }
 
