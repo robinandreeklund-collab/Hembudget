@@ -216,7 +216,7 @@ export default function LandingVariantC() {
       <MyCompanySection theme={THEME} />
       <Logic />
       <Problem />
-      <Pricing />
+      <PriceSection theme={THEME} />
       <Faq />
       <Cta />
       <Contact />
@@ -1592,133 +1592,6 @@ function Problem() {
   );
 }
 
-// ---------- Pricing ----------
-
-function Pricing() {
-  return (
-    <section
-      id="pris"
-      style={{
-        padding: "64px 24px",
-        borderTop: "1px solid #e2e8f0",
-        maxWidth: 1100,
-        margin: "0 auto",
-      }}
-    >
-      <div className="vc-eyebrow" style={{ textAlign: "center", marginBottom: 12 }}>
-        Pris
-      </div>
-      <h2 className="vc-h2" style={{ textAlign: "center" }}>
-        Enkel prismodell.
-      </h2>
-      <p
-        style={{
-          fontSize: 15,
-          color: "#475569",
-          marginTop: 14,
-          marginBottom: 32,
-          maxWidth: 640,
-          margin: "14px auto 32px",
-          textAlign: "center",
-        }}
-      >
-        Gratis under pilotåret 2026 — för skolor och familjer. Ingen
-        bindningstid, inga dolda kostnader. Från 2027 sätts en avgift per
-        användare i dialog med pilotkunderna.
-      </p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 18,
-        }}
-      >
-        <div
-          style={{
-            background: "#fff",
-            border: "2px solid #0f172a",
-            borderRadius: 10,
-            padding: 28,
-          }}
-        >
-          <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
-            Pilot 2026
-          </div>
-          <div
-            style={{
-              fontSize: 56,
-              fontWeight: 700,
-              letterSpacing: -2,
-              lineHeight: 1,
-              marginBottom: 6,
-            }}
-          >
-            0 kr
-          </div>
-          <div style={{ marginBottom: 18, color: "#475569" }}>
-            Hela plattformen, utan tak.
-          </div>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {[
-              "Obegränsat antal elever/barn",
-              "AI-funktioner (Claude Sonnet)",
-              "Portfolio-PDF + ZIP-export",
-              "Support via mail",
-            ].map((t, i) => (
-              <li
-                key={i}
-                style={{ marginBottom: 6, color: "#475569", fontSize: 14 }}
-              >
-                · {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e2e8f0",
-            borderRadius: 10,
-            padding: 28,
-          }}
-        >
-          <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
-            Från 2027
-          </div>
-          <div
-            style={{
-              fontSize: 36,
-              fontWeight: 600,
-              letterSpacing: -1,
-              lineHeight: 1.05,
-              marginBottom: 14,
-            }}
-          >
-            Per användare
-          </div>
-          <div style={{ marginBottom: 18, color: "#475569", fontSize: 14 }}>
-            Nivå sätts tillsammans med pilotkunderna — troligen 50–100
-            kr/användare/år. Familjer får ett enklare paketpris.
-          </div>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {[
-              "Samma plattform, ingen funktionsnedskärning",
-              "Tak för AI-användning",
-              "Dedikerad support",
-            ].map((t, i) => (
-              <li
-                key={i}
-                style={{ marginBottom: 6, color: "#475569", fontSize: 14 }}
-              >
-                · {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 
 // ---------- Logic ----------
@@ -7580,6 +7453,127 @@ function MyCompanySection({ theme }: { theme: Theme }) {
             lån — och ser i siffror varför likviditetsplanering är skillnaden
             mellan ett företag som överlever och ett som inte gör det.
           </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- PriceSection (v5) — pilot 2026 + från 2027 ----------
+
+function PriceSection({ theme }: { theme: Theme }) {
+  return (
+    <section
+      id="pris"
+      style={{ padding: "64px 24px", borderTop: `1px solid ${theme.rule}` }}
+    >
+      <div className={theme.eyebrow} style={{ textAlign: "center", marginBottom: 12 }}>
+        Pris
+      </div>
+      <h2 className={theme.h2} style={{ textAlign: "center" }}>
+        Enkel prismodell.
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: "#475569",
+          marginTop: 14,
+          marginBottom: 32,
+          maxWidth: 640,
+          marginLeft: "auto",
+          marginRight: "auto",
+          textAlign: "center",
+          lineHeight: 1.6,
+        }}
+      >
+        Gratis under pilotåret 2026 — för skolor och familjer. Ingen
+        bindningstid, inga dolda kostnader. Från 2027 sätts en avgift per
+        användare i dialog med pilotkunderna.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 18,
+          maxWidth: 1000,
+          margin: "0 auto",
+        }}
+      >
+        <div
+          style={{
+            background: theme.cardBg,
+            border: `2px solid ${theme.fg}`,
+            borderRadius: theme.radius,
+            padding: 28,
+          }}
+        >
+          <div className={theme.eyebrow} style={{ marginBottom: 12 }}>
+            Pilot 2026
+          </div>
+          <div
+            style={{
+              fontSize: 56,
+              fontWeight: 700,
+              letterSpacing: -2,
+              lineHeight: 1,
+              marginBottom: 6,
+            }}
+          >
+            0 kr
+          </div>
+          <div style={{ marginBottom: 18, color: "#475569" }}>
+            Hela plattformen, utan tak.
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {[
+              "Obegränsat antal elever/barn",
+              "AI-funktioner (Claude Sonnet)",
+              "Portfolio-PDF + ZIP-export",
+              "Support via mail",
+            ].map((t, i) => (
+              <li key={i} style={{ marginBottom: 6, color: "#475569" }}>
+                · {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div
+          style={{
+            background: theme.cardBg,
+            border: `1px solid ${theme.rule}`,
+            borderRadius: theme.radius,
+            padding: 28,
+          }}
+        >
+          <div className={theme.eyebrow} style={{ marginBottom: 12 }}>
+            Från 2027
+          </div>
+          <div
+            style={{
+              fontSize: 36,
+              fontWeight: 600,
+              letterSpacing: -1,
+              lineHeight: 1.05,
+              marginBottom: 14,
+            }}
+          >
+            Per-användare
+          </div>
+          <div style={{ marginBottom: 18, color: "#475569" }}>
+            Nivå sätts tillsammans med pilotkunderna — troligen 50–100
+            kr/användare/år. Familjer får ett enskilt pris/abonn.
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {[
+              "Samma plattform, ingen funktionsnedskärning",
+              "Tak för AI-användning",
+              "Dedicerad support",
+            ].map((t, i) => (
+              <li key={i} style={{ marginBottom: 6, color: "#475569" }}>
+                · {t}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>
