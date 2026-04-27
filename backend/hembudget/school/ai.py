@@ -80,6 +80,22 @@ def _read_api_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY", "").strip()
 
 
+# Senaste felmeddelandet från ett Claude-anrop. Endpoint:en plockar
+# upp detta och inkluderar i HTTP-svaret så super-admin ser orsaken
+# (t.ex. '401 authentication_error' om Anthropic-nyckeln är ogiltig).
+_last_error: Optional[str] = None
+
+
+def _set_last_error(msg: Optional[str]) -> None:
+    global _last_error
+    _last_error = msg
+
+
+def get_last_error() -> Optional[str]:
+    """Returnerar senaste fel från _call_claude (eller None)."""
+    return _last_error
+
+
 def _get_client() -> Any:
     """Lazy-init + revalidering av Anthropic-klienten. Vi sparar en
     'signature' (nyckelns hash-prefix) så att om super-admin byter
@@ -216,9 +232,14 @@ def _call_claude(
       - Haiku stöder inte adaptive thinking — lämna False där.
       - Sonnet 4.6 kör `thinking: {type: "adaptive"}` — modellen
         avgör själv hur mycket den tänker.
+
+    Vid fel: returnerar None men loggar OCH sparar senaste felmeddelandet
+    i modul-state (last_error_message) så endpoint:en kan inkludera det
+    i sitt HTTP-svar. Annars är prod omöjligt att felsöka.
     """
     client = _get_client()
     if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad (ANTHROPIC_API_KEY saknas)")
         return None
     try:
         params: dict[str, Any] = {
@@ -253,6 +274,7 @@ def _call_claude(
         cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
 
         _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        _set_last_error(None)
         return AIResult(
             text=text,
             input_tokens=in_tok,
@@ -260,8 +282,11 @@ def _call_claude(
             cache_read_tokens=cr,
             cache_creation_tokens=cc,
         )
-    except Exception:
+    except Exception as exc:
         log.exception("ai: Claude-anrop misslyckades (model=%s)", model)
+        # Spara kortfattad felklass + meddelande så endpoint kan
+        # inkludera det i 502-svaret.
+        _set_last_error(f"{type(exc).__name__}: {exc}")
         return None
 
 

@@ -1346,9 +1346,13 @@ def wellbeing_monthly_feedback(
         teacher_id=teacher_id,
     )
     if result is None:
+        detail = "AI-anropet misslyckades."
+        last = ai_core.get_last_error()
+        if last:
+            detail = f"AI-anropet misslyckades: {last}"
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "AI-anropet misslyckades.",
+            detail,
         )
     return WellbeingFeedbackOut(
         feedback=result.text,
