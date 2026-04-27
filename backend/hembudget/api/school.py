@@ -492,17 +492,28 @@ def list_students(
         )
         out: list[StudentWithRunsOut] = []
         for st in students:
-            runs = (
+            # Det nya batch-flödet (/teacher/batches) använder ScenarioBatch,
+            # inte den gamla StudentDataGenerationRun-tabellen. Visa båda
+            # för bakåtkompat så historik från gamla körningar inte
+            # försvinner.
+            batch_months = {
+                m for (m,) in
+                s.query(ScenarioBatch.year_month)
+                .filter(ScenarioBatch.student_id == st.id)
+                .all()
+            }
+            run_months = {
+                m for (m,) in
                 s.query(StudentDataGenerationRun.year_month)
                 .filter(StudentDataGenerationRun.student_id == st.id)
-                .order_by(StudentDataGenerationRun.year_month)
                 .all()
-            )
+            }
+            months = sorted(batch_months | run_months)
             base = _student_to_out(st)
             out.append(
                 StudentWithRunsOut(
                     **base.model_dump(),
-                    months_generated=[r[0] for r in runs],
+                    months_generated=months,
                 )
             )
         return out
