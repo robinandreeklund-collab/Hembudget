@@ -890,13 +890,16 @@ def student_get_own_profile(
     info: TokenInfo = Depends(require_token),
 ) -> StudentProfileOut:
     """Eleven läser sin egen profil. Pedagogiskt: partner-lön döljs
-    förrän eleven gjort cost-split-valet ('veil of ignorance')."""
+    förrän eleven gjort cost-split-valet ('veil of ignorance').
+
+    Stödjer även lärar-impersonering via x-as-student så lärare kan
+    se exakt vad eleven ser (utan att tappa session)."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         student = s.query(Student).filter(
-            Student.id == info.student_id
+            Student.id == student_id
         ).first()
         if not student:
             raise HTTPException(404, "Student not found")
@@ -960,13 +963,16 @@ def student_get_cost_split(
 ) -> CostSplitOut:
     """Returnerar elevens cost-split-status. Visar partner_profession +
     partner_gross_salary BARA om eleven redan beslutat — annars är
-    fälten None ('veil of ignorance')."""
+    fälten None ('veil of ignorance').
+
+    Stödjer även lärar-impersonering så banner:n syns för lärare
+    som tittar in via x-as-student."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         student = s.query(Student).filter(
-            Student.id == info.student_id
+            Student.id == student_id
         ).first()
         if not student or not student.profile:
             raise HTTPException(404, "Profil saknas")
@@ -1006,14 +1012,16 @@ def student_set_cost_split(
     from datetime import datetime as _dt
 
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    # Lärare som tittar in via x-as-student ska också kunna sätta valet
+    # (för testning och demo). _resolve_student_actor stödjer båda fallen.
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     if payload.preference not in {"even_50_50", "pro_rata", "all_shared"}:
         raise HTTPException(400, "Ogiltig preference")
 
     with master_session() as s:
         student = s.query(Student).filter(
-            Student.id == info.student_id
+            Student.id == student_id
         ).first()
         if not student or not student.profile:
             raise HTTPException(404, "Profil saknas")
