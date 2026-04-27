@@ -190,13 +190,52 @@ const FEATURES: Array<{
 // ---------- Root ----------
 
 export default function LandingVariantC() {
-  // Registrera ScrollTrigger en gång vid mount. Idempotent — säker att
-  // anropa flera gånger om Variant C remountas (HMR/route-byte).
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const reduced = useReducedMotion();
+
+  // Registrera ScrollTrigger + sätt upp generiska fade-up för alla
+  // sektioner utom Hero (som har egen pin) + stagger för periodiska
+  // tabellens celler. Reduced-motion: hoppar over alla animationer.
   useEffect(() => {
     registerScrollTrigger();
-  }, []);
+    if (reduced || !rootRef.current) return;
+    const root = rootRef.current;
+
+    const ctx = gsap.context(() => {
+      // Fade-up: alla sektioner utom första (Hero, pinned).
+      const sections = root.querySelectorAll<HTMLElement>("section");
+      sections.forEach((s, i) => {
+        if (i === 0) return;
+        gsap.from(s, {
+          opacity: 0,
+          y: 28,
+          duration: 0.85,
+          ease: "power2.out",
+          scrollTrigger: { trigger: s, start: "top 85%", once: true },
+        });
+      });
+
+      // Periodic-table-cellerna staggrar in slumpmässigt.
+      const grids = root.querySelectorAll<HTMLElement>(".vc-periodic-grid");
+      grids.forEach((grid) => {
+        const cells = grid.querySelectorAll<HTMLElement>(".cell");
+        if (!cells.length) return;
+        gsap.from(cells, {
+          opacity: 0,
+          scale: 0.6,
+          duration: 0.45,
+          stagger: { amount: 0.7, from: "random" },
+          ease: "back.out(1.5)",
+          scrollTrigger: { trigger: grid, start: "top 80%", once: true },
+        });
+      });
+    }, rootRef);
+
+    return () => ctx.revert();
+  }, [reduced]);
   return (
     <div
+      ref={rootRef}
       className="vc-root"
       style={{
         width: "100%",
