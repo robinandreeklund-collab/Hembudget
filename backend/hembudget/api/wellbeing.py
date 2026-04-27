@@ -19,6 +19,8 @@ from ..wellbeing.calculator import (
     calculate_wellbeing,
     persist_wellbeing,
 )
+from ..wellbeing.portfolio_impact import compute_portfolio_impact_summary
+from ..wellbeing.stock_hindsight import compute_stock_hindsight
 from .deps import db, require_auth
 
 
@@ -148,6 +150,30 @@ def recompute_wellbeing(
         "total_score": row.total_score,
         "saved_id": row.id,
     }
+
+
+@router.get("/portfolio-impact")
+def portfolio_impact(session: Session = Depends(db)) -> dict:
+    """Live aktieportfölj-påverkan på Trygghet.
+
+    Räknar loss aversion (λ=2.0) + concentration-penalty och returnerar
+    detaljerad data så frontend kan visa ett pedagogiskt kort på
+    /investments. Eleven ska SE varför Trygghet rör sig — inte bara
+    upptäcka att den gjort det."""
+    return compute_portfolio_impact_summary(session)
+
+
+@router.get("/stock-hindsight")
+def stock_hindsight(
+    year_month: Optional[str] = Query(default=None),
+    session: Session = Depends(db),
+) -> dict:
+    """Aktie-eftertanke: 60-dagars hindsight på elevens sälj.
+
+    För varje sälj senaste 30 dagarna (eller specificerad månad) räknar
+    vi ut "vad hade hänt om du väntat 60 dagar". Plus best/worst-beslut
+    och loss-aversion-kvot. Pedagogisk konfrontation, inte moralisering."""
+    return compute_stock_hindsight(session, year_month)
 
 
 # ---------- Personlighet (V2 från start) ----------

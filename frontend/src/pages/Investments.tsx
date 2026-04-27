@@ -314,6 +314,305 @@ function FxCard() {
 }
 
 
+interface WellbeingImpact {
+  has_holdings: boolean;
+  total_value_sek: number;
+  weighted_pct: number;
+  effective_pct: number;
+  safety_impact: number;
+  concentration: boolean;
+  max_weight: number;
+  max_weight_ticker: string;
+  holdings: { ticker: string; name: string; weight: number; change_pct: number; contribution_pct: number }[];
+  explanation: string;
+  loss_aversion: number;
+}
+
+
+function WellbeingImpactCard() {
+  const { data } = useQuery({
+    queryKey: ["wellbeing-portfolio-impact"],
+    queryFn: () => api<WellbeingImpact>("/wellbeing/portfolio-impact"),
+    refetchInterval: 60_000,  // var minut — billigt, bara aggregat
+  });
+  if (!data || !data.has_holdings) return null;
+
+  const impact = data.safety_impact;
+  const moveUp = data.weighted_pct > 0;
+  const moveDown = data.weighted_pct < 0;
+
+  const tone =
+    impact <= -10
+      ? "border-rose-300 bg-rose-50"
+      : impact < 0
+        ? "border-amber-300 bg-amber-50"
+        : impact >= 5
+          ? "border-emerald-300 bg-emerald-50"
+          : impact > 0
+            ? "border-emerald-200 bg-emerald-50/60"
+            : "border-slate-200 bg-slate-50";
+
+  const headline =
+    impact <= -10
+      ? "Trygghet under press"
+      : impact < 0
+        ? "Trygghet sjunker"
+        : impact >= 5
+          ? "Trygghet får skjuts"
+          : impact > 0
+            ? "Trygghet får liten lyft"
+            : "Lugn dag — Trygghet rör sig inte";
+
+  return (
+    <div className={`border-l-4 rounded-md p-4 ${tone}`}>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-600">
+            Wellbeing-påverkan i realtid
+          </div>
+          <div className="text-lg font-semibold text-slate-900">
+            {headline}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className={`text-3xl serif ${
+            impact < 0 ? "text-rose-700" : impact > 0 ? "text-emerald-700" : "text-slate-700"
+          }`}>
+            {impact > 0 ? "+" : ""}{impact}
+          </div>
+          <div className="text-[10px] text-slate-500 leading-tight">
+            poäng på Trygghet
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 text-xs mb-2">
+        <div>
+          <div className="text-slate-500">Portföljens 24h</div>
+          <div className={`font-semibold ${
+            moveDown ? "text-rose-700" : moveUp ? "text-emerald-700" : "text-slate-700"
+          }`}>
+            {data.weighted_pct >= 0 ? "+" : ""}{data.weighted_pct.toFixed(2)} %
+          </div>
+        </div>
+        <div>
+          <div className="text-slate-500">Efter loss aversion (λ={data.loss_aversion})</div>
+          <div className={`font-semibold ${
+            data.effective_pct < 0 ? "text-rose-700" : "text-slate-700"
+          }`}>
+            {data.effective_pct >= 0 ? "+" : ""}{data.effective_pct.toFixed(2)} %
+          </div>
+        </div>
+        <div>
+          <div className="text-slate-500">Största post</div>
+          <div className={`font-semibold ${data.concentration ? "text-amber-700" : "text-slate-700"}`}>
+            {data.max_weight_ticker || "—"} {(data.max_weight * 100).toFixed(0)} %
+            {data.concentration && " ⚠"}
+          </div>
+        </div>
+      </div>
+
+      <div className="text-xs text-slate-700 leading-snug">
+        {data.explanation}
+      </div>
+
+      {data.holdings.length > 0 && (
+        <details className="mt-2">
+          <summary className="text-xs text-slate-600 cursor-pointer hover:text-slate-900">
+            Visa per innehav
+          </summary>
+          <div className="mt-1 space-y-0.5">
+            {data.holdings.map((h) => (
+              <div key={h.ticker} className="flex items-center justify-between text-[11px] text-slate-700">
+                <span>
+                  {h.ticker} <span className="text-slate-500">({(h.weight * 100).toFixed(0)} %)</span>
+                </span>
+                <span className={
+                  h.change_pct < 0 ? "text-rose-700" :
+                  h.change_pct > 0 ? "text-emerald-700" :
+                  "text-slate-500"
+                }>
+                  {h.change_pct >= 0 ? "+" : ""}{h.change_pct.toFixed(2)} %
+                  <span className="text-slate-500 ml-1">
+                    → {h.contribution_pct >= 0 ? "+" : ""}{h.contribution_pct.toFixed(2)} %
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <div className="mt-2 pt-2 border-t border-slate-200/60 text-[10px] text-slate-500 leading-snug">
+        Loss aversion (Kahneman/Tversky): förluster känns ungefär 2× starkare
+        än vinster. Vi modellerar det här så du upplever fenomenet på riktigt
+        — inte bara läser om det. {data.concentration && "Koncentrationspåverkan: 1.5×."}
+      </div>
+    </div>
+  );
+}
+
+
+interface HindsightRow {
+  ticker: string;
+  name: string;
+  sold_at: string;
+  sell_price: number;
+  quantity: number;
+  currency: string;
+  hindsight_price: number | null;
+  hindsight_date: string;
+  is_complete: boolean;
+  missed_profit_sek: number | null;
+  explanation: string;
+}
+
+interface StockHindsight {
+  month: string;
+  sells_count: number;
+  sells_in_profit: number;
+  sells_in_loss: number;
+  loss_aversion_quotient: number | "inf" | null;
+  best_decision: {
+    ticker: string;
+    name: string;
+    quantity: number;
+    sell_price: number;
+    currency: string;
+    realized_pnl_sek: number;
+    sold_at: string;
+    explanation: string;
+  } | null;
+  worst_decision: StockHindsight["best_decision"];
+  hindsight: HindsightRow[];
+  explanation: string;
+  hindsight_days: number;
+}
+
+
+function StockHindsightCard() {
+  const { data } = useQuery({
+    queryKey: ["wellbeing-stock-hindsight"],
+    queryFn: () => api<StockHindsight>("/wellbeing/stock-hindsight"),
+    refetchInterval: 5 * 60_000,  // var 5:e min — billigt aggregat
+  });
+  if (!data || data.sells_count === 0) return null;
+
+  const laq = data.loss_aversion_quotient;
+  const laqText =
+    laq === null
+      ? null
+      : laq === "inf"
+        ? "∞ (bara förluster)"
+        : (laq as number).toFixed(2);
+
+  return (
+    <Card title={`Aktie-eftertanke (${data.month})`}>
+      <div className="text-xs text-slate-700 leading-snug mb-3">
+        {data.explanation}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div className="border rounded p-2 bg-emerald-50 border-emerald-200">
+          <div className="text-[10px] uppercase tracking-wide text-emerald-700">
+            Bästa beslut
+          </div>
+          {data.best_decision ? (
+            <>
+              <div className="text-sm font-semibold mt-0.5">
+                {data.best_decision.ticker}
+              </div>
+              <div className="text-xs text-emerald-800 mt-0.5">
+                {data.best_decision.realized_pnl_sek >= 0 ? "+" : ""}
+                {Math.round(data.best_decision.realized_pnl_sek).toLocaleString("sv-SE")} kr
+              </div>
+              <div className="text-[10px] text-slate-600 mt-1 leading-snug">
+                {data.best_decision.explanation}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-slate-500">Inga sälj med vinst</div>
+          )}
+        </div>
+
+        <div className="border rounded p-2 bg-rose-50 border-rose-200">
+          <div className="text-[10px] uppercase tracking-wide text-rose-700">
+            Sämsta beslut
+          </div>
+          {data.worst_decision ? (
+            <>
+              <div className="text-sm font-semibold mt-0.5">
+                {data.worst_decision.ticker}
+              </div>
+              <div className="text-xs text-rose-800 mt-0.5">
+                {data.worst_decision.realized_pnl_sek >= 0 ? "+" : ""}
+                {Math.round(data.worst_decision.realized_pnl_sek).toLocaleString("sv-SE")} kr
+              </div>
+              <div className="text-[10px] text-slate-600 mt-1 leading-snug">
+                {data.worst_decision.explanation}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-slate-500">Inga sälj med förlust</div>
+          )}
+        </div>
+
+        <div className="border rounded p-2 bg-slate-50 border-slate-200">
+          <div className="text-[10px] uppercase tracking-wide text-slate-700">
+            Loss-aversion-kvot
+          </div>
+          <div className="text-lg font-semibold mt-0.5">
+            {laqText ?? "—"}
+          </div>
+          <div className="text-[10px] text-slate-600 leading-snug mt-1">
+            {data.sells_in_loss} förluster ÷ {data.sells_in_profit} vinster.
+            {laq !== null && laq !== "inf" && (laq as number) >= 2 &&
+              " Mönster: håller på förlorare, säljer vinnare för tidigt."}
+          </div>
+        </div>
+      </div>
+
+      <details>
+        <summary className="text-xs text-slate-700 cursor-pointer hover:text-slate-900 font-medium">
+          Visa {data.hindsight_days}-dagars eftertanke per sälj ({data.hindsight.length})
+        </summary>
+        <div className="mt-2 space-y-2">
+          {data.hindsight.map((h, i) => (
+            <div
+              key={`${h.ticker}-${h.sold_at}-${i}`}
+              className={`border-l-2 pl-2 text-[11px] leading-snug ${
+                h.missed_profit_sek === null
+                  ? "border-slate-300 text-slate-600"
+                  : h.missed_profit_sek > 0
+                    ? "border-amber-400 text-slate-700"
+                    : "border-emerald-400 text-slate-700"
+              }`}
+            >
+              <div className="font-medium text-slate-900">
+                {h.ticker} — {h.sold_at}
+                {!h.is_complete && (
+                  <span className="ml-2 text-[10px] text-slate-500">
+                    (preliminär — 60d har inte passerats än)
+                  </span>
+                )}
+              </div>
+              <div>{h.explanation}</div>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <div className="mt-3 pt-2 border-t border-slate-200 text-[10px] text-slate-500 leading-snug">
+        Aktie-eftertanke: vi visar {data.hindsight_days}-dagars hindsight efter
+        varje sälj. Syftet är inte att ångra — det är att se mönster i dina
+        beslut. Forskningen kring disposition effect: amatörer säljer vinnare
+        för tidigt och behåller förlorare för länge.
+      </div>
+    </Card>
+  );
+}
+
+
 function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
   const pnl = portfolio.unrealized_pnl;
   const pnlPct = portfolio.total_cost_basis > 0
@@ -336,6 +635,8 @@ function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
 
   return (
     <div className="space-y-4">
+      <WellbeingImpactCard />
+      <StockHindsightCard />
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Card title="Totalt värde">
           <div className="text-2xl serif">{formatSEK(portfolio.total_value)}</div>
@@ -680,7 +981,9 @@ function PortfolioTab({
     );
   }
   return (
-    <Card title={`Innehav (${portfolio.holdings.length})`}>
+    <div className="space-y-4">
+      <WellbeingImpactCard />
+      <Card title={`Innehav (${portfolio.holdings.length})`}>
       <table className="w-full text-sm">
         <thead className="text-left text-slate-600 border-b">
           <tr>
@@ -761,6 +1064,7 @@ function PortfolioTab({
         </tbody>
       </table>
     </Card>
+    </div>
   );
 }
 

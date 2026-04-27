@@ -249,6 +249,21 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                 f"Skuld {int(debt):,} kr utan motsvarande buffert — sårbar position.".replace(",", " "),
             ))
 
+    # Aktieportfölj-rörelse — pedagogisk kärnpunkt: eleven ska känna
+    # loss aversion på riktigt. Påverkar Trygghet i realtid.
+    try:
+        from .portfolio_impact import compute_portfolio_impact
+        portfolio_factors = compute_portfolio_impact(session)
+        for pf in portfolio_factors:
+            safety += pf.points
+            factors.append(pf)
+    except Exception:
+        # Får aldrig krascha hela wellbeing-räkningen — log och fortsätt.
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: portfolio_impact misslyckades — hoppar över",
+        )
+
     # --- HÄLSA-DIMENSION (budget vs minimum) ---
     health = 50
     n_violations, violation_cats = _budget_violations(session, year_month)
