@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -245,4 +246,118 @@ class WorkplaceQuestionAnswer(MasterBase):
     )
     answered_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
+    )
+
+
+# ---------- Lönesamtal (idé 2 i dev_v1.md) ----------
+
+class SalaryNegotiation(MasterBase):
+    """En lönesamtal-session per elev och år.
+
+    Skapas när eleven trycker 'Starta samtal'. Status växlar
+    'active' → 'completed' (efter rond 5 eller eleven accepterar)
+    eller 'abandoned' (eleven ger upp). final_salary skrivs när
+    sessionen är klar; pending_salary_monthly på StudentProfile
+    sätts samtidigt så lönespec-generatorn kan committa nya lönen
+    nästa månad.
+    """
+    __tablename__ = "salary_negotiations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Snapshot av profilen vid samtalets start så vi kan visa
+    # 'tidigare lön' även om eleven gör flera samtal över tid.
+    profession: Mapped[str] = mapped_column(String(80), nullable=False)
+    employer: Mapped[str] = mapped_column(String(120), nullable=False)
+    starting_salary: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False,
+    )
+    # Avtalets norm-revision detta år (procent), läses från
+    # CollectiveAgreement.meta. Används av AI-prompten + visas i
+    # sammanfattning för pedagogisk jämförelse.
+    avtal_norm_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    avtal_code: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="active", nullable=False,
+    )  # "active" | "completed" | "abandoned"
+    final_salary: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    final_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # Auto-genererad sammanfattning för lärar-vyn (rubrik + 2-3 punkter
+    # om vad eleven argumenterade och hur det stod sig mot avtals-norm).
+    teacher_summary_md: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+
+
+class NegotiationRound(MasterBase):
+    """En rond i ett lönesamtal — elevens meddelande + AI:ns svar.
+    Append-only; aldrig editerad. Max 5 ronder per session
+    (NegotiationConfig.max_rounds).
+    """
+    __tablename__ = "negotiation_rounds"
+    __table_args__ = (
+        UniqueConstraint(
+            "negotiation_id", "round_no",
+            name="uq_negotiation_round_no",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    negotiation_id: Mapped[int] = mapped_column(
+        ForeignKey("salary_negotiations.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    round_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    student_message: Mapped[str] = mapped_column(Text, nullable=False)
+    employer_response: Mapped[str] = mapped_column(Text, nullable=False)
+    # AI:ns aktuella bud i procent efter denna rond
+    proposed_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # Token-räkning per rond (för kostnads-spårning)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class NegotiationConfig(MasterBase):
+    """Globalt singleton för lönesamtals-konfiguration.
+
+    En rad totalt — id=1. Super-admin kan justera via /admin/ai.
+    Kill-switch (disabled=True) stoppar alla nya samtal. Befintliga
+    aktiva sessioner kan fortfarande spelas klart.
+    """
+    __tablename__ = "negotiation_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    max_rounds: Mapped[int] = mapped_column(
+        Integer, default=5, nullable=False,
+    )
+    max_input_tokens_per_round: Mapped[int] = mapped_column(
+        Integer, default=800, nullable=False,
+    )
+    max_output_tokens_per_round: Mapped[int] = mapped_column(
+        Integer, default=600, nullable=False,
+    )
+    # 'haiku' eller 'sonnet' — vi börjar med Haiku (billigt nog för
+    # kostnadskalkylen i dev_v1.md). Sonnet kan slås på vid behov.
+    model: Mapped[str] = mapped_column(
+        String(20), default="haiku", nullable=False,
+    )
+    disabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
     )
