@@ -16,6 +16,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CELL_INFO, type CellInfo } from "@/data/landingCells";
+import { registerScrollTrigger } from "@/hooks/useScrollAnimation";
 
 // ---------- Delade data ----------
 
@@ -187,6 +188,11 @@ const FEATURES: Array<{
 // ---------- Root ----------
 
 export default function LandingVariantC() {
+  // Registrera ScrollTrigger en gång vid mount. Idempotent — säker att
+  // anropa flera gånger om Variant C remountas (HMR/route-byte).
+  useEffect(() => {
+    registerScrollTrigger();
+  }, []);
   return (
     <div
       className="vc-root"
