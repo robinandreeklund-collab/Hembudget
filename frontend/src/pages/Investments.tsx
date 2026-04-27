@@ -1327,6 +1327,24 @@ function TradeModal({
     holding?.account_id ?? null,
   );
 
+  // Hämta saldon per konto så vi kan visa rätt saldo för det valda
+  // ISK-kontot (cashBalance-prop:en kommer från portfolio som queries
+  // UTAN account_id → returnerar 0).
+  interface BalanceRow {
+    id: number;
+    name: string;
+    current_balance: number;
+  }
+  const balancesQ = useQuery({
+    queryKey: ["balances"],
+    queryFn: () => api<{ accounts: BalanceRow[] }>("/balances/"),
+  });
+  const accountBalance = useMemo(() => {
+    if (accountId === null) return 0;
+    const row = balancesQ.data?.accounts.find((a) => a.id === accountId);
+    return row?.current_balance ?? cashBalance;
+  }, [accountId, balancesQ.data, cashBalance]);
+
   const qty = parseInt(quantity || "0", 10);
   const validQty = Number.isFinite(qty) && qty > 0;
   const price = stock?.last ?? 0;
@@ -1368,8 +1386,25 @@ function TradeModal({
     validQty &&
     stock?.last !== undefined &&
     accountId !== null &&
-    (side === "buy" ? cashBalance >= total : (holding?.quantity ?? 0) >= qty) &&
+    (side === "buy" ? accountBalance >= total : (holding?.quantity ?? 0) >= qty) &&
     !tradeMut.isPending;
+  // Förklaring till varför bekräfta är disabled — visas under knappen
+  let disabledReason: string | null = null;
+  if (!validQty) {
+    disabledReason = "Ange antal aktier (minst 1)";
+  } else if (stock?.last === undefined) {
+    disabledReason = "Ingen kurs tillgänglig — vänta på nästa polltick";
+  } else if (accountId === null) {
+    disabledReason = "Välj ett ISK-konto";
+  } else if (side === "buy" && accountBalance < total) {
+    disabledReason = (
+      `Saldot räcker inte: du har ${accountBalance.toLocaleString("sv-SE")} kr` +
+      ` på det valda kontot, men behöver ${total.toLocaleString("sv-SE")} kr.` +
+      ` Överför från Lönekonto först (sidofliken Överföringar).`
+    );
+  } else if (side === "sell" && (holding?.quantity ?? 0) < qty) {
+    disabledReason = `Du äger bara ${holding?.quantity ?? 0} st — kan inte sälja ${qty}`;
+  }
 
   return (
     <div
@@ -1407,10 +1442,24 @@ function TradeModal({
             <option value="" disabled>
               Välj ISK-konto…
             </option>
-            {iskAccounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
+            {iskAccounts.map((a) => {
+              const bal = balancesQ.data?.accounts.find((b) => b.id === a.id);
+              const balText = bal
+                ? ` — saldo ${bal.current_balance.toLocaleString("sv-SE")} kr`
+                : "";
+              return (
+                <option key={a.id} value={a.id}>
+                  {a.name}{balText}
+                </option>
+              );
+            })}
           </select>
+          {accountId !== null && (
+            <div className="text-xs text-slate-600">
+              Saldo på valt konto:{" "}
+              <strong>{accountBalance.toLocaleString("sv-SE")} kr</strong>
+            </div>
+          )}
           {iskAccounts.length === 0 && (
             <div className="text-xs text-amber-700">
               Inga ISK-konton hittades. Skapa ett under "Konton" först.
@@ -1507,6 +1556,11 @@ function TradeModal({
               : "Bekräfta sälj"}
           </button>
         </div>
+        {!canTrade && disabledReason && (
+          <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
+            {disabledReason}
+          </div>
+        )}
       </div>
     </div>
   );
