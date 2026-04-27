@@ -111,9 +111,41 @@ def poll_quotes(
         fetched += 1
         ts_iso = q.ts.isoformat()
 
+    # FX-kurser: hämta USD/SEK i samma cycle. Tyst fail-soft eftersom
+    # FX är mindre kritiskt än stock-quotes.
+    fx_fetched = 0
+    try:
+        from .quote_providers import fetch_fx_rate_yfinance
+        from ..school.stock_models import FxRate, LatestFxRate
+        rate = fetch_fx_rate_yfinance("USD", "SEK")
+        if rate is not None:
+            now = datetime.utcnow().replace(microsecond=0)
+            session.add(FxRate(
+                base="USD", quote="SEK", ts=now, rate=rate,
+                source="yfinance",
+            ))
+            latest_fx = (
+                session.query(LatestFxRate)
+                .filter(LatestFxRate.base == "USD",
+                        LatestFxRate.quote == "SEK")
+                .first()
+            )
+            if latest_fx is None:
+                session.add(LatestFxRate(
+                    base="USD", quote="SEK", rate=rate, ts=now,
+                ))
+            else:
+                latest_fx.rate = rate
+                latest_fx.ts = now
+            session.flush()
+            fx_fetched = 1
+    except Exception:
+        log.exception("poll_quotes: FX-hämtning failade")
+
     session.flush()
     return {
         "fetched": fetched,
+        "fx_fetched": fx_fetched,
         "skipped_market_closed": False,
         "ts": ts_iso,
     }

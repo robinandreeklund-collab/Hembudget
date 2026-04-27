@@ -125,3 +125,49 @@ class MarketCalendar(MasterBase):
     open_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
     close_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+
+
+class FxRate(MasterBase):
+    """Append-only valutakurshistorik. Append vid varje stock-poll.
+
+    rate = SEK per 1 enhet av base. T.ex. base='USD' → rate=10.50
+    betyder 1 USD = 10.50 SEK. Vi kör USD/SEK i V1; CAD/EUR/GBP kan
+    läggas till senare.
+    """
+    __tablename__ = "fx_rates"
+    __table_args__ = (
+        UniqueConstraint("base", "ts", name="uq_fx_base_ts"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    base: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    quote: Mapped[str] = mapped_column(
+        String(8), default="SEK", nullable=False,
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    rate: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(20), default="yfinance", nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class LatestFxRate(MasterBase):
+    """Denormaliserad senaste kurs per valutapar — undviker subquery."""
+    __tablename__ = "latest_fx_rates"
+    __table_args__ = (
+        UniqueConstraint("base", "quote", name="uq_latest_fx_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    base: Mapped[str] = mapped_column(String(8), nullable=False)
+    quote: Mapped[str] = mapped_column(
+        String(8), default="SEK", nullable=False,
+    )
+    rate: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )

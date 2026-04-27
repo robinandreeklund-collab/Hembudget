@@ -103,6 +103,33 @@ class MockQuoteProvider(QuoteProvider):
 
 # --- YFinanceProvider — gratis, inofficiell ---
 
+def fetch_fx_rate_yfinance(base: str = "USD", quote: str = "SEK") -> Optional[Decimal]:
+    """Hämta valutakurs från yfinance. Returnerar SEK per 1 enhet av base.
+
+    USD/SEK → 'USDSEK=X' i Yahoo. Returnerar None vid fel så pollern
+    kan köra utan FX om nätet ligger nere.
+    """
+    try:
+        import yfinance as yf  # type: ignore
+    except ImportError:
+        log.warning("yfinance saknas — kan inte hämta FX-kurs")
+        return None
+    symbol = f"{base}{quote}=X"
+    try:
+        t = yf.Ticker(symbol)
+        info = t.fast_info
+        last_raw = (
+            info.get("last_price") if isinstance(info, dict)
+            else getattr(info, "last_price", None)
+        )
+        if last_raw is None:
+            return None
+        return Decimal(str(last_raw)).quantize(Decimal("0.000001"))
+    except Exception as exc:
+        log.warning("yfinance FX fetch failed for %s: %s", symbol, exc)
+        return None
+
+
 class YFinanceProvider(QuoteProvider):
     """Yahoo Finance via `yfinance`-paketet. Försening ~15 min på
     gratisnivån — det är pedagogiskt OK men måste märkas i UI."""

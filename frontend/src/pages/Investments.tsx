@@ -25,9 +25,13 @@ interface Holding {
   quantity: number;
   avg_cost: number;
   last_price: number;
-  market_value: number;
-  cost_basis: number;
-  unrealized_pnl: number;
+  market_value: number;            // SEK
+  market_value_native?: number;    // i affärsvalutan (SEK eller USD)
+  cost_basis: number;              // SEK
+  cost_basis_native?: number;      // i affärsvalutan
+  unrealized_pnl: number;          // SEK
+  unrealized_pnl_native?: number;  // i affärsvalutan
+  currency?: string;
   sector: string;
   account_id: number;
 }
@@ -40,6 +44,7 @@ interface Portfolio {
   cash_balance: number;
   total_value: number;
   sector_weights: Record<string, number>;
+  fx_usd_sek: number | null;
 }
 
 interface LedgerRow {
@@ -210,6 +215,91 @@ const LEARN_TIPS = [
 ];
 
 
+interface FxData {
+  rate: number | null;
+  ts: string | null;
+  history: { date: string; rate: number }[];
+  change_pct_30d: number | null;
+}
+
+
+function FxCard() {
+  const { data } = useQuery({
+    queryKey: ["fx-usd-sek"],
+    queryFn: () => api<FxData>("/stocks/fx/usd-sek"),
+    refetchInterval: 5 * 60_000,  // var 5:e min
+  });
+  if (!data || data.rate === null) return null;
+
+  const change = data.change_pct_30d;
+  const minRate = data.history.length
+    ? Math.min(...data.history.map((p) => p.rate))
+    : data.rate;
+  const maxRate = data.history.length
+    ? Math.max(...data.history.map((p) => p.rate))
+    : data.rate;
+
+  return (
+    <Card title="USD / SEK — valutakurs">
+      <div className="flex items-baseline gap-3">
+        <div className="text-3xl serif">
+          {data.rate.toFixed(2)} kr / $
+        </div>
+        {change !== null && change !== undefined && (
+          <div
+            className={`text-sm font-medium ${
+              change > 0 ? "text-rose-700" : change < 0 ? "text-emerald-700" : "text-slate-600"
+            }`}
+            title="Kronkursens rörelse senaste 30 dagar"
+          >
+            {change > 0 ? "+" : ""}{change.toFixed(2)} % på 30 d
+          </div>
+        )}
+      </div>
+      {data.history.length > 1 && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+            <span>Min: {minRate.toFixed(2)}</span>
+            <span>Max: {maxRate.toFixed(2)}</span>
+          </div>
+          <div className="h-12 relative border-t border-b border-slate-100">
+            <svg
+              viewBox="0 0 300 50"
+              preserveAspectRatio="none"
+              className="w-full h-full"
+            >
+              <polyline
+                fill="none"
+                stroke="#4f46e5"
+                strokeWidth="1.5"
+                points={data.history.map((p, i) => {
+                  const x = (i / Math.max(1, data.history.length - 1)) * 300;
+                  const range = maxRate - minRate || 1;
+                  const y = 50 - ((p.rate - minRate) / range) * 45 - 2.5;
+                  return `${x},${y}`;
+                }).join(" ")}
+              />
+            </svg>
+          </div>
+        </div>
+      )}
+      <div className="mt-3 text-xs text-slate-700 leading-snug border-l-2 border-amber-300 pl-2">
+        <strong>Valutarisk:</strong> en starkare krona betyder att USD-aktier
+        blir billigare i SEK när du säljer — alltså valutaförlust även om
+        aktien gick upp i USD. Och tvärtom: en svagare krona ger valutavinst.
+        Senaste {data.history.length} dagar:{" "}
+        {change !== null && change > 0
+          ? `kronan har försvagats ${change.toFixed(1)} % → bra om du äger USD-aktier`
+          : change !== null && change < 0
+            ? `kronan har stärkts ${Math.abs(change).toFixed(1)} % → dåligt för USD-aktier (valutaförlust)`
+            : "stabil"}
+        .
+      </div>
+    </Card>
+  );
+}
+
+
 function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
   const pnl = portfolio.unrealized_pnl;
   const pnlPct = portfolio.total_cost_basis > 0
@@ -316,6 +406,8 @@ function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
           </div>
         </Card>
       </div>
+
+      <FxCard />
     </div>
   );
 }
@@ -581,19 +673,46 @@ function PortfolioTab({
           </tr>
         </thead>
         <tbody>
-          {portfolio.holdings.map((h) => (
+          {portfolio.holdings.map((h) => {
+            const isUsd = h.currency === "USD";
+            const fmtNative = (v: number): string =>
+              isUsd ? `$${v.toFixed(2)}` : formatSEK(v);
+            return (
             <tr key={h.ticker} className="border-b last:border-0">
               <td className="py-2">
-                <div className="font-medium">{h.ticker}</div>
+                <div className="font-medium flex items-center gap-2">
+                  {h.ticker}
+                  {isUsd && (
+                    <span
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200"
+                      title="USD-aktie — kurs i SEK påverkas av USD/SEK-växelkursen"
+                    >
+                      USD
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-slate-500">{h.sector}</div>
               </td>
               <td>{h.quantity}</td>
-              <td>{formatSEK(h.avg_cost)}</td>
-              <td>{formatSEK(h.last_price)}</td>
-              <td>{formatSEK(h.market_value)}</td>
+              <td>{fmtNative(h.avg_cost)}</td>
+              <td>{fmtNative(h.last_price)}</td>
+              <td>
+                {formatSEK(h.market_value)}
+                {isUsd && h.market_value_native !== undefined && (
+                  <div className="text-[10px] text-slate-500">
+                    {fmtNative(h.market_value_native)}
+                  </div>
+                )}
+              </td>
               <td className={h.unrealized_pnl >= 0 ? "text-emerald-700" : "text-red-700"}>
                 {h.unrealized_pnl >= 0 ? "+" : ""}
                 {formatSEK(h.unrealized_pnl)}
+                {isUsd && h.unrealized_pnl_native !== undefined && (
+                  <div className="text-[10px] text-slate-500">
+                    i USD: {h.unrealized_pnl_native >= 0 ? "+" : ""}
+                    {fmtNative(h.unrealized_pnl_native)}
+                  </div>
+                )}
               </td>
               <td className="text-right space-x-1">
                 <button
@@ -612,7 +731,8 @@ function PortfolioTab({
                 </button>
               </td>
             </tr>
-          ))}
+          );
+        })}
         </tbody>
       </table>
     </Card>

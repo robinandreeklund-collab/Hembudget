@@ -119,6 +119,63 @@ def get_history(
         }
 
 
+@router.get("/fx/usd-sek")
+def fx_usd_sek() -> dict:
+    """Aktuell USD/SEK-kurs + 30 dagars historik för pedagogisk graf.
+
+    Returnerar:
+      - rate: SEK per 1 USD (senast pollade värde)
+      - ts: tidpunkt för senaste poll
+      - history: [{date, rate}] — senaste 30 dagar (en rad per dag)
+      - change_pct_30d: hur mycket kronan stärkts/försvagats senaste 30d
+    """
+    from datetime import timedelta
+    from ..school.stock_models import FxRate, LatestFxRate
+
+    with master_session() as s:
+        latest = (
+            s.query(LatestFxRate)
+            .filter(LatestFxRate.base == "USD", LatestFxRate.quote == "SEK")
+            .first()
+        )
+        if not latest:
+            return {
+                "rate": None, "ts": None,
+                "history": [], "change_pct_30d": None,
+            }
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        rows = (
+            s.query(FxRate)
+            .filter(
+                FxRate.base == "USD", FxRate.quote == "SEK",
+                FxRate.ts >= cutoff,
+            )
+            .order_by(FxRate.ts.asc())
+            .all()
+        )
+        # En rad per dag (sista quoten per datum) för rimligt graf-data
+        by_date: dict = {}
+        for r in rows:
+            by_date[r.ts.date().isoformat()] = float(r.rate)
+        history = [
+            {"date": d, "rate": v}
+            for d, v in sorted(by_date.items())
+        ]
+        change_pct_30d = None
+        if len(history) >= 2:
+            first_rate = history[0]["rate"]
+            if first_rate > 0:
+                change_pct_30d = round(
+                    (history[-1]["rate"] - first_rate) / first_rate * 100, 2,
+                )
+        return {
+            "rate": float(latest.rate),
+            "ts": latest.ts.isoformat() if latest.ts else None,
+            "history": history,
+            "change_pct_30d": change_pct_30d,
+        }
+
+
 @router.get("/market/status")
 def market_status() -> dict:
     """Är börsen öppen just nu? + nästa öppning om stängd."""

@@ -389,36 +389,68 @@ def get_portfolio(
         .filter(LatestStockQuote.ticker.in_(tickers))
         .all()
     }
-    sector_map = {
-        s.ticker: s.sector
+    stock_map = {
+        s.ticker: s
         for s in master_session.query(StockMaster)
         .filter(StockMaster.ticker.in_(tickers))
         .all()
     }
+    # FX-kurs USD→SEK för USD-aktier. Default 1 om FX-data saknas
+    # (t.ex. första gången pollar inte hunnit). I så fall behandlas
+    # USD-värden som vore de SEK — UI:n får ändå information.
+    from ..school.stock_models import LatestFxRate
+    fx_row = (
+        master_session.query(LatestFxRate)
+        .filter(LatestFxRate.base == "USD", LatestFxRate.quote == "SEK")
+        .first()
+    )
+    usd_to_sek = Decimal(str(fx_row.rate)) if fx_row else Decimal("1")
 
     out_holdings = []
-    total_mv = Decimal("0")
-    total_cost = Decimal("0")
+    total_mv = Decimal("0")  # i SEK
+    total_cost = Decimal("0")  # i SEK
     sector_values: dict[str, Decimal] = {}
 
     for h in holdings:
         latest = latest_map.get(h.ticker)
         last = Decimal(str(latest.last)) if latest else Decimal(h.avg_cost)
-        market_value = (last * h.quantity).quantize(Decimal("0.01"))
-        cost = (Decimal(h.avg_cost) * h.quantity).quantize(Decimal("0.01"))
-        unrealized = (market_value - cost).quantize(Decimal("0.01"))
-        sector = sector_map.get(h.ticker, "Okänd")
-        sector_values[sector] = sector_values.get(sector, Decimal("0")) + market_value
-        total_mv += market_value
-        total_cost += cost
+        stock = stock_map.get(h.ticker)
+        currency = stock.currency if stock else "SEK"
+        sector = stock.sector if stock else "Okänd"
+        market_value_native = (last * h.quantity).quantize(Decimal("0.01"))
+        cost_native = (Decimal(h.avg_cost) * h.quantity).quantize(Decimal("0.01"))
+        unrealized_native = (market_value_native - cost_native).quantize(
+            Decimal("0.01"),
+        )
+        # Konvertera till SEK för totalsummering. För SEK-aktier blir det
+        # samma värde; för USD-aktier multipliceras med aktuell kurs.
+        # cost_basis_sek använder också CURRENT fx — blandas valutarisk
+        # in i unrealized_pnl. Pedagogiskt viktigt: man ser den TOTALA
+        # P&L i SEK utan att artificiellt dela upp.
+        if currency == "USD":
+            market_value_sek = (market_value_native * usd_to_sek).quantize(
+                Decimal("0.01"),
+            )
+            cost_sek = (cost_native * usd_to_sek).quantize(Decimal("0.01"))
+        else:
+            market_value_sek = market_value_native
+            cost_sek = cost_native
+        unrealized_sek = (market_value_sek - cost_sek).quantize(Decimal("0.01"))
+        sector_values[sector] = sector_values.get(sector, Decimal("0")) + market_value_sek
+        total_mv += market_value_sek
+        total_cost += cost_sek
         out_holdings.append({
             "ticker": h.ticker,
             "quantity": h.quantity,
             "avg_cost": float(h.avg_cost),
             "last_price": float(last),
-            "market_value": float(market_value),
-            "cost_basis": float(cost),
-            "unrealized_pnl": float(unrealized),
+            "market_value": float(market_value_sek),
+            "market_value_native": float(market_value_native),
+            "cost_basis": float(cost_sek),
+            "cost_basis_native": float(cost_native),
+            "unrealized_pnl": float(unrealized_sek),
+            "unrealized_pnl_native": float(unrealized_native),
+            "currency": currency,
             "sector": sector,
             "account_id": h.account_id,
         })
@@ -443,4 +475,5 @@ def get_portfolio(
         "cash_balance": float(cash),
         "total_value": float(total_value),
         "sector_weights": sector_weights,
+        "fx_usd_sek": float(usd_to_sek) if fx_row else None,
     }
