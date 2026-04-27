@@ -57,72 +57,128 @@ type Chapter = {
   wb: WBScores;
 };
 
+type WeekData = {
+  number: 1 | 2 | 3;
+  theme: string;
+  startWb: WBScores;
+  chapters: Chapter[];
+};
+
 const START: WBScores = { ek: 50, hl: 62, sb: 50, fr: 50, tr: 60 };
 
-const CHAPTERS: Chapter[] = [
+const WEEKS: WeekData[] = [
+  // ─── Vecka 1 — Optimism ───
   {
-    id: "ch1",
-    range: "Vecka 1 · måndag 09:14",
-    title: "Lönesamtalet",
-    body:
-      "Du börjar med ett lönesamtal. Marknadslönen ligger 1 500 kr över dig — du argumenterar och Maria höjer 3,5 %. Trygghet stiger.",
-    delta: "+3,5 % lön · Trygghet ↗",
-    wb: { ek: 58, hl: 62, sb: 50, fr: 50, tr: 68 },
+    number: 1,
+    theme: "Första lönen, första valen",
+    startWb: START,
+    chapters: [
+      {
+        id: "v1-mon",
+        range: "Vecka 1 · måndag 09:14",
+        title: "Lönesamtalet",
+        body:
+          "Du börjar med ett lönesamtal. Marknadslönen ligger 1 500 kr över dig — du argumenterar och Maria höjer 3,2 %. Trygghet stiger.",
+        delta: "+3,2 % lön · Trygghet ↗",
+        wb: { ek: 58, hl: 62, sb: 50, fr: 50, tr: 68 },
+      },
+      {
+        id: "v1-wed",
+        range: "Vecka 1 · onsdag",
+        title: "5 000 kr till ISK",
+        body:
+          "Nytt sparmål: 25 % av lönen direkt till ISK. Du köper Volvo B (10 st) och Ericsson B (15 st). Bufferten blir två månadshyror.",
+        delta: "+5 000 kr till ISK · Ekonomi ↗",
+        wb: { ek: 70, hl: 62, sb: 50, fr: 50, tr: 70 },
+      },
+      {
+        id: "v1-fri",
+        range: "Vecka 1 · fredag 17:33",
+        title: 'Du säger ja till bion',
+        body:
+          'Kompisen pingar — 180 kr för biobiljett + popcorn. Du säger ja. Sociala band stiger 4, fritiden plus 3. Saldot är fortfarande grönt.',
+        delta: "−180 kr · Sociala +4 · Fritid +3",
+        wb: { ek: 67, hl: 62, sb: 64, fr: 58, tr: 70 },
+      },
+    ],
   },
+
+  // ─── Vecka 2 — Det oväntade ───
   {
-    id: "ch2",
-    range: "Vecka 1 · onsdag",
-    title: "Du flyttar 5 000 kr till ISK",
-    body:
-      "Nytt sparmål: 25 % av lönen direkt till ISK. Ekonomi-dimensionen växer — bufferten blir två månadshyror.",
-    delta: "+5 000 kr till ISK · Ekonomi ↗",
-    wb: { ek: 70, hl: 62, sb: 50, fr: 50, tr: 70 },
+    number: 2,
+    theme: "Det oväntade",
+    startWb: { ek: 67, hl: 62, sb: 64, fr: 58, tr: 70 },
+    chapters: [
+      {
+        id: "v2-mon",
+        range: "Vecka 2 · måndag 06:48",
+        title: "Maria har glömt passerkortet",
+        body:
+          'Slumpad arbetsplats-fråga: "Din kollega ringer 06:45 — kan du hämta henne?" Du svarar ja, vi täcker varandra. Chefen noterar +4 satisfaction.',
+        delta: "Satisfaction 62 → 72",
+        wb: { ek: 67, hl: 62, sb: 64, fr: 58, tr: 72 },
+      },
+      {
+        id: "v2-wed",
+        range: "Vecka 2 · onsdag 14:02",
+        title: "Tandläkare akut — 2 400 kr",
+        body:
+          'Oväntad utgift. Bufferten dippar med en månads sparande. Nu märker du varför reservfonden inte ska vara tre veckors hyra.',
+        delta: "−2 400 kr · Trygghet ↘",
+        wb: { ek: 60, hl: 60, sb: 64, fr: 58, tr: 60 },
+      },
+      {
+        id: "v2-fri",
+        range: "Vecka 2 · fredag 17:31",
+        title: "Aktiemarknaden ner 3,2 %",
+        body:
+          'Volvo B och en H&M-position drar ner portföljen 784 kr. Wellbeing-Trygghet räknar med λ ≈ 2,0 — förlusten gör dubbelt så ont som motsvarande vinst hade gett.',
+        delta: "Trygghet rasar 2× hårdare",
+        wb: { ek: 55, hl: 58, sb: 64, fr: 55, tr: 45 },
+      },
+    ],
   },
+
+  // ─── Vecka 3 — Krisen och insikten ───
   {
-    id: "ch3",
-    range: "Vecka 1 · fredag 17:32",
-    title: "\"Bio på Filmstaden — 180 kr?\"",
-    body:
-      "Kompisen pingar. 180 kr för biobiljett + popcorn. Säga ja eller nej? Systemet pausar — du måste välja.",
-    wb: { ek: 70, hl: 62, sb: 50, fr: 50, tr: 70 },
-  },
-  {
-    id: "ch4",
-    range: "Vecka 1 · fredag 17:33",
-    title: "Du säger ja",
-    body:
-      "180 kr dras. Sociala band stiger med 4 — fritidens tre poäng följer med. Saldot är fortfarande grönt.",
-    delta: "−180 kr · Sociala +4 · Fritid +3",
-    wb: { ek: 67, hl: 62, sb: 64, fr: 58, tr: 70 },
-  },
-  {
-    id: "ch5",
-    range: "Vecka 4 · söndag 19:18",
-    title: "Månadsslut: ekonomin går inte ihop",
-    body:
-      "Hyran 8 500 kr, autogirot drar imorgon. Saldot: 7 300 kr. Du saknar 1 200 kr. Systemet pausar och tvingar fram ett beslut.",
-    delta: "Saknas: −1 200 kr",
-    wb: { ek: 42, hl: 60, sb: 64, fr: 58, tr: 50 },
-  },
-  {
-    id: "ch6",
-    range: "Vecka 4 · söndag 19:21",
-    title: "Du väljer privatlån",
-    body:
-      "Privatlån 6,4 % över 36 mån. Banken kollar din inkomst, lånet hamnar i huvudboken. Lugnt val — ränta i normalsegmentet.",
-    delta: "Lånar 1 500 kr · 460 kr/mån",
-    wb: { ek: 52, hl: 60, sb: 64, fr: 58, tr: 58 },
-  },
-  {
-    id: "ch7",
-    range: "Vecka 5 · måndag 08:00",
-    title: "Läraren ser hela bilden",
-    body:
-      "Tid på uppgift, varje val loggat, Wellbeing-trenden över hela veckan. Inte i ett separat verktyg — i samma vy som klassen.",
-    delta: "Wellbeing 60 → live",
-    wb: { ek: 56, hl: 62, sb: 66, fr: 60, tr: 62 },
+    number: 3,
+    theme: "Krisen och insikten",
+    startWb: { ek: 55, hl: 58, sb: 64, fr: 55, tr: 45 },
+    chapters: [
+      {
+        id: "v3-mon",
+        range: "Vecka 3 · måndag 19:18",
+        title: "Hyran går inte ihop",
+        body:
+          'Hyran 8 500 kr ska dras imorgon. Saldot är 7 300 kr. Du saknar 1 200 kr. Systemet pausar transaktionen och tvingar fram ett beslut.',
+        delta: "Saknas: −1 200 kr",
+        wb: { ek: 42, hl: 56, sb: 64, fr: 52, tr: 40 },
+      },
+      {
+        id: "v3-wed",
+        range: "Vecka 3 · onsdag 09:34",
+        title: "Privatlån via banken",
+        body:
+          'Du väljer privatlån 6,4 % över 36 mån istället för SMS-lån (117 % APR). Banken kör kreditupplysning, du signerar med EkonomilabbetID. Lugnt val — ränta i normalsegmentet.',
+        delta: "Lånar 1 500 kr · EkonomiSkalan 700 → 680",
+        wb: { ek: 50, hl: 58, sb: 64, fr: 55, tr: 52 },
+      },
+      {
+        id: "v3-fri",
+        range: "Vecka 3 · fredag · Aktie-eftertanke",
+        title: "Loss-aversion-quotient: 1,8×",
+        body:
+          'Spegeln 60 dagar senare: du säljer 1,8× oftare i förlust än i vinst. Du säljer för snabbt när det går ner, för långsamt när det går upp. Klassiskt nybörjarmönster — och fixbart.',
+        delta: "Insikt → Wellbeing stabiliseras",
+        wb: { ek: 56, hl: 62, sb: 66, fr: 60, tr: 62 },
+      },
+    ],
   },
 ];
+
+// Bekvämlighet — alla kapitel i ordning (om vi behöver lista all-in-one t.ex.
+// i reduced-motion-fallbacken).
+const ALL_CHAPTERS: Chapter[] = WEEKS.flatMap((w) => w.chapters);
 
 const REDUCED_THEME = {
   bg: "linear-gradient(180deg, #f0f9ff 0%, #fafaf9 50%, #ffffff 100%)",
@@ -162,7 +218,15 @@ export default function ScrollStoryDemo() {
       `}</style>
 
       <IntroFrame />
-      {reduced ? <ReducedMotionStory /> : <PinnedStory />}
+      {reduced ? (
+        <ReducedMotionStory />
+      ) : (
+        <>
+          {WEEKS.map((w) => (
+            <WeekStory key={w.number} week={w} />
+          ))}
+        </>
+      )}
       <FinalCTA />
     </div>
   );
@@ -253,17 +317,20 @@ function IntroFrame() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Pinned scroll storytelling — 7 kapitel, GSAP scrub-tidslinje
+// WeekStory — pinnad scroll-storytelling per vecka. Tar en WeekData
+// som driver kapitellistan och Wellbeing-pentagonens startpunkt.
+// Återanvänds 3 gånger (vecka 1/2/3) i master-flödet.
 // ─────────────────────────────────────────────────────────────
-function PinnedStory() {
+function WeekStory({ week }: { week: WeekData }) {
   const sectionRef = useRef<HTMLDivElement | null>(null);
   const polyRef = useRef<SVGPolygonElement | null>(null);
   const dotsRef = useRef<SVGGElement | null>(null);
   const scoreRef = useRef<SVGTextElement | null>(null);
-  const teacherViewRef = useRef<HTMLDivElement | null>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const progressBarRef = useRef<HTMLDivElement | null>(null);
   const counterRef = useRef<HTMLDivElement | null>(null);
+
+  const chapters = week.chapters;
 
   useEffect(() => {
     if (!sectionRef.current || !polyRef.current) return;
@@ -271,8 +338,10 @@ function PinnedStory() {
     const el = sectionRef.current;
 
     const ctx = gsap.context(() => {
-      // Wellbeing-state — animeras med GSAP, onUpdate skriver ut nya poly-points.
-      const wb = { ...START };
+      // Wellbeing-state — startar där föregående vecka slutade (eller på
+      // veckans egen startpunkt om det är vecka 1). Animeras genom
+      // kapitlens målvärden via gsap.to + onUpdate.
+      const wb = { ...week.startWb };
       const updatePoly = () => {
         if (polyRef.current) {
           polyRef.current.setAttribute("points", polyFor(wb));
@@ -299,7 +368,7 @@ function PinnedStory() {
         scrollTrigger: {
           trigger: el,
           start: "top top",
-          end: "+=400%",
+          end: "+=200%",
           pin: true,
           scrub: 1.2,
           anticipatePin: 1,
@@ -309,20 +378,20 @@ function PinnedStory() {
             }
             if (counterRef.current) {
               const idx = Math.min(
-                CHAPTERS.length - 1,
-                Math.floor(self.progress * CHAPTERS.length),
+                chapters.length - 1,
+                Math.floor(self.progress * chapters.length),
               );
               counterRef.current.textContent =
-                `Kapitel ${idx + 1} / ${CHAPTERS.length}`;
+                `Vecka ${week.number} · ${idx + 1} / ${chapters.length}`;
             }
           },
         },
       });
 
-      // Varje kapitel pågår ~1 enhet på tidslinjen → 7 kapitel = total 7 enheter.
+      // Varje kapitel pågår ~1 enhet på tidslinjen → 3 kapitel/vecka = 3 enheter.
       // Före varje kapitel: bleknar föregående ut, nästa in. Wellbeing morphar
       // till kapitlets målvärden.
-      CHAPTERS.forEach((c, i) => {
+      chapters.forEach((c, i) => {
         const stepEl = stepRefs.current[i];
         if (!stepEl) return;
         const t = i;
@@ -349,7 +418,7 @@ function PinnedStory() {
           t,
         );
         // Fade out before next chapter (utom sista)
-        if (i < CHAPTERS.length - 1) {
+        if (i < chapters.length - 1) {
           tl.to(
             stepEl,
             { autoAlpha: 0, y: -24, duration: 0.4, ease: "power2.in" },
@@ -357,20 +426,10 @@ function PinnedStory() {
           );
         }
       });
-
-      // Lärarvy fade in i sista kapitlet
-      if (teacherViewRef.current) {
-        tl.fromTo(
-          teacherViewRef.current,
-          { autoAlpha: 0, x: 60 },
-          { autoAlpha: 1, x: 0, duration: 0.6, ease: "power3.out" },
-          CHAPTERS.length - 1,
-        );
-      }
     }, sectionRef);
 
     return () => ctx.revert();
-  }, []);
+  }, [chapters, week.number, week.startWb]);
 
   return (
     <section
@@ -408,7 +467,7 @@ function PinnedStory() {
         />
       </div>
 
-      {/* Kapitelräknare (övre vänstra) */}
+      {/* Vecka + kapitelräknare (övre vänstra) */}
       <div
         style={{
           position: "absolute",
@@ -420,9 +479,15 @@ function PinnedStory() {
           color: "#94a3b8",
           textTransform: "uppercase",
           zIndex: 5,
+          maxWidth: "min(360px, 60vw)",
         }}
       >
-        <div ref={counterRef}>Kapitel 1 / 7</div>
+        <div ref={counterRef} style={{ color: "#fbbf24", marginBottom: 4 }}>
+          Vecka {week.number} · 1 / {chapters.length}
+        </div>
+        <div style={{ fontSize: 10.5, letterSpacing: 1, color: "#64748b" }}>
+          Akt {week.number} · {week.theme}
+        </div>
       </div>
 
       {/* Bakgrundsavatar — student vid skrivbord (subtilt) */}
@@ -472,7 +537,7 @@ function PinnedStory() {
           {/* Data-polygon (animeras) */}
           <polygon
             ref={polyRef}
-            points={polyFor(START)}
+            points={polyFor(week.startWb)}
             fill="rgba(251,191,36,0.18)"
             stroke="#fbbf24"
             strokeWidth="2.4"
@@ -480,7 +545,7 @@ function PinnedStory() {
           {/* Hörn-dots (animeras) */}
           <g ref={dotsRef}>
             {DIMS.map((d, i) => {
-              const [x, y] = point(i, START[d.key]);
+              const [x, y] = point(i, week.startWb[d.key]);
               return (
                 <circle key={i} cx={x} cy={y} r="5" fill="#fbbf24" />
               );
@@ -517,7 +582,7 @@ function PinnedStory() {
             fontWeight="700"
             fill="#fff"
           >
-            {wellbeingScore(START)}
+            {wellbeingScore(week.startWb)}
           </text>
           <text
             x={CX}
@@ -543,7 +608,7 @@ function PinnedStory() {
           zIndex: 4,
         }}
       >
-        {CHAPTERS.map((c, i) => (
+        {chapters.map((c, i) => (
           <div
             key={c.id}
             ref={(el) => (stepRefs.current[i] = el)}
@@ -614,69 +679,6 @@ function PinnedStory() {
         ))}
       </div>
 
-      {/* Lärarvy (fade in i sista kapitlet) */}
-      <div
-        ref={teacherViewRef}
-        style={{
-          position: "absolute",
-          right: "min(40px, 4vw)",
-          top: "min(56px, 8vh)",
-          width: "min(280px, 38vw)",
-          opacity: 0,
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 12,
-          padding: "16px 18px",
-          backdropFilter: "blur(6px)",
-          zIndex: 4,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "ui-monospace, monospace",
-            fontSize: 10.5,
-            letterSpacing: 1.2,
-            color: "#94a3b8",
-            marginBottom: 10,
-            textTransform: "uppercase",
-          }}
-        >
-          /teacher · översikt · klass 9C
-        </div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", marginBottom: 12 }}>
-          Linda · IT-konsult
-        </div>
-        <ul
-          style={{
-            listStyle: "none",
-            padding: 0,
-            margin: 0,
-            fontFamily: "ui-monospace, monospace",
-            fontSize: 12,
-            color: "#cbd5e1",
-            lineHeight: 1.85,
-          }}
-        >
-          <li>Time on task: <span style={{ color: "#fff" }}>4 min 12 s</span></li>
-          <li>Beslut loggade: <span style={{ color: "#fff" }}>7</span></li>
-          <li>Wellbeing-trend: <span style={{ color: "#10b981" }}>−4 → +6</span></li>
-          <li style={{ color: "#fbbf24" }}>● privatlån (lugnt val)</li>
-          <li style={{ color: "#10b981" }}>● 2 sparkonto-överföringar</li>
-        </ul>
-        <div
-          style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: "1px dashed rgba(255,255,255,0.1)",
-            fontSize: 11.5,
-            fontStyle: "italic",
-            color: "#94a3b8",
-            lineHeight: 1.4,
-          }}
-        >
-          Allt loggat. Allt i samma vy som klassen.
-        </div>
-      </div>
     </section>
   );
 }
@@ -771,13 +773,13 @@ function ReducedMotionStory() {
     <section style={{ padding: "48px 24px", background: "#0f172a", color: "#fff" }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
         <div className="ssd-eyebrow" style={{ color: "#fbbf24", marginBottom: 16 }}>
-          En vecka i sju kapitel
+          Tre veckor i nio kapitel
         </div>
         <h2 className="ssd-h2" style={{ marginBottom: 24, color: "#fff" }}>
           Du har valt minskad rörelse — så här ser kapitlen ut.
         </h2>
         <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 18 }}>
-          {CHAPTERS.map((c, i) => (
+          {ALL_CHAPTERS.map((c, i) => (
             <li
               key={c.id}
               style={{
