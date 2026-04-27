@@ -214,8 +214,6 @@ export default function LandingVariantC() {
       <BankSection theme={THEME} />
       <SocraticAISection theme={THEME} />
       <MyCompanySection theme={THEME} />
-      <Logic />
-      <Problem />
       <PriceSection theme={THEME} />
       <Faq />
       <FoundersQuoteSection theme={THEME} />
@@ -263,48 +261,6 @@ const FAQS = [
     q: "Kan jag importera befintliga moduler från andra system?",
     a: "Inte i pilotåret. Modulerna är inbyggda i Ekonomilabbet och uppdateras tillsammans med läroplansförändringar. Egna uppdrag kan läggas in fritt — moduler som format kommer 2027.",
   },
-];
-
-const PROBLEM_STATS = [
-  { num: "4 av 10", label: "unga klarar inte en oväntad räkning på 2 000 kr." },
-  { num: "60 %", label: "av unga har aldrig läst en lönespecifikation." },
-  { num: "1 h", label: "räcker för att prova grunderna i Ekonomilabbet." },
-];
-
-const LOGIC = [
-  {
-    n: "01",
-    title: "En cell, en kompetens",
-    desc: "Varje element är kopplat till en eller flera moduler. När eleven klarar stegen fylls cellen — precis som mastery-grafen redan gör.",
-  },
-  {
-    n: "02",
-    title: "Du rättar i rader",
-    desc: "Reflektioner samlas per kolumn. Claude föreslår rubric-betyg; du skriver under eller ändrar på två klick — som lärare eller förälder.",
-  },
-  {
-    n: "03",
-    title: "Hela gruppen i en bild",
-    desc: "Översikten lägger användarnas mastery som ett värmekarta-lager ovanpå systemet. Funkar för en klass eller ett syskonpar.",
-  },
-];
-
-// Live-statistik visar siffror i nollläge tills pilotskolan startar.
-const STATS_LIVE: Array<{ num: string; label: string }> = [
-  { num: "0", label: "Lärare" },
-  { num: "5", label: "Elever" },
-  { num: "0", label: "Avklarade moduler" },
-  { num: "0", label: "Reflektioner" },
-];
-
-// Sex koncept-skärmar lärare och elever rör sig i.
-const SCREENS: Array<{ sym: string; title: string; desc: string }> = [
-  { sym: "Lä", title: "Lärarens dashboard", desc: "Alla elever, inbox, uppdrag och AI-lägesbilder på en skärm." },
-  { sym: "Mo", title: "Elevens kursplan", desc: "Moduler steg för steg, klar, reflektera, quiz och uppdrag." },
-  { sym: "Ms", title: "Mastery-grafen", desc: "Per-kompetens mastery, milstolpar och nästa-steg-hint." },
-  { sym: "Pf", title: "Portfolio-PDF", desc: "Exporteras per elev eller som ZIP för hela klassen." },
-  { sym: "AI", title: "Echo", desc: "Multi-turn AI-coach som anpassar svaren till elevens nivå." },
-  { sym: "Tt", title: "Time on task", desc: "Se vilka steg som fastnar för eleverna i din klass." },
 ];
 
 // Tema som delas av alla v5-sektioner. Klassnamn matchar SharedStyles nedan.
@@ -475,21 +431,10 @@ function SectionHeader({
   );
 }
 
-// NewSectionCell/Header — separat namn för v5:s tre nya sektioner
-// (Employer/SalaryTalk/Bank). Identiskt utseende, behåller separation
-// så att v5-källkoden mappar 1:1.
-const NewSectionCell = SectionCell;
+// NewSectionHeader — alias för SectionHeader, används av v5:s tre
+// extrasektioner (Employer/SalaryTalk/Bank). Behåller separat namn så
+// att källkoden mappar 1:1 mot v5-mockupen.
 const NewSectionHeader = SectionHeader;
-
-// Tillfällig referens — håller resterande atomer/konstanter "använda"
-// under fas 3 (konsumeras av sektionerna som byggs i fas 5–18). Tas
-// bort senast i fas 4 när Features renderar THEME.
-const __VC_PHASE1_SCAFFOLD = {
-  NewSectionCell,
-  STATS_LIVE,
-  SCREENS,
-};
-void __VC_PHASE1_SCAFFOLD;
 
 function SharedStyles() {
   return (
@@ -1495,158 +1440,9 @@ function Cta() {
   );
 }
 
-// ---------- Problem ----------
-
-function Problem() {
-  return (
-    <section
-      style={{
-        padding: "64px 24px",
-        borderTop: "1px solid #e2e8f0",
-        maxWidth: 1200,
-        margin: "0 auto",
-      }}
-    >
-      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
-        Problemet
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1.1fr) minmax(0,1.4fr)",
-          gap: 56,
-          alignItems: "start",
-        }}
-        className="vc-problem-grid"
-      >
-        <style>{`
-          @media (max-width: 768px) {
-            .vc-problem-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
-          }
-        `}</style>
-        <div>
-          <h2 className="vc-h2">
-            Ekonomi är ett livskunskapsämne.{" "}
-            <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>
-              Och det saknas
-            </em>{" "}
-            — både i skolan och hemma.
-          </h2>
-          <p
-            style={{
-              fontSize: 15,
-              lineHeight: 1.65,
-              color: "#475569",
-              marginTop: 20,
-              maxWidth: 440,
-            }}
-          >
-            Svenska unga lämnar gymnasiet utan grundläggande kunskaper om
-            skatt, sparande, lån och budget. Verkligheten möter dem först
-            när de flyttar hemifrån — ofta för sent. Skolan har sällan
-            tid, och föräldrar har sällan ett verktyg att luta sig mot.
-          </p>
-          <p
-            style={{
-              fontSize: 17,
-              marginTop: 22,
-              fontStyle: "italic",
-              maxWidth: 440,
-              color: "#0f172a",
-            }}
-          >
-            Lär genom att göra — inte genom att läsa om det.
-          </p>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {PROBLEM_STATS.map((s, i) => (
-            <div
-              key={i}
-              className="vc-card"
-              style={{
-                padding: 24,
-                display: "flex",
-                alignItems: "center",
-                gap: 24,
-                flexWrap: "wrap",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 40,
-                  fontWeight: 700,
-                  letterSpacing: -1.2,
-                  color: "#0f172a",
-                  minWidth: 120,
-                }}
-              >
-                {s.num}
-              </div>
-              <div style={{ flex: 1, minWidth: 180, color: "#475569" }}>
-                {s.label}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 
 
-// ---------- Logic ----------
-
-function Logic() {
-  return (
-    <section
-      style={{
-        padding: "56px 24px",
-        maxWidth: 1100,
-        margin: "0 auto",
-        borderTop: "1px solid #e2e8f0",
-      }}
-    >
-      <div
-        className="vc-eyebrow"
-        style={{ textAlign: "center", marginBottom: 32 }}
-      >
-        Logiken
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: 32,
-        }}
-      >
-        {LOGIC.map((l) => (
-          <div key={l.n}>
-            <div
-              className="vc-mono"
-              style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}
-            >
-              {l.n}
-            </div>
-            <h3
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                letterSpacing: -0.4,
-                marginBottom: 10,
-              }}
-            >
-              {l.title}.
-            </h3>
-            <p style={{ fontSize: 14, lineHeight: 1.6, color: "#475569" }}>
-              {l.desc}
-            </p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 // ---------- Features ----------
 
