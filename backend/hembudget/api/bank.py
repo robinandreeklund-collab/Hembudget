@@ -36,6 +36,7 @@ from ..school import is_enabled as school_enabled
 from ..db.base import session_scope
 from ..db.models import (
     Account,
+    PaymentReminder,
     ScheduledPayment,
     Transaction,
     UpcomingTransaction,
@@ -623,6 +624,160 @@ def run_due_payments(
         "skipped": 0,
         "due_count": len(due),
     }
+
+
+# Stege för late-fee per påminnelsenivå
+_REMINDER_FEE_STEPS = {
+    1: Decimal("60"),
+    2: Decimal("120"),
+    3: Decimal("180"),
+    4: Decimal("180"),  # 'Kronofogden'-steget
+}
+
+_REMINDER_DAY_TRIGGERS = {1: 5, 2: 14, 3: 30, 4: 45}
+
+
+def _create_reminder(
+    scope, upcoming_id: int, scheduled_payment_id: Optional[int],
+    reminder_no: int,
+) -> PaymentReminder:
+    """Skapa en PaymentReminder + en separat UpcomingTransaction
+    för avgiften så eleven måste betala även den."""
+    from datetime import date as _date, timedelta as _td
+    fee = _REMINDER_FEE_STEPS.get(reminder_no, Decimal("180"))
+    today = _date.today()
+    u = scope.get(UpcomingTransaction, upcoming_id)
+    name = (
+        f"Påminnelseavgift {u.name if u else 'okänd'}"
+        if reminder_no < 4
+        else f"Inkasso/Kronofogden {u.name if u else 'okänd'}"
+    )
+    fee_due = today + _td(days=14)
+    fee_upc = UpcomingTransaction(
+        kind="bill",
+        name=name,
+        amount=fee,
+        expected_date=fee_due,
+        source="reminder",
+    )
+    if u:
+        fee_upc.debit_account_id = u.debit_account_id
+    scope.add(fee_upc)
+    scope.flush()
+    rem = PaymentReminder(
+        upcoming_id=upcoming_id,
+        scheduled_payment_id=scheduled_payment_id,
+        reminder_no=reminder_no,
+        issued_date=today,
+        late_fee=fee,
+        fee_upcoming_id=fee_upc.id,
+    )
+    scope.add(rem)
+    scope.flush()
+    return rem
+
+
+@router.post("/reminders/run")
+def run_reminders(
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Trigga påminnelse-flödet:
+
+    1. För varje failed_no_funds ScheduledPayment OCH för varje
+       UpcomingTransaction(kind=bill) som inte signerats och passerat
+       förfallodag + 5 dagar:
+       - Om reminder_no=1 inte finns → skapa
+    2. För befintliga reminders, eskalera om dagar passerats:
+       - 14 dagar efter reminder_no=1 → reminder_no=2
+       - 30 dagar efter förfall → reminder_no=3
+       - 45 dagar → reminder_no=4 (kronofogden)
+
+    Idempotent: re-run skapar inga dubletter (UNIQUE-konstraint på
+    (upcoming_id, reminder_no) skulle vara säkrast — för V1 räcker
+    en lookup-check).
+    """
+    _require_school()
+    _student_from_info(info)
+    from datetime import date as _date, timedelta as _td
+    today = _date.today()
+    triggered: list[int] = []
+
+    # Hitta alla obetalda fakturor som passerat förfall + 5d
+    overdue = (
+        scope.query(UpcomingTransaction)
+        .filter(
+            UpcomingTransaction.kind == "bill",
+            UpcomingTransaction.matched_transaction_id.is_(None),
+            UpcomingTransaction.source != "reminder",
+            UpcomingTransaction.expected_date <= today - _td(days=5),
+        )
+        .all()
+    )
+    for u in overdue:
+        # Hitta senaste reminder för fakturan
+        latest = (
+            scope.query(PaymentReminder)
+            .filter(PaymentReminder.upcoming_id == u.id)
+            .order_by(PaymentReminder.reminder_no.desc())
+            .first()
+        )
+        days_overdue = (today - u.expected_date).days
+        # Vilken nivå borde fakturan vara på?
+        target_no = 1
+        for n, threshold in _REMINDER_DAY_TRIGGERS.items():
+            if days_overdue >= threshold:
+                target_no = n
+        # Eskalera bara framåt
+        current = latest.reminder_no if latest else 0
+        if target_no > current:
+            sp = (
+                scope.query(ScheduledPayment)
+                .filter(ScheduledPayment.upcoming_id == u.id)
+                .order_by(ScheduledPayment.id.desc())
+                .first()
+            )
+            rem = _create_reminder(
+                scope,
+                upcoming_id=u.id,
+                scheduled_payment_id=sp.id if sp else None,
+                reminder_no=target_no,
+            )
+            triggered.append(rem.id)
+
+    return {
+        "triggered": len(triggered),
+        "reminder_ids": triggered,
+        "checked_overdue": len(overdue),
+    }
+
+
+@router.get("/reminders")
+def list_reminders(
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Lista alla påminnelser för aktuell elev."""
+    _require_school()
+    _student_from_info(info)
+    rows = (
+        scope.query(PaymentReminder)
+        .order_by(PaymentReminder.issued_date.desc())
+        .all()
+    )
+    out = []
+    for r in rows:
+        u = scope.get(UpcomingTransaction, r.upcoming_id)
+        out.append({
+            "id": r.id,
+            "reminder_no": r.reminder_no,
+            "issued_date": r.issued_date.isoformat(),
+            "late_fee": float(r.late_fee),
+            "upcoming_name": u.name if u else "—",
+            "fee_upcoming_id": r.fee_upcoming_id,
+            "settled_at": r.settled_at.isoformat() if r.settled_at else None,
+        })
+    return {"reminders": out, "count": len(out)}
 
 
 @router.get("/scheduled-payments")

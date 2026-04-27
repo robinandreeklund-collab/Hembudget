@@ -995,6 +995,52 @@ class ScheduledPayment(TenantMixin, Base):
     failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class PaymentReminder(TenantMixin, Base):
+    """En påminnelse-rad genererad när ScheduledPayment misslyckas
+    med 'failed_no_funds' eller en faktura inte signerats förrän
+    förfallodatum + 5 dagar.
+
+    Eskalerar i steg:
+    - reminder_no=1: dag 5 efter förfall, late_fee=60 kr
+    - reminder_no=2: dag 14, late_fee=120 kr
+    - reminder_no=3: dag 30, late_fee=180 kr ('inkasso-varning')
+    - reminder_no=4: dag 45, 'Kronofogden' (simulerat) — markant
+      negativ effekt på kreditbetyget (PR 7b).
+
+    Pedagogiskt: visa eleven att skuldfälla börjar smått. Påminnelse-
+    avgiften läggs till som EXTRA UpcomingTransaction(kind=bill,
+    source='reminder') så eleven måste signera och betala även den.
+    """
+    __tablename__ = "payment_reminders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    scheduled_payment_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("scheduled_payments.id"), nullable=True,
+    )
+    reminder_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    issued_date: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(), nullable=False,
+    )
+    late_fee: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0"),
+    )
+    # Reminder-fakturan som skapas separat så eleven måste betala
+    # även den. NULL om vi inte hunnit skapa den (race-tolerant).
+    fee_upcoming_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("upcoming_transactions.id"), nullable=True,
+    )
+    settled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 def create_all() -> None:
     from .base import get_engine
 
