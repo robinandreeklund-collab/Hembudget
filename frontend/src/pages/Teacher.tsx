@@ -260,31 +260,9 @@ export default function Teacher() {
             {isFamily ? "Dina barn." : "Din klass."}
           </h1>
         </div>
+        {/* Lärar-verktyg har flyttats till sidebaren — här kvar bara
+            klassrelaterade snabbåtgärder. */}
         <div className="flex gap-2 flex-wrap">
-          <Link
-            to="/teacher/modules"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            🎓 Kursmoduler
-          </Link>
-          <Link
-            to="/teacher/reflections"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            ✍️ Reflektioner
-          </Link>
-          <Link
-            to="/teacher/rubrics"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📋 Rubric-mallar
-          </Link>
-          <Link
-            to="/teacher/time-on-task"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            ⏱ Time on task
-          </Link>
           <button
             onClick={async () => {
               const { getApiBase, getToken } = await import("@/api/client");
@@ -311,42 +289,9 @@ export default function Teacher() {
           >
             📦 Klass-portfolio (ZIP)
           </button>
-          <Link
-            to="/docs"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📖 Guide
-          </Link>
-          <Link
-            to="/messages"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            💬 Meddelanden
-          </Link>
-          <Link
-            to="/teacher/matrix"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📊 Klassöversikt
-          </Link>
-          <Link
-            to="/teacher/all-batches"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📄 Alla PDF:er
-          </Link>
-          {isSuperAdmin && (
-            <Link
-              to="/teacher/admin-ai"
-              className="border-[1.5px] border-ink bg-paper hover:bg-[#fffef5] rounded-md px-4 py-2 flex items-center gap-2 text-ink"
-              title="Super-admin · AI, lärar-toggel, SMTP/Gmail, API-nyckel"
-            >
-              ⚙ Inställningar
-            </Link>
-          )}
           <button
             onClick={() => setShowFamilies(!showFamilies)}
-            className="btn-outline rounded-md px-4 py-2 text-sm"
+            className="btn-outline rounded-md px-4 py-2 text-sm flex items-center gap-2"
           >
             <Users className="w-4 h-4" /> Familjer
           </button>

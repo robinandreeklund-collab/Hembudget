@@ -8,14 +8,20 @@ import {
   Briefcase,
   CalendarPlus,
   CircleDollarSign,
+  Clock,
   FileDown,
+  Files,
+  Grid3x3,
   GraduationCap,
   Home,
   Inbox,
+  ListChecks,
   MessageCircle,
   BookOpen,
   GitBranch,
   MessagesSquare,
+  PenSquare,
+  ShieldCheck,
   Trophy,
   Landmark,
   Link2,
@@ -24,6 +30,7 @@ import {
   Paperclip,
   Settings as Cog,
   Upload,
+  Users,
   Receipt,
   CalculatorIcon,
   PiggyBank,
@@ -55,6 +62,19 @@ const ALL_ITEMS: NavItem[] = [
   { to: "/settings", label: "Inställningar", icon: Cog },
 ];
 
+// Lärar-specifika sidor som tidigare låg som knapprad i Teacher.tsx —
+// nu samlade i sidebaren under egen rubrik så vyn blir städad.
+const TEACHER_ITEMS: NavItem[] = [
+  { to: "/teacher", label: "Klassen", icon: Users },
+  { to: "/teacher/matrix", label: "Klassöversikt", icon: Grid3x3 },
+  { to: "/teacher/modules", label: "Kursmoduler", icon: GraduationCap },
+  { to: "/teacher/reflections", label: "Reflektioner", icon: PenSquare },
+  { to: "/teacher/rubrics", label: "Rubric-mallar", icon: ListChecks },
+  { to: "/teacher/time-on-task", label: "Time on task", icon: Clock },
+  { to: "/teacher/all-batches", label: "Alla PDF:er", icon: Files },
+  { to: "/messages", label: "Meddelanden", icon: MessageCircle },
+];
+
 // Elev-vyn döljer importera/inställningar och lägger till Dina dokument
 // och AI-chatt-sidor. Lärare-impersonation visar fortfarande hela
 // menyn så de kan se elevens hela värld.
@@ -70,10 +90,29 @@ interface NotificationCounts {
   total: number;
 }
 
+interface SectionDef {
+  title?: string;
+  items: NavItem[];
+}
+
+
 function NavItems({ onClick }: { onClick?: () => void }) {
-  const { role, asStudent } = useAuth();
+  const { role, asStudent, schoolMode } = useAuth();
   const isStudent = role === "student";
-  const isTeacherViewing = role === "teacher" && Boolean(asStudent);
+  const isTeacher = role === "teacher";
+  const isTeacherViewing = isTeacher && Boolean(asStudent);
+  const isTeacherHome = isTeacher && !asStudent && schoolMode;
+
+  // Super-admin-flagga — låter oss visa /teacher/admin-ai i sidebaren
+  // bara för dem som faktiskt har åtkomst. Endpoint:en är gated så
+  // andra lärare får 403, men vi vill inte visa länken i onödan.
+  const adminQ = useQuery({
+    queryKey: ["sidebar-admin-check"],
+    queryFn: () => api<{ is_super_admin: boolean }>("/admin/ai/me"),
+    enabled: isTeacherHome,
+    retry: false,
+  });
+  const isSuperAdmin = Boolean(adminQ.data?.is_super_admin);
 
   // Pollar olästa-räknare var 30 sek. Bara för elev/impersonering —
   // läraren har sin egen vy. Fail-soft: badges visas inte om endpoint
@@ -95,59 +134,93 @@ function NavItems({ onClick }: { onClick?: () => void }) {
     "/peer-review": "peer_review",
   };
 
-  let items: NavItem[];
+  let sections: SectionDef[];
   if (isStudent) {
-    items = [
-      { to: "/modules", label: "Din kursplan", icon: GitBranch },
-      { to: "/achievements", label: "Prestationer", icon: Trophy },
-      { to: "/my-batches", label: "Dina dokument", icon: Inbox },
-      { to: "/messages", label: "Meddelanden", icon: MessageCircle },
-      { to: "/peer-review", label: "Kamratrespons", icon: MessagesSquare },
-      ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),
-      { to: "/docs", label: "Hjälp & guide", icon: BookOpen },
-    ];
+    sections = [{
+      items: [
+        { to: "/modules", label: "Din kursplan", icon: GitBranch },
+        { to: "/achievements", label: "Prestationer", icon: Trophy },
+        { to: "/my-batches", label: "Dina dokument", icon: Inbox },
+        { to: "/messages", label: "Meddelanden", icon: MessageCircle },
+        { to: "/peer-review", label: "Kamratrespons", icon: MessagesSquare },
+        ...ALL_ITEMS.filter((i) => !STUDENT_HIDDEN.has(i.to)),
+        { to: "/docs", label: "Hjälp & guide", icon: BookOpen },
+      ],
+    }];
   } else if (isTeacherViewing) {
-    items = [
-      { to: "/teacher", label: "Tillbaka till lärare", icon: GraduationCap },
-      { to: "/my-batches", label: "Elevens dokument", icon: Inbox },
-      ...ALL_ITEMS,
+    sections = [{
+      items: [
+        { to: "/teacher", label: "Tillbaka till lärare", icon: GraduationCap },
+        { to: "/my-batches", label: "Elevens dokument", icon: Inbox },
+        ...ALL_ITEMS,
+      ],
+    }];
+  } else if (isTeacherHome) {
+    // Lärar-vyn: dela menyn i två sektioner — Lärarverktyg + Hushåll
+    // (eget konto). Tidigare låg lärarverktygen som knapprad i
+    // Teacher.tsx; nu samlade här så vyn håller samma struktur som
+    // resten av plattformen.
+    const teacherItems = [...TEACHER_ITEMS];
+    if (isSuperAdmin) {
+      teacherItems.push({
+        to: "/teacher/admin-ai", label: "Super-admin", icon: ShieldCheck,
+      });
+    }
+    teacherItems.push({
+      to: "/docs", label: "Guide", icon: BookOpen,
+    });
+    sections = [
+      { title: "Lärarverktyg", items: teacherItems },
+      { title: "Eget konto", items: ALL_ITEMS },
     ];
   } else {
-    items = ALL_ITEMS;
+    sections = [{ items: ALL_ITEMS }];
+  }
+
+  function renderItem(it: NavItem) {
+    const badgeKey = badgeFor[it.to];
+    const count = badgeKey && counts ? counts[badgeKey] : 0;
+    return (
+      <NavLink
+        key={it.to}
+        to={it.to}
+        end={it.to === "/teacher"}
+        onClick={onClick}
+        className={({ isActive }) =>
+          clsx(
+            "flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-l-2",
+            isActive
+              ? "bg-paper text-ink border-ink font-semibold"
+              : "text-[#555] hover:bg-paper border-transparent",
+          )
+        }
+      >
+        <it.icon className="w-4 h-4" />
+        <span className="flex-1">{it.label}</span>
+        {count > 0 && (
+          <span
+            className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-semibold"
+            title={`${count} oläst${count === 1 ? "" : "a"}`}
+          >
+            {count > 99 ? "99+" : count}
+          </span>
+        )}
+      </NavLink>
+    );
   }
 
   return (
     <>
-      {items.map((it) => {
-        const badgeKey = badgeFor[it.to];
-        const count = badgeKey && counts ? counts[badgeKey] : 0;
-        return (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            onClick={onClick}
-            className={({ isActive }) =>
-              clsx(
-                "flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-l-2",
-                isActive
-                  ? "bg-paper text-ink border-ink font-semibold"
-                  : "text-[#555] hover:bg-paper border-transparent",
-              )
-            }
-          >
-            <it.icon className="w-4 h-4" />
-            <span className="flex-1">{it.label}</span>
-            {count > 0 && (
-              <span
-                className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-semibold"
-                title={`${count} oläst${count === 1 ? "" : "a"}`}
-              >
-                {count > 99 ? "99+" : count}
-              </span>
-            )}
-          </NavLink>
-        );
-      })}
+      {sections.map((sec, idx) => (
+        <div key={idx} className={idx > 0 ? "mt-3 pt-3 border-t border-rule" : ""}>
+          {sec.title && (
+            <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+              {sec.title}
+            </div>
+          )}
+          {sec.items.map(renderItem)}
+        </div>
+      ))}
     </>
   );
 }
