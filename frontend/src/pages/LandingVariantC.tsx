@@ -203,6 +203,7 @@ export default function LandingVariantC() {
       <Hero />
       <Features />
       <ManifestoSection theme={THEME} />
+      <WellbeingSection theme={THEME} />
       <Moments />
       <Logic />
       <Problem />
@@ -505,8 +506,6 @@ const NewSectionHeader = SectionHeader;
 // under fas 3 (konsumeras av sektionerna som byggs i fas 5–18). Tas
 // bort senast i fas 4 när Features renderar THEME.
 const __VC_PHASE1_SCAFFOLD = {
-  SectionCell,
-  SectionHeader,
   NewSectionCell,
   NewSectionHeader,
   STATS_LIVE,
@@ -2611,6 +2610,710 @@ function ManifestoSection({ theme }: { theme: Theme }) {
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ---------- WellbeingSection (v5) — radarn med 3 elev-profiler + flip-card ----------
+
+function WellbeingSection({ theme }: { theme: Theme }) {
+  const [hovered, setHovered] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+
+  const profiles = [
+    {
+      name: "Alex · saver",
+      sub: "80 000 kr på sparkontot, säger nej till varje fest",
+      score: 60,
+      pts: { ek: 95, hl: 70, sb: 30, fr: 25, tr: 80 },
+    },
+    {
+      name: "Maja · spender",
+      sub: "Spenderar allt på upplevelser, ingen buffert",
+      score: 50,
+      pts: { ek: 20, hl: 75, sb: 90, fr: 95, tr: 25 },
+    },
+    {
+      name: "Liam · balansen",
+      sub: "Sparar 20 %, säger ja ibland, har en hyfsad buffert",
+      score: 82,
+      pts: { ek: 75, hl: 80, sb: 85, fr: 80, tr: 80 },
+    },
+  ];
+  const cur = profiles[hovered];
+
+  type DimKey = "ek" | "hl" | "sb" | "fr" | "tr";
+  const dims: Array<{
+    key: DimKey;
+    label: string;
+    short: string;
+    weight: number;
+    what: string;
+    plus: string[];
+    minus: string[];
+  }> = [
+    {
+      key: "ek",
+      label: "Ekonomi",
+      short: "Ek",
+      weight: 25,
+      what: "Buffert, skuld, sparande, EkonomiSkalan",
+      plus: ["+ Buffert ≥ 1 mån = +8", "+ Sparkvot ≥ 10 % = +5", "+ Höjd EkonomiSkalan = +3"],
+      minus: ["− Saldo < 0 i 7 dgr = −12", "− SMS-lån = −15", "− Inkasso = −10"],
+    },
+    {
+      key: "hl",
+      label: "Mat & hälsa",
+      short: "Hl",
+      weight: 20,
+      what: "Måltider, sömn, fysisk aktivitet, stress",
+      plus: ["+ Hemlagad mat ≥ 4/v = +6", "+ Träning 2×/v = +5", "+ 7+ h sömn = +4"],
+      minus: ["− Snabbmat 5+/v = −7", "− Stress över ekonomi = −5"],
+    },
+    {
+      key: "sb",
+      label: "Sociala band",
+      short: "Sb",
+      weight: 20,
+      what: "Vänner, familj, romantik, kollegor",
+      plus: ["+ Säga ja till middag = +4", "+ Hjälpa en vän = +6", "+ Familjemiddag = +3"],
+      minus: ["− Tackat nej 3 ggr i rad = −5", "− Isolering helg = −4"],
+    },
+    {
+      key: "fr",
+      label: "Fritid",
+      short: "Fr",
+      weight: 15,
+      what: "Hobbys, kultur, resor, vila utan skärm",
+      plus: ["+ Bok / instrument = +3", "+ Resa / utflykt = +6", "+ Hobby-tid 2 h/v = +2"],
+      minus: ["− Bara skärmtid en hel helg = −4"],
+    },
+    {
+      key: "tr",
+      label: "Trygghet",
+      short: "Tr",
+      weight: 20,
+      what: "Bostad, försäkring, framtidsplaner, kontroll",
+      plus: ["+ Hemförsäkring = +5", "+ Pensionssparande = +4", "+ Budget gjord = +3"],
+      minus: ["− Saknar buffert = −8", "− Ingen försäkring = −5", "− Kronofogden = −20"],
+    },
+  ];
+
+  const cx = 200;
+  const cy = 200;
+  const R = 140;
+  const angleAt = (i: number) => (Math.PI * 2 * i) / 5 - Math.PI / 2;
+  const point = (i: number, v: number): [number, number] => {
+    const a = angleAt(i);
+    const r = R * (v / 100);
+    return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+  };
+  const polyPts = dims.map((d, i) => point(i, cur.pts[d.key]).join(",")).join(" ");
+
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#0f172a",
+        color: "#fff",
+      }}
+    >
+      <SectionHeader cell={{ sym: "Wb", n: "01", label: "Wellbeing" }} eyebrow="Den centrala mätaren" theme={theme} dark>
+        Saldot är inte huvudmätaren. <em style={{ color: "#fbbf24", fontStyle: "italic" }}>Wellbeing</em> är.
+      </SectionHeader>
+      <p
+        style={{
+          maxWidth: 640,
+          marginBottom: 48,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#94a3b8",
+        }}
+      >
+        Wellbeing Score mäter elevens välmående över fem dimensioner — inte hur
+        mycket pengar som finns på kontot. Det är möjligt att vara 80 000 kr rik
+        och ha 60 i Wellbeing. Det är möjligt att vara skuldsatt och ha 75. Det
+        är vad eleven faktiskt behöver lära sig.
+      </p>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1.1fr",
+          gap: 56,
+          alignItems: "center",
+        }}
+        className="vc-wb-grid"
+      >
+        <style>{`
+          @media (max-width: 900px) {
+            .vc-wb-grid { grid-template-columns: 1fr !important; gap: 36px !important; }
+            .vc-wb-bottom { grid-template-columns: 1fr !important; gap: 18px !important; }
+          }
+        `}</style>
+
+        {/* Radar viz — flip card */}
+        <div style={{ perspective: "1600px", aspectRatio: "1 / 1", maxWidth: 460, width: "100%" }}>
+          <div
+            onClick={() => setFlipped((f) => !f)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setFlipped((f) => !f);
+              }
+            }}
+            style={{
+              position: "relative",
+              width: "100%",
+              height: "100%",
+              transformStyle: "preserve-3d",
+              transition: "transform 0.85s cubic-bezier(.2,.7,.3,1)",
+              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+              cursor: "pointer",
+            }}
+          >
+            {/* FRONT */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 14,
+                padding: 28,
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 14,
+                  right: 16,
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 10,
+                  color: "#0f172a",
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  pointerEvents: "none",
+                  background: "#fbbf24",
+                  padding: "5px 9px",
+                  borderRadius: 4,
+                  fontWeight: 700,
+                  zIndex: 2,
+                }}
+              >
+                <span>klicka · poängsystem</span>
+                <span style={{ fontSize: 12 }}>↻</span>
+              </div>
+              <svg viewBox="0 0 400 400" style={{ width: "100%", height: "100%" }}>
+                {[0.25, 0.5, 0.75, 1].map((r, i) => (
+                  <polygon
+                    key={i}
+                    points={dims
+                      .map((_, j) => {
+                        const a = angleAt(j);
+                        return `${cx + Math.cos(a) * R * r},${cy + Math.sin(a) * R * r}`;
+                      })
+                      .join(" ")}
+                    fill="none"
+                    stroke="rgba(255,255,255,0.1)"
+                    strokeWidth="1"
+                  />
+                ))}
+                {dims.map((_, i) => {
+                  const [x, y] = point(i, 100);
+                  return (
+                    <line
+                      key={i}
+                      x1={cx}
+                      y1={cy}
+                      x2={x}
+                      y2={y}
+                      stroke="rgba(255,255,255,0.08)"
+                      strokeWidth="1"
+                    />
+                  );
+                })}
+                <polygon
+                  points={polyPts}
+                  fill="rgba(251,191,36,0.18)"
+                  stroke="#fbbf24"
+                  strokeWidth="2"
+                  style={{ transition: "all 0.5s cubic-bezier(.2,.7,.3,1)" }}
+                />
+                {dims.map((d, i) => {
+                  const [x, y] = point(i, cur.pts[d.key]);
+                  return (
+                    <circle
+                      key={i}
+                      cx={x}
+                      cy={y}
+                      r="4"
+                      fill="#fbbf24"
+                      style={{ transition: "all 0.5s cubic-bezier(.2,.7,.3,1)" }}
+                    />
+                  );
+                })}
+                {dims.map((d, i) => {
+                  const a = angleAt(i);
+                  const lr = R + 28;
+                  const lx = cx + Math.cos(a) * lr;
+                  const ly = cy + Math.sin(a) * lr + 4;
+                  return (
+                    <text
+                      key={i}
+                      x={lx}
+                      y={ly}
+                      textAnchor="middle"
+                      fontSize="11"
+                      fontWeight="600"
+                      fill="#e2e8f0"
+                      fontFamily="ui-monospace, monospace"
+                    >
+                      {d.label.toUpperCase()}
+                    </text>
+                  );
+                })}
+                <text
+                  x={cx}
+                  y={cy - 6}
+                  textAnchor="middle"
+                  fontSize="44"
+                  fontWeight="700"
+                  fill="#fff"
+                  style={{ transition: "all 0.5s" }}
+                >
+                  {cur.score}
+                </text>
+                <text
+                  x={cx}
+                  y={cy + 14}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill="#94a3b8"
+                  fontFamily="ui-monospace, monospace"
+                  letterSpacing="1"
+                >
+                  WELLBEING
+                </text>
+              </svg>
+            </div>
+
+            {/* BACK — poängsystemet */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                background: "rgba(15, 23, 42, 0.6)",
+                border: "1px solid rgba(251,191,36,0.25)",
+                borderRadius: 14,
+                padding: "22px 24px",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginBottom: 14,
+                  paddingBottom: 12,
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, monospace",
+                      fontSize: 10,
+                      color: "#fbbf24",
+                      letterSpacing: 1,
+                      textTransform: "uppercase",
+                      marginBottom: 4,
+                    }}
+                  >
+                    Wellbeing-poängsystemet
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: "#fff" }}>
+                    Så räknas talet i mitten
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontFamily: "ui-monospace, monospace",
+                    fontSize: 10,
+                    color: "#64748b",
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span style={{ color: "#fbbf24" }}>↺</span>
+                  <span>tillbaka</span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: 8,
+                  flex: 1,
+                  overflowY: "auto",
+                  minHeight: 0,
+                }}
+              >
+                {dims.map((d) => (
+                  <div
+                    key={d.key}
+                    style={{
+                      padding: "10px 12px",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        marginBottom: 6,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 5,
+                          background: "#fbbf24",
+                          color: "#0f172a",
+                          display: "grid",
+                          placeItems: "center",
+                          fontFamily: "ui-monospace, monospace",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {d.short}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", flex: 1 }}>
+                        {d.label}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "ui-monospace, monospace",
+                          fontSize: 10,
+                          color: "#fbbf24",
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        vikt {d.weight}%
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        height: 4,
+                        borderRadius: 2,
+                        background: "rgba(255,255,255,0.06)",
+                        overflow: "hidden",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${d.weight * 4}%`,
+                          background: "#fbbf24",
+                        }}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#94a3b8",
+                        marginBottom: 6,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {d.what}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 8px" }}>
+                      {d.plus.slice(0, 2).map((p, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            fontFamily: "ui-monospace, monospace",
+                            fontSize: 10,
+                            color: "#86efac",
+                          }}
+                        >
+                          {p}
+                        </span>
+                      ))}
+                      {d.minus.slice(0, 2).map((m, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            fontFamily: "ui-monospace, monospace",
+                            fontSize: 10,
+                            color: "#fca5a5",
+                          }}
+                        >
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 10,
+                  color: "#64748b",
+                  lineHeight: 1.5,
+                }}
+              >
+                Σ = Ek·0.25 + Hl·0.20 + Sb·0.20 + Fr·0.15 + Tr·0.20 → 0–100
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Profile selector */}
+        <div>
+          <div
+            className={theme.eyebrow}
+            style={{ marginBottom: 14, color: "#94a3b8" }}
+          >
+            Tre elever, samma sandlåda
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {profiles.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setHovered(i)}
+                onMouseEnter={() => setHovered(i)}
+                style={{
+                  textAlign: "left",
+                  padding: 18,
+                  cursor: "pointer",
+                  background:
+                    hovered === i
+                      ? "rgba(251,191,36,0.08)"
+                      : "rgba(255,255,255,0.03)",
+                  border:
+                    hovered === i
+                      ? "2px solid #fbbf24"
+                      : "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 10,
+                  transition: "all .18s",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  fontFamily: "inherit",
+                }}
+              >
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: "50%",
+                    flexShrink: 0,
+                    background:
+                      hovered === i ? "#fbbf24" : "rgba(255,255,255,0.08)",
+                    color: hovered === i ? "#0f172a" : "#94a3b8",
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 16,
+                    fontWeight: 700,
+                    fontFamily: "ui-monospace, monospace",
+                  }}
+                >
+                  {p.score}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 14.5,
+                      fontWeight: 600,
+                      color: "#fff",
+                      marginBottom: 2,
+                    }}
+                  >
+                    {p.name}
+                  </div>
+                  <div
+                    style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.4 }}
+                  >
+                    {p.sub}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <p
+            style={{
+              marginTop: 24,
+              fontSize: 13.5,
+              color: "#94a3b8",
+              lineHeight: 1.55,
+              fontStyle: "italic",
+            }}
+          >
+            Eleven ser inte bara ett tal. Hen ser <em>varför</em> talet ser ut
+            så det gör — och kan röra sig mellan profiler genom sina egna val.
+            Det är livslära, inte räknelära.
+          </p>
+        </div>
+      </div>
+
+      {/* Guldvägen i mitten — extremerna är båda fattigdom */}
+      <div
+        className="vc-wb-bottom"
+        style={{
+          marginTop: 64,
+          paddingTop: 48,
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 32,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+              color: "#94a3b8",
+              letterSpacing: 1,
+              marginBottom: 14,
+              textTransform: "uppercase",
+            }}
+          >
+            För mycket snålhet
+          </div>
+          <p style={{ fontSize: 15, lineHeight: 1.55, color: "#cbd5e1", margin: 0 }}>
+            Aldrig ja till spontana planer. Bufferten växer, men de sociala
+            banden vissnar. Wellbeing rasar — eleven har en perfekt huvudbok
+            och en tom helg.
+          </p>
+        </div>
+        <div
+          style={{
+            background: "rgba(251,191,36,0.06)",
+            border: "1px solid rgba(251,191,36,0.25)",
+            borderRadius: 14,
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+              color: "#fbbf24",
+              letterSpacing: 1,
+              marginBottom: 14,
+              textTransform: "uppercase",
+            }}
+          >
+            Guldvägen i mitten
+          </div>
+          <p
+            style={{
+              fontSize: 15,
+              lineHeight: 1.55,
+              color: "#fef3c7",
+              margin: 0,
+              fontWeight: 500,
+            }}
+          >
+            Pengar är ett verktyg för att köpa frihet och trygghet — men frihet
+            kräver också sociala sammanhang och fritid. Eleven lär sig att
+            navigera mellan ytterligheterna.
+          </p>
+        </div>
+        <div>
+          <div
+            style={{
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+              color: "#94a3b8",
+              letterSpacing: 1,
+              marginBottom: 14,
+              textTransform: "uppercase",
+            }}
+          >
+            För mycket spenderande
+          </div>
+          <p style={{ fontSize: 15, lineHeight: 1.55, color: "#cbd5e1", margin: 0 }}>
+            Allt på upplevelser nu, ingen buffert sedan. Första oväntade
+            tandläkar­räkning blir SMS-lån. Sociala banden lyser — ekonomi och
+            trygghet brinner.
+          </p>
+        </div>
+      </div>
+
+      {/* Manifest pull-quote */}
+      <blockquote
+        style={{
+          margin: "64px auto 0",
+          maxWidth: 720,
+          textAlign: "center",
+          padding: 0,
+        }}
+      >
+        <p
+          style={{
+            fontFamily: theme.serifFont,
+            fontSize: 26,
+            lineHeight: 1.35,
+            color: "#fff",
+            fontStyle: "italic",
+            margin: 0,
+            letterSpacing: -0.3,
+          }}
+        >
+          "I matteuppgifter finns ett facit. I livet finns bara avvägningar.
+          När eleven slutar leta efter rätt svar och börjar söka{" "}
+          <em style={{ color: "#fbbf24" }}>en balans hen själv kan stå för</em>{" "}
+          — då är vi framme."
+        </p>
+        <footer
+          style={{
+            marginTop: 18,
+            fontSize: 12,
+            color: "#64748b",
+            fontFamily: "ui-monospace, monospace",
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}
+        >
+          — Pedagogisk grundprincip
+        </footer>
+      </blockquote>
     </section>
   );
 }
