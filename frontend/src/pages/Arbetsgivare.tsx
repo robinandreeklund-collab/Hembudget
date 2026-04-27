@@ -18,7 +18,7 @@ import {
   Minus,
   AlertCircle,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
 
@@ -139,7 +139,13 @@ export default function Arbetsgivare() {
           note="Hör till PR 4 — kommer efter att lönesamtals-backenden är klar."
         />
       )}
-      {tab === "avtal" && <ComingSoon what="Kollektivavtal" />}
+      {tab === "avtal" && (
+        statusQ.isLoading ? (
+          <Card><div className="text-sm text-slate-600">Laddar…</div></Card>
+        ) : statusQ.data ? (
+          <AgreementTab status={statusQ.data} />
+        ) : null
+      )}
       {tab === "lonesamtal" && (
         <ComingSoon
           what="Lönesamtal"
@@ -313,6 +319,222 @@ function AgreementBanner({ agreement }: { agreement: AgreementOut }) {
         </div>
       )}
     </div>
+  );
+}
+
+
+function AgreementTab({ status }: { status: EmployerStatusOut }) {
+  const ag = status.agreement;
+  if (!ag) {
+    // Småföretag-fallback har egen pedagogisk text. Vi kan rendera samma
+    // banner från översikten + en kort lista över lagstadgade golv.
+    return (
+      <div className="space-y-3">
+        <NoAgreementBanner />
+        <Card title="Lagstadgade golv (utan avtal)">
+          <ul className="text-sm text-slate-700 list-disc ml-5 space-y-1">
+            <li>
+              <strong>Semester:</strong> 25 dagar/år enligt semesterlagen
+            </li>
+            <li>
+              <strong>Sjuklön:</strong> dag 1 karens, dag 2–14 80 % (sjuk-
+              lönelagen). Dag 15+ Försäkringskassan.
+            </li>
+            <li>
+              <strong>Övertid:</strong> rätt till ersättning enligt
+              arbetstidslagen — nivå förhandlas individuellt.
+            </li>
+            <li>
+              <strong>Tjänstepension:</strong> ingen — du behöver spara
+              själv (ISK eller kapitalförsäkring) för att kompensera.
+            </li>
+          </ul>
+        </Card>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <AgreementBanner agreement={ag} />
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
+        <Card title="Avtalets innehåll">
+          <MarkdownLite text={ag.summary_md} />
+          {ag.source_url && (
+            <div className="mt-3 text-xs">
+              <a
+                href={ag.source_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand-700 hover:underline"
+              >
+                Läs det officiella avtalet →
+              </a>
+            </div>
+          )}
+        </Card>
+        <Card title="Nyckeltal">
+          <AgreementMetaTable meta={ag.meta} />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * Mycket enkel markdown-renderare — bara rubriker, fet text och brödtext.
+ * Vi vill inte dra in `marked` eller liknande för 5 användningsfall.
+ * Avtals-summaries använder bara `## h2`, `**fet**` och radbrytningar.
+ */
+function MarkdownLite({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const out: React.ReactNode[] = [];
+  let buffer: string[] = [];
+  function flushBuffer() {
+    if (buffer.length === 0) return;
+    const para = buffer.join(" ").trim();
+    if (para) {
+      out.push(
+        <p key={out.length} className="text-sm text-slate-700 leading-relaxed">
+          {renderInline(para)}
+        </p>,
+      );
+    }
+    buffer = [];
+  }
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      flushBuffer();
+      out.push(
+        <h2 key={out.length} className="text-base font-semibold text-slate-900 mt-3">
+          {line.slice(3)}
+        </h2>,
+      );
+    } else if (line.trim() === "") {
+      flushBuffer();
+    } else {
+      buffer.push(line);
+    }
+  }
+  flushBuffer();
+  return <div className="space-y-2">{out}</div>;
+}
+
+
+/** Bryter en sträng på `**...**` och returnerar React-noder. */
+function renderInline(s: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  const re = /\*\*([^*]+)\*\*/g;
+  let m: RegExpExecArray | null;
+  let i = 0;
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) parts.push(s.slice(last, m.index));
+    parts.push(<strong key={i++}>{m[1]}</strong>);
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) parts.push(s.slice(last));
+  return parts;
+}
+
+
+function AgreementMetaTable({ meta }: { meta: Record<string, unknown> }) {
+  const rows: { label: string; value: string }[] = [];
+
+  // Revisionsökning per år
+  const rev = meta.revision_pct_year as Record<string, number> | undefined;
+  if (rev && Object.keys(rev).length > 0) {
+    const years = Object.keys(rev).sort();
+    const formatted = years.map((y) => `${y}: ${rev[y]} %`).join(", ");
+    rows.push({ label: "Revisionsökning", value: formatted });
+  }
+  if (typeof meta.revision_note === "string" && meta.revision_note) {
+    rows.push({ label: "Revisions-typ", value: meta.revision_note });
+  }
+
+  // Semester
+  if (typeof meta.vacation_days === "number") {
+    let val = `${meta.vacation_days} dagar`;
+    if (typeof meta.vacation_days_age_40 === "number") {
+      val += ` (${meta.vacation_days_age_40} från 40 år`;
+      if (typeof meta.vacation_days_age_50 === "number") {
+        val += `, ${meta.vacation_days_age_50} från 50)`;
+      } else {
+        val += ")";
+      }
+    }
+    rows.push({ label: "Semester", value: val });
+  }
+
+  // Övertid
+  if (typeof meta.overtime_pct === "number") {
+    let val = `${meta.overtime_pct} % vardagar`;
+    if (typeof meta.overtime_pct_weekend === "number") {
+      val += `, ${meta.overtime_pct_weekend} % helger`;
+    } else if (typeof meta.overtime_pct_extra === "number") {
+      val += `, ${meta.overtime_pct_extra} % efter två timmar`;
+    }
+    rows.push({ label: "Övertid", value: val });
+  }
+
+  // OB
+  const obParts: string[] = [];
+  if (typeof meta.ob_evening_pct === "number") {
+    obParts.push(`kväll ${meta.ob_evening_pct} %`);
+  }
+  if (typeof meta.ob_night_pct === "number") {
+    obParts.push(`natt ${meta.ob_night_pct} %`);
+  }
+  if (typeof meta.ob_weekend_pct === "number") {
+    obParts.push(`helg ${meta.ob_weekend_pct} %`);
+  }
+  if (typeof meta.ob_saturday_pct === "number") {
+    obParts.push(`lördag ${meta.ob_saturday_pct} %`);
+  }
+  if (typeof meta.ob_sunday_pct === "number") {
+    obParts.push(`söndag ${meta.ob_sunday_pct} %`);
+  }
+  if (obParts.length > 0) {
+    rows.push({ label: "OB-tillägg", value: obParts.join(", ") });
+  }
+
+  // Tjänstepension
+  if (typeof meta.pension_system === "string" && meta.pension_system) {
+    let val = meta.pension_system;
+    if (typeof meta.pension_pct === "number") {
+      val += ` — ${meta.pension_pct} %`;
+      if (typeof meta.pension_pct_above_75ibb === "number") {
+        val += ` (${meta.pension_pct_above_75ibb} % över 7,5 IBB)`;
+      }
+    }
+    rows.push({ label: "Tjänstepension", value: val });
+  } else if (meta.pension_system === null) {
+    rows.push({
+      label: "Tjänstepension",
+      value: "saknas — viktig att kompensera privat",
+    });
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-sm text-slate-500">
+        Avtalet har inga strukturerade nyckeltal ännu.
+      </div>
+    );
+  }
+  return (
+    <table className="w-full text-sm">
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label} className="border-b border-slate-100 last:border-0">
+            <td className="py-1.5 pr-3 text-slate-600 align-top whitespace-nowrap">
+              {r.label}
+            </td>
+            <td className="py-1.5 text-slate-900">{r.value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
