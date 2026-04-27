@@ -2912,6 +2912,41 @@ function ThreeModesSection({ theme }: { theme: Theme }) {
 function StocksSection({ theme }: { theme: Theme }) {
   const [selectedStock, setSelectedStock] = useState(0);
   const [scenario, setScenario] = useState<"loss" | "gain">("loss");
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const reduced = useReducedMotion();
+
+  // Ticker-animation: aktiepriserna räknar upp 0 → pris med stagger
+  // när StocksSection kommer i view.
+  useEffect(() => {
+    if (reduced || !sectionRef.current) return;
+    registerScrollTrigger();
+    const ctx = gsap.context(() => {
+      ScrollTrigger.create({
+        trigger: sectionRef.current,
+        start: "top 75%",
+        once: true,
+        onEnter: () => {
+          const root = sectionRef.current;
+          if (!root) return;
+          const els = root.querySelectorAll<HTMLElement>("[data-vc-stockprice]");
+          els.forEach((el, i) => {
+            const target = Number(el.dataset.target) || 0;
+            const obj = { v: 0 };
+            gsap.to(obj, {
+              v: target,
+              duration: 1.0,
+              delay: i * 0.08,
+              ease: "power1.out",
+              onUpdate: () => {
+                el.textContent = `${obj.v.toFixed(2)} kr`;
+              },
+            });
+          });
+        },
+      });
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced]);
 
   const stocks = [
     { ticker: "VOLV-B", name: "Volvo B", price: 312.4, change: -2.1, color: "#dc4c2b" },
@@ -2938,6 +2973,7 @@ function StocksSection({ theme }: { theme: Theme }) {
 
   return (
     <section
+      ref={sectionRef}
       style={{
         padding: "96px 24px",
         borderTop: `1px solid ${theme.rule}`,
@@ -3116,6 +3152,8 @@ function StocksSection({ theme }: { theme: Theme }) {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div
+                    data-vc-stockprice
+                    data-target={s.price}
                     style={{
                       fontSize: 13.5,
                       fontWeight: 600,
