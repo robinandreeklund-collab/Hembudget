@@ -205,10 +205,6 @@ export default function Landing() {
       <Logiken />
       <Why />
       <Audiences />
-      <SalaryNegotiation />
-      <BankSimulation />
-      <StockEmotion />
-      <EntreprenorSneak />
       {/* <SocialProof /> — utkommenterad tills vi har riktiga pilotkunder */}
       <Gallery />
       <Pricing />
@@ -1187,123 +1183,6 @@ const FALLBACK_SHOTS: Array<{
   { chip: "Tt", chipColor: "risk", title: "Time on task",
     body: "Se vilka steg som fastnar för eleverna i din klass." },
 ];
-
-// ---------- Lönesamtal + arbetsplats-dynamik ----------
-
-function SalaryNegotiation() {
-  return (
-    <section id="lonesamtal" className="border-t border-rule bg-white">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 md:py-20">
-        <div className="section-divider mb-10">
-          Det enda samtalet på året
-        </div>
-        <div className="grid md:grid-cols-[1.2fr_1fr] gap-10 md:gap-14 items-start">
-          <div>
-            <h2 className="serif text-4xl md:text-5xl leading-[1.05]">
-              Lönesamtal du faktiskt vågar gå in i.
-            </h2>
-            <p className="mt-5 lead max-w-md">
-              Din arbetsgivare har ett kollektivavtal, en revisionsnorm,
-              och ett begränsat utrymme. Eleven får 5 ronder mot
-              AI-chefen Maria — som balanserar avtalet, satisfaction-
-              faktorn och bolagets budget.
-            </p>
-            <div className="mt-8 border-l-[3px] border-ink pl-5 py-1 max-w-md">
-              <div className="serif-italic text-lg leading-snug">
-                Lönen kommer nästa månad — inte på en gång.
-              </div>
-              <p className="mt-2 text-sm body-prose">
-                När samtalet är klart sätts ett <em>pending salary</em>{" "}
-                med startdatum 1:a nästa månad. Lönespecen som genereras
-                speglar den nya lönen — exakt som i verkligheten.
-              </p>
-            </div>
-          </div>
-
-          <div className="border-[1.5px] border-ink bg-paper p-5 space-y-3 text-sm">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">
-              Rond 2 av 5 · avtals-norm 3,0 %
-            </div>
-            <div className="border-l-2 border-slate-300 pl-3 py-1 bg-white">
-              <div className="text-[10px] uppercase text-slate-500 mb-1">
-                Eleven
-              </div>
-              <p className="body-prose">
-                Marknadslönen för min roll ligger på 39 500 kr enligt
-                Akavia 2026. Jag ligger 1 500 kr under. Jag vill upp
-                till 39 500 kr — det är 4,5 %.
-              </p>
-            </div>
-            <div className="border-l-2 border-ink pl-3 py-1 bg-white">
-              <div className="text-[10px] uppercase text-slate-700 mb-1">
-                Maria (HR) — bud 3,5 %
-              </div>
-              <p className="body-prose">
-                Jag uppskattar att du tagit lead-rollen. Men det var
-                inget du valde — du hoppade in när Erik slutade. Det är
-                ett skäl för 4 %, inte 4,5.
-              </p>
-            </div>
-            <div className="text-[11px] text-slate-500 italic pt-1">
-              Eleven ser inte detta. Maria balanserar avtal, satisfaction
-              och budget — utgår från det.
-            </div>
-          </div>
-        </div>
-
-        {/* Workplace-frågor underrad */}
-        <div className="mt-12 pt-8 border-t border-rule grid md:grid-cols-3 gap-4">
-          <div className="border-[1.5px] border-ink p-4 bg-white">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-              Slumpad arbetsplats-fråga
-            </div>
-            <h3 className="serif text-lg leading-snug">
-              Kollegan glömmer pass — täcker du?
-            </h3>
-            <p className="mt-2 text-sm body-prose">
-              Din kollega Maria har glömt sitt passerkort hemma och
-              ringer kl 06.45 — kan du köra och hämta henne? Ert pass
-              startar 07.00.
-            </p>
-          </div>
-          <div className="border-[1.5px] border-ink p-4 bg-white">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-              Arbetsgivar-nöjdhet
-            </div>
-            <h3 className="serif text-lg leading-snug">
-              Hur hanterar du missnöjd kund?
-            </h3>
-            <p className="mt-2 text-sm body-prose">
-              Varje val flyttar elevens satisfaction-score 0–100. Låg
-              score → mindre löneutrymme. Hög score → mer förhandlings-
-              utrymme i samtalet.
-            </p>
-          </div>
-          <div className="border-[1.5px] border-ink p-4 bg-white">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-              Avtal som faktiskt finns
-            </div>
-            <h3 className="serif text-lg leading-snug">
-              11 kollektivavtal · 17 yrken
-            </h3>
-            <p className="mt-2 text-sm body-prose">
-              HÖK Kommunal, Tjänstemanna IT, Byggavtalet, Detaljhandel
-              med flera. Varje yrke är mappat — eller markerat
-              <em> småföretag, fri lönesättning</em>.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// Stub-funktioner för L2/L3/L4 — fylls i följande commits så
-// typecheck håller mellan stegen.
-function BankSimulation() { return null; }
-function StockEmotion() { return null; }
-function EntreprenorSneak() { return null; }
-
 
 function Gallery() {
   const [assets, setAssets] = useState<GalleryAsset[] | null>(null);
