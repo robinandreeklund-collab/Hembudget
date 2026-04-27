@@ -41,7 +41,8 @@ from ..db.models import (
     Transaction,
     UpcomingTransaction,
 )
-from ..school.bank_models import BankSession
+from ..school.bank_models import BankSession, CreditScoreSnapshot
+from ..school.credit_scoring import compute_score
 from ..school.engines import master_session
 from ..school.models import BatchArtifact, ScenarioBatch, Student
 from ..security.crypto import hash_password, verify_password
@@ -778,6 +779,152 @@ def list_reminders(
             "settled_at": r.settled_at.isoformat() if r.settled_at else None,
         })
     return {"reminders": out, "count": len(out)}
+
+
+# ---------- EkonomiSkalan / kreditbetyg ----------
+
+class CreditScoreOut(BaseModel):
+    score: int
+    grade: str
+    factors: dict
+    reasons_md: str
+    computed_at: str
+
+
+def _compute_credit_for_student(
+    scope, student_id: int,
+) -> CreditScoreOut:
+    """Räkna fram aktuellt kreditbetyg och cachea i master-DB."""
+    from datetime import date as _date
+
+    # Antalet sena betalningar
+    late_payments = (
+        scope.query(PaymentReminder)
+        .count()
+    )
+    reminders_high = (
+        scope.query(PaymentReminder)
+        .filter(PaymentReminder.reminder_no >= 3)
+        .count()
+    )
+    failed_payments = (
+        scope.query(ScheduledPayment)
+        .filter(ScheduledPayment.status == "failed_no_funds")
+        .count()
+    )
+
+    # Skuldkvot: totala lån / (gross-lön * 12)
+    from ..db.models import Loan
+    debt_total = Decimal("0")
+    for L in scope.query(Loan).filter(Loan.active.is_(True)).all():
+        debt_total += Decimal(L.principal_amount or 0)
+
+    # Sparande-buffert
+    savings_balance = Decimal("0")
+    avg_monthly_expense = Decimal("0")
+    for acc in scope.query(Account).filter(
+        Account.type.in_({"savings", "isk"})
+    ).all():
+        if acc.opening_balance:
+            savings_balance += Decimal(acc.opening_balance)
+    # Minimal hint: räkna utgifter senaste 3 månaderna
+    from sqlalchemy import func as sa_func
+    today = _date.today()
+    three_months_ago = today.replace(day=1)
+    if three_months_ago.month <= 3:
+        three_months_ago = three_months_ago.replace(
+            year=three_months_ago.year - 1,
+            month=12 - (3 - three_months_ago.month),
+        )
+    else:
+        three_months_ago = three_months_ago.replace(
+            month=three_months_ago.month - 3,
+        )
+    expenses = (
+        scope.query(sa_func.coalesce(sa_func.sum(Transaction.amount), 0))
+        .filter(
+            Transaction.amount < 0,
+            Transaction.date >= three_months_ago,
+        )
+        .scalar() or 0
+    )
+    avg_monthly_expense = abs(Decimal(str(expenses))) / 3
+    savings_buffer_months = (
+        float(savings_balance / avg_monthly_expense)
+        if avg_monthly_expense > 0 else 0.0
+    )
+
+    # Hämta lön + satisfaction från master
+    with master_session() as ms:
+        from ..school.models import StudentProfile
+        from ..school.employer_models import EmployerSatisfaction
+        profile = (
+            ms.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        gross = profile.gross_salary_monthly if profile else 30000
+        annual_income = Decimal(str(gross * 12))
+        debt_ratio = float(debt_total / annual_income) if annual_income > 0 else 0.0
+
+        sat = (
+            ms.query(EmployerSatisfaction)
+            .filter(EmployerSatisfaction.student_id == student_id)
+            .first()
+        )
+        sat_score = sat.score if sat else 70
+
+        st = ms.get(Student, student_id)
+        months_on_platform = 0
+        if st and st.created_at:
+            delta_days = (datetime.utcnow() - st.created_at).days
+            months_on_platform = delta_days // 30
+
+        result = compute_score(
+            late_payments=late_payments,
+            failed_payments=failed_payments,
+            reminders_l3_or_higher=reminders_high,
+            debt_ratio=debt_ratio,
+            savings_buffer_months=savings_buffer_months,
+            satisfaction_score=sat_score,
+            months_on_platform=months_on_platform,
+        )
+
+        # Cachea i master-DB (insert always — håller historik)
+        snap = CreditScoreSnapshot(
+            student_id=student_id,
+            score=result.score,
+            grade=result.grade,
+            factors=result.factors,
+            reasons_md=result.reasons_md,
+        )
+        ms.add(snap)
+        ms.flush()
+        computed_at = snap.computed_at
+
+    return CreditScoreOut(
+        score=result.score,
+        grade=result.grade,
+        factors=result.factors,
+        reasons_md=result.reasons_md,
+        computed_at=computed_at.isoformat(),
+    )
+
+
+@router.get("/credit-score", response_model=CreditScoreOut)
+def get_credit_score(
+    scope = Depends(scope_db),
+    info: TokenInfo = Depends(require_token),
+) -> CreditScoreOut:
+    """Räkna fram + cachea aktuellt kreditbetyg.
+
+    Eleven får läsa varje gång — vi sparar snapshot i master-DB så
+    läraren kan se historiken via /teacher/employer/* (PR 7d eller
+    senare).
+    """
+    _require_school()
+    student_id = _student_from_info(info)
+    return _compute_credit_for_student(scope, student_id)
 
 
 @router.get("/scheduled-payments")

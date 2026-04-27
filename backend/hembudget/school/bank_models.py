@@ -17,12 +17,45 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
+    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .models import MasterBase
+
+
+class CreditScoreSnapshot(MasterBase):
+    """Per-elev kreditbetyg ('EkonomiSkalan'). 300–850-skala likt UC.
+
+    Beräknas vid:
+    - Varje PaymentReminder.issued (negativt på score)
+    - Varje CreditApplication.submitted (cache vid handläggning)
+    - Lazy från frontend när /bank/credit-score öppnas
+
+    `factors` är en JSON med faktor → värde + delta, så eleven kan
+    se exakt vad som drev scoren upp/ner. Pedagogisk transparens.
+    """
+    __tablename__ = "credit_score_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    grade: Mapped[str] = mapped_column(String(2), nullable=False)
+    # JSON: {"late_payments": 3, "reschedules": 1, "debt_ratio": 0.4,
+    #        "savings_buffer_months": 1.5, "satisfaction": 72,
+    #        "_score_components": {factor: delta_pts}, ...}
+    factors: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    # Pedagogisk text: 3-5 punkter om vad som drev scoren just nu
+    reasons_md: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
 
 
 class BankSession(MasterBase):
