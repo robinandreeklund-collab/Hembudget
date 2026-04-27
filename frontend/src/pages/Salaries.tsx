@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK, getApiBase, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import type { Account, HouseholdUser } from "@/types/models";
 
 interface IncomeUpcoming {
@@ -68,6 +69,7 @@ function todayIso(): string {
 
 export default function Salaries() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const [showAddForm, setShowAddForm] = useState(false);
 
   const incomesQ = useQuery({
@@ -257,13 +259,16 @@ export default function Salaries() {
         </Card>
       )}
 
-      {/* AI text-snabbinmatning */}
-      <TextQuickAdd
-        busy={textParseMut.isPending}
-        error={textParseMut.error as Error | null}
-        result={textParseMut.data ?? null}
-        onSubmit={(text) => textParseMut.mutate(text)}
-      />
+      {/* AI text-snabbinmatning — döljs i school-läget eftersom Ekonomilabbet
+          inte använder lokal LM Studio och eleven lär sig formulär bättre. */}
+      {!schoolMode && (
+        <TextQuickAdd
+          busy={textParseMut.isPending}
+          error={textParseMut.error as Error | null}
+          result={textParseMut.data ?? null}
+          onSubmit={(text) => textParseMut.mutate(text)}
+        />
+      )}
 
       {/* PDF löneparser */}
       <SalaryPdfUploader

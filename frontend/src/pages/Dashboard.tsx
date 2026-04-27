@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import { ClassLeaderboard } from "@/components/ClassLeaderboard";
 import { EventInbox } from "@/components/EventInbox";
 import { HouseholdSplitQuiz } from "@/components/HouseholdSplitQuiz";
@@ -73,6 +74,8 @@ interface BalanceRow {
 
 export default function Dashboard() {
   const qc = useQueryClient();
+  const { role } = useAuth();
+  const isStudent = role === "student";
   const [showReset, setShowReset] = useState(false);
   const [month, setMonth] = useState<string>(currentMonth());
   const [editBalanceFor, setEditBalanceFor] = useState<number | null>(null);
@@ -215,14 +218,18 @@ export default function Dashboard() {
               ))}
             </select>
           )}
-          <button
-            onClick={() => setShowReset(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-rose-200 text-rose-600 bg-white hover:bg-rose-50"
-            title="Nollställ all data"
-          >
-            <Trash2 className="w-4 h-4" />
-            Nollställ
-          </button>
+          {/* Elever får inte nollställa sin data — det är klassrumets-data
+              och måste hanteras av läraren via lärar-panelen. */}
+          {!isStudent && (
+            <button
+              onClick={() => setShowReset(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-rose-200 text-rose-600 bg-white hover:bg-rose-50"
+              title="Nollställ all data"
+            >
+              <Trash2 className="w-4 h-4" />
+              Nollställ
+            </button>
+          )}
         </div>
       </div>
 
@@ -723,7 +730,7 @@ export default function Dashboard() {
         )}
       </Card>
 
-      {showReset && <ResetDialog onClose={() => setShowReset(false)} />}
+      {showReset && !isStudent && <ResetDialog onClose={() => setShowReset(false)} />}
     </div>
   );
 }

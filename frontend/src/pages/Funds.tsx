@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import type { Account } from "@/types/models";
 
 // OBS: Decimal-fält (units, market_value, last_price osv.) serialiseras
@@ -76,6 +77,7 @@ function formatPct(n: number | string | null | undefined): string {
 
 export default function FundsPage() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const accountsQ = useQuery({
     queryKey: ["accounts"],
     queryFn: () => api<Account[]>("/accounts"),
@@ -329,40 +331,44 @@ export default function FundsPage() {
             </Card>
           )}
 
-          <Card title="Uppdatera med skärmdump (vision AI)">
-            <div className="text-sm text-slate-700 mb-3">
-              Logga in på bankens ISK-sida, ta en skärmdump av fondöversikten
-              (så hela tabellen syns) och ladda upp den här. Gör det en gång
-              per månad — historiken sparas så du kan följa utvecklingen per
-              fond över tid.
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input
-                type="file"
-                accept="image/png,image/jpeg,application/pdf"
-                onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-                className="md:col-span-2 border rounded px-2 py-1.5 text-sm"
-              />
-              <input
-                type="date"
-                value={snapDate}
-                onChange={(e) => setSnapDate(e.target.value)}
-                className="border rounded px-2 py-1.5 text-sm"
-              />
-            </div>
-            <button
-              className="mt-3 bg-brand-600 text-white px-4 py-2 rounded disabled:opacity-50"
-              disabled={!image || activeId == null || parseMut.isPending}
-              onClick={() => parseMut.mutate()}
-            >
-              {parseMut.isPending ? "Läser bilden…" : "Analysera & uppdatera"}
-            </button>
-            {parseResult !== null && (
-              <pre className="mt-3 bg-slate-900 text-slate-100 text-xs p-3 rounded overflow-x-auto max-h-64">
-                {JSON.stringify(parseResult, null, 2)}
-              </pre>
-            )}
-          </Card>
+          {/* Vision-AI-uppload döljs i school-läget — Ekonomilabbet seedar
+              fonder internt och eleven använder inte sin egen bank-skärmdump. */}
+          {!schoolMode && (
+            <Card title="Uppdatera med skärmdump (vision AI)">
+              <div className="text-sm text-slate-700 mb-3">
+                Logga in på bankens ISK-sida, ta en skärmdump av fondöversikten
+                (så hela tabellen syns) och ladda upp den här. Gör det en gång
+                per månad — historiken sparas så du kan följa utvecklingen per
+                fond över tid.
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,application/pdf"
+                  onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                  className="md:col-span-2 border rounded px-2 py-1.5 text-sm"
+                />
+                <input
+                  type="date"
+                  value={snapDate}
+                  onChange={(e) => setSnapDate(e.target.value)}
+                  className="border rounded px-2 py-1.5 text-sm"
+                />
+              </div>
+              <button
+                className="mt-3 bg-brand-600 text-white px-4 py-2 rounded disabled:opacity-50"
+                disabled={!image || activeId == null || parseMut.isPending}
+                onClick={() => parseMut.mutate()}
+              >
+                {parseMut.isPending ? "Läser bilden…" : "Analysera & uppdatera"}
+              </button>
+              {parseResult !== null && (
+                <pre className="mt-3 bg-slate-900 text-slate-100 text-xs p-3 rounded overflow-x-auto max-h-64">
+                  {JSON.stringify(parseResult, null, 2)}
+                </pre>
+              )}
+            </Card>
+          )}
 
           {history.length > 1 && (
             <Card title="Utveckling över tid (totalvärde)">

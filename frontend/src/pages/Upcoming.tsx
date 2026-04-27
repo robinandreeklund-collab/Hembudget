@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import type { Account, Category } from "@/types/models";
 
 interface UpcomingLine {
@@ -100,6 +101,7 @@ interface ParseState {
 
 export default function Upcoming() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const [month, setMonth] = useState(currentMonth());
   const [parseJobs, setParseJobs] = useState<ParseState[]>([]);
   const [textInput, setTextInput] = useState("");
@@ -425,35 +427,39 @@ export default function Upcoming() {
         )}
       </Card>
 
-      <Card title="Snabbinmatning via text">
-        <div className="text-sm text-slate-700 mb-2">
-          Skriv fritt, LM Studio tolkar: <em>"Vattenfall 1 420 kr förfaller 30 april"</em> eller
-          <em> "Lön Robin 42 000 kr den 25:e"</em>. Bra för räkningar utan bild.
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={textKind}
-            onChange={(e) => setTextKind(e.target.value as "bill" | "income")}
-            className="border rounded px-2 py-1.5"
-          >
-            <option value="bill">Faktura</option>
-            <option value="income">Lön/Inkomst</option>
-          </select>
-          <input
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="T.ex. SBAB bolåneränta 8 500 kr förfaller 25 april"
-            className="flex-1 border rounded px-3 py-1.5"
-          />
-          <button
-            onClick={() => textInput && textMut.mutate()}
-            disabled={!textInput || textMut.isPending}
-            className="bg-brand-600 text-white px-4 py-1.5 rounded disabled:opacity-40"
-          >
-            {textMut.isPending ? "Tolkar…" : "Lägg till"}
-          </button>
-        </div>
-      </Card>
+      {/* Snabbinmatning via text — döljs i school-läget eftersom Ekonomilabbet
+          inte använder lokal LM Studio och eleven lär sig manuellt formulär. */}
+      {!schoolMode && (
+        <Card title="Snabbinmatning via text">
+          <div className="text-sm text-slate-700 mb-2">
+            Skriv fritt, LM Studio tolkar: <em>"Vattenfall 1 420 kr förfaller 30 april"</em> eller
+            <em> "Lön Robin 42 000 kr den 25:e"</em>. Bra för räkningar utan bild.
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={textKind}
+              onChange={(e) => setTextKind(e.target.value as "bill" | "income")}
+              className="border rounded px-2 py-1.5"
+            >
+              <option value="bill">Faktura</option>
+              <option value="income">Lön/Inkomst</option>
+            </select>
+            <input
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="T.ex. SBAB bolåneränta 8 500 kr förfaller 25 april"
+              className="flex-1 border rounded px-3 py-1.5"
+            />
+            <button
+              onClick={() => textInput && textMut.mutate()}
+              disabled={!textInput || textMut.isPending}
+              className="bg-brand-600 text-white px-4 py-1.5 rounded disabled:opacity-40"
+            >
+              {textMut.isPending ? "Tolkar…" : "Lägg till"}
+            </button>
+          </div>
+        </Card>
+      )}
 
       <Card title={`Kommande fakturor (${openBills.length})`}>
         <ItemList

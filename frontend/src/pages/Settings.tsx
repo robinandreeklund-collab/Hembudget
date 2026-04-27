@@ -25,7 +25,7 @@ interface SubHealthResp {
 }
 
 export default function Settings() {
-  const { logout } = useAuth();
+  const { logout, schoolMode } = useAuth();
   const qc = useQueryClient();
   const statusQ = useQuery({
     queryKey: ["status"],
@@ -177,19 +177,23 @@ export default function Settings() {
     <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-2xl">
       <h1 className="serif text-3xl leading-tight">Inställningar</h1>
 
-      <Card title="System">
-        <div className="text-sm space-y-1">
-          <div>DB: <code className="bg-slate-100 px-1 rounded">{statusQ.data?.db_path}</code></div>
-          <div>LM Studio: <code className="bg-slate-100 px-1 rounded">{statusQ.data?.lm_studio}</code></div>
-          <div>
-            Status:{" "}
-            <span className={lmQ.data?.alive ? "text-emerald-600" : "text-rose-600"}>
-              {lmQ.data?.alive ? "ansluten" : "ej ansluten"}
-            </span>
+      {/* System-kortet är driftsinformation om DB-sökväg och LM Studio —
+          inte relevant i school-läget där elever inte ska se infrastrukturen. */}
+      {!schoolMode && (
+        <Card title="System">
+          <div className="text-sm space-y-1">
+            <div>DB: <code className="bg-slate-100 px-1 rounded">{statusQ.data?.db_path}</code></div>
+            <div>LM Studio: <code className="bg-slate-100 px-1 rounded">{statusQ.data?.lm_studio}</code></div>
+            <div>
+              Status:{" "}
+              <span className={lmQ.data?.alive ? "text-emerald-600" : "text-rose-600"}>
+                {lmQ.data?.alive ? "ansluten" : "ej ansluten"}
+              </span>
+            </div>
+            <div>Modell: {lmQ.data?.model}</div>
           </div>
-          <div>Modell: {lmQ.data?.model}</div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <Card title="Hushållsmedlemmar">
         <div className="text-sm text-slate-700 mb-2">
@@ -531,7 +535,9 @@ export default function Settings() {
         </div>
       </Card>
 
-      <TibberSettings />
+      {/* Tibber-OAuth är desktop-funktion (kopplar elev-konto i hemmet
+          mot Tibber-API). Ej relevant i school-läget. */}
+      {!schoolMode && <TibberSettings />}
 
       <Card title="Session">
         <button className="bg-rose-600 text-white px-4 py-2 rounded" onClick={logout}>
