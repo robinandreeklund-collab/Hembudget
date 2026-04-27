@@ -1013,6 +1013,308 @@ WORKPLACE_QUESTIONS: list[dict] = [
         "tags": ["lojalitet", "ärlighet", "konflikt"],
         "difficulty": 3,
     },
+    {
+        "code": "missed_deadline_001",
+        "scenario_md": (
+            "Du inser måndag morgon att du inte hinner med en deadline "
+            "som ligger på onsdag — du hade underskattat hur lång tid "
+            "uppgiften skulle ta. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger till chefen direkt på morgonen och föreslår "
+                    "ny deadline torsdag, plus en plan för hur du tar igen tiden."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Tidig signalering ger tid för chefen att omplanera. "
+                    "Att komma med lösning, inte bara problem, är guld."
+                ),
+            },
+            {
+                "text": (
+                    "Tystar ner det och kör på övertid för att hinna ändå."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Du klarar kanske deadline men bränner ut dig. "
+                    "Bättre att förvarna; chefen kanske inte ens behöver "
+                    "det onsdag."
+                ),
+            },
+            {
+                "text": (
+                    "Lämnar in en halvfärdig version på onsdag utan "
+                    "att flagga att den inte är klar."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att leverera halvfärdigt utan förvarning är värre "
+                    "än sen leverans. Mottagaren tror att det är klart."
+                ),
+            },
+            {
+                "text": (
+                    "Skyller på att du inte fått tillräckligt med "
+                    "information från en kollega."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Att skylla ifrån sig vid första tecken på problem "
+                    "noteras snabbt. Chefer minns vem som tar ansvar."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tidiga varningar är gratis. Sen är dyra. Säg så fort du "
+            "vet: 'jag hinner inte X, kan vi flytta till Y, eller "
+            "minska scopet?'"
+        ),
+        "tags": ["tidshantering", "kommunikation", "ansvar"],
+        "difficulty": 2,
+    },
+    {
+        "code": "conflict_with_colleague_001",
+        "scenario_md": (
+            "En kollega kritiserar ditt arbete på ett möte inför hela "
+            "teamet — på ett sätt du upplever som orättvist. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bemöter sakligt på mötet utan att höja rösten, "
+                    "och tar upp det enskilt med kollegan efteråt."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Saklig respons + privat samtal är vuxet "
+                    "konflikthantering. Du försvarar dig utan att skapa "
+                    "drama."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget på mötet och pratar bakom ryggen på "
+                    "kollegan med andra efteråt."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Skvaller skadar teamet. Konflikten blir kvar och "
+                    "fördjupas — andra dras in."
+                ),
+            },
+            {
+                "text": (
+                    "Höjer rösten och säger ifrån direkt på mötet på "
+                    "ett aggressivt sätt."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Aggressivt försvar gör mötet otrevligt och chefen "
+                    "ser dig som svår att jobba med."
+                ),
+            },
+            {
+                "text": (
+                    "Går direkt till chefen och kräver att kollegan "
+                    "tillrättavisas."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Att hoppa över ett enskilt samtal med kollegan "
+                    "först visar att du inte själv kan lösa konflikter. "
+                    "Chefen vill att vuxna pratar med varandra."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Konflikter är oundvikliga. Bra konflikthantering: bemöt "
+            "sakligt i stunden, ta upp det enskilt efter, eskalera till "
+            "chef bara om det inte löser sig."
+        ),
+        "tags": ["konflikt", "kommunikation"],
+        "difficulty": 3,
+    },
+    {
+        "code": "alcohol_at_work_event_001",
+        "scenario_md": (
+            "Företaget har en after-work-fest med fri bar. Din chef "
+            "och kunder är där. Vad är ditt drickande?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tar 1–2 drinkar och håller dig nykter nog att "
+                    "småprata professionellt."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Sociala företagsevent är fortfarande arbete. "
+                    "Måttfullt drickande visar omdöme."
+                ),
+            },
+            {
+                "text": (
+                    "Avstår helt — alkohol är inte din grej."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Helt OK. Ingen kommer ifrågasätta dig. Drick "
+                    "alkoholfritt eller vatten."
+                ),
+            },
+            {
+                "text": (
+                    "Tar så mycket som de andra — det är fri bar."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "På företagsevent ska du minnas allt du säger. "
+                    "Berusning kan kosta dig professionellt rykte."
+                ),
+            },
+            {
+                "text": (
+                    "Dricker mycket och säger högt vad du tycker om "
+                    "din chef."
+                ),
+                "delta": -6,
+                "explanation": (
+                    "Klassiskt karriärsslut. Det du säger berusad kan "
+                    "kollegor minnas i åratal."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Företagsfester är inte privatliv. Andra ser dig och "
+            "dömer. Tumregel: drick max hälften av vad du skulle dricka "
+            "med vänner. Och ät något."
+        ),
+        "tags": ["omdöme", "social"],
+        "difficulty": 2,
+    },
+    {
+        "code": "confidential_data_001",
+        "scenario_md": (
+            "En vän från en annan bransch frågar dig vid en middag: "
+            "'vem är er största kund? Jag undrar bara, gör en analys.' "
+            "Vad svarar du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "'Det är inte info jag kan dela — företaget har "
+                    "sekretess på kundlistor.' Byter ämne."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Klassisk sekretessreflex. Även om det inte står "
+                    "uttryckligt så är kunddata typiskt konfidentiellt."
+                ),
+            },
+            {
+                "text": (
+                    "Berättar — det är ju ingen i din bransch och "
+                    "det märks ändå offentligt vad ni gör."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Du kan inte säkert veta vem vännen pratar med. "
+                    "Brott mot sekretess kan ge varning eller "
+                    "uppsägning. GDPR finns också att tänka på."
+                ),
+            },
+            {
+                "text": (
+                    "Berättar med en muntlig 'OBS, säg det inte vidare'-"
+                    "klausul."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "En verbal varning skyddar inte mot vidareföring. "
+                    "Du har redan brutit sekretessen i samma sekund "
+                    "du sagt det."
+                ),
+            },
+            {
+                "text": (
+                    "Säger 'jag svarar inte på det' utan att förklara, "
+                    "och blir lite tyst."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Funkar — du läcker inget. Lite avig socialt men "
+                    "professionellt korrekt."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tumregel: kunduppgifter, kontrakt, prissättning, "
+            "kompetenslistor och anställningsuppgifter är default "
+            "konfidentiella. Om du tvekar — säg 'jag kollar med chefen'."
+        ),
+        "tags": ["sekretess", "GDPR", "omdöme"],
+        "difficulty": 2,
+    },
+    {
+        "code": "private_use_company_pc_001",
+        "scenario_md": (
+            "Du behöver beställa en julklapp till din partner och har "
+            "inte tid att gå hem. Får du använda jobbets dator?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Ja under lunchpausen, men du undviker streamingtjänster "
+                    "och privata sociala medier resten av dagen."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "De flesta arbetsgivare tillåter måttlig privat "
+                    "användning på pauser. Beställa en julklapp är OK."
+                ),
+            },
+            {
+                "text": (
+                    "Säger till chefen först och frågar om det är OK."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Helt rätt om du är osäker. Lite formellt, men "
+                    "uppskattat — ingen blir arg."
+                ),
+            },
+            {
+                "text": (
+                    "Spenderar en timme på att shoppa under arbetstid."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Det är arbetstidsstöld. Och loggar visar oftast "
+                    "vad du gör — IT-avdelningen ser."
+                ),
+            },
+            {
+                "text": (
+                    "Loggar in på partnerns Netflix-konto och kollar "
+                    "lite TV under väntetiden."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Streaming på arbetsgivarens nätverk är förbjudet i "
+                    "många bolag och kan trigga IT-säkerhetslarm."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Privat användning av jobbets utrustning på paus är oftast "
+            "OK om det är måttligt. Streamtjänster, fildelning eller "
+            "att handla under mötestid är inte OK."
+        ),
+        "tags": ["omdöme", "tidshantering"],
+        "difficulty": 1,
+    },
 ]
 
 
