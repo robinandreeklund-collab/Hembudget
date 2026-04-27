@@ -2369,7 +2369,7 @@ function Features() {
         }}
       >
         <div>
-          <span className="vc-eyebrow">FUNKTIONER · 09 / 09</span>
+          <span className="vc-eyebrow">FUNKTIONER · 12 / 12</span>
           <h2 className="vc-h2" style={{ marginTop: 10 }}>
             Allt en lärare eller förälder behöver.
           </h2>
