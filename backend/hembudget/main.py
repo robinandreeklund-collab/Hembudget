@@ -156,8 +156,12 @@ def build_app() -> FastAPI:
     app.include_router(smtp_admin.router)
     app.include_router(landing.router)
     app.include_router(ai.router)
-    app.include_router(stocks.router)
+    # stock_trading måste includeas FÖRE stocks: stocks.py har en
+    # catch-all `/stocks/{ticker}`-route som annars matchar
+    # `/stocks/portfolio`, `/stocks/ledger`, `/stocks/orders`,
+    # `/stocks/watchlist` etc. och svarar 404 'Okänd ticker'.
     app.include_router(stock_trading.router)
+    app.include_router(stocks.router)
     app.include_router(teacher_stocks.router)
     app.include_router(credit.router)
     app.include_router(teacher_credit.router)
