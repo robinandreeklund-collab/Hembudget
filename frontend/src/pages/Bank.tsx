@@ -6,7 +6,7 @@
  *  2. Inloggning: QR + polla session tills bekräftad
  *  3. Inloggad: dashboard (kontoutdrag, kommande betalningar, lån)
  *
- * BankID-simulering: vi visar hur flödet funkar i verkligheten.
+ * EkonomilabbetID är vår simulering av en BankID-liknande lösning.
  * Eleven förstår skillnaden mellan något-du-har (telefon/QR) och
  * något-du-vet (PIN). Den här simuleringen tränar mönstret utan
  * riktig BankID-integration.
@@ -19,6 +19,7 @@ import {
   Lock,
   ShieldCheck,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
@@ -161,7 +162,7 @@ function BankShell({
         <Building className="w-5 h-5" />
         <span className="serif text-xl">Ekonomilabbet Bank</span>
         <span className="ml-auto text-xs text-slate-300">
-          {mobile ? "Mobil-bekräftelse" : "BankID-simulering"}
+          {mobile ? "Mobil-bekräftelse" : "EkonomilabbetID-simulering"}
         </span>
       </div>
       <div className={mobile ? "p-4" : ""}>{children}</div>
@@ -271,7 +272,7 @@ function LoginView({
     return (
       <Card title="Logga in i banken">
         <div className="text-sm text-slate-700 leading-relaxed mb-4">
-          Tryck på knappen nedan för att starta en BankID-session.
+          Tryck på knappen nedan för att starta en EkonomilabbetID-session.
           En QR-kod visas — skanna den med din mobil och bekräfta
           med din PIN.
         </div>
@@ -281,7 +282,7 @@ function LoginView({
           className="bg-brand-600 text-white rounded px-4 py-2 flex items-center gap-2 disabled:opacity-50"
         >
           <Lock className="w-4 h-4" />
-          {initMut.isPending ? "Startar…" : "Starta BankID"}
+          {initMut.isPending ? "Startar…" : "Starta EkonomilabbetID"}
         </button>
         {initMut.error && (
           <div className="text-sm text-rose-700 mt-2">
@@ -301,7 +302,7 @@ function LoginView({
     return (
       <Card title="Sessionen har löpt ut">
         <div className="text-sm text-slate-700 mb-3">
-          Din BankID-session var öppen i 15 minuter. Du behöver
+          Din EkonomilabbetID-session var öppen i 15 minuter. Du behöver
           starta en ny för att logga in.
         </div>
         <button
@@ -349,27 +350,19 @@ function LoginView({
 
 
 function QRPlaceholder({ url }: { url: string }) {
-  // Riktig QR-rendering kräver beroende — i Ekonomilabbet räcker en
-  // grafisk placeholder med URL:en under, eftersom QR är pedagogisk
-  // metafor inte säkerhetskritisk.
+  // Riktig skannbar QR via qrcode.react. Eleven kan scanna med sin
+  // mobil eller klicka länken under för att simulera flödet.
   return (
     <div className="border-4 border-slate-900 rounded p-3 bg-white aspect-square flex flex-col items-center justify-center">
-      <div className="text-[8px] text-slate-400 mb-1">QR-kod</div>
-      <div className="grid grid-cols-8 gap-0.5">
-        {/* Gör en pseudo-pattern från URL:ens hash så samma URL ger
-            samma "kod" — pedagogiskt nog för att förstå konceptet */}
-        {Array.from({ length: 64 }).map((_, i) => {
-          const on = (url.charCodeAt(i % url.length) + i) % 3 === 0;
-          return (
-            <div
-              key={i}
-              className={`w-2 h-2 ${on ? "bg-slate-900" : "bg-white"}`}
-            />
-          );
-        })}
-      </div>
-      <div className="text-[8px] text-slate-400 mt-1 truncate w-full text-center">
-        {url.slice(-12)}
+      <QRCodeSVG
+        value={url}
+        size={140}
+        bgColor="#ffffff"
+        fgColor="#0f172a"
+        level="M"
+      />
+      <div className="text-[10px] text-slate-500 mt-2 truncate w-full text-center">
+        {url.replace(/^https?:\/\//, "")}
       </div>
     </div>
   );
@@ -907,7 +900,7 @@ function UpcomingPaymentsTab() {
           break;
         }
         if (status.expired) {
-          throw new Error("BankID-sessionen löpte ut");
+          throw new Error("EkonomilabbetID-sessionen löpte ut");
         }
       }
       if (!confirmed) {
@@ -956,9 +949,9 @@ function UpcomingPaymentsTab() {
       {unsignedRows.length > 0 && (
         <Card title={`Att signera (${unsignedRows.length})`}>
           <div className="text-xs text-slate-500 mb-3">
-            Markera fakturor du vill betala. När du signerar med BankID
-            schemaläggs de — pengarna dras från valt konto på
-            förfallodagen om saldot räcker.
+            Markera fakturor du vill betala. När du signerar med
+            EkonomilabbetID schemaläggs de — pengarna dras från valt konto
+            på förfallodagen om saldot räcker.
           </div>
           <ul className="divide-y divide-slate-200 mb-3">
             {unsignedRows.map((r) => (
@@ -1011,7 +1004,7 @@ function UpcomingPaymentsTab() {
               className="bg-brand-600 text-white rounded px-4 py-1.5 text-sm flex items-center gap-2 disabled:opacity-50"
             >
               {signing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-              {signing ? "Signerar med BankID…" : `Signera ${selectedIds.size} st`}
+              {signing ? "Signerar med EkonomilabbetID…" : `Signera ${selectedIds.size} st`}
             </button>
             {signError && (
               <div className="text-sm text-rose-700 w-full">
