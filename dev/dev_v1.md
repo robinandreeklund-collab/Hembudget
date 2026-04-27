@@ -833,18 +833,29 @@ Idé 1 är förutsättning för idé 2. Idé 3 är fristående från 1+2 men
 
 ### Föreslagen ordning
 
+**REV1**: konsolideringen till `/arbetsgivare` ger oss möjligheten att
+slå ihop idé 1+2-UI-PR:arna till en (samma vy) och skär bort
+låneansökan-konsolideringen som separat PR (sker naturligt i 3c).
+Bank-flödets tre-stegs-import lägger på lite arbete i 3b men inget
+nytt PR-snitt.
+
 | Fas | PR | Vad | Storlek | Beroende |
 |---|---|---|---|---|
-| **A** | 1 | Idé 1: datamodell + endpoints + avtals-seed | M | — |
-| **A** | 2 | Idé 1: UI (workplace, lärarkort, frågor) + module | M | PR 1 |
-| **B** | 3 | Idé 2: lönesamtal-backend + AI-prompt | S | PR 1 |
-| **B** | 4 | Idé 2: lönesamtal-UI + module | M | PR 3 |
-| **C** | 5 | Idé 3a: BankID-skelett + login + dashboard | L | — |
-| **C** | 6 | Idé 3b: kontoutdrag-export + signering + execution | L | PR 5 |
-| **C** | 7 | Idé 3c: påminnelser + kreditbedömning | M | PR 6 |
-| **C** | 8 | Idé 4: flytta låneansökan till /bank + konsolidering | S | PR 7 |
+| **A** | 1 | Idé 1 backend: datamodell (5 tabeller) + endpoints + 17-yrkes-avtals-seed + 30 frågor | L | — |
+| **A** | 2 | `/arbetsgivare` UI — Översikt + Avtal + Eventlogg + Frågor + module "Arbete och avtal" | M | PR 1 |
+| **B** | 3 | Idé 2 backend: lönesamtal-tabeller + AI-prompt + pending_salary-fält på StudentProfile + lönespec-commit-logik | M | PR 1 |
+| **B** | 4 | `/arbetsgivare` UI: Lönespec-flik + Lönesamtal-flik + module "Förhandla din lön" | M | PR 3 |
+| **C** | 5 | Idé 3a: BankID-skelett + PIN-onboarding + `/bank/dashboard` | L | — |
+| **C** | 6 | Idé 3b: bank-export + my-batches-mellanlager + ScheduledPayment + signering + execution-jobb | L | PR 5 |
+| **C** | 7 | Idé 3c: påminnelser + EkonomiSkalan + flytta låneansökan in i `/bank/loan-application` + module "Banken" | M | PR 6 |
 
 Stomlekar: S = ≤8 h, M = 8–18 h, L = 18+ h.
+
+**Notera om PR 2 vs PR 4**: båda rör `/arbetsgivare`-vyn. PR 2 bygger
+ramverket (flikar, layout, lärar-kort) men exkluderar Lönespec- och
+Lönesamtal-flikarna eftersom de hänger på idé 2-backend. PR 4 fyller
+i dem. Mellan PR 2 och PR 4 visar de tomma flikarna en "Kommer snart"-
+text — UX-mässigt hanterbart i en kortare period.
 
 ### Varför ordningen
 
@@ -891,13 +902,27 @@ Om kostnad/tid blir trångt:
 
 ### Gating innan vi börjar
 
-Innan PR 1 påbörjas vill jag:
-- [ ] Bekräfta med dig vilka 6–8 kollektivavtal som ska seedas
-- [ ] Bekräfta att satisfaction-score 0–100 + 5-rond är rätt skalor
-- [ ] Bekräfta att vi vill lyfta kontoutdraget UR /my-batches (ej
-      bara duplicera) — eller om båda källorna ska finnas
-- [ ] Bekräfta att lönesamtalet ska ändra `gross_salary_monthly`
-      omedelbart, inte vid nästa simulerad januari
+**REV1** Alla fyra punkter är nu klarerade:
 
-När de är clearade går jag igång med PR 1.
+- [x] Avtal för alla 17 yrken (mappning + ~10 avtals-summaries — 1.6)
+- [x] Satisfaction 0–100 + 5-rond — bekräftat
+- [x] Bank-flöde: bank → my-batches → import; lönespec separerad
+      till `/arbetsgivare` (3.3)
+- [x] Lönesamtal påverkar nästa månad via `pending_salary_monthly`
+      (2.5 punkt 4)
+
+**Nya öppna frågor som dykt upp under REV1:**
+
+- [ ] Ska `WorkplaceQuestion`-frågorna pushas via Sidebar-badge eller
+      ankomma som en lugn lista i `/arbetsgivare`-fliken? Mitt råd:
+      lugn lista + en daglig påminnelse på Dashboard om olästa frågor
+      finns. Inga modal-popups som avbryter.
+- [ ] När en lärare reset:ar bank-PIN — ska samma flagga också
+      reset:a Workplace-streak? Mitt råd: nej, separata system.
+- [ ] Ska vi visa **kontant** vad lönesamtalet höjer skatten med (eleven
+      ser brutto +1500 men netto +870 efter kommunalskatt + statlig
+      brytpunkt)? Mitt råd: ja — det är kärnan i pedagogiken kring
+      brytpunkt 2026 (~613 900 kr/år). Lägg in i PR 4-summeringen.
+
+När dessa tre svaren ges går jag igång med PR 1.
 
