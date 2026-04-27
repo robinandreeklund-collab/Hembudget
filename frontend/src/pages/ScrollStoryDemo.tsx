@@ -222,6 +222,8 @@ export default function ScrollStoryDemo() {
         <ReducedMotionStory />
       ) : (
         <>
+          {/* Öppnings-swipe: intro (cream) → mörk navy där vecka 1 startar */}
+          <CurveSwipe topColor="#fafaf9" bottomColor="#0f172a" />
           <WeekStory week={WEEKS[0]} />
           <HorizontalGallery
             label="Vecka 1 i bilder"
@@ -274,6 +276,8 @@ export default function ScrollStoryDemo() {
           </HorizontalGallery>
 
           <WeekStory week={WEEKS[2]} />
+          {/* Finale-swipe: dark week-bg → ljus bento-bg */}
+          <CurveSwipe topColor="#0f172a" bottomColor="#fafaf9" />
           <BentoFinale />
         </>
       )}
@@ -1531,6 +1535,108 @@ function LossAversionCard() {
         som Kahneman/Tversky beskrev.
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CurveSwipe — pinnad sektion där en SVG-path morphar från en flat
+// rektangel som täcker hela viewporten till en kurvad form som har
+// "lyfts" upp utanför skärmen. Fungerar som en filmisk övergång
+// mellan två sektioner med olika färgton.
+//
+// Tekniken: GSAP animerar ett progress-objekt (0→1) under scroll,
+// onUpdate skriver om path-d med interpolerade Y-koordinater. Inget
+// plugin krävs (MorphSVGPlugin är paid).
+// ─────────────────────────────────────────────────────────────
+function CurveSwipe({
+  topColor,
+  bottomColor,
+  height = "100vh",
+}: {
+  topColor: string;
+  bottomColor: string;
+  height?: string;
+}) {
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const pathRef = useRef<SVGPathElement | null>(null);
+  const reduced = useReducedMotion();
+
+  useEffect(() => {
+    if (reduced || !sectionRef.current || !pathRef.current) return;
+    registerScrollTrigger();
+    const ctx = gsap.context(() => {
+      const progress = { v: 0 };
+      const update = () => {
+        const t = progress.v;
+        // Y för höger/vänster bottenkant: 100 → -10 (sveps upp utanför)
+        const ySide = 100 - 110 * t;
+        // Y för mittkontrollpunkten: 110 (subtilt böjd ner) → -60 (djup u-kurva uppåt)
+        const yMid = 110 - 170 * t;
+        if (pathRef.current) {
+          pathRef.current.setAttribute(
+            "d",
+            `M 0 0 L 100 0 L 100 ${ySide} Q 50 ${yMid} 0 ${ySide} Z`,
+          );
+        }
+      };
+      update();
+      gsap.to(progress, {
+        v: 1,
+        ease: "none",
+        onUpdate: update,
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top top",
+          end: "+=100%",
+          pin: true,
+          scrub: 1,
+          anticipatePin: 1,
+        },
+      });
+    }, sectionRef);
+    return () => ctx.revert();
+  }, [reduced]);
+
+  // Reduced-motion: tunn färgband-skarv istället för pin
+  if (reduced) {
+    return (
+      <div
+        style={{
+          height: 4,
+          background: `linear-gradient(180deg, ${topColor} 0%, ${bottomColor} 100%)`,
+        }}
+      />
+    );
+  }
+
+  return (
+    <section
+      ref={sectionRef}
+      style={{
+        height,
+        position: "relative",
+        background: bottomColor,
+        overflow: "hidden",
+      }}
+    >
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          display: "block",
+        }}
+      >
+        <path
+          ref={pathRef}
+          d="M 0 0 L 100 0 L 100 100 Q 50 110 0 100 Z"
+          fill={topColor}
+        />
+      </svg>
+    </section>
   );
 }
 
