@@ -35,6 +35,9 @@ dependencies = [
     "rapidfuzz>=3.6",
     "matplotlib>=3.8",
     "anthropic>=0.40",
+    # yfinance: gratis, har Stockholm-börsen — fallback när Finnhub
+    # free tier inte täcker XSTO. ~15 min försening men pedagogiskt OK.
+    "yfinance>=0.2",
 ]
 
 [project.optional-dependencies]

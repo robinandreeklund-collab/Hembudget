@@ -51,6 +51,23 @@ def poll_quotes(
         return {"fetched": 0, "skipped_market_closed": False, "ts": None}
 
     quotes = p.fetch_quotes(tickers)
+    # Fallback: om primär provider inte fick några quotes (t.ex. Finnhub
+    # free tier som saknar Stockholm-börsen) — försök yfinance som backup.
+    # Auto-faller bara tillbaka om provider inte är explicit specificerad.
+    if not quotes and provider is None and p.name != "yfinance":
+        from .quote_providers import YFinanceProvider
+        log.info(
+            "poll_quotes: %s gav 0 quotes, försöker yfinance-fallback",
+            p.name,
+        )
+        try:
+            yf = YFinanceProvider()
+            quotes = yf.fetch_quotes(tickers)
+            if quotes:
+                p = yf  # uppdatera source-namnet på sparade rader
+        except Exception:
+            log.exception("poll_quotes: yfinance-fallback misslyckades")
+
     ts_iso: Optional[str] = None
     fetched = 0
     for q in quotes:
