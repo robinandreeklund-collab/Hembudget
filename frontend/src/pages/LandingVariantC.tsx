@@ -213,6 +213,7 @@ export default function LandingVariantC() {
       <SalaryTalkSection theme={THEME} />
       <BankSection theme={THEME} />
       <SocraticAISection theme={THEME} />
+      <MyCompanySection theme={THEME} />
       <Logic />
       <Problem />
       <Pricing />
@@ -7020,6 +7021,566 @@ function SocraticAISection({ theme }: { theme: Theme }) {
             </div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- MyCompanySection (v5) — Mitt företag · entreprenörskap ----------
+
+function MyCompanySection({ theme }: { theme: Theme }) {
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#fff",
+      }}
+    >
+      <div
+        style={{
+          background: "#fef3c7",
+          border: `1px dashed ${theme.fg}`,
+          borderRadius: 16,
+          padding: "48px 44px",
+          position: "relative",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: -12,
+            left: 24,
+            background: theme.fg,
+            color: "#fef3c7",
+            padding: "4px 12px",
+            borderRadius: 100,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 0.8,
+            fontFamily: "ui-monospace, monospace",
+            textTransform: "uppercase",
+          }}
+        >
+          ● Kommer Q3 2026
+        </span>
+        <div
+          className="vc-mc-hero"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 1fr",
+            gap: 64,
+            alignItems: "center",
+          }}
+        >
+          <style>{`
+            @media (max-width: 900px) {
+              .vc-mc-hero { grid-template-columns: 1fr !important; gap: 32px !important; }
+              .vc-mc-ledger { grid-template-columns: 1fr !important; gap: 14px !important; }
+              .vc-mc-ledger > div:nth-child(2) { transform: rotate(90deg); margin: 0 auto; }
+              .vc-mc-cf { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+          <div>
+            <SectionHeader
+              cell={{ sym: "Co", n: "08", label: "Företag" }}
+              eyebrow="Mitt företag · entreprenörskaps-modul"
+              theme={theme}
+            >
+              Driv ett{" "}
+              <em style={{ color: theme.accent, fontStyle: "italic" }}>
+                eget företag
+              </em>
+              <br />i 8–16 veckor.
+            </SectionHeader>
+            <p
+              style={{
+                fontSize: 16,
+                lineHeight: 1.55,
+                color: "#78350f",
+                marginBottom: 22,
+                maxWidth: 520,
+              }}
+            >
+              För FE1 / FE2 (företagsekonomi gymnasiet). Eleven driver eget
+              företag genom hela terminen — säljer, fakturerar, hanterar moms,
+              möter AI-genererade kunder, skriver årsredovisning. Allt inom
+              samma redovisningssystem som privatekonomin.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {[
+                "Egen kontoplan (BAS)",
+                "Moms 25/12/6",
+                "AI-genererade kunder",
+                "Resultatrapport",
+                "Årsredovisning",
+                "Likviditetsplan",
+              ].map((t, i) => (
+                <span
+                  key={i}
+                  style={{
+                    fontSize: 12,
+                    padding: "5px 11px",
+                    borderRadius: 100,
+                    background: "#fff",
+                    border: "1px solid rgba(120,53,15,.25)",
+                    color: "#78350f",
+                    fontFamily: "ui-monospace, monospace",
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div
+            style={{
+              background: "#0f172a",
+              color: "#fbbf24",
+              padding: 24,
+              borderRadius: 12,
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 12,
+              lineHeight: 1.7,
+            }}
+          >
+            <div style={{ color: "#64748b", marginBottom: 10 }}>// vecka 6 · saldo</div>
+            <div>
+              Försäljning: <span style={{ color: "#fff" }}>+ 14 200 kr</span>
+            </div>
+            <div>
+              Moms ut: <span style={{ color: "#fff" }}>− 2 840 kr</span>
+            </div>
+            <div>
+              Kostnader: <span style={{ color: "#fff" }}>− 6 100 kr</span>
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: "1px solid rgba(255,255,255,.15)",
+              }}
+            >
+              Resultat: <span style={{ color: "#10b981" }}>+ 5 260 kr</span>
+            </div>
+            <div style={{ marginTop: 18, color: "#64748b", fontStyle: "italic" }}>
+              "Tre nya kunder den här veckan — varav en är skeptisk till priset."
+            </div>
+          </div>
+        </div>
+
+        {/* Privatekonomi ↔ företag */}
+        <div
+          style={{
+            marginTop: 44,
+            paddingTop: 36,
+            borderTop: "1px dashed rgba(120,53,15,.3)",
+          }}
+        >
+          <div className={theme.eyebrow} style={{ marginBottom: 14, color: "#78350f" }}>
+            Företaget och privatekonomin är kopplade
+          </div>
+          <h3
+            style={{
+              fontSize: 26,
+              fontWeight: 600,
+              letterSpacing: -0.4,
+              lineHeight: 1.2,
+              marginBottom: 16,
+              color: "#0f172a",
+              maxWidth: 720,
+            }}
+          >
+            Eleven driver företaget och lever sitt liv samtidigt. En högre lön
+            gör privatekonomin starkare — och tär på företagets kassa. En lägre
+            lön ger företaget luft att växa — och kräver mer av elevens buffert
+            hemma.
+          </h3>
+          <p
+            style={{
+              fontSize: 15,
+              lineHeight: 1.6,
+              color: "#78350f",
+              maxWidth: 720,
+              marginBottom: 28,
+            }}
+          >
+            Eleven balanserar två huvudböcker som faktiskt påverkar varandra.
+            Lön, utdelning, kostnader, kapitalinsats — varje transaktion mellan
+            företag och privat syns på <strong> båda</strong> sidor. Och
+            Wellbeing räknar på <em>helheten</em>, inte på den ena.
+          </p>
+
+          <div
+            className="vc-mc-ledger"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto 1fr",
+              gap: 18,
+              alignItems: "stretch",
+            }}
+          >
+            <div
+              style={{
+                background: "#fff",
+                border: "1px solid rgba(120,53,15,.2)",
+                borderRadius: 10,
+                padding: 22,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 14,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "ui-monospace, monospace",
+                    letterSpacing: 1,
+                    color: "#78350f",
+                  }}
+                >
+                  PRIVAT
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "ui-monospace, monospace",
+                    color: "#10b981",
+                  }}
+                >
+                  Wellbeing 78
+                </span>
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: 0,
+                  margin: 0,
+                  fontSize: 13,
+                  fontFamily: "ui-monospace, monospace",
+                  lineHeight: 1.9,
+                  color: "#0f172a",
+                }}
+              >
+                <li>
+                  Lön in: <strong style={{ color: "#10b981" }}>+ 22 000 kr</strong>
+                </li>
+                <li>
+                  Hyra: <span style={{ color: "#dc4c2b" }}>− 8 500 kr</span>
+                </li>
+                <li>
+                  Sparkvot: <strong>18 %</strong>
+                </li>
+                <li style={{ color: "#64748b", fontStyle: "italic", marginTop: 8 }}>
+                  "Bra månad. Buffert växer."
+                </li>
+              </ul>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 64,
+              }}
+            >
+              <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                <path
+                  d="M8 14 H32 M28 10 L32 14 L28 18"
+                  stroke="#78350f"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M32 26 H8 M12 22 L8 26 L12 30"
+                  stroke="#78350f"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: "ui-monospace, monospace",
+                  color: "#78350f",
+                  letterSpacing: 1,
+                  marginTop: 8,
+                  textAlign: "center",
+                }}
+              >
+                LÖN
+                <br />
+                UTDELNING
+                <br />
+                INSATS
+              </span>
+            </div>
+
+            <div
+              style={{
+                background: "#0f172a",
+                color: "#fbbf24",
+                borderRadius: 10,
+                padding: 22,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 14,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "ui-monospace, monospace",
+                    letterSpacing: 1,
+                    color: "#94a3b8",
+                  }}
+                >
+                  FÖRETAG
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "ui-monospace, monospace",
+                    color: "#dc4c2b",
+                  }}
+                >
+                  Likviditet låg
+                </span>
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: 0,
+                  margin: 0,
+                  fontSize: 13,
+                  fontFamily: "ui-monospace, monospace",
+                  lineHeight: 1.9,
+                  color: "#e2e8f0",
+                }}
+              >
+                <li>
+                  Lön ut: <span style={{ color: "#dc4c2b" }}>− 22 000 kr</span>
+                </li>
+                <li>
+                  Försäljning:{" "}
+                  <strong style={{ color: "#10b981" }}>+ 18 400 kr</strong>
+                </li>
+                <li>
+                  Resultat: <strong style={{ color: "#dc4c2b" }}>− 3 600 kr</strong>
+                </li>
+                <li style={{ color: "#94a3b8", fontStyle: "italic", marginTop: 8 }}>
+                  "Måste sänka lönen — eller sälja mer."
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <p
+            style={{
+              marginTop: 24,
+              fontSize: 13.5,
+              color: "#78350f",
+              fontStyle: "italic",
+              maxWidth: 720,
+            }}
+          >
+            Det är inte ett quiz. Det är en balansgång där eleven känner
+            skillnaden mellan att optimera för sig själv, för företaget eller
+            för helheten.
+          </p>
+        </div>
+
+        {/* Likviditet ≠ Lönsamhet */}
+        <div
+          style={{
+            marginTop: 44,
+            paddingTop: 36,
+            borderTop: "1px dashed rgba(120,53,15,.3)",
+          }}
+        >
+          <div className={theme.eyebrow} style={{ marginBottom: 14, color: "#78350f" }}>
+            Advanced · Likviditet ≠ Lönsamhet
+          </div>
+          <h3
+            style={{
+              fontSize: 26,
+              fontWeight: 600,
+              letterSpacing: -0.4,
+              lineHeight: 1.25,
+              marginBottom: 16,
+              color: "#0f172a",
+              maxWidth: 760,
+            }}
+          >
+            Lönsamt på pappret, konkurs på torsdag.
+          </h3>
+          <p
+            style={{
+              fontSize: 15,
+              lineHeight: 1.6,
+              color: "#78350f",
+              maxWidth: 720,
+              marginBottom: 24,
+            }}
+          >
+            Den enskilt viktigaste lärdomen i företagande, som de flesta
+            läroböcker missar: ett lönsamt företag kan gå i konkurs när kunderna
+            betalar sent. Eleven får uppleva glappet mellan kassaflöde och
+            resultat på sin egen dashboard — inte som teori, som plötslig
+            verklighet.
+          </p>
+          <div
+            className="vc-mc-cf"
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
+          >
+            <div
+              style={{
+                background: "#fff",
+                border: "1px solid rgba(120,53,15,.2)",
+                borderRadius: 10,
+                padding: 22,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontFamily: "ui-monospace, monospace",
+                  letterSpacing: 1,
+                  color: "#78350f",
+                  marginBottom: 12,
+                }}
+              >
+                RESULTATRÄKNING
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: 0,
+                  margin: 0,
+                  fontSize: 13,
+                  fontFamily: "ui-monospace, monospace",
+                  lineHeight: 1.9,
+                  color: "#0f172a",
+                }}
+              >
+                <li>
+                  Fakturerat:{" "}
+                  <strong style={{ color: "#10b981" }}>+ 48 000 kr</strong>
+                </li>
+                <li>
+                  Kostnader: <span style={{ color: "#dc4c2b" }}>− 32 000 kr</span>
+                </li>
+                <li
+                  style={{
+                    marginTop: 8,
+                    paddingTop: 8,
+                    borderTop: "1px solid rgba(120,53,15,.15)",
+                  }}
+                >
+                  Resultat:{" "}
+                  <strong style={{ color: "#10b981" }}>+ 16 000 kr ✓</strong>
+                </li>
+              </ul>
+              <div
+                style={{
+                  marginTop: 14,
+                  fontSize: 12.5,
+                  color: "#10b981",
+                  fontStyle: "italic",
+                }}
+              >
+                "Lönsamt!"
+              </div>
+            </div>
+            <div
+              style={{
+                background: "#fff",
+                border: "2px solid #dc4c2b",
+                borderRadius: 10,
+                padding: 22,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontFamily: "ui-monospace, monospace",
+                  letterSpacing: 1,
+                  color: "#dc4c2b",
+                  marginBottom: 12,
+                }}
+              >
+                KASSAFLÖDE
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: 0,
+                  margin: 0,
+                  fontSize: 13,
+                  fontFamily: "ui-monospace, monospace",
+                  lineHeight: 1.9,
+                  color: "#0f172a",
+                }}
+              >
+                <li>
+                  Faktiskt inbetalt:{" "}
+                  <strong style={{ color: "#10b981" }}>+ 18 000 kr</strong>
+                </li>
+                <li>
+                  Hyra + lön:{" "}
+                  <span style={{ color: "#dc4c2b" }}>− 24 000 kr</span>
+                </li>
+                <li
+                  style={{
+                    marginTop: 8,
+                    paddingTop: 8,
+                    borderTop: "1px solid rgba(120,53,15,.15)",
+                  }}
+                >
+                  Kassa:{" "}
+                  <strong style={{ color: "#dc4c2b" }}>− 6 000 kr ✗</strong>
+                </li>
+              </ul>
+              <div
+                style={{
+                  marginTop: 14,
+                  fontSize: 12.5,
+                  color: "#dc4c2b",
+                  fontStyle: "italic",
+                }}
+              >
+                "Kunderna betalar 30 dagar för sent. Hyran kan inte vänta."
+              </div>
+            </div>
+          </div>
+          <p
+            style={{
+              marginTop: 22,
+              fontSize: 13.5,
+              color: "#78350f",
+              fontStyle: "italic",
+              maxWidth: 720,
+            }}
+          >
+            Eleven kommer i kontakt med påminnelser, dröjsmålsränta, kortsiktiga
+            lån — och ser i siffror varför likviditetsplanering är skillnaden
+            mellan ett företag som överlever och ett som inte gör det.
+          </p>
+        </div>
       </div>
     </section>
   );
