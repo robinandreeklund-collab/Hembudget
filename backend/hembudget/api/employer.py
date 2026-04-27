@@ -24,6 +24,7 @@ from ..school.engines import master_session
 from ..school.employer_models import (
     CollectiveAgreement,
     EmployerSatisfaction,
+    EmployerSatisfactionEvent,
     ProfessionAgreement,
 )
 from ..school.models import Student, StudentProfile
@@ -144,6 +145,81 @@ def _ensure_satisfaction(
     return row
 
 
+def _compute_trend(s: Session, student_id: int) -> str:
+    """Trend baserat på senaste 5 events delta-summa.
+
+    > 0 → 'rising', < 0 → 'falling', annars 'stable'.
+    """
+    rows = (
+        s.query(EmployerSatisfactionEvent.delta_score)
+        .filter(EmployerSatisfactionEvent.student_id == student_id)
+        .order_by(EmployerSatisfactionEvent.ts.desc())
+        .limit(5)
+        .all()
+    )
+    if not rows:
+        return "stable"
+    delta_sum = sum(r[0] for r in rows)
+    if delta_sum > 1:
+        return "rising"
+    if delta_sum < -1:
+        return "falling"
+    return "stable"
+
+
+def _apply_delta(
+    s: Session,
+    student_id: int,
+    *,
+    kind: str,
+    delta: int,
+    reason_md: str,
+    meta: Optional[dict] = None,
+) -> EmployerSatisfactionEvent:
+    """Applicera ett delta på en elevs satisfaction.
+
+    - Skapar EmployerSatisfactionEvent-rad
+    - Justerar EmployerSatisfaction.score (klamp 0–100)
+    - Räknar om trend
+    - Sätter last_event_at
+
+    Returnerar den nya event-raden så caller kan länka från
+    annan tabell (t.ex. WorkplaceQuestionAnswer.event_id).
+    """
+    sat = _ensure_satisfaction(s, student_id)
+    new_score = max(0, min(100, sat.score + delta))
+    event = EmployerSatisfactionEvent(
+        student_id=student_id,
+        kind=kind,
+        delta_score=delta,
+        reason_md=reason_md,
+        meta=meta,
+    )
+    s.add(event)
+    s.flush()
+    sat.score = new_score
+    sat.last_event_at = event.ts
+    sat.trend = _compute_trend(s, student_id)
+    s.flush()
+    return event
+
+
+# ---------- Event-schemas ----------
+
+class EventOut(BaseModel):
+    id: int
+    ts: str  # ISO datetime
+    kind: str
+    delta_score: int
+    reason_md: str
+    meta: Optional[dict] = None
+
+
+class EventListOut(BaseModel):
+    events: list[EventOut]
+    total: int
+
+
 # ---------- Endpoints ----------
 
 @router.get("/status", response_model=EmployerStatusOut)
@@ -207,4 +283,48 @@ def get_status(info: TokenInfo = Depends(require_token)) -> EmployerStatusOut:
             ),
             agreement=agreement_out,
             has_agreement=agreement is not None,
+        )
+
+
+@router.get("/events", response_model=EventListOut)
+def list_events(
+    limit: int = 50,
+    info: TokenInfo = Depends(require_token),
+) -> EventListOut:
+    """Eventlogg för aktuell elev — senaste händelserna först.
+
+    Pedagogisk transparens: varje delta har reason_md som förklarar
+    varför scoren rörde sig. Lärar-impersonering tillåten via
+    x-as-student.
+    """
+    _require_school()
+    student_id = _resolve_student_id(info)
+    limit = max(1, min(limit, 500))
+
+    with master_session() as s:
+        total = (
+            s.query(EmployerSatisfactionEvent)
+            .filter(EmployerSatisfactionEvent.student_id == student_id)
+            .count()
+        )
+        rows = (
+            s.query(EmployerSatisfactionEvent)
+            .filter(EmployerSatisfactionEvent.student_id == student_id)
+            .order_by(EmployerSatisfactionEvent.ts.desc())
+            .limit(limit)
+            .all()
+        )
+        return EventListOut(
+            events=[
+                EventOut(
+                    id=r.id,
+                    ts=r.ts.isoformat(),
+                    kind=r.kind,
+                    delta_score=r.delta_score,
+                    reason_md=r.reason_md,
+                    meta=r.meta,
+                )
+                for r in rows
+            ],
+            total=total,
         )
