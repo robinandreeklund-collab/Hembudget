@@ -23,6 +23,7 @@ import TeacherInvestments from "./pages/TeacherInvestments";
 import TeacherWellbeing from "./pages/TeacherWellbeing";
 import Salaries from "./pages/Salaries";
 import Arbetsgivare from "./pages/Arbetsgivare";
+import Bank from "./pages/Bank";
 import TeacherNegotiations from "./pages/TeacherNegotiations";
 import Attachments from "./pages/Attachments";
 import Utility from "./pages/Utility";
@@ -154,6 +155,8 @@ export default function App() {
           <Route path="/upcoming" element={<Upcoming />} />
           <Route path="/salaries" element={<Salaries />} />
           <Route path="/arbetsgivare" element={<Arbetsgivare />} />
+          <Route path="/bank" element={<Bank />} />
+          <Route path="/bank/sign" element={<Bank />} />
           <Route path="/attachments" element={<Attachments />} />
           <Route path="/utility" element={<Utility />} />
           <Route path="/tax" element={<Tax />} />
