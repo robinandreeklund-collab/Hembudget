@@ -12,14 +12,21 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertCircle,
   Building2,
+  CheckCircle2,
+  Download,
+  Eye,
+  FileText,
+  Loader2,
+  Minus,
   TrendingDown,
   TrendingUp,
-  Minus,
-  AlertCircle,
+  Upload,
+  X,
 } from "lucide-react";
-import React, { useState } from "react";
-import { api, formatSEK } from "@/api/client";
+import React, { useEffect, useRef, useState } from "react";
+import { api, formatSEK, getApiBase, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
 
 
@@ -133,12 +140,7 @@ export default function Arbetsgivare() {
           <OverviewTab status={statusQ.data} />
         ) : null
       )}
-      {tab === "lonespec" && (
-        <ComingSoon
-          what="Lönespec"
-          note="Hör till PR 4 — kommer efter att lönesamtals-backenden är klar."
-        />
-      )}
+      {tab === "lonespec" && <SalarySlipsTab />}
       {tab === "avtal" && (
         statusQ.isLoading ? (
           <Card><div className="text-sm text-slate-600">Laddar…</div></Card>
@@ -858,6 +860,273 @@ function NoAgreementBanner() {
         <em>Kollektivavtal</em>.
       </div>
     </div>
+  );
+}
+
+
+// ---------- Lönespec-fliken (PR 4a) ----------
+
+interface BatchArtifact {
+  id: number;
+  kind: string;
+  title: string;
+  filename: string;
+  imported_at: string | null;
+  meta: Record<string, unknown> | null;
+}
+
+
+interface BatchOut {
+  id: number;
+  year_month: string;
+  artifact_count: number;
+  imported_count: number;
+  artifacts: BatchArtifact[];
+}
+
+
+function SalarySlipsTab() {
+  const batchesQ = useQuery({
+    queryKey: ["student-batches"],
+    queryFn: () => api<BatchOut[]>("/student/batches"),
+  });
+  const qc = useQueryClient();
+  const [previewArt, setPreviewArt] = useState<{
+    batchId: number;
+    art: BatchArtifact;
+  } | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const lastBlobRef = useRef<string | null>(null);
+  const [importing, setImporting] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (lastBlobRef.current) URL.revokeObjectURL(lastBlobRef.current);
+    };
+  }, []);
+
+  // Plocka alla lönespec-artefakter, senaste batch först
+  const slips: { batchId: number; year_month: string; art: BatchArtifact }[] = [];
+  for (const b of batchesQ.data ?? []) {
+    for (const a of b.artifacts ?? []) {
+      if (a.kind === "lonespec") {
+        slips.push({ batchId: b.id, year_month: b.year_month, art: a });
+      }
+    }
+  }
+
+  async function openPreview(batchId: number, art: BatchArtifact) {
+    setPreviewArt({ batchId, art });
+    setPreviewLoading(true);
+    setErr(null);
+    try {
+      const url =
+        `${getApiBase()}/student/batches/${batchId}/artifacts/${art.id}/download`;
+      const tok = getToken();
+      const res = await fetch(url, {
+        headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
+      });
+      if (!res.ok) throw new Error(`Hämtning misslyckades (${res.status})`);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      if (lastBlobRef.current) URL.revokeObjectURL(lastBlobRef.current);
+      lastBlobRef.current = blobUrl;
+      setPreviewUrl(blobUrl);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setPreviewArt(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    setPreviewArt(null);
+    setPreviewUrl(null);
+    if (lastBlobRef.current) {
+      URL.revokeObjectURL(lastBlobRef.current);
+      lastBlobRef.current = null;
+    }
+  }
+
+  async function downloadArt(batchId: number, art: BatchArtifact) {
+    const url =
+      `${getApiBase()}/student/batches/${batchId}/artifacts/${art.id}/download`;
+    const tok = getToken();
+    const res = await fetch(url, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
+    });
+    if (!res.ok) {
+      setErr(`Nedladdning misslyckades (${res.status})`);
+      return;
+    }
+    const blob = await res.blob();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = art.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function importArt(batchId: number, art: BatchArtifact) {
+    setImporting(art.id);
+    setErr(null);
+    try {
+      await api(
+        `/student/batches/${batchId}/artifacts/${art.id}/import`,
+        { method: "POST" },
+      );
+      qc.invalidateQueries({ queryKey: ["student-batches"] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(null);
+    }
+  }
+
+  if (batchesQ.isLoading) {
+    return <Card><div className="text-sm text-slate-600">Laddar lönespecar…</div></Card>;
+  }
+  if (slips.length === 0) {
+    return (
+      <Card title="Inga lönespecar än">
+        <div className="text-sm text-slate-700 leading-relaxed">
+          Lönespecar kommer från din arbetsgivare en gång per månad.
+          När läraren genererar månadens material syns dom här direkt
+          — du kan förhandsgranska, ladda ner och importera till
+          bokföringen.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title={`Lönespecar (${slips.length})`}>
+      <div className="text-xs text-slate-500 mb-3">
+        Förhandsgranska för att läsa lönespecen. Importera så hamnar
+        siffrorna automatiskt i din bokföring (lön + skatt + pension).
+      </div>
+      {err && (
+        <div className="text-sm text-rose-700 mb-2 border-l-2 border-rose-400 pl-2">
+          {err}
+        </div>
+      )}
+      <ul className="divide-y divide-slate-200">
+        {slips.map(({ batchId, year_month, art }) => {
+          const isPreviewing =
+            previewArt?.art.id === art.id && previewArt.batchId === batchId;
+          return (
+            <li
+              key={`${batchId}-${art.id}`}
+              className={`py-2 flex items-center gap-3 ${
+                isPreviewing ? "bg-brand-50 -mx-2 px-2 rounded" : ""
+              }`}
+            >
+              <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              <button
+                onClick={() => openPreview(batchId, art)}
+                className="flex-1 text-left min-w-0 hover:text-brand-700"
+              >
+                <div className="font-medium text-sm truncate">
+                  {year_month} — {art.title}
+                </div>
+                <div className="text-xs text-slate-500 truncate">
+                  {art.filename}
+                </div>
+              </button>
+              {art.imported_at ? (
+                <span className="text-xs text-emerald-700 hidden sm:inline-flex items-center gap-1 mr-2">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Importerad
+                </span>
+              ) : null}
+              <button
+                onClick={() => openPreview(batchId, art)}
+                title="Förhandsgranska"
+                className={`p-1.5 rounded ${
+                  isPreviewing
+                    ? "bg-brand-100 text-brand-700"
+                    : "hover:bg-slate-100 text-slate-600"
+                }`}
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => downloadArt(batchId, art)}
+                title="Ladda ner PDF"
+                className="p-1.5 hover:bg-slate-100 rounded text-slate-600"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => importArt(batchId, art)}
+                disabled={importing !== null}
+                title="Importera lön till bokföringen"
+                className={`p-1.5 rounded text-emerald-600 ${
+                  art.imported_at ? "hover:bg-emerald-50" : "hover:bg-emerald-100"
+                } disabled:opacity-50`}
+              >
+                {importing === art.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Preview-overlay */}
+      {previewArt && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          <div className="flex items-center justify-between p-3 border-b">
+            <div className="min-w-0">
+              <div className="font-medium text-sm truncate">
+                {previewArt.art.title}
+              </div>
+              <div className="text-xs text-slate-500 truncate">
+                {previewArt.art.filename}
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() =>
+                  downloadArt(previewArt.batchId, previewArt.art)
+                }
+                title="Ladda ner"
+                className="p-1.5 hover:bg-slate-100 rounded text-slate-600"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={closePreview}
+                className="p-1.5 hover:bg-slate-100 rounded text-slate-600"
+                aria-label="Stäng"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 bg-slate-100">
+            {previewLoading ? (
+              <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Laddar…
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                title={previewArt.art.filename}
+                src={previewUrl}
+                className="w-full h-full"
+              />
+            ) : null}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
