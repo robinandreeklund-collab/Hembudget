@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -171,6 +172,20 @@ def create_batch_for_student(
     }
     with scope_context(scope_key):
         with session_scope() as s:
+            # Säkerställ att eleven finns som User i scope-DB:n så hens
+            # ägarskap kan resolvas till user_<id>. Utan detta hamnar
+            # genererad data under "gemensamt" eftersom owner-strängen
+            # inte matchar någon User-rad.
+            from ..db.models import User as _User
+            student_user = s.query(_User).filter(
+                _User.name == student.display_name
+            ).first()
+            if not student_user:
+                student_user = _User(name=student.display_name)
+                s.add(student_user)
+                s.flush()
+            student_owner = student.display_name
+
             # Säkerställ lönekonto finns (för debit_account_id)
             lonekonto = s.query(Account).filter(
                 Account.name == "Lönekonto"
@@ -183,9 +198,14 @@ def create_batch_for_student(
                     name="Lönekonto", bank="ekonomilabbet",
                     type="checking", currency="SEK",
                     opening_balance=_Dec("25000"),
+                    owner_id=student_user.id,
                 )
                 s.add(lonekonto)
                 s.flush()
+            elif lonekonto.owner_id is None:
+                # Befintligt konto utan ägare — koppla till eleven så
+                # dashboard slutar visa det som "Gemensamt".
+                lonekonto.owner_id = student_user.id
 
             # Lön som planerad "income"
             if scenario.salary:
@@ -204,6 +224,7 @@ def create_batch_for_student(
                         source="scenario",
                         debit_account_id=lonekonto.id,
                         debit_date=sal.pay_date,
+                        owner=student_owner,
                     ))
 
             # Bills — identifiera via description-prefix
@@ -231,6 +252,7 @@ def create_batch_for_student(
                     debit_account_id=lonekonto.id,
                     debit_date=t.date,
                     autogiro=True,
+                    owner=student_owner,
                 ))
 
     sort_order = 0
@@ -358,16 +380,26 @@ def import_artifact(
     }
     with scope_context(scope_key):
         with session_scope() as s:
+            # Säkerställ User-rad så ägarskapet kan skrivas och resolvas.
+            from ..db.models import User as _User
+            student_user = s.query(_User).filter(
+                _User.name == student.display_name
+            ).first()
+            if not student_user:
+                student_user = _User(name=student.display_name)
+                s.add(student_user)
+                s.flush()
+            student_owner = student.display_name
             if parsed.kind == "kontoutdrag":
                 _import_kontoutdrag(s, parsed, stats, facit)
                 _auto_match_upcoming(s)
             elif parsed.kind == "lonespec":
-                _import_lonespec(s, parsed, stats, artifact)
+                _import_lonespec(s, parsed, stats, artifact, student_owner)
             elif parsed.kind == "lan_besked":
                 _import_lan(s, parsed, stats, artifact)
             elif parsed.kind == "kreditkort_faktura":
                 _import_kreditkort(s, parsed, stats, artifact, facit)
-                _create_credit_invoice_upcoming(s, parsed, artifact)
+                _create_credit_invoice_upcoming(s, parsed, artifact, student_owner)
 
     artifact.imported_at = datetime.utcnow()
     return {"ok": True, **stats}
@@ -386,6 +418,7 @@ def _auto_match_upcoming(s: Session) -> None:
 
 def _create_credit_invoice_upcoming(
     s: Session, parsed: EkonomilabbetParseResult, artifact: BatchArtifact,
+    student_owner: Optional[str] = None,
 ) -> None:
     """Skapa en UpcomingTransaction för kreditkortsfakturan så eleven
     ser förfallodagen i /upcoming. Beloppet = totalsumman."""
@@ -431,6 +464,7 @@ def _create_credit_invoice_upcoming(
         debit_account_id=lonekonto.id,
         debit_date=due,
         autogiro=True,
+        owner=student_owner,
     ))
 
 
@@ -438,9 +472,22 @@ def _ensure_account(
     s: Session, name: str, type_: str, bank: str = "ekonomilabbet",
     credit_limit: int | None = None, account_no: str | None = None,
     opening_balance: Decimal | int = 0,
+    owner_id: Optional[int] = None,
 ) -> Account:
+    # Auto-koppla mot enda User-raden om scope-DB:n har exakt en (= solo
+    # elev). Detta säkerställer att genererad data hamnar under elevens
+    # ägarskap istället för "Gemensamt". Familje-scopes med flera users
+    # lämnas oförändrade — där måste ägarskap väljas explicit.
+    if owner_id is None:
+        from ..db.models import User as _User
+        users = s.query(_User).limit(2).all()
+        if len(users) == 1:
+            owner_id = users[0].id
     acc = s.query(Account).filter(Account.name == name).first()
     if acc:
+        # Om kontot redan finns men saknar ägare, koppla in eleven.
+        if owner_id is not None and acc.owner_id is None:
+            acc.owner_id = owner_id
         return acc
     acc = Account(
         name=name, bank=bank, type=type_,
@@ -448,6 +495,7 @@ def _ensure_account(
         account_number=account_no,
         credit_limit=Decimal(credit_limit) if credit_limit else None,
         opening_balance=Decimal(str(opening_balance or 0)),
+        owner_id=owner_id,
     )
     s.add(acc)
     s.flush()
@@ -553,6 +601,7 @@ def _import_kontoutdrag(
 def _import_lonespec(
     s: Session, parsed: EkonomilabbetParseResult, stats: dict,
     artifact: BatchArtifact,
+    student_owner: Optional[str] = None,
 ) -> None:
     """Lönespec sätter ingen ny tx i sig — kontoutdraget innehåller
     redan löneutbetalningen. Vi använder istället metadata för att
@@ -625,6 +674,7 @@ def _import_lonespec(
             debit_date=target_date,
             matched_transaction_id=matched.id if matched else None,
             notes=notes_json,
+            owner=student_owner,
         ))
     else:
         # Berika befintlig rad (idempotent uppgradering vid re-import)
