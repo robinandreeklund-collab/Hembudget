@@ -60,3 +60,35 @@ def test_default_when_env_unset_is_mini(monkeypatch):
 def test_unknown_model_falls_back_to_mini():
     """Okänd modell → mini-default."""
     assert compute_courtage(Decimal("4000"), "okand") == Decimal("10.00")
+
+
+# --- Utlandshandel: USD med valutaväxlingsavgift ---
+
+def test_breakdown_sek_no_fx_fee():
+    from hembudget.stocks.courtage import compute_courtage_breakdown
+    b = compute_courtage_breakdown(Decimal("4000"), currency="SEK")
+    assert b.courtage == Decimal("10.00")
+    assert b.fx_fee == Decimal("0.00")
+    assert b.total_fee == Decimal("10.00")
+    assert b.currency == "SEK"
+
+
+def test_breakdown_usd_includes_fx_fee():
+    """USD-affär: 0.25 % courtage + 0.25 % FX-pålägg."""
+    from hembudget.stocks.courtage import compute_courtage_breakdown
+    b = compute_courtage_breakdown(Decimal("4000"), currency="USD")
+    # 4000 USD * 0.25 % = 10 USD courtage
+    assert b.courtage == Decimal("10.00")
+    # 4000 USD * 0.25 % = 10 USD FX-fee
+    assert b.fx_fee == Decimal("10.00")
+    assert b.total_fee == Decimal("20.00")
+    assert b.currency == "USD"
+
+
+def test_breakdown_usd_minimum_courtage():
+    """Liten USD-affär: minst 1 USD courtage + FX-fee."""
+    from hembudget.stocks.courtage import compute_courtage_breakdown
+    b = compute_courtage_breakdown(Decimal("100"), currency="USD")
+    assert b.courtage == Decimal("1.00")  # min 1 USD
+    assert b.fx_fee == Decimal("0.25")    # 100 * 0.25 %
+    assert b.total_fee == Decimal("1.25")

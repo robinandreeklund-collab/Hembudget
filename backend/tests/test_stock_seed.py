@@ -26,17 +26,18 @@ def session() -> Session:
         yield s
 
 
-def test_seed_stock_universe_creates_30(session):
+def test_seed_stock_universe_creates_60(session):
+    """30 svenska + 30 amerikanska."""
     n = seed_stock_universe(session)
-    assert n == 30
-    assert session.query(StockMaster).count() == 30
+    assert n == 60
+    assert session.query(StockMaster).count() == 60
 
 
 def test_seed_stock_universe_is_idempotent(session):
     seed_stock_universe(session)
     n2 = seed_stock_universe(session)
     assert n2 == 0
-    assert session.query(StockMaster).count() == 30
+    assert session.query(StockMaster).count() == 60
 
 
 def test_seed_universe_covers_at_least_8_sectors(session):
@@ -45,9 +46,20 @@ def test_seed_universe_covers_at_least_8_sectors(session):
     assert len(sectors) >= 7  # Minst 7 distinkta sektorer (Industri, Bank, Telecom, ...)
 
 
+def test_seed_includes_both_currencies(session):
+    seed_stock_universe(session)
+    currencies = {s.currency for s in session.query(StockMaster).all()}
+    assert "SEK" in currencies
+    assert "USD" in currencies
+
+
 def test_universe_tickers_unique():
-    tickers = [s["ticker"] for s in STOCK_UNIVERSE]
-    assert len(tickers) == len(set(tickers))
+    from hembudget.school.stock_seed import US_STOCK_UNIVERSE
+    all_tickers = (
+        [s["ticker"] for s in STOCK_UNIVERSE]
+        + [s["ticker"] for s in US_STOCK_UNIVERSE]
+    )
+    assert len(all_tickers) == len(set(all_tickers))
 
 
 def test_universe_uses_yahoo_format():
@@ -125,5 +137,5 @@ def test_calendar_marks_normal_weekdays_open(session):
 
 def test_seed_all_returns_counts(session):
     r = seed_all(session)
-    assert r["stocks_added"] == 30
+    assert r["stocks_added"] == 60  # 30 svenska + 30 amerikanska
     assert r["calendar_days_added"] >= 365

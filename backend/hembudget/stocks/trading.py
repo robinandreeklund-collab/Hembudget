@@ -125,7 +125,13 @@ def buy_stock(
 
     price = Decimal(str(latest.last))
     gross = (price * quantity).quantize(Decimal("0.01"))
-    courtage = compute_courtage(gross)
+    # Utlandshandel: USD-aktier → courtage i USD + valutaväxlingsavgift
+    # Används av compute_courtage_breakdown via stock.currency.
+    from .courtage import compute_courtage_breakdown
+    breakdown = compute_courtage_breakdown(
+        gross, currency=stock.currency or "SEK",
+    )
+    courtage = breakdown.courtage + breakdown.fx_fee
     total = gross + courtage
 
     cash_balance = _balance_for(scope_session, account_id)
@@ -135,7 +141,12 @@ def buy_stock(
             code="insufficient_funds",
         )
 
-    # 1. Skapa Transaction på ISK-kontot för att dra likviden
+    # 1. Skapa Transaction på ISK-kontot för att dra likviden.
+    # Beskrivning visar valuta + ev. FX-fee så eleven ser kostnaden.
+    fx_note = (
+        f" (inkl. {breakdown.fx_fee} {stock.currency} valutaväxling)"
+        if breakdown.fx_fee > 0 else ""
+    )
     key = f"stockbuy-{account_id}-{ticker}-{quantity}-{price}-{datetime.utcnow().isoformat()}"
     h = hashlib.sha256(key.encode("utf-8")).hexdigest()
     cash_tx = Transaction(
@@ -143,7 +154,10 @@ def buy_stock(
         date=date.today(),
         amount=-total,
         currency=acc.currency or "SEK",
-        raw_description=f"Köp {quantity} st {stock.name} @ {price}",
+        raw_description=(
+            f"Köp {quantity} st {stock.name} @ {price} "
+            f"{stock.currency or 'SEK'}{fx_note}"
+        ),
         is_transfer=False,
         hash=h,
     )
@@ -265,7 +279,12 @@ def sell_stock(
 
     price = Decimal(str(latest.last))
     gross = (price * quantity).quantize(Decimal("0.01"))
-    courtage = compute_courtage(gross)
+    # Sälj: courtage + valutaväxling tas av nettot.
+    from .courtage import compute_courtage_breakdown
+    breakdown = compute_courtage_breakdown(
+        gross, currency=stock.currency or "SEK",
+    )
+    courtage = breakdown.courtage + breakdown.fx_fee
     net_proceeds = gross - courtage
 
     realized_pnl = (

@@ -203,6 +203,10 @@ const LEARN_TIPS = [
     title: "ISK schablonbeskattas",
     body: "Inom ISK betalar du ca 0,9 % per år på portföljens snittvärde — inte vinstskatt. Bra för långsiktigt sparande, mindre bra om du sitter på obeskattade förluster.",
   },
+  {
+    title: "Utlandshandel kostar extra",
+    body: "USA-aktier handlas i USD: utöver mäklarcourtaget tillkommer 0,25 % valutaväxlingsavgift på köp OCH sälj. Det blir alltså 0,5 % bara i FX om du säljer samma år som du köpte. Ofta värt det för dollar-bolag du inte hittar i Sverige (Apple, Nvidia) — men gör inte småbeställningar.",
+  },
 ];
 
 
@@ -471,14 +475,26 @@ function MarketTab({
                   className="flex items-center justify-between border-b last:border-0 py-2"
                 >
                   <div className="flex-1">
-                    <div className="font-medium">{s.name}</div>
+                    <div className="font-medium flex items-center gap-2">
+                      {s.name}
+                      {s.currency && s.currency !== "SEK" && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200"
+                          title="Utländsk aktie — extra valutaväxlingsavgift 0,25 % vid handel"
+                        >
+                          {s.currency}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500">{s.ticker}</div>
                   </div>
                   <div className="text-right pr-3">
                     {s.last !== undefined ? (
                       <>
                         <div className={`font-medium ${marketOpen ? "" : "text-slate-700"}`}>
-                          {formatSEK(s.last)}
+                          {s.currency === "USD"
+                            ? `$${s.last.toFixed(2)}`
+                            : formatSEK(s.last)}
                         </div>
                         {s.change_pct !== null && s.change_pct !== undefined && (
                           <div

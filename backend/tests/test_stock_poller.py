@@ -69,16 +69,16 @@ def test_poll_quotes_skips_when_market_closed(session):
 def test_poll_quotes_force_overrides_closed(session):
     result = poll_quotes(session, provider=MockQuoteProvider(), force=True)
     assert result["skipped_market_closed"] is False
-    assert result["fetched"] == 30
-    assert session.query(StockQuote).count() == 30
-    assert session.query(LatestStockQuote).count() == 30
+    assert result["fetched"] == 60
+    assert session.query(StockQuote).count() == 60
+    assert session.query(LatestStockQuote).count() == 60
 
 
 def test_poll_quotes_writes_history(session):
     _force_market_open(session)
     poll_quotes(session, provider=MockQuoteProvider())
     rows = session.query(StockQuote).all()
-    assert len(rows) == 30
+    assert len(rows) == 60
     for r in rows:
         assert r.last > 0
         assert r.source == "mock"
@@ -92,8 +92,8 @@ def test_poll_quotes_upserts_latest(session):
     # Andra pollen — ingen ny rad, bara update
     poll_quotes(session, provider=MockQuoteProvider(base_seed=2))
     second_count = session.query(LatestStockQuote).count()
-    assert first_count == 30
-    assert second_count == 30  # Ingen dubblering
+    assert first_count == 60
+    assert second_count == 60  # Ingen dubblering
 
 
 def test_poll_quotes_handles_empty_universe(session):

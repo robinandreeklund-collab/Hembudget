@@ -60,10 +60,56 @@ STOCK_UNIVERSE: list[dict] = [
 ]
 
 
+# 30 amerikanska aktier (NYSE/NASDAQ) — tillåter elever att jämföra
+# svenska och amerikanska bolag, lära sig om utlandshandel och
+# valutaväxlingsrisk. Yfinance täcker dem utan extra konfig.
+US_STOCK_UNIVERSE: list[dict] = [
+    # Tech (mega-cap)
+    {"ticker": "AAPL",  "name": "Apple",          "sector": "IT-USA"},
+    {"ticker": "MSFT",  "name": "Microsoft",      "sector": "IT-USA"},
+    {"ticker": "GOOGL", "name": "Alphabet A",     "sector": "IT-USA"},
+    {"ticker": "META",  "name": "Meta Platforms", "sector": "IT-USA"},
+    {"ticker": "NVDA",  "name": "Nvidia",         "sector": "IT-USA"},
+    {"ticker": "AMZN",  "name": "Amazon",         "sector": "IT-USA"},
+    {"ticker": "TSLA",  "name": "Tesla",          "sector": "IT-USA"},
+    {"ticker": "NFLX",  "name": "Netflix",        "sector": "IT-USA"},
+    # Finans
+    {"ticker": "JPM",   "name": "JPMorgan Chase", "sector": "Bank-USA"},
+    {"ticker": "BAC",   "name": "Bank of America", "sector": "Bank-USA"},
+    {"ticker": "V",     "name": "Visa",           "sector": "Bank-USA"},
+    {"ticker": "MA",    "name": "Mastercard",     "sector": "Bank-USA"},
+    {"ticker": "BRK-B", "name": "Berkshire Hathaway B", "sector": "Bank-USA"},
+    # Konsument
+    {"ticker": "KO",    "name": "Coca-Cola",      "sector": "Konsument-USA"},
+    {"ticker": "PEP",   "name": "PepsiCo",        "sector": "Konsument-USA"},
+    {"ticker": "MCD",   "name": "McDonald's",     "sector": "Konsument-USA"},
+    {"ticker": "NKE",   "name": "Nike",           "sector": "Konsument-USA"},
+    {"ticker": "DIS",   "name": "Walt Disney",    "sector": "Konsument-USA"},
+    {"ticker": "WMT",   "name": "Walmart",        "sector": "Konsument-USA"},
+    # Hälsa/läkemedel
+    {"ticker": "JNJ",   "name": "Johnson & Johnson", "sector": "Hälsa-USA"},
+    {"ticker": "PFE",   "name": "Pfizer",         "sector": "Hälsa-USA"},
+    {"ticker": "UNH",   "name": "UnitedHealth",   "sector": "Hälsa-USA"},
+    # Industri/energi
+    {"ticker": "XOM",   "name": "Exxon Mobil",    "sector": "Energi-USA"},
+    {"ticker": "CVX",   "name": "Chevron",        "sector": "Energi-USA"},
+    {"ticker": "BA",    "name": "Boeing",         "sector": "Industri-USA"},
+    {"ticker": "CAT",   "name": "Caterpillar",    "sector": "Industri-USA"},
+    {"ticker": "GE",    "name": "General Electric", "sector": "Industri-USA"},
+    # Övriga välkända
+    {"ticker": "SBUX",  "name": "Starbucks",      "sector": "Konsument-USA"},
+    {"ticker": "PYPL",  "name": "PayPal",         "sector": "IT-USA"},
+    {"ticker": "INTC",  "name": "Intel",          "sector": "IT-USA"},
+]
+
+
 def seed_stock_universe(session: Session) -> int:
     """Idempotent seed av StockMaster — bara tillägg, aldrig delete.
 
-    Returnerar antal tillagda rader."""
+    Returnerar antal tillagda rader. Innehåller både svenska
+    OMXS30-aktier (XSTO, SEK) och amerikanska large-caps
+    (NYSE/NASDAQ, USD) — eleven kan handla båda och lära sig
+    skillnaden i kostnader (utlandscourtage, valutaväxlingsavgift)."""
     existing = {s.ticker for s in session.query(StockMaster).all()}
     added = 0
     for entry in STOCK_UNIVERSE:
@@ -76,6 +122,19 @@ def seed_stock_universe(session: Session) -> int:
             sector=entry["sector"],
             currency="SEK",
             exchange="XSTO",
+            active=1,
+        ))
+        added += 1
+    for entry in US_STOCK_UNIVERSE:
+        if entry["ticker"] in existing:
+            continue
+        session.add(StockMaster(
+            ticker=entry["ticker"],
+            name=entry["name"],
+            name_sv=entry.get("name_sv"),
+            sector=entry["sector"],
+            currency="USD",
+            exchange="XNAS",  # generisk USA — yfinance bryr sig inte
             active=1,
         ))
         added += 1
