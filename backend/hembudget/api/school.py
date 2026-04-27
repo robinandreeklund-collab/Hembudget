@@ -3150,12 +3150,12 @@ def list_all_batch_months(
 
 @router.get(
     "/student/batches",
-    response_model=list[ScenarioBatchOut],
+    response_model=list[ScenarioBatchDetailOut],
 )
 def student_list_batches(
     visible_in: Optional[str] = None,
     info: TokenInfo = Depends(require_token),
-) -> list[ScenarioBatchOut]:
+) -> list[ScenarioBatchDetailOut]:
     """Lista elevens egna batchar. Tillåter lärar-impersonation
     (x-as-student-headern) så lärare kan kolla elevens vy utan att
     smällas ut med 403.
@@ -3166,6 +3166,10 @@ def student_list_batches(
     - arbetsgivare → bara lönespec
     - bank         → bara bank-artefakter
     - None         → allt (bakåtkompat)
+
+    Returnerar detail-shape (med ``artifacts``-array) så att vyer
+    som /arbetsgivare och /my-batches kan rendera filtrerade artefakter
+    direkt utan en N+1-runda av detail-fetchar per batch.
     """
     _require_school_mode()
     # Använd actor_student_id från middleware — fungerar för både
@@ -3179,7 +3183,7 @@ def student_list_batches(
             .order_by(ScenarioBatch.year_month.desc())
             .all()
         )
-        return [_batch_to_out(b, visible_in) for b in batches]
+        return [_batch_to_detail(b, visible_in) for b in batches]
 
 
 def _resolve_batch_for_actor(
