@@ -28,6 +28,8 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import { api, formatSEK, getApiBase, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
+import { NoStudentSelected } from "@/components/NoStudentSelected";
+import { useAuth } from "@/hooks/useAuth";
 
 
 interface AgreementOut {
@@ -83,11 +85,23 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function Arbetsgivare() {
   const [tab, setTab] = useState<Tab>("oversikt");
+  const { role, asStudent } = useAuth();
+  const teacherWithoutStudent = role === "teacher" && !asStudent;
 
   const statusQ = useQuery({
-    queryKey: ["employer-status"],
+    queryKey: ["employer-status", asStudent ?? "self"],
     queryFn: () => api<EmployerStatusOut>("/employer/status"),
+    // Kör inte queryn för lärare som inte har valt en elev — annars
+    // får vi ett 400-fel från backend som inte är meningsfullt.
+    enabled: !teacherWithoutStudent,
   });
+
+  // Lärare som öppnar /arbetsgivare utan att ha valt en elev (t.ex.
+  // direkt från sidebar-länken eller en bokmärkt URL) får en vänlig
+  // "välj elev"-vy istället för en rå HTTP 400 från backend.
+  if (teacherWithoutStudent) {
+    return <NoStudentSelected pageName="Arbetsgivare" />;
+  }
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5">
