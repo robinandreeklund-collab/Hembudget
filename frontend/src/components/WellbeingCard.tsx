@@ -342,8 +342,8 @@ export function WellbeingCard() {
               </div>
             )}
             {aiError && !aiFeedback && (
-              <div className="text-[10px] text-slate-400 text-center mt-1">
-                AI-coach är inte tillgänglig (kräver att läraren slagit på AI).
+              <div className="text-[10px] text-rose-600 text-center mt-1 px-2">
+                AI-coach kunde inte svara: {aiError}
               </div>
             )}
           </div>

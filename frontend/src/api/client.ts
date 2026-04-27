@@ -136,7 +136,19 @@ export async function api<T = unknown>(
     } catch {
       /* ignore */
     }
-    throw new ApiError(res.status, `HTTP ${res.status}: ${res.statusText}`, body);
+    // FastAPI svarar med {detail: "..."} på HTTPException — visa den
+    // texten i felmeddelandet så att UI kan visa den direkt för
+    // användaren utan att behöva packa upp body manuellt.
+    let detailMsg = "";
+    if (body && typeof body === "object" && "detail" in body) {
+      const d = (body as { detail: unknown }).detail;
+      if (typeof d === "string") detailMsg = ` — ${d}`;
+    }
+    throw new ApiError(
+      res.status,
+      `HTTP ${res.status}: ${res.statusText}${detailMsg}`,
+      body,
+    );
   }
   if (res.status === 204) return undefined as T;
   const ct = res.headers.get("content-type") || "";
