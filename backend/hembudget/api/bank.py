@@ -63,11 +63,21 @@ def _require_school() -> None:
 
 
 def _student_from_info(info: TokenInfo) -> int:
+    """Hämta vilken elev requesten gäller.
+
+    - Elev-token: ``info.student_id`` är satt direkt vid token-skapande.
+    - Lärare med ``x-as-student``-impersonation: middleware har redan
+      verifierat ägarskap och satt ``current_actor_student`` i
+      ContextVar:n. Vi läser den.
+      OBS: ``info.student_id`` är alltid None på lärar-tokens — fick
+      alla impersonerade lärare att få 400 här i tidigare versioner."""
     if info.role == "student" and info.student_id:
         return info.student_id
-    if info.role == "teacher" and info.student_id:
-        # Lärar-impersonering — middleware har satt student_id
-        return info.student_id
+    if info.role == "teacher":
+        from ..school.engines import get_current_actor_student
+        sid = get_current_actor_student()
+        if sid is not None:
+            return sid
     raise HTTPException(
         400, "Ingen elev-context — eleven måste vara inloggad",
     )
