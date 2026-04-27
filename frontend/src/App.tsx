@@ -81,6 +81,11 @@ export default function App() {
         <Route path="/login/student" element={<StudentLogin />} />
         <Route path="/demo" element={<DemoChoice />} />
         <Route path="/demo/scroll-story" element={<ScrollStoryDemo />} />
+        {/* /bank/sign är PUBLIK — telefonen som skannar QR:en behöver
+            INTE vara inloggad. Sessionstoken + PIN är säkerheten.
+            Samma route i båda blocken så att inloggade lärare/föräldrar
+            också når sign-vyn utan att kicks tillbaka till /dashboard. */}
+        <Route path="/bank/sign" element={<Bank />} />
         <Route path="/docs" element={<Docs />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}

@@ -213,16 +213,21 @@ def init_session(
 def confirm_session(
     token: str,
     payload: ConfirmIn,
-    info: TokenInfo = Depends(require_token),
 ) -> dict:
     """Mobilen bekräftar sessionen genom att mata in PIN.
 
-    PIN matchas mot Student.bank_pin_hash. Sessionens student_id
-    måste matcha den inloggade eleven (annars kan vem som helst
-    bekräfta vem som helst).
+    OBS: Den här endpointen kräver INTE inloggning. Sessionstoken
+    bundlar sig själv till en specifik elev (sess.student_id sätts
+    när sessionen skapas), PIN matchas mot elevens bank_pin_hash.
+    Det är samma säkerhetsmodell som riktig BankID — appen behöver
+    inte vara 'inloggad' på webbsidan, den signerar bara sessionen.
+
+    Det här är även det som låter en lärare som impersonerar en elev
+    på desktop scanna QR-koden med sin egen telefon (utan att behöva
+    logga in som eleven där) — telefonen behöver bara visa
+    PIN-formuläret. Token + PIN räcker för verifiering.
     """
     _require_school()
-    student_id = _student_from_info(info)
     with master_session() as s:
         sess = (
             s.query(BankSession)
@@ -231,15 +236,13 @@ def confirm_session(
         )
         if not sess:
             raise HTTPException(404, "Sessionen finns inte")
-        if sess.student_id != student_id:
-            raise HTTPException(403, "Sessionen tillhör annan elev")
         if sess.expires_at < datetime.utcnow():
             raise HTTPException(410, "Sessionen har löpt ut")
         if sess.confirmed_at is not None:
             return {"ok": True, "already_confirmed": True}
-        st = s.get(Student, student_id)
+        st = s.get(Student, sess.student_id)
         if not st or not st.bank_pin_hash:
-            raise HTTPException(400, "PIN saknas")
+            raise HTTPException(400, "PIN saknas för eleven")
         if not verify_password(st.bank_pin_hash, payload.pin):
             raise HTTPException(401, "Fel PIN")
         sess.confirmed_at = datetime.utcnow()

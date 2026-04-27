@@ -186,9 +186,18 @@ def test_teacher_reset_bank_pin(fx) -> None:
     assert me["has_pin"] is False
 
 
-def test_other_student_cannot_confirm_session(fx) -> None:
+def test_wrong_pin_cannot_confirm_session(fx) -> None:
+    """Säkerhetsmodellen efter att confirm gjordes publik (för att
+    matcha riktig BankID där appen inte 'loggar in' på webben):
+    PIN-verifiering mot sess.student_id:s bank_pin_hash är det enda
+    lagret. Fel PIN → 401, oavsett om den som ringer endpointen är
+    inloggad som en annan elev, läraren, eller helt oautentiserad.
+
+    Den här testen verifierar att en annan elev — även med sin egen
+    giltiga PIN '3333' — inte kan bekräfta originalelevens session
+    eftersom den ursprungliga eleven har PIN '2222'."""
     client, _, stu, tid, _sid = fx
-    # Sätt PIN
+    # Originalelevens PIN
     client.post(
         "/bank/set-pin",
         json={"pin": "2222"},
@@ -200,14 +209,13 @@ def test_other_student_cannot_confirm_session(fx) -> None:
         headers={"Authorization": f"Bearer {stu}"},
     ).json()
     token = init["token"]
-    # Skapa annan elev som försöker bekräfta
+    # Skapa annan elev med EGEN PIN
     with master_session() as s:
         other = Student(
             teacher_id=tid, display_name="Bob", login_code="BOB00001",
         )
         s.add(other); s.flush()
         oid = other.id
-        # Annan elev har egen PIN
         s.add(StudentProfile(
             student_id=oid,
             profession="Frisör", employer="Cutters",
@@ -218,15 +226,43 @@ def test_other_student_cannot_confirm_session(fx) -> None:
         ))
     other_tok = random_token()
     register_token(other_tok, role="student", student_id=oid)
-    # Sätt PIN för denna och försök bekräfta
     client.post(
         "/bank/set-pin",
         json={"pin": "3333"},
         headers={"Authorization": f"Bearer {other_tok}"},
     )
+    # Andra elevens PIN matchar inte originalelevens hash → 401.
     r = client.post(
         f"/bank/session/{token}/confirm",
         json={"pin": "3333"},
-        headers={"Authorization": f"Bearer {other_tok}"},
     )
-    assert r.status_code == 403
+    assert r.status_code == 401, r.text
+
+
+def test_anyone_with_correct_pin_can_confirm_session(fx) -> None:
+    """Efter publik confirm-endpoint: vem som helst som har sessionstoken
+    och korrekt PIN kan bekräfta. Det är det vi vill — telefonen som
+    skannar QR-koden är typiskt INTE inloggad som eleven på webben.
+
+    Det här flödet är även det som låter en lärare som impersonerar en
+    elev på desktop scanna QR:en med sin egen telefon utan att behöva
+    logga in som eleven på telefonen."""
+    client, _, stu, _tid, _sid = fx
+    client.post(
+        "/bank/set-pin",
+        json={"pin": "2222"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    init = client.post(
+        "/bank/session/init",
+        json={"purpose": "login"},
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    token = init["token"]
+    # Anropet inkluderar INGEN Authorization-header — bara token + rätt PIN.
+    r = client.post(
+        f"/bank/session/{token}/confirm",
+        json={"pin": "2222"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
