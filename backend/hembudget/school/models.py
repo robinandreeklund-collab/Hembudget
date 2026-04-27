@@ -375,6 +375,17 @@ class BatchArtifact(MasterBase):
     imported_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Bank-flödet (idé 3 i dev_v1.md): bank-relaterade artefakter
+    # (kontoutdrag, kreditkort_faktura, lan_besked) syns FÖRST i banken.
+    # Eleven måste exportera dem ur banken → då sätts denna flagga →
+    # de blir synliga i /my-batches. Lönespec hör inte till bank-flödet
+    # (synlig direkt på /arbetsgivare) — flaggan är NULL på dem.
+    exported_to_my_batches: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    exported_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

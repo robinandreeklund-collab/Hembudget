@@ -1290,8 +1290,10 @@ interface BatchOut {
 
 function SalarySlipsTab() {
   const batchesQ = useQuery({
-    queryKey: ["student-batches"],
-    queryFn: () => api<BatchOut[]>("/student/batches"),
+    queryKey: ["student-batches", "arbetsgivare"],
+    queryFn: () => api<BatchOut[]>(
+      "/student/batches?visible_in=arbetsgivare",
+    ),
   });
   const qc = useQueryClient();
   const [previewArt, setPreviewArt] = useState<{

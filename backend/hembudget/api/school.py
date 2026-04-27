@@ -2015,18 +2015,50 @@ class CreateBatchResultRow(BaseModel):
     error: Optional[str] = None
 
 
-def _batch_to_out(b: ScenarioBatch) -> ScenarioBatchOut:
-    imported = sum(1 for a in b.artifacts if a.imported_at is not None)
+_BANK_KINDS = {"kontoutdrag", "kreditkort_faktura", "lan_besked"}
+
+
+def _visible_artifacts(b: ScenarioBatch, visible_in: Optional[str]) -> list:
+    """Filtrera artefakter beroende på vilken vy som hämtar:
+
+    - 'my_batches'  → bank-artefakter måste vara exporterade; lönespec
+                      exkluderas (den hör till /arbetsgivare)
+    - 'arbetsgivare' → bara lönespec
+    - 'bank'         → bara bank-artefakter (oavsett export-status)
+    - None / annat   → allt (bakåtkompat: lärar-vyer + tester)
+    """
+    arts = b.artifacts
+    if visible_in == "my_batches":
+        return [
+            a for a in arts
+            if a.kind != "lonespec"
+            and (a.kind not in _BANK_KINDS or a.exported_to_my_batches)
+        ]
+    if visible_in == "arbetsgivare":
+        return [a for a in arts if a.kind == "lonespec"]
+    if visible_in == "bank":
+        return [a for a in arts if a.kind in _BANK_KINDS]
+    return list(arts)
+
+
+def _batch_to_out(
+    b: ScenarioBatch, visible_in: Optional[str] = None,
+) -> ScenarioBatchOut:
+    arts = _visible_artifacts(b, visible_in)
+    imported = sum(1 for a in arts if a.imported_at is not None)
     return ScenarioBatchOut(
         id=b.id, student_id=b.student_id, year_month=b.year_month,
         created_at=b.created_at,
-        artifact_count=len(b.artifacts),
+        artifact_count=len(arts),
         imported_count=imported,
     )
 
 
-def _batch_to_detail(b: ScenarioBatch) -> ScenarioBatchDetailOut:
-    base = _batch_to_out(b)
+def _batch_to_detail(
+    b: ScenarioBatch, visible_in: Optional[str] = None,
+) -> ScenarioBatchDetailOut:
+    base = _batch_to_out(b, visible_in)
+    arts = _visible_artifacts(b, visible_in)
     return ScenarioBatchDetailOut(
         **base.model_dump(),
         artifacts=[
@@ -2035,7 +2067,7 @@ def _batch_to_detail(b: ScenarioBatch) -> ScenarioBatchDetailOut:
                 sort_order=a.sort_order, imported_at=a.imported_at,
                 meta=a.meta,
             )
-            for a in b.artifacts
+            for a in arts
         ],
     )
 
@@ -3121,11 +3153,20 @@ def list_all_batch_months(
     response_model=list[ScenarioBatchOut],
 )
 def student_list_batches(
+    visible_in: Optional[str] = None,
     info: TokenInfo = Depends(require_token),
 ) -> list[ScenarioBatchOut]:
     """Lista elevens egna batchar. Tillåter lärar-impersonation
     (x-as-student-headern) så lärare kan kolla elevens vy utan att
-    smällas ut med 403."""
+    smällas ut med 403.
+
+    `visible_in` filtrerar artefakter (idé 3 i dev_v1.md):
+    - my_batches   → bank-artefakter måste vara exporterade,
+                     lönespec exkluderas
+    - arbetsgivare → bara lönespec
+    - bank         → bara bank-artefakter
+    - None         → allt (bakåtkompat)
+    """
     _require_school_mode()
     # Använd actor_student_id från middleware — fungerar för både
     # elev-token och lärare med x-as-student.
@@ -3138,7 +3179,7 @@ def student_list_batches(
             .order_by(ScenarioBatch.year_month.desc())
             .all()
         )
-        return [_batch_to_out(b) for b in batches]
+        return [_batch_to_out(b, visible_in) for b in batches]
 
 
 def _resolve_batch_for_actor(
@@ -3166,12 +3207,13 @@ def _resolve_batch_for_actor(
 )
 def student_batch_detail(
     batch_id: int,
+    visible_in: Optional[str] = None,
     info: TokenInfo = Depends(require_token),
 ) -> ScenarioBatchDetailOut:
     _require_school_mode()
     with master_session() as s:
         batch = _resolve_batch_for_actor(info, batch_id, s)
-        return _batch_to_detail(batch)
+        return _batch_to_detail(batch, visible_in)
 
 
 @router.get("/student/batches/{batch_id}/artifacts/{artifact_id}/download")

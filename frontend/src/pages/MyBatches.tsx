@@ -96,7 +96,9 @@ export default function MyBatches() {
   async function reload() {
     setLoading(true);
     try {
-      const list = await api<BatchSummary[]>("/student/batches");
+      const list = await api<BatchSummary[]>(
+        "/student/batches?visible_in=my_batches",
+      );
       setBatches(list);
       if (list.length > 0 && !active) {
         await openBatch(list[0].id);
@@ -109,7 +111,9 @@ export default function MyBatches() {
   }
 
   async function openBatch(id: number) {
-    const detail = await api<BatchDetail>(`/student/batches/${id}`);
+    const detail = await api<BatchDetail>(
+      `/student/batches/${id}?visible_in=my_batches`,
+    );
     setActive(detail);
   }
 

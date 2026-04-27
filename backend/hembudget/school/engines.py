@@ -401,6 +401,30 @@ def _run_master_migrations(engine: Engine) -> None:
     if s_cols and "bank_pin_hash" not in s_cols:
         _add("students", "bank_pin_hash VARCHAR(120)")
 
+    # BatchArtifact.exported_to_my_batches (idé 3 i dev_v1.md):
+    # bank-flödet kräver att bank-artefakter passerar /my-batches via
+    # explicit export. Befintliga artefakter som redan är importerade
+    # backfillas till True så användarens nuvarande vy fortsätter visa
+    # dem i /my-batches.
+    ba_cols = _cols("batch_artifacts")
+    if ba_cols and "exported_to_my_batches" not in ba_cols:
+        _add(
+            "batch_artifacts",
+            "exported_to_my_batches BOOLEAN NOT NULL DEFAULT 0",
+        )
+        # Backfill: redan importerade → exported (de syns i my-batches
+        # redan idag); icke-importerade kontoutdrag/kort/lån går till
+        # bank-flödet. Lönespec lämnas False så den syns på
+        # /arbetsgivare istället.
+        with engine.begin() as conn:
+            conn.execute(_text(
+                "UPDATE batch_artifacts SET exported_to_my_batches = "
+                + ("TRUE" if is_postgres else "1")
+                + " WHERE imported_at IS NOT NULL"
+            ))
+    if ba_cols and "exported_at" not in ba_cols:
+        _add("batch_artifacts", "exported_at DATETIME")
+
     # StudentProfile partner-fält + cost-split-preference (Wellbeing Fas
     # 7+: 'veil of ignorance'-onboarding där eleven väljer fördelnings-
     # modell innan partner-lön avslöjas).

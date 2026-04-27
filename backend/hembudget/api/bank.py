@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session
 from ..school import is_enabled as school_enabled
 from ..school.bank_models import BankSession
 from ..school.engines import master_session
-from ..school.models import Student
+from ..school.models import BatchArtifact, ScenarioBatch, Student
 from ..security.crypto import hash_password, verify_password
 from .deps import TokenInfo, require_token
 
@@ -223,6 +223,114 @@ def confirm_session(
         if not verify_password(st.bank_pin_hash, payload.pin):
             raise HTTPException(401, "Fel PIN")
         sess.confirmed_at = datetime.utcnow()
+        s.flush()
+        return {"ok": True}
+
+
+class BankArtifactOut(BaseModel):
+    artifact_id: int
+    batch_id: int
+    year_month: str
+    kind: str  # "kontoutdrag" | "kreditkort_faktura" | "lan_besked"
+    title: str
+    filename: str
+    exported_to_my_batches: bool
+    exported_at: Optional[str] = None
+    imported_at: Optional[str] = None
+
+
+# Bank-artefakter = bank-relaterade BatchArtifact-kinds som hör hemma
+# i banken (inte /arbetsgivare). Lönespec exkluderas medvetet.
+BANK_ARTIFACT_KINDS = {"kontoutdrag", "kreditkort_faktura", "lan_besked"}
+
+
+@router.get("/statements", response_model=list[BankArtifactOut])
+def list_bank_artifacts(
+    info: TokenInfo = Depends(require_token),
+) -> list[BankArtifactOut]:
+    """Lista bank-relaterade dokument från elevens batches.
+
+    Returnerar kontoutdrag, kreditkortsfakturor och lånebesked
+    (alla 'pappersdokument från banken'). Lönespec hör inte
+    hit — den ligger på /arbetsgivare.
+
+    Senaste batch först. Visar status: redan exporterad till
+    /my-batches eller ej, redan importerad eller ej.
+    """
+    _require_school()
+    student_id = _student_from_info(info)
+    with master_session() as s:
+        rows = (
+            s.query(BatchArtifact, ScenarioBatch)
+            .join(ScenarioBatch, ScenarioBatch.id == BatchArtifact.batch_id)
+            .filter(
+                ScenarioBatch.student_id == student_id,
+                BatchArtifact.kind.in_(BANK_ARTIFACT_KINDS),
+            )
+            .order_by(
+                ScenarioBatch.year_month.desc(),
+                BatchArtifact.sort_order.asc(),
+            )
+            .all()
+        )
+        return [
+            BankArtifactOut(
+                artifact_id=art.id,
+                batch_id=batch.id,
+                year_month=batch.year_month,
+                kind=art.kind,
+                title=art.title,
+                filename=art.filename,
+                exported_to_my_batches=bool(art.exported_to_my_batches),
+                exported_at=(
+                    art.exported_at.isoformat()
+                    if art.exported_at else None
+                ),
+                imported_at=(
+                    art.imported_at.isoformat()
+                    if art.imported_at else None
+                ),
+            )
+            for (art, batch) in rows
+        ]
+
+
+@router.post(
+    "/statements/{batch_id}/{artifact_id}/export",
+)
+def export_to_my_batches(
+    batch_id: int,
+    artifact_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Exportera ett bank-dokument till /my-batches.
+
+    Pedagogiskt motiv: i verkligheten laddar du ner en PDF från
+    banken och importerar sedan i bokföringen — det är två
+    separata system. Här simulerar vi det genom att eleven
+    aktivt måste 'flytta' dokumentet till sin dokumentmapp.
+
+    Idempotent: redan-exporterade artefakter får ingen ny tidsstämpel.
+    """
+    _require_school()
+    student_id = _student_from_info(info)
+    with master_session() as s:
+        # Validera ägarskap via batch
+        batch = s.get(ScenarioBatch, batch_id)
+        if not batch or batch.student_id != student_id:
+            raise HTTPException(404, "Batch finns inte")
+        art = s.get(BatchArtifact, artifact_id)
+        if not art or art.batch_id != batch_id:
+            raise HTTPException(404, "Dokumentet finns inte")
+        if art.kind not in BANK_ARTIFACT_KINDS:
+            raise HTTPException(
+                400,
+                f"Dokumentet ({art.kind}) hör inte till banken",
+            )
+        if art.exported_to_my_batches:
+            return {"ok": True, "already_exported": True}
+        art.exported_to_my_batches = True
+        art.exported_at = datetime.utcnow()
         s.flush()
         return {"ok": True}
 
