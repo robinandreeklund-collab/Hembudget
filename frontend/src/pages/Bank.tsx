@@ -470,7 +470,7 @@ function BankDashboard() {
                 : "border-transparent text-slate-600 hover:text-slate-900"
             }`}
           >
-            {t === "statements" && "Kontoutdrag"}
+            {t === "statements" && "Bank-dokument"}
             {t === "upcoming" && "Kommande"}
             {t === "scheduled" && "Schemalagda"}
             {t === "reminders" && "Påminnelser"}
@@ -765,10 +765,15 @@ function StatementsTab() {
   }
   return (
     <Card title={`Dokument från banken (${arts.length})`}>
-      <div className="text-xs text-slate-500 mb-3">
-        Banken har egna dokument — kontoutdrag, kreditkortsfakturor
-        och lånebesked. Exportera dem till <em>Dina dokument</em> så
-        kan du sedan importera till bokföringen från /my-batches.
+      <div className="text-xs text-slate-500 mb-3 leading-relaxed">
+        Banken genererar tre typer av dokument åt dig: <strong>kontoutdrag</strong>{" "}
+        (det som hänt på ditt konto), <strong>kreditkortsfakturor</strong> (det
+        du ska betala till kortet) och <strong>lånebesked</strong>. Klicka{" "}
+        <strong>Exportera</strong> så hamnar dokumentet i{" "}
+        <a href="/my-batches" className="text-brand-700 underline">Dina
+        dokument</a> — där bokar du in det i din ekonomi. Importerade
+        kreditkortsfakturor dyker sedan upp i fliken <strong>Kommande</strong>{" "}
+        för signering.
       </div>
       <ul className="divide-y divide-slate-200">
         {arts.map((a) => (
@@ -937,8 +942,12 @@ function UpcomingPaymentsTab() {
   if (unsignedRows.length === 0 && rows.length === 0) {
     return (
       <Card title="Inga obetalda fakturor">
-        <div className="text-sm text-slate-700">
-          Allt är betalt eller redan signerat. Bra jobbat!
+        <div className="text-sm text-slate-700 leading-relaxed">
+          Inga fakturor väntar på signering just nu. Fakturor hamnar här när
+          du importerat en <strong>kreditkortsfaktura</strong> eller liknande
+          från <a href="/my-batches" className="text-brand-700 underline">Dina
+          dokument</a> till din bokföring — då skapas en kommande betalning
+          som ska signeras med EkonomilabbetID innan förfallodag.
         </div>
       </Card>
     );
