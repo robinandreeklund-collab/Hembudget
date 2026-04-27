@@ -319,11 +319,49 @@ class FinnhubProvider(QuoteProvider):
         return out
 
 
+class CompositeProvider(QuoteProvider):
+    """Routar tickers per börs: '.ST'-suffix → YFinance (Stockholm),
+    övriga (US) → Finnhub. Finnhub free tier täcker bara US-börsen så
+    Stockholm-aktier behöver YFinance. Använder båda i samma poll-cycle.
+    """
+
+    name = "composite"
+
+    def __init__(self) -> None:
+        self.finnhub = FinnhubProvider()
+        self.yfinance = YFinanceProvider()
+
+    def fetch_quotes(self, tickers: list[str]) -> list[Quote]:
+        sthlm = [t for t in tickers if t.endswith(".ST")]
+        us = [t for t in tickers if not t.endswith(".ST")]
+        out: list[Quote] = []
+        if sthlm:
+            try:
+                out.extend(self.yfinance.fetch_quotes(sthlm))
+            except Exception:
+                log.exception(
+                    "composite: yfinance failed for Stockholm-tickers",
+                )
+        if us:
+            try:
+                if self.finnhub.api_key:
+                    out.extend(self.finnhub.fetch_quotes(us))
+                else:
+                    out.extend(self.yfinance.fetch_quotes(us))
+            except Exception:
+                log.exception(
+                    "composite: provider failed for US-tickers",
+                )
+        return out
+
+
 def get_provider(name: Optional[str] = None) -> QuoteProvider:
     """Faktorymetod.
 
-    Auto-läge (env-var ej satt): finnhub om nyckel finns, annars mock.
-    Explicit: 'finnhub' / 'yfinance' / 'mock'.
+    Auto-läge (env-var ej satt): composite (Finnhub för US-aktier +
+    YFinance för Stockholm) om Finnhub-nyckel finns, annars rent
+    YFinance som täcker båda börserna.
+    Explicit: 'finnhub' / 'yfinance' / 'mock' / 'composite'.
     """
     explicit = name or os.environ.get("HEMBUDGET_QUOTE_PROVIDER", "")
     explicit = (explicit or "").lower().strip()
@@ -333,9 +371,12 @@ def get_provider(name: Optional[str] = None) -> QuoteProvider:
         return YFinanceProvider()
     if explicit == "mock":
         return MockQuoteProvider()
+    if explicit == "composite":
+        return CompositeProvider()
     if explicit:
         log.warning("Okänd HEMBUDGET_QUOTE_PROVIDER=%s — auto-väljer", explicit)
-    # Auto: finnhub om nyckel finns, annars mock
+    # Auto: composite om Finnhub-nyckel finns (snabbare för US),
+    # annars rent YFinance (täcker båda börserna gratis).
     if finnhub_key_configured():
-        return FinnhubProvider()
-    return MockQuoteProvider()
+        return CompositeProvider()
+    return YFinanceProvider()

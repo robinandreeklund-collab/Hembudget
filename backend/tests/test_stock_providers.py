@@ -57,10 +57,15 @@ def test_mock_provider_different_tickers_different_prices():
     assert len(prices) >= 2  # Minst två olika priser
 
 
-def test_get_provider_default_is_mock(monkeypatch):
+def test_get_provider_default_is_yfinance_without_finnhub_key(monkeypatch):
+    """Default = YFinance (täcker båda börserna gratis) när ingen
+    Finnhub-key är satt. Tidigare default: Mock — men det gjorde att
+    aktievyn såg ut som "stängd marknad" på fresh installs."""
     monkeypatch.delenv("HEMBUDGET_QUOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
     p = get_provider()
-    assert isinstance(p, MockQuoteProvider)
+    from hembudget.stocks.quote_providers import YFinanceProvider
+    assert isinstance(p, YFinanceProvider)
 
 
 def test_get_provider_yfinance_when_env_set(monkeypatch):
@@ -69,10 +74,13 @@ def test_get_provider_yfinance_when_env_set(monkeypatch):
     assert isinstance(p, YFinanceProvider)
 
 
-def test_get_provider_unknown_falls_back_to_mock(monkeypatch):
+def test_get_provider_unknown_falls_back_to_default(monkeypatch):
+    """Okänt namn → samma som default (YFinance utan Finnhub-key)."""
     monkeypatch.setenv("HEMBUDGET_QUOTE_PROVIDER", "okand")
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
     p = get_provider()
-    assert isinstance(p, MockQuoteProvider)
+    from hembudget.stocks.quote_providers import YFinanceProvider
+    assert isinstance(p, YFinanceProvider)
 
 
 def test_finnhub_provider_returns_empty_without_key(monkeypatch):
@@ -83,21 +91,25 @@ def test_finnhub_provider_returns_empty_without_key(monkeypatch):
     assert p.fetch_quotes(["VOLV-B.ST"]) == []
 
 
-def test_get_provider_auto_picks_finnhub_when_key_set(monkeypatch):
-    """Utan HEMBUDGET_QUOTE_PROVIDER men med FINNHUB_API_KEY → finnhub."""
+def test_get_provider_auto_picks_composite_when_key_set(monkeypatch):
+    """Utan HEMBUDGET_QUOTE_PROVIDER men med FINNHUB_API_KEY → composite
+    (Finnhub för US, YFinance för Stockholm). Tidigare bara Finnhub som
+    inte täckte Stockholm → tomma kurser för svenska aktier."""
     monkeypatch.delenv("HEMBUDGET_QUOTE_PROVIDER", raising=False)
     monkeypatch.setenv("FINNHUB_API_KEY", "test-key-123")
-    from hembudget.stocks.quote_providers import FinnhubProvider, get_provider
+    from hembudget.stocks.quote_providers import CompositeProvider, get_provider
     p = get_provider()
-    assert isinstance(p, FinnhubProvider)
+    assert isinstance(p, CompositeProvider)
 
 
-def test_get_provider_auto_picks_mock_without_key(monkeypatch):
-    """Utan nyckel + utan env-var → mock."""
+def test_get_provider_auto_picks_yfinance_without_key(monkeypatch):
+    """Utan Finnhub-nyckel + utan env-var → YFinance (täcker båda
+    börserna gratis). Mock används bara för tester."""
     monkeypatch.delenv("HEMBUDGET_QUOTE_PROVIDER", raising=False)
     monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    from hembudget.stocks.quote_providers import YFinanceProvider
     p = get_provider()
-    assert isinstance(p, MockQuoteProvider)
+    assert isinstance(p, YFinanceProvider)
 
 
 def test_finnhub_key_source_env(monkeypatch):
