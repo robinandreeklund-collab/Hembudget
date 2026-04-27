@@ -23,8 +23,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
 import { Card } from "@/components/Card";
-import { NoStudentSelected } from "@/components/NoStudentSelected";
-import { useAuth } from "@/hooks/useAuth";
 
 
 interface BankMeOut {
@@ -52,18 +50,14 @@ interface SessionStatusOut {
 
 export default function Bank() {
   const [searchParams] = useSearchParams();
-  const { role, asStudent } = useAuth();
   // Mobil-flödet (sign-confirm-vyn) tar över när token finns i URL:en
   const signToken = searchParams.get("token");
   // Sign-vy bara aktiv när URL:en innehåller ?token=...
   const isSignView = searchParams.get("sign") === "1" || !!signToken;
-  const teacherWithoutStudent = role === "teacher" && !asStudent;
 
   const meQ = useQuery({
-    queryKey: ["bank-me", asStudent ?? "self"],
+    queryKey: ["bank-me"],
     queryFn: () => api<BankMeOut>("/bank/me"),
-    // Hoppa queryn om lärare inte valt en elev (annars 400 från backend).
-    enabled: !teacherWithoutStudent,
   });
 
   // Session-state — null tills eleven trycker 'Logga in'
@@ -86,11 +80,6 @@ export default function Bank() {
       );
     }
   }, [sessionStatusQ.data?.confirmed]);
-
-  // Lärare utan asStudent → vänlig "välj elev"-vy istället för 400.
-  if (teacherWithoutStudent) {
-    return <NoStudentSelected pageName="Banken" />;
-  }
 
   if (meQ.isLoading) {
     return (
