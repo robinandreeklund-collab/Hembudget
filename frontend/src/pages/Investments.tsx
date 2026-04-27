@@ -157,7 +157,15 @@ export default function Investments() {
       </div>
 
       {tab === "overview" && portfolio && (
-        <OverviewTab portfolio={portfolio} />
+        <OverviewTab
+          portfolio={portfolio}
+          stocks={stocks}
+          watchlist={watchlist}
+          onTrade={(t) => setTradeModal({ ticker: t, side: "buy" })}
+          onDetail={setDetailTicker}
+          marketOpen={market?.open ?? false}
+          onChangeTab={setTab}
+        />
       )}
       {tab === "market" && (
         <MarketTab
@@ -613,7 +621,253 @@ function StockHindsightCard() {
 }
 
 
-function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
+function EmptyOverview({
+  portfolio,
+  stocks,
+  watchlist,
+  onTrade,
+  onDetail,
+  marketOpen,
+  onChangeTab,
+}: {
+  portfolio: Portfolio;
+  stocks: Stock[];
+  watchlist: Set<string>;
+  onTrade: (ticker: string) => void;
+  onDetail: (ticker: string) => void;
+  marketOpen: boolean;
+  onChangeTab: (tab: Tab) => void;
+}) {
+  // Topp-3 vinnare och förlorare idag — bara aktier med change_pct satt.
+  const withChange = stocks.filter(
+    (s) => s.change_pct !== null && s.change_pct !== undefined,
+  );
+  const winners = [...withChange]
+    .sort((a, b) => (b.change_pct ?? 0) - (a.change_pct ?? 0))
+    .slice(0, 3);
+  const losers = [...withChange]
+    .sort((a, b) => (a.change_pct ?? 0) - (b.change_pct ?? 0))
+    .slice(0, 3);
+
+  const watchedStocks = stocks.filter((s) => watchlist.has(s.ticker));
+
+  const cash = portfolio.cash_balance;
+  const hasCash = cash > 0;
+
+  return (
+    <div className="space-y-4">
+      <Card title="Kom igång med aktier">
+        <div className="text-sm text-slate-700 leading-relaxed mb-3">
+          Du äger inga aktier än. Här är vad du behöver göra:
+        </div>
+        <ol className="space-y-2 text-sm text-slate-800">
+          <li className="flex gap-2">
+            <span className={`flex-shrink-0 w-6 h-6 rounded-full text-xs flex items-center justify-center ${
+              hasCash ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"
+            }`}>1</span>
+            <div>
+              <div className="font-medium">
+                Flytta pengar till ett ISK-konto
+                {hasCash && (
+                  <span className="ml-2 text-xs text-emerald-700">
+                    ✓ Klart — {formatSEK(cash)} tillgängligt
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-slate-600 mt-0.5">
+                ISK schablonbeskattas (~0,9 %/år) — bra för långsiktigt
+                aktiesparande. Skapa konto under "Konton" om du saknar.
+              </div>
+            </div>
+          </li>
+          <li className="flex gap-2">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs flex items-center justify-center">2</span>
+            <div>
+              <div className="font-medium">Välj första aktien</div>
+              <div className="text-xs text-slate-600 mt-0.5">
+                Tips: börja med ett bolag du själv förstår produkten av.
+                Volvo bilar, Telia mobil, ICA mat — det gör analysen enklare.
+              </div>
+              <button
+                onClick={() => onChangeTab("market")}
+                className="mt-1 text-xs text-brand-700 hover:underline"
+              >
+                → Bläddra i marknaden ({stocks.length} aktier)
+              </button>
+            </div>
+          </li>
+          <li className="flex gap-2">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs flex items-center justify-center">3</span>
+            <div>
+              <div className="font-medium">Sprid riskerna från start</div>
+              <div className="text-xs text-slate-600 mt-0.5">
+                5+ aktier i olika sektorer ger bättre riskjusterad
+                avkastning än att lägga allt i en. Börja smått — du kan
+                köpa 1 enstaka aktie.
+              </div>
+            </div>
+          </li>
+        </ol>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card title="Dagens vinnare">
+          {winners.length === 0 ? (
+            <div className="text-sm text-slate-500">
+              Inga kursdata än idag — kommer in när marknaden öppnar.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {winners.map((s) => (
+                <MoverRow
+                  key={s.ticker}
+                  stock={s}
+                  watched={watchlist.has(s.ticker)}
+                  onTrade={onTrade}
+                  onDetail={onDetail}
+                  marketOpen={marketOpen}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+        <Card title="Dagens förlorare">
+          {losers.length === 0 ? (
+            <div className="text-sm text-slate-500">
+              Inga kursdata än idag — kommer in när marknaden öppnar.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {losers.map((s) => (
+                <MoverRow
+                  key={s.ticker}
+                  stock={s}
+                  watched={watchlist.has(s.ticker)}
+                  onTrade={onTrade}
+                  onDetail={onDetail}
+                  marketOpen={marketOpen}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card title={`Bevakningslista (${watchedStocks.length})`}>
+        {watchedStocks.length === 0 ? (
+          <div className="text-sm text-slate-500">
+            Inga bevakade aktier än. Stjärnmarkera intressanta bolag i
+            "Marknad" så följer du dem här utan att äga.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {watchedStocks.map((s) => (
+              <MoverRow
+                key={s.ticker}
+                stock={s}
+                watched={true}
+                onTrade={onTrade}
+                onDetail={onDetail}
+                marketOpen={marketOpen}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-4">
+        <Card title="Lär dig">
+          <div className="space-y-3">
+            {LEARN_TIPS.map((t) => (
+              <div key={t.title} className="border-l-2 border-amber-300 pl-2">
+                <div className="text-xs font-semibold text-slate-800">{t.title}</div>
+                <div className="text-[11px] text-slate-600 leading-snug mt-0.5">
+                  {t.body}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <FxCard />
+      </div>
+    </div>
+  );
+}
+
+
+function MoverRow({
+  stock,
+  watched,
+  onTrade,
+  onDetail,
+  marketOpen,
+}: {
+  stock: Stock;
+  watched: boolean;
+  onTrade: (ticker: string) => void;
+  onDetail: (ticker: string) => void;
+  marketOpen: boolean;
+}) {
+  const ch = stock.change_pct ?? 0;
+  const isUsd = stock.currency === "USD";
+  const priceText =
+    stock.last !== undefined && stock.last !== null
+      ? isUsd
+        ? `$${stock.last.toFixed(2)}`
+        : `${stock.last.toFixed(2)} kr`
+      : "—";
+  return (
+    <div className="flex items-center justify-between gap-2 py-1 border-b border-slate-100 last:border-0">
+      <button
+        onClick={() => onDetail(stock.ticker)}
+        className="flex-1 text-left hover:bg-slate-50 -mx-1 px-1 py-0.5 rounded"
+      >
+        <div className="flex items-center gap-1">
+          <span className="text-sm font-medium">{stock.ticker}</span>
+          {watched && <Star className="w-3 h-3 fill-amber-400 text-amber-500" />}
+        </div>
+        <div className="text-[10px] text-slate-500 truncate">
+          {stock.name_sv || stock.name}
+        </div>
+      </button>
+      <div className="text-right text-xs">
+        <div className="text-slate-700">{priceText}</div>
+        <div className={`font-medium flex items-center justify-end gap-0.5 ${
+          ch > 0 ? "text-emerald-700" : ch < 0 ? "text-rose-700" : "text-slate-600"
+        }`}>
+          {ch > 0 ? <ArrowUp className="w-3 h-3" /> : ch < 0 ? <ArrowDown className="w-3 h-3" /> : null}
+          {ch >= 0 ? "+" : ""}{ch.toFixed(2)} %
+        </div>
+      </div>
+      <button
+        onClick={() => onTrade(stock.ticker)}
+        className="text-xs px-2 py-0.5 rounded bg-brand-600 text-white hover:bg-brand-700"
+        title={!marketOpen ? "Marknaden stängd — läggs i kö" : undefined}
+      >
+        Köp
+      </button>
+    </div>
+  );
+}
+
+
+function OverviewTab({
+  portfolio,
+  stocks,
+  watchlist,
+  onTrade,
+  onDetail,
+  marketOpen,
+  onChangeTab,
+}: {
+  portfolio: Portfolio;
+  stocks: Stock[];
+  watchlist: Set<string>;
+  onTrade: (ticker: string) => void;
+  onDetail: (ticker: string) => void;
+  marketOpen: boolean;
+  onChangeTab: (tab: Tab) => void;
+}) {
   const pnl = portfolio.unrealized_pnl;
   const pnlPct = portfolio.total_cost_basis > 0
     ? (pnl / portfolio.total_cost_basis) * 100
@@ -623,6 +877,20 @@ function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
     : 100;
   const holdingCount = portfolio.holdings?.length ?? 0;
   const sectorCount = Object.keys(portfolio.sector_weights).length;
+
+  if (holdingCount === 0) {
+    return (
+      <EmptyOverview
+        portfolio={portfolio}
+        stocks={stocks}
+        watchlist={watchlist}
+        onTrade={onTrade}
+        onDetail={onDetail}
+        marketOpen={marketOpen}
+        onChangeTab={onChangeTab}
+      />
+    );
+  }
 
   // Bästa/sämsta innehav (största absoluta P&L %)
   const pnlPctOf = (h: Holding): number =>
