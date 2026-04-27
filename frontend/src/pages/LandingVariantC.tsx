@@ -208,7 +208,7 @@ export default function LandingVariantC() {
       <ThreeModesSection theme={THEME} />
       <StocksSection theme={THEME} />
       <CreditTriggerSection theme={THEME} />
-      <Moments />
+      <LifeSimSection theme={THEME} />
       <Logic />
       <Problem />
       <Pricing />
@@ -263,36 +263,6 @@ const PROBLEM_STATS = [
   { num: "4 av 10", label: "unga klarar inte en oväntad räkning på 2 000 kr." },
   { num: "60 %", label: "av unga har aldrig läst en lönespecifikation." },
   { num: "1 h", label: "räcker för att prova grunderna i Ekonomilabbet." },
-];
-
-// 5 nyckelmoment — språkfix från originalbundlen:
-// 'kortfaktur' → 'kortfakturor', 'din barn' → 'dina barn'.
-const MOMENTS = [
-  {
-    n: 1,
-    title: "En egen vardag",
-    desc: "Yrke, lön, bostad, lån — allt slumpas unikt per användare. Dashboarden visar nettolön, utgifter, sparande och budget mot verkligheten i realtid.",
-  },
-  {
-    n: 2,
-    title: "Riktiga dokument att jobba med",
-    desc: "Du trycker \"generera\" — eleven får kontoutdrag, lönespec, lånebesked och kortfakturor som PDF:er och importerar själv.",
-  },
-  {
-    n: 3,
-    title: "Budget möter verklighet",
-    desc: "Eleven sätter månadsbudget enligt Konsumentverkets 2026-siffror. När en trasig diskmaskin slår till syns följderna direkt.",
-  },
-  {
-    n: 4,
-    title: "Verkliga ekonomiska val",
-    desc: "Bolåne-beslut baserat på Riksbankens historiska räntor. Eleven binder eller kör rörlig — systemet visar facit efter perioden.",
-  },
-  {
-    n: 5,
-    title: "Du ser hela bilden",
-    desc: "Översiktsmatris över alla användare och uppdrag. Kategoriseringsfacit per transaktion. Chatt för feedback. Samma översikt vare sig du följer en klass eller dina barn.",
-  },
 ];
 
 const LOGIC = [
@@ -1746,345 +1716,6 @@ function Pricing() {
   );
 }
 
-// ---------- Moments ----------
-
-function Moments() {
-  return (
-    <section
-      style={{
-        padding: "40px 24px 80px",
-        maxWidth: 1100,
-        margin: "0 auto",
-      }}
-    >
-      <h2 className="vc-h2">
-        Fem <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>nyckelmoment.</em>
-      </h2>
-      <p
-        style={{
-          fontSize: 15,
-          color: "#475569",
-          marginTop: 16,
-          marginBottom: 48,
-          maxWidth: 540,
-        }}
-      >
-        Det är vad den unga och den vuxna faktiskt gör — i ordning, månad
-        för månad. Samma flöde i klassrummet som hemma.
-      </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
-        {MOMENTS.map((m, i) => (
-          <div
-            key={m.n}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr)",
-              gap: 56,
-              paddingTop: i === 0 ? 0 : 28,
-              borderTop: i === 0 ? "none" : "1px solid #e2e8f0",
-            }}
-            className="vc-moment-row"
-          >
-            <style>{`
-              @media (max-width: 768px) {
-                .vc-moment-row { grid-template-columns: 1fr !important; gap: 20px !important; }
-              }
-            `}</style>
-            <div>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 30,
-                  height: 30,
-                  borderRadius: "50%",
-                  border: "1.5px solid #0f172a",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  marginBottom: 14,
-                }}
-              >
-                {m.n}
-              </div>
-              <h3
-                style={{
-                  fontSize: 26,
-                  fontWeight: 600,
-                  letterSpacing: -0.6,
-                  lineHeight: 1.15,
-                  marginBottom: 12,
-                }}
-              >
-                {m.title}.
-              </h3>
-              <p
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  color: "#475569",
-                  maxWidth: 380,
-                }}
-              >
-                {m.desc}
-              </p>
-            </div>
-            <div
-              className="vc-card"
-              style={{
-                padding: 16,
-                minHeight: 180,
-                fontFamily: 'ui-monospace, "SF Mono", monospace',
-                fontSize: 11,
-                color: "#64748b",
-              }}
-            >
-              <MomentMock variant={m.n} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function MomentMock({ variant }: { variant: number }) {
-  if (variant === 1) {
-    return (
-      <div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            borderBottom: "1px solid #e2e8f0",
-            paddingBottom: 8,
-            marginBottom: 12,
-          }}
-        >
-          <span style={{ fontWeight: 600, color: "#0f172a" }}>
-            Anna · Barista · Stockholm
-          </span>
-        </div>
-        {[
-          ["Nettolön nov", "23 450 kr"],
-          ["Hyra", "−9 200 kr"],
-          ["Mat & dryck", "−3 870 kr"],
-          ["Sparande", "−1 500 kr"],
-          ["Saldo idag", "8 880 kr"],
-        ].map(([k, v]) => (
-          <div
-            key={k}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "5px 0",
-            }}
-          >
-            <span>{k}</span>
-            <span style={{ color: "#0f172a" }}>{v}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (variant === 2) {
-    return (
-      <div>
-        <div style={{ marginBottom: 8 }}>Generering 2026-11</div>
-        {[
-          ["Kontoutdrag", "33 transaktioner"],
-          ["Lönespec", "november"],
-          ["Lånebesked", "1 år bunden"],
-          ["Kortfaktura", "−7 240 kr"],
-        ].map(([t, d], i) => (
-          <div
-            key={i}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "6px 0",
-              borderBottom: "1px solid #e2e8f0",
-            }}
-          >
-            <div>
-              <div style={{ color: "#0f172a", fontWeight: 500 }}>{t}</div>
-              <div style={{ fontSize: 10 }}>{d}</div>
-            </div>
-            <span
-              style={{
-                padding: "2px 8px",
-                border: "1px solid #e2e8f0",
-                borderRadius: 3,
-              }}
-            >
-              PDF
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (variant === 3) {
-    return (
-      <div>
-        <div style={{ marginBottom: 10 }}>Budget vs faktiskt · november</div>
-        {[
-          ["Mat (planerat 4 000)", "3 870", 0.97],
-          ["Nöje (planerat 1 500)", "2 410", 1.6],
-          ["Hushåll (planerat 800)", "1 290", 1.6],
-        ].map(([k, v, r], i) => (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 10,
-                color: "#0f172a",
-              }}
-            >
-              <span>{k as string}</span>
-              <span>{v as string}</span>
-            </div>
-            <div
-              style={{
-                height: 4,
-                background: "#e2e8f0",
-                borderRadius: 2,
-                overflow: "hidden",
-                marginTop: 3,
-              }}
-            >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${Math.min((r as number) * 60, 100)}%`,
-                  background: (r as number) > 1 ? "#dc4c2b" : "#0f172a",
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (variant === 4) {
-    return (
-      <div>
-        <div style={{ marginBottom: 8 }}>Bolåne-uppdrag · 36 mån horisont</div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-            marginBottom: 10,
-          }}
-        >
-          <div
-            style={{
-              padding: 10,
-              border: "1.5px solid #0f172a",
-              borderRadius: 4,
-            }}
-          >
-            <div style={{ fontSize: 10 }}>Rörlig (slutvärde)</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-              3,25 %
-            </div>
-          </div>
-          <div
-            style={{
-              padding: 10,
-              border: "1px solid #e2e8f0",
-              borderRadius: 4,
-            }}
-          >
-            <div style={{ fontSize: 10 }}>3 år bunden</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-              3,90 %
-            </div>
-          </div>
-        </div>
-        <div style={{ fontSize: 10 }}>
-          Snittränta över perioden: 3,5 % · Bunden hela perioden
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            padding: 6,
-            background: "#fef3c7",
-            borderRadius: 3,
-            fontSize: 10,
-            color: "#0f172a",
-          }}
-        >
-          Rörlig vann — 19 240 kr lägre kostnad
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <div style={{ marginBottom: 8 }}>Klass 9A · 5 elever</div>
-      <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
-        <thead style={{ color: "#64748b" }}>
-          <tr>
-            <th align="left">Elev</th>
-            <th>Budget</th>
-            <th>Bolån</th>
-            <th align="right">Mastery</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            ["Anna", "klar", "klar", "83%"],
-            ["Edvard", "klar", "pågår", "71%"],
-            ["Cassi", "pågår", "väntar", "54%"],
-            ["Maja", "klar", "klar", "90%"],
-            ["Erik", "pågår", "klar", "67%"],
-          ].map((r, i) => (
-            <tr key={i} style={{ borderTop: "1px solid #e2e8f0" }}>
-              <td style={{ color: "#0f172a", padding: "5px 0" }}>{r[0]}</td>
-              <td align="center">
-                <span
-                  style={{
-                    padding: "1px 6px",
-                    background: r[1] === "klar" ? "#d1fae5" : "#fef3c7",
-                    borderRadius: 3,
-                  }}
-                >
-                  {r[1]}
-                </span>
-              </td>
-              <td align="center">
-                <span
-                  style={{
-                    padding: "1px 6px",
-                    background:
-                      r[2] === "klar"
-                        ? "#d1fae5"
-                        : r[2] === "pågår"
-                        ? "#fef3c7"
-                        : "#fee2e2",
-                    borderRadius: 3,
-                  }}
-                >
-                  {r[2]}
-                </span>
-              </td>
-              <td
-                align="right"
-                style={{ color: "#0f172a", fontWeight: 600 }}
-              >
-                {r[3]}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 // ---------- Logic ----------
 
@@ -4737,6 +4368,455 @@ function CreditTriggerSection({ theme }: { theme: Theme }) {
               "Hur hamnade du här? Vad kunde du gjort annorlunda?"
             </em>
           </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------- LifeSimSection (v5) — livssimulator + Swish-skuld-spotlight ----------
+
+function LifeSimSection({ theme }: { theme: Theme }) {
+  const events = [
+    {
+      cat: "Socialt",
+      symbol: "Bg",
+      title: "Bio på Filmstaden",
+      cost: "195 kr",
+      wb: "+ Sociala · + Fritid",
+      detail:
+        "Vänskap kostar pengar. Säger eleven nej blir Wellbeing 60 — säger hen ja på allt brister bufferten.",
+    },
+    {
+      cat: "Hälsa",
+      symbol: "Tn",
+      title: "Tandläkare akut",
+      cost: "2 400 kr",
+      wb: "− Trygghet om buffert saknas",
+      detail:
+        "Oväntad utgift. Nu märker eleven varför reservfonden är sex månadshyror, inte två.",
+    },
+    {
+      cat: "Fest",
+      symbol: "Kj",
+      title: "Kalas hos Jonna",
+      cost: "450 kr present + uber",
+      wb: "+ Sociala · − Ekonomi",
+      detail: "Eleven måste välja: avstå eller ompröva budgeten denna vecka.",
+    },
+    {
+      cat: "Vardag",
+      symbol: "Lh",
+      title: "Löning till sparkonto",
+      cost: "+ 4 000 kr",
+      wb: "+ Ekonomi · + Trygghet",
+      detail:
+        "Automatiserat sparande. 25 % till buffert, 5 % till långsiktigt — innan eleven hinner spendera.",
+    },
+    {
+      cat: "Större",
+      symbol: "Mt",
+      title: "Marathon-anmälan",
+      cost: "795 kr",
+      wb: "+ Hälsa · + Fritid",
+      detail:
+        "En investering i sig själv. Värt det? Beror på vad det tränger ut.",
+    },
+    {
+      cat: "Tvång",
+      symbol: "Sl",
+      title: "Sl-böter — glömt biljett",
+      cost: "− 1 500 kr",
+      wb: "− Ekonomi · − Trygghet",
+      detail:
+        "Konsekvens. Inte abstrakt straff — riktig hål i bufferten som tar två månader att fylla.",
+    },
+  ];
+  return (
+    <section
+      style={{
+        padding: "96px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#fafaf9",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 12,
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <SectionHeader
+          cell={{ sym: "Lv", n: "06", label: "Livet" }}
+          eyebrow="Livssimulatorn"
+          theme={theme}
+        >
+          Igenkännbara situationer
+          <br />
+          <em style={{ color: theme.accent, fontStyle: "italic" }}>
+            från svensk vardag.
+          </em>
+        </SectionHeader>
+        <span
+          style={{
+            padding: "6px 12px",
+            background: "#fff",
+            border: `1px solid ${theme.rule}`,
+            borderRadius: 100,
+            fontSize: 12,
+            fontFamily: "ui-monospace, monospace",
+            color: "#475569",
+            letterSpacing: 0.5,
+            marginTop: 12,
+          }}
+        >
+          URVAL · 6 KORT
+        </span>
+      </div>
+      <p
+        style={{
+          maxWidth: 720,
+          marginBottom: 36,
+          fontSize: 15.5,
+          lineHeight: 1.55,
+          color: "#475569",
+        }}
+      >
+        Bio på Filmstaden, julbord på Operaterrassen, akut tandläkare, SL-böter,
+        kalas-presenter, marathon-anmälan. Inga abstrakta lärobokssituationer
+        — situationer eleven faktiskt möter, eller kommer att möta. Varje val
+        syns i bokföringen — och i Wellbeing-poängen.
+      </p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 14,
+        }}
+      >
+        {events.map((e, i) => (
+          <div
+            key={i}
+            style={{
+              background: "#fff",
+              border: `1px solid ${theme.rule}`,
+              borderRadius: 10,
+              padding: 18,
+              transition: "all .14s",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                marginBottom: 14,
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 7,
+                  background: "#fef3c7",
+                  color: "#78350f",
+                  border: "1px solid rgba(120,53,15,.2)",
+                  display: "grid",
+                  placeItems: "center",
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                {e.symbol}
+              </div>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  padding: "3px 8px",
+                  borderRadius: 100,
+                  background: "#f1f5f9",
+                  color: "#475569",
+                  fontFamily: "ui-monospace, monospace",
+                  letterSpacing: 0.5,
+                  textTransform: "uppercase",
+                }}
+              >
+                {e.cat}
+              </span>
+            </div>
+            <h4 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+              {e.title}
+            </h4>
+            <div
+              style={{
+                fontSize: 12.5,
+                fontFamily: "ui-monospace, monospace",
+                color: theme.accent,
+                marginBottom: 10,
+              }}
+            >
+              {e.cost} · {e.wb}
+            </div>
+            <p
+              style={{
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "#64748b",
+                margin: 0,
+              }}
+            >
+              {e.detail}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Social opportunity cost — feature spotlight */}
+      <div
+        style={{
+          marginTop: 56,
+          padding: 0,
+          background: "#fff",
+          border: `1px solid ${theme.rule}`,
+          borderRadius: 14,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          className="vc-lifesim-spotlight"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            alignItems: "stretch",
+          }}
+        >
+          <style>{`
+            @media (max-width: 768px) {
+              .vc-lifesim-spotlight { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+          <div style={{ padding: "36px 36px 36px 40px" }}>
+            <div className={theme.eyebrow} style={{ marginBottom: 12 }}>
+              Mitt favoritmoment
+            </div>
+            <h3
+              style={{
+                fontSize: 24,
+                fontWeight: 600,
+                letterSpacing: -0.4,
+                lineHeight: 1.25,
+                marginBottom: 14,
+                color: "#0f172a",
+                maxWidth: 480,
+              }}
+            >
+              "Att bjuda en kompis" är en av de vanligaste anledningarna till
+              att en budget spricker — som vuxen.
+            </h3>
+            <p
+              style={{
+                fontSize: 14.5,
+                lineHeight: 1.6,
+                color: "#475569",
+                marginBottom: 18,
+                maxWidth: 480,
+              }}
+            >
+              Eleven känner det innan hen är 20. Bjuder hen på middagen denna
+              vecka, kan hen inte gå på konserten nästa vecka. Det är opportunity
+              cost — fast social, vardaglig, igenkännbar. Och eleven ser det i
+              samma vy som saldot.
+            </p>
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <li
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "#0f172a",
+                }}
+              >
+                <span
+                  style={{
+                    color: theme.accent,
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  01
+                </span>
+                <span>
+                  <strong>Sociala band sjunker</strong> om eleven nekar
+                  konsekvent. "Spara pengar" på bekostnad av kompisar är inte
+                  gratis.
+                </span>
+              </li>
+              <li
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "#0f172a",
+                }}
+              >
+                <span
+                  style={{
+                    color: theme.accent,
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  02
+                </span>
+                <span>
+                  <strong>Ekonomin spricker</strong> om eleven bjuder på allt
+                  utan buffert. Generositet utan ramar blir SMS-lån.
+                </span>
+              </li>
+              <li
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "flex-start",
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "#0f172a",
+                }}
+              >
+                <span
+                  style={{
+                    color: theme.accent,
+                    fontFamily: "ui-monospace, monospace",
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  03
+                </span>
+                <span>
+                  <strong>Swish-skulden</strong> blir riktig. En obetald 80-lapp
+                  till en klasskompis är en finansiell belastning som minskar
+                  handlingsutrymmet på riktigt.
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <div
+            style={{
+              background: "#0f172a",
+              padding: 40,
+              display: "grid",
+              placeItems: "center",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                maxWidth: 320,
+                background: "#fff",
+                borderRadius: 18,
+                padding: 18,
+                boxShadow: "0 20px 60px -10px rgba(0,0,0,0.5)",
+                fontFamily: '"Inter", system-ui, sans-serif',
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 16,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "ui-monospace, monospace",
+                    letterSpacing: 1,
+                    color: "#64748b",
+                  }}
+                >
+                  SOCIALA SKULDER
+                </span>
+                <span style={{ fontSize: 11, color: "#dc4c2b", fontWeight: 600 }}>
+                  3 öppna
+                </span>
+              </div>
+              {[
+                { name: "Linnea · pizza på fredag", amt: "85 kr", age: "sedan 6 dagar", urgent: true },
+                { name: "Adam · biobiljett", amt: "140 kr", age: "sedan 2 veckor", urgent: true },
+                { name: "Maja · Spotify-delning", amt: "40 kr", age: "sedan 4 dagar", urgent: false },
+              ].map((d, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: "12px 0",
+                    borderBottom: i < 2 ? "1px solid #f1f5f9" : "none",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 500, color: "#0f172a", marginBottom: 2 }}>
+                      {d.name}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: d.urgent ? "#dc4c2b" : "#64748b" }}>
+                      {d.age}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "ui-monospace, monospace",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {d.amt}
+                  </div>
+                </div>
+              ))}
+              <div
+                style={{
+                  marginTop: 14,
+                  padding: 12,
+                  background: "#fef3c7",
+                  borderRadius: 8,
+                  fontSize: 12.5,
+                  lineHeight: 1.45,
+                  color: "#78350f",
+                }}
+              >
+                <span style={{ fontWeight: 600 }}>Påverkan på handlingsutrymmet:</span>{" "}
+                265 kr fast — det är drygt en bio nästa vecka.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
