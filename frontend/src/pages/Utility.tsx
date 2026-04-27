@@ -105,7 +105,7 @@ export default function Utility() {
   }, [data]);
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="serif text-3xl leading-tight">
           <Activity className="w-6 h-6" />

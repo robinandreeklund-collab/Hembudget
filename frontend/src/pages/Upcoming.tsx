@@ -234,7 +234,7 @@ export default function Upcoming() {
   const paidIncomes = items.filter((i) => i.kind === "income" && isFullyPaid(i));
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="serif text-3xl leading-tight">

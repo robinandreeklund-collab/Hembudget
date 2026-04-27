@@ -123,7 +123,7 @@ export default function Reports() {
   const ledger = ledgerQ.data;
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <h1 className="serif text-3xl leading-tight">Rapporter</h1>
 
       <Card
