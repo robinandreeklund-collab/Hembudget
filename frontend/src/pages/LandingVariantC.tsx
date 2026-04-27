@@ -218,6 +218,7 @@ export default function LandingVariantC() {
       <Problem />
       <PriceSection theme={THEME} />
       <Faq />
+      <FoundersQuoteSection theme={THEME} />
       <Cta />
       <Contact />
       <Footer />
@@ -7576,6 +7577,88 @@ function PriceSection({ theme }: { theme: Theme }) {
           </ul>
         </div>
       </div>
+    </section>
+  );
+}
+
+// ---------- FoundersQuoteSection (v5) — Robin Fröjd · Ekonomilabbet ----------
+
+function FoundersQuoteSection({ theme }: { theme: Theme }) {
+  return (
+    <section
+      style={{
+        padding: "120px 24px",
+        borderTop: `1px solid ${theme.rule}`,
+        background: "#0f172a",
+        color: "#fff",
+      }}
+    >
+      <blockquote
+        style={{
+          margin: "0 auto",
+          maxWidth: 820,
+          textAlign: "center",
+          padding: 0,
+        }}
+      >
+        <p
+          style={{
+            fontFamily: theme.serifFont,
+            fontSize: 32,
+            lineHeight: 1.25,
+            color: "#fff",
+            fontStyle: "italic",
+            margin: 0,
+            letterSpacing: -0.5,
+            textWrap: "balance",
+            fontWeight: 500,
+          }}
+        >
+          "Vi simulerar inte bara ekonomi — vi tränar förmågan att{" "}
+          <em style={{ color: "#fbbf24" }}>leva ett balanserat liv.</em>"
+        </p>
+
+        <div
+          style={{
+            marginTop: 36,
+            fontSize: 15.5,
+            lineHeight: 1.7,
+            color: "#94a3b8",
+            maxWidth: 640,
+            marginLeft: "auto",
+            marginRight: "auto",
+            fontFamily: theme.serifFont,
+          }}
+        >
+          <p style={{ margin: "0 0 14px" }}>
+            Ekonomi är inte ett abstrakt kapitel i en lärobok — det är balansen
+            mellan våra val idag och våra möjligheter imorgon.
+          </p>
+          <p style={{ margin: "0 0 14px" }}>
+            Genom att bygga kunskap genom konsekvenser snarare än teori, ger vi
+            nästa generation verktygen att navigera livets dalar med insikt
+            istället för osäkerhet.
+          </p>
+          <p style={{ margin: 0 }}>
+            Genom att koppla ekonomisk trygghet till personligt välmående, lär
+            vi eleverna att hantera verklighetens stress och fatta beslut som
+            håller över tid.
+          </p>
+        </div>
+
+        <footer
+          style={{
+            marginTop: 36,
+            fontSize: 12,
+            color: "#64748b",
+            fontFamily: "ui-monospace, monospace",
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}
+        >
+          — Robin Fröjd · Ekonomilabbet
+        </footer>
+      </blockquote>
     </section>
   );
 }
