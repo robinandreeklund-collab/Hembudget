@@ -360,6 +360,27 @@ def teacher_negotiation_detail(
 
 
 @router.post(
+    "/teacher/employer/{student_id}/reset-bank-pin",
+)
+def teacher_reset_bank_pin(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Nollställ elevens bank-PIN — eleven tvingas sätta ny vid nästa
+    bank-inlogg. För när PIN tappas eller måste rotaras."""
+    _require_school()
+    teacher_id = info.teacher_id or 0
+    _verify_teacher_owns_student(teacher_id, student_id)
+    with master_session() as s:
+        st = s.get(Student, student_id)
+        if not st:
+            raise HTTPException(404, "Eleven finns inte")
+        st.bank_pin_hash = None
+        s.flush()
+        return {"ok": True}
+
+
+@router.post(
     "/teacher/employer/{student_id}/negotiation/reset",
 )
 def teacher_force_reset_negotiation(

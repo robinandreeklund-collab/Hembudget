@@ -15,12 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 faulthandler.enable()
 
 from .api import (
-    admin, ai, ai_admin, auth, backup, balances, budget, chat, credit,
-    elpris, email_auth, employer, funds, landing, ledger, loans, modules,
-    reports, scenarios, school, settings_kv, smtp_admin, stock_trading,
-    stocks, tax, events, teacher_credit, teacher_employer, teacher_stocks,
-    teacher_wellbeing, transactions, transfers, upcoming, upload, utility,
-    wellbeing,
+    admin, ai, ai_admin, auth, backup, balances, bank, budget, chat,
+    credit, elpris, email_auth, employer, funds, landing, ledger, loans,
+    modules, reports, scenarios, school, settings_kv, smtp_admin,
+    stock_trading, stocks, tax, events, teacher_credit, teacher_employer,
+    teacher_stocks, teacher_wellbeing, transactions, transfers, upcoming,
+    upload, utility, wellbeing,
 )
 from .config import settings
 
@@ -171,6 +171,7 @@ def build_app() -> FastAPI:
     app.include_router(teacher_wellbeing.router)
     app.include_router(employer.router)
     app.include_router(teacher_employer.router)
+    app.include_router(bank.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
