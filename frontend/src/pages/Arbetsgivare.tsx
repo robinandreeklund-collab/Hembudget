@@ -71,11 +71,11 @@ type Tab =
   | "fragor"
   | "events";
 
-const TABS: { id: Tab; label: string; comingSoon?: boolean }[] = [
+const TABS: { id: Tab; label: string }[] = [
   { id: "oversikt", label: "Översikt" },
-  { id: "lonespec", label: "Lönespec", comingSoon: true },
+  { id: "lonespec", label: "Lönespec" },
   { id: "avtal", label: "Kollektivavtal" },
-  { id: "lonesamtal", label: "Lönesamtal", comingSoon: true },
+  { id: "lonesamtal", label: "Lönesamtal" },
   { id: "fragor", label: "Frågor" },
   { id: "events", label: "Eventlogg" },
 ];
@@ -117,11 +117,6 @@ export default function Arbetsgivare() {
             }`}
           >
             {t.label}
-            {t.comingSoon && (
-              <span className="ml-1 text-[10px] text-slate-400 align-top">
-                snart
-              </span>
-            )}
           </button>
         ))}
       </div>
@@ -148,12 +143,7 @@ export default function Arbetsgivare() {
           <AgreementTab status={statusQ.data} />
         ) : null
       )}
-      {tab === "lonesamtal" && (
-        <ComingSoon
-          what="Lönesamtal"
-          note="Hör till PR 4 — kommer efter att lönesamtals-backenden är klar."
-        />
-      )}
+      {tab === "lonesamtal" && <NegotiationTab />}
       {tab === "fragor" && <QuestionsTab />}
       {tab === "events" && <EventLogTab />}
     </div>
@@ -864,6 +854,419 @@ function NoAgreementBanner() {
 }
 
 
+// ---------- Lönesamtal (PR 4b) ----------
+
+interface NegRoundOut {
+  round_no: number;
+  student_message: string;
+  employer_response: string;
+  proposed_pct: number | null;
+  created_at: string;
+}
+
+
+interface NegotiationOut {
+  id: number;
+  student_id: number;
+  profession: string;
+  employer: string;
+  starting_salary: number;
+  avtal_norm_pct: number | null;
+  avtal_code: string | null;
+  status: "active" | "completed" | "abandoned";
+  started_at: string;
+  completed_at: string | null;
+  final_salary: number | null;
+  final_pct: number | null;
+  teacher_summary_md: string | null;
+  rounds: NegRoundOut[];
+  max_rounds: number;
+}
+
+
+interface StartNegotiationOut {
+  negotiation: NegotiationOut;
+  briefing_md: string;
+}
+
+
+interface SendMessageOut {
+  round_no: number;
+  employer_response: string;
+  proposed_pct: number | null;
+  is_final_round: boolean;
+  negotiation_status: string;
+}
+
+
+interface CompleteOut {
+  final_pct: number | null;
+  final_salary: number | null;
+  avtal_norm_pct: number | null;
+  pending_effective_from: string | null;
+  summary_md: string;
+}
+
+
+function NegotiationTab() {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const [completion, setCompletion] = useState<CompleteOut | null>(null);
+
+  const startMut = useMutation({
+    mutationFn: () => api<StartNegotiationOut>(
+      "/employer/negotiation/start",
+      { method: "POST" },
+    ),
+    onSuccess: () => {
+      // Rensa lokala UI-rester när nytt samtal triggas
+      setCompletion(null);
+      setDraft("");
+    },
+  });
+
+  // Försöker hämta startus + samtal automatiskt vid mount
+  useEffect(() => {
+    if (!startMut.data && !startMut.isPending) {
+      startMut.mutate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const negotiation = startMut.data?.negotiation;
+  const briefing = startMut.data?.briefing_md ?? "";
+
+  const sendMut = useMutation({
+    mutationFn: (params: { id: number; message: string }) =>
+      api<SendMessageOut>(
+        `/employer/negotiation/${params.id}/message`,
+        {
+          method: "POST",
+          body: JSON.stringify({ message: params.message }),
+        },
+      ),
+    onSuccess: () => {
+      setDraft("");
+      // Refetch hela samtalet via start (samma session returneras)
+      startMut.mutate();
+    },
+  });
+
+  const completeMut = useMutation({
+    mutationFn: (params: { id: number; accept_offer: boolean }) =>
+      api<CompleteOut>(
+        `/employer/negotiation/${params.id}/complete`,
+        {
+          method: "POST",
+          body: JSON.stringify({ accept_offer: params.accept_offer }),
+        },
+      ),
+    onSuccess: (data) => {
+      setCompletion(data);
+      // Översikten + status visar nu pending_salary
+      qc.invalidateQueries({ queryKey: ["employer-status"] });
+      qc.invalidateQueries({ queryKey: ["employer-events"] });
+    },
+  });
+
+  function send() {
+    if (!negotiation || draft.trim().length < 10) return;
+    sendMut.mutate({ id: negotiation.id, message: draft });
+  }
+
+  if (startMut.isPending) {
+    return <Card><div className="text-sm text-slate-600">Förbereder samtal…</div></Card>;
+  }
+  if (startMut.error) {
+    return (
+      <Card>
+        <div className="text-sm text-rose-700">
+          Kunde inte starta lönesamtal: {String(startMut.error)}
+        </div>
+      </Card>
+    );
+  }
+  if (!negotiation) return null;
+
+  // Slut-state — visa summary
+  if (completion || negotiation.status !== "active") {
+    return (
+      <NegotiationSummary
+        negotiation={negotiation}
+        completion={completion}
+        onStartNew={() => startMut.mutate()}
+      />
+    );
+  }
+
+  const roundsLeft = negotiation.max_rounds - negotiation.rounds.length;
+  const lastBidPct =
+    [...negotiation.rounds]
+      .reverse()
+      .find((r) => r.proposed_pct !== null)?.proposed_pct ?? null;
+  const inputDisabled = sendMut.isPending || roundsLeft <= 0;
+  const canAccept = lastBidPct !== null;
+
+  return (
+    <div className="space-y-4">
+      {/* Briefing endast om inga ronder ännu */}
+      {negotiation.rounds.length === 0 && (
+        <Card>
+          <MarkdownLite text={briefing} />
+        </Card>
+      )}
+
+      {/* Status-rad */}
+      <div className="flex items-center justify-between text-sm border rounded-md p-2 bg-slate-50">
+        <div>
+          <strong>Rond:</strong> {negotiation.rounds.length} av{" "}
+          {negotiation.max_rounds}
+          {lastBidPct !== null && (
+            <>
+              {" · "}
+              <strong>Senaste bud:</strong> {lastBidPct.toFixed(1)} %
+            </>
+          )}
+          {negotiation.avtal_norm_pct !== null && (
+            <>
+              {" · "}
+              <strong>Avtals-norm:</strong>{" "}
+              {negotiation.avtal_norm_pct.toFixed(1)} %
+            </>
+          )}
+        </div>
+        {canAccept && (
+          <button
+            onClick={() =>
+              completeMut.mutate({
+                id: negotiation.id,
+                accept_offer: true,
+              })
+            }
+            disabled={completeMut.isPending}
+            className="text-xs bg-emerald-600 text-white rounded px-3 py-1 hover:bg-emerald-700 disabled:opacity-50"
+          >
+            Acceptera senaste bud ({lastBidPct?.toFixed(1)} %)
+          </button>
+        )}
+      </div>
+
+      {/* Tråden */}
+      <div className="space-y-3">
+        {negotiation.rounds.map((r) => (
+          <div key={r.round_no} className="space-y-2">
+            <div className="bg-slate-50 border-l-4 border-slate-300 rounded-r p-3">
+              <div className="text-[10px] uppercase text-slate-500 mb-1">
+                Du · rond {r.round_no}
+              </div>
+              <div className="text-sm whitespace-pre-wrap text-slate-800">
+                {r.student_message}
+              </div>
+            </div>
+            <div className="bg-brand-50 border-l-4 border-brand-400 rounded-r p-3">
+              <div className="text-[10px] uppercase text-brand-700 mb-1">
+                Maria (HR) · rond {r.round_no}
+                {r.proposed_pct !== null && (
+                  <span className="ml-2">
+                    bud: <strong>{r.proposed_pct.toFixed(1)} %</strong>
+                  </span>
+                )}
+              </div>
+              <div className="text-sm whitespace-pre-wrap text-slate-800">
+                {r.employer_response}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Inmatningsruta */}
+      {roundsLeft > 0 ? (
+        <Card>
+          <div className="text-xs text-slate-500 mb-1">
+            Skriv ditt argument ({roundsLeft} ronder kvar)
+          </div>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            disabled={inputDisabled}
+            rows={4}
+            placeholder="T.ex. 'Jag tog över ansvar X i juni och har levererat Y. Marknadsdata visar Z för min roll. Jag siktar på 4 %.'"
+            className="w-full border rounded p-2 text-sm disabled:opacity-50"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <div className="text-[10px] text-slate-500">
+              Tips: hänvisa till avtals-normen och dina prestationer.
+              Hot om uppsägning utan plan funkar inte — chefen håller
+              sitt bud.
+            </div>
+            <button
+              onClick={send}
+              disabled={inputDisabled || draft.trim().length < 10}
+              className="bg-brand-600 text-white rounded px-4 py-1.5 text-sm hover:bg-brand-700 disabled:opacity-50"
+            >
+              {sendMut.isPending ? "Skickar…" : "Skicka argument"}
+            </button>
+          </div>
+          {sendMut.error && (
+            <div className="text-xs text-rose-700 mt-2">
+              {String(sendMut.error)}
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <div className="text-sm text-slate-700 mb-2">
+            Du har använt alla {negotiation.max_rounds} ronder.
+            {canAccept ? " Acceptera senaste bud eller avbryt." : " Du kan avbryta."}
+          </div>
+          <div className="flex gap-2">
+            {canAccept && (
+              <button
+                onClick={() =>
+                  completeMut.mutate({
+                    id: negotiation.id,
+                    accept_offer: true,
+                  })
+                }
+                disabled={completeMut.isPending}
+                className="bg-emerald-600 text-white rounded px-4 py-1.5 text-sm hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Acceptera ({lastBidPct?.toFixed(1)} %)
+              </button>
+            )}
+            <button
+              onClick={() =>
+                completeMut.mutate({
+                  id: negotiation.id,
+                  accept_offer: false,
+                })
+              }
+              disabled={completeMut.isPending}
+              className="border border-slate-300 text-slate-700 rounded px-4 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              Avbryt utan höjning
+            </button>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
+function NegotiationSummary({
+  negotiation,
+  completion,
+  onStartNew,
+}: {
+  negotiation: NegotiationOut;
+  completion: CompleteOut | null;
+  onStartNew: () => void;
+}) {
+  const finalPct = completion?.final_pct ?? negotiation.final_pct;
+  const finalSalary = completion?.final_salary ?? negotiation.final_salary;
+  const avtalNorm = completion?.avtal_norm_pct ?? negotiation.avtal_norm_pct;
+  const effectiveFrom =
+    completion?.pending_effective_from ?? null;
+
+  const delta =
+    finalPct !== null && avtalNorm !== null
+      ? finalPct - avtalNorm
+      : null;
+
+  let assessTone = "border-slate-200 bg-slate-50";
+  let assessText = "";
+  if (delta !== null) {
+    if (delta > 0.5) {
+      assessTone = "border-emerald-300 bg-emerald-50";
+      assessText = `Du landade ${delta.toFixed(1)} pp över avtals-norm — bra förhandling.`;
+    } else if (delta < -0.5) {
+      assessTone = "border-rose-300 bg-rose-50";
+      assessText = `Du landade ${Math.abs(delta).toFixed(1)} pp under avtals-norm. Pedagogisk anledning att fundera över argumenten.`;
+    } else {
+      assessTone = "border-slate-200 bg-slate-50";
+      assessText = "Du landade i nivå med avtals-normen.";
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card title="Lönesamtal avslutat">
+        <div className={`border-l-4 rounded-md p-3 mb-3 ${assessTone}`}>
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            Resultat
+          </div>
+          {finalPct !== null && finalSalary !== null ? (
+            <>
+              <div className="text-2xl serif mt-1">
+                {finalPct.toFixed(1)} % höjning
+              </div>
+              <div className="text-sm text-slate-700 mt-0.5">
+                {formatSEK(negotiation.starting_salary)} →{" "}
+                <strong>{formatSEK(finalSalary)}</strong>
+                {effectiveFrom && (
+                  <> · gäller från {effectiveFrom}</>
+                )}
+              </div>
+              {assessText && (
+                <div className="text-sm text-slate-700 mt-2">
+                  {assessText}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-sm text-slate-700 mt-1">
+              Du valde att inte acceptera något bud — lönen är oförändrad.
+            </div>
+          )}
+        </div>
+
+        {/* Pedagogisk reflektion */}
+        {completion?.summary_md ? (
+          <MarkdownLite text={completion.summary_md} />
+        ) : negotiation.teacher_summary_md ? (
+          <MarkdownLite text={negotiation.teacher_summary_md} />
+        ) : null}
+
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={onStartNew}
+            className="border border-slate-300 rounded px-3 py-1.5 text-sm hover:bg-slate-50"
+          >
+            Återgå till samtalet ovan
+          </button>
+        </div>
+      </Card>
+
+      {/* Transkript */}
+      <Card title="Transkript">
+        <div className="space-y-3">
+          {negotiation.rounds.map((r) => (
+            <div key={r.round_no} className="space-y-1">
+              <div className="text-[10px] uppercase text-slate-500">
+                Rond {r.round_no}
+              </div>
+              <div className="text-sm bg-slate-50 border-l-2 border-slate-300 pl-2 py-1">
+                <strong>Du:</strong> {r.student_message}
+              </div>
+              <div className="text-sm bg-brand-50 border-l-2 border-brand-400 pl-2 py-1">
+                <strong>Maria:</strong> {r.employer_response}
+                {r.proposed_pct !== null && (
+                  <span className="ml-2 text-xs text-brand-700">
+                    (bud: {r.proposed_pct.toFixed(1)} %)
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+
 // ---------- Lönespec-fliken (PR 4a) ----------
 
 interface BatchArtifact {
@@ -1131,15 +1534,3 @@ function SalarySlipsTab() {
 }
 
 
-function ComingSoon({ what, note }: { what: string; note?: string }) {
-  return (
-    <div className="bg-white border border-slate-200 rounded-md p-6">
-      <div className="text-base font-semibold text-slate-900 mb-1">
-        {what}
-      </div>
-      <div className="text-sm text-slate-600">
-        Kommer i nästa commit. {note}
-      </div>
-    </div>
-  );
-}
