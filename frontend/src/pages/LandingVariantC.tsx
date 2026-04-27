@@ -1928,7 +1928,287 @@ function SalaryNegotiation() {
 }
 
 
-function BankSimulation() { return null; }
+// ---------- Banken: 'Banken är inte bokföringen' ----------
+
+function BankSimulation() {
+  return (
+    <section
+      style={{
+        padding: "64px 24px",
+        borderTop: "1px solid #e2e8f0",
+        maxWidth: 1200,
+        margin: "0 auto",
+      }}
+    >
+      <div className="vc-eyebrow" style={{ marginBottom: 12 }}>
+        Banken · BankID · EkonomiSkalan
+      </div>
+      <h2 className="vc-h2" style={{ marginBottom: 8 }}>
+        Banken är{" "}
+        <em style={{ color: "#dc4c2b", fontStyle: "normal" }}>
+          inte
+        </em>{" "}
+        bokföringen.
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          lineHeight: 1.65,
+          color: "#475569",
+          marginTop: 16,
+          maxWidth: 680,
+        }}
+      >
+        Tre system, samma som i verkligheten. Eleven loggar in i
+        banken med simulerat BankID, exporterar dokument till sin
+        dokumentmapp, och importerar sedan till bokföringen. Saker
+        möts på vägen.
+      </p>
+
+      {/* Tre-stegs-flöde */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 14,
+          marginTop: 32,
+        }}
+        className="vc-bank-steps"
+      >
+        <style>{`
+          @media (max-width: 768px) {
+            .vc-bank-steps { grid-template-columns: 1fr !important; }
+            .vc-bank-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
+          }
+        `}</style>
+        {[
+          {
+            n: "01",
+            title: "Banken",
+            desc: "Logga in med BankID. Se kontoutdrag, kreditkortsfakturor, lånebesked.",
+            color: "#fef3c7",
+            fg: "#78350f",
+          },
+          {
+            n: "02",
+            title: "Mina dokument",
+            desc: "Exportera bank-PDF:erna till din egen dokumentmapp.",
+            color: "#dbeafe",
+            fg: "#1e3a8a",
+          },
+          {
+            n: "03",
+            title: "Bokföringen",
+            desc: "Importera till systemet. Transaktionerna landar på rätt konto.",
+            color: "#d1fae5",
+            fg: "#064e3b",
+          },
+        ].map((s) => (
+          <div
+            key={s.n}
+            className="vc-card"
+            style={{
+              padding: 18,
+              background: s.color,
+              border: `1px solid ${s.fg}33`,
+            }}
+          >
+            <div
+              className="vc-mono"
+              style={{
+                fontSize: 11,
+                color: s.fg,
+                opacity: 0.7,
+                letterSpacing: 1.2,
+                marginBottom: 8,
+              }}
+            >
+              Steg {s.n}
+            </div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: s.fg,
+                marginBottom: 6,
+                letterSpacing: -0.3,
+              }}
+            >
+              {s.title}
+            </div>
+            <div style={{ fontSize: 13, color: s.fg, opacity: 0.85, lineHeight: 1.5 }}>
+              {s.desc}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tre delar — BankID + Signering + Kreditbetyg */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 14,
+          marginTop: 32,
+        }}
+        className="vc-bank-grid"
+      >
+        {/* BankID */}
+        <div
+          className="vc-card"
+          style={{ padding: 22, background: "#fff" }}
+        >
+          <div
+            className="vc-eyebrow"
+            style={{ marginBottom: 8 }}
+          >
+            BankID-simulering
+          </div>
+          <h3
+            style={{
+              fontSize: 19,
+              fontWeight: 700,
+              color: "#0f172a",
+              marginBottom: 10,
+              letterSpacing: -0.4,
+              lineHeight: 1.2,
+            }}
+          >
+            Något du har — något du vet.
+          </h3>
+          <p
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.55,
+              color: "#475569",
+            }}
+          >
+            QR-flöde + 4-siffrig PIN. Pedagogisk metafor: telefonen
+            (något du har) + PIN (något du vet). Eleven förstår
+            varför man aldrig delar PIN — banken ringer aldrig och
+            frågar.
+          </p>
+        </div>
+
+        {/* Signering */}
+        <div
+          className="vc-card"
+          style={{ padding: 22, background: "#fff" }}
+        >
+          <div
+            className="vc-eyebrow"
+            style={{ marginBottom: 8 }}
+          >
+            Signering · saldo räknar
+          </div>
+          <h3
+            style={{
+              fontSize: 19,
+              fontWeight: 700,
+              color: "#0f172a",
+              marginBottom: 10,
+              letterSpacing: -0.4,
+              lineHeight: 1.2,
+            }}
+          >
+            På förfallodagen — om saldot räcker.
+          </h3>
+          <p
+            style={{
+              fontSize: 13.5,
+              lineHeight: 1.55,
+              color: "#475569",
+              marginBottom: 12,
+            }}
+          >
+            Eleven signerar fakturor i banken. På förfallodagen körs
+            betalningen — räcker inte saldot triggas påminnelse-flödet:
+          </p>
+          <div
+            className="vc-mono"
+            style={{
+              fontSize: 12,
+              lineHeight: 1.7,
+              color: "#dc4c2b",
+              background: "#fef2f2",
+              padding: "10px 12px",
+              borderRadius: 6,
+              border: "1px solid #fecaca",
+            }}
+          >
+            60 kr → 120 kr → 180 kr → Kronofogden
+          </div>
+        </div>
+
+        {/* EkonomiSkalan */}
+        <div
+          className="vc-card"
+          style={{
+            padding: 22,
+            background: "#0f172a",
+            color: "#fff",
+            borderColor: "#0f172a",
+          }}
+        >
+          <div
+            className="vc-eyebrow"
+            style={{ marginBottom: 8, color: "#94a3b8" }}
+          >
+            EkonomiSkalan · kreditbetyg
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: 10,
+              marginBottom: 4,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 44,
+                fontWeight: 700,
+                color: "#fbbf24",
+                letterSpacing: -1.5,
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              724
+            </span>
+            <span style={{ fontSize: 13, color: "#94a3b8" }}>
+              / 850
+            </span>
+          </div>
+          <h3
+            style={{
+              fontSize: 17,
+              fontWeight: 600,
+              marginBottom: 10,
+              letterSpacing: -0.3,
+              lineHeight: 1.25,
+              color: "#fff",
+            }}
+          >
+            Varje sen betalning syns.
+          </h3>
+          <p
+            style={{
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: "#cbd5e1",
+            }}
+          >
+            300–850 skala (likt UC). Sena betalningar, skuldkvot,
+            buffert och arbetsgivar-nöjdhet räknas in — varje faktor
+            med transparent delta. Eleven kan räkna efter.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
 function StockEmotion() { return null; }
 function EntreprenorPreview() { return null; }
 
