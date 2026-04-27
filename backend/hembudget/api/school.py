@@ -1989,11 +1989,16 @@ def create_batches(
                     ))
             except Exception as e:
                 log.exception("Batch creation failed for %d", student.id)
+                # Inkludera exception-klassen + meddelandet så super-admin
+                # ser t.ex. 'IntegrityError: NOT NULL constraint failed:
+                # student_profiles.gross_salary_monthly' istället för
+                # bara 'error' i UI:t.
+                err_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
                 results.append(CreateBatchResultRow(
                     student_id=student.id,
                     display_name=student.display_name,
                     year_month=payload.year_month,
-                    status="error", error=str(e),
+                    status="error", error=err_msg,
                 ))
     return results
 

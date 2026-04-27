@@ -400,10 +400,10 @@ export default function Teacher() {
             <div className="font-medium mb-2">Resultat:</div>
             <ul className="space-y-1">
               {lastRun.map((r) => (
-                <li key={r.student_id} className="flex gap-3">
-                  <span className="font-medium w-40">{r.display_name}</span>
+                <li key={r.student_id} className="flex gap-3 items-start">
+                  <span className="font-medium w-40 shrink-0">{r.display_name}</span>
                   <span
-                    className={`px-2 rounded text-xs ${
+                    className={`px-2 rounded text-xs shrink-0 ${
                       r.status === "created"
                         ? "bg-emerald-100 text-emerald-700"
                         : r.status === "overwritten"
@@ -415,12 +415,12 @@ export default function Teacher() {
                   >
                     {r.status}
                   </span>
-                  <span className="text-slate-600 text-xs">
+                  <span className="text-slate-600 text-xs break-all font-mono">
                     {r.stats
                       ? Object.entries(r.stats)
                           .map(([k, v]) => `${k.replace("_created", "")}:${v}`)
                           .join(" · ")
-                      : r.error}
+                      : r.error || "(inget felmeddelande från servern — kolla Cloud Run-loggar)"}
                   </span>
                 </li>
               ))}
