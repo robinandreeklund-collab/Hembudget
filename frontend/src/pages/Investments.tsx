@@ -186,42 +186,132 @@ export default function Investments() {
 
 // --- Översikt ---
 
+const LEARN_TIPS = [
+  {
+    title: "Diversifiering är gratis lunch",
+    body: "Sprid över 5+ aktier i olika sektorer. När en faller har en annan oftast tur. Riskpremien minskar utan att förväntad avkastning gör det.",
+  },
+  {
+    title: "Tid på marknaden > timing",
+    body: "Att sitta still i 10 år slår oftast den som försöker köpa lågt och sälja högt. Marknaden är oförutsägbar på kort sikt men trendar uppåt över decennier.",
+  },
+  {
+    title: "Courtaget äter avkastningen",
+    body: "Mini-courtage ≈ 0,25 % per affär. Köp + sälj = 0,5 %. Handla ofta och du betalar mer än utdelningen ger.",
+  },
+  {
+    title: "ISK schablonbeskattas",
+    body: "Inom ISK betalar du ca 0,9 % per år på portföljens snittvärde — inte vinstskatt. Bra för långsiktigt sparande, mindre bra om du sitter på obeskattade förluster.",
+  },
+];
+
+
 function OverviewTab({ portfolio }: { portfolio: Portfolio }) {
   const pnl = portfolio.unrealized_pnl;
   const pnlPct = portfolio.total_cost_basis > 0
     ? (pnl / portfolio.total_cost_basis) * 100
     : 0;
+  const cashSharePct = portfolio.total_value > 0
+    ? (portfolio.cash_balance / portfolio.total_value) * 100
+    : 100;
+  const holdingCount = portfolio.holdings?.length ?? 0;
+  const sectorCount = Object.keys(portfolio.sector_weights).length;
+
+  // Bästa/sämsta innehav (största absoluta P&L %)
+  const pnlPctOf = (h: Holding): number =>
+    h.cost_basis > 0 ? (h.unrealized_pnl / h.cost_basis) * 100 : 0;
+  const sortedByPnl = [...(portfolio.holdings ?? [])].sort(
+    (a, b) => pnlPctOf(b) - pnlPctOf(a),
+  );
+  const top = sortedByPnl[0];
+  const worst = sortedByPnl.length > 1 ? sortedByPnl[sortedByPnl.length - 1] : null;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Card title="Totalt portföljvärde">
-        <div className="text-3xl serif">{formatSEK(portfolio.total_value)}</div>
-        <div className="text-sm text-slate-600 mt-1">
-          inkl. likvid: {formatSEK(portfolio.cash_balance)}
-        </div>
-      </Card>
-      <Card title="Orealiserad vinst/förlust">
-        <div className={`text-3xl serif ${pnl >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-          {pnl >= 0 ? "+" : ""}{formatSEK(pnl)}
-        </div>
-        <div className="text-sm text-slate-600 mt-1">
-          {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)} % på anskaffningsvärde
-        </div>
-      </Card>
-      <Card title="Sektorvikter">
-        <div className="space-y-1 text-sm">
-          {Object.entries(portfolio.sector_weights)
-            .sort((a, b) => b[1] - a[1])
-            .map(([sector, weight]) => (
-              <div key={sector} className="flex items-center justify-between">
-                <span>{sector}</span>
-                <span className="font-medium">{weight.toFixed(1)} %</span>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <Card title="Totalt värde">
+          <div className="text-2xl serif">{formatSEK(portfolio.total_value)}</div>
+          <div className="text-xs text-slate-600 mt-1">
+            varav likvid: {formatSEK(portfolio.cash_balance)} ({cashSharePct.toFixed(0)} %)
+          </div>
+        </Card>
+        <Card title="Orealiserad P&L">
+          <div className={`text-2xl serif ${pnl >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+            {pnl >= 0 ? "+" : ""}{formatSEK(pnl)}
+          </div>
+          <div className="text-xs text-slate-600 mt-1">
+            {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)} % på {formatSEK(portfolio.total_cost_basis)}
+          </div>
+        </Card>
+        <Card title="Spridning">
+          <div className="text-2xl serif">{holdingCount}</div>
+          <div className="text-xs text-slate-600 mt-1">
+            innehav i {sectorCount} sektor{sectorCount === 1 ? "" : "er"}
+          </div>
+          {holdingCount > 0 && holdingCount < 5 && (
+            <div className="text-[10px] text-amber-700 mt-1">
+              ⚠ Sprid på minst 5 för bättre diversifiering
+            </div>
+          )}
+        </Card>
+        <Card title="Bästa innehav">
+          {top ? (
+            <>
+              <div className="text-base font-semibold">{top.ticker}</div>
+              <div className={`text-sm ${pnlPctOf(top) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                {pnlPctOf(top) >= 0 ? "+" : ""}{pnlPctOf(top).toFixed(2)} %
+              </div>
+              {worst && worst.ticker !== top.ticker && (
+                <div className="text-[10px] text-slate-500 mt-1">
+                  Sämst: {worst.ticker} ({pnlPctOf(worst).toFixed(1)} %)
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-slate-500 text-sm">Inga innehav än</div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-4">
+        <Card title="Sektorvikter">
+          {sectorCount === 0 ? (
+            <div className="text-slate-500 text-sm">Inga innehav än — gå till Marknad och köp din första aktie.</div>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(portfolio.sector_weights)
+                .sort((a, b) => b[1] - a[1])
+                .map(([sector, weight]) => (
+                  <div key={sector}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span>{sector}</span>
+                      <span className="font-medium">{weight.toFixed(1)} %</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded mt-0.5">
+                      <div
+                        className="h-full bg-brand-500 rounded"
+                        style={{ width: `${Math.min(weight, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Lär dig">
+          <div className="space-y-3">
+            {LEARN_TIPS.map((t) => (
+              <div key={t.title} className="border-l-2 border-amber-300 pl-2">
+                <div className="text-xs font-semibold text-slate-800">{t.title}</div>
+                <div className="text-[11px] text-slate-600 leading-snug mt-0.5">
+                  {t.body}
+                </div>
               </div>
             ))}
-          {Object.keys(portfolio.sector_weights).length === 0 && (
-            <div className="text-slate-500">Inga innehav än</div>
-          )}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -249,17 +339,127 @@ function MarketTab({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["stocks-watchlist"] }),
   });
 
+  const [search, setSearch] = useState("");
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"name" | "change" | "watchlist">("name");
+
+  // Stats högst upp
+  const winnersToday = stocks.filter(
+    (s) => (s.change_pct ?? 0) > 0,
+  ).length;
+  const losersToday = stocks.filter(
+    (s) => (s.change_pct ?? 0) < 0,
+  ).length;
+
+  const sectors = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of stocks) set.add(s.sector);
+    return Array.from(set).sort();
+  }, [stocks]);
+
+  const filtered = useMemo(() => {
+    let list = stocks;
+    if (sectorFilter) list = list.filter((s) => s.sector === sectorFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.ticker.toLowerCase().includes(q),
+      );
+    }
+    if (sortBy === "change") {
+      list = [...list].sort(
+        (a, b) => (b.change_pct ?? -9999) - (a.change_pct ?? -9999),
+      );
+    } else if (sortBy === "watchlist") {
+      list = [...list].sort((a, b) => {
+        const aw = watchlist.has(a.ticker) ? 0 : 1;
+        const bw = watchlist.has(b.ticker) ? 0 : 1;
+        if (aw !== bw) return aw - bw;
+        return a.name.localeCompare(b.name);
+      });
+    } else {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list;
+  }, [stocks, search, sectorFilter, sortBy, watchlist]);
+
   const grouped = useMemo(() => {
     const out = new Map<string, Stock[]>();
-    for (const s of stocks) {
+    for (const s of filtered) {
       if (!out.has(s.sector)) out.set(s.sector, []);
       out.get(s.sector)!.push(s);
     }
     return out;
-  }, [stocks]);
+  }, [filtered]);
 
   return (
     <div className="space-y-4">
+      {/* Stats + sök + filter + sortering */}
+      <Card>
+        <div className="flex items-center gap-4 flex-wrap text-sm">
+          <div className="flex items-center gap-3 mr-auto">
+            <span className="text-emerald-700">▲ {winnersToday} upp</span>
+            <span className="text-red-700">▼ {losersToday} ner</span>
+            <span className="text-slate-500 text-xs">
+              ({stocks.length} aktier totalt {marketOpen ? "· börsen öppen" : "· börsen stängd"})
+            </span>
+          </div>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Sök aktie eller ticker…"
+            className="border rounded px-2 py-1 text-sm w-48"
+          />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="border rounded px-2 py-1 text-sm"
+          >
+            <option value="name">Sortera: A-Ö</option>
+            <option value="change">Sortera: störst rörelse</option>
+            <option value="watchlist">Sortera: watchlist först</option>
+          </select>
+        </div>
+        <div className="flex gap-1 flex-wrap mt-3">
+          <button
+            onClick={() => setSectorFilter(null)}
+            className={`text-xs px-2 py-1 rounded border ${
+              sectorFilter === null
+                ? "bg-brand-600 text-white border-brand-600"
+                : "bg-white border-slate-200 hover:border-brand-300"
+            }`}
+          >
+            Alla sektorer
+          </button>
+          {sectors.map((sec) => (
+            <button
+              key={sec}
+              onClick={() =>
+                setSectorFilter(sectorFilter === sec ? null : sec)
+              }
+              className={`text-xs px-2 py-1 rounded border ${
+                sectorFilter === sec
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "bg-white border-slate-200 hover:border-brand-300"
+              }`}
+            >
+              {sec}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {filtered.length === 0 && (
+        <Card>
+          <div className="text-sm text-slate-500 text-center py-6">
+            Inga aktier matchar dina filter.
+          </div>
+        </Card>
+      )}
+
       {Array.from(grouped.entries()).map(([sector, list]) => (
         <Card key={sector} title={`${sector} (${list.length})`}>
           <div className="space-y-1">
