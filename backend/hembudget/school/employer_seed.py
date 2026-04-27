@@ -270,6 +270,280 @@ AGREEMENTS: list[dict] = [
         },
         "verified_at": None,
     },
+    {
+        "code": "byggavtalet_2026",
+        "name": "Byggavtalet — Byggnads",
+        "union": "Byggnads",
+        "employer_org": "Byggföretagen",
+        "valid_from": date(2025, 5, 1),
+        "valid_to": date(2027, 4, 30),
+        "source_url": "https://www.byggnads.se/avtal/",
+        "summary_md": (
+            "## Byggavtalet — Byggnads / Byggföretagen\n\n"
+            "Ditt avtal som anställd i bygg-, anläggnings- eller "
+            "snickeriföretag. Förbund: Byggnads. Motpart: Bygg-"
+            "företagen.\n\n"
+            "**Lön.** Du tjänar antingen på prestationslön (ackord) "
+            "eller månadslön. Ackord betalar mer om du är snabb och "
+            "noggrann men är osäkrare. Centralt sätts grundlön och "
+            "ackordsnormer; lokala förhandlingar avgör potten.\n\n"
+            "**Lönerevision.** ~3,2 % 2025; ~3,0 % 2026 i centrala "
+            "påslag, plus prestationsbaserade lönelyft.\n\n"
+            "**Semester.** 25 dagar; särskild semesterersättning "
+            "12 % av lönen utbetalas i juni (eftersom byggjobb varierar "
+            "från år till år).\n\n"
+            "**Övertid.** 50 % första två timmar; 100 % därefter, "
+            "samt helger. Restidsersättning för resor till "
+            "arbetsplats utanför hemorten.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** Avtalspension SAF-LO: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över. Du väljer förvaltare "
+            "via Fora."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.2, "2026": 3.0},
+            "wage_form": "ackord eller månadslön",
+            "vacation_days": 25,
+            "vacation_pay_pct": 12,
+            "overtime_pct": 50,
+            "overtime_pct_extra": 100,
+            "travel_compensation": True,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "motorbranschen_2026",
+        "name": "Motorbranschavtalet — IF Metall",
+        "union": "IF Metall",
+        "employer_org": "Motorbranschens Arbetsgivareförbund",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.ifmetall.se/avtal",
+        "summary_md": (
+            "## Motorbranschavtalet — IF Metall\n\n"
+            "Ditt avtal som bilmekaniker, lackerare eller bilplåts"
+            "lagare. Förbund: IF Metall. Motpart: Motorbranschens "
+            "Arbetsgivareförbund (MAF).\n\n"
+            "**Lönerevision.** Industri-märket sätter taket: ~3,0 % "
+            "2025 och 2026. Generellt påslag + lokal pott.\n\n"
+            "**Semester.** 25 dagar grundregel.\n\n"
+            "**Övertid.** 50 % vardagar de första två timmarna; "
+            "100 % därefter och helger. OB-tillägg för kvällar "
+            "och nätter.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över. Förvaltas via Fora."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "vacation_days": 25,
+            "overtime_pct": 50,
+            "overtime_pct_extra": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "detaljhandel_2026",
+        "name": "Detaljhandelsavtalet — Handels",
+        "union": "Handelsanställdas Förbund",
+        "employer_org": "Svensk Handel",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.handels.se/avtal",
+        "summary_md": (
+            "## Detaljhandelsavtalet — Handels\n\n"
+            "Ditt avtal som butiksmedarbetare, säljare eller "
+            "lagerarbetare i detaljhandeln. Förbund: Handels. "
+            "Motpart: Svensk Handel.\n\n"
+            "**Lönerevision.** ~3,0 % 2025 och 2026 i centrala "
+            "påslag. Lokala förhandlingar fördelar.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**OB-tillägg.** Stort i detaljhandeln eftersom "
+            "öppettider sträcker sig över kvällar och helger. "
+            "Kvällar +50 %; lördagar +100 %; söndagar och röda "
+            "dagar +100 %. Dessa tillägg utgör ofta 10–20 % av "
+            "totala lönen.\n\n"
+            "**Övertid.** 50 % vardagar; 100 % helger.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över. Förvaltas via Fora."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "vacation_days": 25,
+            "ob_evening_pct": 50,
+            "ob_saturday_pct": 100,
+            "ob_sunday_pct": 100,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "installation_2026",
+        "name": "Installationsavtalet — Elektrikerna",
+        "union": "Svenska Elektrikerförbundet",
+        "employer_org": "Installatörsföretagen",
+        "valid_from": date(2025, 5, 1),
+        "valid_to": date(2027, 4, 30),
+        "source_url": "https://www.sef.se/avtal",
+        "summary_md": (
+            "## Installationsavtalet — Elektrikerna\n\n"
+            "Ditt avtal som installations-elektriker. Förbund: "
+            "Svenska Elektrikerförbundet (SEF). Motpart: "
+            "Installatörsföretagen.\n\n"
+            "**Lön.** Liknande Bygg: ackord eller månadslön. "
+            "Höga grundlöner relativt andra LO-avtal eftersom "
+            "yrket kräver certifiering.\n\n"
+            "**Lönerevision.** ~3,0 % 2025 och 2026.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**Övertid.** 50 % första två timmar; 100 % därefter "
+            "och helger. Restidsersättning för resor utanför "
+            "hemorten.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "wage_form": "ackord eller månadslön",
+            "vacation_days": 25,
+            "overtime_pct": 50,
+            "overtime_pct_extra": 100,
+            "travel_compensation": True,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "grona_riks_2026",
+        "name": "Gröna Riks — HRF",
+        "union": "Hotell- och Restaurang Facket (HRF)",
+        "employer_org": "Visita",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.hrf.net/avtal",
+        "summary_md": (
+            "## Gröna Riks — HRF / Visita\n\n"
+            "Ditt avtal som kock, servitör eller barista i hotell- "
+            "och restaurangbranschen. Förbund: HRF. Motpart: "
+            "Visita.\n\n"
+            "**Lön.** Branschen har låga grundlöner men höga OB-"
+            "tillägg eftersom restauranger har sena kvällar och "
+            "helger.\n\n"
+            "**Lönerevision.** ~3,0 % 2025; 2026 förhandlas.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**OB-tillägg.** Vardagar efter 18.00 +25 %; nätter "
+            "+50 %; helger +75–100 %. Kan utgöra 15–25 % av "
+            "totallönen.\n\n"
+            "**Övertid.** 50 % vardagar; 100 % helger och natt.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "vacation_days": 25,
+            "ob_evening_pct": 25,
+            "ob_night_pct": 50,
+            "ob_weekend_pct": 100,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "smaforetag_inget_avtal",
+        "name": "Småföretag utan kollektivavtal",
+        "union": "—",
+        "employer_org": "—",
+        "valid_from": date(2025, 1, 1),
+        "valid_to": None,
+        "source_url": None,
+        "summary_md": (
+            "## Småföretag utan kollektivavtal\n\n"
+            "Du jobbar på en arbetsplats som inte har tecknat "
+            "kollektivavtal. Det betyder att din lön och dina "
+            "förmåner regleras av lagen — inte av ett avtal "
+            "förhandlat mellan facket och arbetsgivar-"
+            "organisationen.\n\n"
+            "**Lön.** Inget centralt revisionsutrymme. Höjningar "
+            "förhandlas direkt med din chef. Du har rätt att veta "
+            "vad jobbet betalar — men ingen avtalsmodell håller "
+            "lönen i takt med branschen.\n\n"
+            "**Semester.** 25 dagar enligt semesterlagen — det "
+            "är minimum. Inga extra dagar för ålder.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14 enligt sjuk"
+            "lönelagen. Dag 15 tar Försäkringskassan över.\n\n"
+            "**Övertid.** Du har rätt till övertidsersättning "
+            "enligt arbetstidslagen, men nivån är inte avtalad. "
+            "Förhandla själv med chefen.\n\n"
+            "**Tjänstepension.** **Ingen tjänstepension** utöver "
+            "den allmänna pensionen. Det är en stor skillnad: en "
+            "kollektiv-anställd får ~4,5 % av lönen extra varje "
+            "månad in på pensionen som du inte ser. På 30 års "
+            "arbete blir det hundratusentals kronor.\n\n"
+            "**Vad kan du göra?** Pensionsspara själv (ISK eller "
+            "kapitalförsäkring) — det rekommenderas särskilt för "
+            "anställda utan tjänstepension. Eller kräva att "
+            "arbetsgivaren betalar in motsvarande belopp."
+        ),
+        "meta": {
+            "revision_pct_year": {},
+            "revision_note": "ingen central revision — individuell förhandling",
+            "vacation_days": 25,
+            "overtime_pct": None,
+            "overtime_note": "lagstadgad rätt, ingen avtalsnivå",
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag (lag)"},
+                {"days": "2-14", "pct": 80, "note": "sjuklönelagen"},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": None,
+            "pension_pct": 0.0,
+            "pension_note": "saknas — viktig att kompensera privat",
+        },
+        "verified_at": None,
+    },
 ]
 
 
