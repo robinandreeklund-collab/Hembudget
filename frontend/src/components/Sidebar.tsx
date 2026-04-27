@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
 import {
   Activity,
   BarChart3,
@@ -58,10 +60,38 @@ const ALL_ITEMS: NavItem[] = [
 // menyn så de kan se elevens hela värld.
 const STUDENT_HIDDEN = new Set(["/import", "/chat", "/settings"]);
 
+interface NotificationCounts {
+  messages: number;
+  batches: number;
+  assignments: number;
+  peer_review: number;
+  total: number;
+}
+
 function NavItems({ onClick }: { onClick?: () => void }) {
   const { role, asStudent } = useAuth();
   const isStudent = role === "student";
   const isTeacherViewing = role === "teacher" && Boolean(asStudent);
+
+  // Pollar olästa-räknare var 30 sek. Bara för elev/impersonering —
+  // läraren har sin egen vy. Fail-soft: badges visas inte om endpoint
+  // saknas.
+  const notifQ = useQuery({
+    queryKey: ["sidebar-notifications"],
+    queryFn: () => api<NotificationCounts>("/student/notifications/counts"),
+    refetchInterval: 30_000,
+    enabled: isStudent || isTeacherViewing,
+    retry: false,
+  });
+  const counts = notifQ.data;
+
+  // Mappa nav-path → vilket fält i counts som visar badge
+  const badgeFor: Record<string, keyof NotificationCounts | undefined> = {
+    "/messages": "messages",
+    "/my-batches": "batches",
+    "/modules": "assignments",
+    "/peer-review": "peer_review",
+  };
 
   let items: NavItem[];
   if (isStudent) {
@@ -86,24 +116,36 @@ function NavItems({ onClick }: { onClick?: () => void }) {
 
   return (
     <>
-      {items.map((it) => (
-        <NavLink
-          key={it.to}
-          to={it.to}
-          onClick={onClick}
-          className={({ isActive }) =>
-            clsx(
-              "flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-l-2",
-              isActive
-                ? "bg-paper text-ink border-ink font-semibold"
-                : "text-[#555] hover:bg-paper border-transparent",
-            )
-          }
-        >
-          <it.icon className="w-4 h-4" />
-          {it.label}
-        </NavLink>
-      ))}
+      {items.map((it) => {
+        const badgeKey = badgeFor[it.to];
+        const count = badgeKey && counts ? counts[badgeKey] : 0;
+        return (
+          <NavLink
+            key={it.to}
+            to={it.to}
+            onClick={onClick}
+            className={({ isActive }) =>
+              clsx(
+                "flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-l-2",
+                isActive
+                  ? "bg-paper text-ink border-ink font-semibold"
+                  : "text-[#555] hover:bg-paper border-transparent",
+              )
+            }
+          >
+            <it.icon className="w-4 h-4" />
+            <span className="flex-1">{it.label}</span>
+            {count > 0 && (
+              <span
+                className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-semibold"
+                title={`${count} oläst${count === 1 ? "" : "a"}`}
+              >
+                {count > 99 ? "99+" : count}
+              </span>
+            )}
+          </NavLink>
+        );
+      })}
     </>
   );
 }

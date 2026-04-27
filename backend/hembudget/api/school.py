@@ -2576,6 +2576,82 @@ def student_unread_count(
         return {"unread": n}
 
 
+@router.get("/student/notifications/counts")
+def student_notification_counts(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Samlad oläst-räknare per kategori — sidebar pollar denna var
+    30:e sek och visar små röda badges på nav-länkar.
+
+    Kategorier:
+      - messages: nya lärar-meddelanden (read_at NULL)
+      - batches: BatchArtifacts som inte ännu importerats av eleven
+      - assignments: aktiva uppdrag som inte är klarmarkerade
+      - peer_review: peer-review-uppdrag som väntar på elevens
+        respons (om man bygger ut peer-flödet senare)
+
+    Stödjer även lärar-impersonering så banner:n syns för läraren
+    som tittar in via x-as-student."""
+    _require_school_mode()
+    from ..api.modules import _resolve_student_actor
+    try:
+        student_id = _resolve_student_actor(info)
+    except HTTPException:
+        return {
+            "messages": 0, "batches": 0,
+            "assignments": 0, "peer_review": 0, "total": 0,
+        }
+
+    with master_session() as s:
+        # 1. Olästa lärar-meddelanden
+        messages = (
+            s.query(Message)
+            .filter(
+                Message.student_id == student_id,
+                Message.sender_role == "teacher",
+                Message.read_at.is_(None),
+            )
+            .count()
+        )
+
+        # 2. Batches med oimporterade artefakter
+        batches = (
+            s.query(BatchArtifact.id)
+            .join(ScenarioBatch, ScenarioBatch.id == BatchArtifact.batch_id)
+            .filter(
+                ScenarioBatch.student_id == student_id,
+                BatchArtifact.imported_at.is_(None),
+            )
+            .count()
+        )
+
+        # 3. Aktiva uppdrag (Assignment) som inte är klar-markerade.
+        # Enkel approximation: räkna assignments där
+        # manually_completed_at är NULL. Servern har en finare
+        # auto-checker per kind (import_batch, set_budget etc) men
+        # för badge-räknaren räcker manuell-status — eleven ser
+        # detaljerad checklist på /modules-sidan.
+        assignments = (
+            s.query(Assignment.id)
+            .filter(
+                Assignment.student_id == student_id,
+                Assignment.manually_completed_at.is_(None),
+            )
+            .count()
+        )
+
+        peer_review = 0  # Plats för framtida peer-review-räknare
+
+    total = messages + batches + assignments + peer_review
+    return {
+        "messages": messages,
+        "batches": batches,
+        "assignments": assignments,
+        "peer_review": peer_review,
+        "total": total,
+    }
+
+
 @router.get("/teacher/messages/threads",
             response_model=list[ThreadSummaryOut])
 def teacher_list_threads(
