@@ -400,18 +400,18 @@ export default function AdminAI() {
 
 
 function DbMigrationsCard() {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"master" | "scope" | null>(null);
   const [log, setLog] = useState<string[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [columns, setColumns] = useState<Record<string, string[]> | null>(null);
 
-  async function run() {
+  async function runMaster() {
     if (!confirm(
       "Tvinga master-DB-migrationerna att köra direkt mot databasen?\n\n" +
-      "Idempotent — säker att köra om en migration tidigare failat (t.ex. " +
-      "efter en deploy där ALTER TABLE krockade med Postgres-syntax). " +
+      "Idempotent — säker att köra om en migration tidigare failat. " +
       "Loggen visar exakt vad som hände.",
     )) return;
-    setBusy(true);
+    setBusy("master");
     setErr(null);
     setLog(null);
     try {
@@ -423,7 +423,40 @@ function DbMigrationsCard() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  async function runScope() {
+    if (!confirm(
+      "Tvinga SCOPE-DB-migrationerna att köra (loans.loan_kind etc.)?\n\n" +
+      "Behövs efter en deploy om Postgres-loggar visar t.ex. " +
+      "'column loans.loan_kind does not exist'. Idempotent.",
+    )) return;
+    setBusy("scope");
+    setErr(null);
+    setLog(null);
+    try {
+      const res = await api<{ ok: boolean; log: string[] }>(
+        "/admin/ai/db/run-scope-migrations",
+        { method: "POST" },
+      );
+      setLog(res.log);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function loadColumns() {
+    try {
+      const res = await api<{ tables: Record<string, string[]> }>(
+        "/admin/ai/db/scope-columns",
+      );
+      setColumns(res.tables);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -434,24 +467,42 @@ function DbMigrationsCard() {
         <h2 className="font-medium">DB-migrationer</h2>
       </div>
       <p className="text-sm text-slate-700">
-        Tvinga master-DB-migrationerna att köra. Användbart efter en
-        deploy om Postgres-loggarna visar t.ex. <code>column does not exist</code>{" "}
-        eller <code>type "datetime" does not exist</code> — kör då detta så
-        läggs saknade kolumner till utan omstart. Operationen är idempotent
-        (kan köras flera gånger utan effekt).
+        Tvinga DB-migrationerna att köra. Master-migrationerna gäller
+        teachers/students/profiles, scope-migrationerna gäller alla
+        elevdata-tabeller (loans, transactions, accounts osv).
+        Idempotent.
       </p>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <button
-          onClick={run}
-          disabled={busy}
+          onClick={runMaster}
+          disabled={busy !== null}
           className="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
         >
-          {busy ? (
+          {busy === "master" ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
             <Wrench className="w-4 h-4" />
           )}
-          Kör master-migrationer nu
+          Master-migrationer
+        </button>
+        <button
+          onClick={runScope}
+          disabled={busy !== null}
+          className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+        >
+          {busy === "scope" ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Wrench className="w-4 h-4" />
+          )}
+          Scope-migrationer (loans, transactions…)
+        </button>
+        <button
+          onClick={loadColumns}
+          disabled={busy !== null}
+          className="border border-slate-300 hover:bg-slate-50 rounded-md px-3 py-2 text-sm"
+        >
+          Visa scope-kolumner
         </button>
         {log && (
           <span className="text-xs text-emerald-700">
@@ -468,6 +519,19 @@ function DbMigrationsCard() {
         <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto whitespace-pre-wrap max-h-80">
           {log.join("\n")}
         </pre>
+      )}
+      {columns && (
+        <div className="text-xs space-y-2">
+          <div className="font-semibold">Scope-DB-kolumner per tabell:</div>
+          {Object.entries(columns).map(([tbl, cols]) => (
+            <div key={tbl} className="border-l-2 border-slate-200 pl-2">
+              <div className="font-medium text-slate-800">{tbl}</div>
+              <div className="text-slate-500 break-all">
+                {cols.length === 0 ? "(tabell finns inte)" : cols.join(", ")}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );

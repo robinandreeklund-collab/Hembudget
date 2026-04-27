@@ -75,8 +75,27 @@ def create_batch_for_student(
     overwrite=False → returnerar den befintliga. Med overwrite=True
     raderas den gamla batchen + skapas en ny med samma seed.
     """
+    # Profile saknas → försök auto-skapa istället för att kasta. Detta
+    # händer när batch-flödet körs INNAN profile hunnit committas (race),
+    # eller när en orphan-elev (Student utan StudentProfile) genereras
+    # mot. _create_profile_for_student är idempotent + defensiv mot
+    # saknade master-DB-kolumner.
     if not student.profile:
-        raise ValueError("Student saknar profil")
+        from ..api.school import _create_profile_for_student
+        try:
+            _create_profile_for_student(master_session, student)
+            master_session.flush()
+            master_session.refresh(student)
+        except Exception as exc:
+            raise ValueError(
+                f"Student saknar profil och auto-create misslyckades: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        if not student.profile:
+            raise ValueError(
+                "Student saknar profil — auto-create returnerade utan att "
+                "rad commitades. Reparera via /teacher/students/{id}/repair-profile."
+            )
 
     # Hämta lärarens email till PDF:erna (t.ex. "Frågor om din lön: ...")
     # — annars hamnar en påhittad lon@arbetsgivare.se i lönespecen.

@@ -561,3 +561,64 @@ def force_run_migrations(
         target_logger.removeHandler(handler)
 
     return {"ok": True, "log": log_msgs}
+
+
+@router.post("/db/run-scope-migrations")
+def force_run_scope_migrations(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Tvinga scope-DB-migrationerna att köra mot shared-Postgres
+    eller SQLite-per-scope. Adresserar fel som 'column loans.loan_kind
+    does not exist' efter en deploy där migrationen aldrig hann köra."""
+    import logging as _logging
+    import os
+    from ..db.migrate import run_migrations as _run_scope_migrations
+    from ..school import engines as _eng
+    from ..school.engines import _refresh_scope_columns_cache
+
+    log_msgs: list[str] = []
+
+    class _CaptureHandler(_logging.Handler):
+        def emit(self, record):
+            log_msgs.append(f"{record.levelname}: {record.getMessage()}")
+
+    handler = _CaptureHandler()
+    handler.setLevel(_logging.INFO)
+    for name in ("hembudget.db.migrate", "hembudget.school.engines"):
+        _logging.getLogger(name).addHandler(handler)
+
+    try:
+        if os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+            # Postgres-läge: kör mot shared-engine
+            from ..school.engines import _init_shared_scope_engine
+            engine, _ = _init_shared_scope_engine()
+            _run_scope_migrations(engine)
+            _refresh_scope_columns_cache(engine)
+            log_msgs.append("INFO: shared-Postgres scope-migrations körda")
+        else:
+            # SQLite-läge: kör mot alla cachade scope-engines
+            for key, eng in _eng._scope_engines.items():
+                _run_scope_migrations(eng)
+                _refresh_scope_columns_cache(eng)
+                log_msgs.append(f"INFO: SQLite-scope {key} migrerad")
+    except Exception as e:
+        log_msgs.append(f"EXCEPTION: {type(e).__name__}: {e}")
+    finally:
+        for name in ("hembudget.db.migrate", "hembudget.school.engines"):
+            _logging.getLogger(name).removeHandler(handler)
+
+    return {"ok": True, "log": log_msgs}
+
+
+@router.get("/db/scope-columns")
+def get_scope_columns(
+    _: TokenInfo = Depends(_require_super_admin),
+) -> dict:
+    """Returnerar nuvarande scope-DB-kolumnstatus per relevant tabell.
+    Snabb verifiering att t.ex. loans.loan_kind faktiskt finns."""
+    from ..school.engines import _scope_columns
+    return {
+        "tables": {
+            tbl: sorted(cols) for tbl, cols in _scope_columns.items()
+        },
+    }

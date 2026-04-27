@@ -1974,6 +1974,32 @@ class CreateBatchesIn(BaseModel):
     overwrite: bool = False
 
 
+# ---------- Recent batch errors ring-buffer (debug-hjälp) ----------
+
+# Senaste 20 batch-fel — så super-admin kan inspektera tracebacks utan
+# att gräva i Cloud Run-loggar. Ringbuffer i minnet, försvinner vid
+# omstart men det är OK för tillfällig debug.
+_RECENT_BATCH_ERRORS: list[dict] = []
+
+
+def _record_batch_error(
+    *, student_id: int, student_name: str,
+    error_class: str, message: str, traceback: str,
+) -> None:
+    from datetime import datetime as _dt
+    _RECENT_BATCH_ERRORS.append({
+        "ts": _dt.utcnow().isoformat(),
+        "student_id": student_id,
+        "student_name": student_name,
+        "error_class": error_class,
+        "message": message,
+        "traceback": traceback,
+    })
+    # Behåll bara 20 senaste
+    if len(_RECENT_BATCH_ERRORS) > 20:
+        del _RECENT_BATCH_ERRORS[: len(_RECENT_BATCH_ERRORS) - 20]
+
+
 class CreateBatchResultRow(BaseModel):
     student_id: int
     display_name: str
@@ -2089,18 +2115,57 @@ def create_batches(
                     ))
             except Exception as e:
                 log.exception("Batch creation failed for %d", student.id)
-                # Inkludera exception-klassen + meddelandet så super-admin
-                # ser t.ex. 'IntegrityError: NOT NULL constraint failed:
-                # student_profiles.gross_salary_monthly' istället för
-                # bara 'error' i UI:t.
-                err_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                # Inkludera exception-klassen + meddelandet + första
+                # raden av traceback så vi alltid har något att visa
+                # även för exceptions med tom .__str__().
+                import traceback as _tb
+                tb_lines = _tb.format_exception(type(e), e, e.__traceback__)
+                # Plocka sista 3 raderna av traceback för UI:n
+                tb_summary = "".join(tb_lines[-3:]).strip().replace("\n", " | ")
+                err_msg = (
+                    f"{type(e).__name__}: {e}" if str(e)
+                    else type(e).__name__
+                )
+                if not err_msg.strip():
+                    err_msg = "Okänt fel"
+                # Spara hela traceback i global ring-buffer för
+                # /admin/ai/recent-errors-endpointen
+                _record_batch_error(
+                    student_id=student.id,
+                    student_name=student.display_name,
+                    error_class=type(e).__name__,
+                    message=str(e),
+                    traceback="".join(tb_lines),
+                )
                 results.append(CreateBatchResultRow(
                     student_id=student.id,
                     display_name=student.display_name,
                     year_month=payload.year_month,
-                    status="error", error=err_msg,
+                    status="error",
+                    error=f"{err_msg} | {tb_summary[:300]}",
                 ))
     return results
+
+
+@router.get("/teacher/recent-batch-errors")
+def recent_batch_errors(
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Returnerar de 20 senaste batch-genererings-felen med traceback.
+    Bara senast inloggade lärarens egna elever. Snabb debug-hjälp utan
+    att gräva i Cloud Run-loggar."""
+    _require_school_mode()
+    with master_session() as s:
+        student_ids = {
+            sid for (sid,) in
+            s.query(Student.id).filter(Student.teacher_id == info.teacher_id).all()
+        }
+    return {
+        "errors": [
+            e for e in reversed(_RECENT_BATCH_ERRORS)
+            if e["student_id"] in student_ids
+        ],
+    }
 
 
 @router.get(

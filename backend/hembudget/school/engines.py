@@ -157,9 +157,11 @@ def init_master_engine() -> Engine:
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
         # Postgres: pre-ping så stale connections från Cloud SQL inte
-        # smäller. Pool små eftersom Cloud Run kör en instans.
+        # smäller. Cloud SQL db-f1-micro har max ~25 connections totalt.
+        # Vi delar mellan master + shared-scope + Postgres internal, så
+        # håll pools små: 2+3=5 per engine = 10 totalt med headroom.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=2, max_overflow=3,
             pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -404,6 +406,41 @@ def _run_master_migrations(engine: Engine) -> None:
         if "cost_split_decided_at" not in sp_cols:
             _add("student_profiles", "cost_split_decided_at DATETIME")
 
+    # ALTER COLUMN TYPE: konvertera INTEGER → BIGINT på seed-kolumner
+    # som lagrar uint32-värden (kan vara > 2^31-1). create_all ändrar
+    # inte typen på existerande kolumner, så prod-Postgres kan ha
+    # tabellen med INTEGER trots att modellen säger BigInteger →
+    # 'integer out of range' vid INSERT.
+    if is_postgres:
+        for table, col in (
+            ("student_generation_runs", "seed"),
+            ("scenario_batches", "seed"),
+        ):
+            try:
+                inspector2 = _inspect(engine)
+                cols = inspector2.get_columns(table)
+                for c in cols:
+                    if c["name"] == col:
+                        # SQLAlchemy returnerar SQLAlchemy-typer; vi vill
+                        # se om det är 32-bit Integer
+                        col_type_str = str(c["type"]).upper()
+                        if "BIGINT" not in col_type_str and "INTEGER" in col_type_str:
+                            _log.info(
+                                "migration: %s.%s är INTEGER, alterar till BIGINT",
+                                table, col,
+                            )
+                            with engine.begin() as conn:
+                                conn.execute(_text(
+                                    f"ALTER TABLE {table} "
+                                    f"ALTER COLUMN {col} TYPE BIGINT"
+                                ))
+                        break
+            except Exception:
+                _log.exception(
+                    "migration: kunde inte ALTER %s.%s till BIGINT",
+                    table, col,
+                )
+
 
 @contextmanager
 def master_session() -> Iterator[Session]:
@@ -459,8 +496,9 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
+        # Cloud SQL har låg connection-limit. Håll båda engines små.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=2, max_overflow=3,
             pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)

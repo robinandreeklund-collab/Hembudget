@@ -80,6 +80,9 @@ def _add_column(engine: Engine, table: str, column_sql: str) -> None:
 def run_migrations(engine: Engine) -> list[str]:
     """Apply all pending migrations. Returns list of applied changes."""
     applied: list[str] = []
+    log.info(
+        "scope-migrations: starting (dialect=%s)", engine.dialect.name,
+    )
 
     # tenant_id på alla scope-tabeller — krävs för delad Postgres
     # (DB2-migrationen) men läggs även till i SQLite-fil-per-scope så
@@ -505,6 +508,10 @@ def run_migrations(engine: Engine) -> list[str]:
     # New tables (loans, loan_payments, upcoming_transactions) are created
     # by Base.metadata.create_all in auth routes; nothing to ALTER here.
 
+    log.info(
+        "scope-migrations: done — %d ALTERs körda: %s",
+        len(applied), ", ".join(applied) if applied else "(inga)",
+    )
     if applied:
         log.info("Schema migrations applied: %s", ", ".join(applied))
 
