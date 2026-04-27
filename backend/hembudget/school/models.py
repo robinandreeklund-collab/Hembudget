@@ -162,6 +162,12 @@ class Student(MasterBase):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Bank-PIN för BankID-simulering på /bank (idé 3 i dev_v1.md).
+    # 4-siffrig PIN som eleven sätter vid första bank-inlogg, hashad
+    # med bcrypt. Lärare kan resetta via /teacher/students/:id/reset-pin.
+    bank_pin_hash: Mapped[Optional[str]] = mapped_column(
+        String(120), nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
@@ -943,3 +949,7 @@ from . import social_models as _social_models  # noqa: E402, F401
 # EmployerSatisfaction[+Event], WorkplaceQuestion[+Answer]) — idé 1
 # i dev_v1.md.
 from . import employer_models as _employer_models  # noqa: E402, F401
+
+# Bank-flöde (BankSession för BankID-simulering) — idé 3 i dev_v1.md.
+# ScheduledPayment + PaymentReminder ligger i scope-DB.
+from . import bank_models as _bank_models  # noqa: E402, F401

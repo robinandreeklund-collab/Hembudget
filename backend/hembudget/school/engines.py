@@ -394,6 +394,13 @@ def _run_master_migrations(engine: Engine) -> None:
     if "is_family_account" not in t_cols:
         _add("teachers", "is_family_account BOOLEAN NOT NULL DEFAULT 0")
 
+    # Student.bank_pin_hash (idé 3 i dev_v1.md): 4-siffrig PIN för
+    # BankID-simulering, hashad med bcrypt. NULL tills eleven satt
+    # sin första PIN i bank-onboardingen.
+    s_cols = _cols("students")
+    if s_cols and "bank_pin_hash" not in s_cols:
+        _add("students", "bank_pin_hash VARCHAR(120)")
+
     # StudentProfile partner-fält + cost-split-preference (Wellbeing Fas
     # 7+: 'veil of ignorance'-onboarding där eleven väljer fördelnings-
     # modell innan partner-lön avslöjas).
