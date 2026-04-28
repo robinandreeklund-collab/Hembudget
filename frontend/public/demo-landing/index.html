@@ -614,20 +614,12 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .hero-hint::before { content: "● "; color: var(--accent); }
 
-/* ─── Intro-sekvens (CSS @keyframes — triggad av .is-loaded på body) ─── */
+/* ─── Intro: bara info-panel + credits fade-in (figurerna visas direkt) ─── */
 body:not(.is-loaded) .hero-info { opacity: 0; }
 body:not(.is-loaded) .cover-credits { opacity: 0; }
 
-body.is-loaded .figure { animation: figure-in .9s cubic-bezier(.34, 1.18, .64, 1) both; }
-body.is-loaded .figure[data-persona="linda"]   { animation-delay: 0.8s; }
-body.is-loaded .figure[data-persona="peter"]   { animation-delay: 2.0s; }
-body.is-loaded .figure[data-persona="evelina"] { animation-delay: 1.4s; }
-@keyframes figure-in {
-  from { opacity: 0; transform: translateY(80px) scale(0.92); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-body.is-loaded .hero-info { animation: hero-fade-in .6s ease 2.6s both; }
-body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
+body.is-loaded .hero-info { animation: hero-fade-in .6s ease 0.6s both; }
+body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 @keyframes hero-fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
