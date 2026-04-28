@@ -83,11 +83,15 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 /* ─── Hero ─── */
 .hero {
-  min-height: 100vh;
   display: flex; flex-direction: column;
-  padding: 100px clamp(24px, 6vw, 80px) 0 clamp(32px, 8vw, 120px);
+  padding: 100px clamp(24px, 6vw, 80px) 56px clamp(32px, 8vw, 120px);
   position: relative; overflow: hidden;
   background: var(--bg);
+}
+.hero-inner {
+  max-width: 1400px; margin: 0 auto;
+  width: 100%; position: relative; z-index: 2;
+  display: flex; flex-direction: column; flex: 1;
 }
 /* Ambient gradient-mesh som driftar långsamt */
 .hero::before {
@@ -390,14 +394,31 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   text-transform: uppercase; color: var(--muted);
 }
 
-/* Hover: hovrade lyfts + dimmar de andra två */
-.figures:hover .figure:not(:hover):not(:focus-visible) {
-  transform: scale(0.92);
-  opacity: 0.5;
-  filter: saturate(0.55);
+/* Aktiv (auto eller hover): störst och mest synlig.
+   Övriga: dead state — mindre, gråtonad, dimmad. */
+.figures .figure {
+  transform: scale(0.86);
+  opacity: 0.42;
+  filter: saturate(0.4) brightness(1.02);
 }
+.figures .figure.is-active,
 .figure:hover, .figure:focus-visible {
-  transform: translateY(-12px) scale(1.06);
+  transform: translateY(-14px) scale(1.08);
+  opacity: 1;
+  filter: none;
+  z-index: 3;
+}
+/* När någon HOVRAS: alla utom hovrade fryses i dead-state */
+.figures:hover .figure {
+  transform: scale(0.86);
+  opacity: 0.42;
+  filter: saturate(0.4) brightness(1.02);
+}
+.figures:hover .figure:hover,
+.figures:hover .figure:focus-visible {
+  transform: translateY(-14px) scale(1.08);
+  opacity: 1;
+  filter: none;
   z-index: 3;
 }
 .figure:hover .figure-caption,
@@ -848,6 +869,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
       <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
     </header>
 
+    <div class="hero-inner">
     <div class="hero-shell">
       <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
       <h1>Lärobok blir <em>verklighet</em>.</h1>
@@ -997,6 +1019,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         <span class="cover-credits-sep" aria-hidden="true"></span>
         <span>Scrolla för mer ↓</span>
       </div>
+    </div>
     </div>
   </section>
 
@@ -1229,6 +1252,21 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
     heroInfo.setAttribute('data-active', fig.dataset.persona);
     if (isAuto) heroInfo.setAttribute('data-auto', '1');
     else heroInfo.removeAttribute('data-auto');
+
+    // Single-active video: spela bara aktiva, frys övriga på första frame
+    figures.forEach(f => {
+      const v = f.querySelector('.figure-video');
+      if (!v) return;
+      if (f === fig) {
+        f.classList.add('is-active');
+        v.currentTime = 0;
+        v.play().catch(() => {});
+      } else {
+        f.classList.remove('is-active');
+        v.pause();
+        try { v.currentTime = 0; } catch(e) {}
+      }
+    });
   }
   function clear() {
     heroInfo.removeAttribute('data-active');
@@ -1263,7 +1301,7 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
     setTimeout(() => {
       if (!userInteracted) {
         autoRotate();
-        autoTimer = setInterval(autoRotate, 4500);
+        autoTimer = setInterval(autoRotate, 6000);
       }
     }, 600);
   });
@@ -1278,7 +1316,7 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
   setTimeout(() => {
     if (!userInteracted) {
       autoRotate();
-      autoTimer = setInterval(autoRotate, 4500);
+      autoTimer = setInterval(autoRotate, 6000);
     }
   }, 3600);
 })();
