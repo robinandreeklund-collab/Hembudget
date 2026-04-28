@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Idé 4 · Vecka + djupdyk · Ekonomilabbet</title>
+<title>Idé 4 · Lindas vecka + opt-in djupdyk · Ekonomilabbet</title>
 <style>
 :root {
   --bg: #fafaf9;
@@ -47,8 +47,111 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* ─── Sticky nav till höger (subtil, opt-in) ─────────── */
+.deep-nav {
+  position: fixed;
+  top: 50%;
+  right: 24px;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 14px 12px;
+  box-shadow: 0 6px 22px rgba(15,23,42,0.06);
+  max-width: 220px;
+}
+.deep-nav-eyebrow {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 0 6px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+.deep-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  text-align: left;
+  transition: all .12s;
+}
+.deep-nav-btn:hover {
+  background: #fef3c7;
+  color: #78350f;
+}
+.deep-nav-btn:hover .deep-nav-arrow {
+  transform: translateX(2px);
+}
+.deep-nav-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #78350f;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(120,53,15,0.2);
+}
+.deep-nav-label { flex: 1; line-height: 1.2; }
+.deep-nav-arrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  transition: transform .15s;
+}
+.deep-nav-hint {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--muted);
+  letter-spacing: 0.8px;
+  padding: 8px 6px 0;
+  margin-top: 4px;
+  border-top: 1px solid var(--rule);
+  font-style: italic;
+}
+@media (max-width: 900px) {
+  .deep-nav {
+    top: auto;
+    bottom: 16px;
+    right: 16px;
+    left: 16px;
+    transform: none;
+    max-width: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 10px;
+    gap: 4px;
+  }
+  .deep-nav-eyebrow,
+  .deep-nav-hint { display: none; }
+  .deep-nav-btn { padding: 8px 10px; font-size: 12px; flex: 1 1 calc(50% - 4px); }
+  .deep-nav-icon { width: 22px; height: 22px; font-size: 10px; }
+  .deep-nav-arrow { display: none; }
+}
+
+/* ─── HERO ────────────────────────────────────────────── */
 section { padding: 80px 24px; border-top: 1px solid var(--rule); }
-.shell { max-width: 1280px; margin: 0 auto; }
+.shell { max-width: 1100px; margin: 0 auto; }
 h1 {
   font-size: clamp(38px, 5.5vw, 64px);
   font-weight: 700;
@@ -61,15 +164,20 @@ h2 {
   letter-spacing: -0.6px;
   line-height: 1.1;
 }
-
-/* ─── HERO ────────────────────────────────────────────── */
 .hero {
-  padding: 96px 24px 72px;
+  padding: 64px 24px 96px;
   border-top: none;
   background: linear-gradient(180deg, #f8fafc 0%, #fafaf9 100%);
-  text-align: center;
 }
-.hero .shell { max-width: 880px; }
+.hero .shell {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+@media (max-width: 800px) {
+  .hero .shell { grid-template-columns: 1fr; gap: 40px; }
+}
 .hero-eyebrow {
   display: inline-flex;
   align-items: center;
@@ -81,7 +189,7 @@ h2 {
   color: #78350f;
   border-radius: 100px;
   letter-spacing: 1.2px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 .hero-eyebrow::before {
   content: "";
@@ -99,43 +207,129 @@ h2 {
 .hero p {
   font-size: 17px;
   color: #475569;
-  max-width: 640px;
-  margin: 0 auto 36px;
+  max-width: 480px;
+  margin-bottom: 28px;
   line-height: 1.55;
 }
-.hero-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 20px;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 14px;
-  margin-top: 12px;
-  font-size: 14px;
-  color: #475569;
-  text-align: left;
-  max-width: 480px;
+.hero-stats {
+  display: flex;
+  gap: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+  flex-wrap: wrap;
 }
-.hero-hint-arrow {
-  font-size: 22px;
-  color: var(--accent);
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+}
+.hero-stat-num {
+  font-size: 28px;
   font-weight: 700;
+  letter-spacing: -0.6px;
+}
+.hero-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
-/* ─── DAY-SECTION (kärnan i hybrid-idén) ──────────────── */
-.day-section {
-  padding: 0;
+/* Phone mockup (samma som Idé 1) */
+.phone {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 9 / 18;
+  background: #0f172a;
+  border-radius: 36px;
+  padding: 12px;
+  box-shadow: 0 30px 60px -15px rgba(15,23,42,0.4);
+  margin: 0 auto;
+}
+.phone-screen {
   background: #fff;
+  border-radius: 26px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.day-meta {
-  padding: 56px 24px 32px;
-  border-bottom: 1px solid var(--rule);
+.phone-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
 }
-.day-meta .shell {
+.phone-status .time { font-weight: 600; color: var(--fg); }
+.phone-app-bar {
+  padding: 12px 18px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-family: var(--mono);
+  letter-spacing: 1px;
+}
+.phone-notif {
+  margin: 18px 14px;
+  padding: 14px 16px;
+  background: #fef3c7;
+  border: 1px solid rgba(120,53,15,0.25);
+  border-radius: 14px;
+}
+.phone-notif-app {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  color: #78350f;
+  margin-bottom: 6px;
+}
+.phone-notif-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.phone-notif-body {
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+.phone-actions {
+  margin: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.phone-action {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  font-size: 13px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.phone-action.primary {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+  font-weight: 500;
+}
+.phone-action small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.phone-action.primary small { color: rgba(255,255,255,0.6); }
+
+/* ─── DAY SECTIONS ─────────────────────────────────────── */
+.day-header {
   display: flex;
   align-items: baseline;
   gap: 16px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
 .day-time {
@@ -146,144 +340,27 @@ h2 {
   color: var(--accent);
   font-weight: 600;
 }
-.day-meta h2 { width: 100%; margin-top: 16px; }
-.day-meta h2 em {
-  color: var(--accent);
-  font-style: italic;
-  font-family: var(--serif);
-  font-weight: 500;
-}
-
-.day-body {
+.day-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 0;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 48px;
+  align-items: start;
 }
-@media (max-width: 900px) {
-  .day-body { grid-template-columns: 1fr; }
+@media (max-width: 800px) {
+  .day-grid { grid-template-columns: 1fr; gap: 28px; }
 }
-
-/* Vänster pane = horisontell deep-dive */
-.deep-dive {
-  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-  color: #fff;
-  padding: 40px 0 40px 24px;
-  border-right: 1px solid var(--rule);
-  position: relative;
-}
-.deep-dive-header {
-  padding: 0 16px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.deep-dive-eyebrow {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1.4px;
-  color: var(--gold);
-  text-transform: uppercase;
-  font-weight: 600;
-}
-.deep-dive-hint {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: #94a3b8;
-  letter-spacing: 1px;
-}
-.deep-dive-track {
-  display: flex;
-  gap: 14px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-padding-left: 16px;
-  padding: 8px 16px 24px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(251,191,36,0.3) transparent;
-}
-.deep-dive-track::-webkit-scrollbar { height: 6px; }
-.deep-dive-track::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 100px; }
-.deep-dive-track::-webkit-scrollbar-thumb { background: rgba(251,191,36,0.35); border-radius: 100px; }
-
-.deep-slide {
-  flex: 0 0 min(380px, 85%);
-  scroll-snap-align: start;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 14px;
-  padding: 22px 22px 24px;
-  display: flex;
-  flex-direction: column;
-}
-.deep-slide-num {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  color: var(--gold);
-  margin-bottom: 12px;
-  font-weight: 600;
-}
-.deep-slide h3 {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  line-height: 1.2;
-  margin-bottom: 10px;
-  color: #fff;
-}
-.deep-slide p {
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: #cbd5e1;
-  margin-bottom: 14px;
-}
-.deep-slide-mock {
-  margin-top: auto;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.7;
-  color: #e2e8f0;
-}
-.deep-slide-mock-eyebrow {
-  font-size: 9.5px;
-  letter-spacing: 1.2px;
-  color: #94a3b8;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-}
-
-/* Höger pane = dagens narrativ */
-.day-narrative {
-  padding: 40px 32px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-.day-narrative .narr-eyebrow {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  color: var(--accent);
-  text-transform: uppercase;
-  font-weight: 600;
-  margin-bottom: 12px;
-}
+.day-narrative h2 { margin-bottom: 16px; }
 .day-narrative p {
   font-size: 16px;
-  line-height: 1.6;
   color: #475569;
   margin-bottom: 14px;
+  line-height: 1.55;
 }
 .day-narrative em {
   font-family: var(--serif);
   font-style: italic;
   color: var(--fg);
+  font-size: 17px;
 }
 .day-tag {
   display: inline-block;
@@ -297,197 +374,189 @@ h2 {
   border-radius: 100px;
   margin-top: 12px;
   border: 1px solid rgba(120,53,15,0.2);
-  align-self: flex-start;
+}
+.mockup {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
+}
+.mockup-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mockup h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin-bottom: 16px;
 }
 
-/* Phone mockup (kompakt — för måndag) */
-.phone-compact {
-  width: 100%;
-  max-width: 240px;
-  margin: 18px 0 0;
-  background: #0f172a;
-  border-radius: 24px;
-  padding: 8px;
+/* ─── Padding-justering så sticky nav inte överlappar content ─── */
+@media (min-width: 901px) {
+  .shell { padding-right: 48px; }
 }
-.phone-compact-screen {
-  background: #fff;
-  border-radius: 18px;
-  padding: 14px 14px 18px;
-}
-.phone-compact-time {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  text-align: center;
-  margin-bottom: 10px;
-}
-.phone-compact-notif {
-  background: #fef3c7;
-  border: 1px solid rgba(120,53,15,0.25);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  color: var(--fg);
-}
-.phone-compact-notif strong {
-  display: block;
-  margin-bottom: 2px;
+@media (max-width: 900px) {
+  /* Bottom-nav på mobil tar plats */
+  body { padding-bottom: 80px; }
 }
 </style>
 </head>
 <body>
+
 <a href="./" class="back">← tillbaka</a>
 
 <!-- ═══════════════════════════════════════════════════════════
-     HERO — Hybrid-konceptet förklarat
+     STICKY DEEP-DIVE NAV — opt-in, always visible
+     ═══════════════════════════════════════════════════════════ -->
+<nav class="deep-nav" aria-label="Djupdyk i plattformsdelar">
+  <div class="deep-nav-eyebrow">● Vill veta mer?</div>
+  <button class="deep-nav-btn" data-deep="ledger" disabled>
+    <span class="deep-nav-icon">Hb</span>
+    <span class="deep-nav-label">Huvudbok</span>
+    <span class="deep-nav-arrow">→</span>
+  </button>
+  <button class="deep-nav-btn" data-deep="salary" disabled>
+    <span class="deep-nav-icon">Lö</span>
+    <span class="deep-nav-label">Lön / Lönespec</span>
+    <span class="deep-nav-arrow">→</span>
+  </button>
+  <button class="deep-nav-btn" data-deep="employer" disabled>
+    <span class="deep-nav-icon">Ag</span>
+    <span class="deep-nav-label">Arbetsgivare</span>
+    <span class="deep-nav-arrow">→</span>
+  </button>
+  <button class="deep-nav-btn" data-deep="wellbeing" disabled>
+    <span class="deep-nav-icon">Wb</span>
+    <span class="deep-nav-label">Wellbeing-pentagon</span>
+    <span class="deep-nav-arrow">→</span>
+  </button>
+  <div class="deep-nav-hint">3 slides per del · åter till storyn</div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HERO — Måndag 06:48 (samma som Idé 1)
      ═══════════════════════════════════════════════════════════ -->
 <section class="hero">
   <div class="shell">
-    <div class="hero-eyebrow">VECKA + DJUPDYK · IDÉ 04</div>
-    <h1>
-      Linda lever sin vecka.<br>
-      Du <em>swipar in</em> i systemet — när du vill.
-    </h1>
-    <p>
-      Lindas vecka är den röda tråden. Men för varje moment hon möter får du
-      ett horisontellt djupdyk åt vänster — Huvudbok, Lön, Arbetsgivare,
-      Pentagon. Funktioner förklaras <strong>när de blir relevanta</strong>,
-      inte i en separat lista.
-    </p>
-    <div class="hero-hint">
-      <span class="hero-hint-arrow">←</span>
-      <div>
-        <strong>Swipa horisontellt i den mörka panelen</strong> för att läsa
-        om plattformens delar — synkat med dagens händelse.
+    <div>
+      <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
+      <h1>
+        Klockan är <em>06:48</em>.<br>
+        Lindas vecka<br>
+        börjar om <em>2 minuter</em>.
+      </h1>
+      <p>
+        Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i
+        Ekonomilabbet — varje dag har ett moment. Scrolla för att följa
+        henne. Klicka på en plattformsdel till höger om du vill djupdyka.
+      </p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-num">7</span>
+          <span class="hero-stat-label">dagar</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-num">9</span>
+          <span class="hero-stat-label">val att göra</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-num">4</span>
+          <span class="hero-stat-label">djupdyk att utforska</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-status">
+          <span class="time">06:48</span>
+          <span>● Mån 27 nov</span>
+        </div>
+        <div class="phone-app-bar">EKONOMILABBET</div>
+        <div class="phone-notif">
+          <div class="phone-notif-app">● ARBETSPLATS-FRÅGA · TIS 06:45</div>
+          <div class="phone-notif-title">Maria har glömt passerkortet</div>
+          <div class="phone-notif-body">
+            "Min kollega ringer 06:45 och frågar om du kan hämta henne. Ert
+            pass startar 07:00. Vad svarar du?"
+          </div>
+        </div>
+        <div class="phone-actions">
+          <button class="phone-action primary">
+            Ja, jag kör. Vi täcker varandra.
+            <small>+4 satisfaction</small>
+          </button>
+          <button class="phone-action">
+            Be henne ta taxi och ersätta dig.
+            <small>+1 satisfaction</small>
+          </button>
+          <button class="phone-action">
+            Säg till chefen att hon är sen.
+            <small>−5 satisfaction</small>
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════
-     MÅNDAG · Passerkort-frågan + horisontell deep-dive
+     TISDAG — Lönesamtalet
      ═══════════════════════════════════════════════════════════ -->
-<section class="day-section">
-  <div class="day-meta">
-    <div class="shell">
-      <span class="day-time">● Måndag · 06:48</span>
-      <span class="eyebrow">Vecka 1 av 78 scenarier</span>
-      <h2>"Maria har glömt passerkortet hemma. Kan du <em>köra och hämta?</em>"</h2>
+<section>
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time">● Tisdag · 10:14</span>
+      <span class="eyebrow">Det enda samtalet på året</span>
     </div>
-  </div>
-
-  <div class="day-body">
-    <!-- VÄNSTER: horisontell deep-dive -->
-    <div class="deep-dive">
-      <div class="deep-dive-header">
-        <span class="deep-dive-eyebrow">● DJUPDYK · 4 SLIDES</span>
-        <span class="deep-dive-hint">← swipa →</span>
+    <div class="day-grid">
+      <div class="day-narrative">
+        <h2>Linda öppnar lönesamtalet.</h2>
+        <p>
+          Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar.
+          Fem ronder. Linda börjar med marknadsdata: <em>"Akavia 2026 säger
+          39 500 kr för min roll. Jag ligger 1 500 kr under."</em>
+        </p>
+        <p>
+          Maria balanserar avtalet (2,5 % revision), Lindas satisfaction
+          och budgeten. Slutbud rond 3: <strong>3,5 %</strong>. Linda
+          accepterar.
+        </p>
+        <span class="day-tag">+ 1 295 KR / MÅN · GÄLLER 1 MAJ</span>
       </div>
-      <div class="deep-dive-track">
-        <!-- Slide 1: Huvudbok -->
-        <div class="deep-slide">
-          <div class="deep-slide-num">01 / 04 · HUVUDBOK</div>
-          <h3>Det här loggas i huvudboken</h3>
-          <p>
-            Lindas svar är inte bara ett "klick" — det är en händelse som
-            registreras med timestamp, kontext och konsekvens. Lärare kan
-            granska i efterhand: vad valde hon, varför, vad kostade det?
-          </p>
-          <div class="deep-slide-mock">
-            <div class="deep-slide-mock-eyebrow">EVENT-LOGG · 06:48</div>
-            <div>type: <strong>workplace_question</strong></div>
-            <div>answer: <strong style="color:#10b981;">"yes_help"</strong></div>
-            <div>satisfaction_delta: <strong>+4</strong></div>
-            <div>logged_by: <strong>linda · 9c</strong></div>
+      <div class="mockup">
+        <div class="mockup-eyebrow">Lönesamtalet 2026 · 5 ronder</div>
+        <h3>Linda · IT-konsult · Visma</h3>
+        <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 6px;">
+          <div style="padding:10px 8px; background:#f1f5f9; border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#94a3b8;">R 01</div>
+            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">2,5 %</div>
+          </div>
+          <div style="padding:10px 8px; background:#f1f5f9; border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#94a3b8;">R 02</div>
+            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">3,2 %</div>
+          </div>
+          <div style="padding:10px 8px; background:#fef3c7; border-radius:8px; border:2px solid var(--gold); font-family:var(--mono); font-size:10px;">
+            <div style="color:#78350f;">R 03 ★</div>
+            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">3,5 %</div>
+          </div>
+          <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#cbd5e1;">R 04</div>
+            <div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div>
+          </div>
+          <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#cbd5e1;">R 05</div>
+            <div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div>
           </div>
         </div>
-
-        <!-- Slide 2: Lön / Lönespec -->
-        <div class="deep-slide">
-          <div class="deep-slide-num">02 / 04 · LÖN</div>
-          <h3>Lönen är ett faktum från arbetsgivaren</h3>
-          <p>
-            Linda jobbar som IT-konsult på Visma. 37 000 kr brutto, 24 318 kr
-            netto. Det syns i nästa lönespec — en riktig PDF med skatte-
-            uppställning, ITP1, kollektivavtal.
-          </p>
-          <div class="deep-slide-mock">
-            <div class="deep-slide-mock-eyebrow">LÖNESPEC NOV · UTKAST</div>
-            <div>Bruttolön: <strong>37 000 kr</strong></div>
-            <div>Skatt: <strong style="color:#dc4c2b;">−10 959 kr</strong></div>
-            <div>ITP1 (4,5%): <strong style="color:#dc4c2b;">−1 665 kr</strong></div>
-            <div>Netto: <strong style="color:#10b981;">+ 24 376 kr</strong></div>
-          </div>
-        </div>
-
-        <!-- Slide 3: Arbetsgivare -->
-        <div class="deep-slide">
-          <div class="deep-slide-num">03 / 04 · ARBETSGIVARE</div>
-          <h3>Lindas svar flyttar satisfaction-faktorn</h3>
-          <p>
-            17 yrken får riktiga kollektivavtal. Linda är på Tjänstemanna IT
-            (Unionen). Hennes svar på arbetsplats-frågan flyttar nöjdhets-
-            faktorn 0–100. Den påverkar nästa lönesamtal.
-          </p>
-          <div class="deep-slide-mock">
-            <div class="deep-slide-mock-eyebrow">SATISFACTION · LIVE</div>
-            <div>Före: <strong>62 / 100</strong></div>
-            <div>Efter: <strong style="color:#10b981;">66 / 100 ↗</strong></div>
-            <div>Trend: <strong>stigande över 30d</strong></div>
-            <div style="margin-top:6px; font-style:italic; color:#94a3b8;">
-              Chefen noterar engagemang → bättre förhandlingsläge.
-            </div>
-          </div>
-        </div>
-
-        <!-- Slide 4: Pentagon -->
-        <div class="deep-slide">
-          <div class="deep-slide-num">04 / 04 · WELLBEING</div>
-          <h3>Det här syns på pentagonen</h3>
-          <p>
-            Sociala band + 2. Trygghet + 1. Wellbeing-Score (vägd över 5
-            dimensioner) rör sig 60 → 62. Inte i ett separat verktyg —
-            i samma vy där hon ser sitt saldo.
-          </p>
-          <div class="deep-slide-mock">
-            <div class="deep-slide-mock-eyebrow">PENTAGON-DELTAS</div>
-            <div>Ekonomi: 50 → <strong>50</strong> (oförändrad)</div>
-            <div>Sociala band: 50 → <strong style="color:#10b981;">52</strong></div>
-            <div>Trygghet: 60 → <strong style="color:#10b981;">61</strong></div>
-            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.1);">
-              Σ Wellbeing: 60 → <strong style="color:var(--gold);">62</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- HÖGER: dagens narrativ -->
-    <div class="day-narrative">
-      <div class="narr-eyebrow">● Lindas måndag</div>
-      <p>
-        Klockan är 06:48. En notis ploppar in på Lindas mobil. Maria — kollegan
-        på Visma — har glömt passerkortet hemma och måste börja kl 07:00.
-        Tre val visas. Linda väljer:
-        <em>"Ja, jag kör direkt — vi täcker varandra."</em>
-      </p>
-      <p>
-        Det är ett av Lindas 9 val under veckan. Varje val plottas i alla
-        plattformens delar — huvudboken, hennes lön-historik, satisfaction-
-        score, Wellbeing-pentagonen. <strong>Alla fyra ligger horisontellt
-        till vänster om dig nu</strong> — swipa in för att se exakt hur det
-        funkar i systemet.
-      </p>
-      <span class="day-tag">+ 4 SATISFACTION · + 2 SOCIALA BAND</span>
-
-      <div class="phone-compact">
-        <div class="phone-compact-screen">
-          <div class="phone-compact-time">● 06:48 · MÅN 27 NOV</div>
-          <div class="phone-compact-notif">
-            <strong>Arbetsplats-fråga</strong>
-            "Maria har glömt passerkortet — kan du hämta henne? Pass startar 07:00."
-          </div>
+        <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:8px; font-size:13px; color:#065f46;">
+          ● Resultat: ny lön <strong>38 295 kr</strong>
         </div>
       </div>
     </div>
@@ -495,12 +564,13 @@ h2 {
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════
-     RESTERANDE DAGAR + LÄRARVY + CTA — fylls i nästa commit
+     PLACEHOLDER för resterande dagar + lärarvy + CTA + overlay
      ═══════════════════════════════════════════════════════════ -->
 <section style="text-align:center; padding: 64px 24px; color: var(--muted);">
-  <div class="eyebrow">Resten kommer i nästa commit</div>
+  <div class="eyebrow">Resten kommer i nästa commits</div>
   <p style="margin-top: 12px; font-size: 14px;">
-    Tisdag (lönesamtal) → onsdag (ISK) → fredag (aktiekrasch) → söndag (pentagon) → lärar-måndag → CTA
+    Onsdag → torsdag → fredag → söndag → lärar-måndag → CTA<br>
+    Overlay-mekaniken för djupdyk + 4 funktioners 12 slides
   </p>
 </section>
 
