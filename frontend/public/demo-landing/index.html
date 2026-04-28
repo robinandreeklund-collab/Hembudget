@@ -89,24 +89,36 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   position: relative; overflow: hidden;
   background: var(--bg);
 }
+/* Ambient gradient-mesh som driftar långsamt */
 .hero::before {
-  content: ""; position: absolute; inset: 0;
+  content: ""; position: absolute; inset: -10% -5%;
   background:
-    radial-gradient(ellipse 60% 50% at 80% 30%, rgba(220,76,43,0.05) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(251,191,36,0.04) 0%, transparent 60%),
-    linear-gradient(180deg, #f8fafc 0%, var(--bg) 60%, #f8fafc 100%);
+    radial-gradient(ellipse 50% 40% at 20% 30%, rgba(220,76,43,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 35% at 80% 20%, rgba(251,191,36,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 70% 75%, rgba(99,102,241,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 35% at 15% 85%, rgba(220,76,43,0.04) 0%, transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, var(--bg) 50%, #f8fafc 100%);
   z-index: 0;
+  animation: ambient-drift 24s ease-in-out infinite alternate;
+  will-change: transform;
 }
+@keyframes ambient-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(-2%, 1%) scale(1.04); }
+  66%  { transform: translate(1.5%, -1.5%) scale(1.02); }
+  100% { transform: translate(-1%, 0.5%) scale(1.06); }
+}
+/* Hairline grid med radial mask */
 .hero::after {
   content: ""; position: absolute; inset: 0;
   background-image:
-    linear-gradient(0deg, transparent 0%, transparent 49%, rgba(15,23,42,0.025) 49%, rgba(15,23,42,0.025) 51%, transparent 51%),
-    linear-gradient(90deg, transparent 0%, transparent 49%, rgba(15,23,42,0.025) 49%, rgba(15,23,42,0.025) 51%, transparent 51%);
-  background-size: 80px 80px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    linear-gradient(0deg, transparent 0%, transparent 49.5%, rgba(15,23,42,0.025) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 0%, transparent 49.5%, rgba(15,23,42,0.025) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
   z-index: 0;
-  opacity: 0.5;
+  opacity: 0.7;
 }
 .hero-shell { position: relative; z-index: 2; max-width: 720px; margin: 0; flex: 0 0 auto; }
 .hero-stage {
@@ -539,6 +551,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   display: none;
 }
 .hero-info[data-active] .hero-info-content { display: contents; }
+
+/* Auto-läge: en mikrokicker + accent-prick framför theme */
+.hero-info[data-auto] .hero-info-theme::before {
+  content: "● Auto · ";
+  color: var(--gold);
+  animation: float-pulse 2s ease-in-out infinite;
+}
 
 .hero-info-theme {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.8px;
@@ -1060,7 +1079,7 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
   const ctaEl   = heroInfo.querySelector('[data-info-cta]');
   const ctaLabel = heroInfo.querySelector('[data-info-cta-label]');
 
-  function showFor(fig) {
+  function showFor(fig, isAuto) {
     themeEl.textContent = fig.dataset.theme || '';
     pitchEl.textContent = fig.dataset.pitch || '';
     tagsEl.innerHTML = '';
@@ -1080,22 +1099,60 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
       ctaEl.setAttribute('href', fig.getAttribute('href'));
     }
     heroInfo.setAttribute('data-active', fig.dataset.persona);
+    if (isAuto) heroInfo.setAttribute('data-auto', '1');
+    else heroInfo.removeAttribute('data-auto');
   }
   function clear() {
     heroInfo.removeAttribute('data-active');
+    heroInfo.removeAttribute('data-auto');
   }
-  figures.forEach(fig => {
-    fig.addEventListener('mouseenter', () => showFor(fig));
-    fig.addEventListener('focus', () => showFor(fig));
-  });
-  document.getElementById('figures').addEventListener('mouseleave', clear);
 
-  // Förhindra navigation på kommer-snart-figurer
+  let userInteracted = false;
+  let autoTimer = null;
+  let autoIdx = 0;
+
+  function autoRotate() {
+    if (userInteracted) return;
+    showFor(figures[autoIdx], true);
+    autoIdx = (autoIdx + 1) % figures.length;
+  }
+
+  figures.forEach(fig => {
+    fig.addEventListener('mouseenter', () => {
+      userInteracted = true;
+      clearInterval(autoTimer);
+      showFor(fig, false);
+    });
+    fig.addEventListener('focus', () => {
+      userInteracted = true;
+      clearInterval(autoTimer);
+      showFor(fig, false);
+    });
+  });
+  document.getElementById('figures').addEventListener('mouseleave', () => {
+    userInteracted = false;
+    clear();
+    setTimeout(() => {
+      if (!userInteracted) {
+        autoRotate();
+        autoTimer = setInterval(autoRotate, 4500);
+      }
+    }, 600);
+  });
+
   figures.forEach(fig => {
     fig.addEventListener('click', e => {
       if (fig.dataset.soon !== undefined) e.preventDefault();
     });
   });
+
+  // Starta auto-rotation efter intro-sekvensen är klar (~3.5s)
+  setTimeout(() => {
+    if (!userInteracted) {
+      autoRotate();
+      autoTimer = setInterval(autoRotate, 4500);
+    }
+  }, 3600);
 })();
 
 </script>
