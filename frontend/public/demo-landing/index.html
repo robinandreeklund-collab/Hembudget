@@ -306,10 +306,10 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .figure-video-wrap {
   width: 100%; aspect-ratio: 3 / 4;
   position: relative; overflow: hidden;
-  display: flex; align-items: flex-end; justify-content: center;
   isolation: isolate;
 }
 .figure-video {
+  position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover; object-position: center bottom;
   display: block;
