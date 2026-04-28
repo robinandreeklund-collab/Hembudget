@@ -86,81 +86,26 @@ body.is-deep { overflow: hidden; height: 100vh; }
 .vis-card.is-in .vis-bar:nth-child(4) .vis-bar-fill { transition-delay: 580ms; }
 .vis-card.is-in .vis-bar:nth-child(5) .vis-bar-fill { transition-delay: 680ms; }
 
-/* ─── Top-back (vänster, speglar top-cta) ─── */
-.top-back {
-  position: fixed; top: 18px; left: 24px; z-index: 70;
-  display: inline-flex; align-items: center; gap: 12px;
-  padding: 7px 20px 7px 7px;
-  background: var(--fg); color: #fff;
-  text-decoration: none; border-radius: 999px;
-  font-size: 13.5px; font-weight: 600; font-family: inherit;
-  letter-spacing: -0.1px;
-  box-shadow:
-    0 14px 34px -12px rgba(15,23,42,0.5),
-    0 2px 6px -2px rgba(15,23,42,0.2),
-    inset 0 0 0 1px rgba(255,255,255,0.1);
-  transition: transform .25s var(--ease), box-shadow .25s, background .25s;
-}
-.top-back-icon {
-  width: 30px; height: 30px;
-  background: rgba(255,255,255,0.08); color: #fff;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 13px; line-height: 1;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
-  transition: transform .3s cubic-bezier(.34, 1.4, .64, 1), background .25s;
-}
-.top-back:hover {
-  transform: translateY(-2px);
-  background: #1e293b;
-  box-shadow:
-    0 20px 40px -14px rgba(15,23,42,0.55),
-    0 4px 10px -2px rgba(15,23,42,0.25),
-    inset 0 0 0 1px rgba(255,255,255,0.14);
-}
-.top-back:hover .top-back-icon {
-  transform: translateX(-4px) rotate(12deg);
-  background: var(--gold); color: var(--fg);
-}
-
-/* ─── Top-CTA (höger hörn, accent-cirkel inuti) ─── */
+/* ─── Top-CTA (höger hörn, hairline pill) ─── */
 .top-cta {
-  position: fixed; top: 18px; right: 24px; z-index: 70;
-  display: inline-flex; align-items: center; gap: 12px;
-  padding: 7px 7px 7px 20px;
-  background: var(--fg); color: #fff;
-  text-decoration: none; border-radius: 999px;
-  font-size: 13.5px; font-weight: 600; font-family: inherit;
-  letter-spacing: -0.1px;
-  box-shadow:
-    0 14px 34px -12px rgba(15,23,42,0.5),
-    0 2px 6px -2px rgba(15,23,42,0.2),
-    inset 0 0 0 1px rgba(255,255,255,0.1);
-  transition: transform .25s var(--ease), box-shadow .25s, background .25s;
-}
-.top-cta-icon {
-  width: 30px; height: 30px;
-  background: var(--accent); color: #fff;
-  border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 13px; line-height: 1;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.08),
-    0 6px 14px -4px rgba(220,76,43,0.5);
-  transition: transform .3s cubic-bezier(.34, 1.4, .64, 1), background .25s;
+  position: fixed; top: 16px; right: 16px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  text-decoration: none; color: var(--fg);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--rule);
+  padding: 7px 14px; border-radius: 100px;
+  transition: all .2s var(--ease);
 }
 .top-cta:hover {
-  transform: translateY(-2px);
-  background: #1e293b;
-  box-shadow:
-    0 20px 40px -14px rgba(15,23,42,0.55),
-    0 4px 10px -2px rgba(15,23,42,0.25),
-    inset 0 0 0 1px rgba(255,255,255,0.14);
+  background: var(--fg); color: #fff;
+  border-color: var(--fg);
 }
-.top-cta:hover .top-cta-icon {
-  transform: translateX(4px) rotate(-12deg);
-  background: var(--gold); color: var(--fg);
-}
+.top-cta-arrow { transition: transform .2s var(--ease); }
+.top-cta:hover .top-cta-arrow { transform: translateX(2px); }
 
 /* ─── Animerad nedräkning i hero h1 ─── */
 [data-hero-time], [data-hero-mins] {
@@ -246,6 +191,71 @@ h2 {
   letter-spacing: 2.4px; text-transform: uppercase;
   font-weight: 500;
   color: var(--muted);
+}
+
+/* ─── Hero pin-wrapper (scrub-parallax under första 180vh) ─── */
+.hero-pin {
+  position: relative;
+  height: 180vh;
+}
+.hero {
+  position: sticky; top: 0;
+  height: 100vh; min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Scrub-driven transforms via --hero-p (sätts av JS, 0..1) */
+.hero-brand {
+  transform: translate(-50%, calc(var(--hero-p, 0) * -28px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.7);
+}
+.hero h1 {
+  transform: translateY(calc(var(--hero-p, 0) * -80px))
+             scale(calc(1 - var(--hero-p, 0) * 0.06));
+  opacity: calc(1 - var(--hero-p, 0));
+  transform-origin: 0 50%;
+}
+.hero p {
+  transform: translateY(calc(var(--hero-p, 0) * -56px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.5);
+}
+.hero-stats {
+  transform: translateY(calc(var(--hero-p, 0) * -36px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.7);
+}
+.hero-eyebrow {
+  transform: translateY(calc(var(--hero-p, 0) * -20px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.8);
+}
+.hero-scroll-hint {
+  opacity: calc(1 - var(--hero-p, 0) * 2.2);
+}
+.hero-bg-video {
+  filter: blur(calc(var(--hero-p, 0) * 5px))
+          brightness(calc(1 - var(--hero-p, 0) * 0.32));
+}
+.hero-bg-overlay {
+  opacity: calc(1 - var(--hero-p, 0) * 0.35);
+}
+
+/* ─── Section-divider: tunn linje "ritas" vänster→höger när section visas ─ */
+section.day::before {
+  content: ""; position: absolute;
+  top: 0; left: 0; height: 1px; width: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 25%, var(--accent) 75%, transparent 100%);
+  transition: width 1.6s cubic-bezier(.65, 0, .35, 1);
+  z-index: 4;
+}
+section.day.is-in::before { width: 100%; }
+section.day { position: relative; }
+
+/* ─── Sticky vis-card: stannar kvar medan text scrollar förbi ─ */
+@media (min-width: 901px) {
+  .day-vis {
+    position: sticky;
+    top: 12vh;
+    align-self: start;
+  }
 }
 
 /* ─── Hero ─── */
@@ -912,32 +922,28 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
 </head>
 <body>
 
-<a href="./" class="top-back">
-  <span class="top-back-icon">←</span>
-  Tillbaka
-</a>
-
 <a href="#cta" class="top-cta" id="topCta">
   Skapa konto
-  <span class="top-cta-icon">→</span>
+  <span class="top-cta-arrow">→</span>
 </a>
 
 <main class="main-flow" id="main">
 
-  <section class="hero" id="hero" data-scene="hero">
+  <div class="hero-pin" id="heroPin" data-scene="hero">
+  <section class="hero" id="hero">
     <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
       <source src="./linda.mp4" type="video/mp4">
     </video>
     <div class="hero-bg-overlay" aria-hidden="true"></div>
-    <header class="hero-brand" data-fx="fade-down" data-fx-delay="80">
+    <header class="hero-brand">
       <div class="brand-name">Ekonomilabbet</div>
       <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
     </header>
     <div class="shell">
-      <div class="hero-eyebrow" data-fx="fade-up" data-fx-delay="240">EN VECKA I LINDAS LIV</div>
-      <h1 data-fx="reveal" data-fx-delay="320">Klockan är <em data-hero-time>06:48</em>.<br>Lindas vecka börjar<br>om <em data-hero-mins>12 minuter</em>.</h1>
-      <p data-fx="fade-up" data-fx-delay="560">Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i Ekonomilabbet — varje dag har ett moment, varje val räknas. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
-      <div class="hero-stats" data-fx-stagger data-fx-delay="700">
+      <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
+      <h1>Klockan är <em data-hero-time>06:48</em>.<br>Lindas vecka börjar<br>om <em data-hero-mins>12 minuter</em>.</h1>
+      <p>Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i Ekonomilabbet — varje dag har ett moment, varje val räknas. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
+      <div class="hero-stats">
         <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
         <div><span class="hero-stat-num">9</span><span class="hero-stat-label">val att göra</span></div>
         <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk att utforska</span></div>
@@ -947,6 +953,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
       </div>
     </div>
   </section>
+  </div>
 
   <section data-scene="tuesday" class="day">
     <div class="shell">
@@ -1550,39 +1557,64 @@ const DIVE_LABELS = {
   setTimeout(tick, TICK_MS);
 })();
 
-// ─── Hero-bakgrundsvideo: fade in när redo, fade ut vid scroll ──
+// ─── Hero scrub-parallax: räknar progress 0..1 över hero-pin-area ──
 (function() {
+  const heroPin = document.getElementById('heroPin');
   const video = document.getElementById('hero-video');
-  const hero = document.getElementById('hero');
-  if (!video || !hero) return;
+  if (!heroPin) return;
 
-  let isReady = false;
+  let isReady = !!video;
   let raf = 0;
-  const onScroll = () => {
+  const root = document.documentElement;
+
+  const update = () => {
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(() => {
-      const rect = hero.getBoundingClientRect();
-      const heroHeight = rect.height || 1;
-      const past = Math.min(1, Math.max(0, -rect.top / heroHeight));
-      const opacity = past < 0.4 ? 1 : Math.max(0, 1 - (past - 0.4) / 0.6);
-      video.style.opacity = isReady ? opacity.toFixed(3) : '0';
-      if (rect.bottom < 0 && !video.paused) video.pause();
-      else if (rect.bottom > 0 && video.paused) video.play().catch(() => {});
+      const r = heroPin.getBoundingClientRect();
+      const total = heroPin.offsetHeight - window.innerHeight;
+      const p = total > 0 ? Math.max(0, Math.min(1, -r.top / total)) : 0;
+      root.style.setProperty('--hero-p', p.toFixed(4));
+
+      // Pausa videon när vi är förbi pin-zonen för att spara CPU
+      if (video) {
+        if (r.bottom < 0 && !video.paused) video.pause();
+        else if (r.bottom > 0 && video.paused) video.play().catch(() => {});
+        if (!isReady) video.style.opacity = '0';
+      }
     });
   };
-  const reveal = () => {
-    if (isReady) return;
-    isReady = true;
-    onScroll();
-    video.play().catch(() => {});
-  };
-  if (video.readyState >= 2) reveal();
-  else {
-    video.addEventListener('loadeddata', reveal, { once: true });
-    video.addEventListener('canplay', reveal, { once: true });
+
+  if (video) {
+    const reveal = () => {
+      if (isReady) return;
+      isReady = true;
+      video.style.opacity = '';
+      video.play().catch(() => {});
+      update();
+    };
+    if (video.readyState >= 2) reveal();
+    else {
+      video.addEventListener('loadeddata', reveal, { once: true });
+      video.addEventListener('canplay', reveal, { once: true });
+    }
   }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+})();
+
+// ─── Section-divider: rita linje när day-section når viewport ─────
+(function() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.05) {
+        e.target.classList.add('is-in');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.05] });
+  document.querySelectorAll('section.day').forEach(el => obs.observe(el));
 })();
 </script>
 
