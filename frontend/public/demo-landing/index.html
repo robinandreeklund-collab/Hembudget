@@ -428,6 +428,70 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   z-index: 4; pointer-events: none;
 }
 
+/* Mikro-data-float: liten badge som driftar nära figuren */
+.figure-float {
+  position: absolute; z-index: 3;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.4px;
+  background: #fff; color: var(--fg);
+  padding: 7px 11px; border-radius: 100px;
+  border: 1px solid var(--rule);
+  box-shadow: 0 8px 22px -8px rgba(15,23,42,0.18);
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  animation:
+    float-in 0.6s cubic-bezier(.34, 1.4, .64, 1) 3.4s forwards,
+    float-drift 7s ease-in-out 4.0s infinite;
+}
+.figure[data-persona="linda"] .figure-float   { top: 28%; right: -8%; }
+.figure[data-persona="evelina"] .figure-float { top: 22%; left: -10%; }
+.figure[data-persona="peter"] .figure-float   { top: 18%; right: -6%; }
+.figure-float::before {
+  content: ""; display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); margin-right: 7px;
+  vertical-align: middle;
+  animation: float-pulse 1.8s ease-in-out infinite;
+}
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes float-drift {
+  0%, 100% { transform: translate(0, 0); }
+  25%      { transform: translate(2px, -3px); }
+  50%      { transform: translate(-1px, -1px); }
+  75%      { transform: translate(-2px, 2px); }
+}
+@keyframes float-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.3); }
+}
+/* Floats göms när någon hovrar — info-panelen tar över informationen */
+.figures:hover .figure-float { opacity: 0; transition: opacity .25s; }
+
+/* ─── Magazine credits (längst ned) ─── */
+.cover-credits {
+  position: relative; z-index: 2;
+  margin-top: 18px; padding: 14px 0 0;
+  display: flex; justify-content: center; align-items: center;
+  gap: clamp(14px, 2vw, 32px);
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.cover-credits-sep {
+  display: inline-block; width: 4px; height: 4px;
+  background: var(--accent); border-radius: 50%;
+  flex-shrink: 0;
+}
+.cover-credits-vol {
+  font-family: var(--serif); font-size: 12px; font-style: italic;
+  text-transform: none; letter-spacing: 0; color: var(--fg);
+}
+
 /* ─── Info-panel (delad, uppdateras vid hover) ─── */
 .hero-info {
   position: relative; z-index: 2;
@@ -737,6 +801,7 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
               <source src="./linda-intro.mp4" type="video/mp4">
             </video>
           </div>
+          <span class="figure-float" aria-hidden="true"></span>
           <div class="figure-caption">
             <strong>Linda</strong>
             <span>22 · IT-konsult</span>
@@ -755,6 +820,7 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
               <source src="./evelina-intro.mp4" type="video/mp4">
             </video>
           </div>
+          <span class="figure-float" aria-hidden="true"></span>
           <div class="figure-caption">
             <strong>Evelina</strong>
             <span>27 · ekonom</span>
@@ -773,6 +839,7 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
               <source src="./peter-intro.mp4" type="video/mp4">
             </video>
           </div>
+          <span class="figure-float" aria-hidden="true"></span>
           <div class="figure-caption">
             <strong>Peter</strong>
             <span>38 · småbarnsförälder</span>
@@ -800,7 +867,15 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
         </div>
       </div>
 
-      <div class="hero-hint">scrolla för mer ↓</div>
+      <div class="cover-credits">
+        <span class="cover-credits-vol">Vol. 01</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>Ill. Ekonomilabbet 2026</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>Scrolla för mer ↓</span>
+      </div>
     </div>
   </section>
 
@@ -934,6 +1009,14 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
 <script>
 // ─── Intro-sekvens trigger ─────────────────────────────────
 requestAnimationFrame(() => document.body.classList.add('is-loaded'));
+
+// ─── Fyll mikro-floats från data-float på varje figur ─────
+(function() {
+  document.querySelectorAll('.figure[data-float]').forEach(fig => {
+    const float = fig.querySelector('.figure-float');
+    if (float) float.textContent = fig.dataset.float;
+  });
+})();
 
 // ─── Säker video-loop: tvinga restart på 'ended' om browsern
 //     missar loop-attributet (vanligt med alpha-webm) ──────
