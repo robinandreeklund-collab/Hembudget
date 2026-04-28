@@ -307,3 +307,63 @@ def test_full_month_cycle_rolling_n_plus_1_and_dynamic_statement(fx) -> None:
         f"{nov_dec_count} kvarvarande"
     )
     assert dec_batch is not None
+
+
+def test_unsigned_bill_triggers_reminder_with_late_fee(fx) -> None:
+    """Pedagogiskt test: eleven glömmer signera december-hyran. Efter
+    förfall + 5 dagar skapar reminders/run en påminnelse-rad MED
+    en separat UpcomingTransaction för påminnelseavgiften.
+
+    Verifierar Rolling N+1 mot reminder-flödet: fakturor som genereras
+    i förväg (för nästa månad) men aldrig signeras eskalerar genom
+    samma reminder-stege som i verkligheten."""
+    client, _, stu, _tid, sid = fx
+    from hembudget.db.models import PaymentReminder, UpcomingTransaction
+
+    # Generera batch (skapar både nov + dec upcomings via self-healing)
+    _generate_batch(sid, "2026-11")
+
+    # Hitta december-hyran (som vi inte signerar)
+    bills = _list_upcoming_bills(sid)
+    dec_hyra = [
+        (n, d) for n, d, _ in bills
+        if "HYRA" in n and d.startswith("2026-12")
+    ]
+    assert dec_hyra, f"Hittade ingen december-hyra: {bills}"
+    hyra_date = dec_hyra[0][1]
+
+    # Spola fram tiden 6 dagar efter förfallodagen
+    from datetime import date as _date, timedelta as _td
+    after = (_date.fromisoformat(hyra_date) + _td(days=6)).isoformat()
+
+    r = client.post(
+        "/bank/reminders/run",
+        json={"as_of": after},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+
+    # Verifiera påminnelse-rad + extra upcoming för avgiften
+    with master_session() as s:
+        student = s.get(Student, sid)
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            reminders = s.query(PaymentReminder).all()
+            assert len(reminders) >= 1, "Minst en påminnelse ska ha skapats"
+            # Extra UpcomingTransaction för påminnelseavgiften.
+            # När as_of är 6 dagar efter dec-hyrans förfallodag är
+            # november-fakturor (också osignerade) typiskt 30+ dagar
+            # över → de hamnar på högre reminder-nivå med högre
+            # avgift. Vi verifierar bara att MINST en avgifts-rad
+            # skapats med rimligt belopp (60-180 kr enligt stegen).
+            fee_rows = (
+                s.query(UpcomingTransaction)
+                .filter(UpcomingTransaction.source == "reminder")
+                .all()
+            )
+            assert len(fee_rows) >= 1, "Påminnelseavgift ska ha lagts som upcoming"
+            for fee in fee_rows:
+                assert fee.amount in (
+                    Decimal("60"), Decimal("120"), Decimal("180"),
+                ), f"Oväntad påminnelseavgift: {fee.amount}"

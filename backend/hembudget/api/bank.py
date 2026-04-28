@@ -751,6 +751,7 @@ def _create_reminder(
 
 @router.post("/reminders/run")
 def run_reminders(
+    payload: Optional[RunDueIn] = None,
     scope = Depends(scope_db),
     info: TokenInfo = Depends(require_token),
 ) -> dict:
@@ -768,11 +769,20 @@ def run_reminders(
     Idempotent: re-run skapar inga dubletter (UNIQUE-konstraint på
     (upcoming_id, reminder_no) skulle vara säkrast — för V1 räcker
     en lookup-check).
+
+    Tar valfri as_of-parameter (samma som /scheduled-payments/run-due)
+    så läraren kan simulera tidshopp pedagogiskt — 'vad händer om
+    eleven glömmer signera december-hyran?'.
     """
     _require_school()
     _student_from_info(info)
     from datetime import date as _date, timedelta as _td
     today = _date.today()
+    if payload and payload.as_of:
+        try:
+            today = _date.fromisoformat(payload.as_of)
+        except ValueError:
+            raise HTTPException(400, "as_of måste vara YYYY-MM-DD")
     triggered: list[int] = []
 
     # Hitta alla obetalda fakturor som passerat förfall + 5d

@@ -1042,7 +1042,12 @@ function UpcomingPaymentsTab() {
         </Card>
       )}
       {rows.filter((r) => r.already_signed).length > 0 && (
-        <Card title="Redan signerade">
+        <Card title="Schemalagda — väntar på förfallodag">
+          <div className="text-xs text-slate-500 mb-3">
+            Du har signerat dessa betalningar med EkonomilabbetID. De
+            kommer dras automatiskt på respektive förfallodag (om
+            saldot räcker). Försvinner från listan när de körts.
+          </div>
           <ul className="divide-y divide-slate-200 text-sm">
             {rows.filter((r) => r.already_signed).map((r) => (
               <li
@@ -1053,7 +1058,7 @@ function UpcomingPaymentsTab() {
                 <div className="flex-1">
                   <div className="font-medium">{r.name}</div>
                   <div className="text-xs text-slate-500">
-                    Schemalagd {r.scheduled_date} · status {r.scheduled_status}
+                    Dras {r.scheduled_date} · status {r.scheduled_status}
                   </div>
                 </div>
                 <div className="tabular-nums">
