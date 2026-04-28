@@ -101,8 +101,8 @@ h2 {
     background: linear-gradient(180deg, rgba(250,250,249,0.86) 0%, rgba(250,250,249,0.45) 40%, rgba(250,250,249,0.95) 100%);
   }
 }
-.hero .shell { position: relative; z-index: 2; display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: center; }
-@media (max-width: 800px) { .hero .shell { grid-template-columns: 1fr; gap: 40px; } }
+.hero { padding-top: 18vh; padding-bottom: 14vh; min-height: 88vh; display: flex; align-items: center; }
+.hero .shell { position: relative; z-index: 2; max-width: 820px; }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--mono); font-size: 11px;
@@ -119,29 +119,26 @@ h2 {
   font-size: 17px; color: #475569; max-width: 480px;
   margin-bottom: 28px; line-height: 1.55;
 }
-.hero-stats { display: flex; gap: 32px; padding-top: 24px; border-top: 1px solid var(--rule); flex-wrap: wrap; }
-.hero-stat-num { display: block; font-size: 28px; font-weight: 700; letter-spacing: -0.6px; }
-.hero-stat-label { font-size: 12px; color: var(--muted); }
-
-/* Phone mockup */
-.phone {
-  width: 100%; max-width: 320px; aspect-ratio: 9/18;
-  background: var(--fg); border-radius: 36px; padding: 12px;
-  box-shadow: 0 30px 60px -15px rgba(15,23,42,0.4); margin: 0 auto;
+.hero h1 { font-size: clamp(44px, 6.5vw, 78px); letter-spacing: -2.2px; line-height: 0.98; max-width: 12ch; }
+.hero p { font-size: 18px; max-width: 540px; }
+.hero-stats { display: flex; gap: 40px; padding-top: 28px; border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap; margin-top: 8px; }
+.hero-stat-num { display: block; font-size: 32px; font-weight: 700; letter-spacing: -0.8px; }
+.hero-stat-label { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 1.2px; text-transform: uppercase; }
+.hero-scroll-hint {
+  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2.5px;
+  color: var(--muted); z-index: 3;
 }
-.phone-screen { background: #fff; border-radius: 26px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
-.phone-status { display: flex; justify-content: space-between; padding: 12px 18px 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.phone-status .time { font-weight: 600; color: var(--fg); }
-.phone-app-bar { padding: 12px 18px; background: var(--fg); color: #fff; font-size: 12px; font-family: var(--mono); letter-spacing: 1px; }
-.phone-notif { margin: 18px 14px; padding: 14px 16px; background: #fef3c7; border: 1px solid rgba(120,53,15,0.25); border-radius: 12px; }
-.phone-notif-app { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; color: #78350f; margin-bottom: 6px; }
-.phone-notif-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-.phone-notif-body { font-size: 12.5px; color: #475569; line-height: 1.4; }
-.phone-actions { margin: 0 14px; display: flex; flex-direction: column; gap: 6px; }
-.phone-action { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--rule); background: #fff; font-size: 13px; text-align: left; font-family: inherit; cursor: pointer; }
-.phone-action.primary { background: var(--fg); color: #fff; border-color: var(--fg); font-weight: 500; }
-.phone-action small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
-.phone-action.primary small { color: rgba(255,255,255,0.6); }
+.hero-scroll-line {
+  width: 1px; height: 32px;
+  background: linear-gradient(180deg, var(--muted) 0%, transparent 100%);
+  animation: scroll-pulse 2.4s ease-in-out infinite;
+}
+@keyframes scroll-pulse {
+  0%, 100% { transform: scaleY(1); transform-origin: top; opacity: 0.6; }
+  50% { transform: scaleY(0.4); opacity: 1; }
+}
 
 /* ─── Day section ─── */
 .day-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
@@ -197,18 +194,24 @@ h2 {
 .deep-stage { flex: 1; overflow: hidden; position: relative; }
 .deep-content { position: absolute; inset: 0; display: none; }
 .deep-content.is-active { display: block; }
-.deep-track {
-  height: 100%; display: flex;
-  overflow-x: auto; overflow-y: hidden;
-  scroll-snap-type: x mandatory; scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-}
-.deep-track::-webkit-scrollbar { display: none; }
-.deep-track { scrollbar-width: none; }
+.deep-track { position: relative; width: 100%; height: 100%; }
 .deep-slide {
-  flex: 0 0 100%; scroll-snap-align: start;
-  padding: 56px 64px; overflow-y: auto;
+  position: absolute; inset: 0; padding: 56px 64px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 24px;
+  transform: translate3d(110%, 4%, 0) scale(0.96) rotate(0.8deg);
+  opacity: 0; pointer-events: none;
+  transition:
+    transform 720ms cubic-bezier(.34, 1.18, .64, 1),
+    opacity 520ms cubic-bezier(.4, 0, .2, 1);
+  will-change: transform, opacity;
+}
+.deep-slide.is-prev {
+  transform: translate3d(-110%, 4%, 0) scale(0.96) rotate(-0.8deg);
+  opacity: 0; pointer-events: none;
+}
+.deep-slide.is-active {
+  transform: translate3d(0, 0, 0) scale(1) rotate(0);
+  opacity: 1; pointer-events: auto;
 }
 @media (max-width: 700px) { .deep-slide { padding: 36px 24px; } .deep-head { padding: 14px 18px; gap: 12px; } }
 .deep-slide-num { font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; color: var(--accent); font-weight: 600; }
@@ -230,47 +233,78 @@ h2 {
 .deep-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
 .deep-foot-counter { font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
 
-/* ─── Kontextuell nav (frostat glas-kapsel, botten) ─── */
+/* ─── Kontextuell nav (2026: hairlines, asymmetri, spring-feeling) ─── */
 .ctx-nav {
-  position: fixed; bottom: 24px; left: 50%;
-  transform: translate(-50%, 24px);
-  z-index: 50; display: flex; align-items: center; gap: 12px;
-  padding: 8px 8px 8px 18px;
-  background: rgba(15, 23, 42, 0.82);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  color: #fff; border-radius: 999px;
-  box-shadow: 0 14px 40px -10px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.06);
+  position: fixed; bottom: 22px; left: 50%;
+  transform: translate(-50%, 32px);
+  z-index: 50; display: flex; align-items: stretch;
+  background: rgba(8, 12, 22, 0.72);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border-radius: 14px;
+  box-shadow:
+    0 28px 64px -22px rgba(0,0,0,0.55),
+    0 6px 18px -6px rgba(0,0,0,0.35),
+    inset 0 0 0 0.5px rgba(255,255,255,0.16),
+    inset 0 1px 0 rgba(255,255,255,0.08);
   opacity: 0; pointer-events: none;
-  transition: opacity .4s var(--ease), transform .4s var(--ease);
-  max-width: calc(100vw - 32px);
+  transition: opacity .5s var(--ease), transform .55s cubic-bezier(.34, 1.4, .64, 1);
+  color: #fff; max-width: calc(100vw - 32px);
 }
 .ctx-nav.is-visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 body.is-deep .ctx-nav { opacity: 0; pointer-events: none; transform: translate(-50%, 24px); }
-.ctx-eye {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px;
-  text-transform: uppercase; color: rgba(255,255,255,0.5); white-space: nowrap;
+
+.ctx-status { display: flex; align-items: center; gap: 11px; padding: 12px 16px 12px 18px; min-width: 0; }
+.ctx-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--gold); flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(251,191,36,0.65), 0 0 0 0 rgba(251,191,36,0.4);
+  animation: ctx-pulse 2.6s cubic-bezier(.45,.05,.55,.95) infinite;
 }
-.ctx-eye em {
-  color: var(--gold); font-style: normal; font-weight: 600;
-  margin-left: 4px;
+@keyframes ctx-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(251,191,36,0.65), 0 0 0 0 rgba(251,191,36,0.4); }
+  50%      { box-shadow: 0 0 14px rgba(251,191,36,0.85), 0 0 0 6px rgba(251,191,36,0); }
+}
+.ctx-status-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ctx-status-kicker {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.7px;
+  text-transform: uppercase; color: rgba(255,255,255,0.42);
+}
+.ctx-status-label {
+  font-size: 13.5px; font-weight: 500; letter-spacing: -0.1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: opacity .2s var(--ease);
 }
-.ctx-eye em.is-swap { opacity: 0; }
-.ctx-chips { display: flex; gap: 4px; transition: opacity .2s var(--ease); }
+.ctx-status-label.is-swap { opacity: 0; }
+.ctx-divider { width: 0.5px; background: rgba(255,255,255,0.12); margin: 10px 0; }
+.ctx-chips { display: flex; align-items: center; gap: 4px; padding: 7px; transition: opacity .2s var(--ease); }
 .ctx-chips.is-swap { opacity: 0; }
 .chip {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #fff; font-family: inherit; font-size: 12.5px;
-  padding: 7px 14px; border-radius: 999px; cursor: pointer;
-  transition: all .18s var(--ease); font-weight: 500; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 0.5px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.95);
+  font-family: inherit; font-size: 12.5px; font-weight: 500;
+  padding: 8px 12px; border-radius: 9px;
+  cursor: pointer; transition: all .22s var(--ease);
+  letter-spacing: -0.05px; white-space: nowrap;
 }
-.chip:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.25); transform: translateY(-1px); }
+.chip::after {
+  content: "↗"; font-family: var(--mono); font-size: 11px;
+  opacity: 0.45; transition: transform .22s var(--ease), opacity .22s;
+}
+.chip:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.28);
+  transform: translateY(-1px);
+}
+.chip:hover::after { opacity: 1; transform: translate(2px, -2px); }
+.chip:active { transform: translateY(0); }
 @media (max-width: 600px) {
-  .ctx-nav { padding: 6px 6px 6px 14px; gap: 8px; }
-  .ctx-eye { font-size: 9.5px; }
-  .chip { font-size: 11.5px; padding: 6px 11px; }
+  .ctx-status { padding: 10px 12px 10px 14px; gap: 8px; }
+  .ctx-status-kicker { font-size: 8.5px; letter-spacing: 1.4px; }
+  .ctx-status-label { font-size: 12px; }
+  .chip { font-size: 11.5px; padding: 7px 10px; }
 }
 </style>
 </head>
@@ -286,31 +320,16 @@ body.is-deep .ctx-nav { opacity: 0; pointer-events: none; transform: translate(-
     </video>
     <div class="hero-bg-overlay" aria-hidden="true"></div>
     <div class="shell">
-      <div>
-        <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
-        <h1>Klockan är <em>06:48</em>.<br>Lindas vecka<br>börjar om <em>2 minuter</em>.</h1>
-        <p>Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i Ekonomilabbet — varje dag har ett moment. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
-        <div class="hero-stats">
-          <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
-          <div><span class="hero-stat-num">9</span><span class="hero-stat-label">val att göra</span></div>
-          <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk att utforska</span></div>
-        </div>
+      <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
+      <h1>Klockan är <em>06:48</em>.<br>Lindas vecka börjar<br>om <em>2 minuter</em>.</h1>
+      <p>Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i Ekonomilabbet — varje dag har ett moment, varje val räknas. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
+      <div class="hero-stats">
+        <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
+        <div><span class="hero-stat-num">9</span><span class="hero-stat-label">val att göra</span></div>
+        <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk att utforska</span></div>
       </div>
-      <div class="phone">
-        <div class="phone-screen">
-          <div class="phone-status"><span class="time">06:48</span><span>● Mån 27 nov</span></div>
-          <div class="phone-app-bar">EKONOMILABBET</div>
-          <div class="phone-notif">
-            <div class="phone-notif-app">● ARBETSPLATS-FRÅGA · TIS 06:45</div>
-            <div class="phone-notif-title">Maria har glömt passerkortet</div>
-            <div class="phone-notif-body">"Min kollega ringer 06:45 och frågar om du kan hämta henne. Ert pass startar 07:00. Vad svarar du?"</div>
-          </div>
-          <div class="phone-actions">
-            <button class="phone-action primary">Ja, jag kör. Vi täcker varandra.<small>+4 satisfaction</small></button>
-            <button class="phone-action">Be henne ta taxi och ersätta dig.<small>+1 satisfaction</small></button>
-            <button class="phone-action">Säg till chefen att hon är sen.<small>−5 satisfaction</small></button>
-          </div>
-        </div>
+      <div class="hero-scroll-hint" aria-hidden="true">
+        <span>SCROLLA</span><span class="hero-scroll-line"></span>
       </div>
     </div>
   </section>
@@ -451,7 +470,14 @@ body.is-deep .ctx-nav { opacity: 0; pointer-events: none; transform: translate(-
 </template>
 
 <nav class="ctx-nav" id="ctxNav" aria-label="Kontextuell deep-nav">
-  <span class="ctx-eye">Just nu · <em data-scene-label>—</em></span>
+  <div class="ctx-status">
+    <span class="ctx-dot" aria-hidden="true"></span>
+    <div class="ctx-status-text">
+      <span class="ctx-status-kicker">Aktuell scen</span>
+      <span class="ctx-status-label" data-scene-label>—</span>
+    </div>
+  </div>
+  <div class="ctx-divider" aria-hidden="true"></div>
   <div class="ctx-chips" data-chips></div>
 </nav>
 
@@ -491,6 +517,8 @@ const CHIP_LABELS = {
 
   let lastY = 0;
   let activeContent = null;
+  let activeSlideIdx = 0;
+  let slideAnimLock = false;
 
   function getOrCreateContent(key) {
     let el = stage.querySelector(`[data-deep-content="${key}"]`);
@@ -515,6 +543,14 @@ const CHIP_LABELS = {
     if (nextBtn) nextBtn.disabled = idx === total - 1;
   }
 
+  function applySlideClasses(slides, idx) {
+    slides.forEach((s, i) => {
+      s.classList.remove('is-active', 'is-prev');
+      if (i < idx) s.classList.add('is-prev');
+      else if (i === idx) s.classList.add('is-active');
+    });
+  }
+
   function activate(key) {
     const el = getOrCreateContent(key);
     if (!el) return false;
@@ -522,24 +558,23 @@ const CHIP_LABELS = {
     activeContent = el;
     if (kicker) kicker.textContent = el.dataset.kicker || '';
     if (titleEl) titleEl.textContent = el.dataset.title || '';
-    const track = el.querySelector('.deep-track');
-    const slides = track.querySelectorAll('.deep-slide');
-    track.scrollLeft = 0;
+    const slides = el.querySelectorAll('.deep-slide');
+    activeSlideIdx = 0;
+    applySlideClasses(slides, 0);
     setProgress(0, slides.length);
-    // Wire scroll-driven progress (en gång per content)
-    if (!track.dataset.wired) {
-      track.dataset.wired = '1';
-      let raf = 0;
-      track.addEventListener('scroll', () => {
-        cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => {
-          if (el !== activeContent) return;
-          const idx = Math.round(track.scrollLeft / track.clientWidth);
-          setProgress(idx, slides.length);
-        });
-      });
-    }
     return true;
+  }
+
+  function goSlide(dir) {
+    if (!activeContent || slideAnimLock) return;
+    const slides = activeContent.querySelectorAll('.deep-slide');
+    const next = Math.max(0, Math.min(slides.length - 1, activeSlideIdx + dir));
+    if (next === activeSlideIdx) return;
+    activeSlideIdx = next;
+    applySlideClasses(slides, next);
+    setProgress(next, slides.length);
+    slideAnimLock = true;
+    setTimeout(() => { slideAnimLock = false; }, 740);
   }
 
   function open(key) {
@@ -565,20 +600,51 @@ const CHIP_LABELS = {
     if (e.target.closest('[data-close]')) { e.preventDefault(); close(); return; }
   });
 
-  // Pilar + tangentbord
-  function scrollSlide(dir) {
-    if (!activeContent) return;
-    const track = activeContent.querySelector('.deep-track');
-    track.scrollBy({ left: dir * track.clientWidth, behavior: 'smooth' });
-  }
-  prevBtn.addEventListener('click', () => scrollSlide(-1));
-  nextBtn.addEventListener('click', () => scrollSlide(1));
+  prevBtn.addEventListener('click', () => goSlide(-1));
+  nextBtn.addEventListener('click', () => goSlide(1));
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && body.classList.contains('is-deep')) close();
     if (!body.classList.contains('is-deep')) return;
-    if (e.key === 'ArrowRight') scrollSlide(1);
-    if (e.key === 'ArrowLeft') scrollSlide(-1);
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goSlide(1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   { e.preventDefault(); goSlide(-1); }
   });
+
+  // ─── Wheel + touch: dirigera vertikal/horisontell input → slide-byte ─
+  let wheelLock = false;
+  deep.addEventListener('wheel', e => {
+    if (!body.classList.contains('is-deep')) return;
+    // Tillåt vertikal scroll inuti aktiv slide om innehållet är högre
+    const slide = activeContent && activeContent.querySelector('.deep-slide.is-active');
+    const canScrollDown = slide && slide.scrollTop + slide.clientHeight < slide.scrollHeight - 2;
+    const canScrollUp   = slide && slide.scrollTop > 2;
+    const dy = e.deltaY, dx = e.deltaX;
+    const dominant = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    // Liten dödzon, undvik trackpad-jitter
+    if (Math.abs(dominant) < 14) return;
+    // Om vertikal scroll inuti slide kan ta hand om det → låt browsern
+    if (Math.abs(dy) > Math.abs(dx) && ((dy > 0 && canScrollDown) || (dy < 0 && canScrollUp))) return;
+    e.preventDefault();
+    if (wheelLock) return;
+    goSlide(dominant > 0 ? 1 : -1);
+    wheelLock = true;
+    setTimeout(() => { wheelLock = false; }, 760);
+  }, { passive: false });
+
+  // Touch-swipe på mobil
+  let tStartX = 0, tStartY = 0, tStartT = 0;
+  deep.addEventListener('touchstart', e => {
+    tStartX = e.touches[0].clientX;
+    tStartY = e.touches[0].clientY;
+    tStartT = Date.now();
+  }, { passive: true });
+  deep.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tStartX;
+    const dy = e.changedTouches[0].clientY - tStartY;
+    const dt = Date.now() - tStartT;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dt > 700) return;
+    goSlide(dx < 0 ? 1 : -1);
+  }, { passive: true });
 })();
 </script>
 
