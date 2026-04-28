@@ -40,6 +40,48 @@ body.is-deep { overflow: hidden; height: 100vh; }
 }
 .back:hover { background: #fff; border-color: var(--fg); }
 
+/* ─── Top-CTA (höger hörn) ─── */
+.top-cta {
+  position: fixed; top: 16px; right: 24px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 11px 18px 11px 20px;
+  background: var(--fg); color: #fff;
+  text-decoration: none; border-radius: 999px;
+  font-size: 13px; font-weight: 500; font-family: inherit;
+  letter-spacing: -0.05px;
+  box-shadow:
+    0 10px 28px -12px rgba(15,23,42,0.55),
+    0 2px 6px -2px rgba(15,23,42,0.25),
+    inset 0 0 0 1px rgba(255,255,255,0.08);
+  transition: transform .2s var(--ease), box-shadow .2s, background .2s;
+}
+.top-cta:hover {
+  transform: translateY(-1px);
+  background: #1e293b;
+  box-shadow:
+    0 14px 34px -12px rgba(15,23,42,0.55),
+    0 4px 10px -2px rgba(15,23,42,0.3),
+    inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+.top-cta-arrow {
+  font-family: var(--mono); font-size: 11px;
+  opacity: 0.7; letter-spacing: 0.5px;
+}
+
+/* ─── Animerad nedräkning i hero h1 ─── */
+[data-hero-time], [data-hero-mins] {
+  display: inline-block;
+  transition: transform .25s var(--ease), opacity .25s var(--ease);
+  transform-origin: center;
+}
+[data-hero-time].is-tick, [data-hero-mins].is-tick {
+  transform: scale(0.92) translateY(2px);
+  opacity: 0.25;
+}
+[data-hero-time].is-zero, [data-hero-mins].is-zero {
+  color: var(--accent);
+}
+
 /* ─── Page-swipe layout: main + deep-page sliding horisontellt ─── */
 .main-flow {
   transition: transform var(--dur) var(--ease);
@@ -417,6 +459,11 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
 
 <a href="./" class="back">← tillbaka</a>
 
+<a href="#cta" class="top-cta" id="topCta">
+  Boka demo
+  <span class="top-cta-arrow">→</span>
+</a>
+
 <main class="main-flow" id="main">
 
   <section class="hero" id="hero" data-scene="hero">
@@ -430,7 +477,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </header>
     <div class="shell">
       <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
-      <h1>Klockan är <em>06:48</em>.<br>Lindas vecka börjar<br>om <em>2 minuter</em>.</h1>
+      <h1>Klockan är <em data-hero-time>06:48</em>.<br>Lindas vecka börjar<br>om <em data-hero-mins>12 minuter</em>.</h1>
       <p>Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i Ekonomilabbet — varje dag har ett moment, varje val räknas. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
       <div class="hero-stats">
         <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
@@ -852,6 +899,57 @@ const DIVE_LABELS = {
 </script>
 
 <script>
+// ─── Hero-tid: animerad nedräkning 06:48 → 07:00 ────────────
+(function() {
+  const timeEl = document.querySelector('[data-hero-time]');
+  const minsEl = document.querySelector('[data-hero-mins]');
+  if (!timeEl || !minsEl) return;
+  const startMins = 6 * 60 + 48;
+  const endMins   = 7 * 60;
+  let cur = startMins;
+  const TICK_MS = 900;
+  const REACH_PAUSE_MS = 2400;
+
+  function fmt(t) {
+    const h = Math.floor(t / 60);
+    const m = t % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+  function minsLabel(rem) {
+    if (rem === 0) return 'NU';
+    if (rem === 1) return '1 minut';
+    return rem + ' minuter';
+  }
+  function paint(animate) {
+    if (animate) {
+      timeEl.classList.add('is-tick');
+      minsEl.classList.add('is-tick');
+    }
+    setTimeout(() => {
+      const remaining = endMins - cur;
+      timeEl.textContent = fmt(cur);
+      minsEl.textContent = minsLabel(remaining);
+      timeEl.classList.toggle('is-zero', remaining === 0);
+      minsEl.classList.toggle('is-zero', remaining === 0);
+      timeEl.classList.remove('is-tick');
+      minsEl.classList.remove('is-tick');
+    }, animate ? 180 : 0);
+  }
+  paint(false);
+
+  function tick() {
+    cur++;
+    if (cur > endMins) {
+      // pausa kort på "07:00 / NU", återställ sen
+      setTimeout(() => { cur = startMins; paint(true); setTimeout(tick, TICK_MS); }, REACH_PAUSE_MS);
+      return;
+    }
+    paint(true);
+    setTimeout(tick, TICK_MS);
+  }
+  setTimeout(tick, TICK_MS);
+})();
+
 // ─── Hero-bakgrundsvideo: fade in när redo, fade ut vid scroll ──
 (function() {
   const video = document.getElementById('hero-video');
