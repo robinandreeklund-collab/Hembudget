@@ -234,6 +234,13 @@ def _mount_frontend_static(app: FastAPI) -> None:
         target = dist / full_path
         if target.is_file():
             return FileResponse(str(target))
+        # Directory? → serva dess egna index.html om den finns
+        # (gör att /demo-landing/ pekar på frontend/dist/demo-landing/index.html
+        # istället för huvudappens SPA)
+        if target.is_dir():
+            dir_index = target / "index.html"
+            if dir_index.is_file():
+                return FileResponse(str(dir_index))
         return FileResponse(str(dist / "index.html"))
 
 
