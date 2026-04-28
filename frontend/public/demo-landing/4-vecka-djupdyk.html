@@ -11,678 +11,266 @@
   --muted: #64748b;
   --accent: #dc4c2b;
   --gold: #fbbf24;
-  --rule: #e2e8f0;
+  --rule: #e5e7eb;
   --serif: 'Source Serif 4', Georgia, serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --ease: cubic-bezier(.77, 0, .175, 1);
+  --dur: 650ms;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; }
 body {
   font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
   background: var(--bg);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
   line-height: 1.5;
+  position: relative;
 }
+body.is-deep { overflow: hidden; height: 100vh; }
 .back {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 50;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--fg);
-  background: #fff;
+  position: fixed; top: 16px; left: 16px; z-index: 70;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px;
+  text-transform: uppercase; text-decoration: none; color: var(--fg);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--rule);
-  padding: 6px 12px;
-  border-radius: 100px;
+  padding: 6px 12px; border-radius: 100px;
+  transition: all .2s;
 }
-.back:hover { border-color: var(--fg); }
+.back:hover { background: #fff; border-color: var(--fg); }
+
+/* ─── Page-swipe layout: main + deep-page sliding horisontellt ─── */
+.main-flow {
+  transition: transform var(--dur) var(--ease);
+  will-change: transform;
+}
+body.is-deep .main-flow {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.deep-page {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform var(--dur) var(--ease);
+  will-change: transform;
+  display: flex; flex-direction: column;
+  pointer-events: none;
+}
+body.is-deep .deep-page {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* ─── Common typography ─── */
 .eyebrow {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted);
 }
-
-/* ─── Sticky nav till höger (subtil, opt-in) ─────────── */
-.deep-nav {
-  position: fixed;
-  top: 50%;
-  right: 24px;
-  transform: translateY(-50%);
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 14px;
-  padding: 14px 12px;
-  box-shadow: 0 6px 22px rgba(15,23,42,0.06);
-  max-width: 220px;
-}
-.deep-nav-eyebrow {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 1.4px;
-  color: var(--muted);
-  text-transform: uppercase;
-  padding: 0 6px 6px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--rule);
-}
-.deep-nav-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg);
-  text-align: left;
-  transition: all .12s;
-}
-.deep-nav-btn:hover {
-  background: #fef3c7;
-  color: #78350f;
-}
-.deep-nav-btn:hover .deep-nav-arrow {
-  transform: translateX(2px);
-}
-.deep-nav-icon {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  background: #fef3c7;
-  color: #78350f;
-  display: grid;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid rgba(120,53,15,0.2);
-}
-.deep-nav-label { flex: 1; line-height: 1.2; }
-.deep-nav-arrow {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--muted);
-  transition: transform .15s;
-}
-.deep-nav-hint {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--muted);
-  letter-spacing: 0.8px;
-  padding: 8px 6px 0;
-  margin-top: 4px;
-  border-top: 1px solid var(--rule);
-  font-style: italic;
-}
-@media (max-width: 900px) {
-  .deep-nav {
-    top: auto;
-    bottom: 16px;
-    right: 16px;
-    left: 16px;
-    transform: none;
-    max-width: none;
-    flex-direction: row;
-    flex-wrap: wrap;
-    padding: 10px;
-    gap: 4px;
-  }
-  .deep-nav-eyebrow,
-  .deep-nav-hint { display: none; }
-  .deep-nav-btn { padding: 8px 10px; font-size: 12px; flex: 1 1 calc(50% - 4px); }
-  .deep-nav-icon { width: 22px; height: 22px; font-size: 10px; }
-  .deep-nav-arrow { display: none; }
-}
-
-/* ─── HERO ────────────────────────────────────────────── */
-section { padding: 80px 24px; border-top: 1px solid var(--rule); }
+section { padding: 96px 24px; border-top: 1px solid var(--rule); }
 .shell { max-width: 1100px; margin: 0 auto; }
 h1 {
-  font-size: clamp(38px, 5.5vw, 64px);
-  font-weight: 700;
-  letter-spacing: -1.6px;
-  line-height: 1.02;
+  font-size: clamp(38px, 5.5vw, 64px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.02;
 }
 h2 {
-  font-size: clamp(26px, 3.4vw, 38px);
-  font-weight: 600;
-  letter-spacing: -0.6px;
-  line-height: 1.1;
+  font-size: clamp(26px, 3.4vw, 38px); font-weight: 600;
+  letter-spacing: -0.6px; line-height: 1.1;
 }
+
+/* ─── Hero ─── */
 .hero {
-  padding: 64px 24px 96px;
-  border-top: none;
-  background: linear-gradient(180deg, #f8fafc 0%, #fafaf9 100%);
-  position: relative;
-  overflow: hidden;
+  position: relative; overflow: hidden; border-top: 0;
+  padding: 120px 24px 96px;
+  background: linear-gradient(180deg, #f1f5f9 0%, var(--bg) 100%);
 }
 .hero-bg-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 0;
-  opacity: 0;
-  transition: opacity 1.2s ease;
-  pointer-events: none;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; opacity: 0;
+  transition: opacity 1.2s ease; pointer-events: none;
 }
-.hero-bg-video.is-ready { opacity: 1; }
 .hero-bg-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(250,250,249,0.96) 0%, rgba(250,250,249,0.78) 38%, rgba(250,250,249,0.18) 70%, rgba(250,250,249,0) 100%),
-    linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0) 70%, rgba(250,250,249,0.7) 100%);
+    linear-gradient(90deg, rgba(250,250,249,0.94) 0%, rgba(250,250,249,0.55) 50%, rgba(250,250,249,0) 100%),
+    linear-gradient(180deg, rgba(15,23,42,0) 60%, rgba(250,250,249,0.85) 100%);
 }
 @media (max-width: 800px) {
   .hero-bg-overlay {
-    background:
-      linear-gradient(180deg, rgba(250,250,249,0.92) 0%, rgba(250,250,249,0.6) 35%, rgba(250,250,249,0.85) 75%, rgba(250,250,249,1) 100%);
+    background: linear-gradient(180deg, rgba(250,250,249,0.86) 0%, rgba(250,250,249,0.45) 40%, rgba(250,250,249,0.95) 100%);
   }
 }
-.hero .shell { position: relative; z-index: 2; }
-.hero .shell {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 56px;
-  align-items: center;
-}
-@media (max-width: 800px) {
-  .hero .shell { grid-template-columns: 1fr; gap: 40px; }
-}
+.hero .shell { position: relative; z-index: 2; display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: center; }
+@media (max-width: 800px) { .hero .shell { grid-template-columns: 1fr; gap: 40px; } }
 .hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 5px 12px;
-  background: #fef3c7;
-  color: #78350f;
-  border-radius: 100px;
-  letter-spacing: 1.2px;
-  margin-bottom: 24px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px;
+  padding: 5px 12px; background: var(--fg); color: #fff;
+  border-radius: 100px; letter-spacing: 1.4px; margin-bottom: 24px;
 }
-.hero-eyebrow::before {
-  content: "";
-  width: 6px; height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-}
+.hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
 .hero h1 { margin-bottom: 22px; }
 .hero h1 em {
-  color: var(--accent);
-  font-style: italic;
-  font-family: var(--serif);
-  font-weight: 500;
+  color: var(--accent); font-style: italic;
+  font-family: var(--serif); font-weight: 500;
 }
 .hero p {
-  font-size: 17px;
-  color: #475569;
-  max-width: 480px;
-  margin-bottom: 28px;
-  line-height: 1.55;
+  font-size: 17px; color: #475569; max-width: 480px;
+  margin-bottom: 28px; line-height: 1.55;
 }
-.hero-stats {
-  display: flex;
-  gap: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--rule);
-  flex-wrap: wrap;
-}
-.hero-stat {
-  display: flex;
-  flex-direction: column;
-}
-.hero-stat-num {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.6px;
-}
-.hero-stat-label {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-}
+.hero-stats { display: flex; gap: 32px; padding-top: 24px; border-top: 1px solid var(--rule); flex-wrap: wrap; }
+.hero-stat-num { display: block; font-size: 28px; font-weight: 700; letter-spacing: -0.6px; }
+.hero-stat-label { font-size: 12px; color: var(--muted); }
 
-/* Phone mockup (samma som Idé 1) */
+/* Phone mockup */
 .phone {
-  width: 100%;
-  max-width: 320px;
-  aspect-ratio: 9 / 18;
-  background: #0f172a;
-  border-radius: 36px;
-  padding: 12px;
-  box-shadow: 0 30px 60px -15px rgba(15,23,42,0.4);
-  margin: 0 auto;
+  width: 100%; max-width: 320px; aspect-ratio: 9/18;
+  background: var(--fg); border-radius: 36px; padding: 12px;
+  box-shadow: 0 30px 60px -15px rgba(15,23,42,0.4); margin: 0 auto;
 }
-.phone-screen {
-  background: #fff;
-  border-radius: 26px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.phone-status {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 18px 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-}
+.phone-screen { background: #fff; border-radius: 26px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.phone-status { display: flex; justify-content: space-between; padding: 12px 18px 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .phone-status .time { font-weight: 600; color: var(--fg); }
-.phone-app-bar {
-  padding: 12px 18px;
-  background: #0f172a;
-  color: #fff;
-  font-size: 12px;
-  font-family: var(--mono);
-  letter-spacing: 1px;
-}
-.phone-notif {
-  margin: 18px 14px;
-  padding: 14px 16px;
-  background: #fef3c7;
-  border: 1px solid rgba(120,53,15,0.25);
-  border-radius: 14px;
-}
-.phone-notif-app {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 1px;
-  color: #78350f;
-  margin-bottom: 6px;
-}
-.phone-notif-title {
-  font-weight: 600;
-  font-size: 13px;
-  margin-bottom: 4px;
-}
-.phone-notif-body {
-  font-size: 12.5px;
-  color: #475569;
-  line-height: 1.4;
-}
-.phone-actions {
-  margin: 0 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.phone-action {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--rule);
-  background: #fff;
-  font-size: 13px;
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
-}
-.phone-action.primary {
-  background: #0f172a;
-  color: #fff;
-  border-color: #0f172a;
-  font-weight: 500;
-}
-.phone-action small {
-  display: block;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 2px;
-}
+.phone-app-bar { padding: 12px 18px; background: var(--fg); color: #fff; font-size: 12px; font-family: var(--mono); letter-spacing: 1px; }
+.phone-notif { margin: 18px 14px; padding: 14px 16px; background: #fef3c7; border: 1px solid rgba(120,53,15,0.25); border-radius: 12px; }
+.phone-notif-app { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; color: #78350f; margin-bottom: 6px; }
+.phone-notif-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.phone-notif-body { font-size: 12.5px; color: #475569; line-height: 1.4; }
+.phone-actions { margin: 0 14px; display: flex; flex-direction: column; gap: 6px; }
+.phone-action { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--rule); background: #fff; font-size: 13px; text-align: left; font-family: inherit; cursor: pointer; }
+.phone-action.primary { background: var(--fg); color: #fff; border-color: var(--fg); font-weight: 500; }
+.phone-action small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
 .phone-action.primary small { color: rgba(255,255,255,0.6); }
 
-/* ─── DAY SECTIONS ─────────────────────────────────────── */
-.day-header {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-.day-time {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--accent);
-  font-weight: 600;
-}
-.day-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.1fr;
-  gap: 48px;
-  align-items: start;
-}
-@media (max-width: 800px) {
-  .day-grid { grid-template-columns: 1fr; gap: 28px; }
-}
+/* ─── Day section ─── */
+.day-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.day-time { font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+.day-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 48px; align-items: start; }
+@media (max-width: 800px) { .day-grid { grid-template-columns: 1fr; gap: 28px; } }
 .day-narrative h2 { margin-bottom: 16px; }
-.day-narrative p {
-  font-size: 16px;
-  color: #475569;
-  margin-bottom: 14px;
-  line-height: 1.55;
+.day-narrative p { font-size: 16px; color: #475569; margin-bottom: 14px; line-height: 1.55; }
+.day-narrative em { font-family: var(--serif); font-style: italic; color: var(--fg); font-size: 17px; }
+.day-tag { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase; background: #fef3c7; color: #78350f; padding: 4px 10px; border-radius: 100px; margin-top: 12px; border: 1px solid rgba(120,53,15,0.2); }
+.mockup { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.mockup-eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.mockup h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 16px; }
+
+/* Scen-CTA: inline primary action ─── */
+.scene-ctas { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 36px; padding-top: 28px; border-top: 1px dashed var(--rule); }
+.scene-cta {
+  display: inline-flex; align-items: center; gap: 14px;
+  padding: 14px 18px 14px 22px;
+  background: var(--fg); color: #fff; text-decoration: none;
+  border: 0; border-radius: 8px; font-size: 14px;
+  font-family: inherit; cursor: pointer; transition: all .18s var(--ease);
+  text-align: left;
 }
-.day-narrative em {
-  font-family: var(--serif);
-  font-style: italic;
-  color: var(--fg);
-  font-size: 17px;
-}
-.day-tag {
-  display: inline-block;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  background: #fef3c7;
-  color: #78350f;
-  padding: 4px 10px;
-  border-radius: 100px;
-  margin-top: 12px;
-  border: 1px solid rgba(120,53,15,0.2);
-}
-.mockup {
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
-}
-.mockup-eyebrow {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-.mockup h3 {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  margin-bottom: 16px;
+.scene-cta:hover { background: #1e293b; transform: translateY(-1px); box-shadow: 0 8px 18px -8px rgba(15,23,42,0.4); }
+.scene-cta-q { font-weight: 500; }
+.scene-cta-go {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px;
+  color: var(--gold); text-transform: uppercase; padding-left: 10px;
+  border-left: 1px solid rgba(255,255,255,0.15);
 }
 
-/* ─── Padding-justering så sticky nav inte överlappar content ─── */
-@media (min-width: 901px) {
-  .shell { padding-right: 48px; }
+/* ─── Deep-page (full-viewport horisontell sidvändning) ─── */
+.deep-head {
+  display: flex; align-items: center; gap: 20px;
+  padding: 18px 28px; background: #fff;
+  border-bottom: 1px solid var(--rule); flex-shrink: 0;
 }
-@media (max-width: 900px) {
-  /* Bottom-nav på mobil tar plats */
-  body { padding-bottom: 80px; }
+.deep-back {
+  background: transparent; border: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--fg);
+  padding: 8px 14px; border-radius: 100px;
+  border: 1px solid var(--rule); transition: all .15s;
 }
-
-/* ─── DEEP-DIVE OVERLAY ────────────────────────────────── */
-.deep-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(15,23,42,0.55);
-  backdrop-filter: blur(4px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .35s ease;
-}
-.deep-overlay.is-open {
-  opacity: 1;
-  pointer-events: auto;
-}
-.deep-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(96vw, 1100px);
-  background: #fafaf9;
-  box-shadow: -20px 0 60px rgba(15,23,42,0.25);
-  transform: translateX(100%);
-  transition: transform .45s cubic-bezier(.22,.61,.36,1);
-  display: flex;
-  flex-direction: column;
-}
-.deep-overlay.is-open .deep-panel {
-  transform: translateX(0);
-}
-.deep-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 18px 28px;
-  border-bottom: 1px solid var(--rule);
-  background: #fff;
-  flex-wrap: wrap;
-}
-.deep-panel-eyebrow {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  color: var(--accent);
-  font-weight: 600;
-}
-.deep-panel-title {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  margin-right: auto;
-}
-.deep-progress {
-  display: flex;
-  gap: 4px;
-}
-.deep-progress span {
-  width: 26px;
-  height: 4px;
-  background: var(--rule);
-  border-radius: 2px;
-  transition: background .2s;
-}
-.deep-progress span.active { background: var(--accent); }
-.deep-close {
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 100px;
-  padding: 6px 14px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  cursor: pointer;
-  color: var(--fg);
-}
-.deep-close:hover { border-color: var(--fg); background: #fef3c7; }
+.deep-back:hover { border-color: var(--fg); background: var(--fg); color: #fff; }
+.deep-eyebrow-wrap { display: flex; flex-direction: column; gap: 2px; }
+.deep-eyebrow-kicker { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; color: var(--muted); text-transform: uppercase; }
+.deep-eyebrow-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+.deep-progress { margin-left: auto; display: flex; gap: 5px; }
+.deep-progress span { width: 28px; height: 3px; background: var(--rule); border-radius: 2px; transition: background .25s; }
+.deep-progress span.active { background: var(--fg); }
+.deep-stage { flex: 1; overflow: hidden; position: relative; }
+.deep-content { position: absolute; inset: 0; display: none; }
+.deep-content.is-active { display: block; }
 .deep-track {
-  flex: 1;
-  display: flex;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
+  height: 100%; display: flex;
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
 .deep-track::-webkit-scrollbar { display: none; }
 .deep-track { scrollbar-width: none; }
 .deep-slide {
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  padding: 48px 56px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
+  flex: 0 0 100%; scroll-snap-align: start;
+  padding: 56px 64px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 24px;
 }
-@media (max-width: 700px) {
-  .deep-slide { padding: 32px 24px; }
-  .deep-panel-head { padding: 14px 20px; }
-}
-.deep-slide-num {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 1.6px;
-  color: var(--accent);
-  font-weight: 600;
-}
-.deep-slide h3 {
-  font-size: clamp(26px, 3.4vw, 36px);
-  font-weight: 700;
-  letter-spacing: -0.8px;
-  line-height: 1.1;
-  max-width: 720px;
-}
-.deep-slide-lede {
-  font-size: 16px;
-  color: #475569;
-  max-width: 600px;
-  line-height: 1.55;
-}
-.deep-slide-card {
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
-}
+@media (max-width: 700px) { .deep-slide { padding: 36px 24px; } .deep-head { padding: 14px 18px; gap: 12px; } }
+.deep-slide-num { font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; color: var(--accent); font-weight: 600; }
+.deep-slide h3 { font-size: clamp(26px, 3.4vw, 38px); font-weight: 700; letter-spacing: -0.8px; line-height: 1.1; max-width: 720px; }
+.deep-slide-lede { font-size: 16px; color: #475569; max-width: 600px; line-height: 1.55; }
+.deep-slide em { font-family: var(--serif); font-style: italic; color: var(--fg); }
+.deep-slide-card { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
 .deep-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 28px;
-  border-top: 1px solid var(--rule);
-  background: #fff;
-  gap: 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 28px; border-top: 1px solid var(--rule); background: #fff;
+  flex-shrink: 0;
 }
-.deep-nav-arrow-btn {
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 100px;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  font-size: 16px;
-  color: var(--fg);
-  transition: all .12s;
+.deep-arrow {
+  background: #fff; border: 1px solid var(--rule); border-radius: 100px;
+  width: 38px; height: 38px; display: grid; place-items: center;
+  cursor: pointer; font-size: 16px; color: var(--fg); transition: all .12s;
 }
-.deep-nav-arrow-btn:hover:not(:disabled) {
-  border-color: var(--fg);
-  background: #fef3c7;
-}
-.deep-nav-arrow-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.deep-foot-hint {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
+.deep-arrow:hover:not(:disabled) { border-color: var(--fg); background: var(--fg); color: #fff; }
+.deep-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
+.deep-foot-counter { font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
 
-/* ─── Huvudbok-specifika visualiseringar ──────────────── */
-.tkonto {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: 12.5px;
+/* ─── Kontextuell nav (frostat glas-kapsel, botten) ─── */
+.ctx-nav {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translate(-50%, 24px);
+  z-index: 50; display: flex; align-items: center; gap: 12px;
+  padding: 8px 8px 8px 18px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  color: #fff; border-radius: 999px;
+  box-shadow: 0 14px 40px -10px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.06);
+  opacity: 0; pointer-events: none;
+  transition: opacity .4s var(--ease), transform .4s var(--ease);
+  max-width: calc(100vw - 32px);
 }
-.tkonto-side { padding: 14px 16px; }
-.tkonto-side + .tkonto-side { border-left: 1px solid var(--rule); }
-.tkonto-head {
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--rule);
+.ctx-nav.is-visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+body.is-deep .ctx-nav { opacity: 0; pointer-events: none; transform: translate(-50%, 24px); }
+.ctx-eye {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: rgba(255,255,255,0.5); white-space: nowrap;
 }
-.tkonto-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
+.ctx-eye em {
+  color: var(--gold); font-style: normal; font-weight: 600;
+  margin-left: 4px;
+  transition: opacity .2s var(--ease);
 }
-.tkonto-row strong { font-weight: 700; color: var(--fg); }
-.tkonto-row.in { color: #065f46; }
-.tkonto-row.out { color: #991b1b; }
-
-.ledger-list {
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--rule);
+.ctx-eye em.is-swap { opacity: 0; }
+.ctx-chips { display: flex; gap: 4px; transition: opacity .2s var(--ease); }
+.ctx-chips.is-swap { opacity: 0; }
+.chip {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #fff; font-family: inherit; font-size: 12.5px;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  transition: all .18s var(--ease); font-weight: 500; white-space: nowrap;
 }
-.ledger-row {
-  display: grid;
-  grid-template-columns: 90px 1fr auto;
-  gap: 14px;
-  padding: 11px 6px;
-  border-bottom: 1px solid var(--rule);
-  font-size: 13px;
-  align-items: center;
-}
-.ledger-row .date {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  letter-spacing: 0.8px;
-}
-.ledger-row .amt {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 13px;
-  text-align: right;
-}
-.ledger-row .amt.in { color: #065f46; }
-.ledger-row .amt.out { color: #991b1b; }
-.ledger-row.upcoming { background: #fef3c7; }
-.ledger-row.upcoming .date { color: #78350f; }
-
-.balance-bar {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
-  padding: 16px 18px;
-  background: #0f172a;
-  color: #fff;
-  border-radius: 10px;
-  margin-top: 4px;
-}
-.balance-bar-label {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  opacity: 0.6;
-}
-.balance-bar-num {
-  font-family: var(--mono);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
+.chip:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.25); transform: translateY(-1px); }
+@media (max-width: 600px) {
+  .ctx-nav { padding: 6px 6px 6px 14px; gap: 8px; }
+  .ctx-eye { font-size: 9.5px; }
+  .chip { font-size: 11.5px; padding: 6px 11px; }
 }
 </style>
 </head>
@@ -690,591 +278,374 @@ h2 {
 
 <a href="./" class="back">← tillbaka</a>
 
-<!-- ═══════════════════════════════════════════════════════════
-     STICKY DEEP-DIVE NAV — opt-in, always visible
-     ═══════════════════════════════════════════════════════════ -->
-<nav class="deep-nav" aria-label="Djupdyk i plattformsdelar">
-  <div class="deep-nav-eyebrow">● Vill veta mer?</div>
-  <button class="deep-nav-btn" data-deep="ledger">
-    <span class="deep-nav-icon">Hb</span>
-    <span class="deep-nav-label">Huvudbok</span>
-    <span class="deep-nav-arrow">→</span>
-  </button>
-  <button class="deep-nav-btn" data-deep="salary" disabled>
-    <span class="deep-nav-icon">Lö</span>
-    <span class="deep-nav-label">Lön / Lönespec</span>
-    <span class="deep-nav-arrow">→</span>
-  </button>
-  <button class="deep-nav-btn" data-deep="employer" disabled>
-    <span class="deep-nav-icon">Ag</span>
-    <span class="deep-nav-label">Arbetsgivare</span>
-    <span class="deep-nav-arrow">→</span>
-  </button>
-  <button class="deep-nav-btn" data-deep="wellbeing" disabled>
-    <span class="deep-nav-icon">Wb</span>
-    <span class="deep-nav-label">Wellbeing-pentagon</span>
-    <span class="deep-nav-arrow">→</span>
-  </button>
-  <div class="deep-nav-hint">3 slides per del · åter till storyn</div>
+<main class="main-flow" id="main">
+
+  <section class="hero" id="hero" data-scene="hero">
+    <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+      <source src="./linda.mp4" type="video/mp4">
+    </video>
+    <div class="hero-bg-overlay" aria-hidden="true"></div>
+    <div class="shell">
+      <div>
+        <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
+        <h1>Klockan är <em>06:48</em>.<br>Lindas vecka<br>börjar om <em>2 minuter</em>.</h1>
+        <p>Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i Ekonomilabbet — varje dag har ett moment. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
+        <div class="hero-stats">
+          <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
+          <div><span class="hero-stat-num">9</span><span class="hero-stat-label">val att göra</span></div>
+          <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk att utforska</span></div>
+        </div>
+      </div>
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-status"><span class="time">06:48</span><span>● Mån 27 nov</span></div>
+          <div class="phone-app-bar">EKONOMILABBET</div>
+          <div class="phone-notif">
+            <div class="phone-notif-app">● ARBETSPLATS-FRÅGA · TIS 06:45</div>
+            <div class="phone-notif-title">Maria har glömt passerkortet</div>
+            <div class="phone-notif-body">"Min kollega ringer 06:45 och frågar om du kan hämta henne. Ert pass startar 07:00. Vad svarar du?"</div>
+          </div>
+          <div class="phone-actions">
+            <button class="phone-action primary">Ja, jag kör. Vi täcker varandra.<small>+4 satisfaction</small></button>
+            <button class="phone-action">Be henne ta taxi och ersätta dig.<small>+1 satisfaction</small></button>
+            <button class="phone-action">Säg till chefen att hon är sen.<small>−5 satisfaction</small></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-scene="tuesday">
+    <div class="shell">
+      <div class="day-header">
+        <span class="day-time">● Tisdag · 10:14</span>
+        <span class="eyebrow">Det enda samtalet på året</span>
+      </div>
+      <div class="day-grid">
+        <div class="day-narrative">
+          <h2>Linda öppnar lönesamtalet.</h2>
+          <p>Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar. Fem ronder. Linda börjar med marknadsdata: <em>"Akavia 2026 säger 39 500 kr för min roll. Jag ligger 1 500 kr under."</em></p>
+          <p>Maria balanserar avtalet (2,5 % revision), Lindas satisfaction och budgeten. Slutbud rond 3: <strong>3,5 %</strong>. Linda accepterar.</p>
+          <span class="day-tag">+ 1 295 KR / MÅN · GÄLLER 1 MAJ</span>
+        </div>
+        <div class="mockup">
+          <div class="mockup-eyebrow">Lönesamtalet 2026 · 5 ronder</div>
+          <h3>Linda · IT-konsult · Visma</h3>
+          <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 6px;">
+            <div style="padding:10px 8px; background:#f1f5f9; border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#94a3b8;">R 01</div><div style="font-size:14px; font-weight:700; margin-top:4px;">2,5 %</div></div>
+            <div style="padding:10px 8px; background:#f1f5f9; border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#94a3b8;">R 02</div><div style="font-size:14px; font-weight:700; margin-top:4px;">3,2 %</div></div>
+            <div style="padding:10px 8px; background:#fef3c7; border:2px solid var(--gold); border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#78350f;">R 03 ★</div><div style="font-size:14px; font-weight:700; margin-top:4px;">3,5 %</div></div>
+            <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#cbd5e1;">R 04</div><div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div></div>
+            <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#cbd5e1;">R 05</div><div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div></div>
+          </div>
+          <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:6px; font-size:13px; color:#065f46;">● Resultat: ny lön <strong>38 295 kr</strong></div>
+        </div>
+      </div>
+      <div class="scene-ctas">
+        <button class="scene-cta" data-deep="salary">
+          <span class="scene-cta-q">Hur räknas bruttolön → netto?</span>
+          <span class="scene-cta-go">Lönespec →</span>
+        </button>
+        <button class="scene-cta" data-deep="employer">
+          <span class="scene-cta-q">Vad är revision i kollektivavtalet?</span>
+          <span class="scene-cta-go">Avtal →</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<aside class="deep-page" id="deep" aria-hidden="true">
+  <header class="deep-head">
+    <button class="deep-back" data-close>← Tillbaka till sagan</button>
+    <div class="deep-eyebrow-wrap">
+      <span class="deep-eyebrow-kicker" data-current-kicker>Funktion</span>
+      <span class="deep-eyebrow-title" data-current-title>—</span>
+    </div>
+    <div class="deep-progress" data-progress aria-hidden="true"></div>
+  </header>
+  <div class="deep-stage" data-stage></div>
+  <footer class="deep-foot">
+    <button class="deep-arrow" data-prev aria-label="Föregående slide">←</button>
+    <span class="deep-foot-counter">Slide <span data-current-num>1</span> / <span data-total>3</span> · scrolla eller pil</span>
+    <button class="deep-arrow" data-next aria-label="Nästa slide">→</button>
+  </footer>
+</aside>
+
+<!-- Deep-content templates flyttas in i deep-stage av JS vid behov.
+     Första: Lönespec (3 slides) — fler funktioner kommer i R3. -->
+<template id="tpl-salary">
+  <div class="deep-content" data-deep-content="salary"
+       data-kicker="Lön / Lönespec" data-title="Så hamnar Lindas 38 295 kr på kontot">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-num">SLIDE 01 / 03 · BRUTTO</div>
+        <h3>Bruttolönen är inte vad som syns på kontot.</h3>
+        <p class="deep-slide-lede">
+          Linda förhandlade fram 38 295 kr. Det är vad Visma rapporterar
+          till Skatteverket — men det är inte vad som dyker upp på hennes
+          bankkonto den 25:e. Mellan brutto och netto finns en kedja av
+          avdrag som de flesta vuxna inte kan i detalj.
+        </p>
+        <div class="deep-slide-card">
+          <div class="mockup-eyebrow">LÖNESPEC · Visma · maj 2026</div>
+          <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 16px; font-size:14px;">
+            <span>Grundlön</span><strong style="font-family:var(--mono); text-align:right;">38 295</strong>
+            <span style="color:var(--muted); font-size:13px;">+ OB-ersättning (kvällspass)</span><span style="font-family:var(--mono); text-align:right; color:#065f46;">+ 480</span>
+            <span style="color:var(--muted); font-size:13px;">+ Övertid (fredag)</span><span style="font-family:var(--mono); text-align:right; color:#065f46;">+ 1 050</span>
+            <div style="grid-column: span 2; border-top: 1px solid var(--rule); padding-top: 8px; margin-top: 4px;"></div>
+            <strong>Bruttolön</strong><strong style="font-family:var(--mono); text-align:right;">39 825</strong>
+          </div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-num">SLIDE 02 / 03 · SKATT &amp; AVGIFTER</div>
+        <h3>30,2 % försvinner innan kontot ser dem.</h3>
+        <p class="deep-slide-lede">
+          A-skatt enligt Lindas tabell (Stockholm, kommunalskatt 30,02 %),
+          allmän pensionsavgift 7 %. Det är det <em>hon</em> betalar.
+          Visma betalar dessutom arbetsgivaravgift 31,42 % ovanpå — det
+          syns på lönespecen som "social cost", men dras inte från Linda.
+        </p>
+        <div class="deep-slide-card">
+          <div class="mockup-eyebrow">AVDRAG &amp; SKATTER · maj 2026</div>
+          <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 16px; font-size:14px;">
+            <span>Bruttolön</span><strong style="font-family:var(--mono); text-align:right;">39 825</strong>
+            <span style="color:#991b1b; font-size:13px;">− Preliminär A-skatt (28 %)</span><span style="font-family:var(--mono); text-align:right; color:#991b1b;">− 11 151</span>
+            <span style="color:#991b1b; font-size:13px;">− Allmän pensionsavgift (7 %)</span><span style="font-family:var(--mono); text-align:right; color:#991b1b;">− 879</span>
+            <div style="grid-column: span 2; border-top: 1px solid var(--rule); padding-top: 8px; margin-top: 4px;"></div>
+            <strong>Netto till Lindas konto</strong><strong style="font-family:var(--mono); text-align:right; color:#065f46;">27 795</strong>
+          </div>
+          <div style="margin-top:14px; padding:10px 14px; background:#f1f5f9; border-radius:6px; font-size:13px; color:#475569;">
+            <strong>Vismas kostnad ovanpå:</strong> arbetsgivaravgift 12 512 kr (31,42 %). Linda kostar Visma <strong>52 337 kr/mån</strong> totalt.
+          </div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-num">SLIDE 03 / 03 · PDF-EXPORT</div>
+        <h3>Lönespecen är en riktig PDF Linda kan hämta.</h3>
+        <p class="deep-slide-lede">
+          Inte en grafisk illustration. Ekonomilabbet bygger en faktisk
+          PDF varje månad — med organisationsnummer, OCR, månadsperiod,
+          ackumulerade årssummor. Samma format som hon möter i arbetslivet.
+          Hon lär sig läsa lönespec genom att <em>ha en</em>.
+        </p>
+        <div class="deep-slide-card" style="background: linear-gradient(180deg, #fafaf9 0%, #fff 100%);">
+          <div style="display:flex; gap:18px; align-items:center;">
+            <div style="width:64px; height:80px; border:1px solid var(--rule); border-radius:4px; background:#fff; display:grid; place-items:center; font-family:var(--mono); font-size:11px; color:var(--muted);">PDF</div>
+            <div style="flex:1;">
+              <div style="font-weight:600;">lonespec_linda_bergstrom_2026-05.pdf</div>
+              <div style="font-size:13px; color:var(--muted); margin-top:4px;">Genererad av Ekonomilabbet · A4 · 2 sidor · 18 KB</div>
+              <div style="margin-top:10px; font-family:var(--mono); font-size:11px; letter-spacing:1px; color:var(--accent);">→ HÄMTA</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<nav class="ctx-nav" id="ctxNav" aria-label="Kontextuell deep-nav">
+  <span class="ctx-eye">Just nu · <em data-scene-label>—</em></span>
+  <div class="ctx-chips" data-chips></div>
 </nav>
 
-<!-- ═══════════════════════════════════════════════════════════
-     HERO — Måndag 06:48 (samma som Idé 1)
-     ═══════════════════════════════════════════════════════════ -->
-<section class="hero" id="hero">
-  <video class="hero-bg-video" id="hero-video"
-         autoplay muted loop playsinline preload="metadata"
-         aria-hidden="true">
-    <source src="./linda.mp4" type="video/mp4">
-  </video>
-  <div class="hero-bg-overlay" aria-hidden="true"></div>
-  <div class="shell">
-    <div>
-      <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
-      <h1>
-        Klockan är <em>06:48</em>.<br>
-        Lindas vecka<br>
-        börjar om <em>2 minuter</em>.
-      </h1>
-      <p>
-        Linda är 22, IT-konsult i Stockholm. Det här är hennes vecka i
-        Ekonomilabbet — varje dag har ett moment. Scrolla för att följa
-        henne. Klicka på en plattformsdel till höger om du vill djupdyka.
-      </p>
-      <div class="hero-stats">
-        <div class="hero-stat">
-          <span class="hero-stat-num">7</span>
-          <span class="hero-stat-label">dagar</span>
-        </div>
-        <div class="hero-stat">
-          <span class="hero-stat-num">9</span>
-          <span class="hero-stat-label">val att göra</span>
-        </div>
-        <div class="hero-stat">
-          <span class="hero-stat-num">4</span>
-          <span class="hero-stat-label">djupdyk att utforska</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="phone">
-      <div class="phone-screen">
-        <div class="phone-status">
-          <span class="time">06:48</span>
-          <span>● Mån 27 nov</span>
-        </div>
-        <div class="phone-app-bar">EKONOMILABBET</div>
-        <div class="phone-notif">
-          <div class="phone-notif-app">● ARBETSPLATS-FRÅGA · TIS 06:45</div>
-          <div class="phone-notif-title">Maria har glömt passerkortet</div>
-          <div class="phone-notif-body">
-            "Min kollega ringer 06:45 och frågar om du kan hämta henne. Ert
-            pass startar 07:00. Vad svarar du?"
-          </div>
-        </div>
-        <div class="phone-actions">
-          <button class="phone-action primary">
-            Ja, jag kör. Vi täcker varandra.
-            <small>+4 satisfaction</small>
-          </button>
-          <button class="phone-action">
-            Be henne ta taxi och ersätta dig.
-            <small>+1 satisfaction</small>
-          </button>
-          <button class="phone-action">
-            Säg till chefen att hon är sen.
-            <small>−5 satisfaction</small>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     TISDAG — Lönesamtalet
-     ═══════════════════════════════════════════════════════════ -->
-<section>
-  <div class="shell">
-    <div class="day-header">
-      <span class="day-time">● Tisdag · 10:14</span>
-      <span class="eyebrow">Det enda samtalet på året</span>
-    </div>
-    <div class="day-grid">
-      <div class="day-narrative">
-        <h2>Linda öppnar lönesamtalet.</h2>
-        <p>
-          Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar.
-          Fem ronder. Linda börjar med marknadsdata: <em>"Akavia 2026 säger
-          39 500 kr för min roll. Jag ligger 1 500 kr under."</em>
-        </p>
-        <p>
-          Maria balanserar avtalet (2,5 % revision), Lindas satisfaction
-          och budgeten. Slutbud rond 3: <strong>3,5 %</strong>. Linda
-          accepterar.
-        </p>
-        <span class="day-tag">+ 1 295 KR / MÅN · GÄLLER 1 MAJ</span>
-      </div>
-      <div class="mockup">
-        <div class="mockup-eyebrow">Lönesamtalet 2026 · 5 ronder</div>
-        <h3>Linda · IT-konsult · Visma</h3>
-        <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 6px;">
-          <div style="padding:10px 8px; background:#f1f5f9; border-radius:8px; font-family:var(--mono); font-size:10px;">
-            <div style="color:#94a3b8;">R 01</div>
-            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">2,5 %</div>
-          </div>
-          <div style="padding:10px 8px; background:#f1f5f9; border-radius:8px; font-family:var(--mono); font-size:10px;">
-            <div style="color:#94a3b8;">R 02</div>
-            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">3,2 %</div>
-          </div>
-          <div style="padding:10px 8px; background:#fef3c7; border-radius:8px; border:2px solid var(--gold); font-family:var(--mono); font-size:10px;">
-            <div style="color:#78350f;">R 03 ★</div>
-            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">3,5 %</div>
-          </div>
-          <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:8px; font-family:var(--mono); font-size:10px;">
-            <div style="color:#cbd5e1;">R 04</div>
-            <div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div>
-          </div>
-          <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:8px; font-family:var(--mono); font-size:10px;">
-            <div style="color:#cbd5e1;">R 05</div>
-            <div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div>
-          </div>
-        </div>
-        <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:8px; font-size:13px; color:#065f46;">
-          ● Resultat: ny lön <strong>38 295 kr</strong>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     ONSDAG — ISK-köpet
-     ═══════════════════════════════════════════════════════════ -->
-<section>
-  <div class="shell">
-    <div class="day-header">
-      <span class="day-time">● Onsdag · 21:08</span>
-      <span class="eyebrow">Första ISK-köpet</span>
-    </div>
-    <div class="day-grid">
-      <div class="day-narrative">
-        <h2>2 000 kr in på Avanza.</h2>
-        <p>
-          Linda satt och tittade på fonder i en timme. Hon valde global
-          indexfond — låg avgift, bred riskspridning. <em>"Det är inte
-          rocket science. Det är bara att börja."</em>
-        </p>
-        <p>
-          Men hon vet redan: nästa vecka kan kursen sjunka 8 %. Hon har
-          läst om uthållighet, sett kurvor på 30 år. Det är därför hon
-          köper indexfonder, inte en enskild aktie.
-        </p>
-        <span class="day-tag">+ 2 000 KR · GLOBAL INDEX · 0,2 % AVGIFT</span>
-      </div>
-      <div class="mockup">
-        <div class="mockup-eyebrow">Avanza · ISK · 26 nov</div>
-        <h3>Globalfond Index</h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
-          <div style="padding: 12px; background:#f1f5f9; border-radius:10px;">
-            <div style="font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:1px;">KÖPSUMMA</div>
-            <div style="font-size:20px; font-weight:700; margin-top:4px;">2 000 kr</div>
-          </div>
-          <div style="padding: 12px; background:#f1f5f9; border-radius:10px;">
-            <div style="font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:1px;">FÖRV. AVKASTNING / 30 ÅR</div>
-            <div style="font-size:20px; font-weight:700; color:#065f46; margin-top:4px;">~ 7 % / år</div>
-          </div>
-        </div>
-        <div style="padding: 12px; background:#fef3c7; border-radius:8px; font-size:12.5px; color:#78350f; line-height:1.5;">
-          <strong>Echo (AI-mentor):</strong> "Snyggt val på indexfond. Vad
-          händer om kursen sjunker 15 % i januari — säljer du eller köper
-          mer?"
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     TORSDAG — Akut tandläkare
-     ═══════════════════════════════════════════════════════════ -->
-<section>
-  <div class="shell">
-    <div class="day-header">
-      <span class="day-time">● Torsdag · 14:22</span>
-      <span class="eyebrow">Det oförutsedda</span>
-    </div>
-    <div class="day-grid">
-      <div class="day-narrative">
-        <h2>Folktandvården ringer.</h2>
-        <p>
-          En kindtand är spräckt. Akut rotfyllning, 3 200 kr — efter
-          subvention. Linda har en buffert på 18 700 kr. Det här är vad
-          den är till för.
-        </p>
-        <p>
-          Men hon känner ändå stinget i magen. <em>"3 200. Det är hela min
-          ISK-avsättning för månaden."</em> Hon klickar igenom betalningen.
-          Wellbeing-pentagonen tippar — hälsodimensionen rör på sig.
-        </p>
-        <span class="day-tag">− 3 200 KR · OFÖRUTSETT · HÄLSA</span>
-      </div>
-      <div class="mockup">
-        <div class="mockup-eyebrow">Wellbeing-pentagon · 27 nov</div>
-        <h3>Hälsa-dimensionen tippade</h3>
-        <div style="display:flex; align-items:center; justify-content:center; padding: 20px 0;">
-          <svg width="200" height="180" viewBox="0 0 200 180">
-            <polygon points="100,20 180,75 150,165 50,165 20,75"
-                     fill="none" stroke="#cbd5e1" stroke-dasharray="4 4"/>
-            <polygon points="100,28 165,80 140,150 60,150 35,80"
-                     fill="rgba(220,76,43,0.12)" stroke="var(--accent)" stroke-width="1.5"/>
-            <text x="100" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#475569">EKONOMI</text>
-            <text x="190" y="80" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#475569">RELATION</text>
-            <text x="155" y="178" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#dc4c2b" font-weight="700">HÄLSA ↓</text>
-            <text x="45" y="178" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#475569">KARRIÄR</text>
-            <text x="10" y="80" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#475569">FRITID</text>
-          </svg>
-        </div>
-        <p style="font-size:12.5px; color:#475569; line-height:1.5; padding-top:8px; border-top:1px solid var(--rule);">
-          Lärobokens "ha en buffert" blir ett konkret kvitto — Linda tappar
-          inte greppet, men <em>känner</em> tappet.
-        </p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     FREDAG — Aktiekrasch & impuls
-     ═══════════════════════════════════════════════════════════ -->
-<section>
-  <div class="shell">
-    <div class="day-header">
-      <span class="day-time">● Fredag · 16:47</span>
-      <span class="eyebrow">Marknaden tippar</span>
-    </div>
-    <div class="day-grid">
-      <div class="day-narrative">
-        <h2>Globalfonden ner 6,8 %.</h2>
-        <p>
-          Ett push från Avanza: <em>"Stora rörelser i din portfölj."</em>
-          Linda öppnar appen. Lila kurvor faller. Hennes ISK är värd
-          1 864 kr — inte 2 000.
-        </p>
-        <p>
-          Echo kommer in med en fråga: <em>"Var det 2 000 kr du planerade
-          att avsätta i 30 år, eller var det 2 000 kr du planerade att
-          spendera den här månaden?"</em> Linda läser. Stänger appen. Drar
-          ett djupt andetag. Säljer inte.
-        </p>
-        <span class="day-tag">PSYKOLOGI · INTE EKONOMI · WB +2</span>
-      </div>
-      <div class="mockup">
-        <div class="mockup-eyebrow">Avanza-notis · 28 nov 16:47</div>
-        <h3>Globalfond: − 6,8 %</h3>
-        <svg width="100%" height="120" viewBox="0 0 400 120" style="margin-bottom: 12px;">
-          <polyline fill="none" stroke="#dc4c2b" stroke-width="2"
-            points="0,30 40,32 80,40 120,28 160,42 200,55 240,75 280,90 320,98 360,95 400,100"/>
-          <line x1="0" y1="100" x2="400" y2="100" stroke="#cbd5e1" stroke-dasharray="3 3"/>
-          <text x="395" y="115" font-family="JetBrains Mono" font-size="9" text-anchor="end" fill="#dc4c2b">FRE 16:47</text>
-        </svg>
-        <div style="padding: 10px 14px; background:#fef3c7; border:1px solid rgba(120,53,15,0.2); border-radius:8px; font-size:12.5px; color:#78350f; line-height:1.5;">
-          <strong>Echo:</strong> "Tre månaders perspektiv har du redan. Vad
-          gör du <em>inte</em> idag?"
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     SÖNDAG — Veckans review (Wellbeing-pentagon)
-     ═══════════════════════════════════════════════════════════ -->
-<section style="background: linear-gradient(180deg, #fafaf9 0%, #fef3c7 100%);">
-  <div class="shell">
-    <div class="day-header">
-      <span class="day-time">● Söndag · 19:30</span>
-      <span class="eyebrow">Veckans summering</span>
-    </div>
-    <div class="day-grid">
-      <div class="day-narrative">
-        <h2>Pentagon, inte saldo.</h2>
-        <p>
-          Linda öppnar veckorapporten. Hon möts inte av en siffra — hon möts
-          av en femkant. Ekonomi, hälsa, relation, karriär, fritid. Vägd
-          25/20/20/15/20.
-        </p>
-        <p>
-          <em>"Hela poängen,"</em> tänker hon, <em>"är att jag ser min
-          ekonomi som en av fem axlar. Inte den enda."</em> Veckan slutar
-          på <strong>72 / 100</strong>. Inte sämst, inte perfekt. Hon vet
-          varför.
-        </p>
-        <span class="day-tag">WB-INDEX 72 · ↑ 4 FRÅN FÖRRA VECKAN</span>
-      </div>
-      <div class="mockup">
-        <div class="mockup-eyebrow">Wellbeing-rapport · v 48</div>
-        <h3>Veckosaldo: 72 / 100</h3>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:12.5px;">
-          <div style="display:flex; justify-content:space-between; padding:8px 12px; background:#f1f5f9; border-radius:6px;"><span>Ekonomi</span><strong>78</strong></div>
-          <div style="display:flex; justify-content:space-between; padding:8px 12px; background:#f1f5f9; border-radius:6px;"><span>Hälsa</span><strong style="color:#dc4c2b;">62</strong></div>
-          <div style="display:flex; justify-content:space-between; padding:8px 12px; background:#f1f5f9; border-radius:6px;"><span>Relation</span><strong>80</strong></div>
-          <div style="display:flex; justify-content:space-between; padding:8px 12px; background:#f1f5f9; border-radius:6px;"><span>Karriär</span><strong style="color:#065f46;">85</strong></div>
-          <div style="display:flex; justify-content:space-between; padding:8px 12px; background:#f1f5f9; border-radius:6px; grid-column: span 2;"><span>Fritid</span><strong>56</strong></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     LÄRAR-MÅNDAG — Andra sidan av plattformen
-     ═══════════════════════════════════════════════════════════ -->
-<section style="background: #0f172a; color: #fff; border-top: 0;">
-  <div class="shell">
-    <div class="day-header">
-      <span class="day-time" style="color: var(--gold);">● Måndag · 08:14 · LÄRARVY</span>
-      <span class="eyebrow" style="color: rgba(255,255,255,0.55);">Andra sidan av samma plattform</span>
-    </div>
-    <div class="day-grid">
-      <div class="day-narrative">
-        <h2 style="color:#fff;">Anna ser hela klassen i ett ögonkast.</h2>
-        <p style="color: rgba(255,255,255,0.7);">
-          Anna är samhällslärare på Hvitfeldtska. 28 elever. Hon öppnar
-          dashboarden — varje elev en rad, deras WB-index och senaste val.
-          Linda: 72. Marcus: 41. Aisha: 88.
-        </p>
-        <p style="color: rgba(255,255,255,0.7);">
-          Hon klickar på Marcus. Han har inte loggat in på 5 dagar.
-          Senaste val: <em>"Sa upp jobbet utan ny anställning."</em>
-          Anna skickar ett mail. Hon ser inte bara siffror — hon ser att
-          han behöver prat.
-        </p>
-        <span class="day-tag" style="background: rgba(251,191,36,0.18); color: var(--gold); border-color: rgba(251,191,36,0.3);">26 ELEVER PÅ GRÖNT · 2 RÖDA · 0 OFFLINE</span>
-      </div>
-      <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius:14px; padding:24px;">
-        <div style="font-family: var(--mono); font-size:10.5px; letter-spacing:1.4px; color: rgba(255,255,255,0.5); margin-bottom: 14px;">KLASS · SH3A · 28 ELEVER</div>
-        <div style="display:flex; flex-direction:column; gap: 4px;">
-          <div style="display:grid; grid-template-columns: 1fr auto auto; gap:12px; padding:8px 12px; background: rgba(16,185,129,0.12); border-radius:6px; font-size:13px;">
-            <span>Linda Bergström</span>
-            <span style="color:rgba(255,255,255,0.5); font-family:var(--mono); font-size:11px;">aktiv 19:30</span>
-            <strong style="color:#10b981;">72</strong>
-          </div>
-          <div style="display:grid; grid-template-columns: 1fr auto auto; gap:12px; padding:8px 12px; background: rgba(220,76,43,0.18); border-radius:6px; font-size:13px;">
-            <span>Marcus Holm</span>
-            <span style="color:rgba(255,255,255,0.5); font-family:var(--mono); font-size:11px;">5 dgr sen</span>
-            <strong style="color:#dc4c2b;">41</strong>
-          </div>
-          <div style="display:grid; grid-template-columns: 1fr auto auto; gap:12px; padding:8px 12px; background: rgba(16,185,129,0.12); border-radius:6px; font-size:13px;">
-            <span>Aisha Khan</span>
-            <span style="color:rgba(255,255,255,0.5); font-family:var(--mono); font-size:11px;">aktiv 21:02</span>
-            <strong style="color:#10b981;">88</strong>
-          </div>
-          <div style="display:grid; grid-template-columns: 1fr auto auto; gap:12px; padding:8px 12px; background: rgba(255,255,255,0.04); border-radius:6px; font-size:13px;">
-            <span style="color: rgba(255,255,255,0.5);">+ 25 elever</span>
-            <span></span>
-            <span style="color:rgba(255,255,255,0.4); font-family:var(--mono); font-size:11px;">⌄</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     CTA — Slut
-     ═══════════════════════════════════════════════════════════ -->
-<section style="text-align:center; padding: 96px 24px;">
-  <div class="shell">
-    <div class="eyebrow" style="margin-bottom: 18px;">● Det här är Ekonomilabbet</div>
-    <h2 style="max-width: 720px; margin: 0 auto 22px; font-size: clamp(28px, 4vw, 44px);">
-      Privatekonomi som en vecka som händer.<br>Inte ett kapitel som ska läsas.
-    </h2>
-    <p style="max-width: 560px; margin: 0 auto 36px; color: #475569; font-size: 16px; line-height: 1.55;">
-      Lindas vecka är en av tusentals. Varje elev får sin egen, simulerad
-      i realtid mot Skatteverkets siffror, kollektivavtal och faktiska
-      räntor. Du som lärare ser allt.
-    </p>
-    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
-      <a href="#" style="background:#0f172a; color:#fff; padding: 14px 28px; border-radius: 100px; text-decoration:none; font-weight:500; font-size:15px;">Boka demo · 20 min</a>
-      <a href="./" style="background:#fff; color:var(--fg); padding: 14px 28px; border-radius: 100px; text-decoration:none; font-weight:500; font-size:15px; border:1px solid var(--rule);">Tillbaka till alla idéer</a>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════
-     DEEP-DIVE OVERLAYS — en per funktion
-     ═══════════════════════════════════════════════════════════ -->
-<div class="deep-overlay" id="deep-overlay" role="dialog" aria-modal="true" aria-hidden="true">
-  <div class="deep-panel">
-
-    <!-- Huvudbok-overlay -->
-    <div class="deep-content" data-deep-content="ledger" hidden>
-      <div class="deep-panel-head">
-        <span class="deep-panel-eyebrow">● Huvudbok</span>
-        <span class="deep-panel-title">Så syns Lindas vecka i bokföringen</span>
-        <div class="deep-progress" aria-hidden="true">
-          <span class="active"></span><span></span><span></span>
-        </div>
-        <button class="deep-close" data-close>← Tillbaka till storyn</button>
-      </div>
-      <div class="deep-track">
-
-        <!-- Slide 1 / 3 -->
-        <article class="deep-slide">
-          <div class="deep-slide-num">SLIDE 01 / 03 · GRUNDEN</div>
-          <h3>Två kolumner. Inget magi.</h3>
-          <p class="deep-slide-lede">
-            Huvudboken är hjärtat i Lindas ekonomi. Varje krona som rör sig
-            har två sidor: <em>varifrån</em> (kredit) och <em>vart</em> (debet).
-            Det här är dubbel bokföring — samma princip som banker använt sedan 1494.
-          </p>
-          <div class="deep-slide-card">
-            <div class="mockup-eyebrow">T-konto · Bankkonto · 25 nov</div>
-            <div class="tkonto">
-              <div class="tkonto-side">
-                <div class="tkonto-head">DEBET (in på kontot)</div>
-                <div class="tkonto-row in"><span>Lön nov</span><strong>+ 28 750</strong></div>
-                <div class="tkonto-row in"><span>Skatteåterbäring</span><strong>+ 1 240</strong></div>
-              </div>
-              <div class="tkonto-side">
-                <div class="tkonto-head">KREDIT (ut från kontot)</div>
-                <div class="tkonto-row out"><span>Hyra dec</span><strong>− 8 200</strong></div>
-                <div class="tkonto-row out"><span>SL-kort</span><strong>− 985</strong></div>
-                <div class="tkonto-row out"><span>ICA Maxi</span><strong>− 1 320</strong></div>
-              </div>
-            </div>
-            <p style="margin-top: 14px; font-size: 13.5px; color: #475569; line-height: 1.5;">
-              Linda ser inte T-kontot direkt — men varje gång hon swipar sitt
-              kort, eller får lön, registreras transaktionen i Huvudboken.
-              Lärobokens "balansräkning" blir konkret: <em>"min vänsterkolumn
-              växer för att jag jobbade övertid"</em>.
-            </p>
-          </div>
-        </article>
-
-        <!-- Slide 2 / 3 -->
-        <article class="deep-slide">
-          <div class="deep-slide-num">SLIDE 02 / 03 · TRANSAKTIONSLOGGEN</div>
-          <h3>Varje rad är ett val Linda har gjort.</h3>
-          <p class="deep-slide-lede">
-            När Linda swipar sitt kort på Pressbyrån eller får lön från Visma
-            skapas en rad. Datum, belopp, motpart, kategori. Lika enkelt som
-            ett SMS — men det bygger en historia över tid.
-          </p>
-          <div class="deep-slide-card">
-            <div class="mockup-eyebrow">Huvudbok · vecka 48</div>
-            <div class="ledger-list">
-              <div class="ledger-row">
-                <span class="date">25 NOV · TIS</span>
-                <span><strong>Visma AB</strong> · Lön november</span>
-                <span class="amt in">+ 28 750</span>
-              </div>
-              <div class="ledger-row">
-                <span class="date">25 NOV · TIS</span>
-                <span>Spotify · Familjeabonnemang</span>
-                <span class="amt out">− 199</span>
-              </div>
-              <div class="ledger-row">
-                <span class="date">26 NOV · ONS</span>
-                <span>Avanza · Köp ISK · Globalfond</span>
-                <span class="amt out">− 2 000</span>
-              </div>
-              <div class="ledger-row">
-                <span class="date">27 NOV · TOR</span>
-                <span>Folktandvården · Akut rotfyllning</span>
-                <span class="amt out">− 3 200</span>
-              </div>
-              <div class="ledger-row">
-                <span class="date">28 NOV · FRE</span>
-                <span>ICA Maxi · Veckohandling</span>
-                <span class="amt out">− 1 320</span>
-              </div>
-            </div>
-          </div>
-          <p style="font-size: 13.5px; color: #475569; line-height: 1.5; max-width: 600px;">
-            <strong>Detalj:</strong> raden för rotfyllningen är taggad
-            <em>"oförutsett · hälsa"</em>. På söndag visar Wellbeing-pentagonen
-            att hälsodimensionen tippade — för att den raden finns.
-          </p>
-        </article>
-
-        <!-- Slide 3 / 3 -->
-        <article class="deep-slide">
-          <div class="deep-slide-num">SLIDE 03 / 03 · ROLLING N+1</div>
-          <h3>Huvudboken vet vad som ska hända i december.</h3>
-          <p class="deep-slide-lede">
-            Det är inte bara historik. Linda planerar med <em>kommande
-            transaktioner</em> — hyran 1:a dec, autogiro för SL-kortet,
-            ISK-spar 25:e. När månadens batch körs föds nästa månads
-            "upcomings" automatiskt. Hon ser sin verkliga buffert, inte
-            bara dagens saldo.
-          </p>
-          <div class="deep-slide-card">
-            <div class="mockup-eyebrow">Saldo + planering · per 28 nov</div>
-            <div class="balance-bar">
-              <div>
-                <div class="balance-bar-label">Tillgängligt nu</div>
-              </div>
-              <div class="balance-bar-num">14 230 kr</div>
-            </div>
-            <div class="ledger-list" style="margin-top: 14px;">
-              <div class="ledger-row upcoming">
-                <span class="date">1 DEC · KOMMANDE</span>
-                <span>Hyra · december</span>
-                <span class="amt out">− 8 200</span>
-              </div>
-              <div class="ledger-row upcoming">
-                <span class="date">5 DEC · KOMMANDE</span>
-                <span>SL-kort · autogiro</span>
-                <span class="amt out">− 985</span>
-              </div>
-              <div class="ledger-row upcoming">
-                <span class="date">25 DEC · KOMMANDE</span>
-                <span>Avanza · ISK-spar</span>
-                <span class="amt out">− 2 000</span>
-              </div>
-              <div class="ledger-row upcoming">
-                <span class="date">25 DEC · KOMMANDE</span>
-                <span><strong>Visma AB</strong> · Lön december</span>
-                <span class="amt in">+ 28 750</span>
-              </div>
-            </div>
-            <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:8px; font-size:13px; color:#065f46;">
-              ● Prognos sista dec: <strong>+ 31 795 kr</strong> efter alla autogiron
-            </div>
-          </div>
-          <p style="font-size: 13.5px; color: #475569; line-height: 1.5; max-width: 600px;">
-            Linda lär sig <em>"buffert ≠ saldo"</em>. Lärobokens "ha tre månader
-            i marginalen" blir mätbar i app: <strong>du ligger på 1,8 månader.</strong>
-          </p>
-        </article>
-
-      </div>
-      <div class="deep-foot">
-        <button class="deep-nav-arrow-btn" data-prev disabled aria-label="Föregående slide">←</button>
-        <span class="deep-foot-hint">Slide <span data-current>1</span> / 3 · scrolla horisontellt eller tryck pil</span>
-        <button class="deep-nav-arrow-btn" data-next aria-label="Nästa slide">→</button>
-      </div>
-    </div>
-
-    <!-- Placeholder-overlays — fylls i L4-3 -->
-    <div class="deep-content" data-deep-content="salary" hidden>
-      <div class="deep-panel-head">
-        <span class="deep-panel-eyebrow">● Lön / Lönespec</span>
-        <span class="deep-panel-title">Kommer i nästa commit</span>
-        <button class="deep-close" data-close>← Tillbaka till storyn</button>
-      </div>
-      <div class="deep-track">
-        <article class="deep-slide"><h3>3 slides om lönesamtalet kommer i L4-3.</h3></article>
-      </div>
-    </div>
-
-  </div>
-</div>
+<script>
+// ─── Scen-mappning: vilka deep-funktioner gäller var ───────────
+const SCENES = {
+  hero:        { label: 'Måndag morgon', chips: [] },
+  tuesday:     { label: 'Tisdag · Lönesamtal', chips: ['salary', 'employer'] },
+  wednesday:   { label: 'Onsdag · ISK', chips: ['ledger'] },
+  thursday:    { label: 'Torsdag · Akut', chips: ['ledger', 'wellbeing'] },
+  friday:      { label: 'Fredag · Krasch', chips: ['wellbeing'] },
+  sunday:      { label: 'Söndag · Review', chips: ['wellbeing'] },
+  'monday-teacher': { label: 'Måndag · Lärarvy', chips: [] },
+  cta:         { label: 'Slutet', chips: [] },
+};
+const CHIP_LABELS = {
+  ledger:    'Huvudbok',
+  salary:    'Lönespec',
+  employer:  'Kollektivavtal',
+  wellbeing: 'Wellbeing-pentagon',
+};
+</script>
 
 <script>
-// ─── Hero-bakgrundsvideo: fade in när redo, fade ut vid scroll ────
+// ─── Page-swipe + deep-page-motor ──────────────────────────────
+(function() {
+  const body = document.body;
+  const deep = document.getElementById('deep');
+  const stage = deep.querySelector('[data-stage]');
+  const kicker = deep.querySelector('[data-current-kicker]');
+  const titleEl = deep.querySelector('[data-current-title]');
+  const progress = deep.querySelector('[data-progress]');
+  const currentNum = deep.querySelector('[data-current-num]');
+  const totalEl = deep.querySelector('[data-total]');
+  const prevBtn = deep.querySelector('[data-prev]');
+  const nextBtn = deep.querySelector('[data-next]');
+
+  let lastY = 0;
+  let activeContent = null;
+
+  function getOrCreateContent(key) {
+    let el = stage.querySelector(`[data-deep-content="${key}"]`);
+    if (el) return el;
+    const tpl = document.getElementById('tpl-' + key);
+    if (!tpl) return null;
+    el = tpl.content.firstElementChild.cloneNode(true);
+    stage.appendChild(el);
+    return el;
+  }
+
+  function setProgress(idx, total) {
+    progress.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+      const dot = document.createElement('span');
+      if (i === idx) dot.classList.add('active');
+      progress.appendChild(dot);
+    }
+    if (currentNum) currentNum.textContent = (idx + 1);
+    if (totalEl) totalEl.textContent = total;
+    if (prevBtn) prevBtn.disabled = idx === 0;
+    if (nextBtn) nextBtn.disabled = idx === total - 1;
+  }
+
+  function activate(key) {
+    const el = getOrCreateContent(key);
+    if (!el) return false;
+    stage.querySelectorAll('.deep-content').forEach(c => c.classList.toggle('is-active', c === el));
+    activeContent = el;
+    if (kicker) kicker.textContent = el.dataset.kicker || '';
+    if (titleEl) titleEl.textContent = el.dataset.title || '';
+    const track = el.querySelector('.deep-track');
+    const slides = track.querySelectorAll('.deep-slide');
+    track.scrollLeft = 0;
+    setProgress(0, slides.length);
+    // Wire scroll-driven progress (en gång per content)
+    if (!track.dataset.wired) {
+      track.dataset.wired = '1';
+      let raf = 0;
+      track.addEventListener('scroll', () => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          if (el !== activeContent) return;
+          const idx = Math.round(track.scrollLeft / track.clientWidth);
+          setProgress(idx, slides.length);
+        });
+      });
+    }
+    return true;
+  }
+
+  function open(key) {
+    if (body.classList.contains('is-deep')) return;
+    if (!activate(key)) return;
+    lastY = window.scrollY;
+    body.classList.add('is-deep');
+    deep.setAttribute('aria-hidden', 'false');
+  }
+  function close() {
+    if (!body.classList.contains('is-deep')) return;
+    body.classList.remove('is-deep');
+    deep.setAttribute('aria-hidden', 'true');
+    // scrollY är preserverad — main-flow återgår automatiskt
+  }
+  window.openDeep = open;
+  window.closeDeep = close;
+
+  // Klick på alla [data-deep] (scen-CTAs och ctx-nav-chips)
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('[data-deep]');
+    if (trigger) { e.preventDefault(); open(trigger.dataset.deep); return; }
+    if (e.target.closest('[data-close]')) { e.preventDefault(); close(); return; }
+  });
+
+  // Pilar + tangentbord
+  function scrollSlide(dir) {
+    if (!activeContent) return;
+    const track = activeContent.querySelector('.deep-track');
+    track.scrollBy({ left: dir * track.clientWidth, behavior: 'smooth' });
+  }
+  prevBtn.addEventListener('click', () => scrollSlide(-1));
+  nextBtn.addEventListener('click', () => scrollSlide(1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && body.classList.contains('is-deep')) close();
+    if (!body.classList.contains('is-deep')) return;
+    if (e.key === 'ArrowRight') scrollSlide(1);
+    if (e.key === 'ArrowLeft') scrollSlide(-1);
+  });
+})();
+</script>
+
+<script>
+// ─── Kontextuell nav: byter chips per scen ────────────────────
+(function() {
+  const nav = document.getElementById('ctxNav');
+  const labelEl = nav.querySelector('[data-scene-label]');
+  const chipsEl = nav.querySelector('[data-chips]');
+  const sections = document.querySelectorAll('[data-scene]');
+
+  let currentScene = null;
+
+  function render(sceneKey) {
+    if (sceneKey === currentScene) return;
+    currentScene = sceneKey;
+    const cfg = SCENES[sceneKey];
+    if (!cfg || !cfg.chips.length) {
+      nav.classList.remove('is-visible');
+      return;
+    }
+    // Mjuk swap-animation: fade ut, byt, fade in
+    labelEl.classList.add('is-swap');
+    chipsEl.classList.add('is-swap');
+    setTimeout(() => {
+      labelEl.textContent = cfg.label;
+      chipsEl.innerHTML = '';
+      cfg.chips.forEach(key => {
+        const btn = document.createElement('button');
+        btn.className = 'chip';
+        btn.dataset.deep = key;
+        btn.textContent = CHIP_LABELS[key] || key;
+        chipsEl.appendChild(btn);
+      });
+      labelEl.classList.remove('is-swap');
+      chipsEl.classList.remove('is-swap');
+      nav.classList.add('is-visible');
+    }, 200);
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    // Välj den scen som är mest synlig i mitten av viewporten
+    let best = null;
+    let bestScore = 0;
+    entries.forEach(e => {
+      if (e.intersectionRatio > bestScore) {
+        bestScore = e.intersectionRatio;
+        best = e.target;
+      }
+    });
+    // Sök bland alla synliga (inte bara entries) — fall-back
+    if (!best) {
+      sections.forEach(s => {
+        const r = s.getBoundingClientRect();
+        const visibleH = Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(0, r.top));
+        if (visibleH > bestScore) { bestScore = visibleH; best = s; }
+      });
+    }
+    if (best) render(best.dataset.scene);
+  }, { threshold: [0.3, 0.5, 0.7] });
+
+  sections.forEach(s => observer.observe(s));
+})();
+</script>
+
+<script>
+// ─── Hero-bakgrundsvideo: fade in när redo, fade ut vid scroll ──
 (function() {
   const video = document.getElementById('hero-video');
   const hero = document.getElementById('hero');
@@ -1294,13 +665,10 @@ h2 {
       else if (rect.bottom > 0 && video.paused) video.play().catch(() => {});
     });
   };
-
   const reveal = () => {
     if (isReady) return;
     isReady = true;
-    video.classList.add('is-ready');
     onScroll();
-    // Tvinga play för Safari/iOS som ibland kräver ett extra anrop
     video.play().catch(() => {});
   };
   if (video.readyState >= 2) reveal();
@@ -1308,113 +676,8 @@ h2 {
     video.addEventListener('loadeddata', reveal, { once: true });
     video.addEventListener('canplay', reveal, { once: true });
   }
-
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
-})();
-
-(function() {
-  const overlay = document.getElementById('deep-overlay');
-  const panel = overlay.querySelector('.deep-panel');
-  const navButtons = document.querySelectorAll('.deep-nav-btn[data-deep]');
-  const contents = overlay.querySelectorAll('.deep-content');
-  let lastScrollY = 0;
-  let activeContent = null;
-
-  function showContent(key) {
-    contents.forEach(c => {
-      const match = c.getAttribute('data-deep-content') === key;
-      c.hidden = !match;
-      if (match) activeContent = c;
-    });
-  }
-
-  function open(key) {
-    if (overlay.classList.contains('is-open')) return;
-    lastScrollY = window.scrollY;
-    showContent(key);
-    overlay.setAttribute('aria-hidden', 'false');
-    overlay.classList.add('is-open');
-    document.body.style.overflow = 'hidden';
-    if (activeContent) {
-      const track = activeContent.querySelector('.deep-track');
-      if (track) track.scrollLeft = 0;
-      updateProgress(0);
-    }
-  }
-
-  function close() {
-    if (!overlay.classList.contains('is-open')) return;
-    overlay.classList.remove('is-open');
-    overlay.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-    setTimeout(() => {
-      window.scrollTo({ top: lastScrollY, behavior: 'smooth' });
-    }, 280);
-  }
-
-  function updateProgress(idx) {
-    if (!activeContent) return;
-    const dots = activeContent.querySelectorAll('.deep-progress span');
-    const cur = activeContent.querySelector('[data-current]');
-    const prev = activeContent.querySelector('[data-prev]');
-    const next = activeContent.querySelector('[data-next]');
-    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
-    if (cur) cur.textContent = idx + 1;
-    if (prev) prev.disabled = idx === 0;
-    if (next) next.disabled = idx === dots.length - 1;
-  }
-
-  navButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.getAttribute('data-deep');
-      open(key);
-    });
-  });
-
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) close();
-    if (e.target.closest('[data-close]')) close();
-  });
-
-  document.addEventListener('keydown', e => {
-    if (!overlay.classList.contains('is-open')) return;
-    if (e.key === 'Escape') close();
-    if (!activeContent) return;
-    const track = activeContent.querySelector('.deep-track');
-    if (!track) return;
-    const slides = track.querySelectorAll('.deep-slide');
-    const idx = Math.round(track.scrollLeft / track.clientWidth);
-    if (e.key === 'ArrowRight' && idx < slides.length - 1) {
-      track.scrollTo({ left: (idx + 1) * track.clientWidth, behavior: 'smooth' });
-    }
-    if (e.key === 'ArrowLeft' && idx > 0) {
-      track.scrollTo({ left: (idx - 1) * track.clientWidth, behavior: 'smooth' });
-    }
-  });
-
-  // Wire arrows + scroll-driven progress per content
-  contents.forEach(content => {
-    const track = content.querySelector('.deep-track');
-    if (!track) return;
-    const prev = content.querySelector('[data-prev]');
-    const next = content.querySelector('[data-next]');
-    if (next) next.addEventListener('click', () => {
-      track.scrollBy({ left: track.clientWidth, behavior: 'smooth' });
-    });
-    if (prev) prev.addEventListener('click', () => {
-      track.scrollBy({ left: -track.clientWidth, behavior: 'smooth' });
-    });
-    let raf = 0;
-    track.addEventListener('scroll', () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (content !== activeContent) return;
-        const idx = Math.round(track.scrollLeft / track.clientWidth);
-        updateProgress(idx);
-      });
-    });
-  });
 })();
 </script>
 
