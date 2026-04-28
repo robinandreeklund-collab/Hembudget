@@ -270,6 +270,7 @@ BANK_ARTIFACT_KINDS = {"kontoutdrag", "kreditkort_faktura", "lan_besked"}
 @router.get("/statements", response_model=list[BankArtifactOut])
 def list_bank_artifacts(
     info: TokenInfo = Depends(require_token),
+    include_imported: bool = False,
 ) -> list[BankArtifactOut]:
     """Lista bank-relaterade dokument från elevens batches.
 
@@ -279,18 +280,28 @@ def list_bank_artifacts(
 
     Senaste batch först. Visar status: redan exporterad till
     /my-batches eller ej, redan importerad eller ej.
+
+    Filtrering: redan-importerade artefakter (BatchArtifact.imported_at
+    IS NOT NULL) exkluderas som default — de hör i bokföringen, inte
+    i bank-vyn där eleven skulle ladda ner och importera dem.
+    Läraren eller historik-vyn kan hämta hela listan med
+    ?include_imported=true.
     """
     _require_school()
     student_id = _student_from_info(info)
     with master_session() as s:
-        rows = (
+        q = (
             s.query(BatchArtifact, ScenarioBatch)
             .join(ScenarioBatch, ScenarioBatch.id == BatchArtifact.batch_id)
             .filter(
                 ScenarioBatch.student_id == student_id,
                 BatchArtifact.kind.in_(BANK_ARTIFACT_KINDS),
             )
-            .order_by(
+        )
+        if not include_imported:
+            q = q.filter(BatchArtifact.imported_at.is_(None))
+        rows = (
+            q.order_by(
                 ScenarioBatch.year_month.desc(),
                 BatchArtifact.sort_order.asc(),
             )
@@ -373,11 +384,29 @@ class UpcomingPaymentRow(BaseModel):
 
 
 class SignBatchIn(BaseModel):
-    upcoming_ids: list[int] = Field(min_length=1)
-    account_id: int
-    bank_session_token: str
+    upcoming_ids: list[int] = Field(
+        min_length=1,
+        description=(
+            "Lista med UpcomingTransaction.id som ska signeras. "
+            "Måste innehålla minst 1 element."
+        ),
+    )
+    account_id: int = Field(
+        gt=0,
+        description="Konto-id (checking) som ska debiteras vid körningen.",
+    )
+    bank_session_token: str = Field(
+        min_length=8,
+        description=(
+            "Token från en bekräftad EkonomilabbetID-session "
+            "(via /bank/session/init + /bank/session/{token}/confirm)."
+        ),
+    )
     # Default = upcoming.expected_date; överskrivs via override
-    override_date: Optional[str] = None  # ISO YYYY-MM-DD
+    override_date: Optional[str] = Field(
+        default=None,
+        description="ISO YYYY-MM-DD om scheduled_date ska skilja från expected.",
+    )
 
 
 class SignBatchOut(BaseModel):
@@ -432,11 +461,15 @@ def list_upcoming_for_signing(
     scope = Depends(scope_db),
     info: TokenInfo = Depends(require_token),
 ) -> list[UpcomingPaymentRow]:
-    """Lista obetalda fakturor + redan signerade (status). Senast först.
+    """Lista obetalda fakturor + de som är signerade men ej körda.
 
-    Tar med matchade-fakturor som redan har en ScheduledPayment så
-    eleven ser status. Exkluderar matched_transaction_id IS NOT NULL
-    (= redan betalda i bokföringen).
+    Filtrering:
+    - matched_transaction_id IS NOT NULL → redan betald i bokföringen,
+      exkluderas helt (ska inte synas i banken längre)
+    - ScheduledPayment.status == 'executed' → redan körd via run-due
+      även om matched_transaction_id ännu inte hunnit sättas, exkluderas
+      så listan inte trasslar med 'redan signerade'-rader för all framtid
+    - Övriga: visas, med flagga om de har en aktiv ScheduledPayment
     """
     _require_school()
     _student_from_info(info)
@@ -457,6 +490,12 @@ def list_upcoming_for_signing(
             .order_by(ScheduledPayment.id.desc())
             .first()
         )
+        # Skippa om senaste schemalagda redan är executed — då ligger
+        # transaktionen i bokföringen och fakturan ska inte längre
+        # visas i banken (även om matched_transaction_id eventuellt
+        # inte hunnit länkas via auto-matchningen).
+        if sched is not None and sched.status == "executed":
+            continue
         out.append(UpcomingPaymentRow(
             upcoming_id=u.id,
             name=u.name,

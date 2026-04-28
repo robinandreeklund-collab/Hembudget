@@ -266,3 +266,84 @@ def test_anyone_with_correct_pin_can_confirm_session(fx) -> None:
     )
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True
+
+
+def test_sign_payment_batch_validation_rejects_empty(fx) -> None:
+    """Sign-endpointen ska 422 med tydligt fel om upcoming_ids är tom
+    eller account_id är 0/null. Den här testen lades till efter att
+    en användare fick generic 'HTTP 422' utan insikt vad som var fel."""
+    client, _, stu, *_ = fx
+    # Tom upcoming_ids → 422 med tydlig pekare
+    r = client.post(
+        "/bank/upcoming-payments/sign",
+        json={
+            "upcoming_ids": [],
+            "account_id": 1,
+            "bank_session_token": "fake-token-here-1234",
+        },
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 422, r.text
+    body = r.json()
+    # Pydantic v2: detail-listan har fältnamn
+    assert any(
+        "upcoming_ids" in str(err.get("loc", []))
+        for err in body.get("detail", [])
+    ), body
+    # account_id <= 0 → 422
+    r = client.post(
+        "/bank/upcoming-payments/sign",
+        json={
+            "upcoming_ids": [1],
+            "account_id": 0,
+            "bank_session_token": "fake-token-here-1234",
+        },
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_statements_excludes_already_imported(fx) -> None:
+    """/bank/statements ska INTE visa redan-importerade artefakter
+    by default (de hör i bokföringen, inte bank-vyn).
+    include_imported=true ger fortfarande hela listan för historik."""
+    from datetime import datetime
+    from hembudget.school.models import ScenarioBatch, BatchArtifact
+    client, _, stu, _tid, sid = fx
+    with master_session() as s:
+        b = ScenarioBatch(
+            student_id=sid, year_month="2026-11", seed=1, meta={},
+        )
+        s.add(b); s.flush()
+        s.add(BatchArtifact(
+            batch_id=b.id,
+            kind="kontoutdrag",
+            title="Kontoutdrag 2026-11",
+            filename="kontoutdrag_2026-11.pdf",
+            sort_order=0,
+            pdf_bytes=b"%PDF-fake",
+        ))
+        s.add(BatchArtifact(
+            batch_id=b.id,
+            kind="kreditkort_faktura",
+            title="Kreditkortsfaktura 2026-11",
+            filename="kk_2026-11.pdf",
+            sort_order=1,
+            pdf_bytes=b"%PDF-fake",
+            imported_at=datetime.utcnow(),  # redan importerad
+        ))
+    # Default: bara den ej-importerade
+    r = client.get(
+        "/bank/statements",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    arts = r.json()
+    assert len(arts) == 1
+    assert arts[0]["kind"] == "kontoutdrag"
+    # include_imported=true: bägge
+    r = client.get(
+        "/bank/statements?include_imported=true",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert len(r.json()) == 2

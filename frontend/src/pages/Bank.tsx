@@ -892,7 +892,19 @@ function UpcomingPaymentsTab() {
   });
 
   async function signSelected() {
-    if (selectedIds.size === 0 || accountId === null) return;
+    // Validera payload INNAN session-init startas — annars hinner
+    // användaren bekräfta i mobilen för en signering som ändå kraschar
+    // med 422 från backend.
+    if (selectedIds.size === 0) {
+      setSignError("Välj minst en faktura att signera.");
+      return;
+    }
+    if (accountId === null || accountId <= 0) {
+      setSignError(
+        "Inget lönekonto valt — kolla att du har ett checking-konto i din bokföring.",
+      );
+      return;
+    }
     setSigning(true);
     setSignError(null);
     try {
