@@ -615,9 +615,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .hero-hint::before { content: "● "; color: var(--accent); }
 
 /* ─── Intro-sekvens (CSS @keyframes — triggad av .is-loaded på body) ─── */
-body:not(.is-loaded) .figure { opacity: 0; }
 body:not(.is-loaded) .hero-info { opacity: 0; }
-body:not(.is-loaded) .hero-hint { opacity: 0; }
+body:not(.is-loaded) .cover-credits { opacity: 0; }
 
 body.is-loaded .figure { animation: figure-in .9s cubic-bezier(.34, 1.18, .64, 1) both; }
 body.is-loaded .figure[data-persona="linda"]   { animation-delay: 0.8s; }
@@ -809,7 +808,7 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
         <div class="figures-backdrop" aria-hidden="true">Möt<em>et</em></div>
 
       <div class="figures" id="figures">
-        <a class="figure" data-persona="linda" href="./4-vecka-djupdyk.html"
+        <a class="figure" data-persona="linda" href="/demo-landing/4-vecka-djupdyk.html"
            data-theme="Arbetslivet"
            data-pitch="Lönesamtal med AI-Maria, kollektivavtalets revision, pensionsavgift som växer och pentagon som tippar när tandläkaren ringer."
            data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
