@@ -362,7 +362,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   transform-origin: center bottom;
 }
 .figure-video-wrap {
-  width: 100%; aspect-ratio: 3 / 4;
+  width: 100%;
+  height: clamp(360px, 56vh, 600px);
   position: relative;
   isolation: isolate;
 }
