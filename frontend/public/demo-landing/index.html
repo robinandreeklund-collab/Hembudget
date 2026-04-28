@@ -81,43 +81,32 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 [data-fx-stagger].is-in > *:nth-child(3) { transition-delay: 240ms; }
 [data-fx-stagger].is-in > *:nth-child(4) { transition-delay: 360ms; }
 
-/* ─── Hero ─── */
+/* ─── Hero (rent, ingen video) ─── */
 .hero {
-  min-height: 92vh;
+  min-height: 88vh;
   display: flex; align-items: center;
-  padding: 18vh clamp(24px, 6vw, 80px) 14vh clamp(32px, 8vw, 120px);
+  padding: 18vh clamp(24px, 6vw, 80px) 12vh clamp(32px, 8vw, 120px);
   position: relative; overflow: hidden;
-  background: linear-gradient(180deg, #f1f5f9 0%, var(--bg) 100%);
+  background: var(--bg);
 }
-.hero-bg-video {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; z-index: 0; opacity: 0;
-  transition: opacity 1.2s ease; pointer-events: none;
-}
-.hero-bg-video.is-ready { opacity: 1; }
-.hero-bg-overlay {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+.hero::before {
+  content: ""; position: absolute; inset: 0;
   background:
-    linear-gradient(95deg,
-      rgba(250,250,249,0.97) 0%,
-      rgba(250,250,249,0.92) 32%,
-      rgba(250,250,249,0.7) 50%,
-      rgba(250,250,249,0.18) 75%,
-      rgba(250,250,249,0) 100%),
-    linear-gradient(180deg,
-      rgba(250,250,249,0.92) 0%,
-      rgba(250,250,249,0.4) 9%,
-      rgba(250,250,249,0) 22%,
-      rgba(250,250,249,0) 65%,
-      rgba(250,250,249,0.92) 100%);
+    radial-gradient(ellipse 60% 50% at 80% 30%, rgba(220,76,43,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(251,191,36,0.04) 0%, transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, var(--bg) 60%, #f8fafc 100%);
+  z-index: 0;
 }
-@media (max-width: 800px) {
-  .hero-bg-overlay {
-    background: linear-gradient(180deg,
-      rgba(250,250,249,0.94) 0%,
-      rgba(250,250,249,0.78) 35%,
-      rgba(250,250,249,0.95) 100%);
-  }
+.hero::after {
+  content: ""; position: absolute; inset: 0;
+  background-image:
+    linear-gradient(0deg, transparent 0%, transparent 49%, rgba(15,23,42,0.025) 49%, rgba(15,23,42,0.025) 51%, transparent 51%),
+    linear-gradient(90deg, transparent 0%, transparent 49%, rgba(15,23,42,0.025) 49%, rgba(15,23,42,0.025) 51%, transparent 51%);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  z-index: 0;
+  opacity: 0.5;
 }
 .hero .shell { position: relative; z-index: 2; max-width: 720px; margin: 0; }
 .hero-brand {
@@ -260,102 +249,144 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 .persona-grid {
   display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 14px;
 }
-@media (max-width: 1000px) { .persona-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .persona-grid { grid-template-columns: 1fr; gap: 12px; } }
 
+/* Tighter card: media + body i en kompakt enhet */
 .persona-card {
   display: flex; flex-direction: column;
-  background: #fff; border: 1px solid var(--rule);
-  border-radius: 14px; overflow: hidden;
+  background: #fff; border-radius: 14px; overflow: hidden;
   text-decoration: none; color: inherit;
-  transition: all .25s var(--ease);
-  position: relative;
+  position: relative; isolation: isolate;
+  box-shadow:
+    0 0 0 1px var(--rule),
+    0 1px 2px rgba(15,23,42,0.04);
+  transition:
+    transform .35s cubic-bezier(.34, 1.18, .64, 1),
+    box-shadow .35s var(--ease);
 }
 .persona-card:hover:not(.is-soon) {
-  transform: translateY(-4px);
-  border-color: var(--fg);
-  box-shadow: 0 24px 48px -22px rgba(15,23,42,0.22),
-              0 6px 14px -6px rgba(15,23,42,0.08);
+  transform: translateY(-6px);
+  box-shadow:
+    0 0 0 1px var(--fg),
+    0 28px 56px -24px rgba(15,23,42,0.28),
+    0 8px 18px -8px rgba(15,23,42,0.1);
 }
-.persona-card.is-soon { cursor: default; opacity: 0.78; }
+.persona-card::before {
+  content: ""; position: absolute;
+  top: 0; left: 0; height: 2px; width: 0;
+  background: var(--accent); z-index: 4;
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+}
+.persona-card:hover:not(.is-soon)::before { width: 100%; }
+.persona-card.is-soon { cursor: default; }
 .persona-card.is-soon::after {
   content: "KOMMER SNART";
-  position: absolute; top: 16px; right: 16px; z-index: 3;
+  position: absolute; top: 14px; right: 14px; z-index: 3;
   font-family: var(--mono); font-size: 9.5px; font-weight: 700;
   letter-spacing: 1.6px;
-  background: rgba(15,23,42,0.85); color: #fff;
+  background: rgba(15,23,42,0.92); color: #fff;
   padding: 5px 10px; border-radius: 100px;
   backdrop-filter: blur(8px);
 }
 
+/* Media (kvadratisk för tightare grid) */
 .persona-media {
-  position: relative; aspect-ratio: 4 / 3;
+  position: relative; aspect-ratio: 1 / 1;
   background: #0f172a; overflow: hidden;
 }
 .persona-media video, .persona-media img {
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: cover;
-  transition: transform .6s var(--ease);
+  transition: transform .8s cubic-bezier(.65, 0, .35, 1);
 }
 .persona-card:hover:not(.is-soon) .persona-media video,
 .persona-card:hover:not(.is-soon) .persona-media img {
-  transform: scale(1.04);
+  transform: scale(1.06);
+}
+/* Subtil mörk gradient nederst för text-läsbarhet */
+.persona-media::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 50%, rgba(15,23,42,0.65) 100%);
+  z-index: 1;
 }
 .persona-media-placeholder {
-  position: absolute; inset: 0;
-  display: grid; place-items: center;
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(220,76,43,0.12) 0%, transparent 60%),
+    linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   color: rgba(255,255,255,0.3);
-  font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
-  text-transform: uppercase;
 }
 .persona-media-placeholder span {
-  font-size: 64px; font-family: var(--serif); font-weight: 700;
-  color: rgba(255,255,255,0.18); letter-spacing: -2px;
+  font-size: 96px; font-family: var(--serif); font-weight: 700;
+  color: rgba(255,255,255,0.14); letter-spacing: -3px;
+  line-height: 1;
 }
 
 .persona-meta {
-  position: absolute; bottom: 14px; left: 14px; z-index: 2;
-  display: flex; gap: 10px; align-items: baseline;
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px;
-  text-transform: uppercase; color: rgba(255,255,255,0.85);
+  position: absolute; bottom: 16px; left: 18px; z-index: 2;
+  display: flex; flex-direction: column; gap: 2px;
+  color: #fff;
 }
 .persona-meta strong {
-  font-family: var(--serif); font-size: 18px; font-weight: 700;
-  letter-spacing: -0.4px; color: #fff; text-transform: none;
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1;
+}
+.persona-meta span {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px;
+  text-transform: uppercase; color: rgba(255,255,255,0.78);
 }
 
-.persona-body { padding: 26px 26px 28px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+/* Body — tight */
+.persona-body {
+  padding: 18px 20px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
 .persona-theme {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.6px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
   text-transform: uppercase; color: var(--accent); font-weight: 700;
 }
 .persona-pitch {
-  font-size: 17px; line-height: 1.45; color: var(--fg);
-  font-weight: 500; letter-spacing: -0.2px;
+  font-size: 14.5px; line-height: 1.45; color: #334155;
+  font-weight: 500; letter-spacing: -0.1px;
 }
 .persona-tags {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  padding-top: 6px;
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding-top: 4px;
 }
 .persona-tag {
-  font-family: var(--mono); font-size: 10.5px;
-  padding: 4px 10px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 4px 9px; border-radius: 100px;
   background: #f1f5f9; color: var(--muted);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
+  transition: all .2s var(--ease);
+}
+.persona-card:hover:not(.is-soon) .persona-tag {
+  background: rgba(220,76,43,0.08);
+  color: var(--accent);
 }
 .persona-go {
-  margin-top: auto; padding-top: 16px;
+  margin-top: 4px; padding-top: 14px;
   display: flex; justify-content: space-between; align-items: center;
   border-top: 1px solid var(--rule);
   font-family: var(--mono); font-size: 11px; font-weight: 700;
   letter-spacing: 1.5px; text-transform: uppercase;
   color: var(--fg);
 }
-.persona-go-arrow { transition: transform .2s var(--ease); }
-.persona-card:hover:not(.is-soon) .persona-go-arrow { transform: translateX(4px); }
+.persona-go-arrow {
+  display: inline-block; transition: transform .25s cubic-bezier(.34, 1.4, .64, 1);
+}
+.persona-card:hover:not(.is-soon) .persona-go-arrow { transform: translateX(5px); }
 .persona-card.is-soon .persona-go { color: var(--muted); }
+
+/* Förbättrad entrance med rotate + scale */
+.persona-card[data-fx] {
+  transform: translate3d(0, 36px, 0) scale(0.96);
+}
+.persona-card[data-fx].is-in {
+  transform: translate3d(0, 0, 0) scale(1);
+}
 
 /* ─── Lärar-perspektiv (mörk) ─── */
 .teacher {
@@ -497,10 +528,6 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 <main>
 
   <section class="hero" id="hero">
-    <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
-      <source src="./linda.mp4" type="video/mp4">
-    </video>
-    <div class="hero-bg-overlay" aria-hidden="true"></div>
     <header class="hero-brand">
       <div class="brand-name">Ekonomilabbet</div>
       <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
@@ -761,20 +788,6 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   items.forEach(el => obs.observe(el));
 })();
 
-// ─── Hero-video reveal ───────────────────────────────────────
-(function() {
-  const video = document.getElementById('hero-video');
-  if (!video) return;
-  const reveal = () => {
-    video.classList.add('is-ready');
-    video.play().catch(() => {});
-  };
-  if (video.readyState >= 2) reveal();
-  else {
-    video.addEventListener('loadeddata', reveal, { once: true });
-    video.addEventListener('canplay', reveal, { once: true });
-  }
-})();
 </script>
 
 </body>
