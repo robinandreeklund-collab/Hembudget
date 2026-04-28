@@ -163,20 +163,20 @@ def create_batch_for_student(
     master_session.add(batch)
     master_session.flush()
 
-    # Skapa UpcomingTransaction för lön + återkommande fakturor i
-    # elevens scope-DB — så att /upcoming visar "kommande poster" innan
-    # eleven importerar bank-PDF:n. Dessa matchas sedan automatiskt mot
-    # motsvarande bank-tx vid import.
+    # Skapa UpcomingTransactions i elevens scope-DB enligt Rolling N+1:
+    # batchen för month N skapar fakturor som FÖRFALLER under month N+1.
+    # Tidigare skapades fakturor för month N (samma som batchen) vilket
+    # gjorde att kontoutdraget redan visade dem som dragna innan eleven
+    # signerat — fel mot verkligheten där bankens kontoutdrag visar
+    # historik, inte framtid.
+    #
+    # Specialfall: om elevens scope-DB saknar bill-upcomings för
+    # CURRENT month (typiskt en ny elev där detta är första batchen),
+    # genererar vi även för current month så eleven har omedelbara
+    # fakturor att signera. Annars rolling N+1.
     from ..school.engines import scope_context, scope_for_student
+    from .upcoming_planner import plan_upcomings_for_month, next_year_month
     scope_key = scope_for_student(student)
-    BILL_DESCRIPTIONS_TO_UPCOMING = {
-        "HYRA", "BRF AVGIFT", "DRIFT VILLA",
-        "VATTENFALL", "FORTUM", "ELLEVIO", "TIBBER",
-        "TELIA", "BAHNHOF", "COM HEM", "TELE2",
-        "TELENOR ABONNEMANG", "TELIA MOBIL", "TRE",
-        "IF FORSAKRING", "TRYGG HANSA", "FOLKSAM", "LANSFORSAKRINGAR",
-        "BOLÅN", "BILLÅN", "CSN",
-    }
     with scope_context(scope_key):
         with session_scope() as s:
             # Säkerställ att eleven finns som User i scope-DB:n så hens
@@ -214,53 +214,27 @@ def create_batch_for_student(
                 # dashboard slutar visa det som "Gemensamt".
                 lonekonto.owner_id = student_user.id
 
-            # Lön som planerad "income"
-            if scenario.salary:
-                sal = scenario.salary
-                if not s.query(UpcomingTransaction).filter(
-                    UpcomingTransaction.kind == "income",
-                    UpcomingTransaction.expected_date == sal.pay_date,
-                    UpcomingTransaction.amount == sal.net,
-                ).first():
-                    s.add(UpcomingTransaction(
-                        kind="income",
-                        name=f"Lön {sal.employer}",
-                        amount=sal.net,
-                        expected_date=sal.pay_date,
-                        recurring_monthly=True,
-                        source="scenario",
-                        debit_account_id=lonekonto.id,
-                        debit_date=sal.pay_date,
-                        owner=student_owner,
-                    ))
+            # Self-healing: har eleven INGA bill-upcomings än är detta
+            # första batchen → seed också CURRENT month så hen har
+            # något att signera direkt.
+            has_any_bill = (
+                s.query(UpcomingTransaction)
+                .filter(UpcomingTransaction.kind == "bill")
+                .first()
+                is not None
+            )
+            if not has_any_bill:
+                plan_upcomings_for_month(
+                    s, student, student.profile, year_month,
+                    debit_account=lonekonto, owner=student_owner,
+                )
 
-            # Bills — identifiera via description-prefix
-            for t in scenario.transactions:
-                desc_u = t.description.upper()
-                if not any(k in desc_u for k in BILL_DESCRIPTIONS_TO_UPCOMING):
-                    continue
-                if t.amount >= 0:
-                    continue
-                amount_pos = abs(t.amount)
-                # Idempotens: skippa om redan finns
-                if s.query(UpcomingTransaction).filter(
-                    UpcomingTransaction.name == t.description,
-                    UpcomingTransaction.expected_date == t.date,
-                    UpcomingTransaction.amount == amount_pos,
-                ).first():
-                    continue
-                s.add(UpcomingTransaction(
-                    kind="bill",
-                    name=t.description,
-                    amount=amount_pos,
-                    expected_date=t.date,
-                    recurring_monthly=True,
-                    source="scenario",
-                    debit_account_id=lonekonto.id,
-                    debit_date=t.date,
-                    autogiro=True,
-                    owner=student_owner,
-                ))
+            # Rolling N+1: skapa upcomings för NÄSTA månad
+            plan_upcomings_for_month(
+                s, student, student.profile,
+                next_year_month(year_month),
+                debit_account=lonekonto, owner=student_owner,
+            )
 
     sort_order = 0
 
@@ -294,8 +268,29 @@ def create_batch_for_student(
         ))
         sort_order += 1
 
-    # 2. Kontoutdrag (alltid)
-    pdf = render_kontoutdrag(scenario, student_name=student.display_name)
+    # 2. Kontoutdrag (alltid) — DYNAMISKT byggt från elevens faktiska
+    # Transaction-ledger för månaden istället för från scenario.
+    # Om ledgern är tom (första batchen för en ny elev) faller vi
+    # tillbaka till scenario så PDF:en inte blir helt tom.
+    from .ledger_statement import build_ledger_scenario
+    with scope_context(scope_key):
+        with session_scope() as scope_s:
+            ledger_scenario = build_ledger_scenario(
+                scope_s,
+                student_id=student.id,
+                year_month=year_month,
+                bank_name=scenario.bank_name,
+                card_name=scenario.card_name,
+            )
+    statement_scenario = ledger_scenario
+    if not ledger_scenario.transactions:
+        # Tom ledger → fall tillbaka till scenario så första batchen
+        # för en ny elev inte ger ett blankt kontoutdrag. Behåller
+        # opening_balance från scenariot.
+        statement_scenario = scenario
+    pdf = render_kontoutdrag(
+        statement_scenario, student_name=student.display_name,
+    )
     master_session.add(BatchArtifact(
         batch_id=batch.id,
         kind="kontoutdrag",
@@ -304,8 +299,9 @@ def create_batch_for_student(
         sort_order=sort_order,
         pdf_bytes=pdf,
         meta={
-            "tx_count": len(scenario.transactions),
-            "account_no": scenario.bank_account_no,
+            "tx_count": len(statement_scenario.transactions),
+            "account_no": statement_scenario.bank_account_no,
+            "source": "ledger" if statement_scenario is ledger_scenario else "scenario_fallback",
         },
     ))
     sort_order += 1
