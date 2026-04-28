@@ -405,6 +405,255 @@ h2 {
   /* Bottom-nav på mobil tar plats */
   body { padding-bottom: 80px; }
 }
+
+/* ─── DEEP-DIVE OVERLAY ────────────────────────────────── */
+.deep-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15,23,42,0.55);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .35s ease;
+}
+.deep-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.deep-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(96vw, 1100px);
+  background: #fafaf9;
+  box-shadow: -20px 0 60px rgba(15,23,42,0.25);
+  transform: translateX(100%);
+  transition: transform .45s cubic-bezier(.22,.61,.36,1);
+  display: flex;
+  flex-direction: column;
+}
+.deep-overlay.is-open .deep-panel {
+  transform: translateX(0);
+}
+.deep-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--rule);
+  background: #fff;
+  flex-wrap: wrap;
+}
+.deep-panel-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.deep-panel-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin-right: auto;
+}
+.deep-progress {
+  display: flex;
+  gap: 4px;
+}
+.deep-progress span {
+  width: 26px;
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  transition: background .2s;
+}
+.deep-progress span.active { background: var(--accent); }
+.deep-close {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 100px;
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--fg);
+}
+.deep-close:hover { border-color: var(--fg); background: #fef3c7; }
+.deep-track {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+.deep-track::-webkit-scrollbar { display: none; }
+.deep-track { scrollbar-width: none; }
+.deep-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  padding: 48px 56px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+@media (max-width: 700px) {
+  .deep-slide { padding: 32px 24px; }
+  .deep-panel-head { padding: 14px 20px; }
+}
+.deep-slide-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.deep-slide h3 {
+  font-size: clamp(26px, 3.4vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+  max-width: 720px;
+}
+.deep-slide-lede {
+  font-size: 16px;
+  color: #475569;
+  max-width: 600px;
+  line-height: 1.55;
+}
+.deep-slide-card {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
+}
+.deep-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 28px;
+  border-top: 1px solid var(--rule);
+  background: #fff;
+  gap: 12px;
+}
+.deep-nav-arrow-btn {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 100px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--fg);
+  transition: all .12s;
+}
+.deep-nav-arrow-btn:hover:not(:disabled) {
+  border-color: var(--fg);
+  background: #fef3c7;
+}
+.deep-nav-arrow-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.deep-foot-hint {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ─── Huvudbok-specifika visualiseringar ──────────────── */
+.tkonto {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.tkonto-side { padding: 14px 16px; }
+.tkonto-side + .tkonto-side { border-left: 1px solid var(--rule); }
+.tkonto-head {
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.tkonto-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+.tkonto-row strong { font-weight: 700; color: var(--fg); }
+.tkonto-row.in { color: #065f46; }
+.tkonto-row.out { color: #991b1b; }
+
+.ledger-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule);
+}
+.ledger-row {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 14px;
+  padding: 11px 6px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  align-items: center;
+}
+.ledger-row .date {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.8px;
+}
+.ledger-row .amt {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 13px;
+  text-align: right;
+}
+.ledger-row .amt.in { color: #065f46; }
+.ledger-row .amt.out { color: #991b1b; }
+.ledger-row.upcoming { background: #fef3c7; }
+.ledger-row.upcoming .date { color: #78350f; }
+
+.balance-bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  padding: 16px 18px;
+  background: #0f172a;
+  color: #fff;
+  border-radius: 10px;
+  margin-top: 4px;
+}
+.balance-bar-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.balance-bar-num {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
 </style>
 </head>
 <body>
@@ -416,7 +665,7 @@ h2 {
      ═══════════════════════════════════════════════════════════ -->
 <nav class="deep-nav" aria-label="Djupdyk i plattformsdelar">
   <div class="deep-nav-eyebrow">● Vill veta mer?</div>
-  <button class="deep-nav-btn" data-deep="ledger" disabled>
+  <button class="deep-nav-btn" data-deep="ledger">
     <span class="deep-nav-icon">Hb</span>
     <span class="deep-nav-label">Huvudbok</span>
     <span class="deep-nav-arrow">→</span>
@@ -564,15 +813,291 @@ h2 {
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════
-     PLACEHOLDER för resterande dagar + lärarvy + CTA + overlay
+     PLACEHOLDER för resterande dagar + lärarvy + CTA
      ═══════════════════════════════════════════════════════════ -->
 <section style="text-align:center; padding: 64px 24px; color: var(--muted);">
-  <div class="eyebrow">Resten kommer i nästa commits</div>
+  <div class="eyebrow">Resten kommer i nästa commit</div>
   <p style="margin-top: 12px; font-size: 14px;">
-    Onsdag → torsdag → fredag → söndag → lärar-måndag → CTA<br>
-    Overlay-mekaniken för djupdyk + 4 funktioners 12 slides
+    Ons → tors → fre → sön → lärar-måndag → CTA + 3 djupdyk till
   </p>
 </section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     DEEP-DIVE OVERLAYS — en per funktion
+     ═══════════════════════════════════════════════════════════ -->
+<div class="deep-overlay" id="deep-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="deep-panel">
+
+    <!-- Huvudbok-overlay -->
+    <div class="deep-content" data-deep-content="ledger" hidden>
+      <div class="deep-panel-head">
+        <span class="deep-panel-eyebrow">● Huvudbok</span>
+        <span class="deep-panel-title">Så syns Lindas vecka i bokföringen</span>
+        <div class="deep-progress" aria-hidden="true">
+          <span class="active"></span><span></span><span></span>
+        </div>
+        <button class="deep-close" data-close>← Tillbaka till storyn</button>
+      </div>
+      <div class="deep-track">
+
+        <!-- Slide 1 / 3 -->
+        <article class="deep-slide">
+          <div class="deep-slide-num">SLIDE 01 / 03 · GRUNDEN</div>
+          <h3>Två kolumner. Inget magi.</h3>
+          <p class="deep-slide-lede">
+            Huvudboken är hjärtat i Lindas ekonomi. Varje krona som rör sig
+            har två sidor: <em>varifrån</em> (kredit) och <em>vart</em> (debet).
+            Det här är dubbel bokföring — samma princip som banker använt sedan 1494.
+          </p>
+          <div class="deep-slide-card">
+            <div class="mockup-eyebrow">T-konto · Bankkonto · 25 nov</div>
+            <div class="tkonto">
+              <div class="tkonto-side">
+                <div class="tkonto-head">DEBET (in på kontot)</div>
+                <div class="tkonto-row in"><span>Lön nov</span><strong>+ 28 750</strong></div>
+                <div class="tkonto-row in"><span>Skatteåterbäring</span><strong>+ 1 240</strong></div>
+              </div>
+              <div class="tkonto-side">
+                <div class="tkonto-head">KREDIT (ut från kontot)</div>
+                <div class="tkonto-row out"><span>Hyra dec</span><strong>− 8 200</strong></div>
+                <div class="tkonto-row out"><span>SL-kort</span><strong>− 985</strong></div>
+                <div class="tkonto-row out"><span>ICA Maxi</span><strong>− 1 320</strong></div>
+              </div>
+            </div>
+            <p style="margin-top: 14px; font-size: 13.5px; color: #475569; line-height: 1.5;">
+              Linda ser inte T-kontot direkt — men varje gång hon swipar sitt
+              kort, eller får lön, registreras transaktionen i Huvudboken.
+              Lärobokens "balansräkning" blir konkret: <em>"min vänsterkolumn
+              växer för att jag jobbade övertid"</em>.
+            </p>
+          </div>
+        </article>
+
+        <!-- Slide 2 / 3 -->
+        <article class="deep-slide">
+          <div class="deep-slide-num">SLIDE 02 / 03 · TRANSAKTIONSLOGGEN</div>
+          <h3>Varje rad är ett val Linda har gjort.</h3>
+          <p class="deep-slide-lede">
+            När Linda swipar sitt kort på Pressbyrån eller får lön från Visma
+            skapas en rad. Datum, belopp, motpart, kategori. Lika enkelt som
+            ett SMS — men det bygger en historia över tid.
+          </p>
+          <div class="deep-slide-card">
+            <div class="mockup-eyebrow">Huvudbok · vecka 48</div>
+            <div class="ledger-list">
+              <div class="ledger-row">
+                <span class="date">25 NOV · TIS</span>
+                <span><strong>Visma AB</strong> · Lön november</span>
+                <span class="amt in">+ 28 750</span>
+              </div>
+              <div class="ledger-row">
+                <span class="date">25 NOV · TIS</span>
+                <span>Spotify · Familjeabonnemang</span>
+                <span class="amt out">− 199</span>
+              </div>
+              <div class="ledger-row">
+                <span class="date">26 NOV · ONS</span>
+                <span>Avanza · Köp ISK · Globalfond</span>
+                <span class="amt out">− 2 000</span>
+              </div>
+              <div class="ledger-row">
+                <span class="date">27 NOV · TOR</span>
+                <span>Folktandvården · Akut rotfyllning</span>
+                <span class="amt out">− 3 200</span>
+              </div>
+              <div class="ledger-row">
+                <span class="date">28 NOV · FRE</span>
+                <span>ICA Maxi · Veckohandling</span>
+                <span class="amt out">− 1 320</span>
+              </div>
+            </div>
+          </div>
+          <p style="font-size: 13.5px; color: #475569; line-height: 1.5; max-width: 600px;">
+            <strong>Detalj:</strong> raden för rotfyllningen är taggad
+            <em>"oförutsett · hälsa"</em>. På söndag visar Wellbeing-pentagonen
+            att hälsodimensionen tippade — för att den raden finns.
+          </p>
+        </article>
+
+        <!-- Slide 3 / 3 -->
+        <article class="deep-slide">
+          <div class="deep-slide-num">SLIDE 03 / 03 · ROLLING N+1</div>
+          <h3>Huvudboken vet vad som ska hända i december.</h3>
+          <p class="deep-slide-lede">
+            Det är inte bara historik. Linda planerar med <em>kommande
+            transaktioner</em> — hyran 1:a dec, autogiro för SL-kortet,
+            ISK-spar 25:e. När månadens batch körs föds nästa månads
+            "upcomings" automatiskt. Hon ser sin verkliga buffert, inte
+            bara dagens saldo.
+          </p>
+          <div class="deep-slide-card">
+            <div class="mockup-eyebrow">Saldo + planering · per 28 nov</div>
+            <div class="balance-bar">
+              <div>
+                <div class="balance-bar-label">Tillgängligt nu</div>
+              </div>
+              <div class="balance-bar-num">14 230 kr</div>
+            </div>
+            <div class="ledger-list" style="margin-top: 14px;">
+              <div class="ledger-row upcoming">
+                <span class="date">1 DEC · KOMMANDE</span>
+                <span>Hyra · december</span>
+                <span class="amt out">− 8 200</span>
+              </div>
+              <div class="ledger-row upcoming">
+                <span class="date">5 DEC · KOMMANDE</span>
+                <span>SL-kort · autogiro</span>
+                <span class="amt out">− 985</span>
+              </div>
+              <div class="ledger-row upcoming">
+                <span class="date">25 DEC · KOMMANDE</span>
+                <span>Avanza · ISK-spar</span>
+                <span class="amt out">− 2 000</span>
+              </div>
+              <div class="ledger-row upcoming">
+                <span class="date">25 DEC · KOMMANDE</span>
+                <span><strong>Visma AB</strong> · Lön december</span>
+                <span class="amt in">+ 28 750</span>
+              </div>
+            </div>
+            <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:8px; font-size:13px; color:#065f46;">
+              ● Prognos sista dec: <strong>+ 31 795 kr</strong> efter alla autogiron
+            </div>
+          </div>
+          <p style="font-size: 13.5px; color: #475569; line-height: 1.5; max-width: 600px;">
+            Linda lär sig <em>"buffert ≠ saldo"</em>. Lärobokens "ha tre månader
+            i marginalen" blir mätbar i app: <strong>du ligger på 1,8 månader.</strong>
+          </p>
+        </article>
+
+      </div>
+      <div class="deep-foot">
+        <button class="deep-nav-arrow-btn" data-prev disabled aria-label="Föregående slide">←</button>
+        <span class="deep-foot-hint">Slide <span data-current>1</span> / 3 · scrolla horisontellt eller tryck pil</span>
+        <button class="deep-nav-arrow-btn" data-next aria-label="Nästa slide">→</button>
+      </div>
+    </div>
+
+    <!-- Placeholder-overlays — fylls i L4-3 -->
+    <div class="deep-content" data-deep-content="salary" hidden>
+      <div class="deep-panel-head">
+        <span class="deep-panel-eyebrow">● Lön / Lönespec</span>
+        <span class="deep-panel-title">Kommer i nästa commit</span>
+        <button class="deep-close" data-close>← Tillbaka till storyn</button>
+      </div>
+      <div class="deep-track">
+        <article class="deep-slide"><h3>3 slides om lönesamtalet kommer i L4-3.</h3></article>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function() {
+  const overlay = document.getElementById('deep-overlay');
+  const panel = overlay.querySelector('.deep-panel');
+  const navButtons = document.querySelectorAll('.deep-nav-btn[data-deep]');
+  const contents = overlay.querySelectorAll('.deep-content');
+  let lastScrollY = 0;
+  let activeContent = null;
+
+  function showContent(key) {
+    contents.forEach(c => {
+      const match = c.getAttribute('data-deep-content') === key;
+      c.hidden = !match;
+      if (match) activeContent = c;
+    });
+  }
+
+  function open(key) {
+    if (overlay.classList.contains('is-open')) return;
+    lastScrollY = window.scrollY;
+    showContent(key);
+    overlay.setAttribute('aria-hidden', 'false');
+    overlay.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    if (activeContent) {
+      const track = activeContent.querySelector('.deep-track');
+      if (track) track.scrollLeft = 0;
+      updateProgress(0);
+    }
+  }
+
+  function close() {
+    if (!overlay.classList.contains('is-open')) return;
+    overlay.classList.remove('is-open');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    setTimeout(() => {
+      window.scrollTo({ top: lastScrollY, behavior: 'smooth' });
+    }, 280);
+  }
+
+  function updateProgress(idx) {
+    if (!activeContent) return;
+    const dots = activeContent.querySelectorAll('.deep-progress span');
+    const cur = activeContent.querySelector('[data-current]');
+    const prev = activeContent.querySelector('[data-prev]');
+    const next = activeContent.querySelector('[data-next]');
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    if (cur) cur.textContent = idx + 1;
+    if (prev) prev.disabled = idx === 0;
+    if (next) next.disabled = idx === dots.length - 1;
+  }
+
+  navButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-deep');
+      open(key);
+    });
+  });
+
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) close();
+    if (e.target.closest('[data-close]')) close();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (!overlay.classList.contains('is-open')) return;
+    if (e.key === 'Escape') close();
+    if (!activeContent) return;
+    const track = activeContent.querySelector('.deep-track');
+    if (!track) return;
+    const slides = track.querySelectorAll('.deep-slide');
+    const idx = Math.round(track.scrollLeft / track.clientWidth);
+    if (e.key === 'ArrowRight' && idx < slides.length - 1) {
+      track.scrollTo({ left: (idx + 1) * track.clientWidth, behavior: 'smooth' });
+    }
+    if (e.key === 'ArrowLeft' && idx > 0) {
+      track.scrollTo({ left: (idx - 1) * track.clientWidth, behavior: 'smooth' });
+    }
+  });
+
+  // Wire arrows + scroll-driven progress per content
+  contents.forEach(content => {
+    const track = content.querySelector('.deep-track');
+    if (!track) return;
+    const prev = content.querySelector('[data-prev]');
+    const next = content.querySelector('[data-next]');
+    if (next) next.addEventListener('click', () => {
+      track.scrollBy({ left: track.clientWidth, behavior: 'smooth' });
+    });
+    if (prev) prev.addEventListener('click', () => {
+      track.scrollBy({ left: -track.clientWidth, behavior: 'smooth' });
+    });
+    let raf = 0;
+    track.addEventListener('scroll', () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (content !== activeContent) return;
+        const idx = Math.round(track.scrollLeft / track.clientWidth);
+        updateProgress(idx);
+      });
+    });
+  });
+})();
+</script>
 
 </body>
 </html>
