@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idé 4 · Vecka + djupdyk · Ekonomilabbet</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e2e8f0;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+.back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 50;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--rule);
+  padding: 6px 12px;
+  border-radius: 100px;
+}
+.back:hover { border-color: var(--fg); }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+section { padding: 80px 24px; border-top: 1px solid var(--rule); }
+.shell { max-width: 1280px; margin: 0 auto; }
+h1 {
+  font-size: clamp(38px, 5.5vw, 64px);
+  font-weight: 700;
+  letter-spacing: -1.6px;
+  line-height: 1.02;
+}
+h2 {
+  font-size: clamp(26px, 3.4vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+}
+
+/* ─── HERO ────────────────────────────────────────────── */
+.hero {
+  padding: 96px 24px 72px;
+  border-top: none;
+  background: linear-gradient(180deg, #f8fafc 0%, #fafaf9 100%);
+  text-align: center;
+}
+.hero .shell { max-width: 880px; }
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  background: #fef3c7;
+  color: #78350f;
+  border-radius: 100px;
+  letter-spacing: 1.2px;
+  margin-bottom: 28px;
+}
+.hero-eyebrow::before {
+  content: "";
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.hero h1 { margin-bottom: 22px; }
+.hero h1 em {
+  color: var(--accent);
+  font-style: italic;
+  font-family: var(--serif);
+  font-weight: 500;
+}
+.hero p {
+  font-size: 17px;
+  color: #475569;
+  max-width: 640px;
+  margin: 0 auto 36px;
+  line-height: 1.55;
+}
+.hero-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: #475569;
+  text-align: left;
+  max-width: 480px;
+}
+.hero-hint-arrow {
+  font-size: 22px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ─── DAY-SECTION (kärnan i hybrid-idén) ──────────────── */
+.day-section {
+  padding: 0;
+  background: #fff;
+}
+.day-meta {
+  padding: 56px 24px 32px;
+  border-bottom: 1px solid var(--rule);
+}
+.day-meta .shell {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.day-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.day-meta h2 { width: 100%; margin-top: 16px; }
+.day-meta h2 em {
+  color: var(--accent);
+  font-style: italic;
+  font-family: var(--serif);
+  font-weight: 500;
+}
+
+.day-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 0;
+}
+@media (max-width: 900px) {
+  .day-body { grid-template-columns: 1fr; }
+}
+
+/* Vänster pane = horisontell deep-dive */
+.deep-dive {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff;
+  padding: 40px 0 40px 24px;
+  border-right: 1px solid var(--rule);
+  position: relative;
+}
+.deep-dive-header {
+  padding: 0 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.deep-dive-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  color: var(--gold);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.deep-dive-hint {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: #94a3b8;
+  letter-spacing: 1px;
+}
+.deep-dive-track {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 16px;
+  padding: 8px 16px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(251,191,36,0.3) transparent;
+}
+.deep-dive-track::-webkit-scrollbar { height: 6px; }
+.deep-dive-track::-webkit-scrollbar-track { background: rgba(255,255,255,0.04); border-radius: 100px; }
+.deep-dive-track::-webkit-scrollbar-thumb { background: rgba(251,191,36,0.35); border-radius: 100px; }
+
+.deep-slide {
+  flex: 0 0 min(380px, 85%);
+  scroll-snap-align: start;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 22px 22px 24px;
+  display: flex;
+  flex-direction: column;
+}
+.deep-slide-num {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  color: var(--gold);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.deep-slide h3 {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  margin-bottom: 10px;
+  color: #fff;
+}
+.deep-slide p {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #cbd5e1;
+  margin-bottom: 14px;
+}
+.deep-slide-mock {
+  margin-top: auto;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #e2e8f0;
+}
+.deep-slide-mock-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+/* Höger pane = dagens narrativ */
+.day-narrative {
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.day-narrative .narr-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  color: var(--accent);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.day-narrative p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #475569;
+  margin-bottom: 14px;
+}
+.day-narrative em {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--fg);
+}
+.day-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: #fef3c7;
+  color: #78350f;
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-top: 12px;
+  border: 1px solid rgba(120,53,15,0.2);
+  align-self: flex-start;
+}
+
+/* Phone mockup (kompakt — för måndag) */
+.phone-compact {
+  width: 100%;
+  max-width: 240px;
+  margin: 18px 0 0;
+  background: #0f172a;
+  border-radius: 24px;
+  padding: 8px;
+}
+.phone-compact-screen {
+  background: #fff;
+  border-radius: 18px;
+  padding: 14px 14px 18px;
+}
+.phone-compact-time {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 10px;
+}
+.phone-compact-notif {
+  background: #fef3c7;
+  border: 1px solid rgba(120,53,15,0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--fg);
+}
+.phone-compact-notif strong {
+  display: block;
+  margin-bottom: 2px;
+}
+</style>
+</head>
+<body>
+<a href="./" class="back">← tillbaka</a>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HERO — Hybrid-konceptet förklarat
+     ═══════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="shell">
+    <div class="hero-eyebrow">VECKA + DJUPDYK · IDÉ 04</div>
+    <h1>
+      Linda lever sin vecka.<br>
+      Du <em>swipar in</em> i systemet — när du vill.
+    </h1>
+    <p>
+      Lindas vecka är den röda tråden. Men för varje moment hon möter får du
+      ett horisontellt djupdyk åt vänster — Huvudbok, Lön, Arbetsgivare,
+      Pentagon. Funktioner förklaras <strong>när de blir relevanta</strong>,
+      inte i en separat lista.
+    </p>
+    <div class="hero-hint">
+      <span class="hero-hint-arrow">←</span>
+      <div>
+        <strong>Swipa horisontellt i den mörka panelen</strong> för att läsa
+        om plattformens delar — synkat med dagens händelse.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MÅNDAG · Passerkort-frågan + horisontell deep-dive
+     ═══════════════════════════════════════════════════════════ -->
+<section class="day-section">
+  <div class="day-meta">
+    <div class="shell">
+      <span class="day-time">● Måndag · 06:48</span>
+      <span class="eyebrow">Vecka 1 av 78 scenarier</span>
+      <h2>"Maria har glömt passerkortet hemma. Kan du <em>köra och hämta?</em>"</h2>
+    </div>
+  </div>
+
+  <div class="day-body">
+    <!-- VÄNSTER: horisontell deep-dive -->
+    <div class="deep-dive">
+      <div class="deep-dive-header">
+        <span class="deep-dive-eyebrow">● DJUPDYK · 4 SLIDES</span>
+        <span class="deep-dive-hint">← swipa →</span>
+      </div>
+      <div class="deep-dive-track">
+        <!-- Slide 1: Huvudbok -->
+        <div class="deep-slide">
+          <div class="deep-slide-num">01 / 04 · HUVUDBOK</div>
+          <h3>Det här loggas i huvudboken</h3>
+          <p>
+            Lindas svar är inte bara ett "klick" — det är en händelse som
+            registreras med timestamp, kontext och konsekvens. Lärare kan
+            granska i efterhand: vad valde hon, varför, vad kostade det?
+          </p>
+          <div class="deep-slide-mock">
+            <div class="deep-slide-mock-eyebrow">EVENT-LOGG · 06:48</div>
+            <div>type: <strong>workplace_question</strong></div>
+            <div>answer: <strong style="color:#10b981;">"yes_help"</strong></div>
+            <div>satisfaction_delta: <strong>+4</strong></div>
+            <div>logged_by: <strong>linda · 9c</strong></div>
+          </div>
+        </div>
+
+        <!-- Slide 2: Lön / Lönespec -->
+        <div class="deep-slide">
+          <div class="deep-slide-num">02 / 04 · LÖN</div>
+          <h3>Lönen är ett faktum från arbetsgivaren</h3>
+          <p>
+            Linda jobbar som IT-konsult på Visma. 37 000 kr brutto, 24 318 kr
+            netto. Det syns i nästa lönespec — en riktig PDF med skatte-
+            uppställning, ITP1, kollektivavtal.
+          </p>
+          <div class="deep-slide-mock">
+            <div class="deep-slide-mock-eyebrow">LÖNESPEC NOV · UTKAST</div>
+            <div>Bruttolön: <strong>37 000 kr</strong></div>
+            <div>Skatt: <strong style="color:#dc4c2b;">−10 959 kr</strong></div>
+            <div>ITP1 (4,5%): <strong style="color:#dc4c2b;">−1 665 kr</strong></div>
+            <div>Netto: <strong style="color:#10b981;">+ 24 376 kr</strong></div>
+          </div>
+        </div>
+
+        <!-- Slide 3: Arbetsgivare -->
+        <div class="deep-slide">
+          <div class="deep-slide-num">03 / 04 · ARBETSGIVARE</div>
+          <h3>Lindas svar flyttar satisfaction-faktorn</h3>
+          <p>
+            17 yrken får riktiga kollektivavtal. Linda är på Tjänstemanna IT
+            (Unionen). Hennes svar på arbetsplats-frågan flyttar nöjdhets-
+            faktorn 0–100. Den påverkar nästa lönesamtal.
+          </p>
+          <div class="deep-slide-mock">
+            <div class="deep-slide-mock-eyebrow">SATISFACTION · LIVE</div>
+            <div>Före: <strong>62 / 100</strong></div>
+            <div>Efter: <strong style="color:#10b981;">66 / 100 ↗</strong></div>
+            <div>Trend: <strong>stigande över 30d</strong></div>
+            <div style="margin-top:6px; font-style:italic; color:#94a3b8;">
+              Chefen noterar engagemang → bättre förhandlingsläge.
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 4: Pentagon -->
+        <div class="deep-slide">
+          <div class="deep-slide-num">04 / 04 · WELLBEING</div>
+          <h3>Det här syns på pentagonen</h3>
+          <p>
+            Sociala band + 2. Trygghet + 1. Wellbeing-Score (vägd över 5
+            dimensioner) rör sig 60 → 62. Inte i ett separat verktyg —
+            i samma vy där hon ser sitt saldo.
+          </p>
+          <div class="deep-slide-mock">
+            <div class="deep-slide-mock-eyebrow">PENTAGON-DELTAS</div>
+            <div>Ekonomi: 50 → <strong>50</strong> (oförändrad)</div>
+            <div>Sociala band: 50 → <strong style="color:#10b981;">52</strong></div>
+            <div>Trygghet: 60 → <strong style="color:#10b981;">61</strong></div>
+            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.1);">
+              Σ Wellbeing: 60 → <strong style="color:var(--gold);">62</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HÖGER: dagens narrativ -->
+    <div class="day-narrative">
+      <div class="narr-eyebrow">● Lindas måndag</div>
+      <p>
+        Klockan är 06:48. En notis ploppar in på Lindas mobil. Maria — kollegan
+        på Visma — har glömt passerkortet hemma och måste börja kl 07:00.
+        Tre val visas. Linda väljer:
+        <em>"Ja, jag kör direkt — vi täcker varandra."</em>
+      </p>
+      <p>
+        Det är ett av Lindas 9 val under veckan. Varje val plottas i alla
+        plattformens delar — huvudboken, hennes lön-historik, satisfaction-
+        score, Wellbeing-pentagonen. <strong>Alla fyra ligger horisontellt
+        till vänster om dig nu</strong> — swipa in för att se exakt hur det
+        funkar i systemet.
+      </p>
+      <span class="day-tag">+ 4 SATISFACTION · + 2 SOCIALA BAND</span>
+
+      <div class="phone-compact">
+        <div class="phone-compact-screen">
+          <div class="phone-compact-time">● 06:48 · MÅN 27 NOV</div>
+          <div class="phone-compact-notif">
+            <strong>Arbetsplats-fråga</strong>
+            "Maria har glömt passerkortet — kan du hämta henne? Pass startar 07:00."
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     RESTERANDE DAGAR + LÄRARVY + CTA — fylls i nästa commit
+     ═══════════════════════════════════════════════════════════ -->
+<section style="text-align:center; padding: 64px 24px; color: var(--muted);">
+  <div class="eyebrow">Resten kommer i nästa commit</div>
+  <p style="margin-top: 12px; font-size: 14px;">
+    Tisdag (lönesamtal) → onsdag (ISK) → fredag (aktiekrasch) → söndag (pentagon) → lärar-måndag → CTA
+  </p>
+</section>
+
+</body>
+</html>
