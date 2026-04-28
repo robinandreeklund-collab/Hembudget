@@ -322,6 +322,67 @@ def test_complete_without_offer_marks_abandoned(fx) -> None:
         assert p.pending_salary_monthly is None
 
 
+def test_complete_with_accept_offer_sets_pending_salary(fx) -> None:
+    """Happy-path för 'Acceptera senaste bud'-knappen. Vi insertar en
+    NegotiationRound med proposed_pct=3.5 direkt (kringgår AI), sen
+    kör complete med accept_offer=true. Kontrollerar att profilen
+    får pending_salary, slut-pct returneras, och summary genereras.
+
+    Den här testen lades till efter att en användare rapporterade att
+    accept-knappen 'inte gjorde någonting' — det visade sig vara att
+    frontend inte visade backend-felet, och vi saknade test-täckning
+    för exakt det här flödet."""
+    from datetime import datetime, timedelta
+    from decimal import Decimal
+    from hembudget.school.employer_models import (
+        SalaryNegotiation, NegotiationRound,
+    )
+    from hembudget.school.models import StudentProfile
+    client, _, stu, _tid, sid = fx
+    n = client.post(
+        "/employer/negotiation/start",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    nid = n["negotiation"]["id"]
+    # Insertera en runda med proposed_pct direkt — kringgår AI.
+    with master_session() as s:
+        neg = s.get(SalaryNegotiation, nid)
+        assert neg is not None
+        s.add(NegotiationRound(
+            negotiation_id=nid,
+            round_no=1,
+            student_message="Jag har tagit lead-rollen.",
+            employer_response="Bra punkt — 3,5 % är OK.",
+            proposed_pct=3.5,
+            created_at=datetime.utcnow(),
+        ))
+        s.flush()
+    r = client.post(
+        f"/employer/negotiation/{nid}/complete",
+        json={"accept_offer": True},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["final_pct"] == 3.5
+    assert data["final_salary"] is not None
+    assert data["summary_md"]
+    assert "Lönesamtal avslutat" in data["summary_md"]
+    # Profilen får pending_salary + effective-from-datum
+    with master_session() as s:
+        p = s.query(StudentProfile).filter(
+            StudentProfile.student_id == sid
+        ).first()
+        assert p.pending_salary_monthly is not None
+        assert p.pending_salary_monthly > p.gross_salary_monthly
+        assert p.pending_effective_from is not None
+        # Negotiation har nu status='completed'
+        neg = s.get(SalaryNegotiation, nid)
+        assert neg.status == "completed"
+        assert neg.final_pct == 3.5
+        assert neg.final_salary is not None
+
+
 def test_send_message_to_completed_returns_400(fx) -> None:
     client, _, stu, *_ = fx
     n = client.post(

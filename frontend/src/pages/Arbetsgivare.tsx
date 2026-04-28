@@ -1017,37 +1017,46 @@ function NegotiationTab() {
       )}
 
       {/* Status-rad */}
-      <div className="flex items-center justify-between text-sm border rounded-md p-2 bg-slate-50">
-        <div>
-          <strong>Rond:</strong> {negotiation.rounds.length} av{" "}
-          {negotiation.max_rounds}
-          {lastBidPct !== null && (
-            <>
-              {" · "}
-              <strong>Senaste bud:</strong> {lastBidPct.toFixed(1)} %
-            </>
-          )}
-          {negotiation.avtal_norm_pct !== null && (
-            <>
-              {" · "}
-              <strong>Avtals-norm:</strong>{" "}
-              {negotiation.avtal_norm_pct.toFixed(1)} %
-            </>
+      <div className="border rounded-md p-2 bg-slate-50 space-y-2">
+        <div className="flex items-center justify-between text-sm flex-wrap gap-2">
+          <div>
+            <strong>Rond:</strong> {negotiation.rounds.length} av{" "}
+            {negotiation.max_rounds}
+            {lastBidPct !== null && (
+              <>
+                {" · "}
+                <strong>Senaste bud:</strong> {lastBidPct.toFixed(1)} %
+              </>
+            )}
+            {negotiation.avtal_norm_pct !== null && (
+              <>
+                {" · "}
+                <strong>Avtals-norm:</strong>{" "}
+                {negotiation.avtal_norm_pct.toFixed(1)} %
+              </>
+            )}
+          </div>
+          {canAccept && (
+            <button
+              onClick={() =>
+                completeMut.mutate({
+                  id: negotiation.id,
+                  accept_offer: true,
+                })
+              }
+              disabled={completeMut.isPending}
+              className="text-xs bg-emerald-600 text-white rounded px-3 py-1 hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {completeMut.isPending
+                ? "Avslutar…"
+                : `Acceptera senaste bud (${lastBidPct?.toFixed(1)} %)`}
+            </button>
           )}
         </div>
-        {canAccept && (
-          <button
-            onClick={() =>
-              completeMut.mutate({
-                id: negotiation.id,
-                accept_offer: true,
-              })
-            }
-            disabled={completeMut.isPending}
-            className="text-xs bg-emerald-600 text-white rounded px-3 py-1 hover:bg-emerald-700 disabled:opacity-50"
-          >
-            Acceptera senaste bud ({lastBidPct?.toFixed(1)} %)
-          </button>
+        {completeMut.error && (
+          <div className="text-xs text-rose-700 border-t pt-2">
+            Kunde inte avsluta samtalet: {String(completeMut.error)}
+          </div>
         )}
       </div>
 
@@ -1120,7 +1129,7 @@ function NegotiationTab() {
             Du har använt alla {negotiation.max_rounds} ronder.
             {canAccept ? " Acceptera senaste bud eller avbryt." : " Du kan avbryta."}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {canAccept && (
               <button
                 onClick={() =>
@@ -1132,7 +1141,9 @@ function NegotiationTab() {
                 disabled={completeMut.isPending}
                 className="bg-emerald-600 text-white rounded px-4 py-1.5 text-sm hover:bg-emerald-700 disabled:opacity-50"
               >
-                Acceptera ({lastBidPct?.toFixed(1)} %)
+                {completeMut.isPending
+                  ? "Avslutar…"
+                  : `Acceptera (${lastBidPct?.toFixed(1)} %)`}
               </button>
             )}
             <button
@@ -1148,6 +1159,11 @@ function NegotiationTab() {
               Avbryt utan höjning
             </button>
           </div>
+          {completeMut.error && (
+            <div className="text-xs text-rose-700 mt-2">
+              Kunde inte avsluta samtalet: {String(completeMut.error)}
+            </div>
+          )}
         </Card>
       )}
     </div>
