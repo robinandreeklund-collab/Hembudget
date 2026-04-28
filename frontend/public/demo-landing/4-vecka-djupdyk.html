@@ -1280,11 +1280,7 @@ h2 {
   const hero = document.getElementById('hero');
   if (!video || !hero) return;
 
-  const reveal = () => video.classList.add('is-ready');
-  if (video.readyState >= 2) reveal();
-  else video.addEventListener('loadeddata', reveal, { once: true });
-
-  // Pausa videon när hero scrollats förbi (sparar batteri/CPU)
+  let isReady = false;
   let raf = 0;
   const onScroll = () => {
     cancelAnimationFrame(raf);
@@ -1292,13 +1288,27 @@ h2 {
       const rect = hero.getBoundingClientRect();
       const heroHeight = rect.height || 1;
       const past = Math.min(1, Math.max(0, -rect.top / heroHeight));
-      // Mjuk fade i hero-höjdens sista 60 %
       const opacity = past < 0.4 ? 1 : Math.max(0, 1 - (past - 0.4) / 0.6);
-      video.style.opacity = video.classList.contains('is-ready') ? opacity.toFixed(3) : '0';
+      video.style.opacity = isReady ? opacity.toFixed(3) : '0';
       if (rect.bottom < 0 && !video.paused) video.pause();
       else if (rect.bottom > 0 && video.paused) video.play().catch(() => {});
     });
   };
+
+  const reveal = () => {
+    if (isReady) return;
+    isReady = true;
+    video.classList.add('is-ready');
+    onScroll();
+    // Tvinga play för Safari/iOS som ibland kräver ett extra anrop
+    video.play().catch(() => {});
+  };
+  if (video.readyState >= 2) reveal();
+  else {
+    video.addEventListener('loadeddata', reveal, { once: true });
+    video.addEventListener('canplay', reveal, { once: true });
+  }
+
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 })();
