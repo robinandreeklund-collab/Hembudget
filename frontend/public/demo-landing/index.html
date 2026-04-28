@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ekonomilabbet · Landing-demos</title>
+<title>Ekonomilabbet · Privatekonomi som händer</title>
 <style>
 :root {
   --bg: #fafaf9;
@@ -11,186 +11,771 @@
   --muted: #64748b;
   --accent: #dc4c2b;
   --gold: #fbbf24;
-  --rule: #e2e8f0;
+  --rule: #e5e7eb;
   --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --ease: cubic-bezier(.77, 0, .175, 1);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; }
 body {
   font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg); color: var(--fg);
+  -webkit-font-smoothing: antialiased; line-height: 1.5;
+}
+.shell { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+section { padding: clamp(80px, 12vh, 140px) 0; position: relative; }
+section + section { border-top: 1px solid var(--rule); }
+h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
+
+/* ─── Top-CTA (höger hörn) ─── */
+.top-cta {
+  position: fixed; top: 16px; right: 16px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  text-decoration: none; color: var(--fg);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--rule);
+  padding: 7px 14px; border-radius: 100px;
+  transition: all .2s var(--ease);
+}
+.top-cta:hover {
+  background: var(--fg); color: #fff; border-color: var(--fg);
+}
+.top-cta-arrow { transition: transform .2s var(--ease); }
+.top-cta:hover .top-cta-arrow { transform: translateX(2px); }
+
+/* ─── AOS-style entrance ─── */
+[data-fx] {
+  opacity: 0;
+  transition:
+    opacity .9s cubic-bezier(.4,0,.2,1),
+    transform .9s cubic-bezier(.34,1.18,.64,1);
+  will-change: opacity, transform;
+}
+[data-fx="fade-up"]    { transform: translate3d(0, 36px, 0); }
+[data-fx="fade-down"]  { transform: translate3d(0, -28px, 0); }
+[data-fx="fade-left"]  { transform: translate3d(-36px, 0, 0); }
+[data-fx="fade-right"] { transform: translate3d(36px, 0, 0); }
+[data-fx="zoom-in"]    { transform: scale(0.94); }
+[data-fx].is-in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+[data-fx-delay="80"]   { transition-delay: 80ms; }
+[data-fx-delay="160"]  { transition-delay: 160ms; }
+[data-fx-delay="240"]  { transition-delay: 240ms; }
+[data-fx-delay="320"]  { transition-delay: 320ms; }
+[data-fx-delay="400"]  { transition-delay: 400ms; }
+[data-fx-stagger] > * {
+  opacity: 0; transform: translate3d(0, 24px, 0);
+  transition: opacity .8s cubic-bezier(.4,0,.2,1),
+              transform .8s cubic-bezier(.34,1.18,.64,1);
+}
+[data-fx-stagger].is-in > * { opacity: 1; transform: translate3d(0, 0, 0); }
+[data-fx-stagger].is-in > *:nth-child(1) { transition-delay: 0ms; }
+[data-fx-stagger].is-in > *:nth-child(2) { transition-delay: 120ms; }
+[data-fx-stagger].is-in > *:nth-child(3) { transition-delay: 240ms; }
+[data-fx-stagger].is-in > *:nth-child(4) { transition-delay: 360ms; }
+
+/* ─── Hero ─── */
+.hero {
+  min-height: 92vh;
+  display: flex; align-items: center;
+  padding: 18vh clamp(24px, 6vw, 80px) 14vh clamp(32px, 8vw, 120px);
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, #f1f5f9 0%, var(--bg) 100%);
+}
+.hero-bg-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; opacity: 0;
+  transition: opacity 1.2s ease; pointer-events: none;
+}
+.hero-bg-video.is-ready { opacity: 1; }
+.hero-bg-overlay {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(95deg,
+      rgba(250,250,249,0.97) 0%,
+      rgba(250,250,249,0.92) 32%,
+      rgba(250,250,249,0.7) 50%,
+      rgba(250,250,249,0.18) 75%,
+      rgba(250,250,249,0) 100%),
+    linear-gradient(180deg,
+      rgba(250,250,249,0.92) 0%,
+      rgba(250,250,249,0.4) 9%,
+      rgba(250,250,249,0) 22%,
+      rgba(250,250,249,0) 65%,
+      rgba(250,250,249,0.92) 100%);
+}
+@media (max-width: 800px) {
+  .hero-bg-overlay {
+    background: linear-gradient(180deg,
+      rgba(250,250,249,0.94) 0%,
+      rgba(250,250,249,0.78) 35%,
+      rgba(250,250,249,0.95) 100%);
+  }
+}
+.hero .shell { position: relative; z-index: 2; max-width: 720px; margin: 0; }
+.hero-brand {
+  position: absolute; top: 32px; left: 50%; transform: translateX(-50%);
+  z-index: 4; text-align: center;
+}
+.brand-name {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; line-height: 1;
+}
+.brand-tagline {
+  margin-top: 4px;
+  font-family: var(--mono); font-size: 12px;
+  letter-spacing: 2.4px; text-transform: uppercase;
+  font-weight: 500; color: var(--muted); white-space: nowrap;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px;
+  padding: 6px 14px; background: var(--fg); color: #fff;
+  border-radius: 100px; letter-spacing: 1.4px; font-weight: 500;
+  margin-bottom: 28px;
+}
+.hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
+.hero h1 {
+  font-size: clamp(46px, 7vw, 88px);
+  letter-spacing: -2.4px; line-height: 0.96;
+  max-width: 14ch; margin-bottom: 28px;
+}
+.hero h1 em {
+  color: var(--accent); font-style: italic;
+  font-family: var(--serif); font-weight: 500;
+}
+.hero p {
+  font-size: 19px; max-width: 560px; font-weight: 500;
+  color: #1e293b; line-height: 1.55; margin-bottom: 36px;
+}
+.hero-stats {
+  display: flex; gap: 44px; padding-top: 32px;
+  border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap;
+}
+.hero-stat-num { display: block; font-size: 36px; font-weight: 700; letter-spacing: -0.8px; }
+.hero-stat-label {
+  font-size: 11px; color: var(--muted); font-family: var(--mono);
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.hero-scroll-hint {
+  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2.5px;
+  color: var(--muted); z-index: 3;
+}
+.hero-scroll-line {
+  width: 1px; height: 32px;
+  background: linear-gradient(180deg, var(--muted) 0%, transparent 100%);
+  animation: scroll-pulse 2.4s ease-in-out infinite;
+}
+@keyframes scroll-pulse {
+  0%, 100% { transform: scaleY(1); transform-origin: top; opacity: 0.6; }
+  50% { transform: scaleY(0.4); opacity: 1; }
+}
+
+/* ─── System-intro ─── */
+.intro {
   background: var(--bg);
-  color: var(--fg);
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
 }
-.shell {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 64px 24px 96px;
+.intro-grid {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 96px); align-items: start;
 }
-.eyebrow {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 1.8px;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 12px;
+@media (max-width: 900px) { .intro-grid { grid-template-columns: 1fr; gap: 40px; } }
+.intro-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 22px;
 }
-h1 {
-  font-size: clamp(34px, 5vw, 54px);
-  font-weight: 700;
-  letter-spacing: -1.4px;
-  line-height: 1.05;
-  margin-bottom: 18px;
-  max-width: 720px;
+.intro h2 {
+  font-size: clamp(34px, 4.4vw, 56px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05;
+  max-width: 16ch; margin-bottom: 28px;
 }
-.lede {
-  font-size: 17px;
-  line-height: 1.55;
-  color: #475569;
-  max-width: 600px;
-  margin-bottom: 48px;
+.intro h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--accent);
+  font-weight: 500;
 }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+.intro p {
+  font-size: 17px; color: #334155; line-height: 1.65;
+  margin-bottom: 18px; max-width: 56ch;
+}
+.intro p strong { color: var(--fg); font-weight: 700; }
+
+.intro-pillars {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.pillar {
+  display: grid; grid-template-columns: 56px 1fr;
+  gap: 18px; padding: 22px 4px;
+  border-bottom: 1px solid var(--rule);
+}
+.pillar:last-child { border-bottom: 0; }
+.pillar-num {
+  font-family: var(--serif); font-size: 28px; font-weight: 700;
+  letter-spacing: -0.6px; color: var(--accent); line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.pillar-text h3 {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.2px;
+  margin-bottom: 5px;
+}
+.pillar-text p {
+  font-size: 14.5px; color: #475569; line-height: 1.55;
+  max-width: 44ch; margin: 0;
+}
+
+/* ─── Personas ─── */
+.personas {
+  background: linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);
+}
+.personas-head {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 80px); align-items: end;
+  margin-bottom: 56px;
+}
+@media (max-width: 800px) { .personas-head { grid-template-columns: 1fr; gap: 24px; } }
+.personas-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 22px;
+}
+.personas h2 {
+  font-size: clamp(34px, 4.4vw, 56px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05; max-width: 14ch;
+}
+.personas-lede {
+  font-size: 16px; color: #475569; line-height: 1.6; max-width: 42ch;
+  font-family: var(--serif); font-style: italic; padding-bottom: 8px;
+}
+
+.persona-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 18px;
 }
-.card {
-  display: flex;
-  flex-direction: column;
-  text-decoration: none;
-  color: inherit;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 14px;
-  padding: 28px 26px;
-  transition: all .15s;
+@media (max-width: 1000px) { .persona-grid { grid-template-columns: 1fr; } }
+
+.persona-card {
+  display: flex; flex-direction: column;
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 14px; overflow: hidden;
+  text-decoration: none; color: inherit;
+  transition: all .25s var(--ease);
+  position: relative;
 }
-.card:hover {
+.persona-card:hover:not(.is-soon) {
+  transform: translateY(-4px);
   border-color: var(--fg);
-  box-shadow: 0 6px 20px rgba(15,23,42,0.08);
-  transform: translateY(-2px);
+  box-shadow: 0 24px 48px -22px rgba(15,23,42,0.22),
+              0 6px 14px -6px rgba(15,23,42,0.08);
 }
-.card-num {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 1.4px;
-  color: var(--accent);
-  margin-bottom: 14px;
-  font-weight: 600;
+.persona-card.is-soon { cursor: default; opacity: 0.78; }
+.persona-card.is-soon::after {
+  content: "KOMMER SNART";
+  position: absolute; top: 16px; right: 16px; z-index: 3;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px;
+  background: rgba(15,23,42,0.85); color: #fff;
+  padding: 5px 10px; border-radius: 100px;
+  backdrop-filter: blur(8px);
 }
-.card h2 {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.4px;
-  line-height: 1.2;
-  margin-bottom: 12px;
+
+.persona-media {
+  position: relative; aspect-ratio: 4 / 3;
+  background: #0f172a; overflow: hidden;
 }
-.card-desc {
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: #475569;
-  margin-bottom: 18px;
+.persona-media video, .persona-media img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+  transition: transform .6s var(--ease);
 }
-.card-tag {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10.5px;
-  letter-spacing: 1px;
+.persona-card:hover:not(.is-soon) .persona-media video,
+.persona-card:hover:not(.is-soon) .persona-media img {
+  transform: scale(1.04);
+}
+.persona-media-placeholder {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: rgba(255,255,255,0.3);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-top: auto;
-  padding-top: 14px;
+}
+.persona-media-placeholder span {
+  font-size: 64px; font-family: var(--serif); font-weight: 700;
+  color: rgba(255,255,255,0.18); letter-spacing: -2px;
+}
+
+.persona-meta {
+  position: absolute; bottom: 14px; left: 14px; z-index: 2;
+  display: flex; gap: 10px; align-items: baseline;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: rgba(255,255,255,0.85);
+}
+.persona-meta strong {
+  font-family: var(--serif); font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; color: #fff; text-transform: none;
+}
+
+.persona-body { padding: 26px 26px 28px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.persona-theme {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.persona-pitch {
+  font-size: 17px; line-height: 1.45; color: var(--fg);
+  font-weight: 500; letter-spacing: -0.2px;
+}
+.persona-tags {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding-top: 6px;
+}
+.persona-tag {
+  font-family: var(--mono); font-size: 10.5px;
+  padding: 4px 10px; border-radius: 100px;
+  background: #f1f5f9; color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.persona-go {
+  margin-top: auto; padding-top: 16px;
+  display: flex; justify-content: space-between; align-items: center;
   border-top: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--fg);
 }
-.preview-strip {
-  display: flex;
-  gap: 4px;
-  margin: 16px 0 4px;
-  height: 38px;
+.persona-go-arrow { transition: transform .2s var(--ease); }
+.persona-card:hover:not(.is-soon) .persona-go-arrow { transform: translateX(4px); }
+.persona-card.is-soon .persona-go { color: var(--muted); }
+
+/* ─── Lärar-perspektiv (mörk) ─── */
+.teacher {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff;
 }
-.preview-strip span {
-  flex: 1;
-  border-radius: 4px;
+.teacher::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
-.note {
-  margin-top: 56px;
-  padding: 20px 22px;
-  background: #fef3c7;
-  border-left: 3px solid var(--gold);
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: #78350f;
+.teacher-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: clamp(40px, 6vw, 88px); align-items: center;
 }
-.note strong { color: #0f172a; }
+@media (max-width: 900px) { .teacher-grid { grid-template-columns: 1fr; gap: 40px; } }
+.teacher-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--gold); font-weight: 700;
+  margin-bottom: 22px;
+}
+.teacher h2 {
+  font-size: clamp(34px, 4.4vw, 56px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05; margin-bottom: 26px;
+}
+.teacher h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--gold);
+  font-weight: 500;
+}
+.teacher p {
+  font-size: 17px; color: rgba(255,255,255,0.78); line-height: 1.65;
+  margin-bottom: 18px; max-width: 50ch;
+}
+
+.dash-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 22px 24px;
+  box-shadow: 0 30px 60px -28px rgba(0,0,0,0.45);
+}
+.dash-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+.dash-head-class { color: var(--gold); font-weight: 700; }
+.dash-head-stats { color: rgba(255,255,255,0.55); }
+.dash-rows { display: flex; flex-direction: column; gap: 5px; }
+.dash-row {
+  display: grid; grid-template-columns: 26px 1fr auto auto;
+  gap: 14px; padding: 10px 14px;
+  border-radius: 8px; font-size: 13.5px;
+  align-items: center;
+  background: rgba(255,255,255,0.03);
+  transition: background .18s;
+}
+.dash-row:hover { background: rgba(255,255,255,0.07); }
+.dash-row.is-good { background: rgba(16,185,129,0.1); }
+.dash-row.is-warn { background: rgba(220,76,43,0.16); }
+.dash-row-init {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 700; font-size: 13px;
+}
+.dash-row-name { font-weight: 500; letter-spacing: -0.1px; }
+.dash-row-name small {
+  display: block; font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1px; color: rgba(255,255,255,0.5);
+  margin-top: 3px; text-transform: uppercase;
+}
+.dash-row-time {
+  font-family: var(--mono); font-size: 10.5px;
+  color: rgba(255,255,255,0.45); letter-spacing: 0.6px;
+}
+.dash-row-wb {
+  font-family: var(--serif); font-weight: 700; font-size: 18px;
+  letter-spacing: -0.3px; min-width: 32px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.dash-row.is-good .dash-row-wb { color: #10b981; }
+.dash-row.is-warn .dash-row-wb { color: #fca5a5; }
+
+/* ─── Final CTA ─── */
+.cta-final {
+  text-align: center; padding-top: clamp(96px, 14vh, 160px);
+  padding-bottom: clamp(96px, 14vh, 160px);
+}
+.cta-eye {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 24px;
+}
+.cta-final h2 {
+  font-size: clamp(38px, 5.5vw, 72px); font-weight: 700;
+  letter-spacing: -2px; line-height: 1; max-width: 16ch;
+  margin: 0 auto 28px;
+}
+.cta-final h2 em { font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 500; }
+.cta-final p {
+  font-size: 18px; color: #475569; line-height: 1.55; max-width: 52ch;
+  margin: 0 auto 44px;
+}
+.cta-buttons { display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 28px; border-radius: 100px;
+  font-family: inherit; font-size: 15px; font-weight: 600;
+  text-decoration: none; cursor: pointer;
+  transition: all .22s var(--ease);
+  letter-spacing: -0.05px;
+}
+.btn-primary {
+  background: var(--fg); color: #fff;
+  box-shadow: 0 14px 32px -12px rgba(15,23,42,0.45),
+              inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+.btn-primary:hover {
+  transform: translateY(-2px); background: #1e293b;
+  box-shadow: 0 20px 40px -14px rgba(15,23,42,0.55);
+}
+.btn-secondary {
+  background: #fff; color: var(--fg); border: 1px solid var(--rule);
+}
+.btn-secondary:hover { border-color: var(--fg); transform: translateY(-2px); }
+.btn-arrow { font-family: var(--mono); font-size: 13px; transition: transform .2s; }
+.btn:hover .btn-arrow { transform: translateX(3px); }
 </style>
 </head>
 <body>
-<main class="shell">
-  <div class="eyebrow">● Demo · Tre koncept för Ekonomilabbets landningssida</div>
-  <h1>Tre röda trådar att välja mellan.</h1>
-  <p class="lede">
-    Klicka på ett kort för att se hela landningssidan rendered. Alla tre använder
-    samma elev (Linda, IT-konsult, 22) och samma plattform-funktioner — men
-    presenterar dem på radikalt olika sätt.
-  </p>
 
-  <div class="grid">
-    <a class="card" href="./1-en-vecka.html">
-      <div class="card-num">IDÉ 01 · NARRATIV</div>
-      <h2>En vecka i Lindas liv</h2>
-      <p class="card-desc">
-        Hela sidan är en kalender — måndag till söndag, plus läraren som tar över
-        på måndag morgon. Användaren ser systemet via Lindas ögon, dag för dag.
+<a href="#cta" class="top-cta">
+  Skapa konto
+  <span class="top-cta-arrow">→</span>
+</a>
+
+<main>
+
+  <section class="hero" id="hero">
+    <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+      <source src="./linda.mp4" type="video/mp4">
+    </video>
+    <div class="hero-bg-overlay" aria-hidden="true"></div>
+    <header class="hero-brand">
+      <div class="brand-name">Ekonomilabbet</div>
+      <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
+    </header>
+    <div class="shell">
+      <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
+      <h1>Lärobok blir <em>verklighet</em>.</h1>
+      <p>
+        Ekonomilabbet är en plattform där elever möter privatekonomin innan den
+        möter dem. Tre elever, tre veckor, samma plattform — varje val har en
+        konsekvens, varje konsekvens lär en lektion.
       </p>
-      <div class="preview-strip">
-        <span style="background:#fef3c7"></span>
-        <span style="background:#fef3c7"></span>
-        <span style="background:#fef3c7"></span>
-        <span style="background:#fef3c7"></span>
-        <span style="background:#fef3c7"></span>
-        <span style="background:#fef3c7"></span>
-        <span style="background:#0f172a"></span>
+      <div class="hero-stats">
+        <div><span class="hero-stat-num">3</span><span class="hero-stat-label">elever · 3 veckor</span></div>
+        <div><span class="hero-stat-num">12</span><span class="hero-stat-label">kompetenser</span></div>
+        <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk-domäner</span></div>
       </div>
-      <div class="card-tag">EMOTIONELL · DIREKT BEGRIPLIG</div>
-    </a>
+      <div class="hero-scroll-hint" aria-hidden="true">
+        <span>SCROLLA</span><span class="hero-scroll-line"></span>
+      </div>
+    </div>
+  </section>
 
-    <a class="card" href="./2-tre-lager.html">
-      <div class="card-num">IDÉ 02 · KONCEPTUELL</div>
-      <h2>Tre lager: Liv → Ekonomi → Välmående</h2>
-      <p class="card-desc">
-        Tre parallella spår löper genom hela sidan. Varje val plottas samtidigt i
-        alla tre — visar pedagogiken (Wellbeing över saldo) på 5 sekunder.
+  <section class="intro">
+    <div class="shell">
+      <div class="intro-grid">
+        <div>
+          <div class="intro-eye" data-fx="fade-up">● Om plattformen</div>
+          <h2 data-fx="fade-up" data-fx-delay="80">
+            Eleven möter ekonomin <em>innan</em> den möter dem.
+          </h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            På Ekonomilabbet är privatekonomi inte en bok som ska läsas — det
+            är en vecka som händer. Eleven får en simulerad livssituation,
+            möter konsekvenser i realtid och coachas av <strong>Echo</strong>,
+            en sokratisk AI som ställer frågor istället för att ge svar.
+          </p>
+          <p data-fx="fade-up" data-fx-delay="240">
+            Skatteverkets siffror, kollektivavtalen, faktiska räntor — allt
+            är på riktigt. Lärobokens "ha en buffert" blir
+            <strong>1,8 månader på ditt eget konto</strong>.
+          </p>
+        </div>
+        <div class="intro-pillars" data-fx-stagger>
+          <div class="pillar">
+            <div class="pillar-num">01</div>
+            <div class="pillar-text">
+              <h3>Konsekvensdriven simulering</h3>
+              <p>Varje val flyttar saldot, pensionsavgiften, eller wellbeing-pentagon. Inget är hypotetiskt.</p>
+            </div>
+          </div>
+          <div class="pillar">
+            <div class="pillar-num">02</div>
+            <div class="pillar-text">
+              <h3>Echo · Sokratisk AI-coach</h3>
+              <p>Frågar istället för att svara. "Var det 2&nbsp;000 kr du planerade i 30 år, eller spendera den här månaden?"</p>
+            </div>
+          </div>
+          <div class="pillar">
+            <div class="pillar-num">03</div>
+            <div class="pillar-text">
+              <h3>Wellbeing före saldo</h3>
+              <p>5 dimensioner: ekonomi, hälsa, relation, karriär, fritid. Vägd 25/20/20/15/20. Ekonomi är en av fem axlar — inte den enda.</p>
+            </div>
+          </div>
+          <div class="pillar">
+            <div class="pillar-num">04</div>
+            <div class="pillar-text">
+              <h3>Lärar-vy med hela klassen</h3>
+              <p>Anna ser varje elev, varje val, varje WB-index. Hon ser inte bara siffror — hon ser vem som behöver prat.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="personas">
+    <div class="shell">
+      <header class="personas-head">
+        <div>
+          <div class="personas-eye" data-fx="fade-up">● Träffa eleverna</div>
+          <h2 data-fx="fade-up" data-fx-delay="80">Tre veckor.<br>Tre röster.<br>Hela systemet.</h2>
+        </div>
+        <p class="personas-lede" data-fx="fade-up" data-fx-delay="160">
+          Varje elev har sin vecka, sina val och sin utmaning. Tillsammans
+          går de igenom plattformens alla 12 kompetenser — från lönesamtal
+          till ISK-portfölj.
+        </p>
+      </header>
+
+      <div class="persona-grid">
+
+        <a class="persona-card" href="./4-vecka-djupdyk.html" data-fx="fade-up" data-fx-delay="80">
+          <div class="persona-media">
+            <video autoplay muted loop playsinline preload="metadata">
+              <source src="./linda.mp4" type="video/mp4">
+            </video>
+            <div class="persona-meta">
+              <strong>Linda</strong>
+              <span>· 22 · IT-konsult</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Arbetslivet</div>
+            <div class="persona-pitch">Lönesamtal med AI-Maria, första ISK-spar, krasch-psykologi och en pentagon som tippar.</div>
+            <div class="persona-tags">
+              <span class="persona-tag">Lönespec</span>
+              <span class="persona-tag">Kollektivavtal</span>
+              <span class="persona-tag">Wellbeing</span>
+              <span class="persona-tag">Huvudbok</span>
+            </div>
+            <div class="persona-go">
+              Träffa Linda
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
+        </a>
+
+        <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="160" aria-disabled="true">
+          <div class="persona-media">
+            <div class="persona-media-placeholder"><span>P</span></div>
+            <div class="persona-meta">
+              <strong>Peter</strong>
+              <span>· 38 · småbarnsförälder</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Vardagsekonomin</div>
+            <div class="persona-pitch">Familjebudget, fakturor som trillar in, autogiron att signera och en buffert som testas.</div>
+            <div class="persona-tags">
+              <span class="persona-tag">Huvudbok</span>
+              <span class="persona-tag">Kommande fakturor</span>
+              <span class="persona-tag">EkonomilabbetID</span>
+              <span class="persona-tag">Buffert</span>
+            </div>
+            <div class="persona-go">
+              Träffa Peter
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="240" aria-disabled="true">
+          <div class="persona-media">
+            <div class="persona-media-placeholder"><span>E</span></div>
+            <div class="persona-meta">
+              <strong>Evelina</strong>
+              <span>· 27 · ekonom</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Investering</div>
+            <div class="persona-pitch">Aktiehandel, ISK-portfölj som kraschar och reser sig, och skatten som måste optimeras.</div>
+            <div class="persona-tags">
+              <span class="persona-tag">Portfölj</span>
+              <span class="persona-tag">Marknadsdata</span>
+              <span class="persona-tag">ISK-skatt</span>
+              <span class="persona-tag">Krasch</span>
+            </div>
+            <div class="persona-go">
+              Träffa Evelina
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="teacher">
+    <div class="shell">
+      <div class="teacher-grid">
+        <div>
+          <div class="teacher-eye" data-fx="fade-up">● För läraren</div>
+          <h2 data-fx="fade-up" data-fx-delay="80">
+            Anna ser hela klassen i <em>ett ögonkast</em>.
+          </h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            28 elever, 28 veckor som händer parallellt. Anna ser varje
+            wellbeing-index, varje val, vem som inte loggat in på 5 dagar,
+            vem som tippade på hälsa.
+          </p>
+          <p data-fx="fade-up" data-fx-delay="240">
+            Hon ser inte bara siffror — hon ser <strong>vem som behöver
+            prat</strong>. Och hon ser det innan provet, inte efter.
+          </p>
+        </div>
+        <div class="dash-card" data-fx="fade-left" data-fx-delay="160">
+          <div class="dash-head">
+            <span class="dash-head-class">Klass · SH3A · 28 elever</span>
+            <span class="dash-head-stats">26 gröna · 2 röda</span>
+          </div>
+          <div class="dash-rows">
+            <div class="dash-row is-good">
+              <div class="dash-row-init">L</div>
+              <div class="dash-row-name">Linda Bergström<small>aktiv 19:30 · söndag review</small></div>
+              <div class="dash-row-time">2 MIN</div>
+              <div class="dash-row-wb">72</div>
+            </div>
+            <div class="dash-row is-warn">
+              <div class="dash-row-init">P</div>
+              <div class="dash-row-name">Peter Holm<small>buffert tippar · 5 dgr sen</small></div>
+              <div class="dash-row-time">5 D</div>
+              <div class="dash-row-wb">41</div>
+            </div>
+            <div class="dash-row is-good">
+              <div class="dash-row-init">E</div>
+              <div class="dash-row-name">Evelina Khan<small>aktiv 21:02 · ISK-deklaration</small></div>
+              <div class="dash-row-time">NU</div>
+              <div class="dash-row-wb">88</div>
+            </div>
+            <div class="dash-row">
+              <div class="dash-row-init" style="opacity:0.4;">+</div>
+              <div class="dash-row-name" style="color:rgba(255,255,255,0.5);">25 elever till</div>
+              <div class="dash-row-time"></div>
+              <div class="dash-row-wb" style="color:rgba(255,255,255,0.4); font-size:14px;">⌄</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-final" id="cta">
+    <div class="shell">
+      <div class="cta-eye" data-fx="fade-up">● Privatekonomi som händer</div>
+      <h2 data-fx="fade-up" data-fx-delay="80">
+        Lärobok blir verklighet.<br><em>Boka en demo.</em>
+      </h2>
+      <p data-fx="fade-up" data-fx-delay="160">
+        20 minuter. Vi går igenom Lindas, Peters och Evelinas veckor,
+        visar hur lärarvyn fungerar och svarar på alla frågor.
       </p>
-      <div class="preview-strip">
-        <span style="background:#dbeafe"></span>
-        <span style="background:#fef3c7"></span>
-        <span style="background:#d1fae5"></span>
+      <div class="cta-buttons" data-fx="fade-up" data-fx-delay="240">
+        <a href="#" class="btn btn-primary" onclick="return false;">Skapa konto<span class="btn-arrow">→</span></a>
+        <a href="#" class="btn btn-secondary" onclick="return false;">Boka demo · 20 min<span class="btn-arrow">→</span></a>
       </div>
-      <div class="card-tag">VISUELLT UNIK · KONCEPTUELLT DJUP</div>
-    </a>
+    </div>
+  </section>
 
-    <a class="card" href="./3-sidan-vid-sidan.html">
-      <div class="card-num">IDÉ 03 · KONTRAST</div>
-      <h2>Sidan vid sidan: lärobok vs Ekonomilabbet</h2>
-      <p class="card-desc">
-        Två kolumner som löper hela sidan. Vänster: dagens privatekonomi-undervisning.
-        Höger: vad eleven faktiskt upplever. Direkt jämförelse med status quo.
-      </p>
-      <div class="preview-strip">
-        <span style="background:#e2e8f0; flex:1"></span>
-        <span style="background:#fef3c7; flex:1"></span>
-      </div>
-      <div class="card-tag">KONVERTERAR · MARKNADSFÖRINGS-VINKEL</div>
-    </a>
-  </div>
-
-  <div class="note">
-    <strong>Note:</strong> alla tre demos är statiska HTML — de visar layout, copy
-    och visuella riktningar. Riktiga animationer (GSAP scrub, pinned scroll) görs i
-    React-versionen efter du valt riktning. Ge feedback per kort så går vi vidare med
-    en av dem.
-  </div>
 </main>
+
+<script>
+// ─── AOS-style entrance ──────────────────────────────────────
+(function() {
+  const items = document.querySelectorAll('[data-fx], [data-fx-stagger]');
+  if (!items.length) return;
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.12) {
+        e.target.classList.add('is-in');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.12], rootMargin: '0px 0px -8% 0px' });
+  items.forEach(el => obs.observe(el));
+})();
+
+// ─── Hero-video reveal ───────────────────────────────────────
+(function() {
+  const video = document.getElementById('hero-video');
+  if (!video) return;
+  const reveal = () => {
+    video.classList.add('is-ready');
+    video.play().catch(() => {});
+  };
+  if (video.readyState >= 2) reveal();
+  else {
+    video.addEventListener('loadeddata', reveal, { once: true });
+    video.addEventListener('canplay', reveal, { once: true });
+  }
+})();
+</script>
+
 </body>
 </html>
