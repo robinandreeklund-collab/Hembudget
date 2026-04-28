@@ -475,8 +475,11 @@ section.day { padding: clamp(80px, 12vh, 140px) 24px; }
 .deep-content.is-active { display: block; }
 .deep-track { position: relative; width: 100%; height: 100%; }
 .deep-slide {
-  position: absolute; inset: 0; padding: 56px 64px; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 24px;
+  position: absolute; inset: 0; padding: 64px clamp(40px, 6vw, 96px);
+  overflow-y: auto;
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-rows: auto;
+  gap: clamp(40px, 6vw, 88px); align-items: center;
   transform: translate3d(110%, 4%, 0) scale(0.96) rotate(0.8deg);
   opacity: 0; pointer-events: none;
   transition:
@@ -492,12 +495,179 @@ section.day { padding: clamp(80px, 12vh, 140px) 24px; }
   transform: translate3d(0, 0, 0) scale(1) rotate(0);
   opacity: 1; pointer-events: auto;
 }
-@media (max-width: 700px) { .deep-slide { padding: 36px 24px; } .deep-head { padding: 14px 18px; gap: 12px; } }
-.deep-slide-num { font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px; color: var(--accent); font-weight: 600; }
-.deep-slide h3 { font-size: clamp(26px, 3.4vw, 38px); font-weight: 700; letter-spacing: -0.8px; line-height: 1.1; max-width: 720px; }
-.deep-slide-lede { font-size: 16px; color: #475569; max-width: 600px; line-height: 1.55; }
+@media (max-width: 800px) {
+  .deep-slide {
+    grid-template-columns: 1fr;
+    padding: 36px clamp(20px, 5vw, 36px); gap: 32px;
+    align-items: start;
+  }
+  .deep-head { padding: 14px 18px; gap: 12px; }
+}
+.deep-slide-text { display: flex; flex-direction: column; gap: 22px; }
+.deep-slide-vis  { display: flex; flex-direction: column; gap: 18px; }
+
+.deep-slide-num-wrap {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 8px;
+}
+.deep-slide-num-big {
+  font-family: var(--serif); font-size: clamp(56px, 7vw, 96px);
+  font-weight: 700; letter-spacing: -3px; line-height: 0.9;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.deep-slide-num-meta {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.deep-slide-num-meta strong { color: var(--fg); font-weight: 700; }
+.deep-slide h3 {
+  font-size: clamp(32px, 4vw, 46px); font-weight: 700;
+  letter-spacing: -1.2px; line-height: 1.05; max-width: 14ch;
+}
+.deep-slide-lede { font-size: 17px; color: #475569; max-width: 50ch; line-height: 1.6; }
 .deep-slide em { font-family: var(--serif); font-style: italic; color: var(--fg); }
-.deep-slide-card { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.deep-slide-foot {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted);
+  padding-top: 16px; border-top: 1px solid var(--rule); margin-top: 8px;
+}
+
+/* ─── Slide-specifika visualiseringar ─── */
+/* 1: BRUTTO — money stack */
+.brutto-stack { display: flex; flex-direction: column; gap: 4px; }
+.brutto-row {
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: baseline; padding: 18px 24px;
+  background: #fff; border: 1px solid var(--rule); border-radius: 10px;
+  transition: transform .25s var(--ease), box-shadow .25s;
+}
+.brutto-row:hover { transform: translateX(4px); }
+.brutto-row.is-add { background: rgba(16,185,129,0.04); border-color: rgba(16,185,129,0.2); }
+.brutto-row.is-sum {
+  background: var(--fg); color: #fff; border-color: var(--fg);
+  box-shadow: 0 18px 40px -16px rgba(15,23,42,0.4);
+  margin-top: 8px;
+}
+.brutto-row-label { font-size: 14px; }
+.brutto-row-label small {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted); margin-top: 4px;
+}
+.brutto-row.is-sum .brutto-row-label small { color: var(--gold); }
+.brutto-row.is-sum .brutto-row-label { font-weight: 600; font-size: 15px; }
+.brutto-row-num {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.6px; font-variant-numeric: tabular-nums;
+}
+.brutto-row.is-add .brutto-row-num { color: #047857; font-size: 22px; }
+.brutto-row.is-sum .brutto-row-num { font-size: 32px; color: #fff; }
+
+/* 2: SKATT — money flow */
+.flow {
+  display: flex; flex-direction: column; gap: 0;
+  padding: 28px 24px; background: var(--fg); color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 24px 50px -22px rgba(15,23,42,0.5);
+}
+.flow-row {
+  display: grid; grid-template-columns: 1fr auto;
+  padding: 14px 4px; align-items: center;
+}
+.flow-row + .flow-row { border-top: 1px solid rgba(255,255,255,0.08); }
+.flow-row-label { font-size: 14px; opacity: 0.85; }
+.flow-row-num {
+  font-family: var(--mono); font-weight: 700; font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.flow-row.is-out .flow-row-num { color: #fca5a5; }
+.flow-row.is-out .flow-row-label::before {
+  content: "−"; color: #fca5a5; font-weight: 700;
+  margin-right: 8px;
+}
+.flow-row.is-final {
+  margin-top: 12px; padding-top: 18px;
+  border-top: 1.5px solid rgba(255,255,255,0.18) !important;
+}
+.flow-row.is-final .flow-row-label {
+  font-family: var(--serif); font-size: 18px; font-weight: 600; opacity: 1;
+}
+.flow-row.is-final .flow-row-num {
+  font-family: var(--serif); font-size: 28px; color: var(--gold);
+  letter-spacing: -0.5px;
+}
+.flow-foot {
+  margin-top: 18px; padding: 14px 16px;
+  background: rgba(255,255,255,0.06); border-radius: 8px;
+  font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.78);
+}
+.flow-foot strong { color: var(--gold); font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; }
+
+/* 3: PDF — realistic mockup */
+.pdf-wrap { perspective: 1200px; padding: 20px 0; }
+.pdf-doc {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 32px 36px;
+  aspect-ratio: 5 / 7;
+  box-shadow:
+    0 28px 60px -20px rgba(15,23,42,0.28),
+    0 8px 18px -8px rgba(15,23,42,0.12);
+  transform: rotateY(-4deg) rotateX(2deg);
+  transition: transform .4s var(--ease);
+  display: flex; flex-direction: column; gap: 18px;
+}
+.pdf-wrap:hover .pdf-doc { transform: rotateY(0) rotateX(0); }
+.pdf-doc-head {
+  display: flex; justify-content: space-between; align-items: start;
+  padding-bottom: 14px; border-bottom: 2px solid var(--fg);
+}
+.pdf-doc-org {
+  font-family: var(--serif); font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.pdf-doc-org small {
+  display: block; font-family: 'Inter'; font-size: 9.5px;
+  font-weight: 500; letter-spacing: 0.6px; color: var(--muted);
+  margin-top: 2px;
+}
+.pdf-doc-meta {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.8px;
+  color: var(--muted); text-align: right; line-height: 1.5;
+}
+.pdf-doc-title {
+  font-size: 11px; font-family: var(--mono); letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.pdf-doc-rows { display: flex; flex-direction: column; }
+.pdf-doc-row {
+  display: grid; grid-template-columns: 1fr auto;
+  font-size: 11px; padding: 6px 0;
+  border-bottom: 1px dotted var(--rule);
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.pdf-doc-row.is-net {
+  font-weight: 700; font-size: 13px;
+  border-bottom: 0; padding-top: 10px;
+  border-top: 1.5px solid var(--fg);
+}
+.pdf-doc-row.is-net span:last-child { color: var(--accent); }
+.pdf-doc-foot {
+  margin-top: auto; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: 0.6px; color: var(--muted);
+  text-align: center; padding-top: 14px; border-top: 1px solid var(--rule);
+}
+.pdf-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 18px; background: var(--accent); color: #fff;
+  text-decoration: none; border-radius: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  box-shadow: 0 12px 24px -10px rgba(220,76,43,0.5);
+  transition: transform .2s var(--ease), box-shadow .2s;
+  align-self: flex-start;
+}
+.pdf-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -10px rgba(220,76,43,0.55); }
 .deep-foot {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 28px; border-top: 1px solid var(--rule); background: #fff;
@@ -778,66 +948,118 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     <div class="deep-track">
 
       <article class="deep-slide">
-        <div class="deep-slide-num">SLIDE 01 / 03 · BRUTTO</div>
-        <h3>Bruttolönen är inte vad som syns på kontot.</h3>
-        <p class="deep-slide-lede">
-          Linda förhandlade fram 38 295 kr. Det är vad Visma rapporterar
-          till Skatteverket — men det är inte vad som dyker upp på hennes
-          bankkonto den 25:e. Mellan brutto och netto finns en kedja av
-          avdrag som de flesta vuxna inte kan i detalj.
-        </p>
-        <div class="deep-slide-card">
-          <div class="mockup-eyebrow">LÖNESPEC · Visma · maj 2026</div>
-          <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 16px; font-size:14px;">
-            <span>Grundlön</span><strong style="font-family:var(--mono); text-align:right;">38 295</strong>
-            <span style="color:var(--muted); font-size:13px;">+ OB-ersättning (kvällspass)</span><span style="font-family:var(--mono); text-align:right; color:#065f46;">+ 480</span>
-            <span style="color:var(--muted); font-size:13px;">+ Övertid (fredag)</span><span style="font-family:var(--mono); text-align:right; color:#065f46;">+ 1 050</span>
-            <div style="grid-column: span 2; border-top: 1px solid var(--rule); padding-top: 8px; margin-top: 4px;"></div>
-            <strong>Bruttolön</strong><strong style="font-family:var(--mono); text-align:right;">39 825</strong>
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Brutto</strong>3 av tre</span>
+          </div>
+          <h3>Bruttolönen är inte vad som syns på kontot.</h3>
+          <p class="deep-slide-lede">
+            Linda förhandlade fram 38&nbsp;295 kr. Det är vad Visma
+            rapporterar till Skatteverket — men inte vad som dyker upp
+            den 25:e. OB-ersättning och övertid läggs på, sen kommer skatten.
+          </p>
+          <div class="deep-slide-foot">Lönespec · Visma · maj 2026</div>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Grundlön<small>förhandlat 3,5 % revision</small></div>
+              <div class="brutto-row-num">38 295</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ OB-ersättning<small>kvällspass v.18</small></div>
+              <div class="brutto-row-num">+ 480</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Övertid<small>fredag 17–20</small></div>
+              <div class="brutto-row-num">+ 1 050</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Bruttolön<small>innan skatt</small></div>
+              <div class="brutto-row-num">39 825</div>
+            </div>
           </div>
         </div>
       </article>
 
       <article class="deep-slide">
-        <div class="deep-slide-num">SLIDE 02 / 03 · SKATT &amp; AVGIFTER</div>
-        <h3>30,2 % försvinner innan kontot ser dem.</h3>
-        <p class="deep-slide-lede">
-          A-skatt enligt Lindas tabell (Stockholm, kommunalskatt 30,02 %),
-          allmän pensionsavgift 7 %. Det är det <em>hon</em> betalar.
-          Visma betalar dessutom arbetsgivaravgift 31,42 % ovanpå — det
-          syns på lönespecen som "social cost", men dras inte från Linda.
-        </p>
-        <div class="deep-slide-card">
-          <div class="mockup-eyebrow">AVDRAG &amp; SKATTER · maj 2026</div>
-          <div style="display:grid; grid-template-columns: 1fr auto; gap:8px 16px; font-size:14px;">
-            <span>Bruttolön</span><strong style="font-family:var(--mono); text-align:right;">39 825</strong>
-            <span style="color:#991b1b; font-size:13px;">− Preliminär A-skatt (28 %)</span><span style="font-family:var(--mono); text-align:right; color:#991b1b;">− 11 151</span>
-            <span style="color:#991b1b; font-size:13px;">− Allmän pensionsavgift (7 %)</span><span style="font-family:var(--mono); text-align:right; color:#991b1b;">− 879</span>
-            <div style="grid-column: span 2; border-top: 1px solid var(--rule); padding-top: 8px; margin-top: 4px;"></div>
-            <strong>Netto till Lindas konto</strong><strong style="font-family:var(--mono); text-align:right; color:#065f46;">27 795</strong>
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Skatt &amp; avgifter</strong>av tre</span>
           </div>
-          <div style="margin-top:14px; padding:10px 14px; background:#f1f5f9; border-radius:6px; font-size:13px; color:#475569;">
-            <strong>Vismas kostnad ovanpå:</strong> arbetsgivaravgift 12 512 kr (31,42 %). Linda kostar Visma <strong>52 337 kr/mån</strong> totalt.
+          <h3>30,2 % försvinner innan kontot ser dem.</h3>
+          <p class="deep-slide-lede">
+            A-skatt enligt Lindas tabell (Stockholm, kommunalskatt 30,02 %),
+            allmän pensionsavgift 7 %. Visma betalar dessutom 31,42 %
+            arbetsgivaravgift <em>ovanpå</em> — det syns men dras inte
+            från henne.
+          </p>
+          <div class="deep-slide-foot">Avdragsspecifikation · maj 2026</div>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Bruttolön</div>
+              <div class="flow-row-num">39 825</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Preliminär A-skatt · 28 %</div>
+              <div class="flow-row-num">11 151</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Allmän pensionsavgift · 7 %</div>
+              <div class="flow-row-num">879</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Netto till Lindas konto</div>
+              <div class="flow-row-num">27 795</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Vismas totala kostnad:</strong> 52 337 kr — Linda får
+              27 795, skatt + arbetsgivaravgift äter 24 542. Hon ser hela
+              kedjan. Lärobok blir verklighet.
+            </div>
           </div>
         </div>
       </article>
 
       <article class="deep-slide">
-        <div class="deep-slide-num">SLIDE 03 / 03 · PDF-EXPORT</div>
-        <h3>Lönespecen är en riktig PDF Linda kan hämta.</h3>
-        <p class="deep-slide-lede">
-          Inte en grafisk illustration. Ekonomilabbet bygger en faktisk
-          PDF varje månad — med organisationsnummer, OCR, månadsperiod,
-          ackumulerade årssummor. Samma format som hon möter i arbetslivet.
-          Hon lär sig läsa lönespec genom att <em>ha en</em>.
-        </p>
-        <div class="deep-slide-card" style="background: linear-gradient(180deg, #fafaf9 0%, #fff 100%);">
-          <div style="display:flex; gap:18px; align-items:center;">
-            <div style="width:64px; height:80px; border:1px solid var(--rule); border-radius:4px; background:#fff; display:grid; place-items:center; font-family:var(--mono); font-size:11px; color:var(--muted);">PDF</div>
-            <div style="flex:1;">
-              <div style="font-weight:600;">lonespec_linda_bergstrom_2026-05.pdf</div>
-              <div style="font-size:13px; color:var(--muted); margin-top:4px;">Genererad av Ekonomilabbet · A4 · 2 sidor · 18 KB</div>
-              <div style="margin-top:10px; font-family:var(--mono); font-size:11px; letter-spacing:1px; color:var(--accent);">→ HÄMTA</div>
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>PDF-export</strong>av tre</span>
+          </div>
+          <h3>Lönespecen är en riktig PDF — inte en illustration.</h3>
+          <p class="deep-slide-lede">
+            Ekonomilabbet bygger en faktisk PDF varje månad: org-nummer,
+            OCR, månadsperiod, ackumulerade årssummor. Samma format som
+            hon möter i arbetslivet. Hon lär sig läsa lönespec genom att
+            <em>ha en</em>.
+          </p>
+          <a href="#" class="pdf-cta" onclick="return false;">
+            Hämta PDF →
+          </a>
+          <div class="deep-slide-foot">A4 · 2 sidor · 18 KB · genererad av reportlab</div>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="pdf-wrap">
+            <div class="pdf-doc">
+              <div class="pdf-doc-head">
+                <div class="pdf-doc-org">Visma AB<small>556063-3837 · STOCKHOLM</small></div>
+                <div class="pdf-doc-meta">LÖNESPEC<br>2026-05<br>OCR 4587 12</div>
+              </div>
+              <div class="pdf-doc-title">Linda Bergström · IT-konsult</div>
+              <div class="pdf-doc-rows">
+                <div class="pdf-doc-row"><span>Grundlön</span><span>38 295</span></div>
+                <div class="pdf-doc-row"><span>OB-ersättning</span><span>480</span></div>
+                <div class="pdf-doc-row"><span>Övertid · 3 h</span><span>1 050</span></div>
+                <div class="pdf-doc-row"><span>− A-skatt 28 %</span><span>11 151</span></div>
+                <div class="pdf-doc-row"><span>− Pensionsavg 7 %</span><span>879</span></div>
+                <div class="pdf-doc-row is-net"><span>NETTO</span><span>27 795</span></div>
+              </div>
+              <div class="pdf-doc-foot">Genererad av Ekonomilabbet · sida 1 av 2</div>
             </div>
           </div>
         </div>
