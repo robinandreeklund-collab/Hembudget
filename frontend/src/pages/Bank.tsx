@@ -56,6 +56,21 @@ export default function Bank() {
   // Sign-vy bara aktiv när URL:en innehåller ?token=...
   const isSignView = searchParams.get("sign") === "1" || !!signToken;
 
+  // Sign-vy renderas FÖRST — innan vi rör några auth-skyddade endpoints.
+  // Telefonen som scannar QR är typiskt INTE inloggad, så vi måste
+  // hoppa hela /bank/me-fetchen och bara visa PIN-formuläret.
+  if (isSignView && signToken) {
+    return (
+      <BankShell mobile>
+        <SignConfirmView token={signToken} />
+      </BankShell>
+    );
+  }
+
+  return <BankAuthenticatedShell />;
+}
+
+function BankAuthenticatedShell() {
   const meQ = useQuery({
     queryKey: ["bank-me"],
     queryFn: () => api<BankMeOut>("/bank/me"),
@@ -98,15 +113,6 @@ export default function Bank() {
             Banken är inte tillgänglig: {String(meQ.error)}
           </div>
         </Card>
-      </BankShell>
-    );
-  }
-
-  // Sign-vy (mobilen) — eleven matar PIN för en specifik token
-  if (isSignView && signToken) {
-    return (
-      <BankShell mobile>
-        <SignConfirmView token={signToken} />
       </BankShell>
     );
   }
