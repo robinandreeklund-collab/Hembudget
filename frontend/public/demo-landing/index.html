@@ -81,11 +81,32 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 [data-fx-stagger].is-in > *:nth-child(3) { transition-delay: 240ms; }
 [data-fx-stagger].is-in > *:nth-child(4) { transition-delay: 360ms; }
 
-/* ─── Hero (rent, ingen video) ─── */
+/* ─── Hero scroll-pil ─── */
+.hero-down {
+  position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex; flex-direction: column; align-items: center; gap: 8px;
+  text-decoration: none; color: var(--muted);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 2px;
+  text-transform: uppercase; font-weight: 600;
+  padding: 6px;
+  transition: color .2s var(--ease);
+}
+.hero-down:hover { color: var(--fg); }
+.hero-down-arrow {
+  display: inline-block; font-size: 16px; line-height: 1;
+  animation: hero-bounce 2.4s ease-in-out infinite;
+}
+@keyframes hero-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50%      { transform: translateY(6px); opacity: 1; }
+}
+
+/* ─── Hero (text + 3 cards på första skärmen) ─── */
 .hero {
-  min-height: 88vh;
-  display: flex; align-items: center;
-  padding: 18vh clamp(24px, 6vw, 80px) 12vh clamp(32px, 8vw, 120px);
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  padding: 100px clamp(24px, 6vw, 80px) 88px clamp(32px, 8vw, 120px);
   position: relative; overflow: hidden;
   background: var(--bg);
 }
@@ -108,9 +129,14 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   z-index: 0;
   opacity: 0.5;
 }
-.hero .shell { position: relative; z-index: 2; max-width: 720px; margin: 0; }
+.hero-shell { position: relative; z-index: 2; max-width: 720px; margin: 0; flex: 0 0 auto; }
+.hero-personas {
+  position: relative; z-index: 2;
+  margin-top: clamp(32px, 5vh, 56px);
+  flex: 0 0 auto;
+}
 .hero-brand {
-  position: absolute; top: 32px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
   z-index: 4; text-align: center;
 }
 .brand-name {
@@ -134,23 +160,23 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
 .hero h1 {
-  font-size: clamp(46px, 7vw, 88px);
-  letter-spacing: -2.4px; line-height: 0.96;
-  max-width: 14ch; margin-bottom: 28px;
+  font-size: clamp(40px, 5.5vw, 70px);
+  letter-spacing: -2px; line-height: 0.98;
+  max-width: 14ch; margin-bottom: 22px;
 }
 .hero h1 em {
   color: var(--accent); font-style: italic;
   font-family: var(--serif); font-weight: 500;
 }
 .hero p {
-  font-size: 19px; max-width: 560px; font-weight: 500;
-  color: #1e293b; line-height: 1.55; margin-bottom: 36px;
+  font-size: 17px; max-width: 540px; font-weight: 500;
+  color: #1e293b; line-height: 1.55; margin-bottom: 28px;
 }
 .hero-stats {
-  display: flex; gap: 44px; padding-top: 32px;
+  display: flex; gap: 36px; padding-top: 24px;
   border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap;
 }
-.hero-stat-num { display: block; font-size: 36px; font-weight: 700; letter-spacing: -0.8px; }
+.hero-stat-num { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.6px; }
 .hero-stat-label {
   font-size: 11px; color: var(--muted); font-family: var(--mono);
   letter-spacing: 1.2px; text-transform: uppercase;
@@ -291,11 +317,12 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   backdrop-filter: blur(8px);
 }
 
-/* Media (kvadratisk för tightare grid) */
+/* Media — i hero är de bredare (16:10), i fristående grid kvadrat */
 .persona-media {
-  position: relative; aspect-ratio: 1 / 1;
+  position: relative; aspect-ratio: 16 / 10;
   background: #0f172a; overflow: hidden;
 }
+.hero-personas .persona-media { aspect-ratio: 16 / 10; }
 .persona-media video, .persona-media img {
   position: absolute; inset: 0;
   width: 100%; height: 100%; object-fit: cover;
@@ -340,9 +367,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 /* Body — tight */
 .persona-body {
-  padding: 18px 20px 20px;
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px 18px 18px;
+  display: flex; flex-direction: column; gap: 10px;
 }
+.hero-personas .persona-body { padding: 14px 16px 16px; gap: 8px; }
+.hero-personas .persona-pitch { font-size: 13.5px; }
+.hero-personas .persona-go { padding-top: 10px; font-size: 10.5px; }
+.hero-personas .persona-media-placeholder span { font-size: 72px; }
 .persona-theme {
   font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
   text-transform: uppercase; color: var(--accent); font-weight: 700;
@@ -532,12 +563,12 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
       <div class="brand-name">Ekonomilabbet</div>
       <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
     </header>
-    <div class="shell">
+
+    <div class="hero-shell">
       <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
       <h1>Lärobok blir <em>verklighet</em>.</h1>
       <p>
-        Ekonomilabbet är en plattform där elever möter privatekonomin innan den
-        möter dem. Tre elever, tre veckor, samma plattform — varje val har en
+        Tre elever, tre veckor, samma plattform — varje val har en
         konsekvens, varje konsekvens lär en lektion.
       </p>
       <div class="hero-stats">
@@ -545,13 +576,75 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
         <div><span class="hero-stat-num">12</span><span class="hero-stat-label">kompetenser</span></div>
         <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk-domäner</span></div>
       </div>
-      <div class="hero-scroll-hint" aria-hidden="true">
-        <span>SCROLLA</span><span class="hero-scroll-line"></span>
+    </div>
+
+    <div class="hero-personas">
+      <div class="persona-grid">
+
+        <a class="persona-card" href="./4-vecka-djupdyk.html" data-fx="fade-up" data-fx-delay="80">
+          <div class="persona-media">
+            <div class="persona-media-placeholder"><span>L</span></div>
+            <div class="persona-meta">
+              <strong>Linda</strong>
+              <span>22 · IT-konsult</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Arbetslivet</div>
+            <div class="persona-pitch">Lönesamtal, pension som växer och pentagon som tippar.</div>
+            <div class="persona-go">
+              Träffa Linda
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
+        </a>
+
+        <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="160" aria-disabled="true">
+          <div class="persona-media">
+            <div class="persona-media-placeholder"><span>P</span></div>
+            <div class="persona-meta">
+              <strong>Peter</strong>
+              <span>38 · småbarnsförälder</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Vardagsekonomin</div>
+            <div class="persona-pitch">Familjebudget, fakturor, autogiron och buffert som testas.</div>
+            <div class="persona-go">
+              Träffa Peter
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="240" aria-disabled="true">
+          <div class="persona-media">
+            <div class="persona-media-placeholder"><span>E</span></div>
+            <div class="persona-meta">
+              <strong>Evelina</strong>
+              <span>27 · ekonom</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Investering</div>
+            <div class="persona-pitch">Aktiehandel, ISK-portfölj och skatten som måste optimeras.</div>
+            <div class="persona-go">
+              Träffa Evelina
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
+
+    <a class="hero-down" href="#intro" aria-label="Scrolla till om plattformen">
+      <span class="hero-down-label">VAD ÄR EKONOMILABBET?</span>
+      <span class="hero-down-arrow">↓</span>
+    </a>
   </section>
 
-  <section class="intro">
+  <section class="intro" id="intro">
     <div class="shell">
       <div class="intro-grid">
         <div>
@@ -601,100 +694,6 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="personas">
-    <div class="shell">
-      <header class="personas-head">
-        <div>
-          <div class="personas-eye" data-fx="fade-up">● Träffa eleverna</div>
-          <h2 data-fx="fade-up" data-fx-delay="80">Tre veckor.<br>Tre röster.<br>Hela systemet.</h2>
-        </div>
-        <p class="personas-lede" data-fx="fade-up" data-fx-delay="160">
-          Varje elev har sin vecka, sina val och sin utmaning. Tillsammans
-          går de igenom plattformens alla 12 kompetenser — från lönesamtal
-          till ISK-portfölj.
-        </p>
-      </header>
-
-      <div class="persona-grid">
-
-        <a class="persona-card" href="./4-vecka-djupdyk.html" data-fx="fade-up" data-fx-delay="80">
-          <div class="persona-media">
-            <video autoplay muted loop playsinline preload="metadata">
-              <source src="./linda.mp4" type="video/mp4">
-            </video>
-            <div class="persona-meta">
-              <strong>Linda</strong>
-              <span>· 22 · IT-konsult</span>
-            </div>
-          </div>
-          <div class="persona-body">
-            <div class="persona-theme">Arbetslivet</div>
-            <div class="persona-pitch">Lönesamtal med AI-Maria, kollektivavtalets revision, pensionsavgift som växer och pentagon som tippar när tandläkaren ringer.</div>
-            <div class="persona-tags">
-              <span class="persona-tag">Lönespec</span>
-              <span class="persona-tag">Kollektivavtal</span>
-              <span class="persona-tag">Pension</span>
-              <span class="persona-tag">Wellbeing</span>
-            </div>
-            <div class="persona-go">
-              Träffa Linda
-              <span class="persona-go-arrow">→</span>
-            </div>
-          </div>
-        </a>
-
-        <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="160" aria-disabled="true">
-          <div class="persona-media">
-            <div class="persona-media-placeholder"><span>P</span></div>
-            <div class="persona-meta">
-              <strong>Peter</strong>
-              <span>· 38 · småbarnsförälder</span>
-            </div>
-          </div>
-          <div class="persona-body">
-            <div class="persona-theme">Vardagsekonomin</div>
-            <div class="persona-pitch">Familjebudget, fakturor som trillar in, autogiron att signera och en buffert som testas.</div>
-            <div class="persona-tags">
-              <span class="persona-tag">Huvudbok</span>
-              <span class="persona-tag">Kommande fakturor</span>
-              <span class="persona-tag">EkonomilabbetID</span>
-              <span class="persona-tag">Buffert</span>
-            </div>
-            <div class="persona-go">
-              Träffa Peter
-              <span class="persona-go-arrow">→</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="240" aria-disabled="true">
-          <div class="persona-media">
-            <div class="persona-media-placeholder"><span>E</span></div>
-            <div class="persona-meta">
-              <strong>Evelina</strong>
-              <span>· 27 · ekonom</span>
-            </div>
-          </div>
-          <div class="persona-body">
-            <div class="persona-theme">Investering</div>
-            <div class="persona-pitch">Aktiehandel, ISK-portfölj som kraschar och reser sig, och skatten som måste optimeras.</div>
-            <div class="persona-tags">
-              <span class="persona-tag">Portfölj</span>
-              <span class="persona-tag">Marknadsdata</span>
-              <span class="persona-tag">ISK-skatt</span>
-              <span class="persona-tag">Krasch</span>
-            </div>
-            <div class="persona-go">
-              Träffa Evelina
-              <span class="persona-go-arrow">→</span>
-            </div>
-          </div>
-        </div>
-
       </div>
     </div>
   </section>
