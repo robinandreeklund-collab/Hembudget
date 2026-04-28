@@ -419,12 +419,12 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   border-radius: 4px;
 }
 
-/* Subtil ambient-puls när inget är hovrat */
-.figures:not(:hover) .figure {
+/* Subtil ambient-puls när inget är hovrat (sätter inte opacity, bara scale) */
+.figures:not(:hover) .figure[data-breathe] {
   animation: figure-breath 6s ease-in-out infinite;
 }
-.figures:not(:hover) .figure:nth-child(2) { animation-delay: -2s; }
-.figures:not(:hover) .figure:nth-child(3) { animation-delay: -4s; }
+.figures:not(:hover) .figure[data-breathe]:nth-child(2) { animation-delay: -2s; }
+.figures:not(:hover) .figure[data-breathe]:nth-child(3) { animation-delay: -4s; }
 @keyframes figure-breath {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.005); }
