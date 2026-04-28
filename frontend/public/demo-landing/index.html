@@ -102,11 +102,11 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   50%      { transform: translateY(6px); opacity: 1; }
 }
 
-/* ─── Hero (text + 3 cards på första skärmen) ─── */
+/* ─── Hero (text + 3 transparenta cards på första skärmen) ─── */
 .hero {
   min-height: 100vh;
   display: flex; flex-direction: column;
-  padding: 100px clamp(24px, 6vw, 80px) 88px clamp(32px, 8vw, 120px);
+  padding: 100px clamp(24px, 6vw, 80px) 0 clamp(32px, 8vw, 120px);
   position: relative; overflow: hidden;
   background: var(--bg);
 }
@@ -129,10 +129,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   z-index: 0;
   opacity: 0.5;
 }
-.hero-shell { position: relative; z-index: 2; max-width: 720px; margin: 0; flex: 0 0 auto; }
+.hero-shell { position: relative; z-index: 2; max-width: 720px; margin: 0; flex: 1 0 auto; }
 .hero-personas {
   position: relative; z-index: 2;
-  margin-top: clamp(32px, 5vh, 56px);
+  margin: clamp(28px, 4vh, 48px) 0 0;
+  /* sticka ut till hero-kanten — vi flexar margin-left/right negativt */
+  margin-left: calc(-1 * clamp(32px, 8vw, 120px));
+  margin-right: calc(-1 * clamp(24px, 6vw, 80px));
   flex: 0 0 auto;
 }
 .hero-brand {
@@ -275,148 +278,79 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 .persona-grid {
   display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+  gap: 0;
+  border-top: 1px solid rgba(15,23,42,0.6);
 }
-@media (max-width: 1000px) { .persona-grid { grid-template-columns: 1fr; gap: 12px; } }
+@media (max-width: 800px) { .persona-grid { grid-template-columns: 1fr; } }
 
-/* Tighter card: media + body i en kompakt enhet */
+/* Transparent kort: bara tunn ram, label + pil centrerat,
+   videon från hero syns igenom. */
 .persona-card {
+  position: relative;
   display: flex; flex-direction: column;
-  background: #fff; border-radius: 14px; overflow: hidden;
-  text-decoration: none; color: inherit;
-  position: relative; isolation: isolate;
-  box-shadow:
-    0 0 0 1px var(--rule),
-    0 1px 2px rgba(15,23,42,0.04);
-  transition:
-    transform .35s cubic-bezier(.34, 1.18, .64, 1),
-    box-shadow .35s var(--ease);
+  align-items: center; justify-content: center; gap: 16px;
+  aspect-ratio: 5 / 3;
+  text-decoration: none; color: var(--fg);
+  background: transparent;
+  border-right: 1px solid rgba(15,23,42,0.6);
+  border-bottom: 1px solid rgba(15,23,42,0.6);
+  transition: background .3s var(--ease);
+  overflow: hidden;
+  isolation: isolate;
+}
+.persona-card:first-child { border-left: 1px solid rgba(15,23,42,0.6); }
+@media (max-width: 800px) {
+  .persona-card { aspect-ratio: auto; min-height: 200px; border-left: 1px solid rgba(15,23,42,0.6); }
+  .persona-card + .persona-card { border-top: 0; }
 }
 .persona-card:hover:not(.is-soon) {
-  transform: translateY(-6px);
-  box-shadow:
-    0 0 0 1px var(--fg),
-    0 28px 56px -24px rgba(15,23,42,0.28),
-    0 8px 18px -8px rgba(15,23,42,0.1);
+  background: rgba(15,23,42,0.04);
 }
 .persona-card::before {
-  content: ""; position: absolute;
-  top: 0; left: 0; height: 2px; width: 0;
-  background: var(--accent); z-index: 4;
-  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 0%, transparent 70%, rgba(250,250,249,0.4) 100%);
+  z-index: -1; pointer-events: none;
 }
-.persona-card:hover:not(.is-soon)::before { width: 100%; }
 .persona-card.is-soon { cursor: default; }
 .persona-card.is-soon::after {
   content: "KOMMER SNART";
-  position: absolute; top: 14px; right: 14px; z-index: 3;
-  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  position: absolute; top: 14px; right: 14px; z-index: 2;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
   letter-spacing: 1.6px;
-  background: rgba(15,23,42,0.92); color: #fff;
-  padding: 5px 10px; border-radius: 100px;
-  backdrop-filter: blur(8px);
-}
-
-/* Media — i hero är de bredare (16:10), i fristående grid kvadrat */
-.persona-media {
-  position: relative; aspect-ratio: 16 / 10;
-  background: #0f172a; overflow: hidden;
-}
-.hero-personas .persona-media { aspect-ratio: 16 / 10; }
-.persona-media video, .persona-media img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%; object-fit: cover;
-  transition: transform .8s cubic-bezier(.65, 0, .35, 1);
-}
-.persona-card:hover:not(.is-soon) .persona-media video,
-.persona-card:hover:not(.is-soon) .persona-media img {
-  transform: scale(1.06);
-}
-/* Subtil mörk gradient nederst för text-läsbarhet */
-.persona-media::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(180deg, transparent 50%, rgba(15,23,42,0.65) 100%);
-  z-index: 1;
-}
-.persona-media-placeholder {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  background:
-    radial-gradient(ellipse at 30% 30%, rgba(220,76,43,0.12) 0%, transparent 60%),
-    linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  color: rgba(255,255,255,0.3);
-}
-.persona-media-placeholder span {
-  font-size: 96px; font-family: var(--serif); font-weight: 700;
-  color: rgba(255,255,255,0.14); letter-spacing: -3px;
-  line-height: 1;
-}
-
-.persona-meta {
-  position: absolute; bottom: 16px; left: 18px; z-index: 2;
-  display: flex; flex-direction: column; gap: 2px;
-  color: #fff;
-}
-.persona-meta strong {
-  font-family: var(--serif); font-size: 22px; font-weight: 700;
-  letter-spacing: -0.5px; line-height: 1;
-}
-.persona-meta span {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px;
-  text-transform: uppercase; color: rgba(255,255,255,0.78);
-}
-
-/* Body — tight */
-.persona-body {
-  padding: 16px 18px 18px;
-  display: flex; flex-direction: column; gap: 10px;
-}
-.hero-personas .persona-body { padding: 14px 16px 16px; gap: 8px; }
-.hero-personas .persona-pitch { font-size: 13.5px; }
-.hero-personas .persona-go { padding-top: 10px; font-size: 10.5px; }
-.hero-personas .persona-media-placeholder span { font-size: 72px; }
-.persona-theme {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
-  text-transform: uppercase; color: var(--accent); font-weight: 700;
-}
-.persona-pitch {
-  font-size: 14.5px; line-height: 1.45; color: #334155;
-  font-weight: 500; letter-spacing: -0.1px;
-}
-.persona-tags {
-  display: flex; flex-wrap: wrap; gap: 4px;
-  padding-top: 4px;
-}
-.persona-tag {
-  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  background: rgba(15,23,42,0.85); color: #fff;
   padding: 4px 9px; border-radius: 100px;
-  background: #f1f5f9; color: var(--muted);
-  letter-spacing: 0.4px;
-  transition: all .2s var(--ease);
+  backdrop-filter: blur(6px);
 }
-.persona-card:hover:not(.is-soon) .persona-tag {
-  background: rgba(220,76,43,0.08);
-  color: var(--accent);
-}
-.persona-go {
-  margin-top: 4px; padding-top: 14px;
-  display: flex; justify-content: space-between; align-items: center;
-  border-top: 1px solid var(--rule);
-  font-family: var(--mono); font-size: 11px; font-weight: 700;
-  letter-spacing: 1.5px; text-transform: uppercase;
-  color: var(--fg);
-}
-.persona-go-arrow {
-  display: inline-block; transition: transform .25s cubic-bezier(.34, 1.4, .64, 1);
-}
-.persona-card:hover:not(.is-soon) .persona-go-arrow { transform: translateX(5px); }
-.persona-card.is-soon .persona-go { color: var(--muted); }
 
-/* Förbättrad entrance med rotate + scale */
+.persona-card-label {
+  font-family: var(--serif);
+  font-size: clamp(18px, 1.8vw, 24px);
+  font-weight: 600; letter-spacing: -0.4px;
+  color: var(--fg);
+  position: relative; z-index: 1;
+}
+.persona-card-arrow {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: 1px solid rgba(15,23,42,0.55);
+  border-radius: 50%;
+  font-size: 14px; color: var(--fg);
+  transition: all .3s cubic-bezier(.34, 1.4, .64, 1);
+  position: relative; z-index: 1;
+  background: rgba(250,250,249,0.5);
+  backdrop-filter: blur(4px);
+}
+.persona-card:hover:not(.is-soon) .persona-card-arrow {
+  background: var(--fg); color: #fff; border-color: var(--fg);
+  transform: translateY(4px);
+}
+
+/* Entrance */
 .persona-card[data-fx] {
-  transform: translate3d(0, 36px, 0) scale(0.96);
+  transform: translate3d(0, 24px, 0);
 }
 .persona-card[data-fx].is-in {
-  transform: translate3d(0, 0, 0) scale(1);
+  transform: translate3d(0, 0, 0);
 }
 
 /* ─── Lärar-perspektiv (mörk) ─── */
@@ -580,68 +514,20 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
     <div class="hero-personas">
       <div class="persona-grid">
-
         <a class="persona-card" href="./4-vecka-djupdyk.html" data-fx="fade-up" data-fx-delay="80">
-          <div class="persona-media">
-            <div class="persona-media-placeholder"><span>L</span></div>
-            <div class="persona-meta">
-              <strong>Linda</strong>
-              <span>22 · IT-konsult</span>
-            </div>
-          </div>
-          <div class="persona-body">
-            <div class="persona-theme">Arbetslivet</div>
-            <div class="persona-pitch">Lönesamtal, pension som växer och pentagon som tippar.</div>
-            <div class="persona-go">
-              Träffa Linda
-              <span class="persona-go-arrow">→</span>
-            </div>
-          </div>
+          <span class="persona-card-label">Träffa Linda</span>
+          <span class="persona-card-arrow">↓</span>
         </a>
-
         <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="160" aria-disabled="true">
-          <div class="persona-media">
-            <div class="persona-media-placeholder"><span>P</span></div>
-            <div class="persona-meta">
-              <strong>Peter</strong>
-              <span>38 · småbarnsförälder</span>
-            </div>
-          </div>
-          <div class="persona-body">
-            <div class="persona-theme">Vardagsekonomin</div>
-            <div class="persona-pitch">Familjebudget, fakturor, autogiron och buffert som testas.</div>
-            <div class="persona-go">
-              Träffa Peter
-              <span class="persona-go-arrow">→</span>
-            </div>
-          </div>
+          <span class="persona-card-label">Träffa Peter</span>
+          <span class="persona-card-arrow">↓</span>
         </div>
-
         <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="240" aria-disabled="true">
-          <div class="persona-media">
-            <div class="persona-media-placeholder"><span>E</span></div>
-            <div class="persona-meta">
-              <strong>Evelina</strong>
-              <span>27 · ekonom</span>
-            </div>
-          </div>
-          <div class="persona-body">
-            <div class="persona-theme">Investering</div>
-            <div class="persona-pitch">Aktiehandel, ISK-portfölj och skatten som måste optimeras.</div>
-            <div class="persona-go">
-              Träffa Evelina
-              <span class="persona-go-arrow">→</span>
-            </div>
-          </div>
+          <span class="persona-card-label">Träffa Evelina</span>
+          <span class="persona-card-arrow">↓</span>
         </div>
-
       </div>
     </div>
-
-    <a class="hero-down" href="#intro" aria-label="Scrolla till om plattformen">
-      <span class="hero-down-label">VAD ÄR EKONOMILABBET?</span>
-      <span class="hero-down-arrow">↓</span>
-    </a>
   </section>
 
   <section class="intro" id="intro">
