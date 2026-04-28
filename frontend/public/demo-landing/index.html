@@ -278,79 +278,129 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 .persona-grid {
   display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 0;
-  border-top: 1px solid rgba(15,23,42,0.6);
+  gap: 14px;
 }
-@media (max-width: 800px) { .persona-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .persona-grid { grid-template-columns: 1fr; gap: 12px; } }
 
-/* Transparent kort: bara tunn ram, label + pil centrerat,
-   videon från hero syns igenom. */
+/* Card med video-media + rich body */
 .persona-card {
   position: relative;
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 16px;
-  aspect-ratio: 5 / 3;
-  text-decoration: none; color: var(--fg);
-  background: transparent;
-  border-right: 1px solid rgba(15,23,42,0.6);
-  border-bottom: 1px solid rgba(15,23,42,0.6);
-  transition: background .3s var(--ease);
-  overflow: hidden;
+  background: #fff; border-radius: 14px; overflow: hidden;
+  text-decoration: none; color: inherit;
   isolation: isolate;
-}
-.persona-card:first-child { border-left: 1px solid rgba(15,23,42,0.6); }
-@media (max-width: 800px) {
-  .persona-card { aspect-ratio: auto; min-height: 200px; border-left: 1px solid rgba(15,23,42,0.6); }
-  .persona-card + .persona-card { border-top: 0; }
+  box-shadow:
+    0 0 0 1px var(--rule),
+    0 1px 2px rgba(15,23,42,0.04);
+  transition:
+    transform .35s cubic-bezier(.34, 1.18, .64, 1),
+    box-shadow .35s var(--ease);
 }
 .persona-card:hover:not(.is-soon) {
-  background: rgba(15,23,42,0.04);
+  transform: translateY(-6px);
+  box-shadow:
+    0 0 0 1px var(--fg),
+    0 28px 56px -24px rgba(15,23,42,0.28),
+    0 8px 18px -8px rgba(15,23,42,0.1);
 }
 .persona-card::before {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 0%, transparent 70%, rgba(250,250,249,0.4) 100%);
-  z-index: -1; pointer-events: none;
+  content: ""; position: absolute;
+  top: 0; left: 0; height: 2px; width: 0;
+  background: var(--accent); z-index: 4;
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
 }
+.persona-card:hover:not(.is-soon)::before { width: 100%; }
 .persona-card.is-soon { cursor: default; }
 .persona-card.is-soon::after {
   content: "KOMMER SNART";
-  position: absolute; top: 14px; right: 14px; z-index: 2;
-  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  position: absolute; top: 14px; right: 14px; z-index: 3;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
   letter-spacing: 1.6px;
-  background: rgba(15,23,42,0.85); color: #fff;
-  padding: 4px 9px; border-radius: 100px;
-  backdrop-filter: blur(6px);
+  background: rgba(15,23,42,0.92); color: #fff;
+  padding: 5px 10px; border-radius: 100px;
+  backdrop-filter: blur(8px);
 }
 
-.persona-card-label {
-  font-family: var(--serif);
-  font-size: clamp(18px, 1.8vw, 24px);
-  font-weight: 600; letter-spacing: -0.4px;
+.persona-media {
+  position: relative; aspect-ratio: 16 / 10;
+  background: #0f172a; overflow: hidden;
+}
+.persona-media video, .persona-media img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+  transition: transform .8s cubic-bezier(.65, 0, .35, 1);
+}
+.persona-card:hover:not(.is-soon) .persona-media video,
+.persona-card:hover:not(.is-soon) .persona-media img {
+  transform: scale(1.06);
+}
+.persona-media::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 45%, rgba(15,23,42,0.7) 100%);
+  z-index: 1;
+}
+
+.persona-meta {
+  position: absolute; bottom: 16px; left: 18px; z-index: 2;
+  display: flex; flex-direction: column; gap: 2px; color: #fff;
+}
+.persona-meta strong {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1;
+}
+.persona-meta span {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.2px;
+  text-transform: uppercase; color: rgba(255,255,255,0.78);
+}
+
+.persona-body {
+  padding: 18px 20px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.persona-theme {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.persona-pitch {
+  font-size: 14.5px; line-height: 1.45; color: #334155;
+  font-weight: 500; letter-spacing: -0.1px;
+}
+.persona-tags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding-top: 4px;
+}
+.persona-tag {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 4px 9px; border-radius: 100px;
+  background: #f1f5f9; color: var(--muted);
+  letter-spacing: 0.4px;
+  transition: all .2s var(--ease);
+}
+.persona-card:hover:not(.is-soon) .persona-tag {
+  background: rgba(220,76,43,0.08);
+  color: var(--accent);
+}
+.persona-go {
+  margin-top: 4px; padding-top: 14px;
+  display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
   color: var(--fg);
-  position: relative; z-index: 1;
 }
-.persona-card-arrow {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px;
-  border: 1px solid rgba(15,23,42,0.55);
-  border-radius: 50%;
-  font-size: 14px; color: var(--fg);
-  transition: all .3s cubic-bezier(.34, 1.4, .64, 1);
-  position: relative; z-index: 1;
-  background: rgba(250,250,249,0.5);
-  backdrop-filter: blur(4px);
+.persona-go-arrow {
+  display: inline-block;
+  transition: transform .25s cubic-bezier(.34, 1.4, .64, 1);
 }
-.persona-card:hover:not(.is-soon) .persona-card-arrow {
-  background: var(--fg); color: #fff; border-color: var(--fg);
-  transform: translateY(4px);
-}
+.persona-card:hover:not(.is-soon) .persona-go-arrow { transform: translateX(5px); }
+.persona-card.is-soon .persona-go { color: var(--muted); }
 
 /* Entrance */
 .persona-card[data-fx] {
-  transform: translate3d(0, 24px, 0);
+  transform: translate3d(0, 24px, 0) scale(0.97);
 }
 .persona-card[data-fx].is-in {
-  transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0) scale(1);
 }
 
 /* ─── Lärar-perspektiv (mörk) ─── */
@@ -514,18 +564,79 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
     <div class="hero-personas">
       <div class="persona-grid">
+
         <a class="persona-card" href="./4-vecka-djupdyk.html" data-fx="fade-up" data-fx-delay="80">
-          <span class="persona-card-label">Träffa Linda</span>
-          <span class="persona-card-arrow">↓</span>
+          <div class="persona-media">
+            <video autoplay muted loop playsinline preload="metadata"><source src="./linda.mp4" type="video/mp4"></video>
+            <div class="persona-meta">
+              <strong>Linda</strong>
+              <span>22 · IT-konsult</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Arbetslivet</div>
+            <div class="persona-pitch">Lönesamtal med AI-Maria, kollektivavtalets revision, pensionsavgift som växer och pentagon som tippar när tandläkaren ringer.</div>
+            <div class="persona-tags">
+              <span class="persona-tag">Lönespec</span>
+              <span class="persona-tag">Kollektivavtal</span>
+              <span class="persona-tag">Pension</span>
+              <span class="persona-tag">Wellbeing</span>
+            </div>
+            <div class="persona-go">
+              Träffa Linda
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
         </a>
+
         <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="160" aria-disabled="true">
-          <span class="persona-card-label">Träffa Peter</span>
-          <span class="persona-card-arrow">↓</span>
+          <div class="persona-media">
+            <video autoplay muted loop playsinline preload="metadata"><source src="./peter.mp4" type="video/mp4"></video>
+            <div class="persona-meta">
+              <strong>Peter</strong>
+              <span>38 · småbarnsförälder</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Vardagsekonomin</div>
+            <div class="persona-pitch">Familjebudget, fakturor som trillar in, autogiron att signera och en buffert som testas.</div>
+            <div class="persona-tags">
+              <span class="persona-tag">Huvudbok</span>
+              <span class="persona-tag">Kommande fakturor</span>
+              <span class="persona-tag">EkonomilabbetID</span>
+              <span class="persona-tag">Buffert</span>
+            </div>
+            <div class="persona-go">
+              Träffa Peter
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
         </div>
+
         <div class="persona-card is-soon" data-fx="fade-up" data-fx-delay="240" aria-disabled="true">
-          <span class="persona-card-label">Träffa Evelina</span>
-          <span class="persona-card-arrow">↓</span>
+          <div class="persona-media">
+            <video autoplay muted loop playsinline preload="metadata"><source src="./evelina.mp4" type="video/mp4"></video>
+            <div class="persona-meta">
+              <strong>Evelina</strong>
+              <span>27 · ekonom</span>
+            </div>
+          </div>
+          <div class="persona-body">
+            <div class="persona-theme">Investering</div>
+            <div class="persona-pitch">Aktiehandel, ISK-portfölj som kraschar och reser sig, och skatten som måste optimeras.</div>
+            <div class="persona-tags">
+              <span class="persona-tag">Portfölj</span>
+              <span class="persona-tag">Marknadsdata</span>
+              <span class="persona-tag">ISK-skatt</span>
+              <span class="persona-tag">Krasch</span>
+            </div>
+            <div class="persona-go">
+              Träffa Evelina
+              <span class="persona-go-arrow">→</span>
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
   </section>
