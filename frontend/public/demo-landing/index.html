@@ -399,6 +399,18 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   grid-column: 1 / -1; text-align: center;
   display: flex; align-items: center; justify-content: center; gap: 10px;
 }
+.hero-info-empty-text::after {
+  content: "Linda";
+  font-family: var(--serif); font-style: italic;
+  text-transform: none; color: var(--accent); letter-spacing: -0.2px;
+  margin-left: 6px; font-weight: 600;
+  animation: rotate-name 12s steps(1, end) infinite;
+}
+@keyframes rotate-name {
+  0%, 33%   { content: "Linda"; }
+  33%, 66%  { content: "Evelina"; }
+  66%, 100% { content: "Peter"; }
+}
 .hero-info-empty::before, .hero-info-empty::after {
   content: ""; flex: 1 1 80px; height: 1px;
   background: var(--rule); max-width: 120px;
@@ -641,11 +653,11 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
       <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
       <h1>Lärobok blir <em>verklighet</em>.</h1>
       <p>
-        Tre elever, tre veckor, samma plattform — varje val har en
-        konsekvens, varje konsekvens lär en lektion.
+        Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val
+        har en konsekvens, varje konsekvens lär en lektion.
       </p>
       <div class="hero-stats">
-        <div><span class="hero-stat-num">3</span><span class="hero-stat-label">elever · 3 veckor</span></div>
+        <div><span class="hero-stat-num">3</span><span class="hero-stat-label">karaktärer · 3 veckor</span></div>
         <div><span class="hero-stat-num">12</span><span class="hero-stat-label">kompetenser</span></div>
         <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk-domäner</span></div>
       </div>
@@ -654,12 +666,12 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
     <div class="hero-stage" id="heroStage">
       <header class="hero-stage-head">
         <div>
-          <div class="hero-stage-eye">● Träffa eleverna</div>
-          <h2 class="hero-stage-title">Tre veckor. <em>Tre röster.</em> Hela systemet.</h2>
+          <div class="hero-stage-eye">● Möt karaktärerna</div>
+          <h2 class="hero-stage-title">Tre roller. <em>Tre veckor.</em> Hela systemet.</h2>
         </div>
         <p class="hero-stage-lede">
-          Hovra över en elev. De tre går igenom plattformens alla 12
-          kompetenser tillsammans — från lönesamtal till ISK-portfölj.
+          Karaktärer som elever kliver in i. Tillsammans går de igenom
+          plattformens 12 kompetenser — från lönesamtal till ISK-portfölj.
         </p>
       </header>
 
@@ -668,9 +680,10 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
            data-theme="Arbetslivet"
            data-pitch="Lönesamtal med AI-Maria, kollektivavtalets revision, pensionsavgift som växer och pentagon som tippar när tandläkaren ringer."
            data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
-           data-cta="Träffa Linda">
+           data-cta="Träffa Linda"
+           data-float="+ 1 295 kr / mån">
           <div class="figure-video-wrap">
-            <video class="figure-video" autoplay muted loop playsinline preload="metadata">
+            <video class="figure-video" autoplay muted loop playsinline preload="auto">
               <source src="./linda-intro-nobg.webm" type="video/webm">
               <source src="./linda-intro.mp4" type="video/mp4">
             </video>
@@ -685,9 +698,10 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
            data-theme="Investering"
            data-pitch="Aktiehandel, ISK-portfölj som kraschar och reser sig, och skatten som måste optimeras."
            data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
-           data-cta="Kommer snart">
+           data-cta="Kommer snart"
+           data-float="ISK · + 12,4 %">
           <div class="figure-video-wrap">
-            <video class="figure-video" autoplay muted loop playsinline preload="metadata">
+            <video class="figure-video" autoplay muted loop playsinline preload="auto">
               <source src="./evelina-intro-nobg.webm" type="video/webm">
               <source src="./evelina-intro.mp4" type="video/mp4">
             </video>
@@ -702,9 +716,10 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
            data-theme="Vardagsekonomin"
            data-pitch="Familjebudget, fakturor som trillar in, autogiron att signera och en buffert som testas."
            data-tags="Huvudbok,Kommande fakturor,EkonomilabbetID,Buffert"
-           data-cta="Kommer snart">
+           data-cta="Kommer snart"
+           data-float="23 fakturor · 8 200 kr">
           <div class="figure-video-wrap">
-            <video class="figure-video" autoplay muted loop playsinline preload="metadata">
+            <video class="figure-video" autoplay muted loop playsinline preload="auto">
               <source src="./peter-intro-nobg.webm" type="video/webm">
               <source src="./peter-intro.mp4" type="video/mp4">
             </video>
@@ -867,6 +882,22 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
 <script>
 // ─── Intro-sekvens trigger ─────────────────────────────────
 requestAnimationFrame(() => document.body.classList.add('is-loaded'));
+
+// ─── Säker video-loop: tvinga restart på 'ended' om browsern
+//     missar loop-attributet (vanligt med alpha-webm) ──────
+(function() {
+  document.querySelectorAll('.figure-video').forEach(v => {
+    v.addEventListener('ended', () => {
+      try { v.currentTime = 0; v.play().catch(() => {}); } catch(e) {}
+    });
+    v.addEventListener('pause', () => {
+      // Om browsern pausar autoplay (t.ex. tab inactive) — restart vid focus
+      if (v.readyState >= 2 && document.visibilityState === 'visible') {
+        v.play().catch(() => {});
+      }
+    });
+  });
+})();
 
 // ─── AOS-style entrance ──────────────────────────────────────
 (function() {
