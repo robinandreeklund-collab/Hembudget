@@ -1275,15 +1275,14 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         <div class="deep-slide-text">
           <div class="deep-slide-num-wrap">
             <span class="deep-slide-num-big">01</span>
-            <span class="deep-slide-num-meta"><strong>Brutto</strong>3 av tre</span>
+            <span class="deep-slide-num-meta"><strong>Brutto</strong>1 av tre</span>
           </div>
           <h3>Bruttolönen är inte vad som syns på kontot.</h3>
           <p class="deep-slide-lede">
-            Linda förhandlade fram 38&nbsp;295 kr. Det är vad Visma
-            rapporterar till Skatteverket — men inte vad som dyker upp
-            den 25:e. OB-ersättning och övertid läggs på, sen kommer skatten.
+            Linda förhandlade fram 38&nbsp;295 kr. Det är vad Visma rapporterar
+            till Skatteverket — men inte vad som dyker upp den 25:e. OB-ersättning
+            och övertid läggs på, sen kommer skatten.
           </p>
-          <div class="deep-slide-foot">Lönespec · Visma · maj 2026</div>
         </div>
         <div class="deep-slide-vis">
           <div class="brutto-stack">
@@ -1305,22 +1304,48 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             </div>
           </div>
         </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Visma rapporterar varje 25:e</div>
+          <p class="deep-slide-callout-body">
+            Lönespecen byggs av tre datakällor som plattformen läser in vid
+            månadens slut. Linda ser inte rapporteringen — bara raden på
+            sin specifikation.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Visma API</strong>Grundlön 38 295 kr · månadens 25:e</li>
+            <li><strong>Tidssystem</strong>OB-pass loggas automatiskt</li>
+            <li><strong>Chefssign</strong>Övertid godkänns innan utbetalning</li>
+            <li><strong>Akavia 2026</strong>Marknadsdata för revisionsförhandlingar</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Skulle din netto bli mer eller mindre om du jobbade samma timmar
+            utan OB-ersättning? Vad är OB:n värd för dig?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · maj 25</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>Visma · Tidsystem · Akavia 2026</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>1×/mån · 25:e</div>
+          <div class="deep-slide-foot-rich-section"><strong>YTD</strong><em>2 124 OB · 5 280 övertid</em></div>
+        </div>
       </article>
 
       <article class="deep-slide">
         <div class="deep-slide-text">
           <div class="deep-slide-num-wrap">
             <span class="deep-slide-num-big">02</span>
-            <span class="deep-slide-num-meta"><strong>Skatt &amp; avgifter</strong>av tre</span>
+            <span class="deep-slide-num-meta"><strong>Skatt &amp; avgifter</strong>2 av tre</span>
           </div>
           <h3>30,2 % försvinner innan kontot ser dem.</h3>
           <p class="deep-slide-lede">
             A-skatt enligt Lindas tabell (Stockholm, kommunalskatt 30,02 %),
             allmän pensionsavgift 7 %. Visma betalar dessutom 31,42 %
-            arbetsgivaravgift <em>ovanpå</em> — det syns men dras inte
-            från henne.
+            arbetsgivaravgift <em>ovanpå</em> — synligt men inte avdraget.
           </p>
-          <div class="deep-slide-foot">Avdragsspecifikation · maj 2026</div>
         </div>
         <div class="deep-slide-vis">
           <div class="flow">
@@ -1342,10 +1367,38 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             </div>
             <div class="flow-foot">
               <strong>Vismas totala kostnad:</strong> 52 337 kr — Linda får
-              27 795, skatt + arbetsgivaravgift äter 24 542. Hon ser hela
-              kedjan. Lärobok blir verklighet.
+              27 795. Skatt + arbetsgivaravgift äter 24 542. Hela kedjan blir
+              synlig.
             </div>
           </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Skatteverket-tabell + IBB-cap</div>
+          <p class="deep-slide-callout-body">
+            Plattformen hämtar Skatteverkets A-skatt-tabell en gång per år och
+            applicerar den på Lindas bruttolön. Allmän pensionsavgift cappas vid
+            8,07 IBB. Arbetsgivaravgiften läggs ovanpå och syns för transparens.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>SKV2102</strong>Tabell 32 · Stockholm</li>
+            <li><strong>Kommunsk.</strong>30,02 % · Stockholm</li>
+            <li><strong>Pensionsavg</strong>7 % · cap 8,07 IBB</li>
+            <li><strong>Arbg.avg</strong>31,42 % · betalas av Visma</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Visma betalar 12 512 kr ovanpå din lön. Vart går de pengarna —
+            och varför syns de inte på din lönespec?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · maj 26</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>Skatteverket · Pensionsmyndigheten</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>1×/år</div>
+          <div class="deep-slide-foot-rich-section"><strong>Effektiv skatt</strong><em>30,2 %</em></div>
         </div>
       </article>
 
@@ -1353,7 +1406,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         <div class="deep-slide-text">
           <div class="deep-slide-num-wrap">
             <span class="deep-slide-num-big">03</span>
-            <span class="deep-slide-num-meta"><strong>PDF-export</strong>av tre</span>
+            <span class="deep-slide-num-meta"><strong>PDF-export</strong>3 av tre</span>
           </div>
           <h3>Lönespecen är en riktig PDF — inte en illustration.</h3>
           <p class="deep-slide-lede">
@@ -1362,10 +1415,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             hon möter i arbetslivet. Hon lär sig läsa lönespec genom att
             <em>ha en</em>.
           </p>
-          <a href="#" class="pdf-cta" onclick="return false;">
-            Hämta PDF →
-          </a>
-          <div class="deep-slide-foot">A4 · 2 sidor · 18 KB · genererad av reportlab</div>
+          <a href="#" class="pdf-cta" onclick="return false;">Hämta PDF →</a>
         </div>
         <div class="deep-slide-vis">
           <div class="pdf-wrap">
@@ -1386,6 +1436,34 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
               <div class="pdf-doc-foot">Genererad av Ekonomilabbet · sida 1 av 2</div>
             </div>
           </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">ReportLab + deterministisk OCR</div>
+          <p class="deep-slide-callout-body">
+            PDF:en genereras av ReportLab vid varje månadsbatch. OCR-numret
+            är deterministisk Mod10-checksumma så Linda alltid kan referera
+            samma månad. Filen är fingerprintad och versionerad.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Generator</strong>ReportLab 4.1 · A4</li>
+            <li><strong>OCR</strong>Mod10-checksumma · deterministisk</li>
+            <li><strong>YTD-block</strong>Sida 2 · ackumulerade siffror</li>
+            <li><strong>Format</strong>2 sidor · 18 KB · pdf/a-3</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Spara din lönespec varje månad. När du gör deklarationen i mars
+            kommer du behöva varje rad.
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · pedagogisk uppmaning</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Filtyp</strong>PDF/A-3 · A4</div>
+          <div class="deep-slide-foot-rich-section"><strong>Storlek</strong>18 KB</div>
+          <div class="deep-slide-foot-rich-section"><strong>Lagring</strong><em>Lindas bok · permanent</em></div>
         </div>
       </article>
 
