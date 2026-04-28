@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idé 1 · En vecka i Lindas liv · Ekonomilabbet</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e2e8f0;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+.back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 50;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--rule);
+  padding: 6px 12px;
+  border-radius: 100px;
+}
+.back:hover { border-color: var(--fg); }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+section { padding: 80px 24px; border-top: 1px solid var(--rule); }
+.shell { max-width: 1100px; margin: 0 auto; }
+h1 {
+  font-size: clamp(38px, 5.5vw, 64px);
+  font-weight: 700;
+  letter-spacing: -1.6px;
+  line-height: 1.02;
+}
+h2 {
+  font-size: clamp(26px, 3.4vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+}
+
+/* ─── HERO — Lindas mobil måndag 06:48 ──────────────────────── */
+.hero {
+  padding: 64px 24px 96px;
+  border-top: none;
+  background: linear-gradient(180deg, #f8fafc 0%, #fafaf9 100%);
+}
+.hero .shell {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+@media (max-width: 800px) {
+  .hero .shell { grid-template-columns: 1fr; gap: 40px; }
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  background: #fef3c7;
+  color: #78350f;
+  border-radius: 100px;
+  letter-spacing: 1.2px;
+  margin-bottom: 24px;
+}
+.hero-eyebrow::before {
+  content: "";
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.hero h1 { margin-bottom: 22px; }
+.hero h1 em {
+  color: var(--accent);
+  font-style: italic;
+  font-family: var(--serif);
+  font-weight: 500;
+}
+.hero p {
+  font-size: 17px;
+  color: #475569;
+  max-width: 480px;
+  margin-bottom: 28px;
+}
+.hero-stats {
+  display: flex;
+  gap: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+  flex-wrap: wrap;
+}
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+}
+.hero-stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+.hero-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Phone mockup */
+.phone {
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 9 / 18;
+  background: #0f172a;
+  border-radius: 36px;
+  padding: 12px;
+  box-shadow: 0 30px 60px -15px rgba(15,23,42,0.4);
+  margin: 0 auto;
+  position: relative;
+}
+.phone-screen {
+  background: #fff;
+  border-radius: 26px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.phone-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.phone-status .time { font-weight: 600; color: var(--fg); }
+.phone-app-bar {
+  padding: 12px 18px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-family: var(--mono);
+  letter-spacing: 1px;
+}
+.phone-notif {
+  margin: 18px 14px;
+  padding: 14px 16px;
+  background: #fef3c7;
+  border: 1px solid rgba(120,53,15,0.25);
+  border-radius: 14px;
+  animation: fadeIn 0.6s 0.3s both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.phone-notif-app {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  color: #78350f;
+  margin-bottom: 6px;
+}
+.phone-notif-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.phone-notif-body {
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+.phone-actions {
+  margin: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.phone-action {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  font-size: 13px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.phone-action.primary {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+  font-weight: 500;
+}
+.phone-action small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.phone-action.primary small { color: rgba(255,255,255,0.6); }
+
+/* ─── DAY SECTIONS ─────────────────────────────────────────── */
+.day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.day-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.day-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 48px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .day-grid { grid-template-columns: 1fr; gap: 28px; }
+}
+.day-narrative h2 { margin-bottom: 16px; }
+.day-narrative p {
+  font-size: 16px;
+  color: #475569;
+  margin-bottom: 14px;
+}
+.day-narrative em {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--fg);
+  font-size: 17px;
+}
+.day-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: #fef3c7;
+  color: #78350f;
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-top: 12px;
+  border: 1px solid rgba(120,53,15,0.2);
+}
+
+/* Mockup-card (visualisering till höger) */
+.mockup {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
+}
+.mockup-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mockup h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin-bottom: 16px;
+}
+</style>
+</head>
+<body>
+<a href="./" class="back">← tillbaka</a>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HERO — Måndag 06:48, Lindas mobil ploppar in en notis
+     ═══════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="shell">
+    <div>
+      <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
+      <h1>
+        Klockan är <em>06:48</em>.<br>
+        Lindas vecka<br>
+        börjar om <em>2 minuter</em>.
+      </h1>
+      <p>
+        Linda är 22, IT-konsult i Stockholm, hyr en etta i Aspudden. Det här är
+        hennes vecka i Ekonomilabbet — varje dag har ett moment som hela
+        plattformen vrider sig kring. Scrolla för att följa henne.
+      </p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-num">7</span>
+          <span class="hero-stat-label">dagar</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-num">9</span>
+          <span class="hero-stat-label">val att göra</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-num">5</span>
+          <span class="hero-stat-label">dimensioner</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-status">
+          <span class="time">06:48</span>
+          <span>● Mån 27 nov</span>
+        </div>
+        <div class="phone-app-bar">EKONOMILABBET</div>
+        <div class="phone-notif">
+          <div class="phone-notif-app">● ARBETSPLATS-FRÅGA · TIS 06:45</div>
+          <div class="phone-notif-title">Maria har glömt passerkortet</div>
+          <div class="phone-notif-body">
+            "Min kollega ringer 06:45 och frågar om du kan hämta henne. Ert
+            pass startar 07:00. Vad svarar du?"
+          </div>
+        </div>
+        <div class="phone-actions">
+          <button class="phone-action primary">
+            Ja, jag kör. Vi täcker varandra.
+            <small>+4 satisfaction</small>
+          </button>
+          <button class="phone-action">
+            Be henne ta taxi och ersätta dig.
+            <small>+1 satisfaction</small>
+          </button>
+          <button class="phone-action">
+            Säg till chefen att hon är sen.
+            <small>−5 satisfaction</small>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- ═══════════════════════════════════════════════════════════
+     RESTERANDE DAGAR + LÄRARVY + CTA — fylls i nästa commit
+     ═══════════════════════════════════════════════════════════ -->
+<section style="text-align:center; padding: 64px 24px; color: var(--muted);">
+  <div class="eyebrow">Resten kommer i nästa commit</div>
+  <p style="margin-top: 12px; font-size: 14px;">
+    Måndag → tisdag → onsdag → torsdag → fredag → söndag → lärar-måndag → CTA
+  </p>
+</section>
+
+</body>
+</html>
