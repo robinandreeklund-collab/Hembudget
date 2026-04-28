@@ -574,11 +574,17 @@ section.day { padding: clamp(80px, 12vh, 140px) 24px; }
 .deep-content.is-active { display: block; }
 .deep-track { position: relative; width: 100%; height: 100%; }
 .deep-slide {
-  position: absolute; inset: 0; padding: 64px clamp(40px, 6vw, 96px);
+  position: absolute; inset: 0; padding: 56px clamp(36px, 5vw, 80px);
   overflow-y: auto;
-  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  grid-template-rows: auto;
-  gap: clamp(40px, 6vw, 88px); align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "text vis"
+    "system echo"
+    "foot foot";
+  gap: clamp(20px, 2.5vw, 44px) clamp(40px, 5vw, 72px);
+  align-items: start;
   transform: translate3d(110%, 4%, 0) scale(0.96) rotate(0.8deg);
   opacity: 0; pointer-events: none;
   transition:
@@ -594,16 +600,19 @@ section.day { padding: clamp(80px, 12vh, 140px) 24px; }
   transform: translate3d(0, 0, 0) scale(1) rotate(0);
   opacity: 1; pointer-events: auto;
 }
-@media (max-width: 800px) {
+@media (max-width: 900px) {
   .deep-slide {
     grid-template-columns: 1fr;
-    padding: 36px clamp(20px, 5vw, 36px); gap: 32px;
+    grid-template-areas: "text" "vis" "system" "echo" "foot";
+    padding: 36px clamp(20px, 5vw, 36px); gap: 24px;
     align-items: start;
   }
   .deep-head { padding: 14px 18px; gap: 12px; }
 }
-.deep-slide-text { display: flex; flex-direction: column; gap: 22px; }
-.deep-slide-vis  { display: flex; flex-direction: column; gap: 18px; }
+.deep-slide-text   { grid-area: text;   display: flex; flex-direction: column; gap: 20px; }
+.deep-slide-vis    { grid-area: vis;    display: flex; flex-direction: column; gap: 14px; }
+.deep-slide-system { grid-area: system; }
+.deep-slide-echo   { grid-area: echo; }
 
 .deep-slide-num-wrap {
   display: flex; align-items: baseline; gap: 16px;
@@ -630,6 +639,88 @@ section.day { padding: clamp(80px, 12vh, 140px) 24px; }
   font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
   text-transform: uppercase; color: var(--muted);
   padding-top: 16px; border-top: 1px solid var(--rule); margin-top: 8px;
+}
+
+/* "Så funkar det" + "Echo coachar" callouts */
+.deep-slide-system, .deep-slide-echo {
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 11px;
+}
+.deep-slide-system {
+  background: #fff;
+  border: 1px solid var(--rule);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+}
+.deep-slide-echo {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #fff;
+  box-shadow: 0 14px 32px -16px rgba(15,23,42,0.45),
+              inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.deep-slide-callout-eye {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); font-weight: 700;
+}
+.deep-slide-echo .deep-slide-callout-eye { color: var(--gold); }
+.deep-slide-callout-title {
+  font-family: var(--serif); font-size: 19px;
+  font-weight: 600; letter-spacing: -0.3px; line-height: 1.2;
+}
+.deep-slide-echo .deep-slide-callout-title { color: #fff; }
+.deep-slide-callout-body {
+  font-size: 13.5px; line-height: 1.55; color: #475569;
+  max-width: 50ch;
+}
+.deep-slide-callout-list {
+  list-style: none; display: flex; flex-direction: column; gap: 0;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.4;
+}
+.deep-slide-callout-list li {
+  display: grid; grid-template-columns: 110px 1fr;
+  gap: 14px; padding: 7px 0;
+  border-bottom: 1px dotted var(--rule);
+  color: var(--fg);
+}
+.deep-slide-callout-list li:last-child { border-bottom: 0; }
+.deep-slide-callout-list strong {
+  color: var(--accent); font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; font-size: 10px;
+}
+.deep-slide-echo-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.45;
+  padding: 4px 0 4px 16px;
+  border-left: 2px solid var(--gold);
+  color: rgba(255,255,255,0.95);
+}
+.deep-slide-echo-cite {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+}
+
+/* Rich foot — datakällor + meta som magazine-byline */
+.deep-slide-foot-rich {
+  grid-area: foot;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap;
+  gap: 8px 28px; align-items: baseline;
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.deep-slide-foot-rich-section {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.deep-slide-foot-rich-section strong {
+  color: var(--accent); font-weight: 700;
+}
+.deep-slide-foot-rich-section em {
+  font-style: normal; color: var(--fg); font-weight: 600;
 }
 
 /* ─── Slide-specifika visualiseringar ─── */
