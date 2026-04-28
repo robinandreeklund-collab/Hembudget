@@ -279,15 +279,61 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   font-family: var(--serif); font-style: italic; padding-bottom: 8px;
 }
 
-/* ─── Stage med 3 figurer ─── */
+/* ─── Stage: massive backdrop + 3 figurer på samma baseline ─── */
+.figures-stage {
+  position: relative;
+  isolation: isolate;
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 0 clamp(8px, 2vw, 32px);
+}
+
+/* Gigantisk serif-text BAKOM figurerna */
+.figures-backdrop {
+  position: absolute;
+  left: 50%; bottom: clamp(120px, 18vh, 220px);
+  transform: translateX(-50%);
+  z-index: 0;
+  font-family: var(--serif);
+  font-size: clamp(120px, 22vw, 280px);
+  font-weight: 700; letter-spacing: -0.08em;
+  color: rgba(15, 23, 42, 0.045);
+  line-height: 0.85;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+.figures-backdrop em {
+  font-style: italic; font-weight: 500;
+  color: rgba(220, 76, 43, 0.07);
+}
+
 .figures {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: clamp(16px, 2.5vw, 48px);
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(8px, 1.5vw, 28px);
   align-items: end;
   position: relative;
+  z-index: 1;
+  max-width: 980px;
+  margin: 0 auto;
 }
 @media (max-width: 800px) {
   .figures { grid-template-columns: 1fr; gap: 32px; }
+  .figures-backdrop { font-size: 22vw; }
+}
+
+/* Tunn ground-rule under hela figur-raden */
+.figures-ground {
+  position: relative; z-index: 1;
+  height: 1px;
+  margin-top: -1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(15,23,42,0.18) 12%,
+    rgba(15,23,42,0.18) 88%,
+    transparent 100%);
+  pointer-events: none;
 }
 
 .figure {
@@ -675,6 +721,9 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
         </p>
       </header>
 
+      <div class="figures-stage">
+        <div class="figures-backdrop" aria-hidden="true">Möt<em>et</em></div>
+
       <div class="figures" id="figures">
         <a class="figure" data-persona="linda" href="./4-vecka-djupdyk.html"
            data-theme="Arbetslivet"
@@ -729,6 +778,9 @@ body.is-loaded .hero-hint { animation: hero-fade-in .5s ease 3.1s both; }
             <span>38 · småbarnsförälder</span>
           </div>
         </a>
+      </div>
+
+        <div class="figures-ground" aria-hidden="true"></div>
       </div>
 
       <div class="hero-info" id="heroInfo">
