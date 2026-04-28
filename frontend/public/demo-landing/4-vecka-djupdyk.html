@@ -243,35 +243,211 @@ h2 {
   50% { transform: scaleY(0.4); opacity: 1; }
 }
 
-/* ─── Day section ─── */
-.day-header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-.day-time { font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); font-weight: 600; }
-.day-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 48px; align-items: start; }
-@media (max-width: 800px) { .day-grid { grid-template-columns: 1fr; gap: 28px; } }
-.day-narrative h2 { margin-bottom: 16px; }
-.day-narrative p { font-size: 16px; color: #475569; margin-bottom: 14px; line-height: 1.55; }
-.day-narrative em { font-family: var(--serif); font-style: italic; color: var(--fg); font-size: 17px; }
-.day-tag { display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase; background: #fef3c7; color: #78350f; padding: 4px 10px; border-radius: 100px; margin-top: 12px; border: 1px solid rgba(120,53,15,0.2); }
-.mockup { background: #fff; border: 1px solid var(--rule); border-radius: 10px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
-.mockup-eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-.mockup h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 16px; }
+/* ─── Day section (modern editorial-layout) ─── */
+section.day { padding: clamp(80px, 12vh, 140px) 24px; }
+.day-meta {
+  display: grid; grid-template-columns: auto 1fr; gap: 24px 36px;
+  align-items: end; margin-bottom: 64px; padding-bottom: 28px;
+  border-bottom: 1px solid var(--rule);
+}
+.day-meta-time { display: flex; align-items: baseline; gap: 14px; }
+.day-meta-dot { color: var(--accent); font-size: 12px; line-height: 1; }
+.day-meta-day {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 2.4px; text-transform: uppercase; color: var(--muted);
+}
+.day-meta-clock {
+  font-family: var(--serif); font-size: clamp(38px, 5vw, 58px);
+  font-weight: 600; letter-spacing: -1.5px; line-height: 1;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.day-meta-tagline {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(18px, 1.8vw, 22px); color: #475569;
+  letter-spacing: -0.2px; max-width: 36ch;
+  line-height: 1.4; align-self: end; padding-bottom: 6px;
+}
+@media (max-width: 720px) {
+  .day-meta { grid-template-columns: 1fr; gap: 16px; margin-bottom: 40px; }
+  .day-meta-tagline { padding-bottom: 0; }
+}
+
+.day-body {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 80px); align-items: start;
+}
+@media (max-width: 900px) { .day-body { grid-template-columns: 1fr; gap: 40px; } }
+
+.day-text h2 {
+  font-size: clamp(34px, 4.5vw, 56px); font-weight: 700;
+  letter-spacing: -1.4px; line-height: 1.02; margin-bottom: 28px;
+  max-width: 14ch;
+}
+.day-text p {
+  font-size: 17px; color: #334155; line-height: 1.6;
+  margin-bottom: 18px; max-width: 52ch;
+}
+.day-text strong { color: var(--fg); font-weight: 700; }
+
+.day-quote {
+  position: relative;
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(20px, 2vw, 24px); line-height: 1.4;
+  color: var(--fg); padding: 6px 0 6px 22px;
+  margin: 26px 0;
+  border-left: 2px solid var(--accent);
+  max-width: 30ch;
+}
+.day-quote cite {
+  display: block; margin-top: 12px;
+  font-family: var(--mono); font-style: normal;
+  font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.day-result {
+  display: inline-flex; align-items: baseline; gap: 16px;
+  margin-top: 30px; padding: 20px 26px;
+  background: var(--fg); color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 14px 32px -16px rgba(15,23,42,0.5);
+}
+.day-result-num {
+  font-family: var(--serif); font-size: 38px; font-weight: 700;
+  letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.day-result-num::after {
+  content: " kr"; font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 500; opacity: 0.65; margin-left: 4px;
+}
+.day-result-label {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold); font-weight: 600;
+}
+
+/* ─── Visualisering (höger sida) ─── */
+.day-vis { position: relative; }
+.vis-card {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff; border-radius: 14px;
+  padding: 28px 30px;
+  box-shadow:
+    0 24px 60px -24px rgba(15,23,42,0.45),
+    inset 0 0 0 1px rgba(255,255,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.vis-card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+.vis-card-eye { color: var(--gold); font-weight: 600; }
+.vis-card-meta { color: rgba(255,255,255,0.45); }
+.vis-card-title {
+  font-size: 16px; font-weight: 500;
+  letter-spacing: -0.2px; margin-bottom: 24px;
+  color: rgba(255,255,255,0.92);
+}
+.vis-bars {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 8px; height: 200px; align-items: end;
+  padding-bottom: 36px; position: relative;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 20px;
+}
+.vis-bar {
+  position: relative; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center;
+}
+.vis-bar-fill {
+  width: 100%; background: rgba(255,255,255,0.14);
+  border-radius: 6px 6px 0 0;
+  height: var(--h, 0%);
+  transition: height .8s cubic-bezier(.34, 1.18, .64, 1);
+  position: relative;
+}
+.vis-bar.is-peak .vis-bar-fill {
+  background: linear-gradient(180deg, var(--gold) 0%, #d97706 100%);
+  box-shadow: 0 -2px 18px rgba(251,191,36,0.4);
+}
+.vis-bar.is-empty .vis-bar-fill {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  height: 8% !important;
+  border-radius: 4px;
+}
+.vis-bar-num {
+  position: absolute; top: -22px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,0.85);
+  font-variant-numeric: tabular-nums;
+}
+.vis-bar.is-peak .vis-bar-num { color: var(--gold); font-size: 14px; }
+.vis-bar.is-empty .vis-bar-num { color: rgba(255,255,255,0.25); }
+.vis-bar-r {
+  position: absolute; bottom: -22px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px;
+  color: rgba(255,255,255,0.4); white-space: nowrap;
+}
+.vis-card-foot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-top: 4px;
+}
+.vis-card-foot span {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
+}
+.vis-card-foot strong {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Scene-CTA-rad (modernare än innan) ─── */
+.day-cta-row {
+  margin-top: 80px; padding-top: 40px;
+  border-top: 1px solid var(--rule);
+}
+.day-cta-eye {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; margin-bottom: 18px;
+}
 
 /* Scen-CTA: inline primary action ─── */
-.scene-ctas { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 36px; padding-top: 28px; border-top: 1px dashed var(--rule); }
-.scene-cta {
-  display: inline-flex; align-items: center; gap: 14px;
-  padding: 14px 18px 14px 22px;
-  background: var(--fg); color: #fff; text-decoration: none;
-  border: 0; border-radius: 8px; font-size: 14px;
-  font-family: inherit; cursor: pointer; transition: all .18s var(--ease);
-  text-align: left;
+.scene-ctas {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
 }
-.scene-cta:hover { background: #1e293b; transform: translateY(-1px); box-shadow: 0 8px 18px -8px rgba(15,23,42,0.4); }
-.scene-cta-q { font-weight: 500; }
+.scene-cta {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 24px;
+  background: #fff; color: var(--fg); text-decoration: none;
+  border: 1px solid var(--rule); border-radius: 12px;
+  font-size: 15px; font-family: inherit; cursor: pointer;
+  transition: all .22s var(--ease); text-align: left;
+  position: relative; overflow: hidden;
+}
+.scene-cta::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 2px;
+  width: 0; background: var(--accent);
+  transition: width .35s var(--ease);
+}
+.scene-cta:hover {
+  border-color: var(--fg);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px -14px rgba(15,23,42,0.18);
+}
+.scene-cta:hover::after { width: 100%; }
+.scene-cta-q { font-weight: 500; line-height: 1.4; color: #334155; }
 .scene-cta-go {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px;
-  color: var(--gold); text-transform: uppercase; padding-left: 10px;
-  border-left: 1px solid rgba(255,255,255,0.15);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px;
+  color: var(--accent); text-transform: uppercase; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 6px;
 }
 
 /* ─── Deep-page (full-viewport horisontell sidvändning) ─── */
@@ -506,42 +682,72 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="tuesday">
+  <section data-scene="tuesday" class="day">
     <div class="shell">
-      <div class="day-header">
-        <span class="day-time">● Tisdag · 10:14</span>
-        <span class="eyebrow">Det enda samtalet på året</span>
-      </div>
-      <div class="day-grid">
-        <div class="day-narrative">
+
+      <header class="day-meta">
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Tisdag</span>
+          <span class="day-meta-clock">10:14</span>
+        </div>
+        <p class="day-meta-tagline">Det enda samtalet på året.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
           <h2>Linda öppnar lönesamtalet.</h2>
-          <p>Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar. Fem ronder. Linda börjar med marknadsdata: <em>"Akavia 2026 säger 39 500 kr för min roll. Jag ligger 1 500 kr under."</em></p>
+          <p>Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar. Fem ronder. Linda börjar med marknadsdata.</p>
+
+          <blockquote class="day-quote">
+            "Akavia 2026 säger 39&nbsp;500 kr för min roll. Jag ligger 1&nbsp;500 kr under."
+            <cite>— Linda, rond 1</cite>
+          </blockquote>
+
           <p>Maria balanserar avtalet (2,5 % revision), Lindas satisfaction och budgeten. Slutbud rond 3: <strong>3,5 %</strong>. Linda accepterar.</p>
-          <span class="day-tag">+ 1 295 KR / MÅN · GÄLLER 1 MAJ</span>
-        </div>
-        <div class="mockup">
-          <div class="mockup-eyebrow">Lönesamtalet 2026 · 5 ronder</div>
-          <h3>Linda · IT-konsult · Visma</h3>
-          <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 6px;">
-            <div style="padding:10px 8px; background:#f1f5f9; border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#94a3b8;">R 01</div><div style="font-size:14px; font-weight:700; margin-top:4px;">2,5 %</div></div>
-            <div style="padding:10px 8px; background:#f1f5f9; border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#94a3b8;">R 02</div><div style="font-size:14px; font-weight:700; margin-top:4px;">3,2 %</div></div>
-            <div style="padding:10px 8px; background:#fef3c7; border:2px solid var(--gold); border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#78350f;">R 03 ★</div><div style="font-size:14px; font-weight:700; margin-top:4px;">3,5 %</div></div>
-            <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#cbd5e1;">R 04</div><div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div></div>
-            <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:6px; font-family:var(--mono); font-size:10px;"><div style="color:#cbd5e1;">R 05</div><div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div></div>
+
+          <div class="day-result">
+            <div class="day-result-num">+ 1 295</div>
+            <div class="day-result-label">/ mån · gäller 1 maj</div>
           </div>
-          <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:6px; font-size:13px; color:#065f46;">● Resultat: ny lön <strong>38 295 kr</strong></div>
         </div>
+
+        <aside class="day-vis">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Lönesamtalet 2026</span>
+              <span class="vis-card-meta">5 ronder</span>
+            </div>
+            <h3 class="vis-card-title">Linda · IT-konsult · Visma</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 38%;"><span class="vis-bar-num">2,5</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 01</span></div>
+              <div class="vis-bar" style="--h: 56%;"><span class="vis-bar-num">3,2</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 02</span></div>
+              <div class="vis-bar is-peak" style="--h: 64%;"><span class="vis-bar-num">3,5</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 03 ★</span></div>
+              <div class="vis-bar is-empty"><span class="vis-bar-num">—</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 04</span></div>
+              <div class="vis-bar is-empty"><span class="vis-bar-num">—</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 05</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Ny lön</span>
+              <strong>38 295 kr/mån</strong>
+            </div>
+          </div>
+        </aside>
       </div>
-      <div class="scene-ctas">
-        <button class="scene-cta" data-deep="salary">
-          <span class="scene-cta-q">Hur räknas bruttolön → netto?</span>
-          <span class="scene-cta-go">Lönespec →</span>
-        </button>
-        <button class="scene-cta" data-deep="employer">
-          <span class="scene-cta-q">Vad är revision i kollektivavtalet?</span>
-          <span class="scene-cta-go">Avtal →</span>
-        </button>
-      </div>
+
+      <footer class="day-cta-row">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas">
+          <button class="scene-cta" data-deep="salary">
+            <span class="scene-cta-q">Hur räknas bruttolön → netto?</span>
+            <span class="scene-cta-go">Lönespec →</span>
+          </button>
+          <button class="scene-cta" data-deep="employer">
+            <span class="scene-cta-q">Vad är revision i kollektivavtalet?</span>
+            <span class="scene-cta-go">Avtal →</span>
+          </button>
+        </div>
+      </footer>
+
     </div>
   </section>
 
