@@ -323,12 +323,11 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 .figures {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(8px, 1.5vw, 28px);
+  gap: clamp(20px, 3vw, 56px);
   align-items: end;
   position: relative;
   z-index: 1;
-  max-width: 980px;
-  margin: 0 auto;
+  width: 100%;
 }
 @media (max-width: 800px) {
   .figures { grid-template-columns: 1fr; gap: 32px; }
@@ -363,8 +362,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .figure-video-wrap {
   width: 100%;
-  min-height: 360px;
-  height: clamp(360px, 56vh, 600px);
+  aspect-ratio: 3 / 4;
+  min-height: 320px;
   position: relative;
 }
 .figure-video {
