@@ -601,8 +601,22 @@ def _balance_for_account(scope, account_id: int) -> Decimal:
     return base + total
 
 
+class RunDueIn(BaseModel):
+    """Optional payload till run-due. Default: today.
+
+    as_of låter läraren simulera tidshopp pedagogiskt — t.ex. 'kör
+    som om det vore 15 december' så hyran och el-fakturorna körs
+    även om dagen idag är i november. Speglar verkligheten där
+    autogiro körs på förfallodag oavsett när eleven kollar."""
+    as_of: Optional[str] = Field(
+        default=None,
+        description="ISO YYYY-MM-DD. Default: idag.",
+    )
+
+
 @router.post("/scheduled-payments/run-due")
 def run_due_payments(
+    payload: Optional[RunDueIn] = None,
     scope = Depends(scope_db),
     info: TokenInfo = Depends(require_token),
 ) -> dict:
@@ -619,12 +633,17 @@ def run_due_payments(
     - Saldo räcker inte → status='failed_no_funds' (PR 7 triggar
       påminnelse-flödet)
 
-    Returnerar {executed, failed, skipped}.
+    Returnerar {due_count, executed, failed, skipped}.
     """
     _require_school()
     _student_from_info(info)
     from datetime import date as _date
     today = _date.today()
+    if payload and payload.as_of:
+        try:
+            today = _date.fromisoformat(payload.as_of)
+        except ValueError:
+            raise HTTPException(400, "as_of måste vara YYYY-MM-DD")
     due = (
         scope.query(ScheduledPayment)
         .filter(

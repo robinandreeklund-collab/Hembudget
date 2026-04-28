@@ -115,7 +115,7 @@ def build_ledger_scenario(
     for t in in_month:
         tx_events.append(TxEvent(
             date=t.date if isinstance(t.date, date) else _coerce_date(t.date),
-            description=t.description or "",
+            description=t.raw_description or "",
             amount=Decimal(str(t.amount)),
             category_hint="",
         ))
