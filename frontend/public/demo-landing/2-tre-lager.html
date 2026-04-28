@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idé 2 · Tre lager · Ekonomilabbet</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e2e8f0;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* De tre lagrens ankarfärger */
+  --layer-life: #dbeafe;     /* ljus blå — vad eleven gör */
+  --layer-life-fg: #1e3a8a;
+  --layer-money: #fef3c7;    /* gul — hur det syns i siffror */
+  --layer-money-fg: #78350f;
+  --layer-being: #d1fae5;    /* grön — hur det påverkar Wellbeing */
+  --layer-being-fg: #065f46;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+.back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 50;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--rule);
+  padding: 6px 12px;
+  border-radius: 100px;
+}
+.back:hover { border-color: var(--fg); }
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+section { padding: 96px 24px; border-top: 1px solid var(--rule); }
+.shell { max-width: 1180px; margin: 0 auto; }
+
+h1 {
+  font-size: clamp(38px, 5.5vw, 64px);
+  font-weight: 700;
+  letter-spacing: -1.6px;
+  line-height: 1.02;
+}
+h2 {
+  font-size: clamp(26px, 3.4vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+}
+
+/* ─── HERO ────────────────────────────────────────────── */
+.hero {
+  padding: 80px 24px 64px;
+  border-top: none;
+  background: #fff;
+  text-align: center;
+}
+.hero .shell { max-width: 880px; }
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  background: #0f172a;
+  color: var(--gold);
+  border-radius: 100px;
+  letter-spacing: 1.2px;
+  margin-bottom: 28px;
+}
+.hero h1 { margin-bottom: 22px; max-width: 800px; margin-left: auto; margin-right: auto; }
+.hero h1 em {
+  color: var(--accent);
+  font-style: italic;
+  font-family: var(--serif);
+  font-weight: 500;
+}
+.hero p {
+  font-size: 17px;
+  color: #475569;
+  max-width: 640px;
+  margin: 0 auto 36px;
+}
+
+/* ─── Tre-lager-mall ─────────────────────────────────── */
+.tracks {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.tracks-label {
+  padding: 28px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-right: 1px solid var(--rule);
+}
+.tracks-label-eyebrow {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.4px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.tracks-label-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.track-row {
+  padding: 24px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 120px;
+}
+.track-row:last-child { border-bottom: none; }
+.track-row.life { background: var(--layer-life); }
+.track-row.money { background: var(--layer-money); }
+.track-row.being { background: var(--layer-being); }
+
+.track-marker {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  width: 90px;
+}
+.track-row.life .track-marker { color: var(--layer-life-fg); }
+.track-row.money .track-marker { color: var(--layer-money-fg); }
+.track-row.being .track-marker { color: var(--layer-being-fg); }
+
+.track-content { flex: 1; }
+.track-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+.track-row.life h3 { color: var(--layer-life-fg); }
+.track-row.money h3 { color: var(--layer-money-fg); }
+.track-row.being h3 { color: var(--layer-being-fg); }
+.track-content p {
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0;
+}
+.track-row.life p { color: #1e40af; }
+.track-row.money p { color: #92400e; }
+.track-row.being p { color: #047857; }
+
+@media (max-width: 720px) {
+  .tracks { grid-template-columns: 1fr; }
+  .tracks-label { border-right: none; border-bottom: 1px solid var(--rule); padding: 14px 22px; }
+  .track-row { min-height: 100px; padding: 18px 22px; }
+  .track-marker { width: 70px; }
+}
+
+/* ─── Scen-rubrik ──────────────────────────────────────── */
+.scene-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.scene-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.scene-context {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.scene-explainer {
+  font-size: 15px;
+  color: #475569;
+  margin-top: 18px;
+  max-width: 760px;
+  line-height: 1.55;
+}
+</style>
+</head>
+<body>
+<a href="./" class="back">← tillbaka</a>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HERO — Tre lager, förklarat genom ett första moment
+     ═══════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="shell">
+    <div class="hero-eyebrow">● TRE LAGER · LIV → EKONOMI → VÄLMÅENDE</div>
+    <h1>Ett val. <em>Tre konsekvenser.</em><br>Samtidigt.</h1>
+    <p>
+      När en elev gör ett val händer det inte bara i ett lager. Det landar i
+      tre — det hen GÖR, hur det SYNS i siffror, hur det PÅVERKAR välmåendet.
+      Ekonomilabbet visar alla tre, hela tiden.
+    </p>
+
+    <!-- Första exempel: kompisen bjuder på bio -->
+    <div class="tracks" style="margin-top: 12px; text-align: left;">
+      <div class="tracks-label" style="background: var(--layer-life);">
+        <div class="tracks-label-eyebrow">LAGER 01</div>
+        <div class="tracks-label-title" style="color: var(--layer-life-fg);">Liv</div>
+      </div>
+      <div class="track-row life">
+        <div class="track-marker">FRE 17:32</div>
+        <div class="track-content">
+          <h3>"Bio på Filmstaden — 180 kr?"</h3>
+          <p>Kompisen pingar. Linda har två sekunder på sig: ja eller nej.</p>
+        </div>
+      </div>
+
+      <div class="tracks-label" style="background: var(--layer-money); border-top: 1px solid var(--rule);">
+        <div class="tracks-label-eyebrow">LAGER 02</div>
+        <div class="tracks-label-title" style="color: var(--layer-money-fg);">Ekonomi</div>
+      </div>
+      <div class="track-row money">
+        <div class="track-marker">SALDO</div>
+        <div class="track-content">
+          <h3>− 180 kr · transaktion bokförd</h3>
+          <p>Saldo går från 24 318 → 24 138. Hamnar i kategorin <em>Nöje</em>.</p>
+        </div>
+      </div>
+
+      <div class="tracks-label" style="background: var(--layer-being); border-top: 1px solid var(--rule);">
+        <div class="tracks-label-eyebrow">LAGER 03</div>
+        <div class="tracks-label-title" style="color: var(--layer-being-fg);">Välmående</div>
+      </div>
+      <div class="track-row being">
+        <div class="track-marker">PENTAGON</div>
+        <div class="track-content">
+          <h3>Sociala band + 4 · Fritid + 3</h3>
+          <p>Wellbeing-pentagonen morphar. Två dimensioner upp. Ingen ner.</p>
+        </div>
+      </div>
+    </div>
+    <p class="scene-explainer" style="text-align: center; margin: 28px auto 0;">
+      Det här är systemets pedagogiska kärna. <strong>Saldot är inte
+      huvudmätaren.</strong> Sociala band räknas. Fritid räknas. Trygghet
+      räknas. Pengar är ett medel — inte ett mål.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PLACEHOLDER för scener 2-4 + manifesto + CTA
+     ═══════════════════════════════════════════════════════════ -->
+<section style="text-align:center; padding: 64px 24px; color: var(--muted);">
+  <div class="eyebrow">Resten kommer i nästa commit</div>
+  <p style="margin-top: 12px; font-size: 14px;">
+    Scen 2 (oväntad utgift) → 3 (lönesamtal) → 4 (kreditval) → manifesto → lärarvy → CTA
+  </p>
+</section>
+
+</body>
+</html>
