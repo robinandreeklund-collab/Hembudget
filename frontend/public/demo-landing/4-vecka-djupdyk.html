@@ -294,25 +294,15 @@ h2 {
 .deep-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
 .deep-foot-counter { font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
 
-/* ─── Vertikal text-tidslinje (höger sida, levande) ─── */
+/* ─── Vertikal text-tidslinje (pure type, mix-blend för läsbarhet) ─── */
 .timeline {
-  position: fixed; right: 28px; top: 50%;
+  position: fixed; right: 32px; top: 50%;
   transform: translateY(-50%);
   z-index: 50; max-height: 84vh;
   display: flex; flex-direction: column;
   font-family: var(--mono);
   pointer-events: none;
   opacity: 0;
-  padding: 22px 26px 22px 34px;
-  background: rgba(250,250,249,0.55);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
-  border-radius: 16px;
-  box-shadow:
-    0 18px 48px -22px rgba(15,23,42,0.22),
-    0 4px 14px -6px rgba(15,23,42,0.08),
-    inset 0 0 0 1px rgba(255,255,255,0.4),
-    inset 0 1px 0 rgba(255,255,255,0.6);
   transition: opacity .6s var(--ease);
 }
 .timeline.is-visible { opacity: 1; }
@@ -321,21 +311,17 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
 
 .tl-rail {
   position: absolute;
-  left: 35px; top: 28px; bottom: 28px; width: 1.5px;
+  left: 6px; top: 4px; bottom: 4px; width: 1.5px;
   background: linear-gradient(180deg,
-    transparent 0%,
-    rgba(15,23,42,0.22) 8%,
-    rgba(15,23,42,0.22) 92%,
-    transparent 100%);
+    transparent 0%, rgba(255,255,255,0.55) 8%,
+    rgba(255,255,255,0.55) 92%, transparent 100%);
+  mix-blend-mode: difference;
   pointer-events: none;
 }
 .tl-cursor {
-  position: absolute; left: 29px; top: 28px; width: 13px; height: 13px;
+  position: absolute; left: 0; top: 4px; width: 14px; height: 14px;
   background: var(--accent); border-radius: 50%;
-  box-shadow:
-    0 0 0 5px rgba(220,76,43,0.18),
-    0 0 18px rgba(220,76,43,0.6),
-    inset 0 0 0 1px rgba(255,255,255,0.3);
+  box-shadow: 0 0 0 5px rgba(220,76,43,0.2), 0 0 22px rgba(220,76,43,0.65);
   transition: top .55s cubic-bezier(.34, 1.18, .64, 1);
   pointer-events: none;
   z-index: 2;
@@ -350,76 +336,81 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
   50%      { transform: scale(1.7); opacity: 0; }
 }
 .tl-scenes {
-  list-style: none; display: flex; flex-direction: column; gap: 24px;
-  padding: 6px 0 6px 26px; position: relative;
+  list-style: none; display: flex; flex-direction: column; gap: 26px;
+  padding: 4px 0 4px 32px; position: relative;
 }
 .tl-scene { position: relative; }
+/* Inaktiva dots — bara stora cursor:n markerar plats */
 .tl-scene::before {
   content: ""; position: absolute;
-  left: -29px; top: 8px; width: 9px; height: 9px;
-  border-radius: 50%; background: rgba(250,250,249,0.95);
-  box-shadow: inset 0 0 0 1.5px rgba(15,23,42,0.4);
+  left: -28px; top: 9px; width: 7px; height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.65);
+  mix-blend-mode: difference;
   transition: all .35s var(--ease);
 }
 .tl-scene.is-passed::before {
-  background: rgba(15,23,42,0.65);
-  box-shadow: inset 0 0 0 1.5px rgba(15,23,42,0.65);
+  background: rgba(255,255,255,0.7);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.7);
 }
-.tl-scene.is-active::before {
-  opacity: 0;
-}
+.tl-scene.is-active::before { opacity: 0; }
+
 .tl-label {
   background: 0; border: 0; padding: 0; margin: 0;
-  font-family: inherit; font-size: 14px; font-weight: 700;
+  font-family: inherit; font-size: 14.5px; font-weight: 700;
   letter-spacing: 1px; text-transform: uppercase;
-  color: #1e293b;
+  color: #fff;
+  mix-blend-mode: difference;
   cursor: pointer; text-align: left; line-height: 1.3;
-  transition: color .3s var(--ease), letter-spacing .3s var(--ease), transform .3s var(--ease), font-size .3s var(--ease);
+  transition: letter-spacing .3s var(--ease), transform .3s var(--ease),
+              font-size .3s var(--ease), opacity .25s;
 }
-.tl-label:hover { color: var(--fg); }
-.tl-scene.is-passed .tl-label { color: rgba(15,23,42,0.55); }
+.tl-label:hover { opacity: 0.78; }
+.tl-scene.is-passed .tl-label { opacity: 0.45; }
 .tl-scene.is-active .tl-label {
-  color: var(--fg); font-size: 15px; font-weight: 800; letter-spacing: 1.8px;
-  transform: translateX(3px);
+  font-size: 16px; font-weight: 800; letter-spacing: 2px;
+  transform: translateX(4px);
+  opacity: 1;
 }
 .tl-dives {
-  list-style: none; margin-top: 0; padding-left: 16px;
-  display: flex; flex-direction: column; gap: 6px;
+  list-style: none; margin-top: 0; padding-left: 18px;
+  display: flex; flex-direction: column; gap: 7px;
   max-height: 0; opacity: 0; overflow: hidden;
   transition: max-height .5s var(--ease), opacity .3s var(--ease), margin-top .35s;
   pointer-events: none;
 }
 .tl-scene.is-active .tl-dives {
-  max-height: 280px; opacity: 1; margin-top: 12px;
+  max-height: 280px; opacity: 1; margin-top: 14px;
   pointer-events: auto;
 }
 .tl-dive {
   background: 0; border: 0; padding: 3px 0;
-  font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600;
-  color: #1e293b; cursor: pointer; text-align: left;
-  transition: color .18s, transform .18s var(--ease);
+  font-family: 'Inter', sans-serif; font-size: 15.5px; font-weight: 600;
+  color: #fff;
+  mix-blend-mode: difference;
+  cursor: pointer; text-align: left;
+  transition: transform .18s var(--ease), opacity .18s;
   letter-spacing: -0.1px; white-space: nowrap;
-  position: relative; padding-left: 18px;
+  position: relative; padding-left: 20px;
 }
 .tl-dive::before {
   content: "↳"; position: absolute; left: 0; top: 3px;
-  font-family: var(--mono); font-size: 13px; opacity: 0.55;
+  font-family: var(--mono); font-size: 14px; opacity: 0.65;
   transition: opacity .18s, transform .18s;
 }
 .tl-dive:hover {
-  color: var(--accent); transform: translateX(3px);
+  transform: translateX(4px); opacity: 0.78;
 }
 .tl-dive:hover::before { opacity: 1; transform: translateX(2px); }
 
 @media (max-width: 900px) {
-  .timeline { right: 14px; max-height: 72vh; padding: 16px 18px 16px 28px; }
-  .tl-label { font-size: 12px; }
-  .tl-scene.is-active .tl-label { font-size: 13px; }
+  .timeline { right: 16px; max-height: 72vh; }
+  .tl-label { font-size: 12.5px; }
+  .tl-scene.is-active .tl-label { font-size: 13.5px; }
   .tl-dive { font-size: 13.5px; }
 }
-@media (max-width: 600px) {
-  .timeline { display: none; }
-}
+@media (max-width: 600px) { .timeline { display: none; } }
 </style>
 </head>
 <body>
@@ -833,10 +824,9 @@ const DIVE_LABELS = {
     cursorRaf = requestAnimationFrame(() => {
       const tlRect = tl.getBoundingClientRect();
       const aRect = active.getBoundingClientRect();
-      // Dot är top:8 i scen, 9px → centrum y=12.5
-      // Cursor 13px → cursor top i scen = 12.5 - 6.5 = 6
-      // Cursor top relativt timeline = (scen top - timeline top) + 6
-      const top = (aRect.top - tlRect.top) + 6;
+      // Dot: top:9 i scen, 7px → centrum y = 12.5
+      // Cursor 14px → cursor.top i scen = 12.5 - 7 = 5.5
+      const top = (aRect.top - tlRect.top) + 5.5;
       cursor.style.top = top + 'px';
     });
   }
