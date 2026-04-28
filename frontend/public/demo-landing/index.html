@@ -373,14 +373,6 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   display: block;
   pointer-events: none;
 }
-/* Tjock ground-line + skugga under figuren för att bryta vit-på-vit */
-.figure-video-wrap::after {
-  content: ""; position: absolute;
-  bottom: 0; left: 18%; right: 18%; height: 18px;
-  background: radial-gradient(ellipse at center, rgba(15,23,42,0.16) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 1;
-}
 
 .figure-caption {
   display: flex; flex-direction: column; gap: 4px;
