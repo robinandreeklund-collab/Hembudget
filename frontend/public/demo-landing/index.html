@@ -496,103 +496,190 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   text-transform: none; letter-spacing: 0; color: var(--fg);
 }
 
-/* ─── Info-panel (delad, uppdateras vid hover) ─── */
+/* ─── Rich info-panel (per-person-presentation) ─── */
 .hero-info {
   position: relative; z-index: 2;
-  margin: clamp(24px, 4vh, 48px) 0 0;
-  padding: 22px 0 0;
+  margin: clamp(40px, 5vh, 64px) 0 0;
+  padding: clamp(40px, 5vh, 64px) 0 clamp(48px, 6vh, 80px);
   border-top: 1px solid var(--rule);
-  min-height: 110px;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
-  gap: clamp(20px, 3vw, 48px); align-items: center;
+  min-height: 380px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: clamp(28px, 4vw, 72px);
+  align-items: start;
 }
-@media (max-width: 800px) { .hero-info { grid-template-columns: 1fr; gap: 14px; } }
+@media (max-width: 1000px) {
+  .hero-info { grid-template-columns: 1fr 1fr; gap: 28px; }
+  .hero-info-aside { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) { .hero-info { grid-template-columns: 1fr; } }
+
+/* Animerad accent-line som ritas in när panelen aktiveras */
+.hero-info::before {
+  content: ""; position: absolute;
+  top: -1px; left: 0; height: 2px; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  transition: width .8s cubic-bezier(.65, 0, .35, 1);
+  z-index: 3;
+}
+.hero-info[data-active]::before { width: 100%; }
+
+/* Empty state — när inget är hovrat innan auto-rotation startat */
 .hero-info-empty {
   font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
   text-transform: uppercase; color: var(--muted);
   grid-column: 1 / -1; text-align: center;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-}
-.hero-info-empty-text::after {
-  content: "Linda";
-  font-family: var(--serif); font-style: italic;
-  text-transform: none; color: var(--accent); letter-spacing: -0.2px;
-  margin-left: 6px; font-weight: 600;
-  animation: rotate-name 12s steps(1, end) infinite;
-}
-@keyframes rotate-name {
-  0%, 33%   { content: "Linda"; }
-  33%, 66%  { content: "Evelina"; }
-  66%, 100% { content: "Peter"; }
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  align-self: center; padding: 60px 0;
 }
 .hero-info-empty::before, .hero-info-empty::after {
-  content: ""; flex: 1 1 80px; height: 1px;
-  background: var(--rule); max-width: 120px;
+  content: ""; flex: 0 0 80px; height: 1px;
+  background: var(--rule);
 }
 .hero-info[data-active] .hero-info-empty { display: none; }
 
 .hero-info-content { display: contents; }
-.hero-info[data-active] .hero-info-content > * {
-  animation: info-in .35s cubic-bezier(.34, 1.18, .64, 1) both;
-}
-@keyframes info-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.hero-info-content {
-  display: none;
-}
-.hero-info[data-active] .hero-info-content { display: contents; }
+.hero-info:not([data-active]) .hero-info-content { display: none; }
 
-/* Auto-läge: en mikrokicker + accent-prick framför theme */
-.hero-info[data-auto] .hero-info-theme::before {
-  content: "● Auto · ";
-  color: var(--gold);
-  animation: float-pulse 2s ease-in-out infinite;
+/* Vänster: meta + stort serif-namn + ålder/yrke + CTA */
+.hero-info-left {
+  display: flex; flex-direction: column; gap: 14px;
 }
-
-.hero-info-theme {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.8px;
+.hero-info-meta {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
   text-transform: uppercase; color: var(--accent); font-weight: 700;
 }
-.hero-info-pitch {
-  font-size: 15.5px; line-height: 1.5; color: #334155;
-  font-weight: 500; letter-spacing: -0.1px;
+.hero-info[data-auto] .hero-info-meta::before {
+  content: "● Auto · "; color: var(--gold);
 }
-.hero-info-tags {
-  display: flex; flex-wrap: wrap; gap: 5px;
-  margin-top: 8px;
+.hero-info-name {
+  font-family: var(--serif);
+  font-size: clamp(40px, 5.5vw, 72px);
+  font-weight: 700; letter-spacing: -1.8px; line-height: 0.95;
+  margin: 0;
 }
-.hero-info-tag {
-  font-family: var(--mono); font-size: 10px; font-weight: 600;
-  padding: 4px 9px; border-radius: 100px;
-  background: rgba(220,76,43,0.08); color: var(--accent);
-  letter-spacing: 0.4px;
+.hero-info-name em {
+  font-family: var(--serif); font-style: italic;
+  color: var(--accent); font-weight: 500;
+}
+.hero-info-role {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  margin-top: -4px;
 }
 .hero-info-cta {
   display: inline-flex; align-items: center; gap: 10px;
-  padding: 12px 20px; border-radius: 100px;
+  margin-top: 12px;
+  padding: 13px 22px; border-radius: 100px;
   background: var(--fg); color: #fff;
   text-decoration: none; font-family: inherit;
-  font-size: 13px; font-weight: 600; letter-spacing: -0.05px;
+  font-size: 13.5px; font-weight: 600; letter-spacing: -0.05px;
   white-space: nowrap;
   transition: all .22s var(--ease);
-  box-shadow: 0 8px 22px -10px rgba(15,23,42,0.5);
+  box-shadow: 0 10px 24px -10px rgba(15,23,42,0.5);
+  align-self: flex-start;
 }
 .hero-info-cta:hover {
   transform: translateY(-2px); background: #1e293b;
-  box-shadow: 0 12px 28px -10px rgba(15,23,42,0.55);
+  box-shadow: 0 14px 30px -10px rgba(15,23,42,0.55);
 }
 .hero-info-cta-arrow { transition: transform .2s; }
 .hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(3px); }
 .hero-info-cta[aria-disabled="true"] {
   background: transparent; color: var(--muted);
-  border: 1px solid var(--rule); cursor: default;
-  box-shadow: none;
+  border: 1px solid var(--rule); cursor: default; box-shadow: none;
 }
 .hero-info-cta[aria-disabled="true"]:hover {
-  transform: none; background: transparent;
-  box-shadow: none;
+  transform: none; background: transparent; box-shadow: none;
+}
+
+/* Mitten: story-paragraf + tags */
+.hero-info-middle {
+  display: flex; flex-direction: column; gap: 18px;
+}
+.hero-info-eyebrow {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+}
+.hero-info-story {
+  font-size: 17px; line-height: 1.55; color: #1e293b;
+  max-width: 56ch; font-weight: 500;
+}
+.hero-info-story em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.hero-info-story strong {
+  color: var(--accent); font-weight: 700;
+}
+.hero-info-tags {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
+}
+.hero-info-tag {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  padding: 5px 11px; border-radius: 100px;
+  background: rgba(220,76,43,0.08); color: var(--accent);
+  letter-spacing: 0.4px;
+}
+
+/* Höger: pull-quote + vecko-tidslinje */
+.hero-info-aside {
+  display: flex; flex-direction: column; gap: 22px;
+}
+.hero-info-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: 17px; line-height: 1.45;
+  color: var(--fg);
+  padding: 4px 0 4px 18px;
+  border-left: 2px solid var(--accent);
+  margin: 0; max-width: 28ch;
+}
+.hero-info-quote cite {
+  display: block; margin-top: 10px;
+  font-family: var(--mono); font-style: normal;
+  font-size: 10.5px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted);
+}
+.hero-info-week {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-top: 18px; border-top: 1px solid var(--rule);
+}
+.hero-info-week-title {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted); font-weight: 700;
+}
+.hero-info-week-list {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.hero-info-week-item {
+  display: grid; grid-template-columns: auto 1fr;
+  gap: 10px; align-items: baseline;
+  font-family: var(--mono); font-size: 11.5px;
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--rule);
+}
+.hero-info-week-item:last-child { border-bottom: 0; }
+.hero-info-week-day {
+  font-weight: 700; color: var(--accent);
+  letter-spacing: 0.6px;
+}
+.hero-info-week-label {
+  color: #334155; font-weight: 500;
+  letter-spacing: -0.05px;
+}
+
+/* Stagger entrance per kolumn när focus byter */
+.hero-info[data-active] .hero-info-left,
+.hero-info[data-active] .hero-info-middle,
+.hero-info[data-active] .hero-info-aside {
+  animation: panel-col-in .8s cubic-bezier(.34, 1.18, .64, 1) both;
+}
+.hero-info[data-active] .hero-info-left   { animation-delay: 0.05s; }
+.hero-info[data-active] .hero-info-middle { animation-delay: 0.18s; }
+.hero-info[data-active] .hero-info-aside  { animation-delay: 0.32s; }
+@keyframes panel-col-in {
+  from { opacity: 0; transform: translateY(20px); filter: blur(2px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
 /* ─── Hint längst ned ─── */
@@ -792,8 +879,13 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 
       <div class="figures" id="figures">
         <a class="figure" data-persona="linda" href="/demo-landing/4-vecka-djupdyk.html"
-           data-theme="Arbetslivet"
-           data-pitch="Lönesamtal med AI-Maria, kollektivavtalets revision, pensionsavgift som växer och pentagon som tippar när tandläkaren ringer."
+           data-theme="Arbetslivet · Vol. 01"
+           data-name="Linda"
+           data-role="22 · IT-konsult · Stockholm"
+           data-story="En vecka full av val: ett <strong>lönesamtal</strong> som ger 1 295 kr/mån, en oväntad <em>tandläkarakut</em> torsdag, en chef som föreslår karriärutbildning fredag. Varje val flyttar något — saldot, pensionspotten, eller pentagonens balans."
+           data-quote="Akavia 2026 säger 39 500 kr för min roll. Jag ligger 1 500 kr under."
+           data-cite="— Linda · lönesamtalet · rond 1"
+           data-week="Tis|Lönesamtal · Visma;Ons|Pensionsavgiften upptäcks;Tor|Akut tandläkare;Fre|Karriärsamtal;Sön|WB-pentagon · review;Mån|Lärar-Anna ser klassen"
            data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
            data-cta="Träffa Linda"
            data-float="+ 1 295 kr / mån">
@@ -811,8 +903,13 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         </a>
 
         <a class="figure" data-persona="evelina" href="#" data-soon
-           data-theme="Investering"
-           data-pitch="Aktiehandel, ISK-portfölj som kraschar och reser sig, och skatten som måste optimeras."
+           data-theme="Investering · Vol. 02"
+           data-name="Evelina"
+           data-role="27 · ekonom · Malmö"
+           data-story="Hon har följt börsen sedan 22, sett <em>Coronakraschen 2020</em> och vet att marknaden inte är gambling — det är planering. ISK växer <strong>12,4 %</strong> i år, men det är inte siffran som lär henne mest. Det är hur hon hanterar −8 %-dagar."
+           data-quote="Tid i marknaden, inte timing av marknaden."
+           data-cite="— Evelina · efter krasch-fredagen"
+           data-week="Mån|Marknadsöppning;Tis|ISK-spar 5 000 kr;Tor|Globalfond −8 %;Fre|Skattedeklaration · ISK;Sön|12-mån-review · index;Mån|Lärarvy"
            data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
            data-cta="Kommer snart"
            data-float="ISK · + 12,4 %">
@@ -830,8 +927,13 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         </a>
 
         <a class="figure" data-persona="peter" href="#" data-soon
-           data-theme="Vardagsekonomin"
-           data-pitch="Familjebudget, fakturor som trillar in, autogiron att signera och en buffert som testas."
+           data-theme="Vardagsekonomin · Vol. 03"
+           data-name="Peter"
+           data-role="38 · småbarnsförälder · Göteborg"
+           data-story="<strong>23 fakturor</strong> i månaden, hyra 8 200 kr, autogiron som måste signeras innan löningen den 25:e. Echo coachar Peter att <em>sortera prioriteringar</em> — inte att maximera avkastning. Vardagen är inte gambling, det är planering."
+           data-quote="Onsdag kväll. Barnen sover. Räkningstid."
+           data-cite="— Peter · vardagen"
+           data-week="Mån|Räkningar trillar in;Tis|EkonomilabbetID · autogiron;Ons|Bil i verkstad 12 000 kr;Tor|Kategorisera utgifter;Sön|Månadsprognos 31 dec;Mån|Lärar-Anna ser röd"
            data-tags="Huvudbok,Kommande fakturor,EkonomilabbetID,Buffert"
            data-cta="Kommer snart"
            data-float="23 fakturor · 8 200 kr">
@@ -853,19 +955,36 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
       </div>
 
       <div class="hero-info" id="heroInfo">
-        <div class="hero-info-empty">Hovra över en elev för att utforska</div>
+        <div class="hero-info-empty">Hovra över en karaktär</div>
         <div class="hero-info-content">
-          <div>
-            <div class="hero-info-theme" data-info-theme>—</div>
+
+          <div class="hero-info-left">
+            <div class="hero-info-meta" data-info-meta>—</div>
+            <h3 class="hero-info-name" data-info-name>—</h3>
+            <div class="hero-info-role" data-info-role>—</div>
+            <a class="hero-info-cta" data-info-cta href="#">
+              <span data-info-cta-label>Träffa</span>
+              <span class="hero-info-cta-arrow">→</span>
+            </a>
           </div>
-          <div>
-            <p class="hero-info-pitch" data-info-pitch>—</p>
+
+          <div class="hero-info-middle">
+            <div class="hero-info-eyebrow">● Hennes vecka</div>
+            <p class="hero-info-story" data-info-story>—</p>
             <div class="hero-info-tags" data-info-tags></div>
           </div>
-          <a class="hero-info-cta" data-info-cta href="#">
-            <span data-info-cta-label>Träffa</span>
-            <span class="hero-info-cta-arrow">→</span>
-          </a>
+
+          <aside class="hero-info-aside">
+            <blockquote class="hero-info-quote">
+              <span data-info-quote>—</span>
+              <cite data-info-cite>—</cite>
+            </blockquote>
+            <div class="hero-info-week">
+              <div class="hero-info-week-title">● 6 dagar i veckan</div>
+              <div class="hero-info-week-list" data-info-week></div>
+            </div>
+          </aside>
+
         </div>
       </div>
 
@@ -1056,15 +1175,25 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
   const heroInfo = document.getElementById('heroInfo');
   const figures = document.querySelectorAll('#figures .figure');
   if (!heroInfo || !figures.length) return;
-  const themeEl = heroInfo.querySelector('[data-info-theme]');
-  const pitchEl = heroInfo.querySelector('[data-info-pitch]');
+  const metaEl  = heroInfo.querySelector('[data-info-meta]');
+  const nameEl  = heroInfo.querySelector('[data-info-name]');
+  const roleEl  = heroInfo.querySelector('[data-info-role]');
+  const storyEl = heroInfo.querySelector('[data-info-story]');
   const tagsEl  = heroInfo.querySelector('[data-info-tags]');
+  const quoteEl = heroInfo.querySelector('[data-info-quote]');
+  const citeEl  = heroInfo.querySelector('[data-info-cite]');
+  const weekEl  = heroInfo.querySelector('[data-info-week]');
   const ctaEl   = heroInfo.querySelector('[data-info-cta]');
   const ctaLabel = heroInfo.querySelector('[data-info-cta-label]');
 
   function showFor(fig, isAuto) {
-    themeEl.textContent = fig.dataset.theme || '';
-    pitchEl.textContent = fig.dataset.pitch || '';
+    metaEl.textContent  = fig.dataset.theme || '';
+    nameEl.textContent  = fig.dataset.name || '';
+    roleEl.textContent  = fig.dataset.role || '';
+    storyEl.innerHTML   = fig.dataset.story || '';
+    quoteEl.textContent = fig.dataset.quote || '';
+    citeEl.textContent  = fig.dataset.cite || '';
+
     tagsEl.innerHTML = '';
     (fig.dataset.tags || '').split(',').forEach(t => {
       if (!t.trim()) return;
@@ -1073,6 +1202,18 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
       span.textContent = t.trim();
       tagsEl.appendChild(span);
     });
+
+    weekEl.innerHTML = '';
+    (fig.dataset.week || '').split(';').forEach(item => {
+      if (!item.trim()) return;
+      const [day, label] = item.split('|');
+      const row = document.createElement('div');
+      row.className = 'hero-info-week-item';
+      row.innerHTML = '<span class="hero-info-week-day">' + (day || '') + '</span>' +
+                      '<span class="hero-info-week-label">' + (label || '') + '</span>';
+      weekEl.appendChild(row);
+    });
+
     ctaLabel.textContent = fig.dataset.cta || 'Träffa';
     if (fig.dataset.soon !== undefined) {
       ctaEl.setAttribute('aria-disabled', 'true');
@@ -1081,6 +1222,10 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
       ctaEl.removeAttribute('aria-disabled');
       ctaEl.setAttribute('href', fig.getAttribute('href'));
     }
+
+    // Force reflow så CSS-animation triggas igen vid focus-byte
+    heroInfo.removeAttribute('data-active');
+    void heroInfo.offsetWidth;
     heroInfo.setAttribute('data-active', fig.dataset.persona);
     if (isAuto) heroInfo.setAttribute('data-auto', '1');
     else heroInfo.removeAttribute('data-auto');
