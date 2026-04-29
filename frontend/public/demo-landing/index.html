@@ -28,27 +28,40 @@ section { padding: clamp(80px, 12vh, 140px) 0; position: relative; }
 section + section { border-top: 1px solid var(--rule); }
 h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
-/* ─── Top-CTA (höger hörn, samma editorial-glas-profil som info-panelen) ─── */
-.top-cta {
-  position: fixed; top: 16px; right: 16px; z-index: 70;
-  display: inline-flex; align-items: center; gap: 10px;
-  font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: 1.4px; text-transform: uppercase;
-  text-decoration: none; color: #fff;
-  background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
-  backdrop-filter: blur(22px) saturate(140%);
-  -webkit-backdrop-filter: blur(22px) saturate(140%);
-  border: 0;
-  border-top: 1px solid rgba(255,255,255,0.18);
-  padding: 10px 16px; border-radius: 4px;
-  transition: all .22s var(--ease);
+/* ─── Top-nav (höger hörn, text-only — samma serif-bounce som persona-nav) ─── */
+.top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
 }
-.top-cta:hover {
-  background: linear-gradient(135deg, rgba(15,23,42,0.78) 0%, rgba(15,23,42,0.9) 100%);
-  color: var(--gold);
+.top-nav-link {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.2px; line-height: 1.05;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.45);
+  text-decoration: none;
+  transform-origin: right center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    font-weight .3s var(--ease),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
+    color .3s var(--ease);
+  cursor: pointer;
 }
-.top-cta-arrow { transition: transform .2s var(--ease); }
-.top-cta:hover .top-cta-arrow { transform: translateX(3px); }
+.top-nav-link:hover {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.top-nav-link-primary { color: var(--gold); }
+.top-nav-link-primary:hover { color: var(--gold); }
+@media (max-width: 600px) {
+  .top-nav { top: 16px; right: 18px; gap: 18px; }
+  .top-nav-link { font-size: 13px; }
+  .top-nav-link:hover { font-size: 18px; }
+}
 
 /* ─── AOS-style entrance ─── */
 [data-fx] {
@@ -685,17 +698,23 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   font-size: 10.5px;
 }
 
-/* ─── Magazine credits — ljust på mörk video, ligger ovanför info-panelen ─── */
+/* ─── Magazine credits — sitter precis under info-panelen ─── */
 .cover-credits {
   position: relative; z-index: 2;
-  margin: auto 0 14px;
-  padding: 0;
-  display: flex; justify-content: center; align-items: center;
+  margin: 14px 0 6px;
+  padding: 0 50px;
+  display: flex; justify-content: flex-start; align-items: center;
   gap: clamp(14px, 2vw, 32px);
   font-family: var(--mono); font-size: 10px;
   letter-spacing: 1.6px; text-transform: uppercase;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.55);
   flex-wrap: wrap;
+}
+/* Wrap kring info-panel + vertikal scroll-text — gör så credits kan
+   ligga utanför utan att scroll-texten tappar sin position. */
+.hero-info-wrap {
+  position: relative;
+  margin-top: auto;
 }
 /* Vertikal scroll-text på vänster kant av info-panelen — sitter
    utanför panelen så den inte clippas av overflow:hidden */
@@ -826,31 +845,52 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   text-transform: uppercase; color: rgba(255,255,255,0.6); font-weight: 600;
   margin-top: 0;
 }
+/* Stor serif "Träffa [Name]"-CTA — samma serif-bounce som persona-nav-name.
+   Tydligt signal att det finns en hel saga bakom personen. */
 .hero-info-cta {
-  display: inline-flex; align-items: center; gap: 8px;
-  margin-top: 10px;
-  padding: 9px 16px; border-radius: 100px;
-  background: #fff; color: var(--fg);
-  text-decoration: none; font-family: inherit;
-  font-size: 12.5px; font-weight: 600; letter-spacing: -0.05px;
+  display: inline-flex; align-items: baseline; gap: 10px;
+  margin-top: 10px; padding: 0;
+  background: transparent; border: 0; box-shadow: none;
+  text-decoration: none;
+  font-family: var(--serif);
+  font-size: clamp(20px, 2.1vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  line-height: 1.05;
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.5);
   white-space: nowrap;
-  transition: all .22s var(--ease);
-  box-shadow: 0 6px 16px -6px rgba(0,0,0,0.5);
+  transform-origin: left center;
   align-self: flex-start;
+  cursor: pointer;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
+    color .3s var(--ease);
 }
 .hero-info-cta:hover {
-  transform: translateY(-2px); background: var(--gold);
-  box-shadow: 0 14px 30px -10px rgba(0,0,0,0.55);
+  font-size: clamp(26px, 2.7vw, 34px);
+  letter-spacing: -1px;
+  color: var(--gold);
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
 }
-.hero-info-cta-arrow { transition: transform .2s; }
-.hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(3px); }
+.hero-info-cta-arrow {
+  font-family: var(--mono); font-weight: 400;
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+  display: inline-block;
+}
+.hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(8px); }
 .hero-info-cta[aria-disabled="true"] {
-  background: transparent; color: rgba(255,255,255,0.6);
-  border: 1px solid rgba(255,255,255,0.25); cursor: default; box-shadow: none;
+  color: rgba(255,255,255,0.5); cursor: default;
+  font-style: italic; font-weight: 500;
 }
 .hero-info-cta[aria-disabled="true"]:hover {
-  transform: none; background: transparent; box-shadow: none;
+  color: rgba(255,255,255,0.5);
+  font-size: clamp(20px, 2.1vw, 26px);
+  letter-spacing: -0.6px;
+  animation: none;
 }
+.hero-info-cta[aria-disabled="true"] .hero-info-cta-arrow { display: none; }
 
 /* Mitten: story-paragraf + week-chips horisontellt */
 .hero-info-middle {
@@ -1510,10 +1550,10 @@ html.lenis, html.lenis body { height: auto; }
 </head>
 <body>
 
-<a href="#cta" class="top-cta">
-  Skapa konto
-  <span class="top-cta-arrow">→</span>
-</a>
+<nav class="top-nav" aria-label="Konto">
+  <a href="/login" class="top-nav-link">Logga in</a>
+  <a href="#cta" class="top-nav-link top-nav-link-primary">Skapa konto</a>
+</nav>
 
 <main>
 
@@ -1550,24 +1590,18 @@ html.lenis, html.lenis body { height: auto; }
         <p id="heroSubhead">Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val har en konsekvens, varje konsekvens lär en lektion.</p>
       </div>
 
-      <div class="cover-credits">
-        <span class="cover-credits-vol">Vol. 01</span>
-        <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span>Ill. Ekonomilabbet 2026</span>
-        <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
-      </div>
+      <!-- Info-panel + vertikal scroll-text wrappas så credits kan
+           ligga utanför utan att scroll-texten tappar position. -->
+      <div class="hero-info-wrap">
+        <!-- Vertikal scroll-text på vänster kant av info-panelen -->
+        <span class="hero-info-scroll" aria-hidden="true">
+          <span class="hero-info-scroll-text">Scrolla för mer</span>
+          <span class="hero-info-scroll-arrow">↓</span>
+        </span>
 
-      <!-- Vertikal scroll-text på vänster kant av info-panelen -->
-      <span class="hero-info-scroll" aria-hidden="true">
-        <span class="hero-info-scroll-text">Scrolla för mer</span>
-        <span class="hero-info-scroll-arrow">↓</span>
-      </span>
-
-      <!-- Frostat-glas info-panel som overlay på videon, uppdateras
-           via auto-rotation eller klick på höger-nav. Sist i DOM så
-           den ligger mot bottnen av hero. -->
-      <div class="hero-info" id="heroInfo">
+        <!-- Frostat-glas info-panel som overlay på videon, uppdateras
+             via auto-rotation eller klick på höger-nav. -->
+        <div class="hero-info" id="heroInfo">
         <div class="hero-info-empty">Hovra över en karaktär</div>
         <div class="hero-info-content">
 
@@ -1599,6 +1633,16 @@ html.lenis, html.lenis body { height: auto; }
           </aside>
 
         </div>
+        </div>
+      </div>
+
+      <!-- Magazine-credits ligger precis under info-panelen. -->
+      <div class="cover-credits">
+        <span class="cover-credits-vol">Vol. 01</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>Ill. Ekonomilabbet 2026</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
       </div>
     </div>
 
