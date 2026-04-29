@@ -1715,6 +1715,37 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="flow-autogiro">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">23 · Flöde E</div>
+    <h2 class="h-section">Autogiro-signering — <em>23 fakturor</em>, en handling.</h2>
+    <div class="prose">
+      <p>
+        Peters viktigaste flöde. Eleven möter den faktiska komplexiteten
+        i svensk vardagsekonomi: 18 fasta autogiron, 5 oregelbundna
+        som kräver granskning. Allt går genom EkonomilabbetID och
+        Bankgirot.
+      </p>
+      <ol>
+        <li>Banken har tagit emot 23 inkommande fakturor under månaden (hyra, el, försäkring, mobil, tandvård, m.fl.).</li>
+        <li>Eleven öppnar bankens "Kommande" — ser hela listan med belopp och förfallodatum.</li>
+        <li>Plattformen klassificerar automatiskt: 18 är <em>vana</em> (inom 5 % av snitt-belopp + känd utskickare). 5 är <em>oregelbundna</em> och flaggas röda.</li>
+        <li>Eleven granskar de 5 röda raderna en och en — väljer betala / skjuta upp / kontakta utskickare.</li>
+        <li>Eleven trycker <em>Signera 18 vana med EkonomilabbetID</em>.</li>
+        <li>EkonomilabbetID-flow triggas (samma som BankID-simulator) — desktop visar QR, telefonen bekräftar med PIN.</li>
+        <li>Bankgirot tar emot 18 medgivanden i ett svep — schemalagda dragningar registreras.</li>
+        <li>Stoppfrist: eleven kan stoppa enskild dragning till kl 16:00 dagen före.</li>
+        <li>När dragning sker (typiskt 25:e i månaden) flyter pengarna ut automatiskt — visas i kontoutdraget nästa månad.</li>
+      </ol>
+      <p>
+        Pedagogisk vinst: eleven förstår att autogiro inte är magi —
+        det är ett medgivande som sparas hos Bankgirot, en kalender­
+        bunden dragning, och en stoppfrist. Att signera 18 fakturor i
+        ett svep är ett <em>val</em> — eleven kan också signera en i
+        taget om något känns osäkert.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
