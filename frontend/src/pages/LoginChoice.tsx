@@ -1,75 +1,75 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import { PaperChip } from "@/components/paper";
+import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
 
 export default function LoginChoice() {
   return (
-    <div className="min-h-screen bg-paper text-ink grid place-items-center p-6">
-      <div className="w-full max-w-2xl">
-        <Link
-          to="/"
-          className="text-sm text-[#666] nav-link inline-flex items-center gap-1 mb-6"
-        >
-          <ArrowLeft className="w-4 h-4" /> Tillbaka till startsidan
+    <EditorialAuthShell
+      topNavRight={
+        <Link to="/signup/teacher" className="ed-top-link is-primary">
+          Skapa konto
         </Link>
-        <div className="text-center mb-10">
-          <div className="eyebrow mb-3">Ekonomilabbet</div>
-          <h1 className="serif text-4xl md:text-5xl leading-[1.05]">Välkommen.</h1>
-          <p className="lead mt-3">Vem är du?</p>
+      }
+    >
+      <div className="ed-eyebrow">Välkommen tillbaka</div>
+
+      <div className="ed-clock">
+        <div className="ed-clock-time">
+          Klockan är <LiveTime />.
         </div>
-
-        <Link
-          to="/demo"
-          className="block border-[1.5px] border-ink bg-paper text-ink p-5 mb-6 transition-colors hover:bg-[#fffef5]"
-        >
-          <div className="flex items-center gap-3">
-            <PaperChip color="special">⚡</PaperChip>
-            <div>
-              <div className="serif text-lg leading-tight">Prova demoläge direkt</div>
-              <div className="text-sm text-[#555] mt-0.5">
-                Logga in utan konto — färdig klass att utforska.
-              </div>
-            </div>
-          </div>
-        </Link>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            to="/login/teacher"
-            className="feature-card text-left group block"
-          >
-            <PaperChip color="special">Lä</PaperChip>
-            <h2 className="serif text-2xl mt-4">Lärare</h2>
-            <p className="mt-2 body-prose text-sm">
-              Logga in med e-post och lösenord för att hantera din klass.
-            </p>
-          </Link>
-
-          <Link
-            to="/signup/parent"
-            className="feature-card text-left group block"
-          >
-            <PaperChip color="fordj">Fö</PaperChip>
-            <h2 className="serif text-2xl mt-4">Förälder</h2>
-            <p className="mt-2 body-prose text-sm">
-              Skapa familjekonto för dig och dina barn — eller logga in
-              med befintligt.
-            </p>
-          </Link>
-
-          <Link
-            to="/login/student"
-            className="feature-card text-left group block"
-          >
-            <PaperChip color="grund">El</PaperChip>
-            <h2 className="serif text-2xl mt-4">Elev / Barn</h2>
-            <p className="mt-2 body-prose text-sm">
-              Använd din 6-teckens kod som du fått av din lärare eller
-              förälder.
-            </p>
-          </Link>
-        </div>
+        <LiveCountdown minutes={1} />
       </div>
-    </div>
+
+      <p className="ed-subhead">
+        Vem är du? <em>Lärare</em> loggar in med e-post och lösenord.
+        <em>Förälder</em> har samma flöde med ett familjekonto.
+        <em>Elev</em> använder bara sin sextecknade kod.
+      </p>
+
+      <Link to="/demo" className="ed-demo-tile">
+        <span className="ed-demo-tile-icon" aria-hidden="true">⚡</span>
+        <div>
+          <div className="ed-demo-tile-title">Prova demoläge direkt</div>
+          <div className="ed-demo-tile-body">
+            Logga in utan konto — färdig klass att utforska.
+          </div>
+        </div>
+      </Link>
+
+      <div className="ed-choices">
+        <Link to="/login/teacher" className="ed-choice">
+          <span className="ed-choice-eye">Lä · Lärare</span>
+          <span className="ed-choice-title">Logga in som lärare</span>
+          <span className="ed-choice-body">
+            E-post och lösenord. Hela klassen i en pentagon, varje elev en rad.
+          </span>
+          <span className="ed-choice-go">
+            Till inloggning <span className="ed-choice-go-arrow">→</span>
+          </span>
+        </Link>
+
+        <Link to="/signup/parent" className="ed-choice">
+          <span className="ed-choice-eye">Fö · Familj</span>
+          <span className="ed-choice-title">Skapa familjekonto</span>
+          <span className="ed-choice-body">
+            För dig och dina barn — varje barn får sin egen sex-teckens-kod.
+          </span>
+          <span className="ed-choice-go">
+            Skapa konto <span className="ed-choice-go-arrow">→</span>
+          </span>
+        </Link>
+
+        <Link to="/login/student" className="ed-choice">
+          <span className="ed-choice-eye">El · Elev</span>
+          <span className="ed-choice-title">Logga in som elev</span>
+          <span className="ed-choice-body">
+            Använd sex-teckens-koden från din lärare eller förälder.
+          </span>
+          <span className="ed-choice-go">
+            Till elevkod <span className="ed-choice-go-arrow">→</span>
+          </span>
+        </Link>
+      </div>
+    </EditorialAuthShell>
   );
 }
