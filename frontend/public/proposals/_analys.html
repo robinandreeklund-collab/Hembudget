@@ -2631,6 +2631,54 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="pipeline-ai-phases">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">51 · Pipeline · AI och faser</div>
+    <h2 class="h-section">Sju nya AI-funktioner — <em>fem faser</em> i utbyggnad.</h2>
+    <div class="prose">
+      <p>
+        Sju nya AI-funktioner kommer i <code>ai.py</code>:
+        <em>generate_job_description</em> (Haiku, autenticitet i kundtext),
+        <em>evaluate_marketing_copy</em> (Haiku, kvalitetsfaktor 0,5–1,5
+        till engine), <em>evaluate_quote_pitch</em> (Haiku, matchningsfaktor
+        till acceptansmodellen), <em>suggest_bookkeeping_entry</em> (Haiku
+        med tool_use, eleven kan säga emot), <em>review_business_idea</em>
+        (Haiku, modereringsspår — fångar uppenbart olagligt/oetiskt innan
+        affärsidén sparas), plus utökningar av befintliga
+        <em>answer_student_question</em> (Sonnet, "vad är moms?") och
+        <em>score_with_rubric</em> (Sonnet, peer-revision).
+      </p>
+      <p>
+        AI-kostnaden är den största risken: 30 elever × 16 veckor × 5 LLM-anrop
+        ≈ 2 400 anrop per modulkörning. Mitigering är aggressiv caching
+        (<code>cache_control: ephemeral</code> på alla bransch- och
+        segment-prompts som är stabila), kvotlimit per elev per vecka i
+        <code>Teacher</code>-tabellen med varning vid 80 %, och ett
+        <em>ai_enabled=False</em>-läge där simulatorn kör med fasta texter —
+        försämrad upplevelse men inte broken, exakt som CLAUDE.md kräver.
+      </p>
+      <p>
+        Implementationsplanen är fem faser, totalt 6–7 veckor:
+        <strong>Fas 1</strong> grunden (1–2 v) — Business/Customer/Quote/Job/
+        CustomerInvoice, onboarding-wizard, statisk kundpool, manuell tick.
+        <strong>Fas 2</strong> modul + lärar-MVP (1 v) — systemmodul "Mitt
+        företag — från idé till revision" (8 basics-steg), klassöversikt,
+        AI för pitch + jobbeskrivning. <strong>Fas 3</strong> marknadsföring
+        + beslut (1 v) — MarketingCampaign, BusinessDecision, lärarens
+        leverantörsfakturor med massutskick. <strong>Fas 4</strong> avancerat
+        läge (2 v) — LedgerEntry, ChartOfAccount, kontering-AI,
+        bankavstämning, nyckeltalsdashboard. <strong>Fas 5</strong>
+        peer-revision + polish (1 v) — AuditAssignment, spot-check-AI mot
+        kollusion, finjustering efter klassrumstester.
+      </p>
+      <p>
+        Mellan varje fas: släpp till en testlärare, samla feedback, justera.
+        Modulen är "spel-design" lika mycket som "mjukvaru-design", så
+        iteration är obligatorisk — vilket är samma filosofi som har drivit
+        de befintliga 14 aktörerna fram till var de är idag.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
