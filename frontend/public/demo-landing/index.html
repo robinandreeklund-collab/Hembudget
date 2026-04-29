@@ -1018,33 +1018,226 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .teacher {
   background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
   color: #fff;
+  position: relative;
+  padding-top: clamp(80px, 12vh, 140px);
+  padding-bottom: clamp(80px, 12vh, 140px);
 }
 .teacher::before {
   content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
-.teacher-grid {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  gap: clamp(40px, 6vw, 88px); align-items: center;
+
+/* Header-block */
+.teacher-head {
+  max-width: 880px; margin: 0 auto;
+  text-align: center; margin-bottom: clamp(56px, 8vh, 96px);
 }
-@media (max-width: 900px) { .teacher-grid { grid-template-columns: 1fr; gap: 40px; } }
-.teacher-eye {
+.teacher-head .teacher-eye {
   font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
   text-transform: uppercase; color: var(--gold); font-weight: 700;
-  margin-bottom: 22px;
+  margin-bottom: 22px; display: inline-block;
 }
-.teacher h2 {
-  font-size: clamp(34px, 4.4vw, 56px); font-weight: 700;
-  letter-spacing: -1.6px; line-height: 1.05; margin-bottom: 26px;
+.teacher-head h2 {
+  font-size: clamp(38px, 5vw, 64px); font-weight: 700;
+  letter-spacing: -2px; line-height: 1; margin-bottom: 22px;
 }
-.teacher h2 em {
+.teacher-head h2 em {
   font-family: var(--serif); font-style: italic; color: var(--gold);
   font-weight: 500;
 }
-.teacher p {
-  font-size: 17px; color: rgba(255,255,255,0.78); line-height: 1.65;
-  margin-bottom: 18px; max-width: 50ch;
+.teacher-head p {
+  font-size: 18px; line-height: 1.55; color: rgba(255,255,255,0.7);
+  max-width: 56ch; margin: 0 auto;
 }
+
+/* Feature-grid: 6 features i 3x2 desktop, 2x3 tablet, 1x6 mobil */
+.teacher-features {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; max-width: 1280px; margin: 0 auto;
+}
+@media (max-width: 1100px) { .teacher-features { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px)  { .teacher-features { grid-template-columns: 1fr; } }
+
+.teacher-feature {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  padding: 28px 26px 30px;
+  display: flex; flex-direction: column; gap: 14px;
+  position: relative;
+  transition: all .25s var(--ease);
+  isolation: isolate;
+}
+.teacher-feature:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-3px);
+}
+.teacher-feature::before {
+  content: ""; position: absolute;
+  top: 0; left: 0; height: 2px; width: 0;
+  background: var(--gold);
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+}
+.teacher-feature:hover::before { width: 100%; }
+.teacher-feature-icon {
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.22);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  color: var(--gold); letter-spacing: 0.5px;
+}
+.teacher-feature-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold);
+}
+.teacher-feature h3 {
+  font-size: 19px; font-weight: 700; letter-spacing: -0.4px;
+  line-height: 1.15; color: #fff;
+}
+.teacher-feature p {
+  font-size: 14px; line-height: 1.55; color: rgba(255,255,255,0.7);
+  flex: 1;
+}
+.teacher-feature-mini {
+  margin-top: 4px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Mini-mockups inuti varje feature */
+.tf-mock-row {
+  display: grid; grid-template-columns: auto 1fr auto;
+  gap: 10px; padding: 6px 0;
+  border-bottom: 1px dotted rgba(255,255,255,0.06);
+  font-family: var(--mono); font-size: 11px;
+}
+.tf-mock-row:last-child { border-bottom: 0; }
+.tf-mock-row strong {
+  color: var(--gold); font-weight: 700; letter-spacing: 0.4px;
+  font-size: 10px; text-transform: uppercase;
+}
+.tf-mock-row span { color: rgba(255,255,255,0.78); }
+.tf-mock-num {
+  color: #fff; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.tf-mock-num.is-good { color: #10b981; }
+.tf-mock-num.is-warn { color: #fca5a5; }
+
+/* Time-on-task heatmap */
+.tf-heatmap {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.tf-heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.05);
+}
+.tf-heatmap-cell[data-h="1"] { background: rgba(251,191,36,0.15); }
+.tf-heatmap-cell[data-h="2"] { background: rgba(251,191,36,0.35); }
+.tf-heatmap-cell[data-h="3"] { background: rgba(251,191,36,0.55); }
+.tf-heatmap-cell[data-h="4"] { background: rgba(251,191,36,0.85); }
+
+/* Kompetens-bars */
+.tf-bar {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px; align-items: center; padding: 5px 0;
+  font-family: var(--mono); font-size: 10.5px;
+}
+.tf-bar-label { color: rgba(255,255,255,0.85); letter-spacing: 0.3px; }
+.tf-bar-value { color: var(--gold); font-weight: 700; }
+.tf-bar-track {
+  grid-column: 1 / -1; height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px; overflow: hidden;
+  margin-top: 2px;
+}
+.tf-bar-fill {
+  height: 100%; background: var(--gold);
+  border-radius: 2px;
+}
+
+/* AI chat-preview */
+.tf-chat-bubble {
+  padding: 8px 10px; border-radius: 8px;
+  font-size: 11.5px; line-height: 1.4;
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-style: italic;
+}
+.tf-chat-bubble.is-echo {
+  background: rgba(251,191,36,0.1);
+  border-left: 2px solid var(--gold);
+  color: rgba(255,255,255,0.95);
+}
+.tf-chat-bubble.is-student {
+  background: rgba(255,255,255,0.05);
+  margin-left: 14px;
+  color: rgba(255,255,255,0.78);
+}
+
+/* Stats-bar med 4 stora siffror */
+.teacher-stats {
+  margin-top: clamp(48px, 6vh, 80px);
+  max-width: 1280px; margin-left: auto; margin-right: auto;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; overflow: hidden;
+}
+@media (max-width: 700px) { .teacher-stats { grid-template-columns: 1fr 1fr; } }
+.teacher-stat {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  padding: 26px 22px; text-align: left;
+}
+.teacher-stat-num {
+  font-family: var(--serif); font-size: clamp(36px, 4.5vw, 56px);
+  font-weight: 700; letter-spacing: -1.5px; line-height: 1;
+  color: #fff;
+}
+.teacher-stat-num em {
+  font-style: italic; color: var(--gold); font-weight: 500;
+}
+.teacher-stat-label {
+  margin-top: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+/* Quote-card */
+.teacher-quote {
+  margin-top: clamp(48px, 6vh, 80px);
+  max-width: 880px; margin-left: auto; margin-right: auto;
+  text-align: center;
+  padding: clamp(28px, 4vh, 48px) clamp(28px, 4vw, 56px);
+  background: rgba(251,191,36,0.04);
+  border-top: 1px solid rgba(251,191,36,0.2);
+  border-bottom: 1px solid rgba(251,191,36,0.2);
+  border-radius: 4px;
+}
+.teacher-quote-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(22px, 2.6vw, 32px); line-height: 1.35;
+  color: #fff; margin: 0 0 18px;
+}
+.teacher-quote-text::before { content: "" "; color: var(--gold); }
+.teacher-quote-text::after  { content: "" "; color: var(--gold); }
+.teacher-quote-cite {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+}
+.teacher-quote-cite::before, .teacher-quote-cite::after {
+  content: ""; width: 30px; height: 1px;
+  background: rgba(255,255,255,0.25);
+  display: inline-block;
+}
+
+/* Dash-card kvar för original-mockupen om vi vill behålla den */
 
 .dash-card {
   background: rgba(255,255,255,0.04);
@@ -1369,55 +1562,166 @@ html.lenis, html.lenis body { height: auto; }
 
   <section class="teacher">
     <div class="shell">
-      <div class="teacher-grid">
-        <div>
-          <div class="teacher-eye" data-fx="fade-up">● För läraren</div>
-          <h2 data-fx="fade-up" data-fx-delay="80">
-            Anna ser hela klassen i <em>ett ögonkast</em>.
-          </h2>
-          <p data-fx="fade-up" data-fx-delay="160">
-            28 elever, 28 veckor som händer parallellt. Anna ser varje
-            wellbeing-index, varje val, vem som inte loggat in på 5 dagar,
-            vem som tippade på hälsa.
-          </p>
-          <p data-fx="fade-up" data-fx-delay="240">
-            Hon ser inte bara siffror — hon ser <strong>vem som behöver
-            prat</strong>. Och hon ser det innan provet, inte efter.
-          </p>
+
+      <header class="teacher-head">
+        <div class="teacher-eye">● För läraren</div>
+        <h2>Ingen administration.<br><em>Bara undervisning.</em></h2>
+        <p>
+          Du ger eleven en 6-teckenskod — hon är inloggad direkt. Du ser
+          hela klassen i realtid: val, wellbeing-index, time on task, kompetenser.
+          Ingen Google Classroom-integration, ingen import, inget krångel.
+        </p>
+      </header>
+
+      <div class="teacher-features">
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-icon">Kl</div>
+          <div class="teacher-feature-eye">● Klassdashboard</div>
+          <h3>Hela klassen i ett ögonkast.</h3>
+          <p>28 elever, 28 veckor parallellt. WB-index, senaste val, vem som inte loggat in på 5 dagar.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-mock-row">
+              <strong>Linda</strong><span>SH3A · aktiv 19:30</span><span class="tf-mock-num is-good">72</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Peter</strong><span>5 dgr sen · buffert</span><span class="tf-mock-num is-warn">41</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Evelina</strong><span>aktiv NU · ISK</span><span class="tf-mock-num is-good">88</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-icon">Tt</div>
+          <div class="teacher-feature-eye">● Time on task</div>
+          <h3>Varje minut, varje modul, varje dag.</h3>
+          <p>Heatmap över aktivitet per elev. Du ser vem som lägger 90 minuter på pension och vem som klickade fel sek 30.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-heatmap">
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell"></span>
+            </div>
+          </div>
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-icon">12</div>
+          <div class="teacher-feature-eye">● Kompetensspårning</div>
+          <h3>12 kompetenser, automatiskt.</h3>
+          <p>Mappade mot Lgr/Gy-kursplanen. Eleven övar i ett scenario — du får färdiga kompetenstavlor.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-bar">
+              <span class="tf-bar-label">Lönesamtal</span>
+              <span class="tf-bar-value">82 %</span>
+              <span class="tf-bar-track"><span class="tf-bar-fill" style="width:82%"></span></span>
+            </div>
+            <div class="tf-bar">
+              <span class="tf-bar-label">ISK · skatt</span>
+              <span class="tf-bar-value">64 %</span>
+              <span class="tf-bar-track"><span class="tf-bar-fill" style="width:64%"></span></span>
+            </div>
+            <div class="tf-bar">
+              <span class="tf-bar-label">Buffert</span>
+              <span class="tf-bar-value">71 %</span>
+              <span class="tf-bar-track"><span class="tf-bar-fill" style="width:71%"></span></span>
+            </div>
+          </div>
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-icon">Ai</div>
+          <div class="teacher-feature-eye">● Echo · sokratisk AI</div>
+          <h3>Du sätter takten på AI:n.</h3>
+          <p>Echo ställer frågor istället för att ge svar. Du toggle:ar AI per klass eller per modul, ser varje konversation.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-chat-bubble is-echo">"Var detta avdrag som händer dig — eller en investering du gör i ditt 67-åriga jag?"</div>
+            <div class="tf-chat-bubble is-student" style="margin-top:6px;">"Jag har aldrig tänkt på det så förut..."</div>
+          </div>
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-icon">Mo</div>
+          <div class="teacher-feature-eye">● Moduler & scenarier</div>
+          <h3>Färdiga och egna moduler.</h3>
+          <p>"Din första månad", "Lönesamtalet", "ISK-portföljen". Tilldela klassen — eller bygg egen modul med dina egna scenarier.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-mock-row">
+              <strong>Mod 01</strong><span>Din första månad</span><span class="tf-mock-num">28/28</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Mod 02</strong><span>Lönesamtalet</span><span class="tf-mock-num">22/28</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Mod 03</strong><span>ISK-portföljen</span><span class="tf-mock-num">14/28</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-icon">Lp</div>
+          <div class="teacher-feature-eye">● Lärarguide & PDF-export</div>
+          <h3>Material som matchar kursplanen.</h3>
+          <p>Lärarguider, lektionsplanering, bedömningsmallar. Hämta lönespec, kontoutdrag och portfolio-rapporter eleven har skapat.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-mock-row">
+              <strong>PDF</strong><span>Lärarguide · Lgr22</span><span class="tf-mock-num">↓</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>PDF</strong><span>Bedömningsmall</span><span class="tf-mock-num">↓</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>PDF</strong><span>Lindas lönespec</span><span class="tf-mock-num">↓</span>
+            </div>
+          </div>
+        </article>
+
+      </div>
+
+      <div class="teacher-stats">
+        <div class="teacher-stat">
+          <div class="teacher-stat-num"><em>0</em></div>
+          <div class="teacher-stat-label">administration</div>
         </div>
-        <div class="dash-card" data-fx="fade-left" data-fx-delay="160">
-          <div class="dash-head">
-            <span class="dash-head-class">Klass · SH3A · 28 elever</span>
-            <span class="dash-head-stats">26 gröna · 2 röda</span>
-          </div>
-          <div class="dash-rows">
-            <div class="dash-row is-good">
-              <div class="dash-row-init">L</div>
-              <div class="dash-row-name">Linda Bergström<small>aktiv 19:30 · söndag review</small></div>
-              <div class="dash-row-time">2 MIN</div>
-              <div class="dash-row-wb">72</div>
-            </div>
-            <div class="dash-row is-warn">
-              <div class="dash-row-init">P</div>
-              <div class="dash-row-name">Peter Holm<small>buffert tippar · 5 dgr sen</small></div>
-              <div class="dash-row-time">5 D</div>
-              <div class="dash-row-wb">41</div>
-            </div>
-            <div class="dash-row is-good">
-              <div class="dash-row-init">E</div>
-              <div class="dash-row-name">Evelina Khan<small>aktiv 21:02 · ISK-deklaration</small></div>
-              <div class="dash-row-time">NU</div>
-              <div class="dash-row-wb">88</div>
-            </div>
-            <div class="dash-row">
-              <div class="dash-row-init" style="opacity:0.4;">+</div>
-              <div class="dash-row-name" style="color:rgba(255,255,255,0.5);">25 elever till</div>
-              <div class="dash-row-time"></div>
-              <div class="dash-row-wb" style="color:rgba(255,255,255,0.4); font-size:14px;">⌄</div>
-            </div>
-          </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-num">12</div>
+          <div class="teacher-stat-label">systemkompetenser</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-num">6</div>
+          <div class="teacher-stat-label">teckenskod per elev</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-num"><em>∞</em></div>
+          <div class="teacher-stat-label">elevers vägar</div>
         </div>
       </div>
+
+      <blockquote class="teacher-quote">
+        <p class="teacher-quote-text">Eleverna lär sig saker jag aldrig hade kunnat lära ut traditionellt — och jag ser exakt var de fastnar, innan provet.</p>
+        <div class="teacher-quote-cite">Anna Karlsson · Hvitfeldtska gymnasiet · SH3</div>
+      </blockquote>
+
     </div>
   </section>
 
