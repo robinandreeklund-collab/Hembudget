@@ -936,6 +936,84 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-6">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">10 · Aktör 06</div>
+    <h2 class="h-section">Försäkringsbolaget — premier, ärenden, <em>när bilen kraschar</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Fo</div>
+        <div>
+          <div class="actor-name">Försäkringsbolaget</div>
+          <div class="actor-role">Hem · bil · person · ansvar · försäkringsärenden</div>
+        </div>
+        <div class="actor-routes">
+          <code>(idag i /upcoming + scenarier)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Försäkring är inte synligt i navet idag — premierna kommer som
+          fakturor i bankens inkommande, ärenden triggas av scenarier
+          (bilen kraschar, lägenheten översvämmas). I framtida
+          architecture bör försäkringsbolaget ha egen portal eftersom
+          eleven ska kunna <em>jämföra</em> hem/bil/olycksfall, välja
+          självrisk, och driva ett ärende från anmälan till utbetalning.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos försäkringsbolaget</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Översikt aktiva försäkringar.</strong> Hemförsäkring,
+            bilförsäkring (helförsäkring vs halv vs trafik), person­
+            försäkring, ansvarsförsäkring. Per försäkring: premie,
+            självrisk, omfattning, förnyelsedatum.
+          </li>
+          <li>
+            <strong>Jämför försäkringar</strong> mellan bolag. 4–5
+            alternativ med olika villkor, premier, självrisker.
+            Plattformen visar pris-mot-täckning som matris.
+          </li>
+          <li>
+            <strong>Anmäler skadeärende.</strong> Bilen krockar i Peters
+            saga — eleven öppnar ärendet, fyller blankett, laddar upp
+            "bild" (simulerad), väntar på besked, betalar självrisk,
+            får utbetalning till lönekontot.
+          </li>
+          <li>
+            <strong>Ändrar omfattning</strong> vid livshändelser —
+            nytt barn (familje­tillägg), flytt (hemförsäkring gäller
+            bara på folkbokföringsadressen), ny bil.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data försäkringsbolaget äger</div>
+        <ul class="actor-list">
+          <li>Aktiva försäkringar + premier + förnyelsedatum</li>
+          <li>Skadeärenden (status, självrisk, ersättning, datum)</li>
+          <li>Försäkrings-jämförelser (per kategori, 4–5 alternativ)</li>
+          <li>Villkorshandlingar (vad omfattas / vad omfattas inte)</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: Folksam, If, Trygg-Hansa, Länsförsäkringar</li>
+          <li>Hemförsäkring: 110–250 kr/mån typiskt</li>
+          <li>Bilförsäkring: 350–900 kr/mån beroende på modell + bonus</li>
+          <li>Självrisk: 1 500–6 000 kr för hem, 3 500 kr standard bil</li>
+          <li>Olycksfall: 50–150 kr/mån för individ, billigare via fack/jobb</li>
+        </ul>
+
+        <p class="actor-cite">
+          Saknar idag egen route. Funktionen finns delvis i Upcoming.tsx
+          (premier som inkommande fakturor) och scenarier (skadeärenden).
+          Bör få egen <code>/forsakring</code> i ny IA.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
