@@ -1652,7 +1652,7 @@ html.lenis, html.lenis body { height: auto; }
 
 <nav class="top-nav" aria-label="Konto">
   <a href="/login" class="top-nav-link">Logga in</a>
-  <a href="#cta" class="top-nav-link top-nav-link-primary">Skapa konto</a>
+  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary">Skapa konto</a>
 </nav>
 
 <main>
@@ -1758,17 +1758,17 @@ html.lenis, html.lenis body { height: auto; }
         <span class="hero-persona-nav-cursor" aria-hidden="true"></span>
         <ol class="hero-persona-nav-list">
           <li class="hero-persona-nav-item is-active" data-persona-nav="linda"
-              data-href="/demo-landing/4-vecka-djupdyk.html">
+              data-href="/linda">
             <span class="hero-persona-nav-name">Linda</span>
             <span class="hero-persona-nav-role">22 · IT-konsult</span>
           </li>
           <li class="hero-persona-nav-item" data-persona-nav="evelina"
-              data-href="/demo-landing/evelina-vecka.html">
+              data-href="/evelina">
             <span class="hero-persona-nav-name">Evelina</span>
             <span class="hero-persona-nav-role">27 · ekonom</span>
           </li>
           <li class="hero-persona-nav-item" data-persona-nav="peter"
-              data-href="/demo-landing/peter-vecka.html">
+              data-href="/peter">
             <span class="hero-persona-nav-name">Peter</span>
             <span class="hero-persona-nav-role">38 · småbarnsförälder</span>
           </li>
@@ -1778,7 +1778,7 @@ html.lenis, html.lenis body { height: auto; }
 
     <!-- Hidden data-bärare för info-panel-content (oförändrad) -->
     <div class="figures" id="figures" hidden>
-      <a class="figure" data-persona="linda" href="/demo-landing/4-vecka-djupdyk.html"
+      <a class="figure" data-persona="linda" href="/linda"
          data-theme="Arbetslivet · Vol. 01"
          data-h1a="Lärobok" data-h1b=" blir " data-h1c="verklighet"
          data-subhead="Lönesamtal med AI-Maria, pension som växer från 7 %, en pentagon som tippar när tandläkaren ringer. Hennes vecka är full av val."
@@ -1791,7 +1791,7 @@ html.lenis, html.lenis body { height: auto; }
          data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
          data-eyebrow="● Hennes vecka"
          data-cta="Utforska min vardag"></a>
-      <a class="figure" data-persona="evelina" href="/demo-landing/evelina-vecka.html"
+      <a class="figure" data-persona="evelina" href="/evelina"
          data-theme="Investering · Vol. 02"
          data-h1a="Krasch" data-h1b=" blir " data-h1c="kunskap"
          data-subhead="ISK växer 12,4 %. Globalfond ner 8 % på en dag. Echo coachar — tid i marknaden, inte timing av marknaden."
@@ -1804,7 +1804,7 @@ html.lenis, html.lenis body { height: auto; }
          data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
          data-eyebrow="● Hennes vecka"
          data-cta="Utforska min vardag"></a>
-      <a class="figure" data-persona="peter" href="/demo-landing/peter-vecka.html"
+      <a class="figure" data-persona="peter" href="/peter"
          data-theme="Vardagsekonomin · Vol. 03"
          data-h1a="Räkningar" data-h1b=" blir " data-h1c="rutin"
          data-subhead="23 fakturor i månaden, autogiron som signeras, en buffert som testas. Vardagen blir hanterbar genom plan."
@@ -2157,8 +2157,8 @@ html.lenis, html.lenis body { height: auto; }
         visar hur lärarvyn fungerar och svarar på alla frågor.
       </p>
       <div class="cta-buttons" data-fx="fade-up" data-fx-delay="240">
-        <a href="#" class="btn btn-primary" onclick="return false;">Skapa konto<span class="btn-arrow">→</span></a>
-        <a href="#" class="btn btn-secondary" onclick="return false;">Boka demo · 20 min<span class="btn-arrow">→</span></a>
+        <a href="/signup/teacher" class="btn btn-primary">Skapa konto<span class="btn-arrow">→</span></a>
+        <a href="/login" class="btn btn-secondary">Logga in<span class="btn-arrow">→</span></a>
       </div>
     </div>
   </section>
@@ -2179,9 +2179,11 @@ html.lenis, html.lenis body { height: auto; }
       <div class="footer-col">
         <h4>Plattformen</h4>
         <ul>
-          <li><a href="/demo-landing/4-vecka-djupdyk.html">Träffa Linda</a></li>
-          <li><a href="#cta">Boka demo</a></li>
-          <li><a href="#cta">Skapa konto</a></li>
+          <li><a href="/linda">Träffa Linda</a></li>
+          <li><a href="/peter">Träffa Peter</a></li>
+          <li><a href="/evelina">Träffa Evelina</a></li>
+          <li><a href="/signup/teacher">Skapa konto</a></li>
+          <li><a href="/login">Logga in</a></li>
         </ul>
       </div>
       <div class="footer-col">

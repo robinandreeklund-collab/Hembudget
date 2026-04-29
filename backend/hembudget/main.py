@@ -219,7 +219,36 @@ def _mount_frontend_static(app: FastAPI) -> None:
 
     @app.get("/", include_in_schema=False)
     def _spa_root() -> FileResponse:
+        # Public landing = demo-landing/index.html (editorial sida som
+        # presenterar Linda/Peter/Evelina). SPA-shellet bor på /login
+        # och underliggande react-routes; alla SPA-routes faller tillbaka
+        # via _spa_fallback nedan.
+        landing = dist / "demo-landing" / "index.html"
+        if landing.is_file():
+            return FileResponse(str(landing))
         return FileResponse(str(dist / "index.html"))
+
+    # Snygga URLs för persona-sagorna — pekar på respektive saga-HTML
+    # som ligger statiskt under demo-landing/. Linda kvar på pretty-URL
+    # `/linda` istället för dess legacy-filnamn.
+    _SAGA_FILES = {
+        "linda":   dist / "demo-landing" / "4-vecka-djupdyk.html",
+        "peter":   dist / "demo-landing" / "peter-vecka.html",
+        "evelina": dist / "demo-landing" / "evelina-vecka.html",
+    }
+    for _slug, _path in _SAGA_FILES.items():
+        def _make(p: Path):
+            def _serve() -> FileResponse:
+                if p.is_file():
+                    return FileResponse(str(p))
+                return FileResponse(str(dist / "index.html"))
+            return _serve
+        app.add_api_route(
+            "/" + _slug,
+            _make(_path),
+            methods=["GET"],
+            include_in_schema=False,
+        )
 
     # Catch-all för React Router-paths (ej /api, ej /healthz, ej /assets).
     # Måste registreras SIST efter alla API-routers annars fångar den
