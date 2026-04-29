@@ -1718,7 +1718,7 @@ html.lenis, html.lenis body { height: auto; }
           </div>
 
           <div class="hero-info-middle">
-            <div class="hero-info-eyebrow">● Hennes vecka</div>
+            <div class="hero-info-eyebrow" data-info-eyebrow>● Hennes vecka</div>
             <p class="hero-info-story" data-info-story>—</p>
             <div class="hero-info-tags" data-info-tags></div>
           </div>
@@ -1787,6 +1787,7 @@ html.lenis, html.lenis body { height: auto; }
          data-cite="— Linda · lönesamtalet · rond 1"
          data-week="Tis|Lönesamtal · Visma;Ons|Pensionsavgiften upptäcks;Tor|Akut tandläkare;Fre|Karriärsamtal;Sön|WB-pentagon · review;Mån|Lärar-Anna ser klassen"
          data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
+         data-eyebrow="● Hennes vecka"
          data-cta="Utforska min vardag"></a>
       <a class="figure" data-persona="evelina" href="/demo-landing/evelina-vecka.html"
          data-theme="Investering · Vol. 02"
@@ -1799,6 +1800,7 @@ html.lenis, html.lenis body { height: auto; }
          data-cite="— Evelina · efter krasch-fredagen"
          data-week="Mån|Marknadsöppning;Tis|ISK-spar 5 000 kr;Tor|Globalfond −8 %;Fre|Skattedeklaration · ISK;Sön|12-mån-review · index;Mån|Lärarvy"
          data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
+         data-eyebrow="● Hennes vecka"
          data-cta="Utforska min vardag"></a>
       <a class="figure" data-persona="peter" href="/demo-landing/peter-vecka.html"
          data-theme="Vardagsekonomin · Vol. 03"
@@ -1811,6 +1813,7 @@ html.lenis, html.lenis body { height: auto; }
          data-cite="— Peter · vardagen"
          data-week="Mån|Räkningar trillar in;Tis|EkonomilabbetID · autogiron;Ons|Bil i verkstad 12 000 kr;Tor|Kategorisera utgifter;Sön|Månadsprognos 31 dec;Mån|Lärar-Anna ser röd"
          data-tags="Huvudbok,Kommande fakturor,EkonomilabbetID,Buffert"
+         data-eyebrow="● Hans vecka"
          data-cta="Utforska min vardag"></a>
     </div>
 
@@ -2252,6 +2255,7 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
   const metaEl  = heroInfo.querySelector('[data-info-meta]');
   const nameEl  = heroInfo.querySelector('[data-info-name]');
   const roleEl  = heroInfo.querySelector('[data-info-role]');
+  const eyebrowEl = heroInfo.querySelector('[data-info-eyebrow]');
   const storyEl = heroInfo.querySelector('[data-info-story]');
   const tagsEl  = heroInfo.querySelector('[data-info-tags]');
   const quoteEl = heroInfo.querySelector('[data-info-quote]');
@@ -2284,6 +2288,7 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
 
     metaEl.textContent  = fig.dataset.theme || '';
     nameEl.textContent  = fig.dataset.name || '';
+    if (eyebrowEl) eyebrowEl.textContent = fig.dataset.eyebrow || '● Veckan';
     roleEl.textContent  = fig.dataset.role || '';
     storyEl.innerHTML   = fig.dataset.story || '';
     quoteEl.textContent = fig.dataset.quote || '';
