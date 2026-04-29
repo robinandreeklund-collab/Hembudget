@@ -742,6 +742,108 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-4">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">08 · Aktör 04</div>
+    <h2 class="h-section">Lånegivaren — varför <em>banken</em> inte gjorde det själv.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Lå</div>
+        <div>
+          <div class="actor-name">Lånegivaren</div>
+          <div class="actor-role">Bostadslån · billån · konsumtionslån · kreditprövning</div>
+        </div>
+        <div class="actor-routes">
+          <code>/loans</code><br>
+          <code>/mortgage/:id</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          En befintlig låneskuld är inte samma sak som en ansökan, och en
+          ansökan är inte samma sak som ett pågående bolåne-beslut. Vi
+          har därför två separata routes: <code>/loans</code> är
+          <em>befintliga lån</em> (saldo, ränta, amortering, kvarvarande
+          löptid), <code>/mortgage/:id</code> är <em>aktiv beslutsuppgift</em>
+          där eleven står inför ett bolåne-val (välj räntebindning, välj
+          amorteringstakt, välj långivare). Banken hanterar konsumtions-
+          och kreditkortslån; bostadslån har sitt eget tunga flöde.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör med lånegivaren</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Översikt befintliga lån.</strong> Bostadslån (rörlig 3
+            mån + bunden 3 år), billån (4,9 % effektiv), kreditkort­
+            saldo (avbetalningsplan). Per lån: ursprung, kvarvarande,
+            ränta, månads­kost­nad, slutdatum.
+          </li>
+          <li>
+            <strong>Räknar amorteringsplan.</strong> Visualisering av hur
+            kapital krymper över tid + hur mycket ränta som faktiskt
+            betalas. Eleven ser skillnaden mellan rak amortering och
+            annuitet.
+          </li>
+          <li>
+            <strong>Ansöker om nytt lån.</strong> Antingen direkt hos
+            banken (konsumtionslån) eller via en bolåneansökan
+            (<code>/mortgage/:id</code>) där hen jämför långivare. Båda
+            triggar kreditprövning med KALP.
+          </li>
+          <li>
+            <strong>Genomgår kreditprövning.</strong> KALP-beräkning visas
+            steg för steg: inkomst minus skatt minus existerande lån
+            minus Konsumentverkets schablon för levnadskostnader = kvar
+            för räntor + amortering. Räcker det → godkänd. Räcker det
+            inte → nekad med specifik motivering.
+          </li>
+          <li>
+            <strong>Hanterar kreditkortsfaktura.</strong> Specialfall —
+            kortet är hos banken men <em>fakturan är ett lån</em> om den
+            inte betalas i sin helhet. Eleven väljer: betala fullt, dela
+            upp (ränta börjar löpa), missa (påminnelse + dröjsmålsränta).
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data lånegivaren äger</div>
+        <ul class="actor-list">
+          <li>Befintliga lån: ursprungsbelopp, ränta, amorteringstyp, säkerhet</li>
+          <li>KALP-modell: inkomstkrav per lånebelopp + bostadstyp</li>
+          <li>Aktiva ansökningar (status: pending / approved / denied)</li>
+          <li>Bolåne-jämförelser (4–5 långivare med olika villkor)</li>
+          <li>Räntestege (3 mån / 1 år / 3 år / 5 år bunden)</li>
+          <li>Amorteringskrav enligt FI (1 % över 50 % belåningsgrad, 2 % över 70 %)</li>
+        </ul>
+
+        <div class="actor-section-eye">Specifik flow vid bolåne-beslut</div>
+        <div class="actor-flow">
+1. Eleven får uppdrag <strong>"Köp lägenhet i Stockholm 3,2 mkr"</strong><br>
+2. Öppnar <code>/mortgage/:id</code> — beslutsuppgiften<br>
+3. Jämför 4 långivare (SBAB / SEB / Nordea / Avanza)<br>
+4. Väljer räntebindning (rörlig vs 3 år bunden — räntegap visas)<br>
+5. Väljer amorteringstakt (FI-krav minimum + ev. extra)<br>
+6. Plattformen kör KALP → godkänd/nekad med motivering<br>
+7. Vid godkänt: nya lånet hamnar i <code>/loans</code>, månadskostnad i bokföringen
+        </div>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: SBAB, SEB Bolån, Nordea Bolån + konsumtionsbanker som Resurs</li>
+          <li>Datakällor: Riksbankens reporänta, Finansinspektionens amorteringskrav, Konsumentverkets schablon</li>
+          <li>KALP: faktisk svensk modell (Schablonkostnaden 2026: ~9 800 kr/vuxen + 4 200 kr/barn)</li>
+          <li>Kreditkortsränta: SMS-lån-räntor 25–35 % effektiv (Lendo-data)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Loans.tsx (852 rader) för pågående lån och MortgageDecision
+          för aktivt beslut. Banken (1179 rader) hanterar den enklare
+          formen — kreditkortsfakturan.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
