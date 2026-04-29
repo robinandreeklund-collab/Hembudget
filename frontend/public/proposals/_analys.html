@@ -2135,6 +2135,40 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="teacher-student">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">37 · Lärarvy 02</div>
+    <h2 class="h-section">Elevdetalj — fem <em>flikar</em>, en elev.</h2>
+    <div class="prose">
+      <p>
+        Klick på en elev från översikten öppnar elevdetaljvyn — den mest
+        innehållstunga skärmen i hela systemet. Den är organiserad i fem
+        flikar: <em>Översikt</em> (sammanfattning av aktivitet, kompetenser,
+        senaste reflektioner), <em>Bokföring</em> (elevens transaktioner,
+        klassificeringsgrad, anomalier), <em>Moduler</em> (vilka moduler eleven
+        gjort, vilka är pågående, vilka är öppna), <em>Reflektioner</em>
+        (kronologisk lista av elevens textinlägg + Echo-konversationer),
+        <em>Portfolio</em> (kompetensnivåer + lärarens noteringar).
+      </p>
+      <p>
+        Tre handlingar är centrala. Först <em>impersonera</em>: läraren kan
+        klicka "se som Sara" och få exakt elevens vy med banner upptill —
+        detta är det enda säkra sättet att förstå vad eleven faktiskt ser
+        när problem uppstår. Andra: <em>höj kompetens</em>: läraren
+        markerar en kompetens som uppfylld på en viss nivå, valfri
+        motivering. Tredje: <em>kommentera reflektion</em>: läraren kan
+        skriva ett privat svar till elevens reflektion, eleven ser det vid
+        nästa inloggning.
+      </p>
+      <p>
+        En sidopanel högst upp visar AI-token-konsumtion för eleven (om
+        AI är aktiverat) och varnar om eleven närmar sig lärarens månadstak.
+        Eleven ser inte detta; det är lärarens administrativa data.
+        Token-buckets ligger i <code>security/rate_limit.py</code> och är
+        per-lärare, inte per-elev — eleven räknas mot sin lärares tak.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
