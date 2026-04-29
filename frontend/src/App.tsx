@@ -49,6 +49,10 @@ import DemoChoice from "./pages/DemoChoice";
 import Docs from "./pages/Docs";
 import Terms from "./pages/Terms";
 import Faq from "./pages/Faq";
+import Lararguider from "./pages/Lararguider";
+import Lgr22 from "./pages/Lgr22";
+import Rubriker from "./pages/Rubriker";
+import EchoAi from "./pages/EchoAi";
 import ScrollStoryDemo from "./pages/ScrollStoryDemo";
 import MyAchievements from "./pages/MyAchievements";
 import MyModules from "./pages/MyModules";
@@ -91,6 +95,10 @@ export default function App() {
         <Route path="/docs" element={<Docs />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/faq" element={<Faq />} />
+        <Route path="/larguider" element={<Lararguider />} />
+        <Route path="/lgr22" element={<Lgr22 />} />
+        <Route path="/rubriker" element={<Rubriker />} />
+        <Route path="/echo" element={<EchoAi />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
         <Route path="/login/legacy" element={<Login />} />
@@ -136,6 +144,10 @@ export default function App() {
           <Route path="/docs" element={<Docs />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/faq" element={<Faq />} />
+          <Route path="/larguider" element={<Lararguider />} />
+          <Route path="/lgr22" element={<Lgr22 />} />
+          <Route path="/rubriker" element={<Rubriker />} />
+          <Route path="/echo" element={<EchoAi />} />
           <Route path="/modules" element={<MyModules />} />
           <Route path="/modules/:moduleId" element={<ModuleView />} />
           <Route path="/achievements" element={<MyAchievements />} />
