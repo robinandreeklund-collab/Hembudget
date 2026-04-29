@@ -563,6 +563,105 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-2">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">06 · Aktör 02</div>
+    <h2 class="h-section">Arbetsgivaren — anställningen som <em>levande relation</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Vi</div>
+        <div>
+          <div class="actor-name">Arbetsgivaren</div>
+          <div class="actor-role">Anställning · lön · kollektivavtal · satisfaction-score</div>
+        </div>
+        <div class="actor-routes">
+          <code>/arbetsgivare</code><br>
+          <code>/salaries</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Arbetsgivaren är inte bara "var lönen kommer ifrån". Det är en
+          <strong>relation som mäts</strong>: arbetsgivaren har en
+          satisfaction-score på eleven (0–100) som rör sig baserat på
+          beteende — sjukanmälningar, sena ankomster, övertid, prestationer.
+          Lönesamtal går genom Maria-AI i fem ronder. Kollektivavtalet är
+          ett levande dokument eleven kan slå upp varje förmån i.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos arbetsgivaren</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Granskar lönespecen</strong> som genereras varje månad
+            — ReportLab-PDF med OCR, brutto, OB, övertid, A-skatt,
+            allmän pensionsavgift, tjänstepension. Importerar till sin
+            bokföring separat.
+          </li>
+          <li>
+            <strong>Förhandlar lön i fem ronder</strong> mot Maria-AI.
+            Varje rond: argument från eleven (förberett från Akavia-data
+            eller egen motivering) → Marias bud → accept/avslå/argumentera
+            vidare. Slutbud låses in i nya månadens lönespec.
+          </li>
+          <li>
+            <strong>Ser sin satisfaction-score.</strong> Visualiseras som
+            en gauge (&lt;25 = critical, &lt;40 = low, &lt;60 = neutral,
+            ≥60 = good). Score påverkar: hur mycket Maria viker sig i
+            lönesamtal, om eleven får befordran, om eleven blir uppsagd
+            vid kris.
+          </li>
+          <li>
+            <strong>Slår upp kollektivavtalet</strong> per fråga: Vad
+            ger ITP1? Hur fungerar sjukförsäkringen? Föräldralön? Eleven
+            ser monetär värdering av varje förmån (t.ex. tjänstepension
+            som NPV över 30 år).
+          </li>
+          <li>
+            <strong>Hanterar anställningsavtalet</strong> — visstidsanställd,
+            tillsvidare, deltid, övertid-policy, semesterdagar, uppsägningstid.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data arbetsgivaren äger</div>
+        <ul class="actor-list">
+          <li>Anställningsavtal (typ, lön, ITP, semester, uppsägningstid)</li>
+          <li>Lönespec (månadsvis, PDF + struktureat)</li>
+          <li>Kollektivavtal (Akavia ITP1 i Lindas fall — referens-dokument)</li>
+          <li>Satisfaction-score + trend (uppdateras vid varje val)</li>
+          <li>Lönesamtals-historik (5-rond per förhandling, full chatlog)</li>
+          <li>Befordringshistorik / titel-ändringar</li>
+        </ul>
+
+        <div class="actor-section-eye">Specifik flow vid lönesamtal</div>
+        <div class="actor-flow">
+1. Eleven öppnar <strong>/arbetsgivare → Lönesamtal</strong><br>
+2. Förbereder argument (Akavia-data, prestationer, marknads-diff)<br>
+3. <strong>Rond 1:</strong> Maria öppnar med Vismas budget-förslag (t.ex. 2,5 %)<br>
+4. Eleven argumenterar → <strong>rond 2:</strong> Maria räknar om → nytt bud<br>
+5. Upp till <strong>5 ronder</strong>; eleven kan acceptera när som helst<br>
+6. Slutbud låses in → ny lönespec genereras nästa månad<br>
+7. Hela samtalet sparas i lärar-vyn (<code>/teacher/negotiations</code>)
+        </div>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: anställning hos Visma (Lindas case) eller motsvarande svensk arbetsgivare</li>
+          <li>Lönedata: Akavias årliga rapport per yrke + region + erfarenhet</li>
+          <li>Tjänstepension: faktiska ITP1-regler (4,5 % upp till 7,5 IBB, 30 % över)</li>
+          <li>AI-Maria: Claude Haiku 4.5, deterministisk förhandlingsmotor (inte rådgivare)</li>
+          <li>Satisfaction-score: vår modell — speglar hur arbetsgivaren upplever eleven</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Arbetsgivare.tsx (1554 rader) — samlar lönespec, lönesamtal,
+          kollektivavtal, satisfaction-score. Salaries.tsx (1300 rader)
+          är en renodlad lönehistorik-vy.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
