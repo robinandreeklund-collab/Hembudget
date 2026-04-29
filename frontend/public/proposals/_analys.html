@@ -3,349 +3,368 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kategori-analys · Inloggat läge · Ekonomilabbet</title>
+<title>Komplett systemanalys · Inloggat läge · Ekonomilabbet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./_shared.css">
 <style>
-.shell { max-width: 880px; margin: 0 auto; padding: 96px clamp(24px, 6vw, 80px) 96px; }
+.shell { max-width: 960px; margin: 0 auto; padding: 96px clamp(24px, 6vw, 80px) 96px; }
 .head { margin-bottom: 60px; }
 .head .h-eyebrow { margin-bottom: 18px; }
 .head .h-display { margin-bottom: 18px; }
 .head .lead {
   font-family: var(--serif); font-style: italic;
   font-size: 19px; line-height: 1.55; color: #334155;
-  max-width: 60ch;
+  max-width: 64ch;
 }
-section { margin-bottom: 56px; padding-top: 28px; border-top: 1px solid var(--rule); }
-section::before { content: ""; display: block; width: 32px; height: 2px; background: var(--accent); margin-bottom: 14px; margin-top: -1px; }
+section { margin-bottom: 64px; padding-top: 32px; border-top: 1px solid var(--rule); }
+section::before {
+  content: ""; display: block;
+  width: 32px; height: 2px; background: var(--accent);
+  margin-bottom: 14px; margin-top: -1px;
+}
 section h2 { margin-bottom: 22px; }
-.prose { font-size: 15.5px; line-height: 1.7; color: #1f2937; max-width: 65ch; }
 
-.tax-grid {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 14px; margin: 24px 0;
+.prose { font-size: 15.5px; line-height: 1.7; color: #1f2937; max-width: 68ch; }
+.prose p { margin: 0 0 16px; }
+.prose strong { color: var(--fg); font-weight: 700; }
+.prose em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
 }
-@media (max-width: 700px) { .tax-grid { grid-template-columns: 1fr; } }
-.tax-card {
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  padding: 22px;
-  background: #fff;
+.prose ul, .prose ol { margin: 0 0 18px 22px; }
+.prose ul li, .prose ol li { margin: 7px 0; }
+.prose a {
+  color: var(--accent); text-decoration: none;
+  border-bottom: 1px solid rgba(220, 76, 43, 0.4);
 }
-.tax-card h3 {
-  font-family: var(--serif);
-  font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
-  margin-bottom: 6px;
-  color: var(--accent);
+
+.toc {
+  margin: 32px 0;
+  padding: 24px 28px;
+  background: rgba(15, 23, 42, 0.03);
+  border-left: 3px solid var(--fg);
+  border-radius: 0 4px 4px 0;
 }
-.tax-card .num {
-  font-family: var(--mono); font-size: 10px;
+.toc-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
   letter-spacing: 1.6px; text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 4px;
+  color: var(--muted); margin-bottom: 14px;
 }
-.tax-card p {
-  font-size: 14px; line-height: 1.5; color: #475569;
+.toc-eye::before { content: "● "; }
+.toc ol {
+  margin: 0; padding-left: 0; list-style: none;
+  counter-reset: toc;
 }
-.tax-card ul {
-  list-style: none; padding: 0;
-  margin: 12px 0 0;
-  font-family: var(--mono); font-size: 11px;
-  color: #475569;
+.toc li {
+  counter-increment: toc;
+  padding: 7px 0;
+  font-family: var(--serif); font-size: 16px;
+  display: flex; gap: 14px; align-items: baseline;
 }
-.tax-card ul li {
-  padding: 4px 0; border-bottom: 1px dotted var(--rule);
+.toc li::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--accent); letter-spacing: 0.5px;
+  min-width: 24px;
 }
-.tax-card ul li:last-child { border-bottom: 0; }
-
-.feature-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 24px 0;
-  font-size: 13.5px;
+.toc li a {
+  color: var(--fg); text-decoration: none; border-bottom: 0;
+  flex: 1;
 }
-.feature-table th {
-  text-align: left;
-  padding: 10px 14px;
-  border-bottom: 2px solid var(--fg);
-  font-family: var(--mono); font-size: 10px;
+.toc li a:hover { color: var(--accent); }
+.toc li.is-todo a { color: var(--muted); font-style: italic; }
+.toc li.is-todo a::after {
+  content: "kommer i nästa fas";
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
   letter-spacing: 1.4px; text-transform: uppercase;
   color: var(--muted);
+  margin-left: 12px;
+  padding: 2px 8px; border-radius: 100px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--rule);
+  vertical-align: middle;
 }
-.feature-table td {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rule);
-  vertical-align: top;
-}
-.feature-table .b { font-weight: 700; color: var(--fg); }
-.feature-table .a { color: var(--accent); font-weight: 600; }
 
-.foot {
-  text-align: center; margin-top: 80px;
-  padding-top: 32px; border-top: 1px solid var(--rule);
+.callout {
+  margin: 24px 0;
+  padding: 22px 26px;
+  background: rgba(220, 76, 43, 0.06);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
 }
+.callout-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px;
+}
+.callout-eye::before { content: "● "; }
+.callout p { font-size: 15px; line-height: 1.6; color: #422006; margin: 0; }
+.callout p + p { margin-top: 10px; }
+.callout strong { color: #422006; font-weight: 700; }
+
+.principle {
+  display: grid; grid-template-columns: 60px 1fr; gap: 18px;
+  padding: 18px 0; border-bottom: 1px dotted var(--rule);
+}
+.principle:last-child { border-bottom: 0; }
+.principle-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 28px; color: var(--accent); letter-spacing: -0.5px;
+  line-height: 1;
+}
+.principle h4 {
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.15; margin-bottom: 8px;
+}
+.principle p {
+  font-size: 14.5px; line-height: 1.6; color: #334155;
+}
+
+.foot { text-align: center; margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--rule); }
 .foot a {
   font-family: var(--serif); font-size: 16px; font-weight: 700;
   color: var(--accent); text-decoration: none;
+}
+
+.phase-tag {
+  display: inline-block;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 100px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  margin-left: 10px; vertical-align: middle;
 }
 </style>
 </head>
 <body>
 
-<a href="/" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Analys · 2026</span></a>
+<a href="/" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Systemanalys · 2026</span></a>
 <nav class="top-nav">
-  <a href="./index.html">← Tillbaka</a>
+  <a href="./index.html">← Förslagsöversikten</a>
 </nav>
 
 <div class="shell">
 
   <header class="head">
-    <div class="h-eyebrow">Kategori-analys · Inloggat läge</div>
-    <h1 class="h-display">Att forma <em>elevens</em> ekonomiska liv.</h1>
+    <div class="h-eyebrow">Systemanalys · Inloggat läge · Komplett</div>
+    <h1 class="h-display">
+      Vi <em>speglar</em> verkligheten — inte förenklar den.
+    </h1>
     <p class="lead">
-      Tjugofyra olika sidor i nuvarande SPA. Hur grupperar vi dem så
-      eleven inte drunknar — utan att vi tappar någon funktion?
+      Tidigare analys plattade ut hela systemet. Det går inte. Banken
+      är inte bokföring. Arbetsgivaren är inte bara lönespec. Varje
+      sida i plattformen finns för att eleven ska möta en faktisk
+      del av svensk ekonomisk vardag — och vi får inte ta bort steg
+      i flödet.
     </p>
   </header>
 
-  <section>
-    <div class="h-eyebrow" style="margin-bottom: 14px;">Problembilden</div>
-    <h2 class="h-section">Bredd, men ingen <em>karta</em>.</h2>
+  <section id="filosofi">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">01 · Filosofin</div>
+    <h2 class="h-section">Verklighetsspegling, inte <em>förenkling</em>.</h2>
     <div class="prose">
       <p>
-        Plattformen har idag ~24 publika sidor i inloggat läge: Dashboard,
-        Transactions, Budget, Loans, Funds &amp; ISK, Investments, Salaries,
-        Tax, Bank, Import, Scenarios, Reports, Onboarding, Modules,
-        Achievements, Messages, Chat, Settings, Utility, m.fl.
+        Ekonomilabbets pedagogiska kärna är att eleven möter samma
+        struktur som vuxenlivet — bara säkrad bakom en simulering där
+        misstag är gratis. Det betyder att vi inte kan kollapsa
+        <strong>banken</strong> till en saldo-räknare eller
+        <strong>arbetsgivaren</strong> till en lönespec. Vi måste
+        rendera de faktiska flödena: BankID-inloggning via QR-kod,
+        kreditprövning innan lån, lönesamtal i fem ronder, kommande
+        fakturor som eleven väljer datum för.
       </p>
       <p>
-        Sidofältet listar dem i två sektioner — <em>Lärarverktyg</em> och
-        <em>Eget konto</em>. Det är funktionellt korrekt men pedagogiskt
-        platt. Eleven öppnar Dashboard och möts av åtta widgets utan
-        narrativ. Banken är en separat sida från transaktionerna trots att
-        det är samma datakälla. Bokföring saknas helt som koncept fast
-        det är där livet faktiskt händer.
+        Konsekvensen för informationsarkitekturen: <em>två lager</em>.
+        Ett <strong>aktör-lager</strong> där varje yttre part (banken,
+        Visma, Skatteverket, Avanza, Folksam, hyresvärden, Akavia, …)
+        är en egen portal med sin egen logik. Ett
+        <strong>verktygslager</strong> där eleven själv arbetar med
+        bokföring, budget, reflektioner, mastery — synthesisen av allt
+        som strömmar in från aktörerna.
       </p>
       <p>
-        Vi vill <strong>inte</strong> ta bort funktioner — vi vill skapa
-        ett <em>språk</em> som gör att eleven förstår vart de är på väg.
+        Tidigare analys mappade <code>/transactions</code> som
+        "bokföring" och placerade banken där också. Det är fel. Banken
+        är <em>primärkällan</em> för kontoutdrag, kreditkortsfaktura,
+        kreditprövning, kommande inkommande fakturor. Bokföring är
+        elevens <em>egen huvudbok</em> där bankdata sammanställs med
+        manuella poster, kvitton, kategorier. Två olika sidor av samma
+        ekonomi — och eleven måste se båda.
+      </p>
+    </div>
+
+    <div class="callout">
+      <div class="callout-eye">Den röda regeln</div>
+      <p>
+        <strong>Inget steg som finns i den verkliga svenska ekonomin
+        får hoppas över i simuleringen.</strong> Skatten räknas inte
+        ut åt eleven — Skatteverket genererar ett A-skattebesked som
+        eleven läser. Lånet kreditprövas inte tyst — banken kör en
+        KALP-beräkning som eleven ser. Lönesamtalet är inte en
+        siffra som hoppar upp — det är fem ronder med Maria-AI där
+        argumentet faktiskt prövas. Genvägar tar bort poängen.
       </p>
     </div>
   </section>
 
-  <section>
-    <div class="h-eyebrow" style="margin-bottom: 14px;">Förslag</div>
-    <h2 class="h-section">Fem <em>spaces</em>, ett språk.</h2>
+  <section id="vad-finns">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">02 · Översikt</div>
+    <h2 class="h-section">Vad finns redan — på riktigt?</h2>
     <div class="prose">
       <p>
-        Vi grupperar hela det inloggade läget i fem koncept-utrymmen.
-        Varje utrymme har ett tydligt verb, en typografisk identitet,
-        och samlar 3–6 av de befintliga sidorna under sig.
+        Inloggade läget har idag <strong>~50 routes</strong> i
+        <a href="https://github.com/robinandreeklund-collab/Hembudget/blob/main/frontend/src/App.tsx">App.tsx</a>.
+        Grovt fördelat:
+      </p>
+      <ul>
+        <li>
+          <strong>Aktör-portaler</strong> (eleven besöker yttre parter):
+          <code>/bank</code>, <code>/bank/sign</code>,
+          <code>/arbetsgivare</code>, <code>/salaries</code>,
+          <code>/tax</code>, <code>/investments</code>,
+          <code>/funds</code>, <code>/loans</code>,
+          <code>/utility</code>, <code>/mortgage/:id</code>.
+        </li>
+        <li>
+          <strong>Bokförings- och verktygslager</strong> (elevens egna):
+          <code>/dashboard</code>, <code>/transactions</code>,
+          <code>/import</code>, <code>/budget</code>,
+          <code>/upcoming</code>, <code>/attachments</code>,
+          <code>/transfers</code>, <code>/scenarios</code>,
+          <code>/reports</code>.
+        </li>
+        <li>
+          <strong>Lärande</strong>: <code>/modules</code>,
+          <code>/modules/:id</code>, <code>/achievements</code>,
+          <code>/onboarding</code>, <code>/peer-review</code>,
+          <code>/my-batches</code>.
+        </li>
+        <li>
+          <strong>Kommunikation &amp; admin</strong>:
+          <code>/chat</code>, <code>/messages</code>,
+          <code>/settings</code>, <code>/Callback</code> (Tibber).
+        </li>
+        <li>
+          <strong>Lärar-vy</strong>: <code>/teacher</code> + 12
+          underroutes (students, all-batches, matrix, modules,
+          reflections, rubrics, time-on-task, negotiations,
+          admin-ai, investments, credit, wellbeing).
+        </li>
+      </ul>
+      <p>
+        Ingen av dessa får tas bort. Varje ruta speglar en faktisk
+        beslutspunkt eller datakälla i svensk vardagsekonomi. Den
+        nya navigationen ska <em>tydliggöra</em> ekosystemet, inte
+        kollapsa det.
+      </p>
+    </div>
+  </section>
+
+  <section id="lasanvisning">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">03 · Innehåll</div>
+    <h2 class="h-section">Sju faser, en levande analys.</h2>
+    <div class="prose">
+      <p>
+        Den här analysen byggs i sju faser så ingen aktör tappas.
+        Varje fas committas separat — du kan bocka av och ge
+        återkoppling efter varje. <span class="phase-tag">Fas 1 klar</span>
       </p>
     </div>
 
-    <div class="tax-grid">
-      <div class="tax-card">
-        <div class="num">01 · Idag</div>
-        <h3>Idag</h3>
-        <p>
-          Det dagsfärska — vad som händer just nu. Notiser, val att
-          fatta, dagens händelser. Eleven landar här.
-        </p>
-        <ul>
-          <li>Dashboard (live)</li>
-          <li>Notifikationer</li>
-          <li>Dagens uppdrag</li>
-          <li>Echo-coachning</li>
-          <li>Senaste beslut</li>
-        </ul>
-      </div>
-
-      <div class="tax-card">
-        <div class="num">02 · Bokföring</div>
-        <h3>Bokföring</h3>
-        <p>
-          Allt du gjort och allt du måste göra med pengar — ledger,
-          kategorier, kommande fakturor, kvitton.
-        </p>
-        <ul>
-          <li>Transaktioner</li>
-          <li>Kategorier</li>
-          <li>Import (PDF, OCR)</li>
-          <li>Kommande fakturor</li>
-          <li>Bilagor &amp; kvitton</li>
-        </ul>
-      </div>
-
-      <div class="tax-card">
-        <div class="num">03 · Pengar</div>
-        <h3>Pengar</h3>
-        <p>
-          Alla värdebärare — banken (saldon, överföringar), sparande,
-          investeringar, pension, lön. "Vad har jag?"
-        </p>
-        <ul>
-          <li>Banken (konton + saldon)</li>
-          <li>Budget &amp; sparmål</li>
-          <li>Investeringar (ISK, fonder)</li>
-          <li>Pension &amp; tjänstepension</li>
-          <li>Lön &amp; lönespec</li>
-        </ul>
-      </div>
-
-      <div class="tax-card">
-        <div class="num">04 · Avtal</div>
-        <h3>Avtal</h3>
-        <p>
-          Bindande relationer — lån, försäkringar, jobbavtal,
-          kollektivavtal, kreditkort. "Vad har jag lovat och fått lovat?"
-        </p>
-        <ul>
-          <li>Lån &amp; krediter</li>
-          <li>Försäkringar</li>
-          <li>Arbetsgivare &amp; lön</li>
-          <li>EkonomilabbetID</li>
-          <li>Skattedeklaration</li>
-        </ul>
-      </div>
-
-      <div class="tax-card">
-        <div class="num">05 · Utveckling</div>
-        <h3>Utveckling</h3>
-        <p>
-          Lärande, balans, mastery. Inte bara siffror — hela personen.
-          Wellbeing-pentagonen, moduler, reflektioner.
-        </p>
-        <ul>
-          <li>Wellbeing-pentagon</li>
-          <li>Moduler &amp; kursplan</li>
-          <li>Mastery (12 kompetenser)</li>
-          <li>Reflektioner</li>
-          <li>Achievements &amp; streaks</li>
-        </ul>
-      </div>
-
-      <div class="tax-card" style="background: linear-gradient(135deg, rgba(220,76,43,0.06), rgba(251,191,36,0.06)); border-color: rgba(220,76,43,0.2);">
-        <div class="num" style="color: var(--accent);">+ Verkstad</div>
-        <h3 style="color: var(--accent);">Verkstad &amp; profil</h3>
-        <p>
-          Inställningar, integrations, super-admin, AI-budget,
-          backuper, nedladdningar. Det tysta lagret.
-        </p>
-        <ul>
-          <li>Profil &amp; inställningar</li>
-          <li>Integrations (Tibber, m.fl.)</li>
-          <li>Backuper &amp; export</li>
-          <li>Lärar-administration</li>
-          <li>AI-budget &amp; loggar</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="h-eyebrow" style="margin-bottom: 14px;">Mappning</div>
-    <h2 class="h-section">Befintliga sidor → <em>nya spaces</em>.</h2>
-    <table class="feature-table">
-      <thead>
-        <tr>
-          <th>Befintlig route</th>
-          <th>Nytt space</th>
-          <th>Anmärkning</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td class="b">/dashboard</td><td class="a">Idag</td><td>Blir cover-sida — visar dagens fokus, inte allt på en gång.</td></tr>
-        <tr><td class="b">/transactions</td><td class="a">Bokföring</td><td>Ledger-vy med kategori-chips.</td></tr>
-        <tr><td class="b">/budget</td><td class="a">Pengar</td><td>Knyts till sparmål och prognos.</td></tr>
-        <tr><td class="b">/import</td><td class="a">Bokföring</td><td>Auto-flöde från Dina dokument.</td></tr>
-        <tr><td class="b">/loans</td><td class="a">Avtal</td><td>Visualiseras med kalender (avbetalning).</td></tr>
-        <tr><td class="b">/funds, /investments</td><td class="a">Pengar</td><td>Slås ihop till "Investeringar".</td></tr>
-        <tr><td class="b">/salaries</td><td class="a">Pengar</td><td>Lön + lönespec under "Inkomst".</td></tr>
-        <tr><td class="b">/tax</td><td class="a">Avtal</td><td>Skattedeklaration som bindande process.</td></tr>
-        <tr><td class="b">/bank</td><td class="a">Pengar</td><td>Konton + saldon, först-bland-likar i "Pengar".</td></tr>
-        <tr><td class="b">/scenarios</td><td class="a">Utveckling</td><td>Vad-händer-om-modeller, lärande.</td></tr>
-        <tr><td class="b">/reports</td><td class="a">Utveckling</td><td>Månads-/års-summeringar.</td></tr>
-        <tr><td class="b">/modules, /achievements</td><td class="a">Utveckling</td><td>Mastery + lärande.</td></tr>
-        <tr><td class="b">/messages, /chat</td><td class="a">Idag</td><td>Echo + lärar-meddelanden i samma flöde.</td></tr>
-        <tr><td class="b">/settings, /utility</td><td class="a">Verkstad</td><td>Tysta funktioner.</td></tr>
-        <tr><td class="b">/onboarding</td><td class="a">Idag</td><td>Engångs-flöde, inte permanent space.</td></tr>
-      </tbody>
-    </table>
-  </section>
-
-  <section>
-    <div class="h-eyebrow" style="margin-bottom: 14px;">Designprinciper</div>
-    <h2 class="h-section">Hur vi <em>vågar</em> förenkla.</h2>
-    <div class="prose">
+    <div class="toc">
+      <div class="toc-eye">Kommande sektioner</div>
       <ol>
-        <li>
-          <strong>Inget tappas.</strong> Varje funktion behåller sin URL
-          som permalänk för djuplänk + bookmarks. Den nya hierarkin är
-          ett yttre lager, inte en ersättning.
-        </li>
-        <li>
-          <strong>Eleven landar på "Idag".</strong> Aldrig på en lista.
-          Aldrig på en räknare. Cover-stil med en huvudhändelse +
-          tre val.
-        </li>
-        <li>
-          <strong>Fem flikar — aldrig fler.</strong> Tre på mobil
-          (Idag, Bokföring/Pengar, Utveckling). Resten via overflow.
-        </li>
-        <li>
-          <strong>Editorial typografi över hela linjen.</strong> Source
-          Serif 4 för rubriker, JetBrains Mono för meta. Aldrig Inter
-          för en stor siffra — det är alltid serif.
-        </li>
-        <li>
-          <strong>Tidsmedvetenhet inbyggd.</strong> Live klockan
-          uppe-vänster på varje sida. "Lönen kommer om 3 dagar." Saldot
-          är aldrig kontextlöst.
-        </li>
-        <li>
-          <strong>Echo-frågor som CTA, inte chat-bubbla.</strong> Sokratiska
-          frågor visualiserade som editorial pull-quotes. Eleven
-          klickar för att svara — det blir reflektion, inte messaging.
-        </li>
+        <li><a href="#filosofi">Filosofin — verklighetsspegling, inte förenkling</a></li>
+        <li><a href="#vad-finns">Översikt — vad finns redan</a></li>
+        <li class="is-todo"><a href="#aktor-1">Banken — primärkällan för kontoutdrag, kreditkort, lån, kommande fakturor</a></li>
+        <li class="is-todo"><a href="#aktor-2">Arbetsgivaren — anställningsavtalet, lönesamtal, satisfaction-score, kollektivavtal</a></li>
+        <li class="is-todo"><a href="#aktor-3">Skatteverket — A-skatt, deklaration, K4, skatteåterbäring</a></li>
+        <li class="is-todo"><a href="#aktor-4">Lånegivare — KALP-beräkning, kreditprövning, befintliga lån</a></li>
+        <li class="is-todo"><a href="#aktor-5">Investeringsmäklare (Avanza) — ISK, fonder, aktier, schablon</a></li>
+        <li class="is-todo"><a href="#aktor-6">Försäkringsbolag — premier, ärenden, försäkringsval</a></li>
+        <li class="is-todo"><a href="#aktor-7">Hyresvärd / utility — bostadskontrakt, el, vatten, bredband</a></li>
+        <li class="is-todo"><a href="#aktor-8">Pensionsmyndigheten — allmän pension, premiepension, prognos</a></li>
+        <li class="is-todo"><a href="#aktor-9">Bankgirot — autogiro, OCR, faktura-mottagning</a></li>
+        <li class="is-todo"><a href="#aktor-10">Konsumentverket — budget-baseline-data</a></li>
+        <li class="is-todo"><a href="#aktor-11">Akavia — fackförbund, lönedata, rådgivning</a></li>
+        <li class="is-todo"><a href="#aktor-12">Echo — sokratisk AI inom plattformen</a></li>
+        <li class="is-todo"><a href="#aktor-13">Maria — AI-driven HR-chef i lönesamtals-flödet</a></li>
+        <li class="is-todo"><a href="#aktor-14">Anna — lärarens perspektiv (separat ekosystem)</a></li>
+        <li class="is-todo"><a href="#flow-bankid">Flow: BankID-simulator (QR + telefon + PIN)</a></li>
+        <li class="is-todo"><a href="#flow-kontoutdrag">Flow: kontoutdrag → import → bokföring</a></li>
+        <li class="is-todo"><a href="#flow-kreditprovning">Flow: lånansökan → KALP → kreditprövning</a></li>
+        <li class="is-todo"><a href="#flow-lonesamtal">Flow: lönesamtal i fem ronder med Maria</a></li>
+        <li class="is-todo"><a href="#flow-autogiro">Flow: autogiro-signering kollektivt med EkonomilabbetID</a></li>
+        <li class="is-todo"><a href="#verktyg">Verktygslagret — bokföring, budget, scenarios, rapporter</a></li>
+        <li class="is-todo"><a href="#larare">Lärar-ekosystemet — separat parallellvärld</a></li>
+        <li class="is-todo"><a href="#mappning">Mappning av alla ~50 routes mot ny IA</a></li>
+        <li class="is-todo"><a href="#principles">Designprinciper för ny navigation</a></li>
+        <li class="is-todo"><a href="#nav-forslag">Föreslagen navigation — aktör-rad + verktygsdocka + mode-switch</a></li>
       </ol>
     </div>
   </section>
 
-  <section>
-    <div class="h-eyebrow" style="margin-bottom: 14px;">Tre koncept att jämföra</div>
-    <h2 class="h-section">Samma bokföring, tre <em>språk</em>.</h2>
+  <section id="principles-preview">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">04 · Förhandsvisning</div>
+    <h2 class="h-section">Tre principer redan klara.</h2>
     <div class="prose">
       <p>
-        Tre koncept använder samma 5-space-taxonomi men packar den
-        olika visuellt:
+        Innan jag går in på varje aktör i fas 2–4 — här är de
+        principer som styr hela analysen. De kommer fördjupas i den
+        sista fasen men presenteras tidigt så vi har en gemensam
+        kompass.
       </p>
-      <ul>
-        <li>
-          <a href="./vol-1/dashboard.html"><strong>Vol. 01 — Magazine spread.</strong></a>
-          Cover-stil. Månaden är en utgåva. Story-driven layout.
-        </li>
-        <li>
-          <a href="./vol-2/dashboard.html"><strong>Vol. 02 — Tidslinje.</strong></a>
-          Idag är centrum. Spår för pengar, avtal, lärande, balans.
-        </li>
-        <li>
-          <a href="./vol-3/dashboard.html"><strong>Vol. 03 — Pentagon compass.</strong></a>
-          WB-pentagonen som central nav. Klick på axel öppnar utrymme.
-        </li>
-      </ul>
-      <p>
-        Alla tre koncept har en <em>onboarding</em>-vy och en
-        <em>banken</em>-vy så du kan jämföra hur samma innehåll uttrycks
-        i tre olika design-språk.
-      </p>
+    </div>
+
+    <div class="principle">
+      <div class="principle-num"><em>I</em></div>
+      <div>
+        <h4>Aktörer är portaler — inte vyer.</h4>
+        <p>
+          När eleven klickar in i banken byter hen kontext, inte bara
+          ruta. Top-nav ska visa "Du är hos SEB". Bakgrund kan
+          subtilt skifta. Och man ska behöva BankID-logga-in (simulerat)
+          om sessionen löpt ut. Banken är inte en flik i ditt eget
+          dashboard — det är ett besök.
+        </p>
+      </div>
+    </div>
+
+    <div class="principle">
+      <div class="principle-num"><em>II</em></div>
+      <div>
+        <h4>Bokföring är synthesis — inte källa.</h4>
+        <p>
+          <code>/transactions</code> visar allt som hänt — men datat
+          kommer alltid från någon aktör. Bankens kontoutdrag.
+          Arbetsgivarens lönespec. Folksams premie. Eleven ser
+          ursprung per rad ("från SEB · 25 maj 16:00") så de förstår
+          att deras egen huvudbok är en spegel av tolv yttre flöden.
+        </p>
+      </div>
+    </div>
+
+    <div class="principle">
+      <div class="principle-num"><em>III</em></div>
+      <div>
+        <h4>Verktygen tjänar förståelsen — inte mätningen.</h4>
+        <p>
+          Wellbeing-pentagonen, mastery, reflektioner, moduler —
+          dessa är pedagogiska instrument som <em>läser</em> aktör­
+          flödena och översätter till lärande. De ska inte vara
+          frikopplade från ekonomin utan kopplade <em>till</em> den.
+          När bufferten halveras ändras pentagonen — det är samma
+          händelse, två representationer.
+        </p>
+      </div>
     </div>
   </section>
 
   <div class="foot">
-    <a href="./index.html">← Tillbaka till förslagsöversikten</a>
+    <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
 </div>
 
