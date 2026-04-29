@@ -86,26 +86,87 @@ body.is-deep { overflow: hidden; height: 100vh; }
 .vis-card.is-in .vis-bar:nth-child(4) .vis-bar-fill { transition-delay: 580ms; }
 .vis-card.is-in .vis-bar:nth-child(5) .vis-bar-fill { transition-delay: 680ms; }
 
-/* ─── Top-CTA (höger hörn, hairline pill) ─── */
-.top-cta {
-  position: fixed; top: 16px; right: 16px; z-index: 70;
+/* ─── Top-nav (höger) + hemknapp (vänster) — adaptiv färg ─── */
+.top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
+}
+.top-nav-link {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.2px; line-height: 1.05;
+  color: var(--fg);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+  text-decoration: none;
+  transform-origin: right center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    font-weight .3s var(--ease),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
+    color .3s var(--ease),
+    text-shadow .3s var(--ease);
+  cursor: pointer;
+}
+.top-nav-link:hover {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.top-nav-link-primary { color: var(--accent); }
+.top-nav-link-primary:hover { color: var(--accent); }
+
+.home-link {
+  position: fixed; top: 22px; left: 28px; z-index: 70;
   display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: 1.2px; text-transform: uppercase;
-  text-decoration: none; color: var(--fg);
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  border: 1px solid var(--rule);
-  padding: 7px 14px; border-radius: 100px;
-  transition: all .2s var(--ease);
+  font-family: var(--serif);
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.2px; line-height: 1.05;
+  color: var(--fg);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+  text-decoration: none;
+  transform-origin: left center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
+    color .3s var(--ease),
+    text-shadow .3s var(--ease);
 }
-.top-cta:hover {
-  background: var(--fg); color: #fff;
-  border-color: var(--fg);
+.home-link-arrow {
+  display: inline-block;
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
 }
-.top-cta-arrow { transition: transform .2s var(--ease); }
-.top-cta:hover .top-cta-arrow { transform: translateX(2px); }
+.home-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.home-link:hover .home-link-arrow { transform: translateX(-6px); }
+
+@keyframes nav-name-pop {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+/* Adaptiv färg: vit på mörkt, mörkgrå på ljust. Default = ljus
+   (passar dagsavsnitten). Body.nav-on-dark = mörk bakgrund. */
+body.nav-on-dark .top-nav-link,
+body.nav-on-dark .home-link {
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.55);
+}
+body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
+body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.7); }
+
+@media (max-width: 600px) {
+  .top-nav { top: 16px; right: 18px; gap: 16px; }
+  .home-link { top: 16px; left: 18px; }
+  .top-nav-link, .home-link { font-size: 13px; }
+  .top-nav-link:hover, .home-link:hover { font-size: 17px; }
+}
 
 /* ─── Animerad nedräkning i hero h1 ─── */
 [data-hero-time], [data-hero-mins] {
@@ -1094,15 +1155,19 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
 </head>
 <body>
 
-<a href="#cta" class="top-cta" id="topCta">
-  Skapa konto
-  <span class="top-cta-arrow">→</span>
+<a href="/demo-landing/" class="home-link" aria-label="Tillbaka till startsidan">
+  <span class="home-link-arrow" aria-hidden="true">←</span>
+  Hem
 </a>
+<nav class="top-nav" aria-label="Konto">
+  <a href="/login" class="top-nav-link">Logga in</a>
+  <a href="#cta" class="top-nav-link top-nav-link-primary">Skapa konto</a>
+</nav>
 
 <main class="main-flow" id="main">
 
   <div class="hero-pin" id="heroPin" data-scene="hero">
-  <section class="hero" id="hero">
+  <section class="hero" id="hero" data-nav-theme="dark">
     <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
       <source src="./linda.mp4" type="video/mp4">
     </video>
@@ -1129,7 +1194,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
   </section>
   </div>
 
-  <section data-scene="tuesday" class="day">
+  <section data-scene="tuesday" class="day" data-nav-theme="light">
     <div class="shell">
 
       <header class="day-meta" data-fx-stagger>
@@ -1198,7 +1263,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="wednesday" class="day">
+  <section data-scene="wednesday" class="day" data-nav-theme="light">
     <div class="shell">
       <header class="day-meta" data-fx-stagger>
         <div class="day-meta-time">
@@ -1262,7 +1327,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="thursday" class="day">
+  <section data-scene="thursday" class="day" data-nav-theme="light">
     <div class="shell">
       <header class="day-meta" data-fx-stagger>
         <div class="day-meta-time">
@@ -1336,7 +1401,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="friday" class="day">
+  <section data-scene="friday" class="day" data-nav-theme="light">
     <div class="shell">
       <header class="day-meta" data-fx-stagger>
         <div class="day-meta-time">
@@ -1403,7 +1468,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="sunday" class="day">
+  <section data-scene="sunday" class="day" data-nav-theme="light">
     <div class="shell">
       <header class="day-meta" data-fx-stagger>
         <div class="day-meta-time">
@@ -1475,7 +1540,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="monday-teacher" class="day day-dark">
+  <section data-scene="monday-teacher" class="day day-dark" data-nav-theme="dark">
     <div class="shell">
       <header class="day-meta" data-fx-stagger>
         <div class="day-meta-time">
@@ -1552,7 +1617,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </div>
   </section>
 
-  <section data-scene="cta" class="day day-cta">
+  <section data-scene="cta" class="day day-cta" data-nav-theme="light">
     <div class="shell">
       <div class="day-cta-final" data-fx-stagger>
         <div class="day-meta-day" style="color: var(--accent);">● SLUTET</div>
@@ -1572,9 +1637,9 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
 
 </main>
 
-<aside class="deep-page" id="deep" aria-hidden="true">
+<aside class="deep-page" id="deep" aria-hidden="true" data-saga-persona="Linda">
   <header class="deep-head">
-    <button class="deep-back" data-close>← Tillbaka till sagan</button>
+    <button class="deep-back" data-close>← Tillbaka till <span data-back-persona>Linda</span></button>
     <div class="deep-eyebrow-wrap">
       <span class="deep-eyebrow-kicker" data-current-kicker>Funktion</span>
       <span class="deep-eyebrow-title" data-current-title>—</span>
@@ -2417,7 +2482,10 @@ const DIVE_LABELS = {
   function open(key) {
     if (body.classList.contains('is-deep')) return;
     if (!activate(key)) return;
-    lastY = window.scrollY;
+    // Spara EXAKT position så vi kan återställa när användaren stänger.
+    // (overflow:hidden + height:100vh på body hade annars nollställt scroll
+    //  i Safari/iOS — så vi pin:ar med scrollTo efter klassbytet.)
+    lastY = window.scrollY || window.pageYOffset || 0;
     body.classList.add('is-deep');
     deep.setAttribute('aria-hidden', 'false');
   }
@@ -2425,7 +2493,11 @@ const DIVE_LABELS = {
     if (!body.classList.contains('is-deep')) return;
     body.classList.remove('is-deep');
     deep.setAttribute('aria-hidden', 'true');
-    // scrollY är preserverad — main-flow återgår automatiskt
+    // Återställ scrollpositionen explicit så användaren landar exakt
+    // där hen var i sagan — inte överst på sidan.
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: lastY, left: 0, behavior: 'instant' });
+    });
   }
   window.openDeep = open;
   window.closeDeep = close;
@@ -2754,6 +2826,50 @@ const DIVE_LABELS = {
     });
   }, { threshold: [0.05] });
   document.querySelectorAll('section.day').forEach(el => obs.observe(el));
+})();
+</script>
+
+<script>
+// ─── Adaptiv nav-färg: vit text på mörka sektioner, mörk text på ljusa.
+// IntersectionObserver bevakar ett tunt band överst i viewporten — när en
+// [data-nav-theme]-sektion korsar bandet sätts body-klassen om.
+(function () {
+  const body = document.body;
+  const sections = document.querySelectorAll('[data-nav-theme]');
+  if (!sections.length) return;
+
+  function applyTheme(theme) {
+    body.classList.toggle('nav-on-dark', theme === 'dark');
+    body.classList.toggle('nav-on-light', theme === 'light');
+  }
+  // Initial: hero är överst
+  applyTheme('dark');
+
+  const obs = new IntersectionObserver(entries => {
+    // Hitta den sektion som täcker top-bandet (~0–60 px från toppen)
+    let top = null;
+    sections.forEach(s => {
+      const r = s.getBoundingClientRect();
+      if (r.top <= 60 && r.bottom > 60) top = s;
+    });
+    if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
+  }, { rootMargin: '-60px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
+  sections.forEach(s => obs.observe(s));
+
+  // Backup: scroll-baserad recompute (Safari kan missa edge cases)
+  let raf = 0;
+  window.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      let top = null;
+      sections.forEach(s => {
+        const r = s.getBoundingClientRect();
+        if (r.top <= 60 && r.bottom > 60) top = s;
+      });
+      if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
+    });
+  }, { passive: true });
 })();
 </script>
 
