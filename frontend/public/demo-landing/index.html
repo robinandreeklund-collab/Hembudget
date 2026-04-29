@@ -1336,6 +1336,136 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .btn-arrow { font-family: var(--mono); font-size: 13px; transition: transform .2s; }
 .btn:hover .btn-arrow { transform: translateX(3px); }
 
+/* ─── Manifesto-citat (Robin Fröjd) ─── */
+.manifesto {
+  background: linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);
+  position: relative;
+  padding: clamp(96px, 14vh, 160px) 24px;
+}
+.manifesto::before {
+  content: ""; position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 80px; height: 1px;
+  background: var(--accent);
+}
+.manifesto-shell {
+  max-width: 880px; margin: 0 auto;
+  text-align: center;
+}
+.manifesto-eye {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 32px;
+}
+.manifesto-quote {
+  margin: 0 0 32px;
+}
+.manifesto-quote p {
+  font-family: var(--serif); font-size: clamp(22px, 2.6vw, 32px);
+  line-height: 1.4; letter-spacing: -0.4px;
+  color: var(--fg);
+  margin: 0 0 26px;
+  font-weight: 400;
+}
+.manifesto-quote p:first-child {
+  font-style: italic;
+  font-size: clamp(28px, 3.4vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.8px;
+  color: var(--fg);
+  position: relative;
+}
+.manifesto-quote p:first-child::before {
+  content: "" "; color: var(--accent);
+  font-family: var(--serif); font-style: italic;
+}
+.manifesto-quote p:first-child::after {
+  content: " "";color: var(--accent);
+  font-family: var(--serif); font-style: italic;
+}
+.manifesto-quote p:last-child { margin-bottom: 0; }
+.manifesto-quote em {
+  color: var(--accent); font-style: italic;
+}
+.manifesto-cite {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+  display: inline-flex; align-items: center; gap: 14px;
+  padding-top: 18px; border-top: 1px solid var(--rule);
+}
+.manifesto-cite::before {
+  content: ""; width: 6px; height: 6px;
+  background: var(--accent); border-radius: 50%;
+}
+
+/* ─── Footer ─── */
+.site-footer {
+  background: #0f172a; color: rgba(255,255,255,0.85);
+  padding: clamp(64px, 8vh, 96px) 24px clamp(40px, 5vh, 56px);
+  position: relative;
+}
+.site-footer::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+}
+.footer-shell {
+  max-width: 1280px; margin: 0 auto;
+}
+.footer-grid {
+  display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: clamp(32px, 4vw, 64px);
+  padding-bottom: clamp(40px, 5vh, 64px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+@media (max-width: 800px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 500px) {
+  .footer-grid { grid-template-columns: 1fr; gap: 28px; }
+}
+.footer-brand-name {
+  font-family: var(--serif); font-size: 24px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  color: #fff; margin-bottom: 8px;
+}
+.footer-brand-tagline {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55); font-weight: 600;
+  margin-bottom: 18px;
+}
+.footer-brand-blurb {
+  font-size: 13.5px; line-height: 1.55; color: rgba(255,255,255,0.7);
+  max-width: 36ch;
+}
+.footer-col h4 {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 16px;
+}
+.footer-col ul {
+  list-style: none; display: flex; flex-direction: column; gap: 10px;
+}
+.footer-col a {
+  font-size: 14px; color: rgba(255,255,255,0.78);
+  text-decoration: none; transition: color .15s var(--ease);
+  letter-spacing: -0.05px;
+}
+.footer-col a:hover { color: var(--gold); }
+.footer-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: clamp(20px, 3vh, 32px);
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  flex-wrap: wrap; gap: 14px;
+}
+.footer-bottom-meta { display: flex; gap: 18px; align-items: center; }
+.footer-bottom-meta span:not(:last-child)::after {
+  content: " · "; margin-left: 18px; color: var(--accent);
+}
+
 /* ─── Smooth-scroll: Lenis hanterar wheel — ingen krockande CSS ─── */
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }
@@ -1725,6 +1855,18 @@ html.lenis, html.lenis body { height: auto; }
     </div>
   </section>
 
+  <section class="manifesto">
+    <div class="manifesto-shell">
+      <div class="manifesto-eye">● Manifest</div>
+      <blockquote class="manifesto-quote">
+        <p>Pengar är ett medel för välmående, inte ett mål i sig själv.</p>
+        <p>Att maximera saldot till priset av sociala band och fritid är inte ekonomisk framgång — det är en form av <em>fattigdom</em>. Att spendera allt på upplevelser utan buffert är heller inte rikedom — det är <em>skörhet</em>.</p>
+        <p>Ekonomi är konsten att balansera idag mot imorgon, mig själv mot mina relationer, planering mot spontanitet.</p>
+      </blockquote>
+      <div class="manifesto-cite">Robin Fröjd · Ekonomilabbet</div>
+    </div>
+  </section>
+
   <section class="cta-final" id="cta">
     <div class="shell">
       <div class="cta-eye" data-fx="fade-up">● Privatekonomi som händer</div>
@@ -1743,6 +1885,56 @@ html.lenis, html.lenis body { height: auto; }
   </section>
 
 </main>
+
+<footer class="site-footer">
+  <div class="footer-shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-brand-name">Ekonomilabbet</div>
+        <div class="footer-brand-tagline">Konsekvensdriven ekonomi och lärande</div>
+        <p class="footer-brand-blurb">
+          En plattform där elever möter privatekonomin innan den möter dem.
+          Tre karaktärer, tre veckor, hela systemet på riktigt.
+        </p>
+      </div>
+      <div class="footer-col">
+        <h4>Plattformen</h4>
+        <ul>
+          <li><a href="/demo-landing/4-vecka-djupdyk.html">Träffa Linda</a></li>
+          <li><a href="#cta">Boka demo</a></li>
+          <li><a href="#cta">Skapa konto</a></li>
+          <li><a href="/demo-landing/idea-comparison.html">Idé-jämförelse</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Material</h4>
+        <ul>
+          <li><a href="#">Lärarguider</a></li>
+          <li><a href="#">Lgr22-mappning</a></li>
+          <li><a href="#">Bedömningsmallar</a></li>
+          <li><a href="#">Echo · sokratisk AI</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Om</h4>
+        <ul>
+          <li><a href="mailto:info@ekonomilabbet.org">Kontakt</a></li>
+          <li><a href="#">Sekretess</a></li>
+          <li><a href="#">Villkor</a></li>
+          <li><a href="https://github.com/robinandreeklund-collab/Hembudget">GitHub</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Ekonomilabbet</span>
+      <div class="footer-bottom-meta">
+        <span>Stockholm</span>
+        <span>info@ekonomilabbet.org</span>
+        <span>byggt med konsekvenser</span>
+      </div>
+    </div>
+  </div>
+</footer>
 
 <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
