@@ -386,6 +386,117 @@ function renderNav() {
   box.innerHTML = html;
 }
 renderNav();
+
+// === BYGGNADEN: 14 elever (resten kollapsade) ===
+const STUDENTS = [
+  { num:"01", n:"Adam B.",   sub:"Solo · 84 %", d:["green","green","amber","gray","green","green","green","green"], t:"14:22" },
+  { num:"02", n:"Alma K.",   sub:"Solo · 91 %", d:["green","green","green","green","green","green","green","green"], t:"15:40" },
+  { num:"03", n:"Ayan H.",   sub:"Solo · 62 %", d:["amber","green","gray","gray","amber","red","amber","green"], t:"<em>nu</em>" },
+  { num:"04", n:"Elias R.",  sub:"Familj 03 · 78 %", d:["green","green","green","amber","green","amber","green","green"], t:"11:08" },
+  { num:"05", n:"Filip Ö.",  sub:"Solo · 41 %", d:["red","amber","gray","gray","red","gray","amber","red"], t:"22 apr", muted:true },
+  { num:"06", n:"Hanna L.",  sub:"Solo · 88 %", d:["green","green","green","gray","green","green","green","green"], t:"14:51" },
+  { num:"07", n:"Hassan O.", sub:"Solo · 73 %", d:["green","amber","green","green","amber","green","green","green"], t:"12:30" },
+  { num:"08", n:"Ida P.",    sub:"Solo · 95 %", d:["green","green","green","green","green","green","green","green"], t:"09:14" },
+  { num:"09", n:"Isak T.",   sub:"Familj 03 · 67 %", d:["amber","green","gray","gray","green","amber","amber","green"], t:"11:08" },
+  { num:"10", n:"Jamil A.",  sub:"Solo · 54 %", d:["amber","red","gray","gray","amber","red","amber","amber"], t:"25 apr", muted:true },
+  { num:"11", n:"Lisa N.",   sub:"Solo · 86 %", d:["green","green","green","gray","green","green","green","green"], t:"13:19" },
+  { num:"12", n:"Mira S.",   sub:"Solo · 79 %", d:["green","green","amber","gray","green","green","amber","green"], t:"10:02" },
+  { num:"13", n:"Noah J.",   sub:"Solo · 38 %", d:["red","amber","gray","gray","red","gray","red","red"], t:"15 apr", muted:true },
+  { num:"14", n:"Sara A.",   sub:"Solo · 81 %", d:["green","green","green","green","green","amber","green","green"], t:"<em>nu</em>", impersonated:true },
+];
+
+function renderBuilding() {
+  const box = document.getElementById("building");
+  const head = `<div class="building-head"><span>#</span><span>Elev</span><span>Bank</span><span>Arbg</span><span>Avanza</span><span>Lån</span><span>Tibber</span><span>Skatt</span><span>Pension</span><span>Hyra</span><span>Senast</span></div>`;
+  const rows = STUDENTS.map(s => {
+    const dots = s.d.map(c => `<span class="dot ${c}"></span>`).join("");
+    const impFlag = s.impersonated ? ' <span style="font-family:var(--mono);font-size:8.5px;color:var(--accent);letter-spacing:1px;margin-left:5px;background:rgba(220,76,43,0.1);padding:2px 5px;border-radius:3px;">VISAS</span>' : '';
+    const tCls = s.muted ? "row-tail muted" : "row-tail";
+    return `<a href="#" class="row"><span class="row-num">${s.num}</span><div><div class="row-name">${s.n}${impFlag}</div><div class="row-name-sub">${s.sub}</div></div>${dots}<span class="${tCls}">${s.t}</span></a>`;
+  }).join("");
+  const more = `<a href="#" class="row" style="background:#fafaf9;"><span class="row-num">···</span><div><div class="row-name" style="color:var(--muted);">+ 14 elever till</div><div class="row-name-sub">snitt 71 % · klicka för att expandera</div></div><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="row-tail muted">expandera</span></a>`;
+  box.innerHTML = head + rows + more;
+}
+renderBuilding();
+
+// === HÖGER PANEL ===
+function renderRight() {
+  const box = document.getElementById("right");
+  box.innerHTML = `
+    <div class="rp-section">
+      <div class="rp-eye">Behöver stöd nu</div>
+      <div class="rp-title">4 <em>elever</em> idag</div>
+      <ul class="attn-list">
+        <li>
+          <div><div class="attn-name">Filip Ö.</div><div class="attn-why">Senast inloggad 7 dgr · klassning 41 %</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Noah J.</div><div class="attn-why">Senast 14 dgr · 3 röda rum</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Jamil A.</div><div class="attn-why">Skattedeklaration förfaller 3 dgr</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Ayan H.</div><div class="attn-why">Reflektion: "vet inte hur jag deklarerar"</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">AI-budget · april</div>
+      <div class="rp-title">62 % av <em>månadstaket</em></div>
+      <div class="tok-meter"><div class="tok-meter-fill" style="width:62%;"></div></div>
+      <div class="tok-meta"><span>1,4M tokens</span><span>2,3M tak</span></div>
+      <div style="font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:8px;letter-spacing:0.4px;">
+        Echo 64 % · Maria 28 % · Anna 8 %
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Pågående lönesamtal</div>
+      <div class="rp-title">3 elever <em>i Maria</em></div>
+      <a class="maria-card" href="#">
+        <div class="maria-name">Hanna L. · runda 4/5</div>
+        <div class="maria-meta">Yrkat 28 500 · senaste bud 27 200</div>
+        <div class="maria-progress">Maria nära smärtgräns</div>
+      </a>
+      <a class="maria-card" href="#">
+        <div class="maria-name">Mira S. · runda 2/5</div>
+        <div class="maria-meta">Yrkat 27 500 · pågår</div>
+        <div class="maria-progress">förberedande argument</div>
+      </a>
+      <a class="maria-card" href="#">
+        <div class="maria-name">Adam B. · runda 1/5</div>
+        <div class="maria-meta">KALP klar · 24 800 utgångsbud</div>
+        <div class="maria-progress">just startat</div>
+      </a>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Senaste reflektioner</div>
+      <div class="rp-title">3 av <em>14</em> nya</div>
+      <ul class="attn-list">
+        <li>
+          <div><div class="attn-name">Sara A.</div><div class="attn-why">"Restaurang igen — varför är det så lätt?"</div></div>
+          <a href="#" class="attn-go">läs →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Ida P.</div><div class="attn-why">"Pension kändes overkligt tills jag räknade…"</div></div>
+          <a href="#" class="attn-go">läs →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Hassan O.</div><div class="attn-why">"Maria höll inte med mig om friskvård"</div></div>
+          <a href="#" class="attn-go">läs →</a>
+        </li>
+      </ul>
+    </div>
+  `;
+}
+renderRight();
 </script>
 </body>
 </html>
