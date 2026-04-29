@@ -1143,8 +1143,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .btn-arrow { font-family: var(--mono); font-size: 13px; transition: transform .2s; }
 .btn:hover .btn-arrow { transform: translateX(3px); }
 
-/* ─── Smooth-scroll: Lenis hanterar wheel, men har CSS som fallback ─── */
-html { scroll-behavior: smooth; }
+/* ─── Smooth-scroll: Lenis hanterar wheel — ingen krockande CSS ─── */
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }
 .lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
@@ -1675,13 +1674,17 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
 
 // ─── Lenis smooth-scroll + GSAP ScrollTrigger ───────────────
 window.addEventListener('load', () => {
-  if (typeof Lenis === 'undefined' || typeof gsap === 'undefined') return;
+  if (typeof Lenis === 'undefined' || typeof gsap === 'undefined') {
+    console.warn('Lenis or GSAP failed to load — fallback till native scroll');
+    return;
+  }
 
-  // Initiera Lenis (smooth wheel-scroll med momentum)
+  // Initiera Lenis (Lenis v1 API)
   const lenis = new Lenis({
     duration: 1.15,
     easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-    direction: 'vertical',
+    orientation: 'vertical',
+    gestureOrientation: 'vertical',
     smoothWheel: true,
     wheelMultiplier: 1,
     touchMultiplier: 2,
@@ -1734,44 +1737,51 @@ window.addEventListener('load', () => {
       }
     });
 
-    // ─── Section reveals — varje sektion har staggered entry ───
-    gsap.utils.toArray('section.intro, section.personas, section.teacher, section.cta-final').forEach(section => {
+    // ─── Section reveals — fromTo med immediateRender:false så
+    //     content INTE göms innan trigger fyrar (annars osynligt
+    //     om något skulle slå fel) ────────────────────────────
+    gsap.utils.toArray('section.intro, section.teacher, section.cta-final').forEach(section => {
       const items = section.querySelectorAll(
-        '.intro-eye, .intro-grid h2, .intro p, .pillar, ' +
-        '.personas-eye, .personas-head h2, .personas-lede, .persona-card, ' +
-        '.teacher-eye, .teacher-grid h2, .teacher p, .dash-card, ' +
+        '.intro-eye, .intro h2, .intro p, .pillar, ' +
+        '.teacher-eye, .teacher h2, .teacher p, .dash-card, ' +
         '.cta-eye, .cta-final h2, .cta-final p, .cta-buttons'
       );
       if (!items.length) return;
-      gsap.from(items, {
-        opacity: 0,
-        y: 40,
-        duration: 0.9,
-        stagger: 0.08,
-        ease: 'power3.out',
-        scrollTrigger: {
-          trigger: section,
-          start: 'top 75%',
-          toggleActions: 'play none none reverse',
+      gsap.fromTo(items,
+        { opacity: 0, y: 40 },
+        {
+          opacity: 1, y: 0,
+          duration: 0.9,
+          stagger: 0.08,
+          ease: 'power3.out',
+          immediateRender: false,
+          scrollTrigger: {
+            trigger: section,
+            start: 'top 80%',
+            toggleActions: 'play none none none',
+          }
         }
-      });
+      );
     });
 
-    // ─── Teacher dashboard-card pinnat med stagger reveal ───
+    // ─── Teacher dashboard rows — extra dramatisk entrance ───
     const dashCard = document.querySelector('.dash-card');
     if (dashCard) {
-      gsap.from(dashCard.querySelectorAll('.dash-row'), {
-        opacity: 0,
-        x: 40,
-        duration: 0.6,
-        stagger: 0.1,
-        ease: 'back.out(1.4)',
-        scrollTrigger: {
-          trigger: dashCard,
-          start: 'top 70%',
-          toggleActions: 'play none none reverse',
+      gsap.fromTo(dashCard.querySelectorAll('.dash-row'),
+        { opacity: 0, x: 40 },
+        {
+          opacity: 1, x: 0,
+          duration: 0.6,
+          stagger: 0.1,
+          ease: 'back.out(1.4)',
+          immediateRender: false,
+          scrollTrigger: {
+            trigger: dashCard,
+            start: 'top 75%',
+            toggleActions: 'play none none none',
+          }
         }
-      });
+      );
     }
   }
 });
