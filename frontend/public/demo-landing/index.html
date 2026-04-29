@@ -706,7 +706,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   display: grid;
   grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
   gap: clamp(18px, 2.5vw, 36px);
-  align-items: center;
+  align-items: start;
+  min-height: 188px;
   background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
@@ -853,6 +854,10 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   padding: 2px 0 2px 14px;
   border-left: 2px solid var(--gold);
   margin: 0; max-width: 28ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .hero-info-quote cite {
   display: block; margin-top: 6px;
