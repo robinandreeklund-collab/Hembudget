@@ -1,0 +1,2878 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evelinas vecka · investering & ISK · Ekonomilabbet</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e5e7eb;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --ease: cubic-bezier(.77, 0, .175, 1);
+  --dur: 650ms;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  position: relative;
+}
+body.is-deep { overflow: hidden; height: 100vh; }
+
+/* ─── Scroll-triggered entrance-animationer (AOS-style) ─── */
+[data-fx] {
+  opacity: 0;
+  transition:
+    opacity .9s cubic-bezier(.4, 0, .2, 1),
+    transform .9s cubic-bezier(.34, 1.18, .64, 1),
+    letter-spacing .9s cubic-bezier(.4, 0, .2, 1),
+    filter .9s ease;
+  will-change: opacity, transform;
+}
+[data-fx="fade-up"]    { transform: translate3d(0, 36px, 0); }
+[data-fx="fade-down"]  { transform: translate3d(0, -28px, 0); }
+[data-fx="fade-left"]  { transform: translate3d(-36px, 0, 0); }
+[data-fx="fade-right"] { transform: translate3d(36px, 0, 0); }
+[data-fx="zoom-in"]    { transform: scale(0.94); }
+[data-fx="reveal"]     { letter-spacing: -2px; filter: blur(6px); transform: translate3d(0, 12px, 0); }
+[data-fx].is-in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  letter-spacing: revert;
+  filter: blur(0);
+}
+[data-fx-delay="80"]   { transition-delay: 80ms; }
+[data-fx-delay="160"]  { transition-delay: 160ms; }
+[data-fx-delay="240"]  { transition-delay: 240ms; }
+[data-fx-delay="320"]  { transition-delay: 320ms; }
+[data-fx-delay="400"]  { transition-delay: 400ms; }
+[data-fx-delay="480"]  { transition-delay: 480ms; }
+[data-fx-delay="560"]  { transition-delay: 560ms; }
+[data-fx-delay="700"]  { transition-delay: 700ms; }
+
+/* Stagger inom container */
+[data-fx-stagger] > * {
+  opacity: 0; transform: translate3d(0, 24px, 0);
+  transition: opacity .8s cubic-bezier(.4, 0, .2, 1),
+              transform .8s cubic-bezier(.34, 1.18, .64, 1);
+}
+[data-fx-stagger].is-in > *           { opacity: 1; transform: translate3d(0, 0, 0); }
+[data-fx-stagger].is-in > *:nth-child(1) { transition-delay: 0ms; }
+[data-fx-stagger].is-in > *:nth-child(2) { transition-delay: 100ms; }
+[data-fx-stagger].is-in > *:nth-child(3) { transition-delay: 200ms; }
+[data-fx-stagger].is-in > *:nth-child(4) { transition-delay: 300ms; }
+[data-fx-stagger].is-in > *:nth-child(5) { transition-delay: 400ms; }
+[data-fx-stagger].is-in > *:nth-child(6) { transition-delay: 500ms; }
+
+/* Vis-bars: animeras från 0 → --h när vis-card.is-in */
+.vis-bar-fill {
+  height: 0;
+  transition: height 1.1s cubic-bezier(.34, 1.18, .64, 1);
+}
+.vis-card.is-in .vis-bar-fill { height: var(--h, 0%); }
+.vis-card.is-in .vis-bar:nth-child(1) .vis-bar-fill { transition-delay: 200ms; }
+.vis-card.is-in .vis-bar:nth-child(2) .vis-bar-fill { transition-delay: 320ms; }
+.vis-card.is-in .vis-bar:nth-child(3) .vis-bar-fill { transition-delay: 460ms; }
+.vis-card.is-in .vis-bar:nth-child(4) .vis-bar-fill { transition-delay: 580ms; }
+.vis-card.is-in .vis-bar:nth-child(5) .vis-bar-fill { transition-delay: 680ms; }
+
+/* ─── Top-nav (höger) + hemknapp (vänster) — adaptiv färg ─── */
+.top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
+}
+.top-nav-link {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 16px; font-weight: 700;
+  letter-spacing: -0.2px; line-height: 1.05;
+  color: var(--fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  transform-origin: right center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
+    color .3s var(--ease);
+  cursor: pointer;
+}
+.top-nav-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.top-nav-link-primary { color: var(--accent); }
+.top-nav-link-primary:hover { color: var(--accent); }
+
+.home-link {
+  position: fixed; top: 22px; left: 28px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--serif);
+  font-size: 16px; font-weight: 700;
+  letter-spacing: -0.2px; line-height: 1.05;
+  color: var(--fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  transform-origin: left center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
+    color .3s var(--ease);
+}
+.home-link-arrow {
+  display: inline-block;
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+.home-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.home-link:hover .home-link-arrow { transform: translateX(-6px); }
+
+/* Skarp text mot rörlig video — tight 1px shadow, ingen blurry halo. */
+body.nav-on-dark .top-nav-link,
+body.nav-on-dark .home-link {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+}
+body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
+body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.75); }
+
+@keyframes nav-name-pop {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+/* Adaptiv färg flyttad ovan — definitionerna med blurry halo borttagna. */
+
+@media (max-width: 600px) {
+  .top-nav { top: 16px; right: 18px; gap: 16px; }
+  .home-link { top: 16px; left: 18px; }
+  .top-nav-link, .home-link { font-size: 13px; }
+  .top-nav-link:hover, .home-link:hover { font-size: 17px; }
+}
+
+/* ─── Animerad nedräkning i hero h1 ─── */
+[data-hero-time], [data-hero-mins] {
+  display: inline-block;
+  transition: transform .25s var(--ease), opacity .25s var(--ease);
+  transform-origin: center;
+}
+[data-hero-time].is-tick, [data-hero-mins].is-tick {
+  transform: scale(0.92) translateY(2px);
+  opacity: 0.25;
+}
+[data-hero-time].is-zero, [data-hero-mins].is-zero {
+  color: var(--accent);
+}
+
+/* ─── Page-swipe layout: main + deep-page sliding horisontellt ─── */
+.main-flow {
+  transition: transform var(--dur) var(--ease);
+  will-change: transform;
+}
+body.is-deep .main-flow {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.deep-page {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform var(--dur) var(--ease);
+  will-change: transform;
+  display: flex; flex-direction: column;
+  pointer-events: none;
+}
+body.is-deep .deep-page {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* ─── Common typography ─── */
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+section { padding: 96px 24px; border-top: 1px solid var(--rule); }
+.shell { max-width: 1100px; margin: 0 auto; }
+h1 {
+  font-size: clamp(38px, 5.5vw, 64px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.02;
+}
+h2 {
+  font-size: clamp(26px, 3.4vw, 38px); font-weight: 600;
+  letter-spacing: -0.6px; line-height: 1.1;
+}
+
+/* ─── Hero brand-header (centrerat, scrub-fadar bort vid scroll) ─── */
+.hero-brand {
+  position: absolute; top: 32px; left: 50%;
+  z-index: 4;
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, calc(var(--hero-p, 0) * -28px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.7);
+}
+.brand-text { display: flex; flex-direction: column; gap: 4px; }
+.brand-name {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--fg);
+  line-height: 1;
+}
+.brand-tagline {
+  font-family: var(--mono); font-size: 12px;
+  letter-spacing: 2.4px; text-transform: uppercase;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .brand-tagline { font-size: 10px; letter-spacing: 1.6px; }
+}
+
+/* ─── Hero pin-wrapper (scrub-parallax under första 180vh) ─── */
+.hero-pin {
+  position: relative;
+  height: 180vh;
+}
+.hero {
+  position: sticky; top: 0;
+  height: 100vh; min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Scrub-driven transforms via --hero-p (sätts av JS, 0..1) */
+.hero h1 {
+  transform: translateY(calc(var(--hero-p, 0) * -80px))
+             scale(calc(1 - var(--hero-p, 0) * 0.06));
+  opacity: calc(1 - var(--hero-p, 0));
+  transform-origin: 0 50%;
+}
+.hero p {
+  transform: translateY(calc(var(--hero-p, 0) * -56px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.5);
+}
+.hero-stats {
+  transform: translateY(calc(var(--hero-p, 0) * -36px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.7);
+}
+.hero-eyebrow {
+  transform: translateY(calc(var(--hero-p, 0) * -20px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.8);
+}
+.hero-scroll-hint {
+  opacity: calc(1 - var(--hero-p, 0) * 2.2);
+}
+.hero-bg-video {
+  filter: blur(calc(var(--hero-p, 0) * 5px))
+          brightness(calc(1 - var(--hero-p, 0) * 0.32));
+}
+.hero-bg-overlay {
+  opacity: calc(1 - var(--hero-p, 0) * 0.35);
+}
+
+/* ─── Section-divider: tunn linje "ritas" vänster→höger när section visas ─ */
+section.day::before {
+  content: ""; position: absolute;
+  top: 0; left: 0; height: 1px; width: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 25%, var(--accent) 75%, transparent 100%);
+  transition: width 1.6s cubic-bezier(.65, 0, .35, 1);
+  z-index: 4;
+}
+section.day.is-in::before { width: 100%; }
+section.day { position: relative; }
+
+/* ─── Sticky vis-card: stannar kvar medan text scrollar förbi ─ */
+@media (min-width: 901px) {
+  .day-vis {
+    position: sticky;
+    top: 12vh;
+    align-self: start;
+  }
+}
+
+/* ─── Hero ─── */
+.hero {
+  position: relative; overflow: hidden; border-top: 0;
+  padding: 120px 24px 96px;
+  background: linear-gradient(180deg, #f1f5f9 0%, var(--bg) 100%);
+}
+.hero-bg-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; opacity: 0;
+  transition: opacity 1.2s ease;
+  pointer-events: none;
+}
+.hero-bg-video.is-ready { opacity: 1; }
+.hero-bg-overlay {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(95deg,
+      rgba(250,250,249,0.96) 0%,
+      rgba(250,250,249,0.94) 32%,
+      rgba(250,250,249,0.78) 48%,
+      rgba(250,250,249,0.32) 68%,
+      rgba(250,250,249,0.06) 88%,
+      rgba(250,250,249,0) 100%),
+    linear-gradient(180deg,
+      rgba(250,250,249,0.92) 0%,
+      rgba(250,250,249,0.4) 9%,
+      rgba(250,250,249,0) 22%,
+      rgba(250,250,249,0) 65%,
+      rgba(250,250,249,0.92) 100%);
+}
+@media (max-width: 800px) {
+  .hero-bg-overlay {
+    background: linear-gradient(180deg,
+      rgba(250,250,249,0.94) 0%,
+      rgba(250,250,249,0.78) 35%,
+      rgba(250,250,249,0.92) 100%);
+  }
+}
+.hero {
+  padding: 18vh clamp(24px, 6vw, 80px) 14vh clamp(32px, 8vw, 120px);
+  min-height: 88vh; display: flex; align-items: center;
+}
+.hero .shell { position: relative; z-index: 2; max-width: 640px; margin: 0; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px;
+  padding: 6px 14px; background: var(--fg); color: #fff;
+  border-radius: 100px; letter-spacing: 1.4px; margin-bottom: 24px;
+  box-shadow: 0 8px 24px -8px rgba(15,23,42,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+  font-weight: 500;
+}
+.hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
+.hero h1 { margin-bottom: 22px; }
+.hero h1 em {
+  color: var(--accent); font-style: italic;
+  font-family: var(--serif); font-weight: 500;
+}
+.hero p {
+  font-size: 17px; color: #475569; max-width: 480px;
+  margin-bottom: 28px; line-height: 1.55;
+}
+.hero h1 {
+  font-size: clamp(44px, 6.5vw, 78px); letter-spacing: -2.2px;
+  line-height: 0.98; max-width: 12ch;
+}
+.hero p {
+  font-size: 18px; max-width: 520px; font-weight: 500;
+  color: #1e293b; line-height: 1.55;
+}
+.hero-stats { display: flex; gap: 40px; padding-top: 28px; border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap; margin-top: 8px; }
+.hero-stat-num { display: block; font-size: 34px; font-weight: 700; letter-spacing: -0.8px; }
+.hero-stat-label {
+  font-size: 11px; color: var(--muted); font-family: var(--mono);
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.hero-scroll-hint {
+  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2.5px;
+  color: var(--muted); z-index: 3;
+}
+.hero-scroll-line {
+  width: 1px; height: 32px;
+  background: linear-gradient(180deg, var(--muted) 0%, transparent 100%);
+  animation: scroll-pulse 2.4s ease-in-out infinite;
+}
+@keyframes scroll-pulse {
+  0%, 100% { transform: scaleY(1); transform-origin: top; opacity: 0.6; }
+  50% { transform: scaleY(0.4); opacity: 1; }
+}
+
+/* ─── Day section (modern editorial-layout) ─── */
+section.day { padding: clamp(80px, 12vh, 140px) 24px; }
+.day-meta {
+  display: grid; grid-template-columns: auto 1fr; gap: 24px 36px;
+  align-items: end; margin-bottom: 64px; padding-bottom: 28px;
+  border-bottom: 1px solid var(--rule);
+}
+.day-meta-time { display: flex; align-items: baseline; gap: 14px; }
+.day-meta-dot { color: var(--accent); font-size: 12px; line-height: 1; }
+.day-meta-day {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 2.4px; text-transform: uppercase; color: var(--muted);
+}
+.day-meta-clock {
+  font-family: var(--serif); font-size: clamp(38px, 5vw, 58px);
+  font-weight: 600; letter-spacing: -1.5px; line-height: 1;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.day-meta-tagline {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(18px, 1.8vw, 22px); color: #475569;
+  letter-spacing: -0.2px; max-width: 36ch;
+  line-height: 1.4; align-self: end; padding-bottom: 6px;
+}
+@media (max-width: 720px) {
+  .day-meta { grid-template-columns: 1fr; gap: 16px; margin-bottom: 40px; }
+  .day-meta-tagline { padding-bottom: 0; }
+}
+
+.day-body {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 80px); align-items: start;
+}
+@media (max-width: 900px) { .day-body { grid-template-columns: 1fr; gap: 40px; } }
+
+.day-text h2 {
+  font-size: clamp(34px, 4.5vw, 56px); font-weight: 700;
+  letter-spacing: -1.4px; line-height: 1.02; margin-bottom: 28px;
+  max-width: 14ch;
+}
+.day-text p {
+  font-size: 17px; color: #334155; line-height: 1.6;
+  margin-bottom: 18px; max-width: 52ch;
+}
+.day-text strong { color: var(--fg); font-weight: 700; }
+
+.day-quote {
+  position: relative;
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(20px, 2vw, 24px); line-height: 1.4;
+  color: var(--fg); padding: 6px 0 6px 22px;
+  margin: 26px 0;
+  border-left: 2px solid var(--accent);
+  max-width: 30ch;
+}
+.day-quote cite {
+  display: block; margin-top: 12px;
+  font-family: var(--mono); font-style: normal;
+  font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.day-result {
+  display: inline-flex; align-items: baseline; gap: 16px;
+  margin-top: 30px; padding: 20px 26px;
+  background: var(--fg); color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 14px 32px -16px rgba(15,23,42,0.5);
+}
+.day-result-num {
+  font-family: var(--serif); font-size: 38px; font-weight: 700;
+  letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.day-result-num::after {
+  content: " kr"; font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 500; opacity: 0.65; margin-left: 4px;
+}
+.day-result-label {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold); font-weight: 600;
+}
+
+/* ─── Visualisering (höger sida) ─── */
+.day-vis { position: relative; }
+.vis-card {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff; border-radius: 14px;
+  padding: 28px 30px;
+  box-shadow:
+    0 24px 60px -24px rgba(15,23,42,0.45),
+    inset 0 0 0 1px rgba(255,255,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.vis-card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+.vis-card-eye { color: var(--gold); font-weight: 600; }
+.vis-card-meta { color: rgba(255,255,255,0.45); }
+.vis-card-title {
+  font-size: 16px; font-weight: 500;
+  letter-spacing: -0.2px; margin-bottom: 24px;
+  color: rgba(255,255,255,0.92);
+}
+.vis-bars {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 8px; height: 200px; align-items: end;
+  padding-bottom: 36px; position: relative;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 20px;
+}
+.vis-bar {
+  position: relative; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center;
+}
+.vis-bar-fill {
+  width: 100%; background: rgba(255,255,255,0.14);
+  border-radius: 6px 6px 0 0;
+  height: var(--h, 0%);
+  transition: height .8s cubic-bezier(.34, 1.18, .64, 1);
+  position: relative;
+}
+.vis-bar.is-peak .vis-bar-fill {
+  background: linear-gradient(180deg, var(--gold) 0%, #d97706 100%);
+  box-shadow: 0 -2px 18px rgba(251,191,36,0.4);
+}
+.vis-bar.is-empty .vis-bar-fill {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  height: 8% !important;
+  border-radius: 4px;
+}
+.vis-bar-num {
+  position: absolute; top: -22px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,0.85);
+  font-variant-numeric: tabular-nums;
+}
+.vis-bar.is-peak .vis-bar-num { color: var(--gold); font-size: 14px; }
+.vis-bar.is-empty .vis-bar-num { color: rgba(255,255,255,0.25); }
+.vis-bar-r {
+  position: absolute; bottom: -22px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px;
+  color: rgba(255,255,255,0.4); white-space: nowrap;
+}
+.vis-card-foot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-top: 4px;
+}
+.vis-card-foot span {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
+}
+.vis-card-foot strong {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Scene-CTA-rad (modernare än innan) ─── */
+.day-cta-row {
+  margin-top: 80px; padding-top: 40px;
+  border-top: 1px solid var(--rule);
+}
+.day-cta-eye {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; margin-bottom: 18px;
+}
+
+/* Lärar-måndag: mörk bg-variant */
+section.day.day-dark {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff;
+  position: relative;
+}
+section.day.day-dark::after {
+  content: ""; position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+section.day.day-dark .day-meta-day { color: var(--gold); }
+section.day.day-dark .day-meta-clock { color: #fff; }
+section.day.day-dark .day-meta-tagline { color: rgba(255,255,255,0.65); }
+section.day.day-dark .day-meta {
+  border-bottom-color: rgba(255,255,255,0.1);
+}
+section.day.day-dark h2 { color: #fff; }
+section.day.day-dark h2 em { color: var(--gold); }
+section.day.day-dark .day-text p { color: rgba(255,255,255,0.78); }
+section.day.day-dark .day-text strong { color: #fff; }
+section.day.day-dark .day-quote {
+  color: #fff;
+  border-left-color: var(--gold);
+}
+section.day.day-dark .day-quote cite { color: rgba(255,255,255,0.6); }
+section.day.day-dark .day-result {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: none;
+}
+section.day.day-dark .day-result-num { color: #fff; }
+section.day.day-dark .day-result-label { color: var(--gold); }
+
+/* Slut-CTA-sektion */
+section.day.day-cta {
+  background: linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);
+  text-align: center;
+  padding: clamp(96px, 14vh, 160px) 24px;
+}
+.day-cta-final {
+  max-width: 680px; margin: 0 auto;
+}
+.day-cta-final .day-meta-day {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 26px;
+}
+.day-cta-final h2 {
+  font-size: clamp(36px, 5vw, 60px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05; margin-bottom: 26px;
+}
+.day-cta-final h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--accent);
+  font-weight: 500;
+}
+.day-cta-final p {
+  font-size: 17px; line-height: 1.6; color: #475569;
+  max-width: 50ch; margin: 0 auto 36px;
+}
+.day-cta-final p em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.day-cta-buttons {
+  display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+}
+.day-cta-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 26px; border-radius: 100px;
+  font-family: inherit; font-size: 14.5px; font-weight: 600;
+  letter-spacing: -0.05px; text-decoration: none;
+  transition: all .22s var(--ease);
+}
+.day-cta-btn-primary {
+  background: var(--fg); color: #fff;
+  box-shadow: 0 12px 28px -10px rgba(15,23,42,0.5);
+}
+.day-cta-btn-primary:hover {
+  transform: translateY(-2px); background: #1e293b;
+}
+.day-cta-btn-secondary {
+  background: #fff; color: var(--fg); border: 1px solid var(--rule);
+}
+.day-cta-btn-secondary:hover { border-color: var(--fg); transform: translateY(-2px); }
+
+/* Scen-CTA: inline primary action ─── */
+.scene-ctas {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.scene-cta {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 24px;
+  background: #fff; color: var(--fg); text-decoration: none;
+  border: 1px solid var(--rule); border-radius: 12px;
+  font-size: 15px; font-family: inherit; cursor: pointer;
+  transition: all .22s var(--ease); text-align: left;
+  position: relative; overflow: hidden;
+}
+.scene-cta::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 2px;
+  width: 0; background: var(--accent);
+  transition: width .35s var(--ease);
+}
+.scene-cta:hover {
+  border-color: var(--fg);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px -14px rgba(15,23,42,0.18);
+}
+.scene-cta:hover::after { width: 100%; }
+.scene-cta-q { font-weight: 500; line-height: 1.4; color: #334155; }
+.scene-cta-go {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px;
+  color: var(--accent); text-transform: uppercase; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* ─── Deep-page (full-viewport horisontell sidvändning) ─── */
+.deep-head {
+  display: flex; align-items: center; gap: 20px;
+  padding: 18px 28px; background: #fff;
+  border-bottom: 1px solid var(--rule); flex-shrink: 0;
+}
+.deep-back {
+  background: transparent; border: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--fg);
+  padding: 8px 14px; border-radius: 100px;
+  border: 1px solid var(--rule); transition: all .15s;
+}
+.deep-back:hover { border-color: var(--fg); background: var(--fg); color: #fff; }
+.deep-eyebrow-wrap { display: flex; flex-direction: column; gap: 2px; }
+.deep-eyebrow-kicker { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; color: var(--muted); text-transform: uppercase; }
+.deep-eyebrow-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+.deep-progress { margin-left: auto; display: flex; gap: 5px; }
+.deep-progress span { width: 28px; height: 3px; background: var(--rule); border-radius: 2px; transition: background .25s; }
+.deep-progress span.active { background: var(--fg); }
+.deep-stage { flex: 1; overflow: hidden; position: relative; }
+.deep-content { position: absolute; inset: 0; display: none; }
+.deep-content.is-active { display: block; }
+.deep-track { position: relative; width: 100%; height: 100%; }
+.deep-slide {
+  position: absolute; inset: 0; padding: 56px clamp(36px, 5vw, 80px);
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "text vis"
+    "system echo"
+    "foot foot";
+  gap: clamp(20px, 2.5vw, 44px) clamp(40px, 5vw, 72px);
+  align-items: start;
+  transform: translate3d(110%, 4%, 0) scale(0.96) rotate(0.8deg);
+  opacity: 0; pointer-events: none;
+  transition:
+    transform 720ms cubic-bezier(.34, 1.18, .64, 1),
+    opacity 520ms cubic-bezier(.4, 0, .2, 1);
+  will-change: transform, opacity;
+}
+.deep-slide.is-prev {
+  transform: translate3d(-110%, 4%, 0) scale(0.96) rotate(-0.8deg);
+  opacity: 0; pointer-events: none;
+}
+.deep-slide.is-active {
+  transform: translate3d(0, 0, 0) scale(1) rotate(0);
+  opacity: 1; pointer-events: auto;
+}
+@media (max-width: 900px) {
+  .deep-slide {
+    grid-template-columns: 1fr;
+    grid-template-areas: "text" "vis" "system" "echo" "foot";
+    padding: 36px clamp(20px, 5vw, 36px); gap: 24px;
+    align-items: start;
+  }
+  .deep-head { padding: 14px 18px; gap: 12px; }
+}
+.deep-slide-text   { grid-area: text;   display: flex; flex-direction: column; gap: 20px; }
+.deep-slide-vis    { grid-area: vis;    display: flex; flex-direction: column; gap: 14px; }
+.deep-slide-system { grid-area: system; }
+.deep-slide-echo   { grid-area: echo; }
+
+.deep-slide-num-wrap {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 8px;
+}
+.deep-slide-num-big {
+  font-family: var(--serif); font-size: clamp(56px, 7vw, 96px);
+  font-weight: 700; letter-spacing: -3px; line-height: 0.9;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.deep-slide-num-meta {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.deep-slide-num-meta strong { color: var(--fg); font-weight: 700; }
+.deep-slide h3 {
+  font-size: clamp(32px, 4vw, 46px); font-weight: 700;
+  letter-spacing: -1.2px; line-height: 1.05; max-width: 14ch;
+}
+.deep-slide-lede { font-size: 17px; color: #475569; max-width: 50ch; line-height: 1.6; }
+.deep-slide em { font-family: var(--serif); font-style: italic; color: var(--fg); }
+.deep-slide-foot {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted);
+  padding-top: 16px; border-top: 1px solid var(--rule); margin-top: 8px;
+}
+
+/* "Så funkar det" + "Echo coachar" callouts */
+.deep-slide-system, .deep-slide-echo {
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 11px;
+}
+.deep-slide-system {
+  background: #fff;
+  border: 1px solid var(--rule);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+}
+.deep-slide-echo {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #fff;
+  box-shadow: 0 14px 32px -16px rgba(15,23,42,0.45),
+              inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.deep-slide-callout-eye {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); font-weight: 700;
+}
+.deep-slide-echo .deep-slide-callout-eye { color: var(--gold); }
+.deep-slide-callout-title {
+  font-family: var(--serif); font-size: 19px;
+  font-weight: 600; letter-spacing: -0.3px; line-height: 1.2;
+}
+.deep-slide-echo .deep-slide-callout-title { color: #fff; }
+.deep-slide-callout-body {
+  font-size: 13.5px; line-height: 1.55; color: #475569;
+  max-width: 50ch;
+}
+.deep-slide-callout-list {
+  list-style: none; display: flex; flex-direction: column; gap: 0;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.4;
+}
+.deep-slide-callout-list li {
+  display: grid; grid-template-columns: 110px 1fr;
+  gap: 14px; padding: 7px 0;
+  border-bottom: 1px dotted var(--rule);
+  color: var(--fg);
+}
+.deep-slide-callout-list li:last-child { border-bottom: 0; }
+.deep-slide-callout-list strong {
+  color: var(--accent); font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; font-size: 10px;
+}
+.deep-slide-echo-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.45;
+  padding: 4px 0 4px 16px;
+  border-left: 2px solid var(--gold);
+  color: rgba(255,255,255,0.95);
+}
+.deep-slide-echo-cite {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+}
+
+/* Rich foot — datakällor + meta som magazine-byline */
+.deep-slide-foot-rich {
+  grid-area: foot;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap;
+  gap: 8px 28px; align-items: baseline;
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.deep-slide-foot-rich-section {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.deep-slide-foot-rich-section strong {
+  color: var(--accent); font-weight: 700;
+}
+.deep-slide-foot-rich-section em {
+  font-style: normal; color: var(--fg); font-weight: 600;
+}
+
+/* ─── Slide-specifika visualiseringar ─── */
+/* 1: BRUTTO — money stack */
+.brutto-stack { display: flex; flex-direction: column; gap: 4px; }
+.brutto-row {
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: baseline; padding: 18px 24px;
+  background: #fff; border: 1px solid var(--rule); border-radius: 10px;
+  transition: transform .25s var(--ease), box-shadow .25s;
+}
+.brutto-row:hover { transform: translateX(4px); }
+.brutto-row.is-add { background: rgba(16,185,129,0.04); border-color: rgba(16,185,129,0.2); }
+.brutto-row.is-sum {
+  background: var(--fg); color: #fff; border-color: var(--fg);
+  box-shadow: 0 18px 40px -16px rgba(15,23,42,0.4);
+  margin-top: 8px;
+}
+.brutto-row-label { font-size: 14px; }
+.brutto-row-label small {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted); margin-top: 4px;
+}
+.brutto-row.is-sum .brutto-row-label small { color: var(--gold); }
+.brutto-row.is-sum .brutto-row-label { font-weight: 600; font-size: 15px; }
+.brutto-row-num {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.6px; font-variant-numeric: tabular-nums;
+}
+.brutto-row.is-add .brutto-row-num { color: #047857; font-size: 22px; }
+.brutto-row.is-sum .brutto-row-num { font-size: 32px; color: #fff; }
+
+/* 2: SKATT — money flow */
+.flow {
+  display: flex; flex-direction: column; gap: 0;
+  padding: 28px 24px; background: var(--fg); color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 24px 50px -22px rgba(15,23,42,0.5);
+}
+.flow-row {
+  display: grid; grid-template-columns: 1fr auto;
+  padding: 14px 4px; align-items: center;
+}
+.flow-row + .flow-row { border-top: 1px solid rgba(255,255,255,0.08); }
+.flow-row-label { font-size: 14px; opacity: 0.85; }
+.flow-row-num {
+  font-family: var(--mono); font-weight: 700; font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.flow-row.is-out .flow-row-num { color: #fca5a5; }
+.flow-row.is-out .flow-row-label::before {
+  content: "−"; color: #fca5a5; font-weight: 700;
+  margin-right: 8px;
+}
+.flow-row.is-final {
+  margin-top: 12px; padding-top: 18px;
+  border-top: 1.5px solid rgba(255,255,255,0.18) !important;
+}
+.flow-row.is-final .flow-row-label {
+  font-family: var(--serif); font-size: 18px; font-weight: 600; opacity: 1;
+}
+.flow-row.is-final .flow-row-num {
+  font-family: var(--serif); font-size: 28px; color: var(--gold);
+  letter-spacing: -0.5px;
+}
+.flow-foot {
+  margin-top: 18px; padding: 14px 16px;
+  background: rgba(255,255,255,0.06); border-radius: 8px;
+  font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.78);
+}
+.flow-foot strong { color: var(--gold); font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; }
+
+/* 3: PDF — realistic mockup */
+.pdf-wrap { perspective: 1200px; padding: 20px 0; }
+.pdf-doc {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 32px 36px;
+  aspect-ratio: 5 / 7;
+  box-shadow:
+    0 28px 60px -20px rgba(15,23,42,0.28),
+    0 8px 18px -8px rgba(15,23,42,0.12);
+  transform: rotateY(-4deg) rotateX(2deg);
+  transition: transform .4s var(--ease);
+  display: flex; flex-direction: column; gap: 18px;
+}
+.pdf-wrap:hover .pdf-doc { transform: rotateY(0) rotateX(0); }
+.pdf-doc-head {
+  display: flex; justify-content: space-between; align-items: start;
+  padding-bottom: 14px; border-bottom: 2px solid var(--fg);
+}
+.pdf-doc-org {
+  font-family: var(--serif); font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.pdf-doc-org small {
+  display: block; font-family: 'Inter'; font-size: 9.5px;
+  font-weight: 500; letter-spacing: 0.6px; color: var(--muted);
+  margin-top: 2px;
+}
+.pdf-doc-meta {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.8px;
+  color: var(--muted); text-align: right; line-height: 1.5;
+}
+.pdf-doc-title {
+  font-size: 11px; font-family: var(--mono); letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.pdf-doc-rows { display: flex; flex-direction: column; }
+.pdf-doc-row {
+  display: grid; grid-template-columns: 1fr auto;
+  font-size: 11px; padding: 6px 0;
+  border-bottom: 1px dotted var(--rule);
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.pdf-doc-row.is-net {
+  font-weight: 700; font-size: 13px;
+  border-bottom: 0; padding-top: 10px;
+  border-top: 1.5px solid var(--fg);
+}
+.pdf-doc-row.is-net span:last-child { color: var(--accent); }
+.pdf-doc-foot {
+  margin-top: auto; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: 0.6px; color: var(--muted);
+  text-align: center; padding-top: 14px; border-top: 1px solid var(--rule);
+}
+.pdf-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 18px; background: var(--accent); color: #fff;
+  text-decoration: none; border-radius: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  box-shadow: 0 12px 24px -10px rgba(220,76,43,0.5);
+  transition: transform .2s var(--ease), box-shadow .2s;
+  align-self: flex-start;
+}
+.pdf-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -10px rgba(220,76,43,0.55); }
+.deep-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 28px; border-top: 1px solid var(--rule); background: #fff;
+  flex-shrink: 0;
+}
+.deep-arrow {
+  background: #fff; border: 1px solid var(--rule); border-radius: 100px;
+  width: 38px; height: 38px; display: grid; place-items: center;
+  cursor: pointer; font-size: 16px; color: var(--fg); transition: all .12s;
+}
+.deep-arrow:hover:not(:disabled) { border-color: var(--fg); background: var(--fg); color: #fff; }
+.deep-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
+.deep-foot-counter { font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
+
+/* ─── Vertikal text-tidslinje (pure type, mix-blend för läsbarhet) ─── */
+.timeline {
+  position: fixed; right: 32px; top: 50%;
+  transform: translateY(-50%);
+  z-index: 50; max-height: 84vh;
+  display: flex; flex-direction: column;
+  font-family: var(--mono);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s var(--ease);
+}
+.timeline.is-visible { opacity: 1; }
+.timeline > * { pointer-events: auto; }
+body.is-deep .timeline { opacity: 0; pointer-events: none; }
+
+.tl-rail {
+  position: absolute;
+  left: 6px; top: 4px; bottom: 4px; width: 1.5px;
+  background: rgba(255,255,255,0.6);
+  -webkit-mask: linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%);
+          mask: linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%);
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+.tl-cursor {
+  position: absolute; left: 0; top: 4px; width: 14px; height: 14px;
+  background: var(--accent); border-radius: 50%;
+  box-shadow: 0 0 0 5px rgba(220,76,43,0.2), 0 0 22px rgba(220,76,43,0.65);
+  transition: top .55s cubic-bezier(.34, 1.18, .64, 1);
+  pointer-events: none;
+  z-index: 2;
+}
+.tl-cursor::after {
+  content: ""; position: absolute; inset: -4px;
+  border-radius: 50%; border: 1.5px solid rgba(220,76,43,0.5);
+  animation: tl-cursor-pulse 2.4s ease-in-out infinite;
+}
+@keyframes tl-cursor-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.7); opacity: 0; }
+}
+.tl-scenes {
+  list-style: none; display: flex; flex-direction: column; gap: 26px;
+  padding: 4px 0 4px 32px; position: relative;
+}
+.tl-scene { position: relative; }
+/* Inaktiva dots — bara stora cursor:n markerar plats */
+.tl-scene::before {
+  content: ""; position: absolute;
+  left: -28px; top: 9px; width: 7px; height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.75);
+  transition: background .55s cubic-bezier(.65, 0, .35, 1),
+              box-shadow .55s cubic-bezier(.65, 0, .35, 1),
+              opacity .35s var(--ease);
+}
+.tl-scene.is-on-light::before {
+  box-shadow: inset 0 0 0 1.5px rgba(15,23,42,0.45);
+}
+.tl-scene.is-passed::before {
+  background: rgba(255,255,255,0.75);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.75);
+}
+.tl-scene.is-passed.is-on-light::before {
+  background: rgba(15,23,42,0.65);
+  box-shadow: inset 0 0 0 1.5px rgba(15,23,42,0.65);
+}
+.tl-scene.is-active::before { opacity: 0; }
+
+.tl-label {
+  background: 0; border: 0; padding: 0; margin: 0;
+  font-family: inherit; font-size: 14.5px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: #fff;
+  cursor: pointer; text-align: left; line-height: 1.3;
+  transition:
+    color .55s cubic-bezier(.65, 0, .35, 1),
+    letter-spacing .3s var(--ease),
+    transform .3s var(--ease),
+    font-size .3s var(--ease),
+    opacity .25s;
+}
+.tl-scene.is-on-light .tl-label { color: #0f172a; }
+.tl-label:hover { opacity: 0.78; }
+.tl-scene.is-passed .tl-label { opacity: 0.45; }
+.tl-scene.is-active .tl-label {
+  font-size: 16px; font-weight: 800; letter-spacing: 2px;
+  transform: translateX(4px);
+  opacity: 1;
+}
+.tl-dives {
+  list-style: none; margin-top: 0; padding-left: 18px;
+  display: flex; flex-direction: column; gap: 7px;
+  max-height: 0; opacity: 0; overflow: hidden;
+  transition: max-height .5s var(--ease), opacity .3s var(--ease), margin-top .35s;
+  pointer-events: none;
+}
+.tl-scene.is-active .tl-dives {
+  max-height: 280px; opacity: 1; margin-top: 14px;
+  pointer-events: auto;
+}
+.tl-dive {
+  background: 0; border: 0; padding: 3px 0;
+  font-family: 'Inter', sans-serif; font-size: 15.5px; font-weight: 600;
+  color: #fff;
+  cursor: pointer; text-align: left;
+  transition:
+    color .55s cubic-bezier(.65, 0, .35, 1),
+    transform .18s var(--ease),
+    opacity .18s;
+  letter-spacing: -0.1px; white-space: nowrap;
+  position: relative; padding-left: 20px;
+}
+.tl-scene.is-on-light .tl-dive { color: #0f172a; }
+.tl-dive::before {
+  content: "↳"; position: absolute; left: 0; top: 3px;
+  font-family: var(--mono); font-size: 14px; opacity: 0.65;
+  transition: opacity .18s, transform .18s;
+}
+.tl-dive:hover {
+  transform: translateX(4px); opacity: 0.78;
+}
+.tl-dive:hover::before { opacity: 1; transform: translateX(2px); }
+
+@media (max-width: 900px) {
+  .timeline { right: 16px; max-height: 72vh; }
+  .tl-label { font-size: 12.5px; }
+  .tl-scene.is-active .tl-label { font-size: 13.5px; }
+  .tl-dive { font-size: 13.5px; }
+}
+@media (max-width: 600px) { .timeline { display: none; } }
+</style>
+</head>
+<body>
+
+<a href="/demo-landing/" class="home-link" aria-label="Tillbaka till startsidan">
+  <span class="home-link-arrow" aria-hidden="true">←</span>
+  Hem
+</a>
+<nav class="top-nav" aria-label="Konto">
+  <a href="/login" class="top-nav-link">Logga in</a>
+  <a href="#cta" class="top-nav-link top-nav-link-primary">Skapa konto</a>
+</nav>
+
+<main class="main-flow" id="main">
+
+  <div class="hero-pin" id="heroPin" data-scene="hero">
+  <section class="hero" id="hero" data-nav-theme="dark">
+    <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+      <source src="./evelina.mp4" type="video/mp4">
+    </video>
+    <div class="hero-bg-overlay" aria-hidden="true"></div>
+    <header class="hero-brand" id="heroBrand">
+      <div class="brand-text">
+        <div class="brand-name">Ekonomilabbet</div>
+        <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
+      </div>
+    </header>
+    <div class="shell">
+      <div class="hero-eyebrow">EN VECKA I EVELINAS LIV · INVESTERING · VOL. 02</div>
+      <h1>Klockan är <em data-hero-time>08:51</em>.<br>Evelinas vecka börjar<br>om <em data-hero-mins>9 minuter</em>.</h1>
+      <p>Evelina är 27, ekonom i Malmö. Det här är hennes vecka i Ekonomilabbet — månadssparet drar 06:00, börsen öppnar 09:00, och någonstans mitt i veckan rasar globalfonden 8 %. Scrolla för att följa henne. Scenens funktioner dyker upp i navet längst ner.</p>
+      <div class="hero-stats">
+        <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
+        <div><span class="hero-stat-num">12,4&nbsp;%</span><span class="hero-stat-label">ISK · 12 mån</span></div>
+        <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk att utforska</span></div>
+      </div>
+      <div class="hero-scroll-hint" aria-hidden="true">
+        <span>SCROLLA</span><span class="hero-scroll-line"></span>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <section data-scene="tuesday" class="day" data-nav-theme="light">
+    <div class="shell">
+
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Tisdag</span>
+          <span class="day-meta-clock">10:14</span>
+        </div>
+        <p class="day-meta-tagline">Det enda samtalet på året.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Linda öppnar lönesamtalet.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar. Fem ronder. Linda börjar med marknadsdata.</p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Akavia 2026 säger 39&nbsp;500 kr för min roll. Jag ligger 1&nbsp;500 kr under."
+            <cite>— Linda, rond 1</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Maria balanserar avtalet (2,5 % revision), Lindas satisfaction och budgeten. Slutbud rond 3: <strong>3,5 %</strong>. Linda accepterar.</p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="1295" data-count-prefix="+ ">+ 1 295</div>
+            <div class="day-result-label">/ mån · gäller 1 maj</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Lönesamtalet 2026</span>
+              <span class="vis-card-meta">5 ronder</span>
+            </div>
+            <h3 class="vis-card-title">Linda · IT-konsult · Visma</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 38%;"><span class="vis-bar-num">2,5</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 01</span></div>
+              <div class="vis-bar" style="--h: 56%;"><span class="vis-bar-num">3,2</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 02</span></div>
+              <div class="vis-bar is-peak" style="--h: 64%;"><span class="vis-bar-num">3,5</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 03 ★</span></div>
+              <div class="vis-bar is-empty"><span class="vis-bar-num">—</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 04</span></div>
+              <div class="vis-bar is-empty"><span class="vis-bar-num">—</span><span class="vis-bar-fill"></span><span class="vis-bar-r">R 05</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Ny lön</span>
+              <strong>38 295 kr/mån</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="salary">
+            <span class="scene-cta-q">Hur räknas bruttolön → netto?</span>
+            <span class="scene-cta-go">Lönespec →</span>
+          </button>
+          <button class="scene-cta" data-deep="employer">
+            <span class="scene-cta-q">Vad är revision i kollektivavtalet?</span>
+            <span class="scene-cta-go">Avtal →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="wednesday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Onsdag</span>
+          <span class="day-meta-clock">18:30</span>
+        </div>
+        <p class="day-meta-tagline">När en rad blir 2 miljoner.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Linda hittar pensionsavgiften.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">Hon scrollar igenom maj månads lönespec och stannar på en rad: <em>"− 879 kr · allmän pensionsavgift"</em>. Det ser litet ut. Men det är 7 % av allt hon någonsin tjänar.</p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Var detta avdrag som händer dig — eller en investering du gör i ditt 67-åriga jag?"
+            <cite>— Echo, sokratisk fråga</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Echo visar prognosen. På 30 år, 5 % real avkastning, blir 879 kr/månad till <strong>över 632 000 kr</strong>. Plus tjänstepensionen från Visma, 4,5 % via kollektivavtalet. Totalt: 2,2 miljoner.</p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="2184000" data-count-prefix="">2 184 000</div>
+            <div class="day-result-label">prognos · 67-årig Linda · 2071</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Pensionspott · ackumulerat</span>
+              <span class="vis-card-meta">5 % real</span>
+            </div>
+            <h3 class="vis-card-title">Linda · 2026 → 2071</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 14%;"><span class="vis-bar-num">102k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">2031</span></div>
+              <div class="vis-bar" style="--h: 28%;"><span class="vis-bar-num">258k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">2041</span></div>
+              <div class="vis-bar" style="--h: 46%;"><span class="vis-bar-num">552k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">2051</span></div>
+              <div class="vis-bar" style="--h: 70%;"><span class="vis-bar-num">1,1m</span><span class="vis-bar-fill"></span><span class="vis-bar-r">2061</span></div>
+              <div class="vis-bar is-peak" style="--h: 92%;"><span class="vis-bar-num">2,2m</span><span class="vis-bar-fill"></span><span class="vis-bar-r">2071 ★</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Vid 67</span>
+              <strong>2 184 000 kr</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="pension">
+            <span class="scene-cta-q">Hur räknas allmän pension + tjänstepension?</span>
+            <span class="scene-cta-go">Pension →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="thursday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Torsdag</span>
+          <span class="day-meta-clock">14:22</span>
+        </div>
+        <p class="day-meta-tagline">Det oförutsedda.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Folktandvården ringer.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            En kindtand är spräckt. Akut rotfyllning, <strong>3 200 kr</strong> efter
+            subvention. Linda har en buffert på 18 700 kr. Det är vad den är till för.
+          </p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "3 200. Det är hela min ISK-avsättning för månaden."
+            <cite>— Linda, magkänslan</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">
+            Hon klickar igenom betalningen. Wellbeing-pentagonen tippar — hälsodimensionen
+            rör på sig. Hon känner stinget. Bufferten håller, men <em>kvittot på</em>
+            risken är konkret.
+          </p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="3200" data-count-prefix="− ">− 3 200</div>
+            <div class="day-result-label">oförutsett · hälsa-trigger</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Pentagon · 27 nov</span>
+              <span class="vis-card-meta">hälsa-rörelse</span>
+            </div>
+            <h3 class="vis-card-title">Linda · trigger denna vecka</h3>
+            <div style="display:flex; justify-content:center; padding: 18px 0;">
+              <svg width="240" height="200" viewBox="0 0 240 200">
+                <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3 3"/>
+                <polygon points="120,40 200,90 170,160 70,160 40,90" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+                <polygon points="120,32 198,88 170,170 80,168 38,90" fill="rgba(220,76,43,0.18)" stroke="var(--accent)" stroke-width="1.8"/>
+                <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">EKONOMI</text>
+                <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">RELATION</text>
+                <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="var(--accent)" font-weight="700">HÄLSA ↓</text>
+                <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">KARRIÄR</text>
+                <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">FRITID</text>
+              </svg>
+            </div>
+            <div class="vis-card-foot">
+              <span>WB-tapp</span>
+              <strong>−6 hälsa</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Återvänd hit på söndag</span>
+        <p style="font-size: 14px; color: var(--muted); margin-top: 8px;">
+          Tandläkaren tippar hälsa-axeln. Hela mönstret syns i söndagens
+          pentagon-review.
+        </p>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="friday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Fredag</span>
+          <span class="day-meta-clock">16:00</span>
+        </div>
+        <p class="day-meta-tagline">Chefen tar henne till sidan.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">"Vill du läsa AI-säkerhet?"</h2>
+          <p data-fx="fade-up" data-fx-delay="160">Lindas chef Marcus föreslår en <em>internutbildning</em> i AI-säkerhet. 40 timmar, kvällar och helger under tre månader. Hon får ett certifikat och troligen 8–10 % löneökning vid nästa förhandling. Men 40 timmar måste komma någonstans.</p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Karriär är en av fem axlar — vad händer med relation och fritid om karriären växer 40 timmar?"
+            <cite>— Echo, sokratisk fråga</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Linda räknar: löneökning om 18 mån = <strong>+3 800 kr/mån</strong>. Echo visar pentagon-prognosen: karriär +12, fritid −8, relation −4. Hon säger ja, men sätter en gräns: <em>ingen utbildning på söndagar.</em></p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num">+ 8 %</div>
+            <div class="day-result-label">prognos · lön om 18 mån</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Pentagon · trade-off</span>
+              <span class="vis-card-meta">före → efter</span>
+            </div>
+            <h3 class="vis-card-title">Linda · prognos 18 mån</h3>
+            <div style="display: flex; justify-content: center; padding: 18px 0; min-height: 220px;">
+              <svg width="240" height="200" viewBox="0 0 240 200">
+                <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3 3"/>
+                <polygon points="120,40 200,90 170,160 70,160 40,90" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
+                <polygon points="120,30 215,84 175,168 75,170 35,86" fill="rgba(251,191,36,0.18)" stroke="var(--gold)" stroke-width="1.8"/>
+                <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">EKONOMI</text>
+                <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">RELATION</text>
+                <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">FRITID</text>
+                <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="var(--gold)" font-weight="700">KARRIÄR ↑</text>
+                <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.7)">HÄLSA</text>
+              </svg>
+            </div>
+            <div class="vis-card-foot">
+              <span>WB-index</span>
+              <strong>72 → 74</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Återvänd hit på söndag</span>
+        <p style="font-size: 14px; color: var(--muted); margin-top: 8px;">
+          Karriärutbildningen flyttar tre axlar samtidigt. Söndagens
+          pentagon-review visar trade-off:en på riktigt.
+        </p>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="sunday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Söndag</span>
+          <span class="day-meta-clock">19:30</span>
+        </div>
+        <p class="day-meta-tagline">Veckans summering — inte saldo, en pentagon.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Femkant, inte siffra.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            Linda öppnar veckorapporten. Hon möts inte av en saldo-rad — hon möts av
+            en <em>femkant</em>. Ekonomi, hälsa, relation, karriär, fritid. Vägd
+            <strong>25/20/20/15/20</strong>.
+          </p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Hela poängen är att jag ser min ekonomi som en av fem axlar. Inte den enda."
+            <cite>— Linda, söndag review</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">
+            Veckan slutar på <strong>72 / 100</strong>. Inte sämst, inte perfekt. Hon
+            vet varför — tandläkaren tippade hälsa, men karriärsamtalet hjälpte tillbaka.
+            Det är så systemet ska kännas.
+          </p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="72" data-count-prefix="">72</div>
+            <div class="day-result-label">WB-index · ↑ 4 från v.47</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Veckorapport · v.48</span>
+              <span class="vis-card-meta">5 dimensioner</span>
+            </div>
+            <h3 class="vis-card-title">Linda · söndag 19:30</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 78%;"><span class="vis-bar-num">78</span><span class="vis-bar-fill"></span><span class="vis-bar-r">EKO</span></div>
+              <div class="vis-bar" style="--h: 62%;"><span class="vis-bar-num">62</span><span class="vis-bar-fill"></span><span class="vis-bar-r">HÄL</span></div>
+              <div class="vis-bar" style="--h: 80%;"><span class="vis-bar-num">80</span><span class="vis-bar-fill"></span><span class="vis-bar-r">REL</span></div>
+              <div class="vis-bar is-peak" style="--h: 85%;"><span class="vis-bar-num">85</span><span class="vis-bar-fill"></span><span class="vis-bar-r">KAR ★</span></div>
+              <div class="vis-bar" style="--h: 56%;"><span class="vis-bar-num">56</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FRI</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Total WB</span>
+              <strong>72 / 100</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="wellbeing">
+            <span class="scene-cta-q">Vad mäts i Wellbeing-pentagonen?</span>
+            <span class="scene-cta-go">Wellbeing-pentagon →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="monday-teacher" class="day day-dark" data-nav-theme="dark">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Måndag</span>
+          <span class="day-meta-clock">08:14 · LÄRARVY</span>
+        </div>
+        <p class="day-meta-tagline">Andra sidan av samma plattform.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Anna ser hela klassen.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            Anna är samhällslärare på Hvitfeldtska. <strong>28 elever</strong>. Hon
+            öppnar dashboarden — varje elev en rad, deras WB-index och senaste val.
+            Linda 72. Marcus 41. Aisha 88.
+          </p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Jag ser inte bara siffror — jag ser vem som behöver prat. Innan provet, inte efter."
+            <cite>— Anna · samhällslärare · SH3</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">
+            Hon klickar på Marcus. Han har inte loggat in på <strong>5 dagar</strong>.
+            Senaste val: <em>"Sa upp jobbet utan ny anställning."</em> Anna skickar ett
+            mail. Hon ser inte bara siffror — hon ser att han behöver prat.
+          </p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num">26 / 28</div>
+            <div class="day-result-label">på grönt · 2 röda · 0 offline</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Klass · SH3A</span>
+              <span class="vis-card-meta">28 elever</span>
+            </div>
+            <h3 class="vis-card-title">Annas dashboard · 08:14</h3>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(16,185,129,0.14); border-radius: 6px; font-size: 13px;">
+                <span>Linda Bergström</span>
+                <span style="color: rgba(255,255,255,0.5); font-family: var(--mono); font-size: 11px;">aktiv 19:30</span>
+                <strong style="color: #10b981;">72</strong>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(220,76,43,0.18); border-radius: 6px; font-size: 13px;">
+                <span>Marcus Holm</span>
+                <span style="color: rgba(255,255,255,0.5); font-family: var(--mono); font-size: 11px;">5 dgr sen</span>
+                <strong style="color: #fca5a5;">41</strong>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(16,185,129,0.14); border-radius: 6px; font-size: 13px;">
+                <span>Aisha Khan</span>
+                <span style="color: rgba(255,255,255,0.5); font-family: var(--mono); font-size: 11px;">aktiv 21:02</span>
+                <strong style="color: #10b981;">88</strong>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(255,255,255,0.04); border-radius: 6px; font-size: 13px;">
+                <span style="color: rgba(255,255,255,0.5);">+ 25 elever till</span>
+                <span></span>
+                <span style="color: rgba(255,255,255,0.4); font-family: var(--mono); font-size: 11px;">⌄</span>
+              </div>
+            </div>
+            <div class="vis-card-foot" style="margin-top: 14px;">
+              <span>Klassgenomsnitt</span>
+              <strong>74 / 100</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </section>
+
+  <section data-scene="cta" class="day day-cta" data-nav-theme="light">
+    <div class="shell">
+      <div class="day-cta-final" data-fx-stagger>
+        <div class="day-meta-day" style="color: var(--accent);">● SLUTET</div>
+        <h2>Lindas vecka är en av <em>tusentals</em>.</h2>
+        <p>
+          Varje elev får sin egen, simulerad i realtid mot Skatteverkets siffror,
+          kollektivavtal och faktiska räntor. Du som lärare ser allt. Du som elev
+          lär dig genom att <em>uppleva</em>, inte läsa.
+        </p>
+        <div class="day-cta-buttons">
+          <a href="/" class="day-cta-btn day-cta-btn-primary">Skapa konto<span>→</span></a>
+          <a href="/" class="day-cta-btn day-cta-btn-secondary">Tillbaka till start<span>→</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<aside class="deep-page" id="deep" aria-hidden="true" data-saga-persona="Linda">
+  <header class="deep-head">
+    <button class="deep-back" data-close>← Tillbaka till <span data-back-persona>Linda</span></button>
+    <div class="deep-eyebrow-wrap">
+      <span class="deep-eyebrow-kicker" data-current-kicker>Funktion</span>
+      <span class="deep-eyebrow-title" data-current-title>—</span>
+    </div>
+    <div class="deep-progress" data-progress aria-hidden="true"></div>
+  </header>
+  <div class="deep-stage" data-stage></div>
+  <footer class="deep-foot">
+    <button class="deep-arrow" data-prev aria-label="Föregående slide">←</button>
+    <span class="deep-foot-counter">Slide <span data-current-num>1</span> / <span data-total>3</span> · scrolla eller pil</span>
+    <button class="deep-arrow" data-next aria-label="Nästa slide">→</button>
+  </footer>
+</aside>
+
+<!-- Deep-content templates flyttas in i deep-stage av JS vid behov.
+     Första: Lönespec (3 slides) — fler funktioner kommer i R3. -->
+<template id="tpl-salary">
+  <div class="deep-content" data-deep-content="salary"
+       data-kicker="Lön / Lönespec" data-title="Så hamnar Lindas 38 295 kr på kontot">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Brutto</strong>1 av tre</span>
+          </div>
+          <h3>Bruttolönen är inte vad som syns på kontot.</h3>
+          <p class="deep-slide-lede">
+            Linda förhandlade fram 38&nbsp;295 kr. Det är vad Visma rapporterar
+            till Skatteverket — men inte vad som dyker upp den 25:e. OB-ersättning
+            och övertid läggs på, sen kommer skatten.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Grundlön<small>förhandlat 3,5 % revision</small></div>
+              <div class="brutto-row-num">38 295</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ OB-ersättning<small>kvällspass v.18</small></div>
+              <div class="brutto-row-num">+ 480</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Övertid<small>fredag 17–20</small></div>
+              <div class="brutto-row-num">+ 1 050</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Bruttolön<small>innan skatt</small></div>
+              <div class="brutto-row-num">39 825</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Visma rapporterar varje 25:e</div>
+          <p class="deep-slide-callout-body">
+            Lönespecen byggs av tre datakällor som plattformen läser in vid
+            månadens slut. Linda ser inte rapporteringen — bara raden på
+            sin specifikation.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Visma API</strong>Grundlön 38 295 kr · månadens 25:e</li>
+            <li><strong>Tidssystem</strong>OB-pass loggas automatiskt</li>
+            <li><strong>Chefssign</strong>Övertid godkänns innan utbetalning</li>
+            <li><strong>Akavia 2026</strong>Marknadsdata för revisionsförhandlingar</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Skulle din netto bli mer eller mindre om du jobbade samma timmar
+            utan OB-ersättning? Vad är OB:n värd för dig?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · maj 25</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>Visma · Tidsystem · Akavia 2026</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>1×/mån · 25:e</div>
+          <div class="deep-slide-foot-rich-section"><strong>YTD</strong><em>2 124 OB · 5 280 övertid</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Skatt &amp; avgifter</strong>2 av tre</span>
+          </div>
+          <h3>30,2 % försvinner innan kontot ser dem.</h3>
+          <p class="deep-slide-lede">
+            A-skatt enligt Lindas tabell (Stockholm, kommunalskatt 30,02 %),
+            allmän pensionsavgift 7 %. Visma betalar dessutom 31,42 %
+            arbetsgivaravgift <em>ovanpå</em> — synligt men inte avdraget.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Bruttolön</div>
+              <div class="flow-row-num">39 825</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Preliminär A-skatt · 28 %</div>
+              <div class="flow-row-num">11 151</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Allmän pensionsavgift · 7 %</div>
+              <div class="flow-row-num">879</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Netto till Lindas konto</div>
+              <div class="flow-row-num">27 795</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Vismas totala kostnad:</strong> 52 337 kr — Linda får
+              27 795. Skatt + arbetsgivaravgift äter 24 542. Hela kedjan blir
+              synlig.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Skatteverket-tabell + IBB-cap</div>
+          <p class="deep-slide-callout-body">
+            Plattformen hämtar Skatteverkets A-skatt-tabell en gång per år och
+            applicerar den på Lindas bruttolön. Allmän pensionsavgift cappas vid
+            8,07 IBB. Arbetsgivaravgiften läggs ovanpå och syns för transparens.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>SKV2102</strong>Tabell 32 · Stockholm</li>
+            <li><strong>Kommunsk.</strong>30,02 % · Stockholm</li>
+            <li><strong>Pensionsavg</strong>7 % · cap 8,07 IBB</li>
+            <li><strong>Arbg.avg</strong>31,42 % · betalas av Visma</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Visma betalar 12 512 kr ovanpå din lön. Vart går de pengarna —
+            och varför syns de inte på din lönespec?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · maj 26</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>Skatteverket · Pensionsmyndigheten</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>1×/år</div>
+          <div class="deep-slide-foot-rich-section"><strong>Effektiv skatt</strong><em>30,2 %</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>PDF-export</strong>3 av tre</span>
+          </div>
+          <h3>Lönespecen är en riktig PDF — inte en illustration.</h3>
+          <p class="deep-slide-lede">
+            Ekonomilabbet bygger en faktisk PDF varje månad: org-nummer,
+            OCR, månadsperiod, ackumulerade årssummor. Samma format som
+            hon möter i arbetslivet. Hon lär sig läsa lönespec genom att
+            <em>ha en</em>.
+          </p>
+          <a href="#" class="pdf-cta" onclick="return false;">Hämta PDF →</a>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="pdf-wrap">
+            <div class="pdf-doc">
+              <div class="pdf-doc-head">
+                <div class="pdf-doc-org">Visma AB<small>556063-3837 · STOCKHOLM</small></div>
+                <div class="pdf-doc-meta">LÖNESPEC<br>2026-05<br>OCR 4587 12</div>
+              </div>
+              <div class="pdf-doc-title">Linda Bergström · IT-konsult</div>
+              <div class="pdf-doc-rows">
+                <div class="pdf-doc-row"><span>Grundlön</span><span>38 295</span></div>
+                <div class="pdf-doc-row"><span>OB-ersättning</span><span>480</span></div>
+                <div class="pdf-doc-row"><span>Övertid · 3 h</span><span>1 050</span></div>
+                <div class="pdf-doc-row"><span>− A-skatt 28 %</span><span>11 151</span></div>
+                <div class="pdf-doc-row"><span>− Pensionsavg 7 %</span><span>879</span></div>
+                <div class="pdf-doc-row is-net"><span>NETTO</span><span>27 795</span></div>
+              </div>
+              <div class="pdf-doc-foot">Genererad av Ekonomilabbet · sida 1 av 2</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">ReportLab + deterministisk OCR</div>
+          <p class="deep-slide-callout-body">
+            PDF:en genereras av ReportLab vid varje månadsbatch. OCR-numret
+            är deterministisk Mod10-checksumma så Linda alltid kan referera
+            samma månad. Filen är fingerprintad och versionerad.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Generator</strong>ReportLab 4.1 · A4</li>
+            <li><strong>OCR</strong>Mod10-checksumma · deterministisk</li>
+            <li><strong>YTD-block</strong>Sida 2 · ackumulerade siffror</li>
+            <li><strong>Format</strong>2 sidor · 18 KB · pdf/a-3</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Spara din lönespec varje månad. När du gör deklarationen i mars
+            kommer du behöva varje rad.
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · pedagogisk uppmaning</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Filtyp</strong>PDF/A-3 · A4</div>
+          <div class="deep-slide-foot-rich-section"><strong>Storlek</strong>18 KB</div>
+          <div class="deep-slide-foot-rich-section"><strong>Lagring</strong><em>Lindas bok · permanent</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<template id="tpl-employer">
+  <div class="deep-content" data-deep-content="employer"
+       data-kicker="Kollektivavtal" data-title="Avtalets osynliga värde">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Marknadsdata</strong>1 av tre</span>
+          </div>
+          <h3>Akavia 2026 säger 39 500 kr för rollen.</h3>
+          <p class="deep-slide-lede">
+            Linda börjar inte sitt lönesamtal med en känsla. Hon börjar med data.
+            Akavias årliga lönerapport för IT-konsulter, justerad för Stockholm,
+            erfarenhet och titel. Det är samma underlag som Maria sitter med.
+            Marknaden är inte ett rykte — den är en rapport.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Akavia · IT-konsult Sthlm<small>median 2026 · 1 års erfarenhet</small></div>
+              <div class="brutto-row-num">39 500</div>
+            </div>
+            <div class="brutto-row">
+              <div class="brutto-row-label">Visma · Lindas nuvarande<small>vid signering juni 2025</small></div>
+              <div class="brutto-row-num">38 000</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Marknadsmässig diff<small>förhandlingsutrymme</small></div>
+              <div class="brutto-row-num">+ 1 500</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Akavia-API + roll-mappning</div>
+          <p class="deep-slide-callout-body">
+            Plattformen läser in Akavias publika lönerapport en gång per år och
+            mappar Lindas titel till medianlön för hennes erfarenhet och region.
+            När hon förbereder lönesamtalet får hon datan automatiskt.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Akavia 2026</strong>Lönerapport · publik PDF</li>
+            <li><strong>Roll-match</strong>Titel + erfarenhet + region</li>
+            <li><strong>Uppdatering</strong>1×/år · per termin</li>
+            <li><strong>Justering</strong>SCB-data för pris-kompensation</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Marknaden säger 39 500. Du tjänar 38 000. Var börjar du förhandlingen — på medianen, över, eller vid Vismas förra bud?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · måndag morgon</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>Akavia · SCB</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>1×/år</div>
+          <div class="deep-slide-foot-rich-section"><strong>Marknads-diff</strong><em>+ 1 500 kr/mån</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Revision-regler</strong>2 av tre</span>
+          </div>
+          <h3>2,5 % via avtal — resten är förhandling.</h3>
+          <p class="deep-slide-lede">
+            Kollektivavtalet säger att <strong>2,5 % grundrevision</strong> ska gå
+            till alla anställda. Det är golvet. Allt över är individuell förhandling
+            baserat på prestation, ansvar, marknadsdata. Maria måste fördela det
+            individuella på sina 24 anställda — totalbudget styr.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Avtalets grundrevision · 2,5 %</div>
+              <div class="flow-row-num">+ 950</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">Individuell · Lindas argument</div>
+              <div class="flow-row-num">+ 345</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Total revision · 3,5 %</div>
+              <div class="flow-row-num">1 295</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Vismas budget:</strong> 4 % i snitt över 24 anställda. Maria
+              ger Linda 3,5 %, någon annan får 4,5 %. Det är hennes pussel.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">5-rond-förhandling med AI-Maria</div>
+          <p class="deep-slide-callout-body">
+            Maria är en AI-driven HR-chef (Claude Haiku) som balanserar avtalet,
+            Lindas satisfaction och budgeten. Linda har 5 ronder att övertyga.
+            Varje rond ändrar Marias bud baserat på Lindas argument.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Modell</strong>Claude Haiku 4.5 · Anthropic</li>
+            <li><strong>Ronder</strong>5 · max satisfaction-tröskel</li>
+            <li><strong>Slutbud</strong>3,5 % · accept rond 3</li>
+            <li><strong>Mål</strong>Träna förhandlingsspråk, inte vinna</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Maria gav 3,5 %. Du argumenterade för 4,2 %. Varför stannade ni på 3,5 — var det Marias gräns eller ditt eget tålamod?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · efter rond 3 · tisdag eftermiddag</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Avtal</strong>Akavia ITP1</div>
+          <div class="deep-slide-foot-rich-section"><strong>Grundrev.</strong>2,5 %</div>
+          <div class="deep-slide-foot-rich-section"><strong>Individuell</strong><em>0–4 % via förhandling</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Med vs. utan</strong>3 av tre</span>
+          </div>
+          <h3>Vad ger avtalet — egentligen?</h3>
+          <p class="deep-slide-lede">
+            Tjänstepension 4,5 %. Sjukförsäkring. Övertidsersättning. Semesterlön.
+            Föräldralön. Det syns inte på lönespecen — det syns när du
+            <em>behöver</em> det. På 30 år: drygt <strong>645 000 kr extra</strong>
+            från tjänstepensionen ensam, plus tryggheten av att inte vara
+            ekonomiskt utlämnad vid sjukskrivning.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">+ Tjänstepension · 4,5 %</div>
+              <div class="flow-row-num">+ 1 792</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">+ Sjukförsäkring · 90 % lön</div>
+              <div class="flow-row-num">trygghet</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">+ Övertidsersättning · 50–100 %</div>
+              <div class="flow-row-num">faktisk lön</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">+ Semesterlön · 12 %</div>
+              <div class="flow-row-num">på vardagen</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">På 30 år · tjänstepension</div>
+              <div class="flow-row-num">645 000</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Avtalsjämförelse · synlig värdering</div>
+          <p class="deep-slide-callout-body">
+            Linda kan när som helst trycka "vad ger avtalet?" och se monetär värdering
+            av varje förmån. Plattformen räknar tjänstepension som NPV över 30 år,
+            sjukförsäkring som kostnaden för privat motsvarighet, etc.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Tjänstepension</strong>NPV · 5 % real · 30 år</li>
+            <li><strong>Sjukförsäkring</strong>Privat motsvarighet · 320 kr/mån</li>
+            <li><strong>Föräldralön</strong>Snitt 6 mån · 90 % av tak</li>
+            <li><strong>Total värdering</strong>~ 12 200 kr/mån i förmåner</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Vismas avtal ger dig 12 200 kr/mån i osynliga förmåner ovanpå lönen. Hur skulle du värdera det om du jämförde med ett kontraktsanställning utan avtal?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · perspektiv-vidgare</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Avtalets värde</strong>~ 12 200 kr/mån</div>
+          <div class="deep-slide-foot-rich-section"><strong>Tjänstepension</strong>645 000 / 30 år</div>
+          <div class="deep-slide-foot-rich-section"><strong>Lärobok</strong><em>blir verklighet</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<template id="tpl-pension">
+  <div class="deep-content" data-deep-content="pension"
+       data-kicker="Pension" data-title="Vad 7 % blir på 30 år">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Allmän pension</strong>1 av tre</span>
+          </div>
+          <h3>7 % av varje lön. Hela arbetslivet.</h3>
+          <p class="deep-slide-lede">
+            Allmän pensionsavgift är 7 % av Lindas bruttolön — det dras
+            varje månad och hamnar i AP-fonderna eller premiepensionen.
+            Hon ser raden på lönespecen, men det är 30 år bort. Om hon
+            börjar nu bygger hon pensionspotten automatiskt.
+          </p>
+          <div class="deep-slide-foot">Dragning · maj 2026 · ackumulerat 2 124 kr i år</div>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Bruttolön<small>Visma · maj</small></div>
+              <div class="brutto-row-num">39 825</div>
+            </div>
+            <div class="brutto-row" style="background: rgba(220,76,43,0.06); border-color: rgba(220,76,43,0.2);">
+              <div class="brutto-row-label" style="color: #991b1b;">7 % allmän pension<small>till AP-fonder + premiepension</small></div>
+              <div class="brutto-row-num" style="color: #c2410c;">− 879</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Att förvalta åt 67-åringen<small>Linda · 2071</small></div>
+              <div class="brutto-row-num">+ 879</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Tjänstepension</strong>2 av tre</span>
+          </div>
+          <h3>Visma betalar 4,5 % ovanpå lönen.</h3>
+          <p class="deep-slide-lede">
+            Tack vare kollektivavtalet (Akavia ITP1) sätter Visma av
+            <strong>4,5 %</strong> av Lindas bruttolön till tjänstepension.
+            Det är pengar hon inte ser på lönespecen — men de hamnar på
+            hennes namn varje månad. Utan kollektivavtal: ingen tjänstepension.
+          </p>
+          <div class="deep-slide-foot">Akavia ITP1 · upp till 7,5 IBB</div>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Vismas brutto-extra · 4,5 %</div>
+              <div class="flow-row-num">+ 1 792</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">+ allmän pensionsavgift · 7 %</div>
+              <div class="flow-row-num">+ 879</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Total pensionsinsättning · maj</div>
+              <div class="flow-row-num">2 671</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Tjänstepensionen är kollektivavtalets största förmån.</strong>
+              Utan avtal försvinner Vismas 4,5 %. På 30 år: drygt 645 000 kr
+              extra på Lindas konto vid 67.
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>30 år senare</strong>3 av tre</span>
+          </div>
+          <h3>Ränta-på-ränta gör 879 kr/mån till en miljon.</h3>
+          <p class="deep-slide-lede">
+            2 671 kr/månad in på pensionspotten. Vid 5 % real avkastning
+            över 30 år: <em>2,2 miljoner kr</em>. Echo ställer en fråga:
+            <em>"Var detta avdrag som händer dig — eller en investering du
+            gör i ditt 67-åriga jag?"</em>
+          </p>
+          <div class="deep-slide-foot">Schablon: 5 % real avkastning · ej justerat för KPI</div>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="deep-slide-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 32px;">
+            <div class="mockup-eyebrow" style="color: var(--gold); margin-bottom: 18px;">PROGNOS · 67-ÅRIG LINDA · 2071</div>
+            <div style="font-family: var(--serif); font-size: 56px; font-weight: 700; letter-spacing: -1.6px; color: #fff; line-height: 1;">2 184 000<small style="font-family: 'Inter'; font-size: 18px; font-weight: 500; opacity: 0.6; margin-left: 8px;">kr</small></div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px; color: rgba(255,255,255,0.78); font-family: var(--mono);">
+              <span>Allmän pension (7 %)</span><strong style="color: #fff;">632 000 kr</strong>
+              <span>Tjänstepension (4,5 %)</span><strong style="color: var(--gold);">645 000 kr</strong>
+              <span>Avkastning · 30 år · 5 %</span><strong style="color: #fff;">907 000 kr</strong>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<template id="tpl-wellbeing">
+  <div class="deep-content" data-deep-content="wellbeing"
+       data-kicker="Wellbeing-pentagon" data-title="Hela livet i fem axlar">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>5 dimensioner</strong>1 av tre</span>
+          </div>
+          <h3>Ekonomi är en av fem axlar — inte den enda.</h3>
+          <p class="deep-slide-lede">
+            Plattformens kärna är inte saldot. Det är pentagonen. Fem dimensioner
+            av välmående, vägda för att reflektera hur livet faktiskt fungerar:
+            <strong>Ekonomi 25 % · Hälsa 20 % · Relation 20 % · Karriär 15 %
+            · Fritid 20 %</strong>. Vikten är baserad på forskning om subjektiv
+            livskvalitet — pengar betyder något, men inte allt.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="deep-slide-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 32px;">
+            <div class="mockup-eyebrow" style="color: var(--gold); margin-bottom: 12px;">Pentagonens vikter</div>
+            <div style="display:flex; justify-content:center; padding: 12px 0;">
+              <svg width="240" height="200" viewBox="0 0 240 200">
+                <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="rgba(255,255,255,0.2)" stroke-dasharray="3 3"/>
+                <polygon points="120,30 200,84 175,170 65,170 40,84" fill="rgba(251,191,36,0.18)" stroke="var(--gold)" stroke-width="1.8"/>
+                <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">EKONOMI · 25</text>
+                <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">RELATION · 20</text>
+                <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">FRITID · 20</text>
+                <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">KARRIÄR · 15</text>
+                <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">HÄLSA · 20</text>
+              </svg>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); font-family: var(--mono); font-size: 12px;">
+              <span style="color: rgba(255,255,255,0.78);">Total summa</span><strong style="color: #fff;">100 %</strong>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Vägt snitt baserat på forskning</div>
+          <p class="deep-slide-callout-body">
+            Vikterna är hämtade från Världshälsoorganisationens livskvalitetsindex
+            och svensk subjektiv-välbefinnande-forskning (SCB SuLNS). Ekonomi väger
+            mest eftersom det påverkar de andra fyra; hälsa och fritid påverkar
+            varandra; karriär väger minst eftersom värdet av karriär ofta
+            <em>internaliseras</em> i ekonomi över tid.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Ekonomi</strong>25 % · saldo, buffert, skuld</li>
+            <li><strong>Hälsa</strong>20 % · sömn, stress, fysisk</li>
+            <li><strong>Relation</strong>20 % · familj, vänner, partner</li>
+            <li><strong>Fritid</strong>20 % · hobby, vila, glädje</li>
+            <li><strong>Karriär</strong>15 % · utveckling, mål</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Skulle dina vikter se annorlunda ut? Är ekonomi 25 % för dig — eller mindre? Mer? Vad säger det om hur du vill leva?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · självreflektion · första gången</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Källor</strong>WHO QoL · SCB SuLNS</div>
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>Vägt aritmetiskt snitt</div>
+          <div class="deep-slide-foot-rich-section"><strong>Justerbart</strong><em>per elev · max ±5 %/dim</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Hur värdet räknas</strong>2 av tre</span>
+          </div>
+          <h3>Varje val flyttar någon axel.</h3>
+          <p class="deep-slide-lede">
+            Varje dimension är 0–100. Inkomst → ekonomi. Tandläkare → hälsa.
+            Familjekväll → relation. Övertid → karriär ↑ men fritid ↓. Plattformen
+            mappar varje val till påverkan över alla fem axlar — ofta motstridig.
+            Det är där modellen blir <em>livssimulering</em>, inte ekonomi-quiz.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Lönesamtal +1 295 kr/mån</div>
+              <div class="flow-row-num" style="color: #10b981;">EKO +6 / KAR +4</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Tandläkare 3 200 kr</div>
+              <div class="flow-row-num">HÄL −6 / EKO −2</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">Karriärutbildning 40 h</div>
+              <div class="flow-row-num" style="color: #fbbf24;">KAR +12 / FRI −8 / REL −4</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Veckans nettoeffekt</div>
+              <div class="flow-row-num">+ 4 WB</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Inget val är gratis.</strong> Karriärutbildningen ger karriär +12,
+              men kostar 8 fritid och 4 relation. Linda valde det ändå — för att hon
+              vägde långsiktigt mot kortsiktigt. Echo coachade.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Multi-axel-mapping per beslut</div>
+          <p class="deep-slide-callout-body">
+            Plattformen har ~120 valstyper, var och en mappad till deltavärden över
+            alla 5 dimensioner. Mappningen är konfigurerad av lärar-superadmin
+            (kan justeras per klass). Varje val visar Linda förväntad effekt
+            <em>innan</em> hon trycker ja.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Valstyper</strong>~120 · finansiella + livsstilsval</li>
+            <li><strong>Mapping</strong>5-tuple delta per val</li>
+            <li><strong>Förhandsvy</strong>Ja, innan accept</li>
+            <li><strong>Justering</strong>Per klass · super-admin</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Karriärutbildningen kostar dig 12 fritids-poäng. Är de 12 poängen värda mer för dig än 8 % löneökning om 18 månader?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · fredag eftermiddag</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>5-tuple delta-mappning</div>
+          <div class="deep-slide-foot-rich-section"><strong>Förhandsvy</strong>Ja</div>
+          <div class="deep-slide-foot-rich-section"><strong>Veckosumma</strong><em>+ 4 WB · v.48</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Trender</strong>3 av tre</span>
+          </div>
+          <h3>12 veckors trend visar mönstret.</h3>
+          <p class="deep-slide-lede">
+            En vecka säger ingenting. Tolv veckor säger allt. Lindas total-WB har
+            stigit från <strong>68 → 72</strong> över tre månader. Tandläkaren
+            tippade hälsa, men karriärsamtalet kompenserade. Ekonomi har stigit
+            stadigt sedan första lönesamtalet. Mönstret är <em>uppåtgående</em>
+            — och Linda ser det själv på söndag-rapporten.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="vis-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); padding: 28px;">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● 12-veckors trend</span>
+              <span class="vis-card-meta">v.37 → v.48</span>
+            </div>
+            <h3 class="vis-card-title">Linda · WB-index över tid</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 68%;"><span class="vis-bar-num">68</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.37</span></div>
+              <div class="vis-bar" style="--h: 70%;"><span class="vis-bar-num">70</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.41</span></div>
+              <div class="vis-bar" style="--h: 64%;"><span class="vis-bar-num">64</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.44</span></div>
+              <div class="vis-bar" style="--h: 69%;"><span class="vis-bar-num">69</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.46</span></div>
+              <div class="vis-bar is-peak" style="--h: 72%;"><span class="vis-bar-num">72</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.48 ★</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Trend</span>
+              <strong>+ 4 WB · 3 mån</strong>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Veckosnapshot + årstrend</div>
+          <p class="deep-slide-callout-body">
+            Plattformen tar en snapshot av WB varje söndag kl 23:59. Lärare ser hela
+            klassens snitt + spread över tid. Eleven ser sin egen trend och kan jämföra
+            mot klassens — anonymt. Mål är inte att vinna utan att se sitt mönster.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Snapshot</strong>Sön 23:59 · veckans final</li>
+            <li><strong>Visualisering</strong>Bar-graf · 12 veckor</li>
+            <li><strong>Lärar-vy</strong>Klassens snitt · spread</li>
+            <li><strong>Elev-vy</strong>Anonym jämförelse · klass</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Ditt WB är 72 — högre än för 3 månader sen, men lägre än v.41. Vad hände v.44 som drog ner? Och vad skulle du göra annorlunda nästa gång?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · trend-reflektion · söndag review</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Snapshot</strong>Sön 23:59</div>
+          <div class="deep-slide-foot-rich-section"><strong>Trend</strong>72 / 100 · ↑ 4</div>
+          <div class="deep-slide-foot-rich-section"><strong>Lärobok blir</strong><em>verklighet</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<nav class="timeline" id="timeline" aria-label="Kontextuell tidslinje">
+  <span class="tl-rail" aria-hidden="true"></span>
+  <span class="tl-cursor" aria-hidden="true"></span>
+  <ol class="tl-scenes" data-scenes></ol>
+</nav>
+
+<script>
+// ─── Scen-mappning + ordning: tidslinjen följer denna sekvens ──
+const SCENE_ORDER = ['hero', 'tuesday', 'wednesday', 'thursday', 'friday', 'sunday', 'monday-teacher', 'cta'];
+const SCENES = {
+  hero:             { label: 'Måndag morgon',         dives: [] },
+  tuesday:          { label: 'Tisdag · Lönesamtal',    dives: ['salary', 'employer'] },
+  wednesday:        { label: 'Onsdag · Pension',       dives: ['pension'] },
+  thursday:         { label: 'Torsdag · Tandläkaren',  dives: [] },
+  friday:           { label: 'Fredag · Karriärsamtal', dives: [] },
+  sunday:           { label: 'Söndag · Review',        dives: ['wellbeing'] },
+  'monday-teacher': { label: 'Måndag · Lärarvy',       dives: [] },
+  cta:              { label: 'Slutet',                 dives: [] },
+};
+const DIVE_LABELS = {
+  salary:    'Lönespec',
+  employer:  'Kollektivavtal',
+  pension:   'Pension',
+  wellbeing: 'Wellbeing-pentagon',
+};
+</script>
+
+<script>
+// ─── Page-swipe + deep-page-motor ──────────────────────────────
+(function() {
+  const body = document.body;
+  const deep = document.getElementById('deep');
+  const stage = deep.querySelector('[data-stage]');
+  const kicker = deep.querySelector('[data-current-kicker]');
+  const titleEl = deep.querySelector('[data-current-title]');
+  const progress = deep.querySelector('[data-progress]');
+  const currentNum = deep.querySelector('[data-current-num]');
+  const totalEl = deep.querySelector('[data-total]');
+  const prevBtn = deep.querySelector('[data-prev]');
+  const nextBtn = deep.querySelector('[data-next]');
+
+  let lastY = 0;
+  let activeContent = null;
+  let activeSlideIdx = 0;
+  let slideAnimLock = false;
+
+  function getOrCreateContent(key) {
+    let el = stage.querySelector(`[data-deep-content="${key}"]`);
+    if (el) return el;
+    const tpl = document.getElementById('tpl-' + key);
+    if (!tpl) return null;
+    el = tpl.content.firstElementChild.cloneNode(true);
+    stage.appendChild(el);
+    return el;
+  }
+
+  function setProgress(idx, total) {
+    progress.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+      const dot = document.createElement('span');
+      if (i === idx) dot.classList.add('active');
+      progress.appendChild(dot);
+    }
+    if (currentNum) currentNum.textContent = (idx + 1);
+    if (totalEl) totalEl.textContent = total;
+    if (prevBtn) prevBtn.disabled = idx === 0;
+    if (nextBtn) nextBtn.disabled = idx === total - 1;
+  }
+
+  function applySlideClasses(slides, idx) {
+    slides.forEach((s, i) => {
+      s.classList.remove('is-active', 'is-prev');
+      if (i < idx) s.classList.add('is-prev');
+      else if (i === idx) s.classList.add('is-active');
+    });
+  }
+
+  function activate(key) {
+    const el = getOrCreateContent(key);
+    if (!el) return false;
+    stage.querySelectorAll('.deep-content').forEach(c => c.classList.toggle('is-active', c === el));
+    activeContent = el;
+    if (kicker) kicker.textContent = el.dataset.kicker || '';
+    if (titleEl) titleEl.textContent = el.dataset.title || '';
+    const slides = el.querySelectorAll('.deep-slide');
+    activeSlideIdx = 0;
+    applySlideClasses(slides, 0);
+    setProgress(0, slides.length);
+    return true;
+  }
+
+  function goSlide(dir) {
+    if (!activeContent || slideAnimLock) return;
+    const slides = activeContent.querySelectorAll('.deep-slide');
+    const next = Math.max(0, Math.min(slides.length - 1, activeSlideIdx + dir));
+    if (next === activeSlideIdx) return;
+    activeSlideIdx = next;
+    applySlideClasses(slides, next);
+    setProgress(next, slides.length);
+    slideAnimLock = true;
+    setTimeout(() => { slideAnimLock = false; }, 740);
+  }
+
+  function open(key) {
+    if (body.classList.contains('is-deep')) return;
+    if (!activate(key)) return;
+    // Spara EXAKT position så vi kan återställa när användaren stänger.
+    // (overflow:hidden + height:100vh på body hade annars nollställt scroll
+    //  i Safari/iOS — så vi pin:ar med scrollTo efter klassbytet.)
+    lastY = window.scrollY || window.pageYOffset || 0;
+    body.classList.add('is-deep');
+    deep.setAttribute('aria-hidden', 'false');
+  }
+  function close() {
+    if (!body.classList.contains('is-deep')) return;
+    body.classList.remove('is-deep');
+    deep.setAttribute('aria-hidden', 'true');
+    // Återställ scrollpositionen explicit så användaren landar exakt
+    // där hen var i sagan — inte överst på sidan.
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: lastY, left: 0, behavior: 'instant' });
+    });
+  }
+  window.openDeep = open;
+  window.closeDeep = close;
+
+  // Klick på alla [data-deep] (scen-CTAs och ctx-nav-chips)
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('[data-deep]');
+    if (trigger) { e.preventDefault(); open(trigger.dataset.deep); return; }
+    if (e.target.closest('[data-close]')) { e.preventDefault(); close(); return; }
+  });
+
+  prevBtn.addEventListener('click', () => goSlide(-1));
+  nextBtn.addEventListener('click', () => goSlide(1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && body.classList.contains('is-deep')) close();
+    if (!body.classList.contains('is-deep')) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goSlide(1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   { e.preventDefault(); goSlide(-1); }
+  });
+
+  // ─── Wheel + touch: dirigera vertikal/horisontell input → slide-byte ─
+  let wheelLock = false;
+  deep.addEventListener('wheel', e => {
+    if (!body.classList.contains('is-deep')) return;
+    // Tillåt vertikal scroll inuti aktiv slide om innehållet är högre
+    const slide = activeContent && activeContent.querySelector('.deep-slide.is-active');
+    const canScrollDown = slide && slide.scrollTop + slide.clientHeight < slide.scrollHeight - 2;
+    const canScrollUp   = slide && slide.scrollTop > 2;
+    const dy = e.deltaY, dx = e.deltaX;
+    const dominant = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    // Liten dödzon, undvik trackpad-jitter
+    if (Math.abs(dominant) < 14) return;
+    // Om vertikal scroll inuti slide kan ta hand om det → låt browsern
+    if (Math.abs(dy) > Math.abs(dx) && ((dy > 0 && canScrollDown) || (dy < 0 && canScrollUp))) return;
+    e.preventDefault();
+    if (wheelLock) return;
+    goSlide(dominant > 0 ? 1 : -1);
+    wheelLock = true;
+    setTimeout(() => { wheelLock = false; }, 760);
+  }, { passive: false });
+
+  // Touch-swipe på mobil
+  let tStartX = 0, tStartY = 0, tStartT = 0;
+  deep.addEventListener('touchstart', e => {
+    tStartX = e.touches[0].clientX;
+    tStartY = e.touches[0].clientY;
+    tStartT = Date.now();
+  }, { passive: true });
+  deep.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tStartX;
+    const dy = e.changedTouches[0].clientY - tStartY;
+    const dt = Date.now() - tStartT;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dt > 700) return;
+    goSlide(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
+</script>
+
+<script>
+// ─── Vertikal tidslinje: rendera + följ scrollen ───────────────
+(function() {
+  const tl = document.getElementById('timeline');
+  const scenesEl = tl.querySelector('[data-scenes]');
+  const cursor = tl.querySelector('.tl-cursor');
+  const sections = Array.from(document.querySelectorAll('[data-scene]'));
+  const sectionsByKey = Object.fromEntries(sections.map(s => [s.dataset.scene, s]));
+
+  // Bygg upp listan i SCENE_ORDER (även scener som ännu inte har sektion)
+  const sceneNodes = {};
+  SCENE_ORDER.forEach(key => {
+    const cfg = SCENES[key];
+    if (!cfg) return;
+    const li = document.createElement('li');
+    li.className = 'tl-scene';
+    li.dataset.scene = key;
+    if (!sectionsByKey[key]) li.dataset.empty = '1';
+
+    const labelBtn = document.createElement('button');
+    labelBtn.className = 'tl-label';
+    labelBtn.textContent = cfg.label;
+    labelBtn.addEventListener('click', () => scrollToScene(key));
+    li.appendChild(labelBtn);
+
+    if (cfg.dives.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'tl-dives';
+      cfg.dives.forEach(d => {
+        const dliBtn = document.createElement('button');
+        dliBtn.className = 'tl-dive';
+        dliBtn.dataset.deep = d;
+        dliBtn.textContent = DIVE_LABELS[d] || d;
+        const dli = document.createElement('li');
+        dli.appendChild(dliBtn);
+        ul.appendChild(dli);
+      });
+      li.appendChild(ul);
+    }
+    scenesEl.appendChild(li);
+    sceneNodes[key] = li;
+  });
+
+  function scrollToScene(key) {
+    const el = sectionsByKey[key];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  let currentScene = null;
+  let cursorRaf = 0;
+
+  function setActive(key) {
+    if (key === currentScene) return;
+    currentScene = key;
+    const idx = SCENE_ORDER.indexOf(key);
+    SCENE_ORDER.forEach((k, i) => {
+      const node = sceneNodes[k];
+      if (!node) return;
+      node.classList.toggle('is-active', i === idx);
+      node.classList.toggle('is-passed', i < idx);
+    });
+    moveCursor();
+  }
+
+  function moveCursor() {
+    const active = scenesEl.querySelector('.tl-scene.is-active');
+    if (!active) return;
+    cancelAnimationFrame(cursorRaf);
+    cursorRaf = requestAnimationFrame(() => {
+      const tlRect = tl.getBoundingClientRect();
+      const aRect = active.getBoundingClientRect();
+      // Dot: top:9 i scen, 7px → centrum y = 12.5
+      // Cursor 14px → cursor.top i scen = 12.5 - 7 = 5.5
+      const top = (aRect.top - tlRect.top) + 5.5;
+      cursor.style.top = top + 'px';
+    });
+  }
+  window.addEventListener('resize', moveCursor);
+
+  // IntersectionObserver för aktiv scen
+  const observer = new IntersectionObserver(() => {
+    let best = null, bestScore = -1;
+    sections.forEach(s => {
+      const r = s.getBoundingClientRect();
+      const visibleH = Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(0, r.top));
+      const ratio = visibleH / Math.min(window.innerHeight, r.height || 1);
+      if (ratio > bestScore) { bestScore = ratio; best = s; }
+    });
+    if (best) setActive(best.dataset.scene);
+  }, { threshold: [0, 0.15, 0.35, 0.55, 0.75, 1] });
+
+  sections.forEach(s => observer.observe(s));
+
+  // Visa när första scenen detekteras
+  setTimeout(() => tl.classList.add('is-visible'), 250);
+
+  // Per-rad-färgbyte: varje scen får is-on-light när dess label
+  // passerar hero-brytlinjen i viewporten
+  const hero = document.getElementById('hero');
+  if (hero) {
+    let crossRaf = 0;
+    const updateCrossings = () => {
+      cancelAnimationFrame(crossRaf);
+      crossRaf = requestAnimationFrame(() => {
+        const heroBottom = hero.getBoundingClientRect().bottom;
+        Object.values(sceneNodes).forEach(li => {
+          const label = li.querySelector('.tl-label');
+          if (!label) return;
+          const lbY = label.getBoundingClientRect().top + label.offsetHeight / 2;
+          // Om hero-bottom är OVAN labelns mitt → label är över ljus bg
+          li.classList.toggle('is-on-light', heroBottom < lbY);
+        });
+      });
+    };
+    window.addEventListener('scroll', updateCrossings, { passive: true });
+    window.addEventListener('resize', updateCrossings);
+    setTimeout(updateCrossings, 50);
+  }
+})();
+</script>
+
+<script>
+// ─── AOS-style entrance: fade/slide/zoom när element når viewport ──
+(function() {
+  const items = document.querySelectorAll('[data-fx], [data-fx-stagger], .vis-card');
+  if (!items.length) return;
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.12) {
+        e.target.classList.add('is-in');
+        // Trigga count-up om elementet eller dess descendant har data-count-to
+        const counters = e.target.querySelectorAll('[data-count-to]:not(.is-counted)');
+        counters.forEach(animateCount);
+        if (e.target.matches('[data-count-to]:not(.is-counted)')) animateCount(e.target);
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.12, 0.3], rootMargin: '0px 0px -8% 0px' });
+  items.forEach(el => obs.observe(el));
+
+  function animateCount(el) {
+    el.classList.add('is-counted');
+    const target = parseInt(el.dataset.countTo, 10);
+    if (isNaN(target)) return;
+    const prefix = el.dataset.countPrefix || '';
+    const dur = 1200;
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - start) / dur);
+      // Ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      const val = Math.round(target * eased);
+      el.textContent = prefix + val.toLocaleString('sv-SE');
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+})();
+
+// ─── Hero-tid: animerad nedräkning 08:51 → 09:00 (börsöppning) ────────────
+(function() {
+  const timeEl = document.querySelector('[data-hero-time]');
+  const minsEl = document.querySelector('[data-hero-mins]');
+  if (!timeEl || !minsEl) return;
+  const startMins = 8 * 60 + 51;
+  const endMins   = 9 * 60;
+  let cur = startMins;
+  const TICK_MS = 900;
+  const REACH_PAUSE_MS = 2400;
+
+  function fmt(t) {
+    const h = Math.floor(t / 60);
+    const m = t % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+  function minsLabel(rem) {
+    if (rem === 0) return 'NU';
+    if (rem === 1) return '1 minut';
+    return rem + ' minuter';
+  }
+  function paint(animate) {
+    if (animate) {
+      timeEl.classList.add('is-tick');
+      minsEl.classList.add('is-tick');
+    }
+    setTimeout(() => {
+      const remaining = endMins - cur;
+      timeEl.textContent = fmt(cur);
+      minsEl.textContent = minsLabel(remaining);
+      timeEl.classList.toggle('is-zero', remaining === 0);
+      minsEl.classList.toggle('is-zero', remaining === 0);
+      timeEl.classList.remove('is-tick');
+      minsEl.classList.remove('is-tick');
+    }, animate ? 180 : 0);
+  }
+  paint(false);
+
+  function tick() {
+    cur++;
+    if (cur > endMins) {
+      // pausa kort på "07:00 / NU", återställ sen
+      setTimeout(() => { cur = startMins; paint(true); setTimeout(tick, TICK_MS); }, REACH_PAUSE_MS);
+      return;
+    }
+    paint(true);
+    setTimeout(tick, TICK_MS);
+  }
+  setTimeout(tick, TICK_MS);
+})();
+
+// ─── Hero scrub-parallax: räknar progress 0..1 över hero-pin-area ──
+(function() {
+  const heroPin = document.getElementById('heroPin');
+  const video = document.getElementById('hero-video');
+  if (!heroPin) return;
+
+  let isReady = false;
+  let raf = 0;
+  const root = document.documentElement;
+
+  const update = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const r = heroPin.getBoundingClientRect();
+      const total = heroPin.offsetHeight - window.innerHeight;
+      const p = total > 0 ? Math.max(0, Math.min(1, -r.top / total)) : 0;
+      root.style.setProperty('--hero-p', p.toFixed(4));
+
+      // Pausa videon när vi är förbi pin-zonen (sparar CPU/batteri)
+      if (video) {
+        if (r.bottom < 0 && !video.paused) video.pause();
+        else if (r.bottom > 0 && video.paused) video.play().catch(() => {});
+      }
+    });
+  };
+
+  if (video) {
+    const reveal = () => {
+      if (isReady) return;
+      isReady = true;
+      video.classList.add('is-ready');
+      video.style.opacity = '';  // clear ev. tidigare inline-stil
+      video.play().catch(() => {});
+      update();
+    };
+    if (video.readyState >= 2) reveal();
+    else {
+      video.addEventListener('loadeddata', reveal, { once: true });
+      video.addEventListener('canplay', reveal, { once: true });
+    }
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+})();
+
+// ─── Section-divider: rita linje när day-section når viewport ─────
+(function() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.05) {
+        e.target.classList.add('is-in');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.05] });
+  document.querySelectorAll('section.day').forEach(el => obs.observe(el));
+})();
+</script>
+
+<script>
+// ─── Adaptiv nav-färg: vit text på mörka sektioner, mörk text på ljusa.
+// IntersectionObserver bevakar ett tunt band överst i viewporten — när en
+// [data-nav-theme]-sektion korsar bandet sätts body-klassen om.
+(function () {
+  const body = document.body;
+  const sections = document.querySelectorAll('[data-nav-theme]');
+  if (!sections.length) return;
+
+  function applyTheme(theme) {
+    body.classList.toggle('nav-on-dark', theme === 'dark');
+    body.classList.toggle('nav-on-light', theme === 'light');
+  }
+  // Initial: hero är överst
+  applyTheme('dark');
+
+  const obs = new IntersectionObserver(entries => {
+    // Hitta den sektion som täcker top-bandet (~0–60 px från toppen)
+    let top = null;
+    sections.forEach(s => {
+      const r = s.getBoundingClientRect();
+      if (r.top <= 60 && r.bottom > 60) top = s;
+    });
+    if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
+  }, { rootMargin: '-60px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
+  sections.forEach(s => obs.observe(s));
+
+  // Backup: scroll-baserad recompute (Safari kan missa edge cases)
+  let raf = 0;
+  window.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      let top = null;
+      sections.forEach(s => {
+        const r = s.getBoundingClientRect();
+        if (r.top <= 60 && r.bottom > 60) top = s;
+      });
+      if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
+    });
+  }, { passive: true });
+})();
+</script>
+
+</body>
+</html>
