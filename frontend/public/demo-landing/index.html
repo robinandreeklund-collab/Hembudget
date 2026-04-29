@@ -83,15 +83,46 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
 /* ─── Hero ─── */
 .hero {
+  min-height: 100vh;
   display: flex; flex-direction: column;
-  padding: 100px clamp(24px, 6vw, 80px) 56px clamp(32px, 8vw, 120px);
+  padding: 90px clamp(24px, 6vw, 80px) 36px clamp(32px, 8vw, 120px);
   position: relative; overflow: hidden;
-  background: var(--bg);
+  background: #0f172a;
 }
+
+/* Full-bleed bakgrunds-video-stack: 3 videos staplade, aktiv = opacity 1 */
+.hero-bg-stack {
+  position: absolute; inset: 0; z-index: 0;
+}
+.hero-bg-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center 30%;
+  opacity: 0;
+  transition: opacity .65s cubic-bezier(.4, 0, .2, 1);
+  pointer-events: none;
+}
+.hero-bg-video.is-active { opacity: 1; }
+
+/* Mörk gradient-scrim över videon för text-läsbarhet */
+.hero-bg-scrim {
+  position: absolute; inset: 0; z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      rgba(15,23,42,0.55) 0%,
+      rgba(15,23,42,0.15) 25%,
+      rgba(15,23,42,0.15) 55%,
+      rgba(15,23,42,0.85) 100%),
+    linear-gradient(90deg,
+      rgba(15,23,42,0.45) 0%,
+      rgba(15,23,42,0) 50%);
+}
+
 .hero-inner {
   max-width: 1400px; margin: 0 auto;
   width: 100%; position: relative; z-index: 2;
-  display: flex; flex-direction: column; flex: 1;
+  display: flex; flex-direction: column;
 }
 /* Ambient gradient-mesh som driftar långsamt */
 .hero::before {
@@ -163,28 +194,38 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .brand-name {
   font-family: var(--serif);
-  font-size: clamp(28px, 4vw, 42px);
+  font-size: clamp(26px, 3.6vw, 38px);
   font-weight: 700; letter-spacing: 0.5px;
   text-transform: uppercase; line-height: 1;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0,0,0,0.4);
 }
 .brand-tagline {
   margin-top: 4px;
-  font-family: var(--mono); font-size: 12px;
+  font-family: var(--mono); font-size: 11.5px;
   letter-spacing: 2.4px; text-transform: uppercase;
-  font-weight: 500; color: var(--muted); white-space: nowrap;
+  font-weight: 500; color: rgba(255,255,255,0.75); white-space: nowrap;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--mono); font-size: 11px;
-  padding: 6px 14px; background: var(--fg); color: #fff;
-  border-radius: 100px; letter-spacing: 1.4px; font-weight: 500;
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  border-radius: 100px; letter-spacing: 1.4px; font-weight: 600;
   margin-bottom: 28px;
 }
 .hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
 .hero h1 {
-  font-size: clamp(40px, 5.5vw, 70px);
-  letter-spacing: -2px; line-height: 0.98;
+  font-size: clamp(48px, 7vw, 96px);
+  letter-spacing: -2.6px; line-height: 0.96;
   max-width: 14ch; margin-bottom: 22px;
+  color: #fff;
+  text-shadow: 0 4px 32px rgba(0,0,0,0.5);
 }
 .hero h1 em {
   color: var(--accent); font-style: italic;
@@ -192,7 +233,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .hero p {
   font-size: 17px; max-width: 540px; font-weight: 500;
-  color: #1e293b; line-height: 1.55; margin-bottom: 28px;
+  color: rgba(255,255,255,0.88); line-height: 1.55; margin-bottom: 28px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
 .hero-stats {
   display: flex; gap: 36px; padding-top: 24px;
@@ -500,15 +542,113 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .figures:hover .figure-float { opacity: 0; }
 .figures:hover .figure:hover .figure-float { opacity: 1; }
 
-/* ─── Magazine credits (längst ned) ─── */
+/* ─── Vertikal persona-nav (höger sida, Linda-tidslinje-pattern) ─── */
+.hero-persona-nav {
+  position: absolute;
+  right: clamp(20px, 3vw, 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex; flex-direction: column; gap: 16px;
+  pointer-events: auto;
+}
+@media (max-width: 1000px) { .hero-persona-nav { display: none; } }
+.hero-persona-nav-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--gold);
+  padding-left: 26px;
+}
+.hero-persona-nav-stack {
+  position: relative;
+  display: flex; flex-direction: column;
+  padding: 6px 0;
+}
+.hero-persona-nav-rail {
+  position: absolute;
+  left: 8px; top: 14px; bottom: 14px; width: 1.5px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+.hero-persona-nav-cursor {
+  position: absolute; left: 1px; top: 14px;
+  width: 16px; height: 16px;
+  background: var(--accent); border-radius: 50%;
+  box-shadow:
+    0 0 0 5px rgba(220,76,43,0.18),
+    0 0 22px rgba(220,76,43,0.65),
+    inset 0 0 0 1px rgba(255,255,255,0.3);
+  transition: top .65s cubic-bezier(.34, 1.18, .64, 1);
+  pointer-events: none;
+  z-index: 2;
+}
+.hero-persona-nav-cursor::after {
+  content: ""; position: absolute; inset: -5px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(220, 76, 43, 0.5);
+  animation: nav-cursor-pulse 2.4s ease-in-out infinite;
+}
+@keyframes nav-cursor-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.7); opacity: 0; }
+}
+.hero-persona-nav-list {
+  list-style: none; display: flex; flex-direction: column;
+  gap: 26px; padding: 0 0 0 26px;
+  position: relative;
+}
+.hero-persona-nav-item {
+  position: relative;
+  cursor: pointer;
+  outline: 0;
+  transition:
+    color .3s var(--ease),
+    transform .3s var(--ease),
+    opacity .3s var(--ease);
+  opacity: 0.55;
+}
+.hero-persona-nav-item:hover { opacity: 0.85; }
+.hero-persona-nav-item.is-active { opacity: 1; transform: translateX(4px); }
+.hero-persona-nav-item::before {
+  content: ""; position: absolute;
+  left: -22px; top: 6px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.3);
+  transition: opacity .3s;
+}
+.hero-persona-nav-item.is-active::before { opacity: 0; }
+.hero-persona-nav-name {
+  display: block;
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.05;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  transition: font-size .3s var(--ease);
+}
+.hero-persona-nav-item.is-active .hero-persona-nav-name {
+  font-size: 20px;
+}
+.hero-persona-nav-role {
+  display: block;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+  margin-top: 3px;
+}
+.hero-persona-nav-item.is-active .hero-persona-nav-role { color: var(--gold); }
+
+/* ─── Magazine credits — ljust på mörk video ─── */
 .cover-credits {
   position: relative; z-index: 2;
-  margin-top: 18px; padding: 14px 0 0;
+  margin-top: 16px; padding: 14px 0 0;
   display: flex; justify-content: center; align-items: center;
   gap: clamp(14px, 2vw, 32px);
   font-family: var(--mono); font-size: 10px;
   letter-spacing: 1.6px; text-transform: uppercase;
-  color: var(--muted);
+  color: rgba(255,255,255,0.6);
   flex-wrap: wrap;
 }
 .cover-credits-sep {
@@ -518,20 +658,31 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .cover-credits-vol {
   font-family: var(--serif); font-size: 12px; font-style: italic;
-  text-transform: none; letter-spacing: 0; color: var(--fg);
+  text-transform: none; letter-spacing: 0; color: rgba(255,255,255,0.95);
 }
 
-/* ─── Rich info-panel (per-person-presentation) ─── */
+/* ─── Rich info-panel — frostat-glas overlay på videon ─── */
 .hero-info {
   position: relative; z-index: 2;
-  margin: clamp(40px, 5vh, 64px) 0 0;
-  padding: clamp(40px, 5vh, 64px) 0 clamp(48px, 6vh, 80px);
-  border-top: 1px solid var(--rule);
-  min-height: 380px;
+  margin: auto 0 0;
+  padding: clamp(28px, 3.5vh, 44px) clamp(28px, 3.5vw, 52px);
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1fr);
   gap: clamp(28px, 4vw, 72px);
   align-items: start;
+  background: rgba(250, 250, 249, 0.92);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-radius: 16px;
+  box-shadow:
+    0 28px 64px -24px rgba(0,0,0,0.55),
+    0 8px 18px -8px rgba(0,0,0,0.25),
+    inset 0 0 0 1px rgba(255,255,255,0.5);
+  /* max-width så den inte täcker hela bredden på desktop */
+  max-width: calc(100% - clamp(220px, 18vw, 280px));
+}
+@media (max-width: 1000px) {
+  .hero-info { max-width: 100%; }
 }
 @media (max-width: 1000px) {
   .hero-info { grid-template-columns: 1fr 1fr; gap: 28px; }
@@ -909,118 +1060,39 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 <main>
 
   <section class="hero" id="hero">
+
+    <!-- Full-bleed video-stack: aktiv persona spelar, övriga pausade på frame 0.
+         Crossfade mellan dem vid byte. -->
+    <div class="hero-bg-stack" aria-hidden="true">
+      <video class="hero-bg-video is-active" data-persona="linda" muted loop playsinline preload="auto">
+        <source src="./linda.mp4" type="video/mp4">
+      </video>
+      <video class="hero-bg-video" data-persona="evelina" muted loop playsinline preload="metadata">
+        <source src="./evelina.mp4" type="video/mp4">
+      </video>
+      <video class="hero-bg-video" data-persona="peter" muted loop playsinline preload="metadata">
+        <source src="./peter.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="hero-bg-scrim" aria-hidden="true"></div>
+
     <header class="hero-brand">
       <div class="brand-name">Ekonomilabbet</div>
       <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
     </header>
 
     <div class="hero-inner">
-    <div class="hero-shell">
-      <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
-      <h1>Lärobok blir <em>verklighet</em>.</h1>
-      <p>
-        Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val
-        har en konsekvens, varje konsekvens lär en lektion.
-      </p>
-      <div class="hero-stats">
-        <div><span class="hero-stat-num">3</span><span class="hero-stat-label">karaktärer · 3 veckor</span></div>
-        <div><span class="hero-stat-num">12</span><span class="hero-stat-label">kompetenser</span></div>
-        <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk-domäner</span></div>
-      </div>
-    </div>
-
-    <div class="hero-stage" id="heroStage">
-      <header class="hero-stage-head">
-        <div>
-          <div class="hero-stage-eye">● Möt karaktärerna</div>
-          <h2 class="hero-stage-title">Tre roller. <em>Tre veckor.</em> Hela systemet.</h2>
-        </div>
-        <p class="hero-stage-lede">
-          Karaktärer som elever kliver in i. Tillsammans går de igenom
-          plattformens 12 kompetenser — från lönesamtal till ISK-portfölj.
+      <div class="hero-shell">
+        <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
+        <h1>Lärobok blir <em>verklighet</em>.</h1>
+        <p>
+          Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val
+          har en konsekvens, varje konsekvens lär en lektion.
         </p>
-      </header>
-
-      <div class="figures-stage">
-        <div class="figures-backdrop" aria-hidden="true">Möt<em>et</em></div>
-
-      <div class="figures" id="figures">
-        <a class="figure" data-persona="linda" href="/demo-landing/4-vecka-djupdyk.html"
-           data-theme="Arbetslivet · Vol. 01"
-           data-name="Linda"
-           data-role="22 · IT-konsult · Stockholm"
-           data-story="En vecka full av val: ett <strong>lönesamtal</strong> som ger 1 295 kr/mån, en oväntad <em>tandläkarakut</em> torsdag, en chef som föreslår karriärutbildning fredag. Varje val flyttar något — saldot, pensionspotten, eller pentagonens balans."
-           data-quote="Akavia 2026 säger 39 500 kr för min roll. Jag ligger 1 500 kr under."
-           data-cite="— Linda · lönesamtalet · rond 1"
-           data-week="Tis|Lönesamtal · Visma;Ons|Pensionsavgiften upptäcks;Tor|Akut tandläkare;Fre|Karriärsamtal;Sön|WB-pentagon · review;Mån|Lärar-Anna ser klassen"
-           data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
-           data-cta="Träffa Linda"
-           data-float="+ 1 295 kr / mån">
-          <div class="figure-video-wrap">
-            <video class="figure-video" autoplay muted loop playsinline preload="auto">
-              <source src="./linda-intro-nobg.webm" type="video/webm">
-              <source src="./linda-intro.mp4" type="video/mp4">
-            </video>
-          </div>
-          <span class="figure-float" aria-hidden="true"></span>
-          <div class="figure-caption">
-            <strong>Linda</strong>
-            <span>22 · IT-konsult</span>
-          </div>
-        </a>
-
-        <a class="figure" data-persona="evelina" href="#" data-soon
-           data-theme="Investering · Vol. 02"
-           data-name="Evelina"
-           data-role="27 · ekonom · Malmö"
-           data-story="Hon har följt börsen sedan 22, sett <em>Coronakraschen 2020</em> och vet att marknaden inte är gambling — det är planering. ISK växer <strong>12,4 %</strong> i år, men det är inte siffran som lär henne mest. Det är hur hon hanterar −8 %-dagar."
-           data-quote="Tid i marknaden, inte timing av marknaden."
-           data-cite="— Evelina · efter krasch-fredagen"
-           data-week="Mån|Marknadsöppning;Tis|ISK-spar 5 000 kr;Tor|Globalfond −8 %;Fre|Skattedeklaration · ISK;Sön|12-mån-review · index;Mån|Lärarvy"
-           data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
-           data-cta="Kommer snart"
-           data-float="ISK · + 12,4 %">
-          <div class="figure-video-wrap">
-            <video class="figure-video" autoplay muted loop playsinline preload="auto">
-              <source src="./evelina-intro-nobg.webm" type="video/webm">
-              <source src="./evelina-intro.mp4" type="video/mp4">
-            </video>
-          </div>
-          <span class="figure-float" aria-hidden="true"></span>
-          <div class="figure-caption">
-            <strong>Evelina</strong>
-            <span>27 · ekonom</span>
-          </div>
-        </a>
-
-        <a class="figure" data-persona="peter" href="#" data-soon
-           data-theme="Vardagsekonomin · Vol. 03"
-           data-name="Peter"
-           data-role="38 · småbarnsförälder · Göteborg"
-           data-story="<strong>23 fakturor</strong> i månaden, hyra 8 200 kr, autogiron som måste signeras innan löningen den 25:e. Echo coachar Peter att <em>sortera prioriteringar</em> — inte att maximera avkastning. Vardagen är inte gambling, det är planering."
-           data-quote="Onsdag kväll. Barnen sover. Räkningstid."
-           data-cite="— Peter · vardagen"
-           data-week="Mån|Räkningar trillar in;Tis|EkonomilabbetID · autogiron;Ons|Bil i verkstad 12 000 kr;Tor|Kategorisera utgifter;Sön|Månadsprognos 31 dec;Mån|Lärar-Anna ser röd"
-           data-tags="Huvudbok,Kommande fakturor,EkonomilabbetID,Buffert"
-           data-cta="Kommer snart"
-           data-float="23 fakturor · 8 200 kr">
-          <div class="figure-video-wrap">
-            <video class="figure-video" autoplay muted loop playsinline preload="auto">
-              <source src="./peter-intro-nobg.webm" type="video/webm">
-              <source src="./peter-intro.mp4" type="video/mp4">
-            </video>
-          </div>
-          <span class="figure-float" aria-hidden="true"></span>
-          <div class="figure-caption">
-            <strong>Peter</strong>
-            <span>38 · småbarnsförälder</span>
-          </div>
-        </a>
       </div>
 
-        <div class="figures-ground" aria-hidden="true"></div>
-      </div>
-
+      <!-- Frostat-glas info-panel som overlay på videon, uppdateras
+           via auto-rotation eller klick på höger-nav -->
       <div class="hero-info" id="heroInfo">
         <div class="hero-info-empty">Hovra över en karaktär</div>
         <div class="hero-info-content">
@@ -1065,7 +1137,65 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         <span>Scrolla för mer ↓</span>
       </div>
     </div>
+
+    <!-- Vertikal persona-nav höger sida (likt Linda-tidslinjen) -->
+    <nav class="hero-persona-nav" id="personaNav" aria-label="Välj karaktär">
+      <div class="hero-persona-nav-eye">● TRÄFFA</div>
+      <div class="hero-persona-nav-stack">
+        <span class="hero-persona-nav-rail" aria-hidden="true"></span>
+        <span class="hero-persona-nav-cursor" aria-hidden="true"></span>
+        <ol class="hero-persona-nav-list">
+          <li class="hero-persona-nav-item is-active" data-persona-nav="linda"
+              data-href="/demo-landing/4-vecka-djupdyk.html">
+            <span class="hero-persona-nav-name">Linda</span>
+            <span class="hero-persona-nav-role">22 · IT-konsult</span>
+          </li>
+          <li class="hero-persona-nav-item" data-persona-nav="evelina" data-soon>
+            <span class="hero-persona-nav-name">Evelina</span>
+            <span class="hero-persona-nav-role">27 · ekonom</span>
+          </li>
+          <li class="hero-persona-nav-item" data-persona-nav="peter" data-soon>
+            <span class="hero-persona-nav-name">Peter</span>
+            <span class="hero-persona-nav-role">38 · småbarnsförälder</span>
+          </li>
+        </ol>
+      </div>
+    </nav>
+
+    <!-- Hidden data-bärare för info-panel-content (oförändrad) -->
+    <div class="figures" id="figures" hidden>
+      <a class="figure" data-persona="linda" href="/demo-landing/4-vecka-djupdyk.html"
+         data-theme="Arbetslivet · Vol. 01"
+         data-name="Linda"
+         data-role="22 · IT-konsult · Stockholm"
+         data-story="En vecka full av val: ett <strong>lönesamtal</strong> som ger 1 295 kr/mån, en oväntad <em>tandläkarakut</em> torsdag, en chef som föreslår karriärutbildning fredag. Varje val flyttar något — saldot, pensionspotten, eller pentagonens balans."
+         data-quote="Akavia 2026 säger 39 500 kr för min roll. Jag ligger 1 500 kr under."
+         data-cite="— Linda · lönesamtalet · rond 1"
+         data-week="Tis|Lönesamtal · Visma;Ons|Pensionsavgiften upptäcks;Tor|Akut tandläkare;Fre|Karriärsamtal;Sön|WB-pentagon · review;Mån|Lärar-Anna ser klassen"
+         data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
+         data-cta="Träffa Linda"></a>
+      <a class="figure" data-persona="evelina" href="#" data-soon
+         data-theme="Investering · Vol. 02"
+         data-name="Evelina"
+         data-role="27 · ekonom · Malmö"
+         data-story="Hon har följt börsen sedan 22, sett <em>Coronakraschen 2020</em> och vet att marknaden inte är gambling — det är planering. ISK växer <strong>12,4 %</strong> i år, men det är inte siffran som lär henne mest. Det är hur hon hanterar −8 %-dagar."
+         data-quote="Tid i marknaden, inte timing av marknaden."
+         data-cite="— Evelina · efter krasch-fredagen"
+         data-week="Mån|Marknadsöppning;Tis|ISK-spar 5 000 kr;Tor|Globalfond −8 %;Fre|Skattedeklaration · ISK;Sön|12-mån-review · index;Mån|Lärarvy"
+         data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
+         data-cta="Kommer snart"></a>
+      <a class="figure" data-persona="peter" href="#" data-soon
+         data-theme="Vardagsekonomin · Vol. 03"
+         data-name="Peter"
+         data-role="38 · småbarnsförälder · Göteborg"
+         data-story="<strong>23 fakturor</strong> i månaden, hyra 8 200 kr, autogiron som måste signeras innan löningen den 25:e. Echo coachar Peter att <em>sortera prioriteringar</em> — inte att maximera avkastning. Vardagen är inte gambling, det är planering."
+         data-quote="Onsdag kväll. Barnen sover. Räkningstid."
+         data-cite="— Peter · vardagen"
+         data-week="Mån|Räkningar trillar in;Tis|EkonomilabbetID · autogiron;Ons|Bil i verkstad 12 000 kr;Tor|Kategorisera utgifter;Sön|Månadsprognos 31 dec;Mån|Lärar-Anna ser röd"
+         data-tags="Huvudbok,Kommande fakturor,EkonomilabbetID,Buffert"
+         data-cta="Kommer snart"></a>
     </div>
+
   </section>
 
   <section class="intro" id="intro">
@@ -1199,30 +1329,6 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 // ─── Intro-sekvens trigger ─────────────────────────────────
 requestAnimationFrame(() => document.body.classList.add('is-loaded'));
 
-// ─── Fyll mikro-floats från data-float på varje figur ─────
-(function() {
-  document.querySelectorAll('.figure[data-float]').forEach(fig => {
-    const float = fig.querySelector('.figure-float');
-    if (float) float.textContent = fig.dataset.float;
-  });
-})();
-
-// ─── Säker video-loop: tvinga restart på 'ended' om browsern
-//     missar loop-attributet (vanligt med alpha-webm) ──────
-(function() {
-  document.querySelectorAll('.figure-video').forEach(v => {
-    v.addEventListener('ended', () => {
-      try { v.currentTime = 0; v.play().catch(() => {}); } catch(e) {}
-    });
-    v.addEventListener('pause', () => {
-      // Om browsern pausar autoplay (t.ex. tab inactive) — restart vid focus
-      if (v.readyState >= 2 && document.visibilityState === 'visible') {
-        v.play().catch(() => {});
-      }
-    });
-  });
-})();
-
 // ─── AOS-style entrance ──────────────────────────────────────
 (function() {
   const items = document.querySelectorAll('[data-fx], [data-fx-stagger]');
@@ -1238,11 +1344,24 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
   items.forEach(el => obs.observe(el));
 })();
 
-// ─── Info-panel: uppdatera content vid hover/focus på figur ──
+// ─── Säker video-loop ──────────────────────────────────────
+(function() {
+  document.querySelectorAll('.hero-bg-video').forEach(v => {
+    v.addEventListener('ended', () => {
+      try { v.currentTime = 0; v.play().catch(() => {}); } catch(e) {}
+    });
+  });
+})();
+
+// ─── Hero-cinema: video-crossfade + info-panel sync + nav-cursor ──
 (function() {
   const heroInfo = document.getElementById('heroInfo');
-  const figures = document.querySelectorAll('#figures .figure');
-  if (!heroInfo || !figures.length) return;
+  const figures = Array.from(document.querySelectorAll('#figures .figure'));
+  const navItems = Array.from(document.querySelectorAll('.hero-persona-nav-item'));
+  const navCursor = document.querySelector('.hero-persona-nav-cursor');
+  const bgVideos = Array.from(document.querySelectorAll('.hero-bg-video'));
+  if (!heroInfo || !figures.length || !navItems.length) return;
+
   const metaEl  = heroInfo.querySelector('[data-info-meta]');
   const nameEl  = heroInfo.querySelector('[data-info-name]');
   const roleEl  = heroInfo.querySelector('[data-info-role]');
@@ -1254,7 +1373,28 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
   const ctaEl   = heroInfo.querySelector('[data-info-cta]');
   const ctaLabel = heroInfo.querySelector('[data-info-cta-label]');
 
-  function showFor(fig, isAuto) {
+  function findFig(persona) {
+    return figures.find(f => f.dataset.persona === persona);
+  }
+  function findBgVideo(persona) {
+    return bgVideos.find(v => v.dataset.persona === persona);
+  }
+
+  function moveCursorTo(personaKey) {
+    const item = navItems.find(n => n.dataset.personaNav === personaKey);
+    if (!item || !navCursor) return;
+    const stack = item.closest('.hero-persona-nav-stack');
+    const itemRect = item.getBoundingClientRect();
+    const stackRect = stack.getBoundingClientRect();
+    // Cursor centreras på item-toppens första 14 px
+    const top = (itemRect.top - stackRect.top) + 6 - 1;
+    navCursor.style.top = top + 'px';
+  }
+
+  function showFor(personaKey, isAuto) {
+    const fig = findFig(personaKey);
+    if (!fig) return;
+
     metaEl.textContent  = fig.dataset.theme || '';
     nameEl.textContent  = fig.dataset.name || '';
     roleEl.textContent  = fig.dataset.role || '';
@@ -1291,83 +1431,93 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
       ctaEl.setAttribute('href', fig.getAttribute('href'));
     }
 
-    // Force reflow så CSS-animation triggas igen vid focus-byte
+    // Force reflow så CSS-animation triggas igen
     heroInfo.removeAttribute('data-active');
     void heroInfo.offsetWidth;
-    heroInfo.setAttribute('data-active', fig.dataset.persona);
+    heroInfo.setAttribute('data-active', personaKey);
     if (isAuto) heroInfo.setAttribute('data-auto', '1');
     else heroInfo.removeAttribute('data-auto');
 
-    // Single-active video: spela bara aktiva, frys övriga på första frame
-    figures.forEach(f => {
-      const v = f.querySelector('.figure-video');
-      if (!v) return;
-      if (f === fig) {
-        f.classList.add('is-active');
+    // Crossfade bakgrunds-video
+    bgVideos.forEach(v => {
+      if (v.dataset.persona === personaKey) {
+        v.classList.add('is-active');
         v.currentTime = 0;
         v.play().catch(() => {});
       } else {
-        f.classList.remove('is-active');
+        v.classList.remove('is-active');
         v.pause();
         try { v.currentTime = 0; } catch(e) {}
       }
     });
-  }
-  function clear() {
-    heroInfo.removeAttribute('data-active');
-    heroInfo.removeAttribute('data-auto');
+
+    // Uppdatera höger-nav active-state
+    navItems.forEach(n => {
+      n.classList.toggle('is-active', n.dataset.personaNav === personaKey);
+    });
+    moveCursorTo(personaKey);
   }
 
   let userInteracted = false;
   let autoTimer = null;
   let autoIdx = 0;
+  const ORDER = ['linda', 'evelina', 'peter'];
 
   function autoRotate() {
     if (userInteracted) return;
-    showFor(figures[autoIdx], true);
-    autoIdx = (autoIdx + 1) % figures.length;
+    showFor(ORDER[autoIdx], true);
+    autoIdx = (autoIdx + 1) % ORDER.length;
   }
 
-  figures.forEach(fig => {
-    fig.addEventListener('mouseenter', () => {
-      userInteracted = true;
-      clearInterval(autoTimer);
-      showFor(fig, false);
-    });
-    fig.addEventListener('focus', () => {
-      userInteracted = true;
-      clearInterval(autoTimer);
-      showFor(fig, false);
-    });
-  });
-  document.getElementById('figures').addEventListener('mouseleave', () => {
-    userInteracted = false;
-    clear();
-    setTimeout(() => {
-      if (!userInteracted) {
-        autoRotate();
-        autoTimer = setInterval(autoRotate, 6000);
+  // Klick på höger-nav byter persona och pausar auto i 8 sek
+  navItems.forEach(n => {
+    n.addEventListener('click', () => {
+      const key = n.dataset.personaNav;
+      const fig = findFig(key);
+      // Om det är en data-soon, navigera inte. Bara byt visning.
+      if (!n.dataset.soon && fig && fig.getAttribute('href') &&
+          fig.getAttribute('href') !== '#') {
+        // Klick på aktiv eller dubbelklick → följ länken
+        if (n.classList.contains('is-active')) {
+          window.location.href = fig.getAttribute('href');
+          return;
+        }
       }
-    }, 600);
-  });
-
-  figures.forEach(fig => {
-    fig.addEventListener('click', e => {
-      if (fig.dataset.soon !== undefined) e.preventDefault();
+      userInteracted = true;
+      clearInterval(autoTimer);
+      showFor(key, false);
+      // Återstart auto-rotation efter 8s grace
+      setTimeout(() => {
+        userInteracted = false;
+        autoIdx = (ORDER.indexOf(key) + 1) % ORDER.length;
+        autoTimer = setInterval(autoRotate, 6000);
+      }, 8000);
     });
   });
 
-  // Starta omedelbart med Linda som aktiv (figures[0])
-  if (figures.length > 0) {
-    showFor(figures[0], true);
-    autoIdx = 1;  // nästa rotation visar Evelina
-  }
-  // Sen rotera var 6:e sekund
+  // CTA-klick följer Lindas href om aktiv
+  ctaEl.addEventListener('click', e => {
+    if (ctaEl.getAttribute('aria-disabled') === 'true') {
+      e.preventDefault();
+    }
+  });
+
+  // Starta med Linda
+  showFor('linda', true);
+  autoIdx = 1;
+
+  // Auto-rotation var 6:e s (matchar video-loop)
   setTimeout(() => {
     if (!userInteracted) {
       autoTimer = setInterval(autoRotate, 6000);
     }
   }, 6000);
+
+  // Re-positionera cursor vid resize
+  window.addEventListener('resize', () => {
+    const active = navItems.find(n => n.classList.contains('is-active'));
+    if (active) moveCursorTo(active.dataset.personaNav);
+  });
 })();
 
 </script>
