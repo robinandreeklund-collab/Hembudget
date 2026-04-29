@@ -676,6 +676,37 @@ function renderRight() {
 }
 renderRight();
 
+// === ECHO DRAWER ===
+function renderDrawer() {
+  const box = document.getElementById("drawer");
+  box.innerHTML = `
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-eye">Echo · sokratisk</div>
+        <div style="font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:0.6px;">Claude Haiku 4.5 · 1 240 tokens denna chatt</div>
+      </div>
+      <button class="drawer-close" id="drawerClose" aria-label="Stäng">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="msg echo">"Hej Sara. Jag har tittat på din april — vad vill du börja med? De 12 ovettade transaktionerna, eller restaurang-kategorin som ligger 75 % över budget?"</div>
+      <div class="msg user">Restaurang. Det är samma som förra månaden känns det.</div>
+      <div class="msg echo">"Du har rätt. Mars var 1 940 kr på restaurang — april blev 2 100. Båda mot en budget på 1 200. Vad hände den 17:e april? Jag ser tre poster på Max under 47 minuter."</div>
+      <div class="msg user">Det var efter laxsim-träningen, vi var fyra som gick.</div>
+      <div class="msg echo">"Fyra på Max blir snabbt 600 kr. Hur ofta händer det i månaden — och är 1 200 kr/mån realistisk för en budget då?"</div>
+      <div class="msg user" style="opacity:0.45;font-style:italic;">Sara skriver...</div>
+    </div>
+    <div class="drawer-foot">
+      <input type="text" placeholder="Skriv till Echo…" />
+      <button>Skicka</button>
+    </div>
+  `;
+  document.getElementById("drawerClose").addEventListener("click", () => {
+    document.getElementById("drawer").classList.remove("open");
+    document.getElementById("scrim").classList.remove("on");
+  });
+}
+renderDrawer();
+
 const SIDE = document.getElementById("side");
 const CORRIDOR = document.getElementById("corridor");
 const DESK = document.getElementById("desk");
