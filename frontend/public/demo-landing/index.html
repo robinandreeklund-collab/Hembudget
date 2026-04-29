@@ -28,25 +28,27 @@ section { padding: clamp(80px, 12vh, 140px) 0; position: relative; }
 section + section { border-top: 1px solid var(--rule); }
 h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 
-/* ─── Top-CTA (höger hörn) ─── */
+/* ─── Top-CTA (höger hörn, samma editorial-glas-profil som info-panelen) ─── */
 .top-cta {
   position: fixed; top: 16px; right: 16px; z-index: 70;
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: 1.2px; text-transform: uppercase;
-  text-decoration: none; color: var(--fg);
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  border: 1px solid var(--rule);
-  padding: 7px 14px; border-radius: 100px;
-  transition: all .2s var(--ease);
+  letter-spacing: 1.4px; text-transform: uppercase;
+  text-decoration: none; color: #fff;
+  background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,0.18);
+  padding: 10px 16px; border-radius: 4px;
+  transition: all .22s var(--ease);
 }
 .top-cta:hover {
-  background: var(--fg); color: #fff; border-color: var(--fg);
+  background: linear-gradient(135deg, rgba(15,23,42,0.78) 0%, rgba(15,23,42,0.9) 100%);
+  color: var(--gold);
 }
 .top-cta-arrow { transition: transform .2s var(--ease); }
-.top-cta:hover .top-cta-arrow { transform: translateX(2px); }
+.top-cta:hover .top-cta-arrow { transform: translateX(3px); }
 
 /* ─── AOS-style entrance ─── */
 [data-fx] {
@@ -208,15 +210,16 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   text-shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
 .hero-eyebrow {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 11px;
-  padding: 6px 14px;
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.18);
+  padding: 9px 16px;
+  background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,0.18);
   color: #fff;
-  border-radius: 100px; letter-spacing: 1.4px; font-weight: 600;
+  border-radius: 4px; letter-spacing: 1.4px; font-weight: 600;
   margin-bottom: 28px;
 }
 .hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
@@ -622,23 +625,40 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .hero-persona-nav-name {
   display: block;
   font-family: var(--serif);
-  font-size: 18px; font-weight: 700;
-  letter-spacing: -0.4px; line-height: 1.05;
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.2px; line-height: 1.05;
   color: #fff;
   text-shadow: 0 2px 12px rgba(0,0,0,0.4);
-  transition: font-size .3s var(--ease);
+  transform-origin: left center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    font-weight .3s var(--ease),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1);
 }
 .hero-persona-nav-item.is-active .hero-persona-nav-name {
-  font-size: 20px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+@keyframes nav-name-pop {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
 }
 .hero-persona-nav-role {
   display: block;
-  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 600;
   letter-spacing: 1.4px; text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(255, 255, 255, 0.55);
   margin-top: 3px;
+  transition: color .3s var(--ease), font-size .3s var(--ease);
 }
-.hero-persona-nav-item.is-active .hero-persona-nav-role { color: var(--gold); }
+.hero-persona-nav-item.is-active .hero-persona-nav-role {
+  color: var(--gold);
+  font-size: 10.5px;
+}
 
 /* ─── Magazine credits — ljust på mörk video ─── */
 .cover-credits {
@@ -650,6 +670,20 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   letter-spacing: 1.6px; text-transform: uppercase;
   color: rgba(255,255,255,0.6);
   flex-wrap: wrap;
+}
+/* Scrolla-för-mer pulserar storlek + studsar var ~5e sek */
+.cover-credits-scroll {
+  display: inline-block;
+  animation: scroll-bounce 5s cubic-bezier(.34, 1.56, .64, 1) infinite;
+  transform-origin: center;
+  color: rgba(255,255,255,0.85);
+}
+@keyframes scroll-bounce {
+  0%, 80%, 100% { transform: scale(1) translateY(0); }
+  84%           { transform: scale(1.18) translateY(-2px); color: var(--gold); }
+  88%           { transform: scale(0.94) translateY(3px); }
+  92%           { transform: scale(1.08) translateY(-1px); }
+  96%           { transform: scale(1) translateY(0); }
 }
 .cover-credits-sep {
   display: inline-block; width: 4px; height: 4px;
@@ -1142,7 +1176,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         <span class="cover-credits-sep" aria-hidden="true"></span>
         <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
         <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span>Scrolla för mer ↓</span>
+        <span class="cover-credits-scroll">Scrolla för mer ↓</span>
       </div>
     </div>
 
