@@ -52,12 +52,12 @@ export default function DemoChoice() {
   return (
     <div className="min-h-screen bg-paper text-ink p-6">
       <div className="max-w-3xl mx-auto space-y-6">
-        <Link
-          to="/"
+        <a
+          href="/"
           className="text-sm text-[#666] nav-link inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-4 h-4" /> Tillbaka till startsidan
-        </Link>
+        </a>
 
         <div className="border-l-[3px] border-ink bg-white p-4 flex items-start gap-3">
           <Zap className="w-5 h-5 mt-0.5 shrink-0" strokeWidth={1.5} />

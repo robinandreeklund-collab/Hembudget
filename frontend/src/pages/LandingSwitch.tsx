@@ -1,33 +1,23 @@
 /**
- * LandingSwitch.tsx — fetchar aktiv landings-variant från
- * /landing/variant och router till respektive komponent.
+ * LandingSwitch.tsx — TIDIGARE: hämtade aktiv landing-variant och
+ * router till Landing eller LandingVariantC. NU: tom redirect-stub
+ * som tvingar full page-reload till `/`, vilket backend serverar
+ * från demo-landing/index.html (den nya editorial-startsidan).
  *
- * Default: variant 'c' (Ekonomilabbet v5-rebuild). Super-admin kan
- * toggla tillbaka till 'default' (paper-stilen i Landing.tsx) i
- * admin-panelen för A/B-test.
- *
- * Vid laddning visas LandingVariantC direkt (optimistisk default) —
- * om backend skulle returnera 'default' växlar vi då över utan att
- * blocka first paint. För majoriteten av besökare betyder det noll
- * flicker.
+ * Det här ersätter den gamla SPA-Landing.tsx för slutanvändare.
+ * Komponenten används fortfarande av React Router för catch-all
+ * (`*`) och `/`-routen i unauth-blocket — alla träffar på dessa
+ * resulterar i att webbläsaren redirectas till backend-rooten.
  */
-import { useEffect, useState } from "react";
-import { api } from "@/api/client";
-import Landing from "./Landing";
-import LandingVariantC from "./LandingVariantC";
-
-type VariantOut = { variant: string };
+import { useEffect } from "react";
 
 export default function LandingSwitch() {
-  const [variant, setVariant] = useState<string>("c");
-
   useEffect(() => {
-    api<VariantOut>("/landing/variant")
-      .then((r) => {
-        if (r.variant === "default") setVariant("default");
-      })
-      .catch(() => undefined);
+    // window.location.replace säkerställer att SPA-laddningen ersätts
+    // av en riktig GET / mot backend, som returnerar demo-landing.
+    if (typeof window !== "undefined") {
+      window.location.replace("/");
+    }
   }, []);
-
-  return variant === "default" ? <Landing /> : <LandingVariantC />;
+  return null;
 }

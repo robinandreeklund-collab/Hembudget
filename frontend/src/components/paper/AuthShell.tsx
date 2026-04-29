@@ -1,10 +1,14 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 
 /** Gemensamt yttre skal för alla auth-sidor (login, signup, glömt
  * lösenord, verify-email, reset-password). Ger paper-bg, centrerat
- * 480px-kort med 1.5px svart border + tillbaka-länk till /. */
+ * 480px-kort med 1.5px svart border + tillbaka-länk till /.
+ *
+ * Tillbaka-länken är ett vanligt `<a href>` (inte react-router-Link)
+ * så ett klick tvingar en full page-navigation — backend serverar då
+ * demo-landing/index.html istället för att React Router renderar den
+ * gamla SPA-Landingen inuti SPA:n. */
 export function AuthShell({
   title,
   eyebrow,
@@ -23,12 +27,12 @@ export function AuthShell({
   return (
     <div className="min-h-screen bg-paper text-ink grid place-items-center p-6">
       <div className="w-full max-w-md">
-        <Link
-          to={back}
+        <a
+          href={back}
           className="text-sm text-[#666] hover:text-ink flex items-center gap-1 mb-5 nav-link inline-flex"
         >
           <ArrowLeft className="w-4 h-4" /> {backLabel}
-        </Link>
+        </a>
         <div className="bg-white border-[1.5px] border-ink p-8">
           {eyebrow && <div className="eyebrow mb-3">{eyebrow}</div>}
           <h1 className="serif text-3xl leading-[1.05] mb-3">{title}</h1>

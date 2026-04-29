@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
 import "./editorial.css";
 
 /** Editorial yttre skal för auth-sidor — speglar /demo-landing.
@@ -10,6 +9,11 @@ import "./editorial.css";
  *  Sidor passar in egen content via children — typografi (h1, p,
  *  cards, formulär) löses lokalt via .ed-* klasser eftersom de
  *  redan är scopade i editorial.css.
+ *
+ *  Hem-länken är ett vanligt `<a href>` (inte react-router-Link) så
+ *  klicket gör en full page-navigation — backend serverar då
+ *  demo-landing/index.html. Annars hade React Router renderat sin
+ *  egna `/`-route (gamla Landing) inuti SPA:n.
  */
 export function EditorialAuthShell({
   topNavRight,
@@ -26,10 +30,10 @@ export function EditorialAuthShell({
 }) {
   return (
     <div className="ed-root">
-      <Link to={homeHref} className="ed-home-link" aria-label="Tillbaka till startsidan">
+      <a href={homeHref} className="ed-home-link" aria-label="Tillbaka till startsidan">
         <span className="ed-home-arrow" aria-hidden="true">←</span>
         {homeLabel}
-      </Link>
+      </a>
 
       {topNavRight && <nav className="ed-top-nav" aria-label="Konto">{topNavRight}</nav>}
 
