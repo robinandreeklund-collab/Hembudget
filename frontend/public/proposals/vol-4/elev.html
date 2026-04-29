@@ -606,6 +606,76 @@ function renderDesk() {
 }
 renderDesk();
 
+// === HÖGER PANEL ===
+function renderRight() {
+  const box = document.getElementById("right");
+  box.innerHTML = `
+    <div class="rp-section">
+      <div class="rp-eye">Pågående moduler</div>
+      <div class="rp-title">3 i <em>arbete</em></div>
+      <a class="mod" href="#">
+        <div class="mod-name">Ditt första bolån</div>
+        <div class="mod-meta">Steg 4/12 · KALP-räkning · 14 min kvar</div>
+        <div class="mod-bar"><div class="mod-bar-fill" style="width:33%;"></div></div>
+      </a>
+      <a class="mod" href="#">
+        <div class="mod-name">Lönesamtalet</div>
+        <div class="mod-meta">Runda 2/5 med Maria · pågår</div>
+        <div class="mod-bar"><div class="mod-bar-fill" style="width:40%;"></div></div>
+      </a>
+      <a class="mod" href="#">
+        <div class="mod-name">Skatten i april</div>
+        <div class="mod-meta">Steg 7/9 · deklaration kvar</div>
+        <div class="mod-bar"><div class="mod-bar-fill" style="width:78%;"></div></div>
+      </a>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Aktiva uppdrag</div>
+      <div class="rp-title">2 från <em>Anders Lind</em></div>
+      <a class="asgn" href="#">
+        <div class="asgn-name">Bolåneansökan · 2,4 Mkr</div>
+        <div class="asgn-meta">Förfaller 5 maj · 6 dagar</div>
+        <div class="asgn-from">Anders Lind · klass 9C · alla elever</div>
+      </a>
+      <a class="asgn" href="#">
+        <div class="asgn-name">Peer-review · Hassan O.</div>
+        <div class="asgn-meta">Förfaller 30 april · 1 dag</div>
+        <div class="asgn-from">Anders Lind · matchad partner</div>
+      </a>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Echo · senaste</div>
+      <div class="echo-last">
+        <div class="echo-last-text">"Du har 12 transaktioner från Coop, Ica och Hemköp ovettade. Vill du gå igenom dem nu — eller efter att du tittat på din mat-kategori i budgeten?"</div>
+        <div class="echo-last-meta">Echo · 14:22 idag · Haiku 4.5</div>
+        <a href="#" class="echo-open" onclick="document.getElementById('echoBtn').click(); return false;">Öppna chatten →</a>
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Kompetenser · 12 system</div>
+      <div class="rp-title">Nivå <em>grund</em> i 7 av 12</div>
+      <div class="comp-list">
+        <div class="comp"><span class="comp-name">Bokföring</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Budget</span><span class="comp-lv fordj">fördj.</span></div>
+        <div class="comp"><span class="comp-name">Sparande</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Skatte-grund</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Lön</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Lån & räntor</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Investering</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Pensionsförst.</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Kreditförståelse</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Försäkring</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Konsumenträtt</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Reflektion</span><span class="comp-lv grund">grund</span></div>
+      </div>
+    </div>
+  `;
+}
+renderRight();
+
 const SIDE = document.getElementById("side");
 const CORRIDOR = document.getElementById("corridor");
 const DESK = document.getElementById("desk");
