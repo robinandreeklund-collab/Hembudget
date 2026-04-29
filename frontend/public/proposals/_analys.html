@@ -2363,6 +2363,35 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="design-principle-3">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">44 · Designprincip 03</div>
+    <h2 class="h-section">AI är <em>spegel</em>, inte <em>orakel</em>.</h2>
+    <div class="prose">
+      <p>
+        Tre AI-personor finns i systemet — Echo (sokratisk reflektion), Maria
+        (lönesamtals-motpart), Anna (privatekonomisk rådgivare). Alla tre är
+        designade efter samma princip: AI får aldrig <em>tala om</em> för
+        eleven vad som är rätt eller fel. AI får ställa frågor, peka tillbaka
+        på elevens egen data, jämföra mot referensvärden — men den ekonomiska
+        bedömningen tillhör alltid eleven själv (eller läraren).
+      </p>
+      <p>
+        Tekniskt manifesteras detta i prompt-designen: alla tre personor körs
+        med ett <em>system-prompt</em> som explicit förbjuder rekommendationer
+        i imperativ form. Echo får inte säga "du borde spara mer i ISK"; Echo
+        får säga "när du tittar på din ISK och din vanliga depå sida vid sida,
+        vad ser du?". Maria förhandlar realistiskt men avslöjar inte sin
+        smärtgräns. Anna förklarar mekanismer men låter eleven dra slutsatser.
+      </p>
+      <p>
+        Detta är också skälet till att AI-flödena är gated bakom lärarens
+        <code>ai_enabled</code>-flagga och token-budget — vi vill inte att
+        AI:n blir en överallt-närvarande chatbot som eleven hänger på som
+        krycka. AI är ett verktyg som väljs medvetet.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
