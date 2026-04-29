@@ -844,6 +844,98 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-5">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">09 · Aktör 05</div>
+    <h2 class="h-section">Investeringsmäklaren — ISK, fonder, krasch i <em>egen tid</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">AV</div>
+        <div>
+          <div class="actor-name">Investeringsmäklaren</div>
+          <div class="actor-role">ISK · fonder · aktier · schablonbeskattning</div>
+        </div>
+        <div class="actor-routes">
+          <code>/investments</code><br>
+          <code>/funds</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Mäklaren (Avanza i vårt typfall, men kan vara Nordnet, Lysa,
+          SEB Trygg-fonden) är en separat värld från banken — egen
+          inloggning, egen tidsaxel (börsdygn), egna regler. Eleven
+          loggar in, sätter månadsspar, väljer fonder, ser kursrörelser
+          i realtid (simulerade) och möter krasch-fredagar med −8 %
+          som inte påverkar lönekontot men påverkar pentagon-axeln för
+          ekonomi.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos mäklaren</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Öppnar ISK-konto.</strong> Engångshandling — eleven
+            läser om schablonbeskattning, kapitalbas, K4-skillnaden
+            (slipper rapportera per affär).
+          </li>
+          <li>
+            <strong>Sätter månadsspar.</strong> 5 000 kr/mån från
+            lönekontot via autogiro (Bankgirot-flödet). Eleven väljer
+            fördelning: 60 % globalfond, 25 % svensk index, 15 % räntor.
+          </li>
+          <li>
+            <strong>Köper / säljer fonder och aktier.</strong> Fond­
+            handel sker en gång per dag (kurs sätts efter börsstängning).
+            Aktier handlas live. Båda visar courtage (0 kr för fonder,
+            t.ex. 19 kr min för aktier).
+          </li>
+          <li>
+            <strong>Möter marknadsrörelser.</strong> Plattformen
+            simulerar dagsvolatilitet baserat på MSCI World-historik —
+            ibland +1,8 %, ibland −8 % på en dag. Eleven ser hela
+            kurvan, panik-säljer eller behåller.
+          </li>
+          <li>
+            <strong>Granskar portföljallokering.</strong> Tabell per
+            innehav: anskaffningsvärde, aktuellt värde, orealiserad
+            vinst/förlust, andel av portföljen. Re-balansering föreslås
+            när drift &gt; 5 %.
+          </li>
+          <li>
+            <strong>Ser schablonintäkten</strong> beräknas i realtid:
+            kapitalbas (kvartalsvis snitt) × statslåneräntan + 1 %.
+            Den dyker sen upp som förtryckt rad i deklarationen hos
+            Skatteverket.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data mäklaren äger</div>
+        <ul class="actor-list">
+          <li>ISK-kapitalbas (kvartalsvis) + ackumulerad schablonintäkt</li>
+          <li>Innehav per värdepapper (units, anskaffningsvärde, market value)</li>
+          <li>Transaktionshistorik (köp, sälj, utdelning, courtage)</li>
+          <li>Fondkurser (NAV per dag) och aktiekurser (live, simulerat)</li>
+          <li>Månadsspar-konfiguration (belopp, fördelning, datum)</li>
+          <li>K4-bilaga om eleven har AF-konto utöver ISK</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: Avanza, Nordnet, Lysa, SEB Trygg-fonden</li>
+          <li>Schablonräntan 2026: SLR (≈ 2,8 %) + 1 % = 3,8 %</li>
+          <li>ISK-cap: ingen formell — men &gt; 1 mkr blir AF-konto ofta gynnsamt</li>
+          <li>Fondhandel: T+1, kurs efter stängning — speglas exakt</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Investments.tsx (2151 rader) för portföljen + krasch-
+          mekaniken, Funds.tsx (434 rader) för fondköp specifikt.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
