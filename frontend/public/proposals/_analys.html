@@ -1772,6 +1772,34 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="tool-dashboard">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">25 · Verktyg 01</div>
+    <h2 class="h-section">Dashboard — <em>tillstånd</em>, inte tidslinje.</h2>
+    <div class="prose">
+      <p>
+        Dashboard är första vyn efter inloggning och svarar på exakt en fråga:
+        <em>hur står det till just nu?</em> Den är inte en aktivitetsström, inte
+        en feed, inte en kalender — det är en stillbild. Saldon på samtliga konton,
+        skuld kvar på lån, månadens klassificeringsgrad, närmaste lönedag, antal
+        aktiva mål, senaste bokföringsdag. Tio till tolv tal, ingen scroll, allt
+        ovanför viken.
+      </p>
+      <p>
+        Pedagogiskt syfte: ge eleven en känsla av <em>överblick</em> innan hen
+        dyker ner i detaljer. Ungdomar saknar ofta känslan av att ha ett ekonomiskt
+        läge — pengar är något som finns eller inte finns på kortet. Dashboarden
+        materialiserar tillståndet: här är dina tillgångar, här är dina skulder,
+        här är dina åtaganden den närmaste månaden.
+      </p>
+      <p>
+        Tekniskt: aggregerar från <em>alla</em> aktör-databaser (banken, Avanza,
+        Folksam, Pensionsmyndigheten) plus elevens egen bokföring. Refresh sker
+        på pull-to-refresh och vid varje ny inloggning, men inte i bakgrunden —
+        för en simulator behövs ingen polling, och tystnaden är pedagogisk.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
