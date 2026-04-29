@@ -1663,6 +1663,58 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="flow-kreditprovning">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">21 · Flöde C</div>
+    <h2 class="h-section">Lånansökan → KALP → <em>kreditprövning</em>.</h2>
+    <div class="prose">
+      <p>
+        Eleven ska aldrig se ett lån som "godkänt magiskt". Hela KALP-
+        beräkningen visas steg för steg så eleven förstår exakt varför
+        utfallet blev som det blev.
+      </p>
+      <ol>
+        <li>Eleven får uppdrag eller egen drivkraft → ansöker om lån (konsumtionslån via banken eller bostadslån via <code>/mortgage/:id</code>).</li>
+        <li>Plattformen samlar inkomstdata från arbetsgivaren (lönespec) — netto + tjänstepension.</li>
+        <li>Plattformen samlar existerande skulder (kreditkort, befintliga lån) från banken + lånegivaren.</li>
+        <li>Plattformen läser Konsumentverkets schablon för elevens hushållstyp (ensamboende / sambo / barn).</li>
+        <li>KALP-räkning körs: <em>Inkomst − skatt − existerande räntor/amortering − Konsumentverkets schablon = kvar för det nya lånet</em>.</li>
+        <li>Om bostadslån: kontroll av Finansinspektionens amorteringskrav (1 % över 50 % belåning, 2 % över 70 %).</li>
+        <li>Resultat visas: godkänd / nekad / godkänd med villkor (lägre belopp, högre amortering).</li>
+        <li>Vid godkänt: nya lånet hamnar i <code>/loans</code> och månadskostnaden blir en kommande faktura via banken.</li>
+      </ol>
+      <p>
+        Pedagogisk vinst: eleven ser <em>varje rad</em> i KALP — varför
+        man inte kan låna 4 mkr på 28 000 i månadslön, varför ett
+        existerande billån påverkar bostadslånet, varför FI-kraven finns.
+      </p>
+    </div>
+  </section>
+
+  <section id="flow-lonesamtal">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">22 · Flöde D</div>
+    <h2 class="h-section">Lönesamtal: <em>fem ronder</em> med Maria.</h2>
+    <div class="prose">
+      <p>
+        Lönesamtalet är pedagogiskt det viktigaste flödet i hela
+        plattformen — det tränar både argumentation, datadriven
+        förhandling och realistisk arbetsmarknadskunskap.
+      </p>
+      <ol>
+        <li><strong>Förberedelse.</strong> Eleven öppnar <code>/arbetsgivare → Lönesamtal</code>. Hämtar Akavia-data (median för rollen + region + erfarenhet).</li>
+        <li><strong>Rond 1.</strong> Maria öppnar med Vismas budget-utgångsläge (oftast 2,5 % grundrevision enligt avtal). Eleven argumenterar.</li>
+        <li><strong>Rond 2.</strong> Maria räknar om — om elevens argument hade datastöd flyttar hon sig 0,5–1,5 procentenheter. Eleven kan acceptera eller fortsätta.</li>
+        <li><strong>Rond 3–4.</strong> Eleven kan dra in fler argument: prestation, marknadsbrist, kompetensutveckling. Maria viker sig stegvis men har en hård gräns vid sin budget-andel.</li>
+        <li><strong>Rond 5.</strong> Sista rond. Maria levererar slutbud. Eleven måste välja: accept eller avslå (avslå = oförändrad lön).</li>
+        <li><strong>Konsekvens.</strong> Slutbud låses in. Nästa lönespec genereras med ny brutto. Satisfaction-score uppdateras (för aggressiv förhandling kan sänka score, datadriven kan höja).</li>
+        <li><strong>Lärar-bedömning.</strong> Hela 5-rond-samtalet sparas i <code>/teacher/negotiations</code> så läraren kan bedöma argumentationsförmåga.</li>
+      </ol>
+      <p>
+        Denna 7-stegs-resa är icke förkortbar. Genvägar (t.ex. "klicka
+        för 3,5 % höjning") tar bort hela poängen.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
