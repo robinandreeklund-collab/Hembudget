@@ -2679,6 +2679,56 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="pipeline-risks">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">52 · Pipeline · öppna beslut + fallgropar</div>
+    <h2 class="h-section">Fem <em>öppna frågor</em> och fyra <em>kända fallgropar</em>.</h2>
+    <div class="prose">
+      <p>
+        Innan första raden kod skrivs ska fem strategiska val göras.
+        (1) <em>Tidsuppfattning</em> — manuell vecko-stegning eller realtid?
+        Rekommendation: börja manuellt, lägg auto-advance vid lärar-kommando
+        senare. (2) <em>Klass-ekonomi vs individ</em> — kan elever handla av
+        varandra? Spännande pedagogiskt, mardröm tekniskt eftersom det
+        kräver delad tabell utanför scope-DB:n. Rekommendation: nej i V1.
+        (3) <em>Manuell resultaträkning som ny step-typ?</em> Rekommendation:
+        utöka <code>task</code> med specifika params, inga nya step-typer.
+        (4) <em>Lås från läraren eller fritt val mellan basics/advanced?</em>
+        Rekommendation: läraren sätter taket per klass, eleven stiger inom
+        det. (5) <em>Kundpool</em> — handgjorda eller AI-genererade?
+        Rekommendation: hybrid — 20 grundkunder per bransch i seed,
+        AI varierar pitchtext per förfrågan.
+      </p>
+      <p>
+        Fyra kända fallgropar att designa runt. <em>Beräkningstunga ticks</em>
+        — "stega vecka framåt" gör mycket; om 30 elever stegar samtidigt
+        fryser UI:n. Lösning: bakgrundsjobb via ny
+        <code>BusinessTickJob</code>-tabell, vilket bryter mot dagens
+        synkrona pattern men är nödvändigt. <em>Determinism för rättvisa</em>
+        — seed:a slumpgeneratorn på <code>(business_id, week_number)</code>,
+        inte på <code>time()</code>; två elever med samma beslut samma vecka
+        ska få liknande utfall.
+      </p>
+      <p>
+        <em>Multi-tenant-fallgrop</em> — bakgrundsuppgifter körs utan
+        HTTP-kontext, alltså utan <code>StudentScopeMiddleware</code>.
+        ContextVar:n måste sättas explicit via
+        <code>set_current_scope(scope_for_student(student))</code> i
+        tick-jobbet; bygg en helper-dekorator för alla bakgrundsfunktioner.
+        <em>PDF-prestanda</em> — reportlab är trögt vid bulk; massutskick av
+        leverantörsfakturor till 30 elever genereras lazy (vid första
+        nedladdning), inte vid skapande. Mall + parametrar lagras tills
+        någon faktiskt klickar.
+      </p>
+      <p>
+        Modulen är dessutom den första som på allvar kommer pressa systemet
+        mot Postgres-fallback (<code>HEMBUDGET_DATABASE_URL</code>). Den
+        path:en finns redan; den behöver bara aktiveras när belastningen
+        kräver det. Tills dess fungerar den under
+        <code>--max-instances=1</code> precis som resten av plattformen.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
