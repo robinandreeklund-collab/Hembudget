@@ -2554,6 +2554,44 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="pipeline-mechanics">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">49 · Pipeline · spelmekanik</div>
+    <h2 class="h-section">"Programmet avgör" — <em>deterministiskt</em>, inte LLM.</h2>
+    <div class="prose">
+      <p>
+        Två separata mekanismer driver simulatorn, och båda är medvetet
+        deterministiska — inte LLM-drivna — eftersom läraren måste kunna
+        förklara <em>varför</em> något hände och eleven måste kunna räkna
+        ut samband.
+      </p>
+      <p>
+        <strong>Tar kunden offerten?</strong> En sigmoid-acceptansmodell
+        med fem viktade faktorer: prisavvikelse mot riktpris (per kunds
+        priskänslighet), företagets rykte (0–100), aktuell
+        marknadsföringseffekt (avtagande över tid), AI-bedömd matchning
+        mellan pitch och behov (0–1), avvikelse på leveranstid. Slumptal
+        jämförs mot P(accept). Eleven får alltid en kort motivering:
+        <em>"Kunden tyckte priset var rimligt men du lovade leverans 3
+        veckor — för långsamt."</em>
+      </p>
+      <p>
+        <strong>Får eleven fler liknande jobb?</strong> En
+        pipeline-genererare som körs när simuleringen stegar fram en
+        vecka: bas + bonus(rykte) + bonus(aktiva kampanjer) + bonus(senaste
+        levererade kvalitet) − penalty(öppna klagomål). Branschmix viktas
+        av elevens historiska affärsidé och ev. nyköpta kompetenser
+        (kurs i webbutveckling → fler IT-jobb dyker upp).
+      </p>
+      <p>
+        LLM används bara för <em>innehåll</em> — kundtexter, jobbeskrivning,
+        pitchbedömning som faktor 0–1 — aldrig för <em>beslut</em>. Det är
+        en arkitekturprincip som rimmar med designprincip 03 från tidigare
+        avsnitt: AI är spegel, inte orakel. När pedagogiken kräver
+        spårbarhet — så är pedagogiken det som bestämmer arkitekturen.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
