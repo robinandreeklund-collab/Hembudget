@@ -1608,6 +1608,61 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="flow-bankid">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">19 · Flöde A</div>
+    <h2 class="h-section">BankID-simulator: <em>QR + telefon + PIN</em>.</h2>
+    <div class="prose">
+      <p>
+        Det här är det enda flödet i plattformen som kräver två
+        enheter samtidigt. Pedagogiskt mål: eleven förstår skillnaden
+        mellan <em>något du har</em> (telefonen) och <em>något du vet</em>
+        (PIN). Det är samma princip som riktigt BankID.
+      </p>
+      <ol>
+        <li>Eleven öppnar <code>/bank</code> på desktop. Plattformen kollar om session är aktiv (≤ 15 min).</li>
+        <li>Ingen session → desktop renderar QR-kod med engångs-token.</li>
+        <li>Eleven "scannar" med sin telefon → telefonen öppnar <code>/bank/sign?token=…</code> (publik route, ingen huvudinloggning krävs).</li>
+        <li>Telefonen visar PIN-form. Eleven knappar in 4-siffrig PIN.</li>
+        <li>Telefonen skickar PIN till backend → backend markerar token som signerad.</li>
+        <li>Desktop pollar token-status → fångar "signed" → laddar bankens dashboard.</li>
+        <li>Sessionen lever 15 min. Vid utloggning eller timeout → tillbaka till steg 2.</li>
+      </ol>
+      <p>
+        Det är samma sak vid riktigt BankID — bara att vår
+        signering är mot vår egen backend, inte mot BankID-servern.
+        Eleven får intuition för flödet utan att exponeras för riktig
+        identitet.
+      </p>
+    </div>
+  </section>
+
+  <section id="flow-kontoutdrag">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">20 · Flöde B</div>
+    <h2 class="h-section">Kontoutdrag → import → <em>egen bokföring</em>.</h2>
+    <div class="prose">
+      <p>
+        Här syns den viktigaste arkitekturella separation: banken
+        äger kontoutdraget, eleven äger sin bokföring. Importen är
+        ett medvetet, manuellt steg.
+      </p>
+      <ol>
+        <li>Banken genererar månadens kontoutdrag (PDF + struktureat) och lägger det i bankens "Dina dokument".</li>
+        <li>Eleven öppnar banken via BankID-flow.</li>
+        <li>Eleven hämtar PDF:en → ser den som hon vore riktig.</li>
+        <li>Eleven trycker <em>Importera</em> → går till <code>/import</code>.</li>
+        <li>Plattformen parser PDF:en, visar förslag på transaktioner med kategori.</li>
+        <li>Eleven granskar varje rad, justerar kategori om fel.</li>
+        <li>Bekräfta import → transaktionerna landar i <code>/transactions</code>.</li>
+        <li>Bokföringen visar nu varje rad med <em>ursprung: SEB · 25 maj 16:00</em> så det är spårbart.</li>
+      </ol>
+      <p>
+        Det här flödet förekommer en gång per månad. Pedagogisk vinst:
+        eleven förstår att banken bara visar pengarörelser — kategori­
+        seringen och budgetjämförelsen sker i bokföringen.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
