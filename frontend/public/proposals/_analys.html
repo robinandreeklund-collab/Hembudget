@@ -2511,6 +2511,49 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="pipeline-domain">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">48 · Pipeline · domän</div>
+    <h2 class="h-section">Mitt företag · 13 nya tabeller, två svårighetsnivåer.</h2>
+    <div class="prose">
+      <p>
+        Domänlagret är <em>nytt ovanpå dagens motor</em>, inte parallellt.
+        Tretton nya scope-isolerade entiteter, alla via
+        <code>TenantMixin</code>:
+        <em>Business</em> (företaget självt — affärsidé, bransch, läge, rykte),
+        <em>Customer</em> (segment, priskänslighet, betalningsmoral),
+        <em>JobOpportunity</em> (offertförfrågan med riktpris och deadline),
+        <em>Quote</em> (elevens offert med pitch),
+        <em>Job</em> (vunnen offert som blir uppdrag),
+        <em>CustomerInvoice</em> (kundfaktura kopplad till Job),
+        <em>SupplierInvoice</em> (inkommande, från läraren eller systemet),
+        <em>MarketingCampaign</em> (typ + kostnad + AI-bedömd kvalitet),
+        <em>BusinessDecision</em> (anställning, försäkring, leasingbil),
+        <em>LedgerEntry</em> (debet/kredit-poster i avancerat läge),
+        <em>ChartOfAccount</em> (förenklad BAS-kontoplan, ~30 konton),
+        <em>ReconciliationSession</em> (bankavstämningar),
+        <em>AuditAssignment</em> (peer-revision).
+      </p>
+      <p>
+        Två lägen lever sida vid sida på samma företag:
+        <strong>basics</strong> (Företagsekonomi 1 / Entreprenörskap) — manuell
+        resultaträkning, knappval för beslut, automatisk veckovis avstämning,
+        inga T-konton eller nyckeltal; och <strong>advanced</strong>
+        (Företagsekonomi 2) — riktig dubbel bokföring, drag-och-släpp-avstämning
+        mot lärarens kontoutdrag, fyra nyckeltal (bruttomarginal, soliditet,
+        likviditet, omsättningshastighet) och peer-revision. Läraren sätter
+        taket per klass; eleven kan stiga inom det.
+      </p>
+      <p>
+        Det avgörande designvalet: <em>alla affärshändelser mynnar ut i
+        Transaction + LedgerEntry</em>. Modulen bygger inte ett separat
+        bokföringssystem utan återanvänder den befintliga motorn — kundfaktura
+        blir en transaktion på "Försäljning", inbetalning blir överföring till
+        bankkontot, exakt analogt med hur privattransaktioner kategoriseras
+        idag.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
