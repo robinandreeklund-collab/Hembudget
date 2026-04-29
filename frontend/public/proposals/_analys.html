@@ -1254,6 +1254,71 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-10">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">14 · Aktör 10</div>
+    <h2 class="h-section">Konsumentverket — <em>data</em>, inte portal.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">KV</div>
+        <div>
+          <div class="actor-name">Konsumentverket</div>
+          <div class="actor-role">Hushållsbudget-baseline · referenskostnader 2026</div>
+        </div>
+        <div class="actor-routes">
+          <code>(referensdata — används av /budget + KALP)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Konsumentverket är inte en portal eleven besöker — det är en
+          <strong>baseline-datakälla</strong> som plattformen läser från
+          för att sätta budget-utgångsläge och KALP-schablon. Eleven ser
+          siffrorna men interagerar inte med Konsumentverket direkt.
+          Fortfarande viktig att namnge eftersom verklighet kräver
+          källtransparens: "Vi visar 4 200 kr för mat — varifrån?".
+        </p>
+
+        <div class="actor-section-eye">Vad Konsumentverket bidrar med</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Referenskostnader 2026.</strong> Mat, kläder, hygien,
+            fritid, hushåll. Per ålderskategori (1–3 år, 4–6, 7–10 osv.)
+            och hushållstyp (ensamboende, par, par med barn).
+          </li>
+          <li>
+            <strong>Kostnadsschablonen.</strong> Används i KALP­
+            beräkning hos lånegivaren — "minimisumma som måste finnas
+            kvar efter räntor + amortering".
+          </li>
+          <li>
+            <strong>Hela hushållets baseline.</strong> När eleven sätter
+            sin första budget i onboarding föreslår plattformen
+            Konsumentverkets siffror som utgångspunkt — eleven justerar
+            uppåt eller nedåt.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Konsumentverkets faktiska "Koll på pengarna" / referensvärden 2026</li>
+          <li>Mat: ~4 100 kr/vuxen, lägre för barn</li>
+          <li>Kläder &amp; skor: ~660 kr/vuxen</li>
+          <li>Fritid: ~600 kr/vuxen</li>
+          <li>Hushållsel: separat (inte i schablonen)</li>
+          <li>Uppdateras 1 gång/år, juni</li>
+        </ul>
+
+        <p class="actor-cite">
+          Inte egen route. Datat används av Budget.tsx (655 rader) +
+          MortgageDecision/Loans (KALP). Bör <em>visas</em> som källa
+          i alla budget-vyer ("Konsumentverkets schablon 2026").
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
