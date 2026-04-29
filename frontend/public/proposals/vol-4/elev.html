@@ -498,7 +498,60 @@ body { background: #f6f5f3; }
 <aside class="drawer" id="drawer"></aside>
 
 <script>
-// Hooks för att fylla allt i kommande commits
+// === SIDOMENY ===
+const NAV = {
+  verktyg: [
+    { ic: "▤",  nm: "Översikt",         badge: "",        active: true,  href: "#" },
+    { ic: "≡",  nm: "Transaktioner",    badge: "12 ok",   href: "#" },
+    { ic: "▦",  nm: "Budget april",     badge: "78 %",    href: "#" },
+    { ic: "◎",  nm: "Mål & sparande",   badge: "4",       href: "#" },
+    { ic: "↗",  nm: "Investeringssim",  badge: "",        href: "#" },
+    { ic: "%",  nm: "Lånekalkylator",   badge: "",        href: "#" },
+    { ic: "◷",  nm: "Pension",          badge: "",        href: "#" },
+    { ic: "§",  nm: "Skattedeklaration", badge: "öppen",  badgeKind: "gold", href: "#" },
+    { ic: "□",  nm: "Kvitton & filer",  badge: "",        href: "#" },
+    { ic: "⚙",  nm: "Inställningar",    badge: "",        href: "#" },
+  ],
+  aktorer: [
+    { ic: "B",  nm: "Banken",                 badge: "1", badgeKind: "gold", href: "#" },
+    { ic: "A",  nm: "Arbetsgivaren",          badge: "",  href: "#" },
+    { ic: "$",  nm: "Avanza",                 badge: "",  href: "#" },
+    { ic: "L",  nm: "Lånegivaren",            badge: "",  href: "#" },
+    { ic: "⚡", nm: "Tibber & Folksam",       badge: "",  href: "#" },
+    { ic: "S",  nm: "Skatteverket",           badge: "!",  badgeKind: "gold", href: "#" },
+    { ic: "P",  nm: "Pensionsmyndigheten",    badge: "",  href: "#" },
+    { ic: "H",  nm: "Hyresvärden",            badge: "1 maj", badgeKind: "gray", href: "#" },
+  ],
+  skola: [
+    { ic: "✦",  nm: "Mina moduler",       badge: "1 ny", href: "#" },
+    { ic: "★",  nm: "Min portfolio",      badge: "",     href: "#" },
+    { ic: "❝",  nm: "Reflektioner",       badge: "1 prompt", badgeKind: "gold", href: "#" },
+    { ic: "▷",  nm: "Mina uppdrag",       badge: "2",    href: "#" },
+    { ic: "✉",  nm: "Meddelanden",        badge: "1",    href: "#" },
+  ],
+};
+
+function renderNav() {
+  const box = document.getElementById("side");
+  const sections = [
+    { eye: "Verktyg",  items: NAV.verktyg },
+    { eye: "Aktörer",  items: NAV.aktorer },
+    { eye: "Skola",    items: NAV.skola },
+  ];
+  let html = "";
+  sections.forEach(s => {
+    html += `<div class="dock-eye">${s.eye}</div>`;
+    s.items.forEach(it => {
+      const cls = it.active ? "dock-link active" : "dock-link";
+      const badgeCls = it.badgeKind ? "badge " + it.badgeKind : "badge";
+      const badge = it.badge ? `<span class="${badgeCls}">${it.badge}</span>` : "";
+      html += `<a class="${cls}" href="${it.href}"><span class="ic">${it.ic}</span><span class="nm">${it.nm}</span>${badge}</a>`;
+    });
+  });
+  box.innerHTML = html;
+}
+renderNav();
+
 const SIDE = document.getElementById("side");
 const CORRIDOR = document.getElementById("corridor");
 const DESK = document.getElementById("desk");
