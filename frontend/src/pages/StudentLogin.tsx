@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
 import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 import { LiveTime, LiveSecondsCountdown } from "@/components/editorial/LiveClock";
 
 export default function StudentLogin() {
@@ -32,9 +33,7 @@ export default function StudentLogin() {
 
   return (
     <EditorialAuthShell
-      topNavRight={
-        <Link to="/login" className="ed-top-link">Tillbaka</Link>
-      }
+      topNavRight={<AuthAwareTopLinks />}
     >
       <div className="ed-eyebrow">Elevinloggning · Sex tecken</div>
 

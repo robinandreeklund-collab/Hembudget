@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { EditorialLightShell } from "@/components/editorial/EditorialLightShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 
 type Section = {
   id: string;
@@ -778,14 +779,7 @@ export default function Docs() {
         </>
       }
       intro="För elever, lärare och föräldrar. Sökbart, indexerat, alltid uppdaterat mot plattformen."
-      topNavRight={
-        <>
-          <Link to="/login" className="edl-top-link">Logga in</Link>
-          <Link to="/signup/teacher" className="edl-top-link is-primary">
-            Skapa konto
-          </Link>
-        </>
-      }
+      topNavRight={<AuthAwareTopLinks variant="light" />}
       withAsideSidebar
       aside={
         <>

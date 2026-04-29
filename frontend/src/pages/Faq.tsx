@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { EditorialLightShell } from "@/components/editorial/EditorialLightShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 
 type Q = {
   q: React.ReactNode;
@@ -253,14 +254,7 @@ export default function Faq() {
         </>
       }
       intro="Hittar du inte svaret? Skriv till info@ekonomilabbet.org. Vi svarar inom två vardagar."
-      topNavRight={
-        <>
-          <Link to="/login" className="edl-top-link">Logga in</Link>
-          <Link to="/signup/teacher" className="edl-top-link is-primary">
-            Skapa konto
-          </Link>
-        </>
-      }
+      topNavRight={<AuthAwareTopLinks variant="light" />}
     >
       {FAQ.map((group) => (
         <section key={group.id} id={group.id} className="edl-section">

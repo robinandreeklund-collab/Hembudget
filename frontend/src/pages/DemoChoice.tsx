@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Zap } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Eyebrow, PaperChip, SectionDivider } from "@/components/paper";
+import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
+import { LiveTime } from "@/components/editorial/LiveClock";
 
 type DemoStatus = {
   demo_available: boolean;
@@ -26,7 +26,8 @@ export default function DemoChoice() {
   }, []);
 
   async function loginAsTeacher() {
-    setBusy(true); setErr(null);
+    setBusy(true);
+    setErr(null);
     try {
       await demoTeacherLogin();
       window.location.href = "/teacher";
@@ -38,7 +39,8 @@ export default function DemoChoice() {
   }
 
   async function loginAsStudent(code: string) {
-    setBusy(true); setErr(null);
+    setBusy(true);
+    setErr(null);
     try {
       await demoStudentLogin(code);
       window.location.href = "/dashboard";
@@ -50,105 +52,111 @@ export default function DemoChoice() {
   }
 
   return (
-    <div className="min-h-screen bg-paper text-ink p-6">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <a
-          href="/"
-          className="text-sm text-[#666] nav-link inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="w-4 h-4" /> Tillbaka till startsidan
-        </a>
+    <EditorialAuthShell topNavRight={<AuthAwareTopLinks />}>
+      <div className="ed-eyebrow">Demoläge · Vol. 00</div>
 
-        <div className="border-l-[3px] border-ink bg-white p-4 flex items-start gap-3">
-          <Zap className="w-5 h-5 mt-0.5 shrink-0" strokeWidth={1.5} />
-          <div>
-            <div className="serif text-lg leading-tight">Demoläge</div>
-            <p className="body-prose text-sm mt-1">
-              All data i demo-miljön återställs automatiskt var 10:e minut.
-              Perfekt för att testa plattformen utan att skapa konto. Du
-              delar demo-miljön med andra besökare — spara inget viktigt.
-            </p>
-          </div>
+      <div className="ed-clock">
+        <div className="ed-clock-time">
+          Klockan är <LiveTime />.
         </div>
+        <span className="ed-clock-countdown">
+          Demon nollställs <em>var 10:e minut</em>.
+        </span>
+      </div>
 
-        {err && (
-          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
-            {err}
-          </div>
-        )}
+      <p className="ed-subhead">
+        Inget konto, ingen e-post. Testa plattformen som <em>lärare</em> eller
+        som <em>elev</em> i en delad sandlåda. Allt återställs automatiskt
+        så du kan börja om när du vill.
+      </p>
 
-        {!status ? (
-          <div className="text-[#888] text-sm serif-italic">Laddar…</div>
-        ) : !status.demo_available ? (
-          <div className="border-[1.5px] border-rule bg-white p-4 text-sm text-[#555]">
+      {err && <div className="ed-error">{err}</div>}
+
+      {!status ? (
+        <div className="ed-card">
+          <p style={{ color: "rgba(255,255,255,0.6)", fontStyle: "italic", textAlign: "center", margin: 0 }}>
+            Laddar demo-status…
+          </p>
+        </div>
+      ) : !status.demo_available ? (
+        <div className="ed-card">
+          <p style={{ margin: 0 }}>
             Demomiljön är inte tillgänglig just nu
-            {status.reason ? `: ${status.reason}` : "."}. Testa igen om en minut.
-          </div>
-        ) : (
-          <>
+            {status.reason ? `: ${status.reason}` : "."}. Testa igen om en
+            minut.
+          </p>
+        </div>
+      ) : (
+        <>
+          <button
+            onClick={loginAsTeacher}
+            disabled={busy}
+            className="ed-demo-tile"
+            aria-label="Logga in som demo-lärare"
+            style={{
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: busy ? 0.5 : 1,
+              textAlign: "left",
+              font: "inherit",
+              color: "#fff",
+              width: "100%",
+            }}
+          >
+            <span className="ed-demo-tile-icon" aria-hidden="true">⚡</span>
             <div>
-              <Eyebrow className="mb-2">Testa plattformen</Eyebrow>
-              <h1 className="serif text-3xl md:text-4xl leading-tight">
-                Välj rollen du vill prova.
-              </h1>
+              <div className="ed-demo-tile-title">Logga in som lärare</div>
+              <div className="ed-demo-tile-body">
+                Skapa elever, skicka dokument, se klassöversikten, skriv
+                uppdrag. Som om du skulle använda det i klassrummet.
+              </div>
             </div>
+          </button>
 
-            <button
-              onClick={loginAsTeacher}
-              disabled={busy}
-              className="w-full text-left feature-card disabled:opacity-50"
-            >
-              <div className="flex items-start gap-4">
-                <PaperChip color="special">Lä</PaperChip>
-                <div className="flex-1">
-                  <h2 className="serif text-xl">Logga in som lärare</h2>
-                  <p className="body-prose text-sm mt-2">
-                    Skapa elever, skicka dokument, se klassöversikten, skriv
-                    uppdrag. Som om du skulle använda det i klassrummet.
-                  </p>
-                </div>
+          {(status.student_codes ?? []).length > 0 && (
+            <div>
+              <div
+                className="ed-eyebrow"
+                style={{ marginTop: "12px", marginBottom: "16px" }}
+              >
+                Eller — som elev
               </div>
-            </button>
-
-            <div className="border-[1.5px] border-ink bg-white p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <PaperChip color="grund">El</PaperChip>
-                <div>
-                  <h2 className="serif text-xl">Logga in som elev</h2>
-                  <p className="body-prose text-sm">
-                    Välj vilken av demo-eleverna du vill prova.
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="ed-choices">
                 {(status.student_codes ?? []).map((s) => (
                   <button
                     key={s.code}
                     onClick={() => loginAsStudent(s.code)}
                     disabled={busy}
-                    className="text-left border-[1.5px] border-rule hover:border-ink hover:bg-paper px-4 py-3 transition-colors disabled:opacity-50"
+                    className="ed-choice"
+                    style={{
+                      cursor: busy ? "not-allowed" : "pointer",
+                      opacity: busy ? 0.5 : 1,
+                      textAlign: "left",
+                      font: "inherit",
+                      color: "#fff",
+                      width: "100%",
+                    }}
                   >
-                    <div className="serif text-base text-ink">{s.name}</div>
-                    <div className="text-xs text-[#666] mt-0.5">
-                      {s.class} · kod <span className="kbd">{s.code}</span>
-                    </div>
+                    <span className="ed-choice-eye">Kod · {s.code}</span>
+                    <span className="ed-choice-title">{s.name}</span>
+                    <span className="ed-choice-body">
+                      {s.class ?? "Demo-elev"} · prova från elevens
+                      perspektiv. Inget krävs av dig.
+                    </span>
+                    <span className="ed-choice-go">
+                      Logga in <span className="ed-choice-go-arrow">→</span>
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
+          )}
 
-            {status.next_reset_at && (
-              <ResetCountdown iso={status.next_reset_at} />
-            )}
-          </>
-        )}
-
-        <SectionDivider className="pt-4">eller</SectionDivider>
-        <div className="text-center">
-          <Link to="/login" className="nav-link text-sm">Riktig inloggning</Link>
-        </div>
-      </div>
-    </div>
+          {status.next_reset_at && (
+            <ResetCountdown iso={status.next_reset_at} />
+          )}
+        </>
+      )}
+    </EditorialAuthShell>
   );
 }
 
@@ -162,8 +170,18 @@ function ResetCountdown({ iso }: { iso: string }) {
   const mins = Math.max(0, Math.floor(diffMs / 60000));
   const secs = Math.max(0, Math.floor((diffMs % 60000) / 1000));
   return (
-    <div className="text-center text-xs text-[#888] serif-italic">
-      Nästa automatiska reset om {mins} min {secs.toString().padStart(2, "0")} s
+    <div
+      style={{
+        textAlign: "center",
+        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        fontSize: "11px",
+        letterSpacing: "1.6px",
+        textTransform: "uppercase",
+        color: "rgba(255, 255, 255, 0.5)",
+        marginTop: "12px",
+      }}
+    >
+      Nästa reset · {mins} min {secs.toString().padStart(2, "0")} s
     </div>
   );
 }

@@ -37,13 +37,16 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .top-nav-link {
   display: inline-block;
   font-family: var(--serif);
-  font-size: 17px; font-weight: 700;
-  letter-spacing: -0.3px; line-height: 1;
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  /* Subtle 1px stroke-shadow ger stadig kant även utan hover */
+  text-shadow: 0 0 0.4px currentColor, 0 1px 0 rgba(255,255,255,0.4);
   transform-origin: right center;
   transition:
     font-size .45s cubic-bezier(.34, 1.56, .64, 1),
@@ -739,7 +742,7 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
    utanför panelen så den inte clippas av overflow:hidden */
 .hero-info-scroll {
   position: absolute;
-  left: 0; bottom: 0; height: 188px;
+  left: 0; bottom: 0; top: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px;
   width: 50px;  /* matchar info-panelens margin-left */
@@ -781,13 +784,14 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 .hero-info {
   position: relative; z-index: 2;
   margin: 0 0 0 50px;
-  padding: 18px clamp(20px, 2.6vw, 32px);
+  padding: 22px clamp(20px, 2.6vw, 32px) 24px;
   display: grid;
   grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
   gap: clamp(18px, 2.5vw, 36px);
   align-items: start;
-  height: 188px;
-  overflow: hidden;
+  /* Min-height så panelen inte hoppar i höjd när persona byts, men
+     overflow visible så långt innehåll faktiskt syns. */
+  min-height: 200px;
   background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
@@ -863,15 +867,17 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 /* Stor CTA — VILAR PÅ boxens överkant. Position absolute mot
    .hero-info-wrap (som har samma bredd som panelen). `bottom: 100%`
    gör att elementets nedre kant ligger exakt där panelen börjar — som
-   en label som står på en hylla. Boxen rör sig inte, CTA är OVANFÖR. */
+   en label som står på en hylla. Boxen rör sig inte, CTA är OVANFÖR.
+   Levande baseline-animering (subtle text-shadow-pulse) + dramatisk
+   hover-sekvens (split-line från båda håll, sheen, arrow-tail). */
 .hero-info-cta {
   position: absolute;
   bottom: 100%;
   right: clamp(18px, 2.6vw, 32px);
   margin-bottom: 0;
   z-index: 4;
-  display: inline-flex; align-items: baseline; gap: 12px;
-  padding: 0 0 4px 0;
+  display: inline-flex; align-items: baseline; gap: 14px;
+  padding: 0 0 6px 0;
   background: transparent; border: 0; box-shadow: none;
   text-decoration: none;
   font-family: var(--serif);
@@ -886,33 +892,78 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   text-rendering: geometricPrecision;
   text-shadow: 0 1px 2px rgba(0,0,0,0.85);
   transform-origin: right bottom;
+  /* Levande breathe när inte hovrad — guld-aura pulserar mjukt */
+  animation: cta-breathe 4.6s cubic-bezier(.4, 0, .6, 1) infinite;
   transition:
-    color .3s var(--ease),
-    letter-spacing .3s var(--ease),
-    transform .35s cubic-bezier(.34, 1.56, .64, 1);
+    color .35s var(--ease),
+    letter-spacing .4s var(--ease),
+    transform .45s cubic-bezier(.34, 1.56, .64, 1);
 }
-.hero-info-cta::after {
-  /* Accent-line direkt på panelens överkant — knyter ihop visuellt */
+@keyframes cta-breathe {
+  0%, 100% {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.85),
+      0 0 0 rgba(251,191,36,0);
+  }
+  50% {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.85),
+      0 0 22px rgba(251,191,36,0.22);
+  }
+}
+/* Vänster halva av accent-linje — växer från center till vänster på hover */
+.hero-info-cta::before {
   content: ""; position: absolute;
-  left: 0; right: 28px; bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--gold));
-  transform: scaleX(0); transform-origin: left center;
-  transition: transform .5s cubic-bezier(.65, 0, .35, 1);
+  right: 50%; bottom: 0; width: 0; height: 2px;
+  background: linear-gradient(-90deg, var(--gold), var(--accent));
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+}
+/* Höger halva — växer från center till höger */
+.hero-info-cta::after {
+  content: ""; position: absolute;
+  left: 50%; bottom: 0; width: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
 }
 .hero-info-cta:hover {
   color: var(--gold);
   letter-spacing: -1.4px;
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  animation: none; /* pausa breathe medan hovrad */
+  text-shadow:
+    0 1px 2px rgba(0,0,0,0.85),
+    0 0 28px rgba(251,191,36,0.45);
 }
-.hero-info-cta:hover::after { transform: scaleX(1); }
+.hero-info-cta:hover::before { width: calc(50% - 14px); }
+.hero-info-cta:hover::after  { width: calc(50% - 14px); }
 .hero-info-cta-arrow {
+  position: relative;
   font-family: var(--mono); font-weight: 400;
   font-size: 0.7em;
-  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+  transition:
+    transform .55s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .4s var(--ease);
   display: inline-block;
 }
-.hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(8px); }
+/* Arrow-tail: visa pseudo-streck efter pilen som "tail" på hover */
+.hero-info-cta-arrow::before {
+  content: ""; position: absolute;
+  right: 100%; top: 50%;
+  width: 0; height: 1.5px;
+  margin-right: 4px;
+  background: var(--gold);
+  transform: translateY(-50%);
+  transition: width .35s cubic-bezier(.65, 0, .35, 1);
+  opacity: 0;
+}
+.hero-info-cta:hover .hero-info-cta-arrow {
+  transform: translateX(12px);
+}
+.hero-info-cta:hover .hero-info-cta-arrow::before {
+  width: 22px;
+  opacity: 0.85;
+  transition-delay: .15s;
+}
 /* Disabled (Evelina/Peter): tystare italic, ingen line, ingen pil */
 .hero-info-cta[aria-disabled="true"] {
   color: rgba(255,255,255,0.55); cursor: default;
@@ -950,9 +1001,9 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 .hero-info-story {
   font-size: 14.5px; line-height: 1.5; color: rgba(255,255,255,0.88);
   max-width: 52ch; font-weight: 400;
-  /* Begränsa till 3 rader så panelen håller höjd */
+  /* Begränsa till 4 rader — tillräckligt att hela mening ryms. */
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -982,9 +1033,9 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   color: #fff;
   padding: 2px 0 2px 14px;
   border-left: 2px solid var(--gold);
-  margin: 0; max-width: 28ch;
+  margin: 0; max-width: 32ch;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1002,10 +1053,11 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   letter-spacing: 1.5px; text-transform: uppercase;
   color: rgba(255,255,255,0.55); font-weight: 700;
 }
-/* Week som horisontella chips istället för stacked rows */
+/* Week som horisontella chips istället för stacked rows. Tre rader
+   max så längsta vecko-listan inte trycker panelen för långt. */
 .hero-info-week-list {
   display: flex; flex-wrap: wrap; gap: 4px;
-  max-height: 60px; /* lås till 2 rader chips, oavsett labellängd */
+  max-height: 92px;
   overflow: hidden;
 }
 .hero-info-week-item {
@@ -1145,28 +1197,135 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 @media (max-width: 1100px) { .teacher-features { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px)  { .teacher-features { grid-template-columns: 1fr; } }
 
+/* Animerad rotating border-glow runt kortet — conic-gradient roterar
+   via custom property (kräver @property-stöd, fallback = bara opacity-fade). */
+@property --tf-ang {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
 .teacher-feature {
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 14px;
-  padding: 28px 26px 30px;
-  display: flex; flex-direction: column; gap: 14px;
   position: relative;
-  transition: all .25s var(--ease);
   isolation: isolate;
+  cursor: pointer;
+  perspective: 1400px;
+  /* Höjd-låsning så fram + back har samma footprint */
+  min-height: 320px;
+  transition: transform .25s var(--ease), background .25s var(--ease), border-color .25s var(--ease);
 }
 .teacher-feature:hover {
   background: rgba(255,255,255,0.06);
   border-color: rgba(255,255,255,0.2);
   transform: translateY(-3px);
 }
-.teacher-feature::before {
-  content: ""; position: absolute;
-  top: 0; left: 0; height: 2px; width: 0;
-  background: var(--gold);
-  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+/* Roterande conic-glöd som åker runt kantens hela perimeter på hover */
+.teacher-feature::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--tf-ang, 0deg),
+    transparent 0%,
+    rgba(251, 191, 36, 0.0) 12%,
+    var(--gold) 22%,
+    var(--accent) 32%,
+    transparent 46%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .35s var(--ease);
+  z-index: 1;
 }
-.teacher-feature:hover::before { width: 100%; }
+.teacher-feature:hover::after,
+.teacher-feature.is-flipped::after {
+  opacity: 1;
+  animation: tf-spin 3.6s linear infinite;
+}
+@keyframes tf-spin { to { --tf-ang: 360deg; } }
+
+/* Inre wrapper som kan vridas i 3D — innehåller fram + back */
+.teacher-feature-inner {
+  position: relative;
+  width: 100%; height: 100%;
+  min-height: inherit;
+  transform-style: preserve-3d;
+  transition: transform .85s cubic-bezier(.4, 0, .2, 1);
+}
+.teacher-feature.is-flipped .teacher-feature-inner {
+  transform: rotateY(180deg);
+}
+.tf-front, .tf-back {
+  position: absolute;
+  inset: 0;
+  padding: 28px 26px 30px;
+  display: flex; flex-direction: column; gap: 14px;
+  -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
+  border-radius: inherit;
+}
+.tf-back {
+  transform: rotateY(180deg);
+  background: linear-gradient(135deg, rgba(220, 76, 43, 0.06) 0%, rgba(251, 191, 36, 0.05) 100%);
+}
+.tf-back-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.tf-back h4 {
+  font-family: var(--serif);
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1.1;
+  color: #fff;
+  margin: 0;
+}
+.tf-back p {
+  font-size: 13.5px; line-height: 1.55;
+  color: rgba(255,255,255,0.7);
+  margin: 0;
+}
+.tf-back ul {
+  list-style: none; padding: 0; margin: 4px 0 0;
+  display: flex; flex-direction: column; gap: 7px;
+  font-family: var(--mono); font-size: 11px;
+  color: rgba(255,255,255,0.78);
+}
+.tf-back ul li {
+  padding-left: 14px; position: relative;
+}
+.tf-back ul li::before {
+  content: "→";
+  position: absolute; left: 0;
+  color: var(--gold);
+  font-weight: 700;
+}
+.tf-flip-hint {
+  margin-top: auto; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tf-flip-hint .tf-flip-arrow {
+  display: inline-block;
+  transition: transform .35s var(--ease);
+}
+.teacher-feature:hover .tf-flip-hint .tf-flip-arrow,
+.teacher-feature.is-flipped .tf-flip-hint .tf-flip-arrow {
+  transform: rotate(180deg);
+}
 .teacher-feature-icon {
   width: 38px; height: 38px;
   border-radius: 8px;
@@ -1448,15 +1607,49 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   letter-spacing: 2px; text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 24px;
+  /* Hjärtslag på den ledande pricken via separat span */
+}
+.about-eye-pulse {
+  display: inline-block;
+  margin-right: 2px;
+  animation: about-pulse 1.6s cubic-bezier(.4, 0, .6, 1) infinite;
+  transform-origin: center;
+}
+@keyframes about-pulse {
+  0%, 60%, 100% { transform: scale(1); opacity: 1; }
+  10% { transform: scale(1.5); opacity: 0.85; }
+  20% { transform: scale(0.95); opacity: 1; }
+  30% { transform: scale(1.3); opacity: 0.9; }
+  40% { transform: scale(1); }
 }
 .about-head h2 {
   font-size: clamp(40px, 5.5vw, 72px);
   font-weight: 700; letter-spacing: -2.2px; line-height: 1;
   max-width: 18ch; margin: 0 auto;
+  position: relative;
 }
 .about-head h2 em {
-  font-family: var(--serif); font-style: italic; color: var(--accent);
+  font-family: var(--serif); font-style: italic;
   font-weight: 500;
+  /* "levande" andas — färg + skugga går mellan accent/gold */
+  background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 50%, var(--accent) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: about-living 6.4s linear infinite;
+}
+@keyframes about-living {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 220% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-eye-pulse, .about-head h2 em { animation: none; }
+  .about-head h2 em {
+    color: var(--accent);
+    -webkit-text-fill-color: var(--accent);
+  }
 }
 .about-lead {
   font-family: var(--serif);
@@ -1650,9 +1843,11 @@ html.lenis, html.lenis body { height: auto; }
 </head>
 <body>
 
-<nav class="top-nav" aria-label="Konto">
-  <a href="/login" class="top-nav-link">Logga in</a>
-  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary">Skapa konto</a>
+<nav class="top-nav" id="topNav" aria-label="Konto" data-auth-nav>
+  <a href="/login" class="top-nav-link" data-auth-when="out">Logga in</a>
+  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary" data-auth-when="out">Skapa konto</a>
+  <a href="/dashboard" class="top-nav-link" data-auth-when="in" hidden>Dashboard</a>
+  <a href="/dashboard?logout=1" class="top-nav-link top-nav-link-primary" data-auth-when="in" hidden>Logga ut</a>
 </nav>
 
 <main>
@@ -1892,6 +2087,8 @@ html.lenis, html.lenis body { height: auto; }
       <div class="teacher-features">
 
         <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
           <div class="teacher-feature-icon">Kl</div>
           <div class="teacher-feature-eye">● Klassdashboard</div>
           <h3>Hela klassen i ett ögonkast.</h3>
@@ -1907,9 +2104,26 @@ html.lenis, html.lenis body { height: auto; }
               <strong>Evelina</strong><span>aktiv NU · ISK</span><span class="tf-mock-num is-good">88</span>
             </div>
           </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Lärarens flow</div>
+            <h4>Innan provet — inte efter.</h4>
+            <p>Du klickar en röd elev → ser val-historik → Echo-konversationer → skickar mail. Tre klick.</p>
+            <ul>
+          <li>26 / 28 elever på grönt</li>
+          <li>Auto-larm vid 5 dagars passivitet</li>
+          <li>Ingen lärare missar någon</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
         </article>
 
         <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
           <div class="teacher-feature-icon">Tt</div>
           <div class="teacher-feature-eye">● Time on task</div>
           <h3>Varje minut, varje modul, varje dag.</h3>
@@ -1939,9 +2153,26 @@ html.lenis, html.lenis body { height: auto; }
               <span class="tf-heatmap-cell"></span>
             </div>
           </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Aggregerat</div>
+            <h4>47 timmar — varje minut räknas.</h4>
+            <p>Klassens snitt 1 h 41 m / vecka. Lindas 2 h 18 m. Peak: tisdag 19–21 (lönesamtal).</p>
+            <ul>
+          <li>Per elev, per modul, per dag</li>
+          <li>Heatmap visar intensitet</li>
+          <li>Zooma in: scrollade hen 90 min på pension?</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
         </article>
 
         <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
           <div class="teacher-feature-icon">12</div>
           <div class="teacher-feature-eye">● Kompetensspårning</div>
           <h3>12 kompetenser, automatiskt.</h3>
@@ -1963,9 +2194,26 @@ html.lenis, html.lenis body { height: auto; }
               <span class="tf-bar-track"><span class="tf-bar-fill" style="width:71%"></span></span>
             </div>
           </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Lgr22 / Gy22</div>
+            <h4>Kunskapskrav — automatiskt mappade.</h4>
+            <p>Varje scenario tickar in mot rätt kunskapskrav. Du behöver inte koda om bedömningen — den är inbyggd.</p>
+            <ul>
+          <li>Lönesamtal → samhällsekonomins delar (sh)</li>
+          <li>ISK · skatt → privatekonomi (gy)</li>
+          <li>Buffert → ekonomi & konsumtion (hk)</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
         </article>
 
         <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
           <div class="teacher-feature-icon">Ai</div>
           <div class="teacher-feature-eye">● Echo · sokratisk AI</div>
           <h3>Du sätter takten på AI:n.</h3>
@@ -1974,9 +2222,26 @@ html.lenis, html.lenis body { height: auto; }
             <div class="tf-chat-bubble is-echo">"Var detta avdrag som händer dig — eller en investering du gör i ditt 67-åriga jag?"</div>
             <div class="tf-chat-bubble is-student" style="margin-top:6px;">"Jag har aldrig tänkt på det så förut..."</div>
           </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Lärarens kontroll</div>
+            <h4>Du sätter takten.</h4>
+            <p>Slå av/på per klass eller per modul. Justera ton. Sätt budget. Granska varje konversation.</p>
+            <ul>
+          <li>23 frågor / klass / vecka i snitt</li>
+          <li>0,42 kr / elev / vecka i tokens</li>
+          <li>Fullständig logg per anrop</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
         </article>
 
         <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
           <div class="teacher-feature-icon">Mo</div>
           <div class="teacher-feature-eye">● Moduler & scenarier</div>
           <h3>Färdiga och egna moduler.</h3>
@@ -1992,9 +2257,26 @@ html.lenis, html.lenis body { height: auto; }
               <strong>Mod 03</strong><span>ISK-portföljen</span><span class="tf-mock-num">14/28</span>
             </div>
           </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Bygg eget</div>
+            <h4>12 systemmoduler — eller dina egna.</h4>
+            <p>Drag & drop scenarier. Versionera. Tilldela en klass eller en enskild elev. Ingen kodning.</p>
+            <ul>
+          <li>Förinlästa: Din första månad, Lönesamtalet, ISK</li>
+          <li>Skapa egna scenarier per ämne</li>
+          <li>Versionering — eleverna ser inte halvfärdigt</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
         </article>
 
         <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
           <div class="teacher-feature-icon">Lp</div>
           <div class="teacher-feature-eye">● Lärarguide & PDF-export</div>
           <h3>Material som matchar kursplanen.</h3>
@@ -2010,6 +2292,21 @@ html.lenis, html.lenis body { height: auto; }
               <strong>PDF</strong><span>Lindas lönespec</span><span class="tf-mock-num">↓</span>
             </div>
           </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Hämta material</div>
+            <h4>PDF:er som matchar kursplanen.</h4>
+            <p>Lärarguider, lektionsplanering, bedömningsmallar — och elevens egna lönespec, kontoutdrag, portfolio.</p>
+            <ul>
+          <li>Lärarguide · Lgr22-mappad</li>
+          <li>Bedömningsmall i 4 nivåer</li>
+          <li>Klass-portfolio som ZIP</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
         </article>
 
       </div>
@@ -2044,7 +2341,7 @@ html.lenis, html.lenis body { height: auto; }
     <div class="about-shell">
 
       <header class="about-head">
-        <div class="about-eye">● Vad är Ekonomilabbet?</div>
+        <div class="about-eye"><span class="about-eye-pulse">●</span> Vad är Ekonomilabbet?</div>
         <h2>En levande simulering av <em>hela ekonomilivet</em>.</h2>
       </header>
 
@@ -2594,6 +2891,66 @@ window.addEventListener('load', () => {
   }, { passive: true });
   window.addEventListener('resize', recompute);
   recompute();
+})();
+</script>
+
+<script>
+// ─── Card-flip för teacher-features: klick toggle:ar is-flipped.
+// Tangentbordsstöd via Enter/Space, aria-pressed uppdateras.
+(function () {
+  const cards = document.querySelectorAll(".teacher-feature");
+  cards.forEach((card) => {
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-pressed", "false");
+    function flip() {
+      card.classList.toggle("is-flipped");
+      card.setAttribute(
+        "aria-pressed",
+        card.classList.contains("is-flipped") ? "true" : "false",
+      );
+    }
+    card.addEventListener("click", flip);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        flip();
+      }
+    });
+  });
+})();
+</script>
+
+<script>
+// ─── Auth-aware top-nav: visa Logga in/Skapa konto för utloggade,
+// Dashboard/Logga ut för inloggade. SPA:n lagrar token i sessionStorage
+// (key "hembudget_token"), så vi läser samma key. Klick på "Logga ut"
+// rensar nyckeln och navigerar till /.
+(function () {
+  const KEY = "hembudget_token";
+  function paint() {
+    const token = sessionStorage.getItem(KEY);
+    const isIn = !!token;
+    document.querySelectorAll('[data-auth-when="out"]').forEach(el => {
+      el.hidden = isIn;
+    });
+    document.querySelectorAll('[data-auth-when="in"]').forEach(el => {
+      el.hidden = !isIn;
+    });
+  }
+  paint();
+  // Re-paint vid storage-event (annan flik) + vid sidovisning
+  window.addEventListener("storage", paint);
+  window.addEventListener("pageshow", paint);
+
+  // "Logga ut"-länken: rensa token och navigera till /
+  document.querySelectorAll('a[href="/dashboard?logout=1"]').forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      sessionStorage.removeItem(KEY);
+      window.location.href = "/";
+    });
+  });
 })();
 </script>
 

@@ -71,10 +71,14 @@
 .ed-top-link {
   display: inline-block;
   font-family: var(--ed-serif);
-  font-size: 17px; font-weight: 700;
-  letter-spacing: -0.3px; line-height: 1;
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
   color: #fff;
   text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
   text-shadow:
     0 0 1px rgba(0, 0, 0, 0.95),
     0 1px 2px rgba(0, 0, 0, 0.85),
@@ -98,10 +102,14 @@
   position: fixed; top: 22px; left: 28px; z-index: 70;
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--ed-serif);
-  font-size: 17px; font-weight: 700;
-  letter-spacing: -0.3px; line-height: 1;
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
   color: #fff;
   text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
   text-shadow:
     0 0 1px rgba(0, 0, 0, 0.95),
     0 1px 2px rgba(0, 0, 0, 0.85),
@@ -407,8 +415,13 @@
   border-radius: 6px;
   text-decoration: none;
   color: #fff;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
   transition: transform .3s var(--ed-ease), border-color .3s var(--ed-ease);
 }
+button.ed-demo-tile, button.ed-choice { font: inherit; }
 .ed-demo-tile:hover {
   transform: translateY(-2px);
   border-color: var(--ed-gold);

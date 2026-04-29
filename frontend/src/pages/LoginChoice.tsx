@@ -1,15 +1,12 @@
 import { Link } from "react-router-dom";
 import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
 
 export default function LoginChoice() {
   return (
     <EditorialAuthShell
-      topNavRight={
-        <Link to="/signup/teacher" className="ed-top-link is-primary">
-          Skapa konto
-        </Link>
-      }
+      topNavRight={<AuthAwareTopLinks />}
     >
       <div className="ed-eyebrow">Välkommen tillbaka</div>
 

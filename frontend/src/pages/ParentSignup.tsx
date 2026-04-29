@@ -4,6 +4,7 @@ import { api, ApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
 import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
 
 // Tekniskt samma signup-flöde som TeacherSignup, men:
@@ -79,9 +80,7 @@ export default function ParentSignup() {
 
   return (
     <EditorialAuthShell
-      topNavRight={
-        <Link to="/login" className="ed-top-link">Logga in</Link>
-      }
+      topNavRight={<AuthAwareTopLinks />}
     >
       <div className="ed-eyebrow">Skapa familjekonto · Vol. 03</div>
 

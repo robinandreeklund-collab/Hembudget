@@ -94,13 +94,16 @@ body.is-deep { overflow: hidden; height: 100vh; }
 .top-nav-link {
   display: inline-block;
   font-family: var(--serif);
-  font-size: 17px; font-weight: 700;
-  letter-spacing: -0.3px; line-height: 1;
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  /* Subtle 1px stroke-shadow ger stadig kant även utan hover */
+  text-shadow: 0 0 0.4px currentColor, 0 1px 0 rgba(255,255,255,0.4);
   transform-origin: right center;
   transition:
     font-size .45s cubic-bezier(.34, 1.56, .64, 1),
@@ -121,13 +124,15 @@ body.is-deep { overflow: hidden; height: 100vh; }
   position: fixed; top: 22px; left: 28px; z-index: 70;
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--serif);
-  font-size: 17px; font-weight: 700;
-  letter-spacing: -0.3px; line-height: 1;
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  text-shadow: 0 0 0.4px currentColor, 0 1px 0 rgba(255,255,255,0.4);
   transform-origin: left center;
   transition:
     font-size .45s cubic-bezier(.34, 1.56, .64, 1),
@@ -1174,9 +1179,11 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
   <span class="home-link-arrow" aria-hidden="true">←</span>
   Hem
 </a>
-<nav class="top-nav" aria-label="Konto">
-  <a href="/login" class="top-nav-link">Logga in</a>
-  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary">Skapa konto</a>
+<nav class="top-nav" id="topNav" aria-label="Konto" data-auth-nav>
+  <a href="/login" class="top-nav-link" data-auth-when="out">Logga in</a>
+  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary" data-auth-when="out">Skapa konto</a>
+  <a href="/dashboard" class="top-nav-link" data-auth-when="in" hidden>Dashboard</a>
+  <a href="/dashboard?logout=1" class="top-nav-link top-nav-link-primary" data-auth-when="in" hidden>Logga ut</a>
 </nav>
 
 <main class="main-flow" id="main">
@@ -2917,6 +2924,37 @@ const DIVE_LABELS = {
   // Initial paint
   applyTheme('dark');
   recompute();
+})();
+</script>
+
+<script>
+// ─── Auth-aware top-nav: visa Logga in/Skapa konto för utloggade,
+// Dashboard/Logga ut för inloggade. SPA:n lagrar token i sessionStorage
+// (key "hembudget_token"), så vi läser samma key. Klick på "Logga ut"
+// rensar nyckeln och navigerar till /.
+(function () {
+  const KEY = "hembudget_token";
+  function paint() {
+    const token = sessionStorage.getItem(KEY);
+    const isIn = !!token;
+    document.querySelectorAll('[data-auth-when="out"]').forEach(el => {
+      el.hidden = isIn;
+    });
+    document.querySelectorAll('[data-auth-when="in"]').forEach(el => {
+      el.hidden = !isIn;
+    });
+  }
+  paint();
+  window.addEventListener("storage", paint);
+  window.addEventListener("pageshow", paint);
+
+  document.querySelectorAll('a[href="/dashboard?logout=1"]').forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      sessionStorage.removeItem(KEY);
+      window.location.href = "/";
+    });
+  });
 })();
 </script>
 
