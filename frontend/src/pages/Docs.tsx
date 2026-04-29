@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowLeft, ChevronRight, MessageCircle,
-} from "lucide-react";
+import { EditorialLightShell } from "@/components/editorial/EditorialLightShell";
 
 type Section = {
   id: string;
@@ -733,11 +731,16 @@ const SECTIONS: Section[] = [
 ];
 
 
+const GROUP_LABELS = {
+  student: "För elever",
+  teacher: "För lärare",
+  pedagogy: "Bakgrund & pedagogik",
+} as const;
+
 export default function Docs() {
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
 
   useEffect(() => {
-    // Hash-scroll om URL:en har #id
     if (window.location.hash) {
       const id = window.location.hash.slice(1);
       const el = document.getElementById(id);
@@ -748,53 +751,56 @@ export default function Docs() {
     }
   }, []);
 
-  const groupLabels = {
-    student: { label: "För elever" },
-    teacher: { label: "För lärare" },
-    pedagogy: { label: "Bakgrund & pedagogik" },
-  };
+  // Spåra vilken sektion som är synlig så aside-länken markeras live
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible) setActiveSection(visible.target.id);
+      },
+      { rootMargin: "-100px 0px -60% 0px", threshold: [0, 1] },
+    );
+    SECTIONS.forEach((s) => {
+      const el = document.getElementById(s.id);
+      if (el) obs.observe(el);
+    });
+    return () => obs.disconnect();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-30 bg-paper/95 backdrop-blur border-b border-rule">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link
-            to="/"
-            className="text-sm nav-link inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="w-4 h-4" /> Startsidan
+    <EditorialLightShell
+      eyebrow="Dokumentation · Vol. 01"
+      title={
+        <>
+          Allt du behöver veta om <em>Ekonomilabbet</em>.
+        </>
+      }
+      intro="För elever, lärare och föräldrar. Sökbart, indexerat, alltid uppdaterat mot plattformen."
+      topNavRight={
+        <>
+          <Link to="/login" className="edl-top-link">Logga in</Link>
+          <Link to="/signup/teacher" className="edl-top-link is-primary">
+            Skapa konto
           </Link>
-          <div className="flex items-center gap-2">
-            <svg width="22" height="22" viewBox="0 0 40 40" aria-hidden="true">
-              <circle cx="20" cy="20" r="18" fill="none" stroke="#111217" strokeWidth="2" />
-              <text x="20" y="26" textAnchor="middle" fontFamily="Spectral" fontWeight="800" fontSize="18">Ek</text>
-            </svg>
-            <span className="serif text-lg">Dokumentation</span>
-          </div>
-          <div className="w-20" />
-        </div>
-      </header>
-
-      <div className="max-w-6xl mx-auto px-6 py-12 grid md:grid-cols-[240px_1fr] gap-10">
-        {/* Sidomeny */}
-        <aside className="md:sticky md:top-20 self-start space-y-7">
+        </>
+      }
+      withAsideSidebar
+      aside={
+        <>
           {(["student", "teacher", "pedagogy"] as const).map((group) => {
-            const { label } = groupLabels[group];
             const items = SECTIONS.filter((s) => s.group === group);
             return (
-              <div key={group}>
-                <div className="eyebrow mb-3">{label}</div>
-                <ul className="space-y-1 border-l border-rule">
+              <div key={group} className="edl-aside-group">
+                <div className="edl-aside-eye">{GROUP_LABELS[group]}</div>
+                <ul className="edl-aside-list">
                   {items.map((s) => (
                     <li key={s.id}>
                       <a
                         href={`#${s.id}`}
                         onClick={() => setActiveSection(s.id)}
-                        className={`block px-3 py-1.5 text-sm border-l-2 -ml-px transition-colors ${
-                          activeSection === s.id
-                            ? "border-ink text-ink font-semibold"
-                            : "border-transparent text-[#666] hover:text-ink"
-                        }`}
+                        className={activeSection === s.id ? "is-active" : ""}
                       >
                         {s.title}
                       </a>
@@ -804,45 +810,23 @@ export default function Docs() {
               </div>
             );
           })}
-          <div className="border-t border-rule pt-4">
-            <Link
-              to="/messages"
-              className="text-sm nav-link inline-flex items-center gap-1"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Fråga din lärare
-              <ChevronRight className="w-3 h-3" />
-            </Link>
+          <div className="edl-aside-group">
+            <div className="edl-aside-eye">Mer</div>
+            <ul className="edl-aside-list">
+              <li><Link to="/faq">Vanliga frågor</Link></li>
+              <li><Link to="/terms">Villkor &amp; simulering</Link></li>
+              <li><a href="mailto:info@ekonomilabbet.org">Kontakt</a></li>
+            </ul>
           </div>
-        </aside>
-
-        {/* Innehåll */}
-        <main className="space-y-14">
-          {SECTIONS.map((s) => (
-            <section
-              key={s.id}
-              id={s.id}
-              className="scroll-mt-24"
-            >
-              <h2 className="serif text-2xl md:text-3xl leading-tight mb-4 pb-3 border-b border-rule">
-                {s.title}
-              </h2>
-              <div className="space-y-4 body-prose text-[15px]">
-                {s.body()}
-              </div>
-            </section>
-          ))}
-        </main>
-      </div>
-
-      <footer className="border-t border-rule mt-16">
-        <div className="max-w-6xl mx-auto px-6 py-8 text-center text-sm text-[#888] serif-italic">
-          Har du förslag på vad som kan förbättras i dokumentationen? Skriv
-          till <a href="mailto:info@ekonomilabbet.org" className="nav-link not-italic">
-            info@ekonomilabbet.org
-          </a> eller använd meddelandefunktionen i appen.
-        </div>
-      </footer>
-    </div>
+        </>
+      }
+    >
+      {SECTIONS.map((s) => (
+        <section key={s.id} id={s.id} className="edl-section">
+          <h2 className="edl-h2">{s.title}</h2>
+          <div className="edl-prose">{s.body()}</div>
+        </section>
+      ))}
+    </EditorialLightShell>
   );
 }

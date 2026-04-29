@@ -47,6 +47,8 @@ import ResetPassword from "./pages/ResetPassword";
 import StudentLogin from "./pages/StudentLogin";
 import DemoChoice from "./pages/DemoChoice";
 import Docs from "./pages/Docs";
+import Terms from "./pages/Terms";
+import Faq from "./pages/Faq";
 import ScrollStoryDemo from "./pages/ScrollStoryDemo";
 import MyAchievements from "./pages/MyAchievements";
 import MyModules from "./pages/MyModules";
@@ -87,6 +89,8 @@ export default function App() {
             också når sign-vyn utan att kicks tillbaka till /dashboard. */}
         <Route path="/bank/sign" element={<Bank />} />
         <Route path="/docs" element={<Docs />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/faq" element={<Faq />} />
         {/* Fallback: behåll gamla kombinerade Login-komponenten som extra
             backup i fall något djuplänkar dit */}
         <Route path="/login/legacy" element={<Login />} />
@@ -130,6 +134,8 @@ export default function App() {
           <Route path="/messages" element={<Messages />} />
           <Route path="/demo/scroll-story" element={<ScrollStoryDemo />} />
           <Route path="/docs" element={<Docs />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/faq" element={<Faq />} />
           <Route path="/modules" element={<MyModules />} />
           <Route path="/modules/:moduleId" element={<ModuleView />} />
           <Route path="/achievements" element={<MyAchievements />} />
