@@ -1336,69 +1336,98 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .btn-arrow { font-family: var(--mono); font-size: 13px; transition: transform .2s; }
 .btn:hover .btn-arrow { transform: translateX(3px); }
 
-/* ─── Manifesto-citat (Robin Fröjd) ─── */
-.manifesto {
-  background: linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);
+/* ─── Vad är Ekonomilabbet? (editorial-artikel) ─── */
+.about {
+  background: var(--bg);
   position: relative;
   padding: clamp(96px, 14vh, 160px) 24px;
 }
-.manifesto::before {
+.about::before {
   content: ""; position: absolute;
   top: 0; left: 50%; transform: translateX(-50%);
   width: 80px; height: 1px;
   background: var(--accent);
 }
-.manifesto-shell {
-  max-width: 880px; margin: 0 auto;
-  text-align: center;
+.about-shell {
+  max-width: 1080px; margin: 0 auto;
 }
-.manifesto-eye {
+.about-head {
+  text-align: center;
+  margin-bottom: clamp(48px, 6vh, 64px);
+}
+.about-eye {
+  display: inline-block;
   font-family: var(--mono); font-size: 11px; font-weight: 700;
   letter-spacing: 2px; text-transform: uppercase;
-  color: var(--accent); margin-bottom: 32px;
+  color: var(--accent);
+  margin-bottom: 24px;
 }
-.manifesto-quote {
-  margin: 0 0 32px;
+.about-head h2 {
+  font-size: clamp(40px, 5.5vw, 72px);
+  font-weight: 700; letter-spacing: -2.2px; line-height: 1;
+  max-width: 18ch; margin: 0 auto;
 }
-.manifesto-quote p {
-  font-family: var(--serif); font-size: clamp(22px, 2.6vw, 32px);
-  line-height: 1.4; letter-spacing: -0.4px;
-  color: var(--fg);
-  margin: 0 0 26px;
-  font-weight: 400;
-}
-.manifesto-quote p:first-child {
-  font-style: italic;
-  font-size: clamp(28px, 3.4vw, 40px);
+.about-head h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--accent);
   font-weight: 500;
-  letter-spacing: -0.8px;
-  color: var(--fg);
+}
+.about-lead {
+  font-family: var(--serif);
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.5; color: #1e293b;
+  text-align: center;
+  max-width: 56ch;
+  margin: 0 auto clamp(56px, 8vh, 80px);
+}
+.about-lead strong {
+  color: var(--fg); font-weight: 600;
+}
+.about-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: clamp(28px, 4vw, 56px);
+  margin-bottom: clamp(56px, 7vh, 80px);
+}
+@media (max-width: 900px) { .about-grid { grid-template-columns: 1fr; gap: 36px; } }
+.about-block {
   position: relative;
+  padding-top: 22px;
+  border-top: 2px solid var(--accent);
 }
-.manifesto-quote p:first-child::before {
-  content: "\201C"; color: var(--accent);
-  font-family: var(--serif); font-style: italic;
-  margin-right: 4px;
-}
-.manifesto-quote p:first-child::after {
-  content: "\201D"; color: var(--accent);
-  font-family: var(--serif); font-style: italic;
-  margin-left: 4px;
-}
-.manifesto-quote p:last-child { margin-bottom: 0; }
-.manifesto-quote em {
-  color: var(--accent); font-style: italic;
-}
-.manifesto-cite {
+.about-block-num {
   font-family: var(--mono); font-size: 11px; font-weight: 700;
   letter-spacing: 1.6px; text-transform: uppercase;
-  color: var(--muted);
-  display: inline-flex; align-items: center; gap: 14px;
-  padding-top: 18px; border-top: 1px solid var(--rule);
+  color: var(--accent); margin-bottom: 12px;
 }
-.manifesto-cite::before {
-  content: ""; width: 6px; height: 6px;
-  background: var(--accent); border-radius: 50%;
+.about-block h3 {
+  font-size: clamp(20px, 2.1vw, 26px); font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1.15;
+  margin-bottom: 14px; color: var(--fg);
+}
+.about-block p {
+  font-size: 14.5px; line-height: 1.6; color: #334155;
+}
+.about-block p strong { color: var(--fg); font-weight: 700; }
+.about-block p em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.about-close {
+  text-align: center;
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(18px, 2vw, 24px); line-height: 1.55;
+  color: var(--fg);
+  max-width: 64ch; margin: 0 auto;
+  padding-top: 36px;
+  border-top: 1px solid var(--rule);
+  position: relative;
+}
+.about-close::before {
+  content: ""; position: absolute;
+  top: -1px; left: 50%; transform: translateX(-50%);
+  width: 40px; height: 1px;
+  background: var(--accent);
+}
+.about-close em {
+  color: var(--accent); font-weight: 500;
 }
 
 /* ─── Footer ─── */
@@ -1441,6 +1470,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   font-size: 13.5px; line-height: 1.55; color: rgba(255,255,255,0.7);
   max-width: 36ch;
 }
+.footer-brand-blurb strong { color: #fff; font-weight: 600; }
 .footer-col h4 {
   font-family: var(--mono); font-size: 10px; font-weight: 700;
   letter-spacing: 1.8px; text-transform: uppercase;
@@ -1696,12 +1726,13 @@ html.lenis, html.lenis body { height: auto; }
     <div class="shell">
 
       <header class="teacher-head">
-        <div class="teacher-eye">● För läraren</div>
-        <h2>Ingen administration.<br><em>Bara undervisning.</em></h2>
+        <div class="teacher-eye">● För läraren · föräldern · coachen</div>
+        <h2>Ingen administration.<br><em>Bara lärande.</em></h2>
         <p>
-          Du ger eleven en 6-teckenskod — hon är inloggad direkt. Du ser
-          hela klassen i realtid: val, wellbeing-index, time on task, kompetenser.
-          Ingen Google Classroom-integration, ingen import, inget krångel.
+          Ge eleven, ditt barn eller hela klassen en 6-teckenskod —
+          de är inloggade direkt. Du ser allt i realtid: val, wellbeing-index,
+          time on task, kompetenser. Funkar lika väl vid köksbordet som i
+          klassrummet — ingen Google Classroom, ingen import, inget krångel.
         </p>
       </header>
 
@@ -1857,15 +1888,67 @@ html.lenis, html.lenis body { height: auto; }
     </div>
   </section>
 
-  <section class="manifesto">
-    <div class="manifesto-shell">
-      <div class="manifesto-eye">● Manifest</div>
-      <blockquote class="manifesto-quote">
-        <p>Pengar är ett medel för välmående, inte ett mål i sig själv.</p>
-        <p>Att maximera saldot till priset av sociala band och fritid är inte ekonomisk framgång — det är en form av <em>fattigdom</em>. Att spendera allt på upplevelser utan buffert är heller inte rikedom — det är <em>skörhet</em>.</p>
-        <p>Ekonomi är konsten att balansera idag mot imorgon, mig själv mot mina relationer, planering mot spontanitet.</p>
-      </blockquote>
-      <div class="manifesto-cite">Robin Fröjd · Ekonomilabbet</div>
+  <section class="about">
+    <div class="about-shell">
+
+      <header class="about-head">
+        <div class="about-eye">● Vad är Ekonomilabbet?</div>
+        <h2>En levande simulering av <em>hela ekonomilivet</em>.</h2>
+      </header>
+
+      <p class="about-lead">
+        Ekonomilabbet är en djupgående lärplattform för privatekonomi och en unik simuleringsmiljö som fångar hela den ekonomiska livscykeln — från första sparpengen till pension, skuldsanering eller välstånd. <strong>För elever, lärare, föräldrar och barn.</strong>
+      </p>
+
+      <div class="about-grid">
+        <article class="about-block">
+          <div class="about-block-num">● 01 · Konsekvensbaserat lärande i realtid</div>
+          <h3>Varje val flyttar både saldot och välmåendet.</h3>
+          <p>
+            <strong>Impulsiva köp</strong> tömmer saldot och sänker välmåndsindexet,
+            medan <strong>konsekvent sparande</strong> bygger trygghet och självförtroende.
+            Plattformen saknar slut — dåliga val leder inte till game over utan till
+            verklighetsnära konsekvenser som betalningspåminnelser, Kronofogden och
+            skuldsanering, precis som i verkliga livet. Det skapar
+            <em>autentisk känslomässig inlärning</em> där användaren upplever både
+            euforin av ekonomisk framgång och stressen av misskötsel.
+          </p>
+        </article>
+
+        <article class="about-block">
+          <div class="about-block-num">● 02 · Holistisk modell</div>
+          <h3>Ekonomi och välmående hänger ihop.</h3>
+          <p>
+            Unikt är integrationen av finansiella och psykologiska mått. Ett
+            underskott påverkar inte bara kontot utan även
+            <strong>wellbeing-parametrar</strong> — sömnkvalitet, relationer,
+            självkänsla — baserat på forskning om hur finansiell stress försämrar
+            mental hälsa. Plattformen modellerar beteendeeffekter: rädsla för skulder
+            leder till undvikande beteenden, medan små vinster bygger
+            <em>momentum</em> för långsiktiga vanor.
+          </p>
+        </article>
+
+        <article class="about-block">
+          <div class="about-block-num">● 03 · Från teori till erfarenhet</div>
+          <h3>Learning by doing — på riktigt.</h3>
+          <p>
+            Komplexa begrepp som <em>ränta-på-ränta</em>, marginalskatt och livsvalens
+            långsiktiga effekter internaliseras genom att användas. Användaren testar
+            karriärvägar, boendeformer, konsumtionsmönster och ser hur varje väg
+            formar både <strong>nettoförmögenhet och livskvalitet</strong> över
+            decennier. Inga kortsiktiga quiz — en levande simulering där alla vägar
+            är realistiska och alla misstag lärorika.
+          </p>
+        </article>
+      </div>
+
+      <p class="about-close">
+        Resultatet är en plattform som inte bara lär ut privatekonomi, utan
+        <em>formar ekonomiskt medvetna, resilienta individer</em> som förstår
+        sambandet mellan sina val, deras plånbok och deras liv.
+      </p>
+
     </div>
   </section>
 
@@ -1895,8 +1978,8 @@ html.lenis, html.lenis body { height: auto; }
         <div class="footer-brand-name">Ekonomilabbet</div>
         <div class="footer-brand-tagline">Konsekvensdriven ekonomi och lärande</div>
         <p class="footer-brand-blurb">
-          En plattform där elever möter privatekonomin innan den möter dem.
-          Tre karaktärer, tre veckor, hela systemet på riktigt.
+          En plattform där användaren möter privatekonomin innan den möter dem.
+          <strong>För elever, lärare, föräldrar och barn.</strong>
         </p>
       </div>
       <div class="footer-col">
@@ -1905,7 +1988,6 @@ html.lenis, html.lenis body { height: auto; }
           <li><a href="/demo-landing/4-vecka-djupdyk.html">Träffa Linda</a></li>
           <li><a href="#cta">Boka demo</a></li>
           <li><a href="#cta">Skapa konto</a></li>
-          <li><a href="/demo-landing/idea-comparison.html">Idé-jämförelse</a></li>
         </ul>
       </div>
       <div class="footer-col">
@@ -1923,14 +2005,13 @@ html.lenis, html.lenis body { height: auto; }
           <li><a href="mailto:info@ekonomilabbet.org">Kontakt</a></li>
           <li><a href="#">Sekretess</a></li>
           <li><a href="#">Villkor</a></li>
-          <li><a href="https://github.com/robinandreeklund-collab/Hembudget">GitHub</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-bottom">
       <span>© 2026 Ekonomilabbet</span>
       <div class="footer-bottom-meta">
-        <span>Stockholm</span>
+        <span>Hjo</span>
         <span>info@ekonomilabbet.org</span>
         <span>byggt med konsekvenser</span>
       </div>
