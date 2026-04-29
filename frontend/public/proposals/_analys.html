@@ -2076,6 +2076,35 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="teacher-intro">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">35 · Lärar-ekosystemet</div>
+    <h2 class="h-section">Lärarens vy är ett <em>annat</em> system — i samma kodbas.</h2>
+    <div class="prose">
+      <p>
+        Allt vi har beskrivit hittills — fjorton aktörer, tio verktyg — är
+        elevens vy. När en lärare loggar in händer något helt annat: appen
+        växlar till en multi-tenant administrationsyta där läraren ser alla
+        sina elever, alla sina familjer, alla sina pågående konversationer
+        och alla sina kompetensbedömningar. Samma React-bundle, samma backend,
+        men en parallell uppsättning routes (<code>/teacher/*</code>) och en
+        helt annan informations-arkitektur.
+      </p>
+      <p>
+        Tekniskt: lärarens token ger access till en master-databas som listar
+        elever och familjer. När läraren klickar in på en elev <em>impersonerar</em>
+        appen den eleven — backend sätter elevens scope-ContextVar för
+        requesten, så läraren ser exakt det eleven ser, men med ett synligt
+        bandage upptill: <em>"Du är inloggad som Sara · återgå"</em>.
+        Impersonation loggas i audit-tabellen.
+      </p>
+      <p>
+        Lärar-ekosystemet består av tre huvudsakliga delar — en översiktsvy,
+        en elevdetaljvy, och ett innehålls-redigeringsverktyg för moduler.
+        Vi går igenom dem nu.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
