@@ -1100,6 +1100,81 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-8">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">12 · Aktör 08</div>
+    <h2 class="h-section">Pensionsmyndigheten — den <em>30 år bortre</em> aktören.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">PM</div>
+        <div>
+          <div class="actor-name">Pensionsmyndigheten</div>
+          <div class="actor-role">Allmän pension · premiepension · 67-årsprognos</div>
+        </div>
+        <div class="actor-routes">
+          <code>(idag i /tax + /salaries)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Pensionsmyndigheten är pedagogiskt knepig — ingen 22-åring
+          tänker på sin pension. Men plattformens kärnpoäng är just
+          att <em>visualisera den 67-åriga jaget</em>: 7 % av varje lön
+          som dras idag växer till 2,2 mkr över 45 år. Pensionsmyndigheten
+          behöver egen portal eftersom den hanterar något ingen annan
+          aktör ser: <strong>premiepensionsfondernas faktiska val</strong>.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos Pensionsmyndigheten</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Ser inkomstpensionsbeskedet.</strong> Det årliga
+            "orange kuvertet" — totalt intjänat, prognos vid 65/67/70,
+            scenarier vid sjukdom/förtidspension.
+          </li>
+          <li>
+            <strong>Väljer premiepensionsfonder.</strong> 4–5 fonder ur
+            ett urval på ~500. Eller AP7 Såfa (default-alternativet).
+            Eleven läser om förvaltningsavgiftens betydelse på 30 år.
+          </li>
+          <li>
+            <strong>Ser 30-årsprognos.</strong> Allmän pension 7 %
+            (632 000 kr vid 67) + tjänstepension 4,5 % (645 000 kr) +
+            avkastning över tiden = 2,2 mkr (med 5 % real avkastning).
+          </li>
+          <li>
+            <strong>Hanterar uttag senare.</strong> Vid 61 år tidigast.
+            Hel/halv/fjärdedels uttag. Plattformen kan simulera det
+            vid behov.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data Pensionsmyndigheten äger</div>
+        <ul class="actor-list">
+          <li>Inkomstpensionsbalansen (uppdateras årligen via Skatteverket)</li>
+          <li>Premiepensionsval + fondvärde + förvaltningskostnad</li>
+          <li>Prognoser vid olika pensions­åldrar (61–70)</li>
+          <li>Tjänstepensions-aggregat från Collectum / Fora / m.fl.</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: pensionsmyndigheten.se "Mina sidor" + minPension.se aggregat</li>
+          <li>7 % allmän pension (cap vid 8,07 IBB)</li>
+          <li>2,5 % premiepension (av allmänna 7 %)</li>
+          <li>AP7 Såfa: default, lifecycle-allokering</li>
+          <li>Tjänstepension utöver: ITP1 4,5 % &lt; 7,5 IBB, 30 % över</li>
+        </ul>
+
+        <p class="actor-cite">
+          Saknar idag egen route — pensionsdata visas spridd över
+          /salaries och /tax. Bör få egen <code>/pension</code> i ny IA.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
