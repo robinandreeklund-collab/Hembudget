@@ -552,6 +552,60 @@ function renderNav() {
 }
 renderNav();
 
+// === KORRIDOR (8 aktörer) ===
+const ROOMS = [
+  { num: "01", name: "Banken",            sub: "Privatkonto · ISK · Sparkonto · Kreditkort", v: "14 282", vu: "kr", meta: "Tillgänglig", pulse: true },
+  { num: "02", name: "Arbetsgivaren",     sub: "Sthlm Sjukhus AB · 80 % tjänst",              v: "25 maj", vu: "",   meta: "Nästa lön" },
+  { num: "03", name: "Avanza",            sub: "ISK · 4 fonder · 600 kr/mån",                  v: "8 460",  vu: "kr", meta: "+2,1 % i april" },
+  { num: "04", name: "Lånegivaren",       sub: "Studielån · CSN · ränta 1,7 %",                v: "38 200", vu: "kr", meta: "Skuld kvar" },
+  { num: "05", name: "Tibber & Folksam",  sub: "El · Hemförsäkring · Olycksfall",              v: "812",    vu: "kr", meta: "El april" },
+  { num: "06", name: "Skatteverket",      sub: "Förifylld deklaration · 1 ändring föreslås",   v: "2 maj",  vu: "",   meta: "Sista dag", pulse: true },
+  { num: "07", name: "Pensionsmyndigheten", sub: "Inkomst- + premiepension · prognos 2061",     v: "12 800", vu: "/mån", meta: "Vid 67" },
+  { num: "08", name: "Hyresvärden",       sub: "Stockholmshem · 2:a · Hökarängen",             v: "7 240",  vu: "kr", meta: "1 maj" },
+];
+function renderCorridor() {
+  const box = document.getElementById("corridor");
+  box.innerHTML = ROOMS.map(r => `
+    <a class="room" href="#">
+      <span class="room-num">${r.num}</span>
+      <div>
+        <div class="room-name">${r.name}${r.pulse ? '<span class="room-pulse"></span>' : ''}</div>
+        <div class="room-sub">${r.sub}</div>
+      </div>
+      <div>
+        <div class="room-num-side">${r.v}<em>${r.vu}</em></div>
+        <div class="room-num-meta">${r.meta}</div>
+      </div>
+    </a>
+  `).join("");
+}
+renderCorridor();
+
+// === SKRIVBORDET (5 verktyg-genvägar) ===
+const TOOLS = [
+  { name: "Bokföring",        sub: "Senast: 28 april",      num: "12 ok", numMeta: "Att klassa", flag: true,  emValue: true },
+  { name: "Budget april",     sub: "15 kategorier · 22 dgr", num: "78 %",  numMeta: "Förbrukad" },
+  { name: "Mina mål",         sub: "Buffert · Körkort · Interrail", num: "4", numMeta: "Aktiva" },
+  { name: "Skattedeklaration", sub: "Granska 1 förslag",    num: "Öppen", numMeta: "2 maj",      flag: true },
+  { name: "Reflektioner",     sub: "Senast 17 april",        num: "1",     numMeta: "Prompt" },
+];
+function renderDesk() {
+  const box = document.getElementById("desk");
+  box.innerHTML = TOOLS.map(t => `
+    <a class="tool ${t.flag ? 'flag' : ''}" href="#">
+      <div>
+        <div class="tool-name">${t.name}</div>
+        <div class="tool-sub">${t.sub}</div>
+      </div>
+      <div>
+        <div class="tool-num">${t.emValue ? `<em>${t.num.split(' ')[0]}</em> ${t.num.split(' ').slice(1).join(' ')}` : t.num}</div>
+        <div class="tool-sub">${t.numMeta}</div>
+      </div>
+    </a>
+  `).join("");
+}
+renderDesk();
+
 const SIDE = document.getElementById("side");
 const CORRIDOR = document.getElementById("corridor");
 const DESK = document.getElementById("desk");
