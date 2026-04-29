@@ -1387,6 +1387,75 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-12">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">16 · Aktör 12</div>
+    <h2 class="h-section">Echo — den <em>sokratiska</em> följeslagaren.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Ec</div>
+        <div>
+          <div class="actor-name">Echo</div>
+          <div class="actor-role">Sokratisk AI · pedagogisk reflektion · ej rådgivare</div>
+        </div>
+        <div class="actor-routes">
+          <code>/chat</code><br>
+          <code>(triggas i alla aktör-flöden)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Echo är inte en aktör i samma mening som banken — Echo är en
+          följeslagare som dyker upp i alla flöden. Men Echo har egen
+          identitet och egen logik (Claude Haiku 4.5, sokratisk
+          frågeställare, aldrig rådgivare). Eleven möter Echo som en
+          <em>frågeskugga</em> som dyker in efter ett val, vid en kris,
+          eller vid stagnation.
+        </p>
+
+        <div class="actor-section-eye">Var Echo dyker upp</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Efter ett val.</strong> Eleven betalar tandläkaren
+            3 200 kr → Echo: "Hade du gjort samma val om bufferten
+            legat på 6 000?"
+          </li>
+          <li>
+            <strong>Vid kris.</strong> Globalfond −8 % på en dag → Echo:
+            "Vad ändrade sig fundamentalt? Eller är det bara priset?"
+          </li>
+          <li>
+            <strong>Vid stagnation.</strong> Eleven har inte gjort något
+            val på 3 minuter → Echo: "Vad är det som gör beslutet svårt?"
+          </li>
+          <li>
+            <strong>I /chat.</strong> Som öppen samtalsyta för
+            reflektion — eleven kan när som helst ställa en fråga.
+          </li>
+          <li>
+            <strong>I lärar-vyn.</strong> Läraren kan se varje Echo-
+            konversation per elev (full transparens).
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Echo:s gränser</div>
+        <ul class="actor-list">
+          <li>Aldrig rådgivning — bara frågor</li>
+          <li>Aldrig produktnamn som rekommendation (Avanza nämns som referens)</li>
+          <li>Token-räkning loggas per anrop (lärar-budget)</li>
+          <li>Ingen elev-data till Anthropic utöver det specifika anropet</li>
+          <li>Sokratisk gräns: ej kris (då hänvisar till skol-kurator)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Chat.tsx (572 rader) för öppen samtalsyta. Triggers finns
+          inbäddade i de flesta aktör-flöden via prompts från backend.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
