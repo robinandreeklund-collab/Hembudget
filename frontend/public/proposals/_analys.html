@@ -662,6 +662,86 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-3">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">07 · Aktör 03</div>
+    <h2 class="h-section">Skatteverket — myndigheten med <em>egen logik</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">SK</div>
+        <div>
+          <div class="actor-name">Skatteverket</div>
+          <div class="actor-role">A-skatt · deklaration · K4 · skatteåterbäring</div>
+        </div>
+        <div class="actor-routes">
+          <code>/tax</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Skatteverket är inte en kalkylator inbäddad i lönespecen — det
+          är en egen myndighet med egen tidsaxel. Eleven öppnar
+          Skatteverket för att <em>göra</em> deklarationen, inte för att
+          läsa skatten. Den här portalen levererar A-skattebesked,
+          kalibrerar preliminär skatt, tar emot K4-blanketten och
+          skickar tillbaka skatteåterbäring eller kvarskatt i juni.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos Skatteverket</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Hämtar A-skattebesked</strong> en gång per år. Innehåller
+            skattetabell (32 i Stockholm, 33 i Göteborg, etc.), jobb­
+            skatte­avdrag, grundavdrag, och ev. justeringsfaktor om man har
+            sidoinkomster.
+          </li>
+          <li>
+            <strong>Lämnar in deklarationen</strong> — INK1-blanketten med
+            förtryckta uppgifter (lön, ränteavdrag, ISK-schablonintäkt) +
+            egna tillägg (avdrag för dubbla bostäder, hemresor).
+          </li>
+          <li>
+            <strong>Bifogar K4-bilagan</strong> för aktie- och fondvinster
+            som inte ligger i ISK. Beräknas från transaktionshistorik —
+            men eleven måste manuellt mappa anskaffningsvärden.
+          </li>
+          <li>
+            <strong>Tar emot beslut</strong> i juni — antingen
+            skatteåterbäring (sätts in på lönekontot via banken) eller
+            kvarskatt (eleven måste betala in före november).
+          </li>
+          <li>
+            <strong>Justerar preliminärskatten</strong> mid-year om
+            inkomsten ändras (lönelyft, sidoinkomst, nytt jobb) så hen
+            inte får kvarskatt nästa vår.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data Skatteverket äger</div>
+        <ul class="actor-list">
+          <li>Skattetabeller per kommun + ålder + eventuell föreningsavgift</li>
+          <li>A-skattebesked per inkomsttagare</li>
+          <li>Förtryckta deklarations-rader (lön, ränta, ISK-schablon)</li>
+          <li>Skatteåterbäring / kvarskatt per beskattningsår</li>
+          <li>Skiktgränser för statlig skatt (uppdateras årligen)</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: skatteverket.se inloggat-vy + Mina sidor</li>
+          <li>Datakällor: Skatteverkets faktiska tabeller (SKV2102 m.fl.), kommunalskatt 2026</li>
+          <li>Tidpunkter: deklaration öppnar mars, deadline 2 maj, beslut juni</li>
+          <li>Pensionsavgift 7 %: dras av arbetsgivaren men <em>tillgodoräknas</em> via Skatteverket → Pensionsmyndigheten</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Tax.tsx (350 rader) för aktuell deklarations-vy.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
