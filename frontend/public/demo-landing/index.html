@@ -661,7 +661,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   text-transform: none; letter-spacing: 0; color: rgba(255,255,255,0.95);
 }
 
-/* ─── Rich info-panel — frostat-glas overlay på videon ─── */
+/* ─── Rich info-panel — frostat mörkt glas overlay (editorial) ─── */
 .hero-info {
   position: relative; z-index: 2;
   margin: auto 0 0;
@@ -670,15 +670,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1fr);
   gap: clamp(28px, 4vw, 72px);
   align-items: start;
-  background: rgba(250, 250, 249, 0.92);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border-radius: 16px;
-  box-shadow:
-    0 28px 64px -24px rgba(0,0,0,0.55),
-    0 8px 18px -8px rgba(0,0,0,0.25),
-    inset 0 0 0 1px rgba(255,255,255,0.5);
-  /* max-width så den inte täcker hela bredden på desktop */
+  background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border-radius: 4px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.92);
+  /* ingen prominent shadow eller inset border — mer editorial overlay */
   max-width: calc(100% - clamp(220px, 18vw, 280px));
 }
 @media (max-width: 1000px) {
@@ -732,38 +730,38 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   font-family: var(--serif);
   font-size: clamp(40px, 5.5vw, 72px);
   font-weight: 700; letter-spacing: -1.8px; line-height: 0.95;
-  margin: 0;
+  margin: 0; color: #fff;
 }
 .hero-info-name em {
   font-family: var(--serif); font-style: italic;
-  color: var(--accent); font-weight: 500;
+  color: var(--gold); font-weight: 500;
 }
 .hero-info-role {
   font-family: var(--mono); font-size: 12px; letter-spacing: 1.4px;
-  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; color: rgba(255,255,255,0.6); font-weight: 600;
   margin-top: -4px;
 }
 .hero-info-cta {
   display: inline-flex; align-items: center; gap: 10px;
   margin-top: 12px;
   padding: 13px 22px; border-radius: 100px;
-  background: var(--fg); color: #fff;
+  background: #fff; color: var(--fg);
   text-decoration: none; font-family: inherit;
   font-size: 13.5px; font-weight: 600; letter-spacing: -0.05px;
   white-space: nowrap;
   transition: all .22s var(--ease);
-  box-shadow: 0 10px 24px -10px rgba(15,23,42,0.5);
+  box-shadow: 0 10px 24px -10px rgba(0,0,0,0.5);
   align-self: flex-start;
 }
 .hero-info-cta:hover {
-  transform: translateY(-2px); background: #1e293b;
-  box-shadow: 0 14px 30px -10px rgba(15,23,42,0.55);
+  transform: translateY(-2px); background: var(--gold);
+  box-shadow: 0 14px 30px -10px rgba(0,0,0,0.55);
 }
 .hero-info-cta-arrow { transition: transform .2s; }
 .hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(3px); }
 .hero-info-cta[aria-disabled="true"] {
-  background: transparent; color: var(--muted);
-  border: 1px solid var(--rule); cursor: default; box-shadow: none;
+  background: transparent; color: rgba(255,255,255,0.6);
+  border: 1px solid rgba(255,255,255,0.25); cursor: default; box-shadow: none;
 }
 .hero-info-cta[aria-disabled="true"]:hover {
   transform: none; background: transparent; box-shadow: none;
@@ -775,17 +773,17 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 }
 .hero-info-eyebrow {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.6px;
-  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 600;
 }
 .hero-info-story {
-  font-size: 17px; line-height: 1.55; color: #1e293b;
-  max-width: 56ch; font-weight: 500;
+  font-size: 17px; line-height: 1.55; color: rgba(255,255,255,0.88);
+  max-width: 56ch; font-weight: 400;
 }
 .hero-info-story em {
-  font-family: var(--serif); font-style: italic; color: var(--fg);
+  font-family: var(--serif); font-style: italic; color: #fff; font-weight: 500;
 }
 .hero-info-story strong {
-  color: var(--accent); font-weight: 700;
+  color: var(--gold); font-weight: 700;
 }
 .hero-info-tags {
   display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
@@ -793,7 +791,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .hero-info-tag {
   font-family: var(--mono); font-size: 10.5px; font-weight: 600;
   padding: 5px 11px; border-radius: 100px;
-  background: rgba(220,76,43,0.08); color: var(--accent);
+  background: rgba(251, 191, 36, 0.14); color: var(--gold);
   letter-spacing: 0.4px;
 }
 
@@ -804,25 +802,25 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .hero-info-quote {
   font-family: var(--serif); font-style: italic;
   font-size: 17px; line-height: 1.45;
-  color: var(--fg);
+  color: #fff;
   padding: 4px 0 4px 18px;
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--gold);
   margin: 0; max-width: 28ch;
 }
 .hero-info-quote cite {
   display: block; margin-top: 10px;
   font-family: var(--mono); font-style: normal;
   font-size: 10.5px; letter-spacing: 1.4px;
-  text-transform: uppercase; color: var(--muted);
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
 }
 .hero-info-week {
   display: flex; flex-direction: column; gap: 8px;
-  padding-top: 18px; border-top: 1px solid var(--rule);
+  padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.1);
 }
 .hero-info-week-title {
   font-family: var(--mono); font-size: 9.5px;
   letter-spacing: 1.6px; text-transform: uppercase;
-  color: var(--muted); font-weight: 700;
+  color: rgba(255,255,255,0.55); font-weight: 700;
 }
 .hero-info-week-list {
   display: flex; flex-direction: column; gap: 4px;
@@ -832,15 +830,15 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   gap: 10px; align-items: baseline;
   font-family: var(--mono); font-size: 11.5px;
   padding: 4px 0;
-  border-bottom: 1px dotted var(--rule);
+  border-bottom: 1px dotted rgba(255,255,255,0.1);
 }
 .hero-info-week-item:last-child { border-bottom: 0; }
 .hero-info-week-day {
-  font-weight: 700; color: var(--accent);
+  font-weight: 700; color: var(--gold);
   letter-spacing: 0.6px;
 }
 .hero-info-week-label {
-  color: #334155; font-weight: 500;
+  color: rgba(255,255,255,0.85); font-weight: 500;
   letter-spacing: -0.05px;
 }
 
@@ -1431,12 +1429,16 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
       ctaEl.setAttribute('href', fig.getAttribute('href'));
     }
 
-    // Force reflow så CSS-animation triggas igen
+    // Force animation restart via dubbel requestAnimationFrame —
+    // garanterar att browsern processar removeAttribute innan setAttribute
     heroInfo.removeAttribute('data-active');
-    void heroInfo.offsetWidth;
-    heroInfo.setAttribute('data-active', personaKey);
-    if (isAuto) heroInfo.setAttribute('data-auto', '1');
-    else heroInfo.removeAttribute('data-auto');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        heroInfo.setAttribute('data-active', personaKey);
+        if (isAuto) heroInfo.setAttribute('data-auto', '1');
+        else heroInfo.removeAttribute('data-auto');
+      });
+    });
 
     // Crossfade bakgrunds-video
     bgVideos.forEach(v => {
