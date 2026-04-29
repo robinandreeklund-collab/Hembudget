@@ -35,6 +35,11 @@ def build_app() -> FastAPI:
         title="Hembudget API",
         version="0.1.0",
         description="Lokal AI-driven familjeekonomi (Nemotron Nano 3 via LM Studio)",
+        # FastAPI:s auto-docs flyttas till /api/* så /docs är fri för
+        # editorial-dokumentationen som SPA:n serverar.
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        openapi_url="/api/openapi.json",
     )
     # CORS:
     # - demo-mode: tillåt alla origins (publik Render-deploy)
