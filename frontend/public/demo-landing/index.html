@@ -257,6 +257,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   color: rgba(255,255,255,0.88); line-height: 1.55; margin-bottom: 28px;
   text-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
+.hero p.is-flipping {
+  animation: subhead-flip 0.7s cubic-bezier(.34, 1.18, .64, 1) both;
+}
+@keyframes subhead-flip {
+  from { opacity: 0; transform: translateY(10px); filter: blur(2px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
 .hero-stats {
   display: flex; gap: 36px; padding-top: 24px;
   border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap;
@@ -690,20 +697,35 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   color: rgba(255,255,255,0.6);
   flex-wrap: wrap;
 }
-/* Scrolla-för-mer pulserar storlek + studsar var ~5e sek */
-.cover-credits-scroll {
-  display: inline-block;
-  animation: scroll-bounce 5s cubic-bezier(.34, 1.56, .64, 1) infinite;
-  transform-origin: center;
-  color: rgba(255,255,255,0.85);
+/* Vertikal scroll-text på vänster kant av info-panelen */
+.hero-info-scroll {
+  position: absolute;
+  left: -36px; top: 50%;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 2.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  pointer-events: none;
+  white-space: nowrap;
 }
-@keyframes scroll-bounce {
-  0%, 80%, 100% { transform: scale(1) translateY(0); }
-  84%           { transform: scale(1.18) translateY(-2px); color: var(--gold); }
-  88%           { transform: scale(0.94) translateY(3px); }
-  92%           { transform: scale(1.08) translateY(-1px); }
+.hero-info-scroll-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+.hero-info-scroll-arrow {
+  font-size: 14px;
+  animation: scroll-arrow-bounce 5s cubic-bezier(.34, 1.56, .64, 1) infinite;
+  transform-origin: center;
+}
+@keyframes scroll-arrow-bounce {
+  0%, 80%, 100% { transform: scale(1) translateY(0); color: rgba(255,255,255,0.55); }
+  84%           { transform: scale(1.4) translateY(2px); color: var(--gold); }
+  88%           { transform: scale(0.92) translateY(6px); }
+  92%           { transform: scale(1.15) translateY(3px); }
   96%           { transform: scale(1) translateY(0); }
 }
+@media (max-width: 800px) { .hero-info-scroll { display: none; } }
 .cover-credits-sep {
   display: inline-block; width: 4px; height: 4px;
   background: var(--accent); border-radius: 50%;
@@ -717,7 +739,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 /* ─── Rich info-panel — frostat mörkt glas overlay (editorial, kompakt) ─── */
 .hero-info {
   position: relative; z-index: 2;
-  margin: 0;
+  margin: 0 0 0 50px;
   padding: 18px clamp(20px, 2.6vw, 32px);
   display: grid;
   grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
@@ -1158,10 +1180,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
           <span data-h1-b> blir </span>
           <em data-h1-c>verklighet</em><span>.</span>
         </h1>
-        <p>
-          Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val
-          har en konsekvens, varje konsekvens lär en lektion.
-        </p>
+        <p id="heroSubhead">Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val har en konsekvens, varje konsekvens lär en lektion.</p>
       </div>
 
       <div class="cover-credits">
@@ -1170,14 +1189,16 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         <span>Ill. Ekonomilabbet 2026</span>
         <span class="cover-credits-sep" aria-hidden="true"></span>
         <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
-        <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span class="cover-credits-scroll">Scrolla för mer ↓</span>
       </div>
 
       <!-- Frostat-glas info-panel som overlay på videon, uppdateras
            via auto-rotation eller klick på höger-nav. Sist i DOM så
            den ligger mot bottnen av hero. -->
       <div class="hero-info" id="heroInfo">
+        <span class="hero-info-scroll" aria-hidden="true">
+          <span class="hero-info-scroll-text">Scrolla för mer</span>
+          <span class="hero-info-scroll-arrow">↓</span>
+        </span>
         <div class="hero-info-empty">Hovra över en karaktär</div>
         <div class="hero-info-content">
 
@@ -1241,6 +1262,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
       <a class="figure" data-persona="linda" href="/demo-landing/4-vecka-djupdyk.html"
          data-theme="Arbetslivet · Vol. 01"
          data-h1a="Lärobok" data-h1b=" blir " data-h1c="verklighet"
+         data-subhead="Lönesamtal med AI-Maria, pension som växer från 7 %, en pentagon som tippar när tandläkaren ringer. Hennes vecka är full av val."
          data-name="Linda"
          data-role="22 · IT-konsult · Stockholm"
          data-story="En vecka full av val: ett <strong>lönesamtal</strong> som ger 1 295 kr/mån, en oväntad <em>tandläkarakut</em> torsdag, en chef som föreslår karriärutbildning fredag. Varje val flyttar något — saldot, pensionspotten, eller pentagonens balans."
@@ -1252,6 +1274,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
       <a class="figure" data-persona="evelina" href="#" data-soon
          data-theme="Investering · Vol. 02"
          data-h1a="Krasch" data-h1b=" blir " data-h1c="kunskap"
+         data-subhead="ISK växer 12,4 %. Globalfond ner 8 % på en dag. Echo coachar — tid i marknaden, inte timing av marknaden."
          data-name="Evelina"
          data-role="27 · ekonom · Malmö"
          data-story="Hon har följt börsen sedan 22, sett <em>Coronakraschen 2020</em> och vet att marknaden inte är gambling — det är planering. ISK växer <strong>12,4 %</strong> i år, men det är inte siffran som lär henne mest. Det är hur hon hanterar −8 %-dagar."
@@ -1263,6 +1286,7 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
       <a class="figure" data-persona="peter" href="#" data-soon
          data-theme="Vardagsekonomin · Vol. 03"
          data-h1a="Räkningar" data-h1b=" blir " data-h1c="rutin"
+         data-subhead="23 fakturor i månaden, autogiron som signeras, en buffert som testas. Vardagen blir hanterbar genom plan."
          data-name="Peter"
          data-role="38 · småbarnsförälder · Göteborg"
          data-story="<strong>23 fakturor</strong> i månaden, hyra 8 200 kr, autogiron som måste signeras innan löningen den 25:e. Echo coachar Peter att <em>sortera prioriteringar</em> — inte att maximera avkastning. Vardagen är inte gambling, det är planering."
@@ -1521,6 +1545,18 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           h1.classList.add('is-flipping');
+        });
+      });
+    }
+
+    // Uppdatera subhead-paragraf med fade-up animation
+    const subhead = document.getElementById('heroSubhead');
+    if (subhead && fig.dataset.subhead) {
+      subhead.classList.remove('is-flipping');
+      requestAnimationFrame(() => {
+        subhead.textContent = fig.dataset.subhead;
+        requestAnimationFrame(() => {
+          subhead.classList.add('is-flipping');
         });
       });
     }
