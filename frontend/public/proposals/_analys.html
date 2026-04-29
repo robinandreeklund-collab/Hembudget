@@ -137,6 +137,102 @@ section h2 { margin-bottom: 22px; }
   border: 1px solid rgba(16, 185, 129, 0.3);
   margin-left: 10px; vertical-align: middle;
 }
+
+/* Aktör-block (återanvänds 14 ggr) */
+.actor {
+  margin: 32px 0;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+.actor-head {
+  display: grid; grid-template-columns: 64px 1fr auto; gap: 18px; align-items: center;
+  padding: 22px 26px;
+  border-bottom: 1px solid var(--rule);
+  background: linear-gradient(180deg, #fafaf9 0%, #fff 100%);
+}
+.actor-chip {
+  width: 64px; height: 64px;
+  border-radius: 8px;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 17px; font-weight: 700;
+  letter-spacing: 1px;
+  background: rgba(220, 76, 43, 0.10);
+  color: var(--accent);
+  border: 1px solid rgba(220, 76, 43, 0.25);
+}
+.actor-name {
+  font-family: var(--serif); font-size: 28px; font-weight: 700;
+  letter-spacing: -0.7px; line-height: 1.05;
+  margin-bottom: 4px;
+}
+.actor-name em { font-style: italic; color: var(--accent); font-weight: 500; }
+.actor-role {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.actor-routes {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.4px;
+  text-align: right;
+}
+.actor-routes code {
+  display: inline-block;
+  background: rgba(220, 76, 43, 0.06);
+  padding: 2px 8px;
+  border-radius: 100px;
+  border: 1px solid rgba(220, 76, 43, 0.2);
+  margin: 2px 2px;
+  font-size: 11px;
+}
+.actor-body {
+  padding: 24px 26px 28px;
+  font-size: 15px; line-height: 1.65; color: #1f2937;
+}
+.actor-body strong { color: var(--fg); font-weight: 700; }
+.actor-body em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.actor-body p { margin: 0 0 14px; }
+.actor-body p:last-child { margin-bottom: 0; }
+.actor-section-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+  margin: 18px 0 8px;
+}
+.actor-section-eye::before { content: "● "; }
+.actor-list {
+  margin: 8px 0 14px 22px;
+  padding: 0;
+}
+.actor-list li {
+  margin: 6px 0;
+  line-height: 1.55;
+}
+.actor-flow {
+  margin: 14px 0;
+  padding: 14px 18px;
+  background: rgba(15, 23, 42, 0.03);
+  border-left: 3px solid var(--fg);
+  border-radius: 0 4px 4px 0;
+  font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.6;
+  color: #1f2937;
+}
+.actor-flow strong {
+  color: var(--accent); font-weight: 700;
+}
+.actor-cite {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.actor-cite::before { content: "→ "; color: var(--accent); }
 </style>
 </head>
 <body>
