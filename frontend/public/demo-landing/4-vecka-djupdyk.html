@@ -2107,6 +2107,214 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
   </div>
 </template>
 
+<template id="tpl-wellbeing">
+  <div class="deep-content" data-deep-content="wellbeing"
+       data-kicker="Wellbeing-pentagon" data-title="Hela livet i fem axlar">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>5 dimensioner</strong>1 av tre</span>
+          </div>
+          <h3>Ekonomi är en av fem axlar — inte den enda.</h3>
+          <p class="deep-slide-lede">
+            Plattformens kärna är inte saldot. Det är pentagonen. Fem dimensioner
+            av välmående, vägda för att reflektera hur livet faktiskt fungerar:
+            <strong>Ekonomi 25 % · Hälsa 20 % · Relation 20 % · Karriär 15 %
+            · Fritid 20 %</strong>. Vikten är baserad på forskning om subjektiv
+            livskvalitet — pengar betyder något, men inte allt.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="deep-slide-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); color: #fff; padding: 32px;">
+            <div class="mockup-eyebrow" style="color: var(--gold); margin-bottom: 12px;">Pentagonens vikter</div>
+            <div style="display:flex; justify-content:center; padding: 12px 0;">
+              <svg width="240" height="200" viewBox="0 0 240 200">
+                <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="rgba(255,255,255,0.2)" stroke-dasharray="3 3"/>
+                <polygon points="120,30 200,84 175,170 65,170 40,84" fill="rgba(251,191,36,0.18)" stroke="var(--gold)" stroke-width="1.8"/>
+                <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">EKONOMI · 25</text>
+                <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">RELATION · 20</text>
+                <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">FRITID · 20</text>
+                <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">KARRIÄR · 15</text>
+                <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">HÄLSA · 20</text>
+              </svg>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); font-family: var(--mono); font-size: 12px;">
+              <span style="color: rgba(255,255,255,0.78);">Total summa</span><strong style="color: #fff;">100 %</strong>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Vägt snitt baserat på forskning</div>
+          <p class="deep-slide-callout-body">
+            Vikterna är hämtade från Världshälsoorganisationens livskvalitetsindex
+            och svensk subjektiv-välbefinnande-forskning (SCB SuLNS). Ekonomi väger
+            mest eftersom det påverkar de andra fyra; hälsa och fritid påverkar
+            varandra; karriär väger minst eftersom värdet av karriär ofta
+            <em>internaliseras</em> i ekonomi över tid.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Ekonomi</strong>25 % · saldo, buffert, skuld</li>
+            <li><strong>Hälsa</strong>20 % · sömn, stress, fysisk</li>
+            <li><strong>Relation</strong>20 % · familj, vänner, partner</li>
+            <li><strong>Fritid</strong>20 % · hobby, vila, glädje</li>
+            <li><strong>Karriär</strong>15 % · utveckling, mål</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Skulle dina vikter se annorlunda ut? Är ekonomi 25 % för dig — eller mindre? Mer? Vad säger det om hur du vill leva?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · självreflektion · första gången</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Källor</strong>WHO QoL · SCB SuLNS</div>
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>Vägt aritmetiskt snitt</div>
+          <div class="deep-slide-foot-rich-section"><strong>Justerbart</strong><em>per elev · max ±5 %/dim</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Hur värdet räknas</strong>2 av tre</span>
+          </div>
+          <h3>Varje val flyttar någon axel.</h3>
+          <p class="deep-slide-lede">
+            Varje dimension är 0–100. Inkomst → ekonomi. Tandläkare → hälsa.
+            Familjekväll → relation. Övertid → karriär ↑ men fritid ↓. Plattformen
+            mappar varje val till påverkan över alla fem axlar — ofta motstridig.
+            Det är där modellen blir <em>livssimulering</em>, inte ekonomi-quiz.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Lönesamtal +1 295 kr/mån</div>
+              <div class="flow-row-num" style="color: #10b981;">EKO +6 / KAR +4</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Tandläkare 3 200 kr</div>
+              <div class="flow-row-num">HÄL −6 / EKO −2</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">Karriärutbildning 40 h</div>
+              <div class="flow-row-num" style="color: #fbbf24;">KAR +12 / FRI −8 / REL −4</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Veckans nettoeffekt</div>
+              <div class="flow-row-num">+ 4 WB</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Inget val är gratis.</strong> Karriärutbildningen ger karriär +12,
+              men kostar 8 fritid och 4 relation. Linda valde det ändå — för att hon
+              vägde långsiktigt mot kortsiktigt. Echo coachade.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Multi-axel-mapping per beslut</div>
+          <p class="deep-slide-callout-body">
+            Plattformen har ~120 valstyper, var och en mappad till deltavärden över
+            alla 5 dimensioner. Mappningen är konfigurerad av lärar-superadmin
+            (kan justeras per klass). Varje val visar Linda förväntad effekt
+            <em>innan</em> hon trycker ja.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Valstyper</strong>~120 · finansiella + livsstilsval</li>
+            <li><strong>Mapping</strong>5-tuple delta per val</li>
+            <li><strong>Förhandsvy</strong>Ja, innan accept</li>
+            <li><strong>Justering</strong>Per klass · super-admin</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Karriärutbildningen kostar dig 12 fritids-poäng. Är de 12 poängen värda mer för dig än 8 % löneökning om 18 månader?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · fredag eftermiddag</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>5-tuple delta-mappning</div>
+          <div class="deep-slide-foot-rich-section"><strong>Förhandsvy</strong>Ja</div>
+          <div class="deep-slide-foot-rich-section"><strong>Veckosumma</strong><em>+ 4 WB · v.48</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Trender</strong>3 av tre</span>
+          </div>
+          <h3>12 veckors trend visar mönstret.</h3>
+          <p class="deep-slide-lede">
+            En vecka säger ingenting. Tolv veckor säger allt. Lindas total-WB har
+            stigit från <strong>68 → 72</strong> över tre månader. Tandläkaren
+            tippade hälsa, men karriärsamtalet kompenserade. Ekonomi har stigit
+            stadigt sedan första lönesamtalet. Mönstret är <em>uppåtgående</em>
+            — och Linda ser det själv på söndag-rapporten.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="vis-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); padding: 28px;">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● 12-veckors trend</span>
+              <span class="vis-card-meta">v.37 → v.48</span>
+            </div>
+            <h3 class="vis-card-title">Linda · WB-index över tid</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 68%;"><span class="vis-bar-num">68</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.37</span></div>
+              <div class="vis-bar" style="--h: 70%;"><span class="vis-bar-num">70</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.41</span></div>
+              <div class="vis-bar" style="--h: 64%;"><span class="vis-bar-num">64</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.44</span></div>
+              <div class="vis-bar" style="--h: 69%;"><span class="vis-bar-num">69</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.46</span></div>
+              <div class="vis-bar is-peak" style="--h: 72%;"><span class="vis-bar-num">72</span><span class="vis-bar-fill"></span><span class="vis-bar-r">v.48 ★</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Trend</span>
+              <strong>+ 4 WB · 3 mån</strong>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Veckosnapshot + årstrend</div>
+          <p class="deep-slide-callout-body">
+            Plattformen tar en snapshot av WB varje söndag kl 23:59. Lärare ser hela
+            klassens snitt + spread över tid. Eleven ser sin egen trend och kan jämföra
+            mot klassens — anonymt. Mål är inte att vinna utan att se sitt mönster.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Snapshot</strong>Sön 23:59 · veckans final</li>
+            <li><strong>Visualisering</strong>Bar-graf · 12 veckor</li>
+            <li><strong>Lärar-vy</strong>Klassens snitt · spread</li>
+            <li><strong>Elev-vy</strong>Anonym jämförelse · klass</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Ditt WB är 72 — högre än för 3 månader sen, men lägre än v.41. Vad hände v.44 som drog ner? Och vad skulle du göra annorlunda nästa gång?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · trend-reflektion · söndag review</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Snapshot</strong>Sön 23:59</div>
+          <div class="deep-slide-foot-rich-section"><strong>Trend</strong>72 / 100 · ↑ 4</div>
+          <div class="deep-slide-foot-rich-section"><strong>Lärobok blir</strong><em>verklighet</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
 <nav class="timeline" id="timeline" aria-label="Kontextuell tidslinje">
   <span class="tl-rail" aria-hidden="true"></span>
   <span class="tl-cursor" aria-hidden="true"></span>
