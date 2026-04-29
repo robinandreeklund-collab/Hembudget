@@ -87,7 +87,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .hero {
   min-height: 100vh;
   display: flex; flex-direction: column;
-  padding: 90px clamp(24px, 6vw, 80px) 36px clamp(32px, 8vw, 120px);
+  padding: 90px clamp(24px, 6vw, 80px) 18px clamp(32px, 8vw, 120px);
   position: relative; overflow: hidden;
   background: #0f172a;
 }
@@ -125,6 +125,8 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   max-width: 1400px; margin: 0 auto;
   width: 100%; position: relative; z-index: 2;
   display: flex; flex-direction: column;
+  flex: 1;
+  min-height: calc(100vh - 126px);
 }
 /* Ambient gradient-mesh som driftar långsamt */
 .hero::before {
@@ -660,10 +662,11 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   font-size: 10.5px;
 }
 
-/* ─── Magazine credits — ljust på mörk video ─── */
+/* ─── Magazine credits — ljust på mörk video, ligger ovanför info-panelen ─── */
 .cover-credits {
   position: relative; z-index: 2;
-  margin-top: 16px; padding: 14px 0 0;
+  margin: auto 0 14px;
+  padding: 0;
   display: flex; justify-content: center; align-items: center;
   gap: clamp(14px, 2vw, 32px);
   font-family: var(--mono); font-size: 10px;
@@ -698,7 +701,7 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 /* ─── Rich info-panel — frostat mörkt glas overlay (editorial, kompakt) ─── */
 .hero-info {
   position: relative; z-index: 2;
-  margin: auto 0 0;
+  margin: 0;
   padding: 18px clamp(20px, 2.6vw, 32px);
   display: grid;
   grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
@@ -1133,8 +1136,19 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         </p>
       </div>
 
+      <div class="cover-credits">
+        <span class="cover-credits-vol">Vol. 01</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>Ill. Ekonomilabbet 2026</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span class="cover-credits-scroll">Scrolla för mer ↓</span>
+      </div>
+
       <!-- Frostat-glas info-panel som overlay på videon, uppdateras
-           via auto-rotation eller klick på höger-nav -->
+           via auto-rotation eller klick på höger-nav. Sist i DOM så
+           den ligger mot bottnen av hero. -->
       <div class="hero-info" id="heroInfo">
         <div class="hero-info-empty">Hovra över en karaktär</div>
         <div class="hero-info-content">
@@ -1167,16 +1181,6 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
           </aside>
 
         </div>
-      </div>
-
-      <div class="cover-credits">
-        <span class="cover-credits-vol">Vol. 01</span>
-        <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span>Ill. Ekonomilabbet 2026</span>
-        <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
-        <span class="cover-credits-sep" aria-hidden="true"></span>
-        <span class="cover-credits-scroll">Scrolla för mer ↓</span>
       </div>
     </div>
 
