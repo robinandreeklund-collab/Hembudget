@@ -2440,6 +2440,45 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="conclusion">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">46 · Slutsats</div>
+    <h2 class="h-section">Vad detta system <em>är</em>.</h2>
+    <div class="prose">
+      <p>
+        Ekonomilabbet är inte en finansapp för ungdomar. Det är en
+        <em>simulator</em> av det vuxna ekonomiska livet, byggd som en
+        skolmiljö, där eleven får möta fjorton aktörer i en realistisk
+        sekvens av flöden — BankID-signering, kreditprövning, lönesamtal,
+        autogiro — och sedan få verktygen att tänka efter med. Lärarens
+        roll är att orkestrera, observera, kommentera och bedöma.
+      </p>
+      <p>
+        Tre saker skiljer detta från konkurrerande pedagogiska
+        produktidéer. För det första: <em>aktör/verktyg-uppdelningen</em>
+        — ungdomar lär sig genom att möta riktiga roller, inte genom att
+        läsa om dem. För det andra: <em>friktion som information</em> —
+        vi kortar inte ner BankID-flödet bara för att vi kan. För det
+        tredje: <em>AI som spegel</em> — Claude blir aldrig orakel.
+      </p>
+      <p>
+        Den tekniska arkitekturen reflekterar pedagogiken. Multi-tenant
+        SQLite-per-elev (eller Postgres med tenant_id-isolering i prod)
+        gör att varje elev har sin egen ekonomiska verklighet utan att
+        spilla över på klasskamrater. ContextVar-baserat scope säkerställer
+        att lärarens impersonation aldrig läcker. Token-budget per lärare
+        gör AI:n till en knapp resurs som måste användas medvetet. Allt
+        hänger ihop.
+      </p>
+      <p>
+        Den här analysen har lyft fram <em>fjorton aktörer</em>,
+        <em>fem detaljerade flöden</em>, <em>tio kärnverktyg</em>, <em>tre
+        lärarvyer</em> (utbyggda till <em>15 lärar-routes</em> i den
+        verkliga inventeringen), <em>23 elev-routes</em> och tre
+        designprinciper. Det är systemet. Det är vad vi designar emot.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
