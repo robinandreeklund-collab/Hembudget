@@ -1175,6 +1175,85 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-9">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">13 · Aktör 09</div>
+    <h2 class="h-section">Bankgirot — det <em>osynliga</em> mellanlagret.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">BG</div>
+        <div>
+          <div class="actor-name">Bankgirot</div>
+          <div class="actor-role">Autogiro · OCR · betal-infrastruktur</div>
+        </div>
+        <div class="actor-routes">
+          <code>(infrastruktur — mest synlig i banken + kommande)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Bankgirot är ett mellanlager — eleven besöker det inte aktivt.
+          Men det förklarar <em>hur</em> autogiron flyttar pengar mellan
+          banker, hur OCR-numret fungerar, varför stoppfristen är 1
+          bankdag innan dragning. När eleven förstår Bankgirot förstår
+          hen varför EkonomilabbetID kan signera 18 fakturor på en gång —
+          det är samma tekniska kontrakt.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven möter från Bankgirot</div>
+        <ul class="actor-list">
+          <li>
+            <strong>OCR-nummer på fakturor.</strong> Mod10-checksumma
+            (Luhn), unik per faktura. Eleven förstår varför man inte
+            kan slumpa fram ett OCR och betala.
+          </li>
+          <li>
+            <strong>Autogiro-medgivande.</strong> Eleven signerar med
+            EkonomilabbetID (vår BankID-simulator) — Bankgirot tar emot,
+            registrerar, drar pengar på avtalad dag.
+          </li>
+          <li>
+            <strong>Stoppfrist 1 bankdag.</strong> Eleven kan stoppa
+            ett autogiro till kl 16:00 dagen före dragning. Efter det
+            är det låst.
+          </li>
+          <li>
+            <strong>Bankdagar.</strong> Helger, röda dagar, midsommarafton
+            — Bankgirot kör inte. Eleven ser att en faktura med
+            förfallodag på söndag dras på fredag istället.
+          </li>
+          <li>
+            <strong>Bankgirostandard 0–9999999.</strong> När eleven
+            betalar manuellt skriver hen Bankgironummer + OCR.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data Bankgirot styr</div>
+        <ul class="actor-list">
+          <li>OCR-checksum-validering (Mod10/Luhn)</li>
+          <li>Autogiro-medgivanden + status (active/cancelled/pending)</li>
+          <li>Bankdagskalender (svenska helger + bank-stoppar)</li>
+          <li>Dragnings-kalender per medgivande</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Bankgirot AB är ett delägt clearinginstitut (Riksbanken-licens)</li>
+          <li>Standarden BG-format används av i princip alla svenska banker</li>
+          <li>OCR Mod10/Luhn = samma checksum som svenska personnumret slutsiffran</li>
+          <li>Stoppfrist 1 bankdag är reglerad i Bankgirot-anslutningsavtalet</li>
+        </ul>
+
+        <p class="actor-cite">
+          Bankgirot är infrastruktur — visas i banken, /upcoming, och i
+          autogiro-kontroller men har ingen egen route. Behöver inte
+          heller — det är en datalogik, inte en plats eleven besöker.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
