@@ -1473,6 +1473,22 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   margin-bottom: clamp(56px, 7vh, 80px);
 }
 @media (max-width: 900px) { .about-grid { grid-template-columns: 1fr; gap: 36px; } }
+
+/* 2-kolumnsvariant — manifest-blocken under huvudgriden, lite tystare
+   typografi, gold accent istället för orange för att markera stegvis
+   fördjupning av samma resonemang. */
+.about-grid-2 {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: clamp(28px, 4vw, 56px);
+  margin-bottom: clamp(56px, 7vh, 80px);
+  padding-top: clamp(40px, 5vh, 56px);
+  border-top: 1px solid var(--rule);
+}
+@media (max-width: 900px) { .about-grid-2 { grid-template-columns: 1fr; gap: 36px; } }
+.about-grid-2 .about-block {
+  border-top: 2px solid var(--gold);
+}
+.about-grid-2 .about-block-num { color: var(--gold); }
 .about-block {
   position: relative;
   padding-top: 22px;
@@ -2068,6 +2084,38 @@ html.lenis, html.lenis body { height: auto; }
             formar både <strong>nettoförmögenhet och livskvalitet</strong> över
             decennier. Inga kortsiktiga quiz — en levande simulering där alla vägar
             är realistiska och alla misstag lärorika.
+          </p>
+        </article>
+      </div>
+
+      <div class="about-grid-2">
+        <article class="about-block">
+          <div class="about-block-num">● 04 · Ett svar på skolans fyrkantighet</div>
+          <h3>Bortom PDF:en där svaret fortfarande är 1+1.</h3>
+          <p>
+            Utifrån egna erfarenheter är den svenska skolan fortfarande
+            <em>fyrkantig</em> i en värld där teknik och kunskap utvecklas i rasande
+            takt. Skolans digitala plattformar är ofta kvar på <strong>PDF i digitalt
+            format</strong> — där svaret fortfarande är 1+1. Vi går bortom detta med
+            en fullständig simulering där läraren har komplett insyn i elevens resa.
+            Vi ser det goda i dagens spel och upplevelser som engagerar, lär ut och
+            sprider kunskap som aldrig förr. Istället för att se tekniken som ett
+            hinder använder Ekonomilabbet den för att skapa <em>nya, levande vägar
+            till lärande</em> — från teori till verklighetsnära erfarenhet.
+          </p>
+        </article>
+
+        <article class="about-block">
+          <div class="about-block-num">● 05 · Vårt mål: Nya vägar för kunskap</div>
+          <h3>Beslut leder till konsekvenser — inte ett slut.</h3>
+          <p>
+            Vi söker andra vägar för kunskap, ökar engagemang och gör resan rolig och
+            spännande genom <strong>uppdrag och utmaningar med dynamiska mått</strong>.
+            Beslut leder till konsekvenser — inte ett slut. Vi simulerar inte
+            <em>"fel"</em>, utan förståelsen att avvägningar öppnar andra vägar bortom
+            drömmar som aldrig nås. Avgörande exempel: realistisk aktiehandel där
+            eleven direkt ser <strong>risker</strong> och att rikedom sällan kommer
+            över en natt.
           </p>
         </article>
       </div>
