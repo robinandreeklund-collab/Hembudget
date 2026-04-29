@@ -22,7 +22,7 @@ export default function Rubriker() {
     <EditorialLightShell
       eyebrow="Bedömningsmallar · Vol. 01"
       title={<>Bedömningsmallar med <em>fingerkänsla</em>.</>}
-      intro="Tre lager bedömning samtidigt — formativ, summativ, autentisk. Mappade mot Lgr22, Gy22 och Skolverkets bedömningsstöd. Allt utan att eleven märker att de bedöms."
+      intro="Tre lager bedömning samtidigt — formativ, summativ, autentisk. Mappade mot Lgr22, Gy25 och Skolverkets bedömningsstöd. Allt utan att eleven märker att de bedöms."
       topNavRight={<AuthAwareTopLinks variant="light" />}
     >
       <section id="tre-lager" className="edl-section">

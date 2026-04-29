@@ -173,7 +173,7 @@ export default function Lararguider() {
             <li>
               <strong>Summativ</strong> — reflektioner och quiz-resultat
               aggregeras till mastery per kompetens (12 systemkompetenser).
-              Mappade mot Lgr22/Gy22.
+              Mappade mot Lgr22/Gy25.
             </li>
             <li>
               <strong>Autentisk</strong> — eleven producerar riktiga

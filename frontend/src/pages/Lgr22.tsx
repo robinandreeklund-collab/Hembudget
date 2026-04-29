@@ -5,8 +5,8 @@ import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
 export default function Lgr22() {
   return (
     <EditorialLightShell
-      eyebrow="Lgr22 + Gy22 · Kunskapskrav"
-      title={<>Mappning mot <em>Lgr22 + Gy22</em>.</>}
+      eyebrow="Lgr22 + Gy25 · Kunskapskrav"
+      title={<>Mappning mot <em>Lgr22 + Gy25</em>.</>}
       intro="Varje moment i Ekonomilabbet matchar specifika kunskapskrav från svenska läroplanen. Den här sidan visar exakt hur — kurs för kurs, ämne för ämne."
       topNavRight={<AuthAwareTopLinks variant="light" />}
     >
@@ -133,10 +133,10 @@ export default function Lgr22() {
       </section>
 
       <section id="privatekonomi-gy" className="edl-section">
-        <h2 className="edl-h2">Privatekonomi (Gy22)</h2>
+        <h2 className="edl-h2">Privatekonomi (Gy25)</h2>
         <div className="edl-prose">
           <p>
-            Gy22-kursen <em>Privatekonomi 100p</em> är nästan helt täckt av
+            Gy25-kursen <em>Privatekonomi 100p</em> är nästan helt täckt av
             plattformen. Här mappas det centrala innehållet en-till-en:
           </p>
           <ul>
@@ -184,7 +184,7 @@ export default function Lgr22() {
       </section>
 
       <section id="foretagsekonomi-gy" className="edl-section">
-        <h2 className="edl-h2">Företagsekonomi 1 + 2 (Gy22)</h2>
+        <h2 className="edl-h2">Företagsekonomi 1 + 2 (Gy25)</h2>
         <div className="edl-prose">
           <p>
             Linda och Evelina-spåren passar för:
@@ -211,7 +211,7 @@ export default function Lgr22() {
       </section>
 
       <section id="sh-gy" className="edl-section">
-        <h2 className="edl-h2">Samhällskunskap 1a1 / 1b (Gy22)</h2>
+        <h2 className="edl-h2">Samhällskunskap 1a1 / 1b (Gy25)</h2>
         <div className="edl-prose">
           <p>
             Plattformen täcker tunga delar:
@@ -267,7 +267,7 @@ export default function Lgr22() {
         <div className="edl-callout-eye">Skolverket-källa</div>
         <p>
           Citaten ovan är parafraseringar av centrala innehåll och kunskaps­
-          krav i Lgr22 / Gy22. Originaltexterna finns publika på{" "}
+          krav i Lgr22 / Gy25. Originaltexterna finns publika på{" "}
           <a href="https://www.skolverket.se" target="_blank" rel="noopener" style={{ color: "#92400e", textDecoration: "underline" }}>skolverket.se</a>.
           Mappningen är vår tolkning — vi uppdaterar minst en gång per termin
           eller när Skolverket reviderar texterna.
