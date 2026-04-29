@@ -459,6 +459,110 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-1">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">05 · Aktör 01</div>
+    <h2 class="h-section">Banken — primärkällan, <em>inte</em> bokföringen.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">SE/ND</div>
+        <div>
+          <div class="actor-name">Banken</div>
+          <div class="actor-role">Primärbank · BankID-autentisering · pengarörelser</div>
+        </div>
+        <div class="actor-routes">
+          <code>/bank</code><br>
+          <code>/bank/sign</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Banken är inte ett saldofönster och definitivt inte en synonym
+          för <code>/transactions</code>. Banken är den <strong>egna
+          portalen</strong> som eleven besöker — på samma sätt som hen
+          loggar in på SEB eller Swedbank i verkligheten. När eleven
+          klickar in i banken byter hen kontext, autentiserar sig
+          (simulerat), och möter en separat datadomän.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör i banken</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Loggar in via BankID-simulator.</strong> Desktop visar
+            en QR-kod som eleven "scannar" (samma flöde som i
+            verkligheten). Telefonens session pollar tills mobilen
+            bekräftat med PIN. Sessionen lever 15 min och måste förnyas.
+            <code>/bank/sign</code> är publik route — telefonen behöver
+            inte vara inloggad i Ekonomilabbet.
+          </li>
+          <li>
+            <strong>Ser saldon per konto.</strong> Lönekonto, sparkonto,
+            kreditkortskonto. Ränta per konto, OCR-rörelser, datum för
+            senaste insättning.
+          </li>
+          <li>
+            <strong>Hämtar kontoutdrag.</strong> Banken är primärkälla.
+            Kontoutdraget genereras månadsvis av banken och eleven
+            <em>importerar</em> det till sin egen bokföring (separat
+            steg, separat sida — <code>/import</code>).
+          </li>
+          <li>
+            <strong>Hanterar kreditkort.</strong> Faktura, saldo,
+            kreditgräns, ränta vid delbetalning, månadens köpsumma.
+          </li>
+          <li>
+            <strong>Hanterar lån.</strong> Befintliga lån (ränta, kvarvarande,
+            amortering) plus möjligheten att <em>ansöka om nytt</em>. Vid
+            ansökan kör banken en kreditprövning med KALP-beräkning —
+            eleven ser hela motiveringen för godkänd/nekad.
+          </li>
+          <li>
+            <strong>Tar emot kommande fakturor.</strong> Nya inkommande
+            fakturor dyker upp i bankens inkorg. Eleven läser, väljer
+            <em>förfallodatum</em> (eller flyttar fram det), bekräftar
+            mottagning. Det är här eleven först möter en faktura — innan
+            den landar som autogiro eller blir påminnelse.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data banken äger</div>
+        <ul class="actor-list">
+          <li>Konton (typ, nummer, saldo, ränta, ägare)</li>
+          <li>Kontoutdrag (transaktionslista per konto, månadsvis)</li>
+          <li>Kreditkortsfaktura + delbetalningsplan</li>
+          <li>Lånebesked + amorteringsschema + KALP-rapport</li>
+          <li>Inkommande fakturor (innan eleven valt datum)</li>
+          <li>BankID-sessioner (token, sign-status, expiry)</li>
+        </ul>
+
+        <div class="actor-section-eye">Specifik flow när eleven öppnar banken</div>
+        <div class="actor-flow">
+1. Eleven klickar <strong>Banken</strong> i navet<br>
+2. Plattformen kollar om BankID-session är aktiv (≤ 15 min)<br>
+3. Om inte → desktop visar QR-kod, mobilen scannar<br>
+4. Mobilen renderar PIN-form (<strong>/bank/sign?token=…</strong>)<br>
+5. PIN bekräftas → desktop:s polling fångar status → session ny<br>
+6. Eleven landar på bankens dashboard (saldon, kontoutdrag, lån, kommande)<br>
+7. Specifika handlingar: import kontoutdrag, signera kommande, ansök lån
+        </div>
+
+        <div class="actor-section-eye">Verklighetsmappning (svensk vardag)</div>
+        <ul class="actor-list">
+          <li>Speglar: SEB, Swedbank, Nordea, Handelsbanken — vilken bank du nu använder</li>
+          <li>Datakällor: Bankgirot OCR-format, IBAN-struktur, svensk räntesats-konvention</li>
+          <li>Kreditprövning: KALP följer Konsumentverkets schablon + Finansinspektionens amorteringskrav</li>
+          <li>BankID-simulator: speglar QR + PIN-flödet, men token är vårt eget (ingen riktig BankID-koppling)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Bank.tsx (1179 rader) för faktisk implementation av QR-flow,
+          session-polling och kontoutdrag-rendering.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
