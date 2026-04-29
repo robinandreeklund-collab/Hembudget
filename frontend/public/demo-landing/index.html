@@ -661,23 +661,25 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   text-transform: none; letter-spacing: 0; color: rgba(255,255,255,0.95);
 }
 
-/* ─── Rich info-panel — frostat mörkt glas overlay (editorial) ─── */
+/* ─── Rich info-panel — frostat mörkt glas overlay (editorial, kompakt) ─── */
 .hero-info {
   position: relative; z-index: 2;
   margin: auto 0 0;
-  padding: clamp(28px, 3.5vh, 44px) clamp(28px, 3.5vw, 52px);
+  padding: 18px clamp(20px, 2.6vw, 32px);
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: clamp(28px, 4vw, 72px);
-  align-items: start;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: clamp(18px, 2.5vw, 36px);
+  align-items: center;
   background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
   backdrop-filter: blur(22px) saturate(140%);
   -webkit-backdrop-filter: blur(22px) saturate(140%);
   border-radius: 4px;
   border-top: 1px solid rgba(255,255,255,0.12);
   color: rgba(255,255,255,0.92);
-  /* ingen prominent shadow eller inset border — mer editorial overlay */
   max-width: calc(100% - clamp(220px, 18vw, 280px));
+}
+@media (max-width: 1100px) {
+  .hero-info { grid-template-columns: 1fr; gap: 14px; max-width: 100%; }
 }
 @media (max-width: 1000px) {
   .hero-info { max-width: 100%; }
@@ -726,10 +728,13 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .hero-info[data-auto] .hero-info-meta::before {
   content: "● Auto · "; color: var(--gold);
 }
+.hero-info-left {
+  display: flex; flex-direction: column; gap: 6px;
+}
 .hero-info-name {
   font-family: var(--serif);
-  font-size: clamp(40px, 5.5vw, 72px);
-  font-weight: 700; letter-spacing: -1.8px; line-height: 0.95;
+  font-size: clamp(28px, 3.6vw, 44px);
+  font-weight: 700; letter-spacing: -1.2px; line-height: 0.95;
   margin: 0; color: #fff;
 }
 .hero-info-name em {
@@ -737,20 +742,20 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   color: var(--gold); font-weight: 500;
 }
 .hero-info-role {
-  font-family: var(--mono); font-size: 12px; letter-spacing: 1.4px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.3px;
   text-transform: uppercase; color: rgba(255,255,255,0.6); font-weight: 600;
-  margin-top: -4px;
+  margin-top: 0;
 }
 .hero-info-cta {
-  display: inline-flex; align-items: center; gap: 10px;
-  margin-top: 12px;
-  padding: 13px 22px; border-radius: 100px;
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 10px;
+  padding: 9px 16px; border-radius: 100px;
   background: #fff; color: var(--fg);
   text-decoration: none; font-family: inherit;
-  font-size: 13.5px; font-weight: 600; letter-spacing: -0.05px;
+  font-size: 12.5px; font-weight: 600; letter-spacing: -0.05px;
   white-space: nowrap;
   transition: all .22s var(--ease);
-  box-shadow: 0 10px 24px -10px rgba(0,0,0,0.5);
+  box-shadow: 0 6px 16px -6px rgba(0,0,0,0.5);
   align-self: flex-start;
 }
 .hero-info-cta:hover {
@@ -767,17 +772,22 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   transform: none; background: transparent; box-shadow: none;
 }
 
-/* Mitten: story-paragraf + tags */
+/* Mitten: story-paragraf + week-chips horisontellt */
 .hero-info-middle {
-  display: flex; flex-direction: column; gap: 18px;
+  display: flex; flex-direction: column; gap: 10px;
 }
 .hero-info-eyebrow {
-  font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.6px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px;
   text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 600;
 }
 .hero-info-story {
-  font-size: 17px; line-height: 1.55; color: rgba(255,255,255,0.88);
-  max-width: 56ch; font-weight: 400;
+  font-size: 14.5px; line-height: 1.5; color: rgba(255,255,255,0.88);
+  max-width: 52ch; font-weight: 400;
+  /* Begränsa till 3 rader så panelen håller höjd */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .hero-info-story em {
   font-family: var(--serif); font-style: italic; color: #fff; font-weight: 500;
@@ -795,44 +805,44 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   letter-spacing: 0.4px;
 }
 
-/* Höger: pull-quote + vecko-tidslinje */
+/* Höger: pull-quote + vecko-chips */
 .hero-info-aside {
-  display: flex; flex-direction: column; gap: 22px;
+  display: flex; flex-direction: column; gap: 12px;
 }
 .hero-info-quote {
   font-family: var(--serif); font-style: italic;
-  font-size: 17px; line-height: 1.45;
+  font-size: 14.5px; line-height: 1.4;
   color: #fff;
-  padding: 4px 0 4px 18px;
+  padding: 2px 0 2px 14px;
   border-left: 2px solid var(--gold);
   margin: 0; max-width: 28ch;
 }
 .hero-info-quote cite {
-  display: block; margin-top: 10px;
+  display: block; margin-top: 6px;
   font-family: var(--mono); font-style: normal;
-  font-size: 10.5px; letter-spacing: 1.4px;
+  font-size: 9.5px; letter-spacing: 1.3px;
   text-transform: uppercase; color: rgba(255,255,255,0.5);
 }
 .hero-info-week {
-  display: flex; flex-direction: column; gap: 8px;
-  padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex; flex-direction: column; gap: 6px;
 }
 .hero-info-week-title {
-  font-family: var(--mono); font-size: 9.5px;
-  letter-spacing: 1.6px; text-transform: uppercase;
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 1.5px; text-transform: uppercase;
   color: rgba(255,255,255,0.55); font-weight: 700;
 }
+/* Week som horisontella chips istället för stacked rows */
 .hero-info-week-list {
-  display: flex; flex-direction: column; gap: 4px;
+  display: flex; flex-wrap: wrap; gap: 4px;
 }
 .hero-info-week-item {
-  display: grid; grid-template-columns: auto 1fr;
-  gap: 10px; align-items: baseline;
-  font-family: var(--mono); font-size: 11.5px;
-  padding: 4px 0;
-  border-bottom: 1px dotted rgba(255,255,255,0.1);
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 7px; border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px;
+  white-space: nowrap;
 }
-.hero-info-week-item:last-child { border-bottom: 0; }
 .hero-info-week-day {
   font-weight: 700; color: var(--gold);
   letter-spacing: 0.6px;
