@@ -2261,6 +2261,49 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="routes-student">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">41 · Mappning · elev-routes</div>
+    <h2 class="h-section">Elev-routes — 23 stycken efter inloggning.</h2>
+    <div class="prose">
+      <p>
+        Faktisk inventering, grupperade efter typ:
+      </p>
+      <p>
+        <strong>Aktör-portaler (8):</strong>
+        <code>/bank</code> + <code>/bank/sign</code> (Banken),
+        <code>/arbetsgivare</code> (Arbetsgivaren),
+        <code>/salaries</code> (lönespecar — del av arbetsgivaren),
+        <code>/loans</code> (Lånegivaren),
+        <code>/funds</code> + <code>/investments</code> (Avanza),
+        <code>/utility</code> (Tibber + Folksam-aggregat),
+        <code>/Callback</code> (TibberCallback-OAuth-väg),
+        <code>/upcoming</code> (kommande fakturor — bankens åtagande-vy).
+      </p>
+      <p>
+        <strong>Synthesis-verktyg (10):</strong>
+        <code>/dashboard</code>, <code>/transactions</code>,
+        <code>/import</code>, <code>/budget</code>, <code>/scenarios</code>
+        (mål + simulator), <code>/transfers</code>, <code>/tax</code>,
+        <code>/reports</code>, <code>/attachments</code> (kvitton, PDF-arkiv),
+        <code>/settings</code>.
+      </p>
+      <p>
+        <strong>Pedagogiska:</strong>
+        <code>/modules</code> + <code>/modules/:moduleId</code>,
+        <code>/achievements</code>, <code>/chat</code> (Echo),
+        <code>/messages</code> (lärar-elev-meddelanden),
+        <code>/my-batches</code> (egna uppdrag).
+      </p>
+      <p>
+        Det är 23 routes — men alla används inte i alla lägen. Hembudget-läget
+        döljer t.ex. <code>/modules</code> och <code>/achievements</code>;
+        Ekonomilabbet-läget döljer <code>/Callback</code> (Tibber). Routerna
+        finns men sidomenyn filtreras dynamiskt utifrån
+        <code>useAuth().mode</code>.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
