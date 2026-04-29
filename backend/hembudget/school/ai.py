@@ -46,6 +46,12 @@ MAX_TOKENS_RUBRIC = 600
 MAX_TOKENS_QA = 800
 MAX_TOKENS_MODULE = 2500
 MAX_TOKENS_CATEGORY = 200
+MAX_TOKENS_STOCK_TERM = 200
+MAX_TOKENS_STOCK_FEEDBACK = 300
+MAX_TOKENS_DIVERSIFICATION = 400
+MAX_TOKENS_WELLBEING_MONTHLY = 500
+MAX_TOKENS_DECLINE_NUDGE = 200
+MAX_TOKENS_INVITE_MOTIVATION = 250
 
 # app_config-nyckel där DB-nyckeln lagras. Super-admin kan sätta,
 # uppdatera och rensa den via UI. Fallback är ANTHROPIC_API_KEY-env-
@@ -72,6 +78,22 @@ def _read_api_key() -> str:
         # tillbaka till env tyst.
         log.exception("ai: kunde inte läsa API-nyckel från DB")
     return os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+
+# Senaste felmeddelandet från ett Claude-anrop. Endpoint:en plockar
+# upp detta och inkluderar i HTTP-svaret så super-admin ser orsaken
+# (t.ex. '401 authentication_error' om Anthropic-nyckeln är ogiltig).
+_last_error: Optional[str] = None
+
+
+def _set_last_error(msg: Optional[str]) -> None:
+    global _last_error
+    _last_error = msg
+
+
+def get_last_error() -> Optional[str]:
+    """Returnerar senaste fel från _call_claude (eller None)."""
+    return _last_error
 
 
 def _get_client() -> Any:
@@ -210,9 +232,14 @@ def _call_claude(
       - Haiku stöder inte adaptive thinking — lämna False där.
       - Sonnet 4.6 kör `thinking: {type: "adaptive"}` — modellen
         avgör själv hur mycket den tänker.
+
+    Vid fel: returnerar None men loggar OCH sparar senaste felmeddelandet
+    i modul-state (last_error_message) så endpoint:en kan inkludera det
+    i sitt HTTP-svar. Annars är prod omöjligt att felsöka.
     """
     client = _get_client()
     if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad (ANTHROPIC_API_KEY saknas)")
         return None
     try:
         params: dict[str, Any] = {
@@ -247,6 +274,7 @@ def _call_claude(
         cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
 
         _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        _set_last_error(None)
         return AIResult(
             text=text,
             input_tokens=in_tok,
@@ -254,8 +282,11 @@ def _call_claude(
             cache_read_tokens=cr,
             cache_creation_tokens=cc,
         )
-    except Exception:
+    except Exception as exc:
         log.exception("ai: Claude-anrop misslyckades (model=%s)", model)
+        # Spara kortfattad felklass + meddelande så endpoint kan
+        # inkludera det i 502-svaret.
+        _set_last_error(f"{type(exc).__name__}: {exc}")
         return None
 
 
@@ -571,6 +602,232 @@ Riktlinjer:
 - Säg aldrig vilket numrerat alternativ som var rätt — förklara konceptet istället, eleven ser ändå facit i UI:t."""
 
 
+CHAT_SYSTEM_PROMPT = """Du är en vänlig ekonomi-coach för svenska gymnasie-elever.
+Du svarar på frågor om personlig ekonomi, budget, lön, skatt, lån, sparande
+och investeringar. Eleven jobbar med Ekonomilabbet-plattformen.
+
+Riktlinjer:
+- Svenska, lättläst, målgrupp 16–19 år. Max ~200 ord per svar.
+- Svara konkret och pedagogiskt. Använd vardagsexempel (Swish, Spotify,
+  lön från extrajobb, ICA-konto, ISK, busskort).
+- Du har INTE tillgång till elevens egen data — om eleven frågar
+  "vad har jag på kontot" så förklara att du inte ser det och
+  hänvisa till plattformens egna vyer (Dashboard, Kontoutdrag).
+- Ge INTE personlig finansiell rådgivning ("köp aktien X"). Förklara
+  istället hur eleven själv kan tänka kring beslutet.
+- Inga emojis. Max en punktlista om det hjälper. Svara aldrig på
+  något som bryter mot svensk ekonomi-/konsumentlagstiftning."""
+
+
+def answer_chat_message(
+    *,
+    history: list[dict],
+    new_message: str,
+    teacher_id: int | None = None,
+) -> Optional["AIResult"]:
+    """Multi-turn chat med Claude. `history` = lista av {role, content} dicts
+    med tidigare 'user'- och 'assistant'-meddelanden. `new_message` = elevens
+    senaste meddelande.
+
+    Vi anropar messages.create direkt så modellen ser hela tråden — utan
+    detta skulle den glömma kontexten mellan frågor."""
+    client = _get_client()
+    if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad (ANTHROPIC_API_KEY saknas)")
+        return None
+    # Begränsa historik till de senaste 20 meddelanden så input-tokens
+    # inte växer obegränsat per session.
+    recent = history[-20:]
+    msgs = [
+        {"role": h["role"], "content": h["content"]}
+        for h in recent
+        if h.get("content") and h.get("role") in ("user", "assistant")
+    ]
+    msgs.append({"role": "user", "content": new_message})
+    try:
+        resp = client.messages.create(
+            model=MODEL_HAIKU,  # Haiku räcker för korta Q&A — billigt
+            max_tokens=600,
+            system=[
+                {
+                    "type": "text",
+                    "text": CHAT_SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            messages=msgs,
+        )
+        text_parts: list[str] = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        text = "\n".join(text_parts).strip()
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+        _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        _set_last_error(None)
+        return AIResult(
+            text=text, input_tokens=in_tok, output_tokens=out_tok,
+            cache_read_tokens=cr, cache_creation_tokens=cc,
+        )
+    except Exception as exc:
+        log.exception("ai: chat-anrop misslyckades")
+        _set_last_error(f"{type(exc).__name__}: {exc}")
+        return None
+
+
+# ---------- Lönesamtal (idé 2 i dev_v1.md) ----------
+
+NEGOTIATION_SYSTEM_TEMPLATE = """Du är HR-chefen Maria på {employer}. \
+Du har precis fått {student_name} på lönesamtal. Hen är {profession} \
+och har varit anställd i {years} år.
+
+Faktagrund för dig (eleven ser INTE detta direkt):
+- Aktuell bruttolön: {salary} kr/mån
+- Kollektivavtal: {agreement_name} med revisionsutrymme {pct}% i år
+- Satisfaction-score från arbetsplats-events: {score}/100 ({trend})
+- Senaste 3 events: {events_summary}
+
+Dina principer:
+- Du är generös men inom ramen — du kan ge ±2 procentenheter över \
+avtals-norm vid hög satisfaction (≥75); ±1 under vid låg (<40).
+- Du bemöter argumentet, inte personen.
+- Du säger ALDRIG vad avtalet sätter — eleven ska själv hänvisa \
+till det.
+- Om eleven ger sakliga argument (marknadsdata, prestation, ny \
+kompetens) → flyttar du dig 0,5–1 pp.
+- Om eleven hotar säga upp sig utan plan, säg lugnt: 'det vore \
+tråkigt, men beslutet är ditt' och håll ditt bud.
+- Du avslutar varje rond med ett konkret bud i procent.
+- Max 150 ord per svar. Ingen emoji. Ingen markdown-rubrik. \
+Ingen punktlista om det inte gör det tydligare.
+
+Detta är rond {round_no} av {max_rounds}. Sista ronden = ditt slutbud."""
+
+
+def negotiate_salary_round(
+    *,
+    history: list[dict],
+    new_message: str,
+    student_name: str,
+    profession: str,
+    employer: str,
+    salary: int,
+    years: int,
+    agreement_name: str,
+    avtal_pct: float,
+    satisfaction_score: int,
+    satisfaction_trend: str,
+    recent_events: list[str],
+    round_no: int,
+    max_rounds: int,
+    teacher_id: int | None = None,
+    max_tokens: int = 600,
+) -> Optional[AIResult]:
+    """En rond i lönesamtalet — multi-turn med Claude Haiku.
+
+    `history` = lista av {role, content} för tidigare ronder
+    (interleavade student/employer-meddelanden). Vi bygger system-
+    prompten med all kontext (avtal, satisfaction, events) så
+    modellen vet exakt vilken ram hen förhandlar inom — utan att
+    avslöja tal till eleven."""
+    client = _get_client()
+    if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad (ANTHROPIC_API_KEY saknas)")
+        return None
+
+    events_summary = "; ".join(recent_events[-3:]) if recent_events else "inga"
+
+    system = NEGOTIATION_SYSTEM_TEMPLATE.format(
+        student_name=student_name,
+        profession=profession,
+        employer=employer,
+        salary=salary,
+        years=max(0, years),
+        agreement_name=agreement_name,
+        pct=avtal_pct,
+        score=satisfaction_score,
+        trend=satisfaction_trend,
+        events_summary=events_summary,
+        round_no=round_no,
+        max_rounds=max_rounds,
+    )
+
+    # Historik som turn-by-turn-meddelanden. Eleven = "user",
+    # AI = "assistant". Vi inkluderar bara ronder som faktiskt
+    # finns för att hålla input-tokens nere.
+    msgs: list[dict] = []
+    for h in history[-2 * max_rounds :]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            msgs.append({"role": h["role"], "content": h["content"]})
+    msgs.append({"role": "user", "content": new_message})
+
+    try:
+        resp = client.messages.create(
+            model=MODEL_HAIKU,
+            max_tokens=max_tokens,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
+            messages=msgs,
+        )
+        text_parts: list[str] = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        text = "\n".join(text_parts).strip()
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        cr = getattr(usage, "cache_read_input_tokens", 0) if usage else 0
+        cc = getattr(usage, "cache_creation_input_tokens", 0) if usage else 0
+        _record_usage(teacher_id, in_tok + cr + cc, out_tok)
+        _set_last_error(None)
+        return AIResult(
+            text=text, input_tokens=in_tok, output_tokens=out_tok,
+            cache_read_tokens=cr, cache_creation_tokens=cc,
+        )
+    except Exception as exc:
+        log.exception("ai: negotiate_salary_round misslyckades")
+        _set_last_error(f"{type(exc).__name__}: {exc}")
+        return None
+
+
+def extract_proposed_pct(text: str) -> float | None:
+    """Heuristisk extraktion av AI:ns bud i procent.
+
+    Söker efter mönster som '3,5 %', '3.5%', '3 procent'. Vi
+    accepterar -10 till +20 (resten är troligen brus eller
+    referens till avtalets historik). None om inget hittas.
+    """
+    import re
+    # Mönster: ett tal (med valfri decimaldel) följt av % eller "procent"
+    pat = re.compile(
+        r"(\d+(?:[.,]\d+)?)\s*(?:%|procent)",
+        re.IGNORECASE,
+    )
+    candidates: list[float] = []
+    for m in pat.finditer(text or ""):
+        raw = m.group(1).replace(",", ".")
+        try:
+            v = float(raw)
+        except ValueError:
+            continue
+        if -10 <= v <= 20:
+            candidates.append(v)
+    if not candidates:
+        return None
+    # Sista nämnda = oftast slutbudet i ronden
+    return candidates[-1]
+
+
 def answer_student_question(
     *,
     question: str,
@@ -809,5 +1066,267 @@ def check_category_semantic_match(
             "Rapportera om elevens val är semantiskt korrekt mot facit."
         ),
         tool_schema=CATEGORY_TOOL_SCHEMA,
+        teacher_id=teacher_id,
+    )
+
+
+# ---------- Aktie-features (D4) ----------
+#
+# AI får ALDRIG ge köp/sälj-rekommendationer för enskilda aktier. Endast
+# förklaringar, observationer och pedagogiska frågor. Detta är både
+# juridiskt skyddande (simulator i skola, inte rådgivning) och
+# pedagogiskt rätt — eleven ska tänka själv.
+
+STOCK_TERM_SYSTEM_PROMPT = """Du är en pedagogisk förklarare av aktietermer på lättläst svenska för svenska gymnasieelever (16–18 år).
+
+Regler:
+- Förklara termen i 1–2 meningar, max 60 ord.
+- Använd ett vardagligt exempel om möjligt.
+- Ge ALDRIG köp- eller säljrekommendationer.
+- Säg aldrig "du borde", "jag rekommenderar", "satsa på".
+- Om termen handlar om risk eller skatt: var saklig, inte skrämmande.
+- Skriv på svenska."""
+
+
+def explain_stock_term(
+    *,
+    term: str,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Förklarar en aktieterm pedagogiskt. Anropas när eleven hovrar
+    eller klickar på 'Vad är X?' i UI:t."""
+    user = f"Förklara termen: '{term}'"
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=STOCK_TERM_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=MAX_TOKENS_STOCK_TERM,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT = """Du ger pedagogisk återkoppling till en svensk gymnasieelev som just gjort en aktieaffär i en skol-simulator.
+
+Regler:
+- Reflektera över KARAKTÄREN av affären (sektor, storlek, timing) — INTE om den var "bra eller dålig".
+- Ge ALDRIG köp- eller säljrekommendationer.
+- Nämn ev. courtage som procentandel av affären om det är högt (>1 %).
+- Om eleven skrev en motivering, kommentera den kort men ärligt.
+- 2–4 meningar, max 80 ord, lättläst svenska.
+- Ingen "du borde", inga åsikter om aktiens framtida värde."""
+
+
+def feedback_on_trade(
+    *,
+    side: str,  # "buy" | "sell"
+    ticker: str,
+    stock_name: str,
+    sector: str,
+    quantity: int,
+    price: float,
+    courtage: float,
+    total: float,
+    student_rationale: str | None,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Kort kommentar efter köp/sälj. Aktiveras bara när lärarens
+    ai_enabled=True. Tom kommentar = simulatorn fungerar utan."""
+    courtage_pct = (courtage / total * 100) if total > 0 else 0
+    rationale = student_rationale or "(ingen motivering angiven)"
+    user = (
+        f"Affär: {side} {quantity} st {stock_name} ({ticker}, {sector}).\n"
+        f"Kurs {price:.2f} kr/styck, courtage {courtage:.2f} kr "
+        f"({courtage_pct:.2f} % av affären), totalt {total:.2f} kr.\n"
+        f"Elevens motivering: {rationale}\n\n"
+        "Ge en kort pedagogisk reflektion på svenska."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=STOCK_TRADE_FEEDBACK_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=MAX_TOKENS_STOCK_FEEDBACK,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+DIVERSIFICATION_SYSTEM_PROMPT = """Du bedömer hur diversifierad en svensk gymnasieelevs aktieportfölj är.
+
+Regler:
+- Bedöm spridning över sektorer + viktning (är en sektor extremt dominerande?).
+- Säg ALDRIG vilka aktier eleven ska köpa eller sälja.
+- Om spridningen är god, säg det och förklara varför kort.
+- Om en sektor dominerar (>50 %), nämn det som observation utan att skriva "byt ut".
+- 2–4 meningar, max 80 ord, lättläst svenska."""
+
+
+def evaluate_diversification(
+    *,
+    sector_weights: dict,  # sector -> percent
+    n_holdings: int,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Bedömer portföljens diversifiering pedagogiskt."""
+    sector_lines = "\n".join(
+        f"- {sector}: {weight:.1f} %"
+        for sector, weight in sorted(
+            sector_weights.items(), key=lambda kv: -kv[1],
+        )
+    )
+    user = (
+        f"Antal innehav: {n_holdings}\n"
+        f"Sektorvikter:\n{sector_lines}\n\n"
+        "Bedöm diversifieringen pedagogiskt på svenska."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=DIVERSIFICATION_SYSTEM_PROMPT,
+        user_prompt=user,
+        max_tokens=MAX_TOKENS_DIVERSIFICATION,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+# ---------- Wellbeing-features (Fas 6) ----------
+#
+# AI används för pedagogisk reflektion runt elevens beslut. Sokratisk
+# princip: AI frågar mer än hen svarar. Aldrig fördömande, aldrig
+# 'rekommendera'. Bara hjälpa eleven se mönster i egna val.
+
+WELLBEING_MONTHLY_SYSTEM_PROMPT = """Du är en pedagogisk Wellbeing-coach för svenska gymnasieelever.
+
+Du får elevens Wellbeing-poäng över 5 dimensioner och elevens egna beslut
+denna månad. Skriv en kort, vänlig sammanfattning på lättläst svenska:
+
+Regler:
+- 4-6 meningar, max 100 ord
+- Aldrig fördömande — eleven har valt själv, det finns inte 'rätt' eller 'fel'
+- Lyft det som GICK BRA före det som behöver tänkas på
+- Ställ minst en öppen fråga som eleven kan reflektera över själv
+- Förklara samband: 'Du nekade alla sociala events och Sociala band sjönk —
+  det är förväntat'
+- Aldrig 'du borde' — använd 'du kan tänka på' eller 'fundera över'
+- Var mänsklig, inte robotisk. Korta meningar. Inga punktlistor."""
+
+
+def monthly_wellbeing_feedback(
+    *,
+    year_month: str,
+    total_score: int,
+    economy: int,
+    health: int,
+    social: int,
+    leisure: int,
+    safety: int,
+    events_accepted: int,
+    events_declined: int,
+    budget_violations: int,
+    decline_streak: int,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Pedagogisk månadsreflektion — Sokratisk, ej fördömande."""
+    prompt = (
+        f"Månad: {year_month}\n"
+        f"Total Wellbeing: {total_score}/100\n"
+        f"  Ekonomi: {economy}\n"
+        f"  Mat & hälsa: {health}\n"
+        f"  Sociala band: {social}\n"
+        f"  Fritid: {leisure}\n"
+        f"  Trygghet: {safety}\n"
+        f"\nElevens val denna månad:\n"
+        f"  Accepterade events: {events_accepted}\n"
+        f"  Nekade events: {events_declined}\n"
+        f"  Budget under Konsumentverket-minimum: "
+        f"{budget_violations} kategorier\n"
+        f"  Aktiv neka-streak: {decline_streak}\n"
+        f"\nSkriv en pedagogisk månadsreflektion. Ställ en öppen fråga "
+        f"som eleven kan tänka på inför nästa månad."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=WELLBEING_MONTHLY_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        max_tokens=MAX_TOKENS_WELLBEING_MONTHLY,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+DECLINE_NUDGE_SYSTEM_PROMPT = """Du är en pedagogisk coach för svenska gymnasieelever.
+
+Eleven har just nekat 3+ sociala events i rad. Du ska INTE skälla — ditt
+jobb är att låta eleven själv reflektera över valen.
+
+Regler:
+- 3-4 meningar, max 60 ord
+- Inga 'du borde' eller 'du måste'
+- Föreslå att eleven kan flagga 'valde sparande' om valen är medvetna
+- Påminn om att att alltid säga nej har en kostnad för relationer
+- Sluta med en öppen fråga: 'Var det medvetet?' eller liknande"""
+
+
+def decline_streak_nudge(
+    *,
+    streak_count: int,
+    recent_categories: list[str],
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Pedagogisk nudge när eleven nekat 3+ events i rad."""
+    cats = ", ".join(set(recent_categories[:5])) or "olika"
+    prompt = (
+        f"Eleven har nekat {streak_count} sociala förslag i rad "
+        f"(kategorier: {cats}).\n"
+        f"Skriv en kort, omtänksam reflektion."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=DECLINE_NUDGE_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        max_tokens=MAX_TOKENS_DECLINE_NUDGE,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
+INVITE_MOTIVATION_SYSTEM_PROMPT = """Du är en neutral pedagogisk kommentator.
+
+En klasskompis har bjudit eleven på ett event. Du ska INTE rekommendera
+att hen accepterar eller nekar — bara hjälpa eleven se båda sidor.
+
+Regler:
+- 3-4 meningar, max 60 ord
+- Nämn både kostnaden och det sociala värdet
+- Påminn om elevens budget om relevant
+- Ställ en öppen fråga som hjälper eleven bestämma sig"""
+
+
+def class_invite_motivation(
+    *,
+    inviter_name: str,
+    event_title: str,
+    cost: float,
+    cost_split_model: str,
+    swish_amount: float,
+    student_balance: float,
+    student_savings: float,
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Neutral kommentar när en klasskompis bjuder på ett event."""
+    prompt = (
+        f"{inviter_name} har bjudit eleven på '{event_title}'.\n"
+        f"Total kostnad: {cost:.0f} kr (modell: {cost_split_model})\n"
+        f"Elevens del (Swish): {swish_amount:.0f} kr\n"
+        f"Elevens lönekonto: {student_balance:.0f} kr\n"
+        f"Elevens sparkonto: {student_savings:.0f} kr\n\n"
+        f"Skriv en neutral pedagogisk kommentar — inte rekommendation."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=INVITE_MOTIVATION_SYSTEM_PROMPT,
+        user_prompt=prompt,
+        max_tokens=MAX_TOKENS_INVITE_MOTIVATION,
+        use_thinking=False,
         teacher_id=teacher_id,
     )

@@ -1,0 +1,2738 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Komplett systemanalys · Inloggat läge · Ekonomilabbet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./_shared.css">
+<style>
+.shell { max-width: 960px; margin: 0 auto; padding: 96px clamp(24px, 6vw, 80px) 96px; }
+.head { margin-bottom: 60px; }
+.head .h-eyebrow { margin-bottom: 18px; }
+.head .h-display { margin-bottom: 18px; }
+.head .lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.55; color: #334155;
+  max-width: 64ch;
+}
+section { margin-bottom: 64px; padding-top: 32px; border-top: 1px solid var(--rule); }
+section::before {
+  content: ""; display: block;
+  width: 32px; height: 2px; background: var(--accent);
+  margin-bottom: 14px; margin-top: -1px;
+}
+section h2 { margin-bottom: 22px; }
+
+.prose { font-size: 15.5px; line-height: 1.7; color: #1f2937; max-width: 68ch; }
+.prose p { margin: 0 0 16px; }
+.prose strong { color: var(--fg); font-weight: 700; }
+.prose em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.prose ul, .prose ol { margin: 0 0 18px 22px; }
+.prose ul li, .prose ol li { margin: 7px 0; }
+.prose a {
+  color: var(--accent); text-decoration: none;
+  border-bottom: 1px solid rgba(220, 76, 43, 0.4);
+}
+
+.toc {
+  margin: 32px 0;
+  padding: 24px 28px;
+  background: rgba(15, 23, 42, 0.03);
+  border-left: 3px solid var(--fg);
+  border-radius: 0 4px 4px 0;
+}
+.toc-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 14px;
+}
+.toc-eye::before { content: "● "; }
+.toc ol {
+  margin: 0; padding-left: 0; list-style: none;
+  counter-reset: toc;
+}
+.toc li {
+  counter-increment: toc;
+  padding: 7px 0;
+  font-family: var(--serif); font-size: 16px;
+  display: flex; gap: 14px; align-items: baseline;
+}
+.toc li::before {
+  content: counter(toc, decimal-leading-zero);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--accent); letter-spacing: 0.5px;
+  min-width: 24px;
+}
+.toc li a {
+  color: var(--fg); text-decoration: none; border-bottom: 0;
+  flex: 1;
+}
+.toc li a:hover { color: var(--accent); }
+.toc li.is-todo a { color: var(--muted); font-style: italic; }
+.toc li.is-todo a::after {
+  content: "kommer i nästa fas";
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+  margin-left: 12px;
+  padding: 2px 8px; border-radius: 100px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+.callout {
+  margin: 24px 0;
+  padding: 22px 26px;
+  background: rgba(220, 76, 43, 0.06);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+.callout-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px;
+}
+.callout-eye::before { content: "● "; }
+.callout p { font-size: 15px; line-height: 1.6; color: #422006; margin: 0; }
+.callout p + p { margin-top: 10px; }
+.callout strong { color: #422006; font-weight: 700; }
+
+.principle {
+  display: grid; grid-template-columns: 60px 1fr; gap: 18px;
+  padding: 18px 0; border-bottom: 1px dotted var(--rule);
+}
+.principle:last-child { border-bottom: 0; }
+.principle-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 28px; color: var(--accent); letter-spacing: -0.5px;
+  line-height: 1;
+}
+.principle h4 {
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.15; margin-bottom: 8px;
+}
+.principle p {
+  font-size: 14.5px; line-height: 1.6; color: #334155;
+}
+
+.foot { text-align: center; margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--rule); }
+.foot a {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  color: var(--accent); text-decoration: none;
+}
+
+.phase-tag {
+  display: inline-block;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 100px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  margin-left: 10px; vertical-align: middle;
+}
+
+/* Aktör-block (återanvänds 14 ggr) */
+.actor {
+  margin: 32px 0;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+.actor-head {
+  display: grid; grid-template-columns: 64px 1fr auto; gap: 18px; align-items: center;
+  padding: 22px 26px;
+  border-bottom: 1px solid var(--rule);
+  background: linear-gradient(180deg, #fafaf9 0%, #fff 100%);
+}
+.actor-chip {
+  width: 64px; height: 64px;
+  border-radius: 8px;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 17px; font-weight: 700;
+  letter-spacing: 1px;
+  background: rgba(220, 76, 43, 0.10);
+  color: var(--accent);
+  border: 1px solid rgba(220, 76, 43, 0.25);
+}
+.actor-name {
+  font-family: var(--serif); font-size: 28px; font-weight: 700;
+  letter-spacing: -0.7px; line-height: 1.05;
+  margin-bottom: 4px;
+}
+.actor-name em { font-style: italic; color: var(--accent); font-weight: 500; }
+.actor-role {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.actor-routes {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.4px;
+  text-align: right;
+}
+.actor-routes code {
+  display: inline-block;
+  background: rgba(220, 76, 43, 0.06);
+  padding: 2px 8px;
+  border-radius: 100px;
+  border: 1px solid rgba(220, 76, 43, 0.2);
+  margin: 2px 2px;
+  font-size: 11px;
+}
+.actor-body {
+  padding: 24px 26px 28px;
+  font-size: 15px; line-height: 1.65; color: #1f2937;
+}
+.actor-body strong { color: var(--fg); font-weight: 700; }
+.actor-body em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.actor-body p { margin: 0 0 14px; }
+.actor-body p:last-child { margin-bottom: 0; }
+.actor-section-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+  margin: 18px 0 8px;
+}
+.actor-section-eye::before { content: "● "; }
+.actor-list {
+  margin: 8px 0 14px 22px;
+  padding: 0;
+}
+.actor-list li {
+  margin: 6px 0;
+  line-height: 1.55;
+}
+.actor-flow {
+  margin: 14px 0;
+  padding: 14px 18px;
+  background: rgba(15, 23, 42, 0.03);
+  border-left: 3px solid var(--fg);
+  border-radius: 0 4px 4px 0;
+  font-family: var(--mono); font-size: 12.5px;
+  line-height: 1.6;
+  color: #1f2937;
+}
+.actor-flow strong {
+  color: var(--accent); font-weight: 700;
+}
+.actor-cite {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.actor-cite::before { content: "→ "; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<a href="/" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Systemanalys · 2026</span></a>
+<nav class="top-nav">
+  <a href="./index.html">← Förslagsöversikten</a>
+</nav>
+
+<div class="shell">
+
+  <header class="head">
+    <div class="h-eyebrow">Systemanalys · Inloggat läge · Komplett</div>
+    <h1 class="h-display">
+      Vi <em>speglar</em> verkligheten — inte förenklar den.
+    </h1>
+    <p class="lead">
+      Tidigare analys plattade ut hela systemet. Det går inte. Banken
+      är inte bokföring. Arbetsgivaren är inte bara lönespec. Varje
+      sida i plattformen finns för att eleven ska möta en faktisk
+      del av svensk ekonomisk vardag — och vi får inte ta bort steg
+      i flödet.
+    </p>
+  </header>
+
+  <section id="filosofi">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">01 · Filosofin</div>
+    <h2 class="h-section">Verklighetsspegling, inte <em>förenkling</em>.</h2>
+    <div class="prose">
+      <p>
+        Ekonomilabbets pedagogiska kärna är att eleven möter samma
+        struktur som vuxenlivet — bara säkrad bakom en simulering där
+        misstag är gratis. Det betyder att vi inte kan kollapsa
+        <strong>banken</strong> till en saldo-räknare eller
+        <strong>arbetsgivaren</strong> till en lönespec. Vi måste
+        rendera de faktiska flödena: BankID-inloggning via QR-kod,
+        kreditprövning innan lån, lönesamtal i fem ronder, kommande
+        fakturor som eleven väljer datum för.
+      </p>
+      <p>
+        Konsekvensen för informationsarkitekturen: <em>två lager</em>.
+        Ett <strong>aktör-lager</strong> där varje yttre part (banken,
+        Visma, Skatteverket, Avanza, Folksam, hyresvärden, Akavia, …)
+        är en egen portal med sin egen logik. Ett
+        <strong>verktygslager</strong> där eleven själv arbetar med
+        bokföring, budget, reflektioner, mastery — synthesisen av allt
+        som strömmar in från aktörerna.
+      </p>
+      <p>
+        Tidigare analys mappade <code>/transactions</code> som
+        "bokföring" och placerade banken där också. Det är fel. Banken
+        är <em>primärkällan</em> för kontoutdrag, kreditkortsfaktura,
+        kreditprövning, kommande inkommande fakturor. Bokföring är
+        elevens <em>egen huvudbok</em> där bankdata sammanställs med
+        manuella poster, kvitton, kategorier. Två olika sidor av samma
+        ekonomi — och eleven måste se båda.
+      </p>
+    </div>
+
+    <div class="callout">
+      <div class="callout-eye">Den röda regeln</div>
+      <p>
+        <strong>Inget steg som finns i den verkliga svenska ekonomin
+        får hoppas över i simuleringen.</strong> Skatten räknas inte
+        ut åt eleven — Skatteverket genererar ett A-skattebesked som
+        eleven läser. Lånet kreditprövas inte tyst — banken kör en
+        KALP-beräkning som eleven ser. Lönesamtalet är inte en
+        siffra som hoppar upp — det är fem ronder med Maria-AI där
+        argumentet faktiskt prövas. Genvägar tar bort poängen.
+      </p>
+    </div>
+  </section>
+
+  <section id="vad-finns">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">02 · Översikt</div>
+    <h2 class="h-section">Vad finns redan — på riktigt?</h2>
+    <div class="prose">
+      <p>
+        Inloggade läget har idag <strong>~50 routes</strong> i
+        <a href="https://github.com/robinandreeklund-collab/Hembudget/blob/main/frontend/src/App.tsx">App.tsx</a>.
+        Grovt fördelat:
+      </p>
+      <ul>
+        <li>
+          <strong>Aktör-portaler</strong> (eleven besöker yttre parter):
+          <code>/bank</code>, <code>/bank/sign</code>,
+          <code>/arbetsgivare</code>, <code>/salaries</code>,
+          <code>/tax</code>, <code>/investments</code>,
+          <code>/funds</code>, <code>/loans</code>,
+          <code>/utility</code>, <code>/mortgage/:id</code>.
+        </li>
+        <li>
+          <strong>Bokförings- och verktygslager</strong> (elevens egna):
+          <code>/dashboard</code>, <code>/transactions</code>,
+          <code>/import</code>, <code>/budget</code>,
+          <code>/upcoming</code>, <code>/attachments</code>,
+          <code>/transfers</code>, <code>/scenarios</code>,
+          <code>/reports</code>.
+        </li>
+        <li>
+          <strong>Lärande</strong>: <code>/modules</code>,
+          <code>/modules/:id</code>, <code>/achievements</code>,
+          <code>/onboarding</code>, <code>/peer-review</code>,
+          <code>/my-batches</code>.
+        </li>
+        <li>
+          <strong>Kommunikation &amp; admin</strong>:
+          <code>/chat</code>, <code>/messages</code>,
+          <code>/settings</code>, <code>/Callback</code> (Tibber).
+        </li>
+        <li>
+          <strong>Lärar-vy</strong>: <code>/teacher</code> + 12
+          underroutes (students, all-batches, matrix, modules,
+          reflections, rubrics, time-on-task, negotiations,
+          admin-ai, investments, credit, wellbeing).
+        </li>
+      </ul>
+      <p>
+        Ingen av dessa får tas bort. Varje ruta speglar en faktisk
+        beslutspunkt eller datakälla i svensk vardagsekonomi. Den
+        nya navigationen ska <em>tydliggöra</em> ekosystemet, inte
+        kollapsa det.
+      </p>
+    </div>
+  </section>
+
+  <section id="lasanvisning">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">03 · Innehåll</div>
+    <h2 class="h-section">Sju faser, en levande analys.</h2>
+    <div class="prose">
+      <p>
+        Den här analysen byggs i sju faser så ingen aktör tappas.
+        Varje fas committas separat — du kan bocka av och ge
+        återkoppling efter varje. <span class="phase-tag">Fas 1 klar</span>
+      </p>
+    </div>
+
+    <div class="toc">
+      <div class="toc-eye">Kommande sektioner</div>
+      <ol>
+        <li><a href="#filosofi">Filosofin — verklighetsspegling, inte förenkling</a></li>
+        <li><a href="#vad-finns">Översikt — vad finns redan</a></li>
+        <li class="is-todo"><a href="#aktor-1">Banken — primärkällan för kontoutdrag, kreditkort, lån, kommande fakturor</a></li>
+        <li class="is-todo"><a href="#aktor-2">Arbetsgivaren — anställningsavtalet, lönesamtal, satisfaction-score, kollektivavtal</a></li>
+        <li class="is-todo"><a href="#aktor-3">Skatteverket — A-skatt, deklaration, K4, skatteåterbäring</a></li>
+        <li class="is-todo"><a href="#aktor-4">Lånegivare — KALP-beräkning, kreditprövning, befintliga lån</a></li>
+        <li class="is-todo"><a href="#aktor-5">Investeringsmäklare (Avanza) — ISK, fonder, aktier, schablon</a></li>
+        <li class="is-todo"><a href="#aktor-6">Försäkringsbolag — premier, ärenden, försäkringsval</a></li>
+        <li class="is-todo"><a href="#aktor-7">Hyresvärd / utility — bostadskontrakt, el, vatten, bredband</a></li>
+        <li class="is-todo"><a href="#aktor-8">Pensionsmyndigheten — allmän pension, premiepension, prognos</a></li>
+        <li class="is-todo"><a href="#aktor-9">Bankgirot — autogiro, OCR, faktura-mottagning</a></li>
+        <li class="is-todo"><a href="#aktor-10">Konsumentverket — budget-baseline-data</a></li>
+        <li class="is-todo"><a href="#aktor-11">Akavia — fackförbund, lönedata, rådgivning</a></li>
+        <li class="is-todo"><a href="#aktor-12">Echo — sokratisk AI inom plattformen</a></li>
+        <li class="is-todo"><a href="#aktor-13">Maria — AI-driven HR-chef i lönesamtals-flödet</a></li>
+        <li class="is-todo"><a href="#aktor-14">Anna — lärarens perspektiv (separat ekosystem)</a></li>
+        <li class="is-todo"><a href="#flow-bankid">Flow: BankID-simulator (QR + telefon + PIN)</a></li>
+        <li class="is-todo"><a href="#flow-kontoutdrag">Flow: kontoutdrag → import → bokföring</a></li>
+        <li class="is-todo"><a href="#flow-kreditprovning">Flow: lånansökan → KALP → kreditprövning</a></li>
+        <li class="is-todo"><a href="#flow-lonesamtal">Flow: lönesamtal i fem ronder med Maria</a></li>
+        <li class="is-todo"><a href="#flow-autogiro">Flow: autogiro-signering kollektivt med EkonomilabbetID</a></li>
+        <li class="is-todo"><a href="#verktyg">Verktygslagret — bokföring, budget, scenarios, rapporter</a></li>
+        <li class="is-todo"><a href="#larare">Lärar-ekosystemet — separat parallellvärld</a></li>
+        <li class="is-todo"><a href="#mappning">Mappning av alla ~50 routes mot ny IA</a></li>
+        <li class="is-todo"><a href="#principles">Designprinciper för ny navigation</a></li>
+        <li class="is-todo"><a href="#nav-forslag">Föreslagen navigation — aktör-rad + verktygsdocka + mode-switch</a></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="principles-preview">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">04 · Förhandsvisning</div>
+    <h2 class="h-section">Tre principer redan klara.</h2>
+    <div class="prose">
+      <p>
+        Innan jag går in på varje aktör i fas 2–4 — här är de
+        principer som styr hela analysen. De kommer fördjupas i den
+        sista fasen men presenteras tidigt så vi har en gemensam
+        kompass.
+      </p>
+    </div>
+
+    <div class="principle">
+      <div class="principle-num"><em>I</em></div>
+      <div>
+        <h4>Aktörer är portaler — inte vyer.</h4>
+        <p>
+          När eleven klickar in i banken byter hen kontext, inte bara
+          ruta. Top-nav ska visa "Du är hos SEB". Bakgrund kan
+          subtilt skifta. Och man ska behöva BankID-logga-in (simulerat)
+          om sessionen löpt ut. Banken är inte en flik i ditt eget
+          dashboard — det är ett besök.
+        </p>
+      </div>
+    </div>
+
+    <div class="principle">
+      <div class="principle-num"><em>II</em></div>
+      <div>
+        <h4>Bokföring är synthesis — inte källa.</h4>
+        <p>
+          <code>/transactions</code> visar allt som hänt — men datat
+          kommer alltid från någon aktör. Bankens kontoutdrag.
+          Arbetsgivarens lönespec. Folksams premie. Eleven ser
+          ursprung per rad ("från SEB · 25 maj 16:00") så de förstår
+          att deras egen huvudbok är en spegel av tolv yttre flöden.
+        </p>
+      </div>
+    </div>
+
+    <div class="principle">
+      <div class="principle-num"><em>III</em></div>
+      <div>
+        <h4>Verktygen tjänar förståelsen — inte mätningen.</h4>
+        <p>
+          Wellbeing-pentagonen, mastery, reflektioner, moduler —
+          dessa är pedagogiska instrument som <em>läser</em> aktör­
+          flödena och översätter till lärande. De ska inte vara
+          frikopplade från ekonomin utan kopplade <em>till</em> den.
+          När bufferten halveras ändras pentagonen — det är samma
+          händelse, två representationer.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-1">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">05 · Aktör 01</div>
+    <h2 class="h-section">Banken — primärkällan, <em>inte</em> bokföringen.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">SE/ND</div>
+        <div>
+          <div class="actor-name">Banken</div>
+          <div class="actor-role">Primärbank · BankID-autentisering · pengarörelser</div>
+        </div>
+        <div class="actor-routes">
+          <code>/bank</code><br>
+          <code>/bank/sign</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Banken är inte ett saldofönster och definitivt inte en synonym
+          för <code>/transactions</code>. Banken är den <strong>egna
+          portalen</strong> som eleven besöker — på samma sätt som hen
+          loggar in på SEB eller Swedbank i verkligheten. När eleven
+          klickar in i banken byter hen kontext, autentiserar sig
+          (simulerat), och möter en separat datadomän.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör i banken</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Loggar in via BankID-simulator.</strong> Desktop visar
+            en QR-kod som eleven "scannar" (samma flöde som i
+            verkligheten). Telefonens session pollar tills mobilen
+            bekräftat med PIN. Sessionen lever 15 min och måste förnyas.
+            <code>/bank/sign</code> är publik route — telefonen behöver
+            inte vara inloggad i Ekonomilabbet.
+          </li>
+          <li>
+            <strong>Ser saldon per konto.</strong> Lönekonto, sparkonto,
+            kreditkortskonto. Ränta per konto, OCR-rörelser, datum för
+            senaste insättning.
+          </li>
+          <li>
+            <strong>Hämtar kontoutdrag.</strong> Banken är primärkälla.
+            Kontoutdraget genereras månadsvis av banken och eleven
+            <em>importerar</em> det till sin egen bokföring (separat
+            steg, separat sida — <code>/import</code>).
+          </li>
+          <li>
+            <strong>Hanterar kreditkort.</strong> Faktura, saldo,
+            kreditgräns, ränta vid delbetalning, månadens köpsumma.
+          </li>
+          <li>
+            <strong>Hanterar lån.</strong> Befintliga lån (ränta, kvarvarande,
+            amortering) plus möjligheten att <em>ansöka om nytt</em>. Vid
+            ansökan kör banken en kreditprövning med KALP-beräkning —
+            eleven ser hela motiveringen för godkänd/nekad.
+          </li>
+          <li>
+            <strong>Tar emot kommande fakturor.</strong> Nya inkommande
+            fakturor dyker upp i bankens inkorg. Eleven läser, väljer
+            <em>förfallodatum</em> (eller flyttar fram det), bekräftar
+            mottagning. Det är här eleven först möter en faktura — innan
+            den landar som autogiro eller blir påminnelse.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data banken äger</div>
+        <ul class="actor-list">
+          <li>Konton (typ, nummer, saldo, ränta, ägare)</li>
+          <li>Kontoutdrag (transaktionslista per konto, månadsvis)</li>
+          <li>Kreditkortsfaktura + delbetalningsplan</li>
+          <li>Lånebesked + amorteringsschema + KALP-rapport</li>
+          <li>Inkommande fakturor (innan eleven valt datum)</li>
+          <li>BankID-sessioner (token, sign-status, expiry)</li>
+        </ul>
+
+        <div class="actor-section-eye">Specifik flow när eleven öppnar banken</div>
+        <div class="actor-flow">
+1. Eleven klickar <strong>Banken</strong> i navet<br>
+2. Plattformen kollar om BankID-session är aktiv (≤ 15 min)<br>
+3. Om inte → desktop visar QR-kod, mobilen scannar<br>
+4. Mobilen renderar PIN-form (<strong>/bank/sign?token=…</strong>)<br>
+5. PIN bekräftas → desktop:s polling fångar status → session ny<br>
+6. Eleven landar på bankens dashboard (saldon, kontoutdrag, lån, kommande)<br>
+7. Specifika handlingar: import kontoutdrag, signera kommande, ansök lån
+        </div>
+
+        <div class="actor-section-eye">Verklighetsmappning (svensk vardag)</div>
+        <ul class="actor-list">
+          <li>Speglar: SEB, Swedbank, Nordea, Handelsbanken — vilken bank du nu använder</li>
+          <li>Datakällor: Bankgirot OCR-format, IBAN-struktur, svensk räntesats-konvention</li>
+          <li>Kreditprövning: KALP följer Konsumentverkets schablon + Finansinspektionens amorteringskrav</li>
+          <li>BankID-simulator: speglar QR + PIN-flödet, men token är vårt eget (ingen riktig BankID-koppling)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Bank.tsx (1179 rader) för faktisk implementation av QR-flow,
+          session-polling och kontoutdrag-rendering.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-2">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">06 · Aktör 02</div>
+    <h2 class="h-section">Arbetsgivaren — anställningen som <em>levande relation</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Vi</div>
+        <div>
+          <div class="actor-name">Arbetsgivaren</div>
+          <div class="actor-role">Anställning · lön · kollektivavtal · satisfaction-score</div>
+        </div>
+        <div class="actor-routes">
+          <code>/arbetsgivare</code><br>
+          <code>/salaries</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Arbetsgivaren är inte bara "var lönen kommer ifrån". Det är en
+          <strong>relation som mäts</strong>: arbetsgivaren har en
+          satisfaction-score på eleven (0–100) som rör sig baserat på
+          beteende — sjukanmälningar, sena ankomster, övertid, prestationer.
+          Lönesamtal går genom Maria-AI i fem ronder. Kollektivavtalet är
+          ett levande dokument eleven kan slå upp varje förmån i.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos arbetsgivaren</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Granskar lönespecen</strong> som genereras varje månad
+            — ReportLab-PDF med OCR, brutto, OB, övertid, A-skatt,
+            allmän pensionsavgift, tjänstepension. Importerar till sin
+            bokföring separat.
+          </li>
+          <li>
+            <strong>Förhandlar lön i fem ronder</strong> mot Maria-AI.
+            Varje rond: argument från eleven (förberett från Akavia-data
+            eller egen motivering) → Marias bud → accept/avslå/argumentera
+            vidare. Slutbud låses in i nya månadens lönespec.
+          </li>
+          <li>
+            <strong>Ser sin satisfaction-score.</strong> Visualiseras som
+            en gauge (&lt;25 = critical, &lt;40 = low, &lt;60 = neutral,
+            ≥60 = good). Score påverkar: hur mycket Maria viker sig i
+            lönesamtal, om eleven får befordran, om eleven blir uppsagd
+            vid kris.
+          </li>
+          <li>
+            <strong>Slår upp kollektivavtalet</strong> per fråga: Vad
+            ger ITP1? Hur fungerar sjukförsäkringen? Föräldralön? Eleven
+            ser monetär värdering av varje förmån (t.ex. tjänstepension
+            som NPV över 30 år).
+          </li>
+          <li>
+            <strong>Hanterar anställningsavtalet</strong> — visstidsanställd,
+            tillsvidare, deltid, övertid-policy, semesterdagar, uppsägningstid.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data arbetsgivaren äger</div>
+        <ul class="actor-list">
+          <li>Anställningsavtal (typ, lön, ITP, semester, uppsägningstid)</li>
+          <li>Lönespec (månadsvis, PDF + struktureat)</li>
+          <li>Kollektivavtal (Akavia ITP1 i Lindas fall — referens-dokument)</li>
+          <li>Satisfaction-score + trend (uppdateras vid varje val)</li>
+          <li>Lönesamtals-historik (5-rond per förhandling, full chatlog)</li>
+          <li>Befordringshistorik / titel-ändringar</li>
+        </ul>
+
+        <div class="actor-section-eye">Specifik flow vid lönesamtal</div>
+        <div class="actor-flow">
+1. Eleven öppnar <strong>/arbetsgivare → Lönesamtal</strong><br>
+2. Förbereder argument (Akavia-data, prestationer, marknads-diff)<br>
+3. <strong>Rond 1:</strong> Maria öppnar med Vismas budget-förslag (t.ex. 2,5 %)<br>
+4. Eleven argumenterar → <strong>rond 2:</strong> Maria räknar om → nytt bud<br>
+5. Upp till <strong>5 ronder</strong>; eleven kan acceptera när som helst<br>
+6. Slutbud låses in → ny lönespec genereras nästa månad<br>
+7. Hela samtalet sparas i lärar-vyn (<code>/teacher/negotiations</code>)
+        </div>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: anställning hos Visma (Lindas case) eller motsvarande svensk arbetsgivare</li>
+          <li>Lönedata: Akavias årliga rapport per yrke + region + erfarenhet</li>
+          <li>Tjänstepension: faktiska ITP1-regler (4,5 % upp till 7,5 IBB, 30 % över)</li>
+          <li>AI-Maria: Claude Haiku 4.5, deterministisk förhandlingsmotor (inte rådgivare)</li>
+          <li>Satisfaction-score: vår modell — speglar hur arbetsgivaren upplever eleven</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Arbetsgivare.tsx (1554 rader) — samlar lönespec, lönesamtal,
+          kollektivavtal, satisfaction-score. Salaries.tsx (1300 rader)
+          är en renodlad lönehistorik-vy.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-3">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">07 · Aktör 03</div>
+    <h2 class="h-section">Skatteverket — myndigheten med <em>egen logik</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">SK</div>
+        <div>
+          <div class="actor-name">Skatteverket</div>
+          <div class="actor-role">A-skatt · deklaration · K4 · skatteåterbäring</div>
+        </div>
+        <div class="actor-routes">
+          <code>/tax</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Skatteverket är inte en kalkylator inbäddad i lönespecen — det
+          är en egen myndighet med egen tidsaxel. Eleven öppnar
+          Skatteverket för att <em>göra</em> deklarationen, inte för att
+          läsa skatten. Den här portalen levererar A-skattebesked,
+          kalibrerar preliminär skatt, tar emot K4-blanketten och
+          skickar tillbaka skatteåterbäring eller kvarskatt i juni.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos Skatteverket</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Hämtar A-skattebesked</strong> en gång per år. Innehåller
+            skattetabell (32 i Stockholm, 33 i Göteborg, etc.), jobb­
+            skatte­avdrag, grundavdrag, och ev. justeringsfaktor om man har
+            sidoinkomster.
+          </li>
+          <li>
+            <strong>Lämnar in deklarationen</strong> — INK1-blanketten med
+            förtryckta uppgifter (lön, ränteavdrag, ISK-schablonintäkt) +
+            egna tillägg (avdrag för dubbla bostäder, hemresor).
+          </li>
+          <li>
+            <strong>Bifogar K4-bilagan</strong> för aktie- och fondvinster
+            som inte ligger i ISK. Beräknas från transaktionshistorik —
+            men eleven måste manuellt mappa anskaffningsvärden.
+          </li>
+          <li>
+            <strong>Tar emot beslut</strong> i juni — antingen
+            skatteåterbäring (sätts in på lönekontot via banken) eller
+            kvarskatt (eleven måste betala in före november).
+          </li>
+          <li>
+            <strong>Justerar preliminärskatten</strong> mid-year om
+            inkomsten ändras (lönelyft, sidoinkomst, nytt jobb) så hen
+            inte får kvarskatt nästa vår.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data Skatteverket äger</div>
+        <ul class="actor-list">
+          <li>Skattetabeller per kommun + ålder + eventuell föreningsavgift</li>
+          <li>A-skattebesked per inkomsttagare</li>
+          <li>Förtryckta deklarations-rader (lön, ränta, ISK-schablon)</li>
+          <li>Skatteåterbäring / kvarskatt per beskattningsår</li>
+          <li>Skiktgränser för statlig skatt (uppdateras årligen)</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: skatteverket.se inloggat-vy + Mina sidor</li>
+          <li>Datakällor: Skatteverkets faktiska tabeller (SKV2102 m.fl.), kommunalskatt 2026</li>
+          <li>Tidpunkter: deklaration öppnar mars, deadline 2 maj, beslut juni</li>
+          <li>Pensionsavgift 7 %: dras av arbetsgivaren men <em>tillgodoräknas</em> via Skatteverket → Pensionsmyndigheten</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Tax.tsx (350 rader) för aktuell deklarations-vy.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-4">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">08 · Aktör 04</div>
+    <h2 class="h-section">Lånegivaren — varför <em>banken</em> inte gjorde det själv.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Lå</div>
+        <div>
+          <div class="actor-name">Lånegivaren</div>
+          <div class="actor-role">Bostadslån · billån · konsumtionslån · kreditprövning</div>
+        </div>
+        <div class="actor-routes">
+          <code>/loans</code><br>
+          <code>/mortgage/:id</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          En befintlig låneskuld är inte samma sak som en ansökan, och en
+          ansökan är inte samma sak som ett pågående bolåne-beslut. Vi
+          har därför två separata routes: <code>/loans</code> är
+          <em>befintliga lån</em> (saldo, ränta, amortering, kvarvarande
+          löptid), <code>/mortgage/:id</code> är <em>aktiv beslutsuppgift</em>
+          där eleven står inför ett bolåne-val (välj räntebindning, välj
+          amorteringstakt, välj långivare). Banken hanterar konsumtions-
+          och kreditkortslån; bostadslån har sitt eget tunga flöde.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör med lånegivaren</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Översikt befintliga lån.</strong> Bostadslån (rörlig 3
+            mån + bunden 3 år), billån (4,9 % effektiv), kreditkort­
+            saldo (avbetalningsplan). Per lån: ursprung, kvarvarande,
+            ränta, månads­kost­nad, slutdatum.
+          </li>
+          <li>
+            <strong>Räknar amorteringsplan.</strong> Visualisering av hur
+            kapital krymper över tid + hur mycket ränta som faktiskt
+            betalas. Eleven ser skillnaden mellan rak amortering och
+            annuitet.
+          </li>
+          <li>
+            <strong>Ansöker om nytt lån.</strong> Antingen direkt hos
+            banken (konsumtionslån) eller via en bolåneansökan
+            (<code>/mortgage/:id</code>) där hen jämför långivare. Båda
+            triggar kreditprövning med KALP.
+          </li>
+          <li>
+            <strong>Genomgår kreditprövning.</strong> KALP-beräkning visas
+            steg för steg: inkomst minus skatt minus existerande lån
+            minus Konsumentverkets schablon för levnadskostnader = kvar
+            för räntor + amortering. Räcker det → godkänd. Räcker det
+            inte → nekad med specifik motivering.
+          </li>
+          <li>
+            <strong>Hanterar kreditkortsfaktura.</strong> Specialfall —
+            kortet är hos banken men <em>fakturan är ett lån</em> om den
+            inte betalas i sin helhet. Eleven väljer: betala fullt, dela
+            upp (ränta börjar löpa), missa (påminnelse + dröjsmålsränta).
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data lånegivaren äger</div>
+        <ul class="actor-list">
+          <li>Befintliga lån: ursprungsbelopp, ränta, amorteringstyp, säkerhet</li>
+          <li>KALP-modell: inkomstkrav per lånebelopp + bostadstyp</li>
+          <li>Aktiva ansökningar (status: pending / approved / denied)</li>
+          <li>Bolåne-jämförelser (4–5 långivare med olika villkor)</li>
+          <li>Räntestege (3 mån / 1 år / 3 år / 5 år bunden)</li>
+          <li>Amorteringskrav enligt FI (1 % över 50 % belåningsgrad, 2 % över 70 %)</li>
+        </ul>
+
+        <div class="actor-section-eye">Specifik flow vid bolåne-beslut</div>
+        <div class="actor-flow">
+1. Eleven får uppdrag <strong>"Köp lägenhet i Stockholm 3,2 mkr"</strong><br>
+2. Öppnar <code>/mortgage/:id</code> — beslutsuppgiften<br>
+3. Jämför 4 långivare (SBAB / SEB / Nordea / Avanza)<br>
+4. Väljer räntebindning (rörlig vs 3 år bunden — räntegap visas)<br>
+5. Väljer amorteringstakt (FI-krav minimum + ev. extra)<br>
+6. Plattformen kör KALP → godkänd/nekad med motivering<br>
+7. Vid godkänt: nya lånet hamnar i <code>/loans</code>, månadskostnad i bokföringen
+        </div>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: SBAB, SEB Bolån, Nordea Bolån + konsumtionsbanker som Resurs</li>
+          <li>Datakällor: Riksbankens reporänta, Finansinspektionens amorteringskrav, Konsumentverkets schablon</li>
+          <li>KALP: faktisk svensk modell (Schablonkostnaden 2026: ~9 800 kr/vuxen + 4 200 kr/barn)</li>
+          <li>Kreditkortsränta: SMS-lån-räntor 25–35 % effektiv (Lendo-data)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Loans.tsx (852 rader) för pågående lån och MortgageDecision
+          för aktivt beslut. Banken (1179 rader) hanterar den enklare
+          formen — kreditkortsfakturan.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-5">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">09 · Aktör 05</div>
+    <h2 class="h-section">Investeringsmäklaren — ISK, fonder, krasch i <em>egen tid</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">AV</div>
+        <div>
+          <div class="actor-name">Investeringsmäklaren</div>
+          <div class="actor-role">ISK · fonder · aktier · schablonbeskattning</div>
+        </div>
+        <div class="actor-routes">
+          <code>/investments</code><br>
+          <code>/funds</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Mäklaren (Avanza i vårt typfall, men kan vara Nordnet, Lysa,
+          SEB Trygg-fonden) är en separat värld från banken — egen
+          inloggning, egen tidsaxel (börsdygn), egna regler. Eleven
+          loggar in, sätter månadsspar, väljer fonder, ser kursrörelser
+          i realtid (simulerade) och möter krasch-fredagar med −8 %
+          som inte påverkar lönekontot men påverkar pentagon-axeln för
+          ekonomi.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos mäklaren</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Öppnar ISK-konto.</strong> Engångshandling — eleven
+            läser om schablonbeskattning, kapitalbas, K4-skillnaden
+            (slipper rapportera per affär).
+          </li>
+          <li>
+            <strong>Sätter månadsspar.</strong> 5 000 kr/mån från
+            lönekontot via autogiro (Bankgirot-flödet). Eleven väljer
+            fördelning: 60 % globalfond, 25 % svensk index, 15 % räntor.
+          </li>
+          <li>
+            <strong>Köper / säljer fonder och aktier.</strong> Fond­
+            handel sker en gång per dag (kurs sätts efter börsstängning).
+            Aktier handlas live. Båda visar courtage (0 kr för fonder,
+            t.ex. 19 kr min för aktier).
+          </li>
+          <li>
+            <strong>Möter marknadsrörelser.</strong> Plattformen
+            simulerar dagsvolatilitet baserat på MSCI World-historik —
+            ibland +1,8 %, ibland −8 % på en dag. Eleven ser hela
+            kurvan, panik-säljer eller behåller.
+          </li>
+          <li>
+            <strong>Granskar portföljallokering.</strong> Tabell per
+            innehav: anskaffningsvärde, aktuellt värde, orealiserad
+            vinst/förlust, andel av portföljen. Re-balansering föreslås
+            när drift &gt; 5 %.
+          </li>
+          <li>
+            <strong>Ser schablonintäkten</strong> beräknas i realtid:
+            kapitalbas (kvartalsvis snitt) × statslåneräntan + 1 %.
+            Den dyker sen upp som förtryckt rad i deklarationen hos
+            Skatteverket.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data mäklaren äger</div>
+        <ul class="actor-list">
+          <li>ISK-kapitalbas (kvartalsvis) + ackumulerad schablonintäkt</li>
+          <li>Innehav per värdepapper (units, anskaffningsvärde, market value)</li>
+          <li>Transaktionshistorik (köp, sälj, utdelning, courtage)</li>
+          <li>Fondkurser (NAV per dag) och aktiekurser (live, simulerat)</li>
+          <li>Månadsspar-konfiguration (belopp, fördelning, datum)</li>
+          <li>K4-bilaga om eleven har AF-konto utöver ISK</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: Avanza, Nordnet, Lysa, SEB Trygg-fonden</li>
+          <li>Schablonräntan 2026: SLR (≈ 2,8 %) + 1 % = 3,8 %</li>
+          <li>ISK-cap: ingen formell — men &gt; 1 mkr blir AF-konto ofta gynnsamt</li>
+          <li>Fondhandel: T+1, kurs efter stängning — speglas exakt</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Investments.tsx (2151 rader) för portföljen + krasch-
+          mekaniken, Funds.tsx (434 rader) för fondköp specifikt.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-6">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">10 · Aktör 06</div>
+    <h2 class="h-section">Försäkringsbolaget — premier, ärenden, <em>när bilen kraschar</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Fo</div>
+        <div>
+          <div class="actor-name">Försäkringsbolaget</div>
+          <div class="actor-role">Hem · bil · person · ansvar · försäkringsärenden</div>
+        </div>
+        <div class="actor-routes">
+          <code>(idag i /upcoming + scenarier)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Försäkring är inte synligt i navet idag — premierna kommer som
+          fakturor i bankens inkommande, ärenden triggas av scenarier
+          (bilen kraschar, lägenheten översvämmas). I framtida
+          architecture bör försäkringsbolaget ha egen portal eftersom
+          eleven ska kunna <em>jämföra</em> hem/bil/olycksfall, välja
+          självrisk, och driva ett ärende från anmälan till utbetalning.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos försäkringsbolaget</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Översikt aktiva försäkringar.</strong> Hemförsäkring,
+            bilförsäkring (helförsäkring vs halv vs trafik), person­
+            försäkring, ansvarsförsäkring. Per försäkring: premie,
+            självrisk, omfattning, förnyelsedatum.
+          </li>
+          <li>
+            <strong>Jämför försäkringar</strong> mellan bolag. 4–5
+            alternativ med olika villkor, premier, självrisker.
+            Plattformen visar pris-mot-täckning som matris.
+          </li>
+          <li>
+            <strong>Anmäler skadeärende.</strong> Bilen krockar i Peters
+            saga — eleven öppnar ärendet, fyller blankett, laddar upp
+            "bild" (simulerad), väntar på besked, betalar självrisk,
+            får utbetalning till lönekontot.
+          </li>
+          <li>
+            <strong>Ändrar omfattning</strong> vid livshändelser —
+            nytt barn (familje­tillägg), flytt (hemförsäkring gäller
+            bara på folkbokföringsadressen), ny bil.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data försäkringsbolaget äger</div>
+        <ul class="actor-list">
+          <li>Aktiva försäkringar + premier + förnyelsedatum</li>
+          <li>Skadeärenden (status, självrisk, ersättning, datum)</li>
+          <li>Försäkrings-jämförelser (per kategori, 4–5 alternativ)</li>
+          <li>Villkorshandlingar (vad omfattas / vad omfattas inte)</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: Folksam, If, Trygg-Hansa, Länsförsäkringar</li>
+          <li>Hemförsäkring: 110–250 kr/mån typiskt</li>
+          <li>Bilförsäkring: 350–900 kr/mån beroende på modell + bonus</li>
+          <li>Självrisk: 1 500–6 000 kr för hem, 3 500 kr standard bil</li>
+          <li>Olycksfall: 50–150 kr/mån för individ, billigare via fack/jobb</li>
+        </ul>
+
+        <p class="actor-cite">
+          Saknar idag egen route. Funktionen finns delvis i Upcoming.tsx
+          (premier som inkommande fakturor) och scenarier (skadeärenden).
+          Bör få egen <code>/forsakring</code> i ny IA.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-7">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">11 · Aktör 07</div>
+    <h2 class="h-section">Hyresvärd &amp; utility — bostaden som <em>kostnadsmotor</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Hy</div>
+        <div>
+          <div class="actor-name">Hyresvärd &amp; utility</div>
+          <div class="actor-role">Bostadskontrakt · el · vatten · bredband · uppvärmning</div>
+        </div>
+        <div class="actor-routes">
+          <code>/utility</code><br>
+          <code>/Callback</code> (Tibber)
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Bostaden är inte en rad i budgeten — det är en samling
+          fakturor som varierar månad till månad och som har egna
+          relationer (Stockholmsbostäder, Vattenfall, Tele2, Stadsnät).
+          Eleven har en hyresvärd som höjer hyran 1 maj, en
+          elleverantör som svänger 30 % mellan vinter och sommar,
+          ett bredband som är fast pris. Tibber kan kopplas in på
+          riktigt via OAuth (<code>/Callback</code>) — eleven ser
+          timpriser och förstår spotpris-modellen.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos hyresvärden / utility</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Granskar hyreskontraktet.</strong> Yta, hyra/mån,
+            uppsägningstid (3 mån standard), inflyttning, depositionen
+            (1 hyra hos privat hyresvärd). Hyreshöjning 1 maj enligt
+            avtal — eleven ser exakt motivering.
+          </li>
+          <li>
+            <strong>Hanterar elavtal.</strong> Fast pris, rörligt,
+            mixavtal. Förbrukning per månad (kWh). Spotpris per timme
+            via Tibber-koppling. Plattformen lär ut prisskillnaden
+            mellan Stockholm (SE3) och Skåne (SE4).
+          </li>
+          <li>
+            <strong>Förbrukningshistorik.</strong> El, vatten, bredband,
+            uppvärmning över 12 månader — eleven ser säsongsvariationen
+            tydligt och kan jämföra mot snittet för sitt typhushåll.
+          </li>
+          <li>
+            <strong>Byter leverantör.</strong> Spotpris vs fast pris —
+            eleven jämför och fattar beslut. Bytesprocess + uppsägningstid.
+          </li>
+          <li>
+            <strong>Säger upp / söker andrahand.</strong> Vid flytt
+            (modul "Flytta hemifrån" eller "Flytta ihop"). Andrahand
+            kräver hyresvärdens godkännande.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data hyresvärd / utility äger</div>
+        <ul class="actor-list">
+          <li>Hyreskontrakt (yta, hyra, uppsägning, deposition)</li>
+          <li>Hyreshöjnings­historik (datum, %, motivering)</li>
+          <li>Elförbrukning per månad + per timme (vid Tibber)</li>
+          <li>Spotpriser per timme och elområde (SE1–SE4)</li>
+          <li>Vatten-, bredbands-, uppvärmningsfakturor</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Hyresvärd: kommunal (Stockholmsbostäder), privat, bostadsrätt</li>
+          <li>Elavtal: Vattenfall, Fortum, Skellefteå Kraft, m.fl.</li>
+          <li>Tibber: faktisk OAuth-koppling fungerar (har en TibberCallback-route)</li>
+          <li>Bredband: Telia, Tele2, Comhem — typiskt 359–599 kr/mån fast</li>
+          <li>Vatten: kommunalt, oftast i hyran (BR) eller separat (HR)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Utility.tsx (1281 rader) — månadsvis förbrukningshistorik
+          för el, vatten, bredband, uppvärmning. TibberCallback hanterar
+          OAuth-flödet vid integration.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-8">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">12 · Aktör 08</div>
+    <h2 class="h-section">Pensionsmyndigheten — den <em>30 år bortre</em> aktören.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">PM</div>
+        <div>
+          <div class="actor-name">Pensionsmyndigheten</div>
+          <div class="actor-role">Allmän pension · premiepension · 67-årsprognos</div>
+        </div>
+        <div class="actor-routes">
+          <code>(idag i /tax + /salaries)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Pensionsmyndigheten är pedagogiskt knepig — ingen 22-åring
+          tänker på sin pension. Men plattformens kärnpoäng är just
+          att <em>visualisera den 67-åriga jaget</em>: 7 % av varje lön
+          som dras idag växer till 2,2 mkr över 45 år. Pensionsmyndigheten
+          behöver egen portal eftersom den hanterar något ingen annan
+          aktör ser: <strong>premiepensionsfondernas faktiska val</strong>.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos Pensionsmyndigheten</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Ser inkomstpensionsbeskedet.</strong> Det årliga
+            "orange kuvertet" — totalt intjänat, prognos vid 65/67/70,
+            scenarier vid sjukdom/förtidspension.
+          </li>
+          <li>
+            <strong>Väljer premiepensionsfonder.</strong> 4–5 fonder ur
+            ett urval på ~500. Eller AP7 Såfa (default-alternativet).
+            Eleven läser om förvaltningsavgiftens betydelse på 30 år.
+          </li>
+          <li>
+            <strong>Ser 30-årsprognos.</strong> Allmän pension 7 %
+            (632 000 kr vid 67) + tjänstepension 4,5 % (645 000 kr) +
+            avkastning över tiden = 2,2 mkr (med 5 % real avkastning).
+          </li>
+          <li>
+            <strong>Hanterar uttag senare.</strong> Vid 61 år tidigast.
+            Hel/halv/fjärdedels uttag. Plattformen kan simulera det
+            vid behov.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data Pensionsmyndigheten äger</div>
+        <ul class="actor-list">
+          <li>Inkomstpensionsbalansen (uppdateras årligen via Skatteverket)</li>
+          <li>Premiepensionsval + fondvärde + förvaltningskostnad</li>
+          <li>Prognoser vid olika pensions­åldrar (61–70)</li>
+          <li>Tjänstepensions-aggregat från Collectum / Fora / m.fl.</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Speglar: pensionsmyndigheten.se "Mina sidor" + minPension.se aggregat</li>
+          <li>7 % allmän pension (cap vid 8,07 IBB)</li>
+          <li>2,5 % premiepension (av allmänna 7 %)</li>
+          <li>AP7 Såfa: default, lifecycle-allokering</li>
+          <li>Tjänstepension utöver: ITP1 4,5 % &lt; 7,5 IBB, 30 % över</li>
+        </ul>
+
+        <p class="actor-cite">
+          Saknar idag egen route — pensionsdata visas spridd över
+          /salaries och /tax. Bör få egen <code>/pension</code> i ny IA.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-9">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">13 · Aktör 09</div>
+    <h2 class="h-section">Bankgirot — det <em>osynliga</em> mellanlagret.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">BG</div>
+        <div>
+          <div class="actor-name">Bankgirot</div>
+          <div class="actor-role">Autogiro · OCR · betal-infrastruktur</div>
+        </div>
+        <div class="actor-routes">
+          <code>(infrastruktur — mest synlig i banken + kommande)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Bankgirot är ett mellanlager — eleven besöker det inte aktivt.
+          Men det förklarar <em>hur</em> autogiron flyttar pengar mellan
+          banker, hur OCR-numret fungerar, varför stoppfristen är 1
+          bankdag innan dragning. När eleven förstår Bankgirot förstår
+          hen varför EkonomilabbetID kan signera 18 fakturor på en gång —
+          det är samma tekniska kontrakt.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven möter från Bankgirot</div>
+        <ul class="actor-list">
+          <li>
+            <strong>OCR-nummer på fakturor.</strong> Mod10-checksumma
+            (Luhn), unik per faktura. Eleven förstår varför man inte
+            kan slumpa fram ett OCR och betala.
+          </li>
+          <li>
+            <strong>Autogiro-medgivande.</strong> Eleven signerar med
+            EkonomilabbetID (vår BankID-simulator) — Bankgirot tar emot,
+            registrerar, drar pengar på avtalad dag.
+          </li>
+          <li>
+            <strong>Stoppfrist 1 bankdag.</strong> Eleven kan stoppa
+            ett autogiro till kl 16:00 dagen före dragning. Efter det
+            är det låst.
+          </li>
+          <li>
+            <strong>Bankdagar.</strong> Helger, röda dagar, midsommarafton
+            — Bankgirot kör inte. Eleven ser att en faktura med
+            förfallodag på söndag dras på fredag istället.
+          </li>
+          <li>
+            <strong>Bankgirostandard 0–9999999.</strong> När eleven
+            betalar manuellt skriver hen Bankgironummer + OCR.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data Bankgirot styr</div>
+        <ul class="actor-list">
+          <li>OCR-checksum-validering (Mod10/Luhn)</li>
+          <li>Autogiro-medgivanden + status (active/cancelled/pending)</li>
+          <li>Bankdagskalender (svenska helger + bank-stoppar)</li>
+          <li>Dragnings-kalender per medgivande</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Bankgirot AB är ett delägt clearinginstitut (Riksbanken-licens)</li>
+          <li>Standarden BG-format används av i princip alla svenska banker</li>
+          <li>OCR Mod10/Luhn = samma checksum som svenska personnumret slutsiffran</li>
+          <li>Stoppfrist 1 bankdag är reglerad i Bankgirot-anslutningsavtalet</li>
+        </ul>
+
+        <p class="actor-cite">
+          Bankgirot är infrastruktur — visas i banken, /upcoming, och i
+          autogiro-kontroller men har ingen egen route. Behöver inte
+          heller — det är en datalogik, inte en plats eleven besöker.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-10">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">14 · Aktör 10</div>
+    <h2 class="h-section">Konsumentverket — <em>data</em>, inte portal.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">KV</div>
+        <div>
+          <div class="actor-name">Konsumentverket</div>
+          <div class="actor-role">Hushållsbudget-baseline · referenskostnader 2026</div>
+        </div>
+        <div class="actor-routes">
+          <code>(referensdata — används av /budget + KALP)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Konsumentverket är inte en portal eleven besöker — det är en
+          <strong>baseline-datakälla</strong> som plattformen läser från
+          för att sätta budget-utgångsläge och KALP-schablon. Eleven ser
+          siffrorna men interagerar inte med Konsumentverket direkt.
+          Fortfarande viktig att namnge eftersom verklighet kräver
+          källtransparens: "Vi visar 4 200 kr för mat — varifrån?".
+        </p>
+
+        <div class="actor-section-eye">Vad Konsumentverket bidrar med</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Referenskostnader 2026.</strong> Mat, kläder, hygien,
+            fritid, hushåll. Per ålderskategori (1–3 år, 4–6, 7–10 osv.)
+            och hushållstyp (ensamboende, par, par med barn).
+          </li>
+          <li>
+            <strong>Kostnadsschablonen.</strong> Används i KALP­
+            beräkning hos lånegivaren — "minimisumma som måste finnas
+            kvar efter räntor + amortering".
+          </li>
+          <li>
+            <strong>Hela hushållets baseline.</strong> När eleven sätter
+            sin första budget i onboarding föreslår plattformen
+            Konsumentverkets siffror som utgångspunkt — eleven justerar
+            uppåt eller nedåt.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Konsumentverkets faktiska "Koll på pengarna" / referensvärden 2026</li>
+          <li>Mat: ~4 100 kr/vuxen, lägre för barn</li>
+          <li>Kläder &amp; skor: ~660 kr/vuxen</li>
+          <li>Fritid: ~600 kr/vuxen</li>
+          <li>Hushållsel: separat (inte i schablonen)</li>
+          <li>Uppdateras 1 gång/år, juni</li>
+        </ul>
+
+        <p class="actor-cite">
+          Inte egen route. Datat används av Budget.tsx (655 rader) +
+          MortgageDecision/Loans (KALP). Bör <em>visas</em> som källa
+          i alla budget-vyer ("Konsumentverkets schablon 2026").
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-11">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">15 · Aktör 11</div>
+    <h2 class="h-section">Akavia — <em>fackförbundet</em> som rådgivare.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">AK</div>
+        <div>
+          <div class="actor-name">Akavia (facket)</div>
+          <div class="actor-role">Medlemskap · marknadslönedata · förhandlings-stöd</div>
+        </div>
+        <div class="actor-routes">
+          <code>(refererad i /arbetsgivare + lönesamtal)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Akavia är fackförbundet i Lindas värld (för Peters yrke kan
+          det vara Kommunal eller Unionen, för Evelina Civilekonomerna).
+          Fackets största pedagogiska värde: <strong>marknadslönedata</strong>
+          — eleven förbereder lönesamtalet med faktisk Akavia-statistik
+          och argumenterar med data, inte känsla.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos facket</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Hämtar marknadslönedata.</strong> Median för
+            elevens roll + region + erfarenhet. T.ex. "IT-konsult
+            Stockholm 1 års erfarenhet → 39 500 kr/mån (Akavia 2026)".
+            Används direkt i lönesamtalet med Maria.
+          </li>
+          <li>
+            <strong>Granskar kollektivavtalet.</strong> Akavia förhandlar
+            kollektivavtal med arbetsgivarna (i Lindas fall Akavia ITP1).
+            Eleven kan slå upp specifika paragrafer.
+          </li>
+          <li>
+            <strong>Tar emot rådgivning.</strong> När lönesamtalet eller
+            uppsägningssituation triggas kan eleven få fack-stöd
+            (simulerad chat eller checklista).
+          </li>
+          <li>
+            <strong>Betalar medlemsavgift.</strong> ~298 kr/mån för
+            Akavia. Eleven ser den som autogiro 25:e varje månad och
+            kan reflektera över "är den värd det?".
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Akavia: faktisk Sveriges största fackförbund för akademiker</li>
+          <li>Lönerapport: faktiskt publik PDF varje år, per yrke + region</li>
+          <li>ITP1-avtalet: gemensamt för Akavia + Svenskt Näringsliv</li>
+          <li>Andra fackförbund i andra personas: Kommunal, Unionen, Civilekonomerna</li>
+        </ul>
+
+        <p class="actor-cite">
+          Inte egen route idag. Akavias data laddas in i lönesamtalet
+          (Arbetsgivare.tsx) och visas som referens. Bör eventuellt få
+          egen <code>/facket</code>-route när vi lägger till medlemskap +
+          rådgivning som flöden.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-12">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">16 · Aktör 12</div>
+    <h2 class="h-section">Echo — den <em>sokratiska</em> följeslagaren.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Ec</div>
+        <div>
+          <div class="actor-name">Echo</div>
+          <div class="actor-role">Sokratisk AI · pedagogisk reflektion · ej rådgivare</div>
+        </div>
+        <div class="actor-routes">
+          <code>/chat</code><br>
+          <code>(triggas i alla aktör-flöden)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Echo är inte en aktör i samma mening som banken — Echo är en
+          följeslagare som dyker upp i alla flöden. Men Echo har egen
+          identitet och egen logik (Claude Haiku 4.5, sokratisk
+          frågeställare, aldrig rådgivare). Eleven möter Echo som en
+          <em>frågeskugga</em> som dyker in efter ett val, vid en kris,
+          eller vid stagnation.
+        </p>
+
+        <div class="actor-section-eye">Var Echo dyker upp</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Efter ett val.</strong> Eleven betalar tandläkaren
+            3 200 kr → Echo: "Hade du gjort samma val om bufferten
+            legat på 6 000?"
+          </li>
+          <li>
+            <strong>Vid kris.</strong> Globalfond −8 % på en dag → Echo:
+            "Vad ändrade sig fundamentalt? Eller är det bara priset?"
+          </li>
+          <li>
+            <strong>Vid stagnation.</strong> Eleven har inte gjort något
+            val på 3 minuter → Echo: "Vad är det som gör beslutet svårt?"
+          </li>
+          <li>
+            <strong>I /chat.</strong> Som öppen samtalsyta för
+            reflektion — eleven kan när som helst ställa en fråga.
+          </li>
+          <li>
+            <strong>I lärar-vyn.</strong> Läraren kan se varje Echo-
+            konversation per elev (full transparens).
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Echo:s gränser</div>
+        <ul class="actor-list">
+          <li>Aldrig rådgivning — bara frågor</li>
+          <li>Aldrig produktnamn som rekommendation (Avanza nämns som referens)</li>
+          <li>Token-räkning loggas per anrop (lärar-budget)</li>
+          <li>Ingen elev-data till Anthropic utöver det specifika anropet</li>
+          <li>Sokratisk gräns: ej kris (då hänvisar till skol-kurator)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Chat.tsx (572 rader) för öppen samtalsyta. Triggers finns
+          inbäddade i de flesta aktör-flöden via prompts från backend.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-13">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">17 · Aktör 13</div>
+    <h2 class="h-section">Maria — AI-driven <em>HR-chef</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Ma</div>
+        <div>
+          <div class="actor-name">Maria</div>
+          <div class="actor-role">Förhandlingsmotor · 5-rond lönesamtal · employer-AI</div>
+        </div>
+        <div class="actor-routes">
+          <code>(under /arbetsgivare)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Maria är inte Echo — hon är arbetsgivarens röst. När eleven
+          går in i lönesamtalet möter hen Maria som en faktisk motpart
+          med egna mål: hålla budgeten, fördela höjningar rättvist över
+          24 anställda, bibehålla satisfaction. Maria är deterministisk
+          — ger samma svar på samma argument. Hon "viker sig" inte av
+          empati, utan av matematik.
+        </p>
+
+        <div class="actor-section-eye">Marias logik</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Budget-driven.</strong> Visma har 4 % i totalbudget
+            över 24 anställda. Maria fördelar — högpresterare får mer,
+            låga får mindre.
+          </li>
+          <li>
+            <strong>5 ronder.</strong> Eleven kan argumentera 5 gånger.
+            Varje rond ändrar Marias bud baserat på elevens argument:
+            Akavia-data → bud upp; "jag är värd det" utan data → bud
+            ned.
+          </li>
+          <li>
+            <strong>Satisfaction-koppling.</strong> Hög satisfaction-
+            score → Maria är generösare. Låg → Maria är fast.
+          </li>
+          <li>
+            <strong>Sparad konversation.</strong> Hela 5-rond-samtalet
+            sparas och visas i lärar-vyn (<code>/teacher/negotiations</code>)
+            för bedömning av argumentationsförmåga.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Claude Haiku 4.5 (Anthropic) trimmad för svensk HR-dialog</li>
+          <li>Förhandlings­modell: Akavia-medel ± individual prestation ± budget</li>
+          <li>Inte rådgivare — eleven får aldrig "tips" från Maria, bara svar på argument</li>
+          <li>Determinism: samma input → samma output (för pedagogisk fairness)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Implementerad inom Arbetsgivare.tsx. Logiken bor i backend
+          (<code>school/ai-client</code>) och kommunicerar via Anthropic
+          SDK. Tokenkostnad räknas mot lärarens budget.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="aktor-14">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">18 · Aktör 14</div>
+    <h2 class="h-section">Anna — den <em>helt egna</em> världen.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">An</div>
+        <div>
+          <div class="actor-name">Anna · läraren</div>
+          <div class="actor-role">Lärar-ekosystem · klassdashboard · separat parallellvärld</div>
+        </div>
+        <div class="actor-routes">
+          <code>/teacher</code> + 12 underroutes
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Lärar-vyn är en helt parallell värld — ingen elev ser den, men
+          den följer alla elever. Den behöver behandlas som ett separat
+          ekosystem med egen IA. Däremot lever den i samma URL-space och
+          måste därför navigeras in/ut tydligt.
+        </p>
+
+        <div class="actor-section-eye">Vad läraren gör</div>
+        <ul class="actor-list">
+          <li>
+            <code>/teacher</code> — klassdashboard: 28 elever, WB-index,
+            senaste val, larm vid passivitet
+          </li>
+          <li>
+            <code>/teacher/students/:id</code> — elev-detalj med full
+            historik, mastery-spår, reflektioner, val
+          </li>
+          <li>
+            <code>/teacher/all-batches</code> — alla val-batches över alla
+            elever
+          </li>
+          <li>
+            <code>/teacher/matrix</code> — kunskapskrav-matris (vem har
+            klarat vad)
+          </li>
+          <li>
+            <code>/teacher/modules</code> + <code>/teacher/modules/:id</code> —
+            bygga / redigera moduler
+          </li>
+          <li>
+            <code>/teacher/reflections</code> — alla reflektioner per klass
+          </li>
+          <li>
+            <code>/teacher/rubrics</code> — bedömningsmallar
+          </li>
+          <li>
+            <code>/teacher/time-on-task</code> — tidsåtgång per modul
+          </li>
+          <li>
+            <code>/teacher/negotiations</code> — alla lönesamtals-historiker
+          </li>
+          <li>
+            <code>/teacher/admin-ai</code> — AI-budget, token-loggar,
+            Echo-toggle
+          </li>
+          <li>
+            <code>/teacher/investments</code>, <code>/teacher/credit</code>,
+            <code>/teacher/wellbeing</code> — fördjupningar per ämne
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Anna är samhällslärare på Hvitfeldtska gymnasiet (klass SH3A)</li>
+          <li>Hon ser aldrig elev-data direkt utan via klass-aggregat eller per-elev-vy</li>
+          <li>Lärar-vyn bör vara <em>bedömnings-redo</em> mot Lgr22 + Gy25</li>
+          <li>Impersonation: läraren kan "se som elev" för felsökning</li>
+        </ul>
+
+        <p class="actor-cite">
+          12 sub-routes — egna analys-faser bör räknas in i fas 6.
+          Bör behandlas som <em>parallell IA</em>, inte som elev-vy med
+          extra flikar.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section id="flow-bankid">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">19 · Flöde A</div>
+    <h2 class="h-section">BankID-simulator: <em>QR + telefon + PIN</em>.</h2>
+    <div class="prose">
+      <p>
+        Det här är det enda flödet i plattformen som kräver två
+        enheter samtidigt. Pedagogiskt mål: eleven förstår skillnaden
+        mellan <em>något du har</em> (telefonen) och <em>något du vet</em>
+        (PIN). Det är samma princip som riktigt BankID.
+      </p>
+      <ol>
+        <li>Eleven öppnar <code>/bank</code> på desktop. Plattformen kollar om session är aktiv (≤ 15 min).</li>
+        <li>Ingen session → desktop renderar QR-kod med engångs-token.</li>
+        <li>Eleven "scannar" med sin telefon → telefonen öppnar <code>/bank/sign?token=…</code> (publik route, ingen huvudinloggning krävs).</li>
+        <li>Telefonen visar PIN-form. Eleven knappar in 4-siffrig PIN.</li>
+        <li>Telefonen skickar PIN till backend → backend markerar token som signerad.</li>
+        <li>Desktop pollar token-status → fångar "signed" → laddar bankens dashboard.</li>
+        <li>Sessionen lever 15 min. Vid utloggning eller timeout → tillbaka till steg 2.</li>
+      </ol>
+      <p>
+        Det är samma sak vid riktigt BankID — bara att vår
+        signering är mot vår egen backend, inte mot BankID-servern.
+        Eleven får intuition för flödet utan att exponeras för riktig
+        identitet.
+      </p>
+    </div>
+  </section>
+
+  <section id="flow-kontoutdrag">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">20 · Flöde B</div>
+    <h2 class="h-section">Kontoutdrag → import → <em>egen bokföring</em>.</h2>
+    <div class="prose">
+      <p>
+        Här syns den viktigaste arkitekturella separation: banken
+        äger kontoutdraget, eleven äger sin bokföring. Importen är
+        ett medvetet, manuellt steg.
+      </p>
+      <ol>
+        <li>Banken genererar månadens kontoutdrag (PDF + struktureat) och lägger det i bankens "Dina dokument".</li>
+        <li>Eleven öppnar banken via BankID-flow.</li>
+        <li>Eleven hämtar PDF:en → ser den som hon vore riktig.</li>
+        <li>Eleven trycker <em>Importera</em> → går till <code>/import</code>.</li>
+        <li>Plattformen parser PDF:en, visar förslag på transaktioner med kategori.</li>
+        <li>Eleven granskar varje rad, justerar kategori om fel.</li>
+        <li>Bekräfta import → transaktionerna landar i <code>/transactions</code>.</li>
+        <li>Bokföringen visar nu varje rad med <em>ursprung: SEB · 25 maj 16:00</em> så det är spårbart.</li>
+      </ol>
+      <p>
+        Det här flödet förekommer en gång per månad. Pedagogisk vinst:
+        eleven förstår att banken bara visar pengarörelser — kategori­
+        seringen och budgetjämförelsen sker i bokföringen.
+      </p>
+    </div>
+  </section>
+
+  <section id="flow-kreditprovning">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">21 · Flöde C</div>
+    <h2 class="h-section">Lånansökan → KALP → <em>kreditprövning</em>.</h2>
+    <div class="prose">
+      <p>
+        Eleven ska aldrig se ett lån som "godkänt magiskt". Hela KALP-
+        beräkningen visas steg för steg så eleven förstår exakt varför
+        utfallet blev som det blev.
+      </p>
+      <ol>
+        <li>Eleven får uppdrag eller egen drivkraft → ansöker om lån (konsumtionslån via banken eller bostadslån via <code>/mortgage/:id</code>).</li>
+        <li>Plattformen samlar inkomstdata från arbetsgivaren (lönespec) — netto + tjänstepension.</li>
+        <li>Plattformen samlar existerande skulder (kreditkort, befintliga lån) från banken + lånegivaren.</li>
+        <li>Plattformen läser Konsumentverkets schablon för elevens hushållstyp (ensamboende / sambo / barn).</li>
+        <li>KALP-räkning körs: <em>Inkomst − skatt − existerande räntor/amortering − Konsumentverkets schablon = kvar för det nya lånet</em>.</li>
+        <li>Om bostadslån: kontroll av Finansinspektionens amorteringskrav (1 % över 50 % belåning, 2 % över 70 %).</li>
+        <li>Resultat visas: godkänd / nekad / godkänd med villkor (lägre belopp, högre amortering).</li>
+        <li>Vid godkänt: nya lånet hamnar i <code>/loans</code> och månadskostnaden blir en kommande faktura via banken.</li>
+      </ol>
+      <p>
+        Pedagogisk vinst: eleven ser <em>varje rad</em> i KALP — varför
+        man inte kan låna 4 mkr på 28 000 i månadslön, varför ett
+        existerande billån påverkar bostadslånet, varför FI-kraven finns.
+      </p>
+    </div>
+  </section>
+
+  <section id="flow-lonesamtal">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">22 · Flöde D</div>
+    <h2 class="h-section">Lönesamtal: <em>fem ronder</em> med Maria.</h2>
+    <div class="prose">
+      <p>
+        Lönesamtalet är pedagogiskt det viktigaste flödet i hela
+        plattformen — det tränar både argumentation, datadriven
+        förhandling och realistisk arbetsmarknadskunskap.
+      </p>
+      <ol>
+        <li><strong>Förberedelse.</strong> Eleven öppnar <code>/arbetsgivare → Lönesamtal</code>. Hämtar Akavia-data (median för rollen + region + erfarenhet).</li>
+        <li><strong>Rond 1.</strong> Maria öppnar med Vismas budget-utgångsläge (oftast 2,5 % grundrevision enligt avtal). Eleven argumenterar.</li>
+        <li><strong>Rond 2.</strong> Maria räknar om — om elevens argument hade datastöd flyttar hon sig 0,5–1,5 procentenheter. Eleven kan acceptera eller fortsätta.</li>
+        <li><strong>Rond 3–4.</strong> Eleven kan dra in fler argument: prestation, marknadsbrist, kompetensutveckling. Maria viker sig stegvis men har en hård gräns vid sin budget-andel.</li>
+        <li><strong>Rond 5.</strong> Sista rond. Maria levererar slutbud. Eleven måste välja: accept eller avslå (avslå = oförändrad lön).</li>
+        <li><strong>Konsekvens.</strong> Slutbud låses in. Nästa lönespec genereras med ny brutto. Satisfaction-score uppdateras (för aggressiv förhandling kan sänka score, datadriven kan höja).</li>
+        <li><strong>Lärar-bedömning.</strong> Hela 5-rond-samtalet sparas i <code>/teacher/negotiations</code> så läraren kan bedöma argumentationsförmåga.</li>
+      </ol>
+      <p>
+        Denna 7-stegs-resa är icke förkortbar. Genvägar (t.ex. "klicka
+        för 3,5 % höjning") tar bort hela poängen.
+      </p>
+    </div>
+  </section>
+
+  <section id="flow-autogiro">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">23 · Flöde E</div>
+    <h2 class="h-section">Autogiro-signering — <em>23 fakturor</em>, en handling.</h2>
+    <div class="prose">
+      <p>
+        Peters viktigaste flöde. Eleven möter den faktiska komplexiteten
+        i svensk vardagsekonomi: 18 fasta autogiron, 5 oregelbundna
+        som kräver granskning. Allt går genom EkonomilabbetID och
+        Bankgirot.
+      </p>
+      <ol>
+        <li>Banken har tagit emot 23 inkommande fakturor under månaden (hyra, el, försäkring, mobil, tandvård, m.fl.).</li>
+        <li>Eleven öppnar bankens "Kommande" — ser hela listan med belopp och förfallodatum.</li>
+        <li>Plattformen klassificerar automatiskt: 18 är <em>vana</em> (inom 5 % av snitt-belopp + känd utskickare). 5 är <em>oregelbundna</em> och flaggas röda.</li>
+        <li>Eleven granskar de 5 röda raderna en och en — väljer betala / skjuta upp / kontakta utskickare.</li>
+        <li>Eleven trycker <em>Signera 18 vana med EkonomilabbetID</em>.</li>
+        <li>EkonomilabbetID-flow triggas (samma som BankID-simulator) — desktop visar QR, telefonen bekräftar med PIN.</li>
+        <li>Bankgirot tar emot 18 medgivanden i ett svep — schemalagda dragningar registreras.</li>
+        <li>Stoppfrist: eleven kan stoppa enskild dragning till kl 16:00 dagen före.</li>
+        <li>När dragning sker (typiskt 25:e i månaden) flyter pengarna ut automatiskt — visas i kontoutdraget nästa månad.</li>
+      </ol>
+      <p>
+        Pedagogisk vinst: eleven förstår att autogiro inte är magi —
+        det är ett medgivande som sparas hos Bankgirot, en kalender­
+        bunden dragning, och en stoppfrist. Att signera 18 fakturor i
+        ett svep är ett <em>val</em> — eleven kan också signera en i
+        taget om något känns osäkert.
+      </p>
+    </div>
+  </section>
+
+  <section id="tools-intro">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">24 · Verktygslagret</div>
+    <h2 class="h-section">När data har landat — då börjar <em>förståelsen</em>.</h2>
+    <div class="prose">
+      <p>
+        Aktörerna producerar händelser. Verktygen tolkar dem. Skillnaden är central:
+        en aktör är en plats där eleven <em>handlar</em> (loggar in, signerar, förhandlar);
+        ett verktyg är en plats där eleven <em>tänker</em> (sorterar, jämför, simulerar,
+        drar slutsatser). Aktörerna ger autenticitet — verktygen ger pedagogik. Båda
+        krävs; inget av dem fungerar ensamt.
+      </p>
+      <p>
+        Verktygen sitter alla i samma applikationsskal — sidomeny vänster, huvudyta
+        höger, samma typografi, samma färgsystem. De delar databas och autentisering
+        med aktörerna men är medvetet <em>opersoniga</em> i tonen: ingen Anna,
+        ingen Maria, ingen Echo som pratar tillbaka. Bara siffror, tabeller, grafer
+        och tydliga handgrepp. Det är meningen. Verktygen är där eleven ska känna
+        sig kompetent, inte guidad.
+      </p>
+      <p>
+        Det finns tio kärnverktyg. Vi går igenom dem i den ordning de naturligt
+        används av en elev som precis loggat in för första gången.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-dashboard">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">25 · Verktyg 01</div>
+    <h2 class="h-section">Dashboard — <em>tillstånd</em>, inte tidslinje.</h2>
+    <div class="prose">
+      <p>
+        Dashboard är första vyn efter inloggning och svarar på exakt en fråga:
+        <em>hur står det till just nu?</em> Den är inte en aktivitetsström, inte
+        en feed, inte en kalender — det är en stillbild. Saldon på samtliga konton,
+        skuld kvar på lån, månadens klassificeringsgrad, närmaste lönedag, antal
+        aktiva mål, senaste bokföringsdag. Tio till tolv tal, ingen scroll, allt
+        ovanför viken.
+      </p>
+      <p>
+        Pedagogiskt syfte: ge eleven en känsla av <em>överblick</em> innan hen
+        dyker ner i detaljer. Ungdomar saknar ofta känslan av att ha ett ekonomiskt
+        läge — pengar är något som finns eller inte finns på kortet. Dashboarden
+        materialiserar tillståndet: här är dina tillgångar, här är dina skulder,
+        här är dina åtaganden den närmaste månaden.
+      </p>
+      <p>
+        Tekniskt: aggregerar från <em>alla</em> aktör-databaser (banken, Avanza,
+        Folksam, Pensionsmyndigheten) plus elevens egen bokföring. Refresh sker
+        på pull-to-refresh och vid varje ny inloggning, men inte i bakgrunden —
+        för en simulator behövs ingen polling, och tystnaden är pedagogisk.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-transactions">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">26 · Verktyg 02</div>
+    <h2 class="h-section">Transaktioner — där rådatat <em>blir</em> bokföring.</h2>
+    <div class="prose">
+      <p>
+        Det vanligaste missförståndet, även från någon som arbetat länge med
+        produkten: <em>transaktioner är inte banken</em>. Banken (aktör 01) är
+        platsen där råa kontorörelser dyker upp som de gör i verkligheten — utan
+        kategori, utan motpart, utan mening. Verktyget Transaktioner är där
+        eleven förvandlar dessa rörelser till begripliga händelser: <em>"Coop
+        Konsum 18:42 / 312 kr"</em> blir <em>"Mat &amp; livsmedel"</em> kopplat
+        till kategori, motpart, ev. budgetpost.
+      </p>
+      <p>
+        Listan består av rader importerade från kontoutdrag (CSV/PDF/XLSX) plus
+        manuellt inlagda kontant-händelser. Varje rad har en av fyra status:
+        <em>okategoriserad</em>, <em>auto-klassificerad</em> (regelmotor träffade),
+        <em>AI-förslagen</em> (regelmotor missade, Claude Haiku föreslog),
+        <em>manuellt bekräftad</em>. Skolläget visar status-färger till läraren
+        för att kunna se vilka elever som faktiskt rör vid sina rader och vilka
+        som bara klickar "godkänn alla".
+      </p>
+      <p>
+        Pedagogiken: kategoriserings-arbetet är inte ett administrativt straff,
+        det är <em>poängen</em>. När eleven tvingas titta på 312 kr på Coop och
+        besluta om det är "Mat hemma" eller "Lunch ute" — då uppstår den
+        ekonomiska medvetenheten. Automatisering är därför avsiktligt begränsad:
+        regelmotorn klarar de uppenbara fallen (lön, hyra, autogiro) men lämnar
+        tillräckligt mycket åt eleven för att skapa friktion med syfte.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-budget">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">27 · Verktyg 03</div>
+    <h2 class="h-section">Budget — <em>plan</em> möter <em>utfall</em>.</h2>
+    <div class="prose">
+      <p>
+        Budget-verktyget är en tabell på två kolumner: planerat och faktiskt.
+        Eleven sätter en månadsbudget per kategori (Mat 3 500, Hyra 7 200,
+        Transport 1 100, …) och systemet räknar i realtid hur mycket av
+        kategorin som förbrukats genom de bokförda transaktionerna. Visualiseras
+        som progress-bar per rad och en summerad bar längst upp.
+      </p>
+      <p>
+        Tre signalfärger: <em>grön</em> (under 80 % av budgeten med 7+ dagar
+        kvar av månaden), <em>gul</em> (80–100 % eller orealistisk takt),
+        <em>röd</em> (över budget). Färgerna är inte moraliska — de är
+        informationella. Att hamna i rött betyder inte att man misslyckats,
+        det betyder att verkligheten inte matchade planen, och då är frågan:
+        var planen fel eller var beteendet fel?
+      </p>
+      <p>
+        Konsumentverkets riktvärden (per persontyp, per hushållsstorlek) finns
+        som bakgrundsinfo i sidopanelen — om eleven satt 1 200 kr på mat för
+        en månad och Konsumentverket säger 3 600 för samma persontyp så ser hen
+        avvikelsen som en grå skugga bakom sin egen siffra. Vi rättar inte
+        eleven; vi visar referensen.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-goals">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">28 · Verktyg 04</div>
+    <h2 class="h-section">Mål — sparande som en <em>räkning</em> till sig själv.</h2>
+    <div class="prose">
+      <p>
+        Verktyget Mål låter eleven definiera sparmål — buffert (3 månadshyror),
+        körkort (15 000 kr), interrail-resa (8 000 kr), kontantinsats (200 000
+        kr) — och knyter dem till ett underliggande sparkonto eller ISK.
+        Varje mål har ett målbelopp, en deadline, ett avsättningsschema (kr/månad)
+        och en visualisering som visar hur långt eleven kommit och om hen ligger
+        i fas.
+      </p>
+      <p>
+        Den verkligt centrala detaljen är att avsättningarna behandlas som
+        <em>räkningar</em> i bokföringen — pay yourself first. När eleven
+        skapar ett mål med 1 500 kr/månad till buffert så dyker det upp som
+        en planerad utgående överföring i banken (likställd med hyra och
+        elräkning) och i budgeten som en egen rad. Sparande är inte rest;
+        sparande är åtagande.
+      </p>
+      <p>
+        Vid målets deadline produceras en summering: blev det? Hur mycket fattades?
+        Vad gick det till annars? Det är inte en bedömning utan en reflektionspunkt
+        — Echo (aktör 11) tar ofta över därifrån för att hjälpa eleven läsa sin
+        egen bokföring och hitta var pengarna verkligen gick.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-invest">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">29 · Verktyg 05</div>
+    <h2 class="h-section">Investeringssimulator — <em>tid</em>, ränta-på-ränta, schablonskatt.</h2>
+    <div class="prose">
+      <p>
+        Simulatorn låter eleven leka med fyra parametrar: startbelopp, månadsspar,
+        årlig avkastning (default 7 %, justerbart 0–12), tidshorisont (1–50 år).
+        Resultatet visas både som linjediagram (kapital över tid) och som
+        slutbelopp i en stor siffra. Två scenarion kan jämföras sida vid sida:
+        <em>spara 500 kr/månad i 40 år</em> mot <em>spara 1 500 kr/månad i
+        20 år</em> — samma totala insättning, dramatiskt olika utfall. Det är
+        verktygets pedagogiska kärna.
+      </p>
+      <p>
+        Skattemodellen är medveten icke-trivial: simulatorn räknar både ISK
+        (schablonskatt på kapitalunderlag — riksbankens statslåneränta + 1 %,
+        golv 1,25 %) och vanlig depå (30 % på realiserad vinst). Eleven ser
+        hur de två kontotyperna divergerar för olika tidshorisonter. Detta är
+        inte beslutsstöd; det är begreppsbildning. Skatten är inte bara en
+        siffra på årsbeskedet.
+      </p>
+      <p>
+        Indata kommer från Avanza-aktören (befintlig portfölj, befintlig
+        ISK-kapital) och scenariot kan exporteras till elevens reflektionsmodul.
+        Anna (aktör 14) refererar ofta till den här simulatorn när eleven frågar
+        om kontantinsats, pension eller buffert: <em>"prova själv i simulatorn —
+        sätt 2 000 kr/månad och 25 år, vad händer?"</em>
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-loan">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">30 · Verktyg 06</div>
+    <h2 class="h-section">Lånekalkylator — <em>amortering</em>, <em>ränta</em>, <em>KALP</em>.</h2>
+    <div class="prose">
+      <p>
+        Verktyget räknar låneutrymme och månadskostnad utifrån fyra inputs:
+        låneslag (bolån / blanco / billån / studielån), lånebelopp, räntesats
+        och amorteringsplan (rak / annuitet / minimumkrav). Output är inte
+        bara en siffra utan en hel <em>amorteringstabell</em> månad för månad
+        — eleven kan se exakt hur räntan sjunker när skulden krymper, och
+        hur amortering på 1 % vs 2 % vs 3 % förändrar tidpunkten för
+        skuldfrihet.
+      </p>
+      <p>
+        För bolån appliceras Finansinspektionens amorteringskrav korrekt:
+        2 % över 70 % av bostadens värde, 1 % mellan 50 % och 70 %, 0 % under
+        50 %; plus extra 1 % om skulden överstiger 4,5 × årsinkomsten. Detta
+        är inte ornament — det är samma räkning Lånegivaren (aktör 04) gör
+        i kreditprövningen, så eleven kan i förväg räkna ut vad banken kommer
+        kräva.
+      </p>
+      <p>
+        KALP-fliken (Kvar Att Leva På) återanvänder Konsumentverkets schabloner
+        från aktör 10 och visar hur mycket pengar som blir kvar efter ränta,
+        amortering, hyra och driftkostnader. Är KALP negativ — då hade banken
+        sagt nej. Här pedagogisera vi <em>varför</em> banken sa nej och vad
+        eleven hade kunnat göra annorlunda.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-pension">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">31 · Verktyg 07</div>
+    <h2 class="h-section">Pensionsöversikt — tre <em>pelare</em>, en <em>helhet</em>.</h2>
+    <div class="prose">
+      <p>
+        Verktyget aggregerar elevens pensionsbild från tre källor:
+        <em>allmän pension</em> (Pensionsmyndigheten, aktör 09: inkomstpension
+        + premiepension), <em>tjänstepension</em> (Arbetsgivaren, aktör 02:
+        ITP1 om kollektivavtal finns, annars ingen) och <em>privat sparande</em>
+        (Avanza, aktör 05: ISK eller pensionsförsäkring). Var och en visualiseras
+        som en pelare, och totalen visas som beräknad månadsutbetalning vid
+        65, 67, 70 års ålder.
+      </p>
+      <p>
+        Beräkningen är medvetet pessimistisk: 2 % real avkastning antas (inte
+        7 %), inflationsuppräknat till dagens penningvärde, och
+        delningstal följer SCB:s aktuariella tabeller. Resultatet blir oftast
+        en chock för eleven — pensionen är lägre än hen förväntat — och det
+        är den chocken som är hela poängen med verktyget. Anna refererar
+        konsekvent hit när elever pratar om "långt fram" och "behöver inte
+        tänka på".
+      </p>
+      <p>
+        Pelarna är klickbara: klick på <em>tjänstepension</em> visar avtalsdetaljer
+        (Akavia ITP1: 4,5 % under 7,5 IBB + 30 % över), klick på
+        <em>premiepension</em> visar nuvarande fondval och avkastning sedan
+        start, klick på <em>privat</em> visar ISK-saldo och månadsavsättning.
+        Helheten är därmed också ingången till underliggande aktörer.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-tax">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">32 · Verktyg 08</div>
+    <h2 class="h-section">Skattedeklaration — där <em>allt</em> möts.</h2>
+    <div class="prose">
+      <p>
+        Skattedeklarationen är inte ett separat tema utan en <em>summering</em>
+        av allt övrigt. Verktyget visar förifyllt underlag från Skatteverket
+        (aktör 03) — inkomster från arbetsgivare, ränta från banken, kapitalvinst
+        från Avanza, ev. förmåner — och låter eleven gå igenom rad för rad.
+        Nästan ingenting ska ändras manuellt; det är inte poängen. Poängen
+        är att eleven faktiskt ser <em>varifrån</em> alla siffror kommer.
+      </p>
+      <p>
+        Tre detaljer är pedagogiskt centrala: (1) <em>jobbskatteavdrag</em>
+        beräknas korrekt i fyra steg utifrån inkomstnivå — eleven ser exakt
+        varför nettan är högre än skattetabellen antyder; (2)
+        <em>ränteavdrag</em> på skuldränta visas som negativ skatt (30 % upp
+        till 100 000 kr räntebetalning, 21 % därutöver); (3) <em>schablonskatt
+        på ISK</em> dyker upp som en post som beräknats utanför elevens
+        kontroll — det är så ISK fungerar i verkligheten.
+      </p>
+      <p>
+        Slutresultatet är <em>kvarskatt</em> eller <em>skatteåterbäring</em>
+        — i båda fallen ett konkret tal som eleven kan koppla tillbaka till
+        sin lönespec ("preliminärskatten varit för låg / för hög hela året").
+        Verktyget är därmed också ett retrospektivt facit på hur väl elevens
+        skatteinställningar matchade årets verklighet.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-modules">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">33 · Verktyg 09</div>
+    <h2 class="h-section">Moduler — <em>kompetenser</em>, inte kurser.</h2>
+    <div class="prose">
+      <p>
+        Modul-verktyget är platsen där läraren möter sina elever pedagogiskt.
+        Elevens vy: en lista med pågående och avklarade moduler ("Din första
+        månad", "Ditt första bolån", "Din pension om 40 år"). Varje modul är
+        en serie kapitel — text att läsa, övningar att lösa i andra verktyg,
+        reflektioner att skriva, ibland en konversation med Echo. Avklarad
+        modul ger en eller flera <em>kompetenser</em> i elevens portfolio.
+      </p>
+      <p>
+        Det finns tolv systemkompetenser som autoseedas vid uppstart i skolläget
+        — bokföring, budget, kreditförståelse, skatte-grundläggande, sparande,
+        pensionsförståelse, försäkring, lön, lån-och-räntor, investering,
+        konsumenträttigheter, ekonomisk reflektion. Lärare kan lägga till egna.
+        Varje kompetens har <em>nivåer</em> (intro, grund, fördjupning) och
+        nivån höjs när elevens prestationer i modulerna kvalificerar.
+      </p>
+      <p>
+        Bedömningen är inte automatisk på det sättet att en algoritm sätter
+        betyg — det är läraren som godkänner kompetens-höjningar baserat på
+        elevens portfolio. AI:n (Echo / Maria) hjälper men beslutar inte.
+        Detta är medvetet: skolläget ska respektera lärarens professionella
+        bedömning, inte ersätta den.
+      </p>
+    </div>
+  </section>
+
+  <section id="tool-reflect">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">34 · Verktyg 10</div>
+    <h2 class="h-section">Reflektioner — där <em>siffror</em> blir <em>tankar</em>.</h2>
+    <div class="prose">
+      <p>
+        Det sista kärnverktyget är elevens reflektionslogg. Det är en kronologisk
+        ström av textinlägg som eleven skriver — antingen ostyrt ("vad lärde du
+        dig den här veckan?") eller styrt via prompter från modulerna ("titta
+        på din mat-kategori i mars: vad ser du?"). Inläggen är synliga för
+        läraren men aldrig för andra elever.
+      </p>
+      <p>
+        Echo (aktör 11) kan kopplas in när eleven vill bolla — men endast på
+        elevens initiativ, aldrig pushat. Echo läser elevens senaste
+        bokföringsdata, budget och måluppfyllelse innan svaret formuleras, så
+        de sokratiska frågorna blir konkreta: <em>"jag ser att du satt en
+        budget på 1 200 kr för restaurang och hamnade på 2 100. Vad var det
+        som hände den 17:e?"</em> Det är inte en chatbot som ger råd; det är
+        en spegel som ställer frågor.
+      </p>
+      <p>
+        Reflektionerna utgör tillsammans elevens portfolio — det är dem läraren
+        läser inför kompetens-höjning, det är dem eleven själv kan bläddra i
+        om sex månader och se sin egen utveckling. Verktyget är intentionellt
+        lågfrekvent: vi tror inte på ekonomisk dagbok varje dag, men vi tror
+        på en eftertänksam reflektion var fjortonde dag.
+      </p>
+    </div>
+  </section>
+
+  <section id="teacher-intro">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">35 · Lärar-ekosystemet</div>
+    <h2 class="h-section">Lärarens vy är ett <em>annat</em> system — i samma kodbas.</h2>
+    <div class="prose">
+      <p>
+        Allt vi har beskrivit hittills — fjorton aktörer, tio verktyg — är
+        elevens vy. När en lärare loggar in händer något helt annat: appen
+        växlar till en multi-tenant administrationsyta där läraren ser alla
+        sina elever, alla sina familjer, alla sina pågående konversationer
+        och alla sina kompetensbedömningar. Samma React-bundle, samma backend,
+        men en parallell uppsättning routes (<code>/teacher/*</code>) och en
+        helt annan informations-arkitektur.
+      </p>
+      <p>
+        Tekniskt: lärarens token ger access till en master-databas som listar
+        elever och familjer. När läraren klickar in på en elev <em>impersonerar</em>
+        appen den eleven — backend sätter elevens scope-ContextVar för
+        requesten, så läraren ser exakt det eleven ser, men med ett synligt
+        bandage upptill: <em>"Du är inloggad som Sara · återgå"</em>.
+        Impersonation loggas i audit-tabellen.
+      </p>
+      <p>
+        Lärar-ekosystemet består av tre huvudsakliga delar — en översiktsvy,
+        en elevdetaljvy, och ett innehålls-redigeringsverktyg för moduler.
+        Vi går igenom dem nu.
+      </p>
+    </div>
+  </section>
+
+  <section id="teacher-overview">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">36 · Lärarvy 01</div>
+    <h2 class="h-section">Översikten — <em>klass</em> som information.</h2>
+    <div class="prose">
+      <p>
+        Första vyn efter lärarinloggning är klassöversikten. En tabell med
+        alla elever (eller familjer) listade med fem kolumner: namn,
+        senast aktiv, klassificeringsgrad denna månad, antal pågående moduler,
+        och en signalfärg som sammanfattar nuläget — grön (i fas), gul
+        (begynnande släp), röd (har inte loggat in på 14 dagar eller har
+        kategoriseringsgrad under 30 %).
+      </p>
+      <p>
+        Filter och sortering finns, men det viktiga är att vyn aldrig
+        rangordnar elever mot varandra — det finns inget "topp-3-listor",
+        ingen leaderboard, ingen jämförelse. Pedagogiken är individuell;
+        det enda jämförelsetal som existerar är elevens nuläge mot elevens
+        eget tidigare läge. Lärarens uppgift är inte att betygsätta utan
+        att se vem som behöver stöd.
+      </p>
+      <p>
+        Klick på en elevrad öppnar elevdetaljvyn (nästa avsnitt). Knapp
+        högst upp till höger låter läraren skapa nya elever — en åt gången
+        eller via massimport (CSV med namn + e-post för vårdnadshavare).
+        Varje ny elev får en sexteckens-engångskod som skickas till
+        vårdnadshavarens mejl tillsammans med en länk.
+      </p>
+    </div>
+  </section>
+
+  <section id="teacher-student">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">37 · Lärarvy 02</div>
+    <h2 class="h-section">Elevdetalj — fem <em>flikar</em>, en elev.</h2>
+    <div class="prose">
+      <p>
+        Klick på en elev från översikten öppnar elevdetaljvyn — den mest
+        innehållstunga skärmen i hela systemet. Den är organiserad i fem
+        flikar: <em>Översikt</em> (sammanfattning av aktivitet, kompetenser,
+        senaste reflektioner), <em>Bokföring</em> (elevens transaktioner,
+        klassificeringsgrad, anomalier), <em>Moduler</em> (vilka moduler eleven
+        gjort, vilka är pågående, vilka är öppna), <em>Reflektioner</em>
+        (kronologisk lista av elevens textinlägg + Echo-konversationer),
+        <em>Portfolio</em> (kompetensnivåer + lärarens noteringar).
+      </p>
+      <p>
+        Tre handlingar är centrala. Först <em>impersonera</em>: läraren kan
+        klicka "se som Sara" och få exakt elevens vy med banner upptill —
+        detta är det enda säkra sättet att förstå vad eleven faktiskt ser
+        när problem uppstår. Andra: <em>höj kompetens</em>: läraren
+        markerar en kompetens som uppfylld på en viss nivå, valfri
+        motivering. Tredje: <em>kommentera reflektion</em>: läraren kan
+        skriva ett privat svar till elevens reflektion, eleven ser det vid
+        nästa inloggning.
+      </p>
+      <p>
+        En sidopanel högst upp visar AI-token-konsumtion för eleven (om
+        AI är aktiverat) och varnar om eleven närmar sig lärarens månadstak.
+        Eleven ser inte detta; det är lärarens administrativa data.
+        Token-buckets ligger i <code>security/rate_limit.py</code> och är
+        per-lärare, inte per-elev — eleven räknas mot sin lärares tak.
+      </p>
+    </div>
+  </section>
+
+  <section id="teacher-editor">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">38 · Lärarvy 03</div>
+    <h2 class="h-section">Modul-editorn — innehåll som <em>läraren</em> äger.</h2>
+    <div class="prose">
+      <p>
+        Modulerna i systemet kommer i två varianter: <em>seedade</em> moduler
+        som installeras automatiskt vid uppstart ("Din första månad" m.fl.)
+        och <em>egna</em> moduler som läraren skapar för sin klass. Editorn
+        är platsen för det andra. Den består av en kapitelvy till vänster,
+        en redigeringsyta till höger, och en preview-knapp överst som
+        visar exakt det eleven kommer se.
+      </p>
+      <p>
+        Ett kapitel är en sekvens av block: <em>text</em> (markdown),
+        <em>övning</em> (länk till ett verktyg + valbara förinställningar
+        — t.ex. "öppna investeringssimulatorn med 1000 kr/mån i 30 år"),
+        <em>reflektionsprompt</em> (text som blir en obligatorisk reflektion
+        i elevens logg), <em>kompetensspärr</em> (modulen kan inte avslutas
+        innan en specifik kompetens nått en specifik nivå). Block kan
+        sorteras med drag-and-drop och versionseras automatiskt.
+      </p>
+      <p>
+        En modul kan publiceras till hela klassen eller till specifika
+        elever. Vid publicering blir modulen <em>readonly</em> i elevens
+        vy — läraren kan fortfarande redigera, men ändringar slår igenom
+        först vid nästa publicering. Detta för att undvika att elever
+        upplever att innehållet ändras under fötterna mitt i en uppgift.
+      </p>
+    </div>
+  </section>
+
+  <section id="routes-public">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">39 · Mappning · publika routes</div>
+    <h2 class="h-section">Publika routes — innan inloggning.</h2>
+    <div class="prose">
+      <p>
+        Faktisk inventering från <code>frontend/src/App.tsx</code>. Före
+        autentisering finns 14 routes synliga: <code>/</code> (landningsväxlare
+        som visar Hembudget eller Ekonomilabbet beroende på env-flag),
+        <code>/login</code> (val mellan elev/lärare),
+        <code>/login/teacher</code>, <code>/signup/teacher</code>,
+        <code>/signup/parent</code>, <code>/verify-email</code>,
+        <code>/forgot-password</code>, <code>/reset-password</code>,
+        <code>/login/student</code> (sexsiffrig kod), <code>/demo</code>
+        (val mellan demoupplägg), <code>/demo/scroll-story</code>,
+        <code>/bank/sign</code> (BankID-mock som även är åtkomlig publikt
+        för signering från externa flöden), och informationssidor
+        <code>/docs</code>, <code>/terms</code>, <code>/faq</code>.
+      </p>
+      <p>
+        Plus <em>läs-alltid</em>-routes <code>/larguider</code>,
+        <code>/lgr22</code>, <code>/rubriker</code> (lärarmaterial),
+        <code>/echo</code> (publik EchoAi-sandbox). Alla okända paths
+        fångas av en catch-all som leder tillbaka till
+        <code>LandingSwitch</code>.
+      </p>
+    </div>
+  </section>
+
+  <section id="routes-teacher">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">40 · Mappning · lärar-routes</div>
+    <h2 class="h-section">Lärar-routes — 13 stycken under <code>/teacher/*</code>.</h2>
+    <div class="prose">
+      <p>
+        Lärar-ekosystemet är tyngre än det lät i förra avsnittet. Faktisk
+        inventering: <code>/teacher</code> (översikt),
+        <code>/teacher/students/:studentId</code> (elevdetalj),
+        <code>/teacher/all-batches</code> (alla pågående batchuppdrag),
+        <code>/teacher/matrix</code> (uppdragsmatris klass × modul),
+        <code>/teacher/modules</code> + <code>/teacher/modules/:moduleId</code>
+        (modul-bibliotek + editor),
+        <code>/teacher/reflections</code> (alla elevers reflektioner i en ström),
+        <code>/teacher/rubrics</code> (bedömningsmatriser),
+        <code>/teacher/time-on-task</code> (engagemangsstatistik),
+        <code>/teacher/negotiations</code> (alla pågående lönesamtal),
+        <code>/teacher/admin-ai</code> (AI-konfig + token-budget),
+        <code>/teacher/investments</code> (klassens investeringsprestanda),
+        <code>/teacher/credit</code> (kreditprövningsfacit),
+        <code>/teacher/wellbeing</code> (mental hälsa-signaler).
+      </p>
+      <p>
+        Plus två "delade" routes som teknisk är lärar-orkestrerade men öppnas
+        av eleven: <code>/mortgage/:assignmentId</code> (bolåneuppdrag som
+        läraren delar ut, eleven löser),
+        <code>/peer-review</code> (peer review där lärare matchat två elever).
+        Detta är 13 + 2 = 15 lärar-orienterade routes utöver de publika.
+        Min ursprungliga "tre lärarvyer" var en pedagogisk förenkling — det
+        verkliga lärar-systemet är betydligt rikare.
+      </p>
+    </div>
+  </section>
+
+  <section id="routes-student">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">41 · Mappning · elev-routes</div>
+    <h2 class="h-section">Elev-routes — 23 stycken efter inloggning.</h2>
+    <div class="prose">
+      <p>
+        Faktisk inventering, grupperade efter typ:
+      </p>
+      <p>
+        <strong>Aktör-portaler (8):</strong>
+        <code>/bank</code> + <code>/bank/sign</code> (Banken),
+        <code>/arbetsgivare</code> (Arbetsgivaren),
+        <code>/salaries</code> (lönespecar — del av arbetsgivaren),
+        <code>/loans</code> (Lånegivaren),
+        <code>/funds</code> + <code>/investments</code> (Avanza),
+        <code>/utility</code> (Tibber + Folksam-aggregat),
+        <code>/Callback</code> (TibberCallback-OAuth-väg),
+        <code>/upcoming</code> (kommande fakturor — bankens åtagande-vy).
+      </p>
+      <p>
+        <strong>Synthesis-verktyg (10):</strong>
+        <code>/dashboard</code>, <code>/transactions</code>,
+        <code>/import</code>, <code>/budget</code>, <code>/scenarios</code>
+        (mål + simulator), <code>/transfers</code>, <code>/tax</code>,
+        <code>/reports</code>, <code>/attachments</code> (kvitton, PDF-arkiv),
+        <code>/settings</code>.
+      </p>
+      <p>
+        <strong>Pedagogiska:</strong>
+        <code>/modules</code> + <code>/modules/:moduleId</code>,
+        <code>/achievements</code>, <code>/chat</code> (Echo),
+        <code>/messages</code> (lärar-elev-meddelanden),
+        <code>/my-batches</code> (egna uppdrag).
+      </p>
+      <p>
+        Det är 23 routes — men alla används inte i alla lägen. Hembudget-läget
+        döljer t.ex. <code>/modules</code> och <code>/achievements</code>;
+        Ekonomilabbet-läget döljer <code>/Callback</code> (Tibber). Routerna
+        finns men sidomenyn filtreras dynamiskt utifrån
+        <code>useAuth().mode</code>.
+      </p>
+    </div>
+  </section>
+
+  <section id="design-principle-1">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">42 · Designprincip 01</div>
+    <h2 class="h-section">Aktörer ser ut som <em>världen</em>; verktyg ser ut som <em>appen</em>.</h2>
+    <div class="prose">
+      <p>
+        Den första designprincipen som följer av två-lager-arkitekturen:
+        aktör-portaler ska visuellt likna sina motsvarigheter i verkligheten,
+        verktygen ska visuellt likna varandra. Banken ska kännas som en bank
+        (svalt blå, formellt typsnitt, kontoutdrag som ser ut som
+        riktiga kontoutdrag); Avanza ska kännas som Avanza (gul accent,
+        portfolio-rutnät, kursgrafer); Skatteverket ska kännas som
+        Skatteverket (nyktert myndighetsbeige, blanketter med radnummer).
+      </p>
+      <p>
+        Verktygen däremot ska ha gemensam visuell grammatik: samma
+        sidomeny, samma typografi, samma färgpalett, samma knappstilar.
+        Eleven ska kunna växla från Budget till Skattedeklaration utan
+        att behöva orientera om sig — det är samma "appens egen" yta.
+      </p>
+      <p>
+        Detta är inte bara estetik. Det är pedagogisk signalering: när jag
+        är i en aktör-portal är jag en <em>kund</em>, jag har begränsad makt,
+        jag måste följa deras flöde. När jag är i ett verktyg är jag den
+        som <em>tänker</em> — verktyget jobbar för mig, inte tvärtom.
+      </p>
+    </div>
+  </section>
+
+  <section id="design-principle-2">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">43 · Designprincip 02</div>
+    <h2 class="h-section">Friktion är <em>information</em> — automatisera inte bort den.</h2>
+    <div class="prose">
+      <p>
+        Den vanligaste produktinstinkten i en finanstech-app är att minimera
+        antalet klick. För Ekonomilabbet är instinkten ofta motsatt: det
+        ekonomiska lärandet sitter i de moment där eleven faktiskt måste
+        <em>tänka</em>. När vi inför ett "klassificera alla med ett klick"
+        så ger vi bort poängen.
+      </p>
+      <p>
+        Det betyder inte att alla flöden ska vara klumpiga. Tre regler:
+        (1) <em>upprepning</em> ska vara billig — om eleven redan klassificerat
+        en återkommande utgift en gång, ska systemet komma ihåg det.
+        (2) <em>mekanisk friktion</em> ska minimeras — fält ska inte tappa fokus,
+        sökvägar ska inte vara djupa, fel ska vara reversibla.
+        (3) <em>kognitiv friktion</em> ska bevaras — när eleven ska besluta något
+        som har ett pedagogiskt värde, ska beslutet inte gömmas bakom en knapp
+        som heter "OK".
+      </p>
+      <p>
+        Tydligaste exemplet är BankID-flödet. Det vore tekniskt trivialt att
+        låta eleven trycka enter och hoppa över QR-kod-mockmoment. Men
+        BankID-flödet i verkligheten är just den delen som gör eleven medveten
+        om att hen <em>signerar något viktigt</em>. Den medvetenheten är
+        värdefull, så vi behåller den.
+      </p>
+    </div>
+  </section>
+
+  <section id="design-principle-3">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">44 · Designprincip 03</div>
+    <h2 class="h-section">AI är <em>spegel</em>, inte <em>orakel</em>.</h2>
+    <div class="prose">
+      <p>
+        Tre AI-personor finns i systemet — Echo (sokratisk reflektion), Maria
+        (lönesamtals-motpart), Anna (privatekonomisk rådgivare). Alla tre är
+        designade efter samma princip: AI får aldrig <em>tala om</em> för
+        eleven vad som är rätt eller fel. AI får ställa frågor, peka tillbaka
+        på elevens egen data, jämföra mot referensvärden — men den ekonomiska
+        bedömningen tillhör alltid eleven själv (eller läraren).
+      </p>
+      <p>
+        Tekniskt manifesteras detta i prompt-designen: alla tre personor körs
+        med ett <em>system-prompt</em> som explicit förbjuder rekommendationer
+        i imperativ form. Echo får inte säga "du borde spara mer i ISK"; Echo
+        får säga "när du tittar på din ISK och din vanliga depå sida vid sida,
+        vad ser du?". Maria förhandlar realistiskt men avslöjar inte sin
+        smärtgräns. Anna förklarar mekanismer men låter eleven dra slutsatser.
+      </p>
+      <p>
+        Detta är också skälet till att AI-flödena är gated bakom lärarens
+        <code>ai_enabled</code>-flagga och token-budget — vi vill inte att
+        AI:n blir en överallt-närvarande chatbot som eleven hänger på som
+        krycka. AI är ett verktyg som väljs medvetet.
+      </p>
+    </div>
+  </section>
+
+  <section id="nav-proposal">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">45 · Förslag · sidomeny</div>
+    <h2 class="h-section">Förslag på <em>navigation</em> — två sektioner, samma meny.</h2>
+    <div class="prose">
+      <p>
+        Den nuvarande sidomenyn behandlar alla 23 elev-routes som en platt
+        lista. Det blir trångt och döljer den arkitektoniska skillnaden mellan
+        aktörer och verktyg. Förslag: dela menyn i två tydligt visuellt
+        separerade grupper, med en tunn linje och rubriker emellan.
+      </p>
+      <p>
+        <strong>VERKTYG</strong> (övre sektion, visas alltid):
+        Översikt (<code>/dashboard</code>) ·
+        Transaktioner (<code>/transactions</code>) ·
+        Budget (<code>/budget</code>) ·
+        Mål &amp; scenarier (<code>/scenarios</code>) ·
+        Skattedeklaration (<code>/tax</code>) ·
+        Rapporter (<code>/reports</code>) ·
+        Kvitton (<code>/attachments</code>) ·
+        Inställningar (<code>/settings</code>).
+      </p>
+      <p>
+        <strong>AKTÖRER</strong> (nedre sektion, med små logotyper):
+        Banken (<code>/bank</code>) ·
+        Arbetsgivaren (<code>/arbetsgivare</code>) ·
+        Avanza (<code>/investments</code>) ·
+        Lånegivaren (<code>/loans</code>) ·
+        Tibber &amp; Folksam (<code>/utility</code>) ·
+        Skatteverket (öppnas via <code>/tax</code>-flik) ·
+        Pensionsmyndigheten (öppnas via <code>/scenarios</code>-flik).
+      </p>
+      <p>
+        <strong>SKOLA</strong> (visas bara i Ekonomilabbet-läget):
+        Mina moduler (<code>/modules</code>) ·
+        Min portfolio (<code>/achievements</code>) ·
+        Reflektioner (<code>/chat</code> + Echo-historia) ·
+        Mina uppdrag (<code>/my-batches</code>) ·
+        Meddelanden (<code>/messages</code>).
+      </p>
+      <p>
+        Effekten: eleven förstår direkt skillnaden mellan vad hen kan göra
+        i appen (övre del) och vart hen behöver "gå någonstans" för att
+        göra något (mellersta del). Skol-funktioner samlas på sin egen plats
+        och konkurrerar inte om uppmärksamheten.
+      </p>
+    </div>
+  </section>
+
+  <section id="conclusion">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">46 · Slutsats</div>
+    <h2 class="h-section">Vad detta system <em>är</em>.</h2>
+    <div class="prose">
+      <p>
+        Ekonomilabbet är inte en finansapp för ungdomar. Det är en
+        <em>simulator</em> av det vuxna ekonomiska livet, byggd som en
+        skolmiljö, där eleven får möta fjorton aktörer i en realistisk
+        sekvens av flöden — BankID-signering, kreditprövning, lönesamtal,
+        autogiro — och sedan få verktygen att tänka efter med. Lärarens
+        roll är att orkestrera, observera, kommentera och bedöma.
+      </p>
+      <p>
+        Tre saker skiljer detta från konkurrerande pedagogiska
+        produktidéer. För det första: <em>aktör/verktyg-uppdelningen</em>
+        — ungdomar lär sig genom att möta riktiga roller, inte genom att
+        läsa om dem. För det andra: <em>friktion som information</em> —
+        vi kortar inte ner BankID-flödet bara för att vi kan. För det
+        tredje: <em>AI som spegel</em> — Claude blir aldrig orakel.
+      </p>
+      <p>
+        Den tekniska arkitekturen reflekterar pedagogiken. Multi-tenant
+        SQLite-per-elev (eller Postgres med tenant_id-isolering i prod)
+        gör att varje elev har sin egen ekonomiska verklighet utan att
+        spilla över på klasskamrater. ContextVar-baserat scope säkerställer
+        att lärarens impersonation aldrig läcker. Token-budget per lärare
+        gör AI:n till en knapp resurs som måste användas medvetet. Allt
+        hänger ihop.
+      </p>
+      <p>
+        Den här analysen har lyft fram <em>fjorton aktörer</em>,
+        <em>fem detaljerade flöden</em>, <em>tio kärnverktyg</em>, <em>tre
+        lärarvyer</em> (utbyggda till <em>15 lärar-routes</em> i den
+        verkliga inventeringen), <em>23 elev-routes</em> och tre
+        designprinciper. Det är systemet. Det är vad vi designar emot.
+      </p>
+    </div>
+  </section>
+
+  <section id="pipeline-intro">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">47 · Pipelinen</div>
+    <h2 class="h-section">Vad som ligger på <em>kommande</em> i två-lager-arkitekturen.</h2>
+    <div class="prose">
+      <p>
+        Allt vi beskrivit hittills är det som finns idag. Men arkitekturen är
+        avsiktligt designad för att växa, och i <code>deb/README.md</code> finns
+        redan en fullständig designanalys för nästa stora utbyggnad: en
+        entreprenörskaps- och företagsekonomi-simulator under arbetsnamnet
+        <em>"Mitt företag"</em>. Den är inte byggd än, men den är specificerad
+        ner till domänmodell, AI-funktioner och implementationsfaser.
+      </p>
+      <p>
+        Konceptet i en mening: en <em>dynamisk företagssimulator</em> där
+        eleven driver ett självvalt enskilt företag över 8–16 simulerade
+        veckor — får offerter från en AI-driven kundpool, fakturerar, bokför,
+        stämmer av bank, tar strategiska beslut (marknadsföring, anställning,
+        friskvård), och får läraren som "myndighet/leverantör" som matar in
+        skatter, leverantörsfakturor och granskning.
+      </p>
+      <p>
+        I vår två-lager-modell är detta intressant: simulatorn är
+        <em>både</em> en aktör (företaget självt — kunder dyker upp,
+        fakturor kommer, beslut behöver fattas) <em>och</em> ett verktyg
+        (resultaträkning, balansräkning, nyckeltalsdashboard, peer-revision).
+        Den blir därmed ett mikrokosmos av hela det större systemet — med
+        eleven själv i rollen som "banken" / "arbetsgivaren" gentemot sin
+        egen verksamhet.
+      </p>
+    </div>
+  </section>
+
+  <section id="pipeline-domain">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">48 · Pipeline · domän</div>
+    <h2 class="h-section">Mitt företag · 13 nya tabeller, två svårighetsnivåer.</h2>
+    <div class="prose">
+      <p>
+        Domänlagret är <em>nytt ovanpå dagens motor</em>, inte parallellt.
+        Tretton nya scope-isolerade entiteter, alla via
+        <code>TenantMixin</code>:
+        <em>Business</em> (företaget självt — affärsidé, bransch, läge, rykte),
+        <em>Customer</em> (segment, priskänslighet, betalningsmoral),
+        <em>JobOpportunity</em> (offertförfrågan med riktpris och deadline),
+        <em>Quote</em> (elevens offert med pitch),
+        <em>Job</em> (vunnen offert som blir uppdrag),
+        <em>CustomerInvoice</em> (kundfaktura kopplad till Job),
+        <em>SupplierInvoice</em> (inkommande, från läraren eller systemet),
+        <em>MarketingCampaign</em> (typ + kostnad + AI-bedömd kvalitet),
+        <em>BusinessDecision</em> (anställning, försäkring, leasingbil),
+        <em>LedgerEntry</em> (debet/kredit-poster i avancerat läge),
+        <em>ChartOfAccount</em> (förenklad BAS-kontoplan, ~30 konton),
+        <em>ReconciliationSession</em> (bankavstämningar),
+        <em>AuditAssignment</em> (peer-revision).
+      </p>
+      <p>
+        Två lägen lever sida vid sida på samma företag:
+        <strong>basics</strong> (Företagsekonomi 1 / Entreprenörskap) — manuell
+        resultaträkning, knappval för beslut, automatisk veckovis avstämning,
+        inga T-konton eller nyckeltal; och <strong>advanced</strong>
+        (Företagsekonomi 2) — riktig dubbel bokföring, drag-och-släpp-avstämning
+        mot lärarens kontoutdrag, fyra nyckeltal (bruttomarginal, soliditet,
+        likviditet, omsättningshastighet) och peer-revision. Läraren sätter
+        taket per klass; eleven kan stiga inom det.
+      </p>
+      <p>
+        Det avgörande designvalet: <em>alla affärshändelser mynnar ut i
+        Transaction + LedgerEntry</em>. Modulen bygger inte ett separat
+        bokföringssystem utan återanvänder den befintliga motorn — kundfaktura
+        blir en transaktion på "Försäljning", inbetalning blir överföring till
+        bankkontot, exakt analogt med hur privattransaktioner kategoriseras
+        idag.
+      </p>
+    </div>
+  </section>
+
+  <section id="pipeline-mechanics">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">49 · Pipeline · spelmekanik</div>
+    <h2 class="h-section">"Programmet avgör" — <em>deterministiskt</em>, inte LLM.</h2>
+    <div class="prose">
+      <p>
+        Två separata mekanismer driver simulatorn, och båda är medvetet
+        deterministiska — inte LLM-drivna — eftersom läraren måste kunna
+        förklara <em>varför</em> något hände och eleven måste kunna räkna
+        ut samband.
+      </p>
+      <p>
+        <strong>Tar kunden offerten?</strong> En sigmoid-acceptansmodell
+        med fem viktade faktorer: prisavvikelse mot riktpris (per kunds
+        priskänslighet), företagets rykte (0–100), aktuell
+        marknadsföringseffekt (avtagande över tid), AI-bedömd matchning
+        mellan pitch och behov (0–1), avvikelse på leveranstid. Slumptal
+        jämförs mot P(accept). Eleven får alltid en kort motivering:
+        <em>"Kunden tyckte priset var rimligt men du lovade leverans 3
+        veckor — för långsamt."</em>
+      </p>
+      <p>
+        <strong>Får eleven fler liknande jobb?</strong> En
+        pipeline-genererare som körs när simuleringen stegar fram en
+        vecka: bas + bonus(rykte) + bonus(aktiva kampanjer) + bonus(senaste
+        levererade kvalitet) − penalty(öppna klagomål). Branschmix viktas
+        av elevens historiska affärsidé och ev. nyköpta kompetenser
+        (kurs i webbutveckling → fler IT-jobb dyker upp).
+      </p>
+      <p>
+        LLM används bara för <em>innehåll</em> — kundtexter, jobbeskrivning,
+        pitchbedömning som faktor 0–1 — aldrig för <em>beslut</em>. Det är
+        en arkitekturprincip som rimmar med designprincip 03 från tidigare
+        avsnitt: AI är spegel, inte orakel. När pedagogiken kräver
+        spårbarhet — så är pedagogiken det som bestämmer arkitekturen.
+      </p>
+    </div>
+  </section>
+
+  <section id="pipeline-teacher">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">50 · Pipeline · läraren som omvärld</div>
+    <h2 class="h-section">Lärarens roll — <em>Skatteverket</em>, <em>leverantören</em>, <em>granskaren</em>.</h2>
+    <div class="prose">
+      <p>
+        I "Mitt företag"-modulen får läraren en mer aktiv motpart-roll än
+        i resten av systemet. Lärarvyn <code>/teacher/business</code> har tre
+        kort. Först <em>klassöversikt</em>: tabell med företagsnamn,
+        omsättning, vinst, antal kundfakturor, antal förfallna fakturor,
+        senaste avstämningens status, AI-tokens använda — sortbar och
+        filtrerbar enligt samma mönster som <code>/teacher/reflections</code>.
+      </p>
+      <p>
+        Andra kortet är <em>Skicka leverantörsfaktura</em>: läraren markerar
+        en eller flera elever, fyller i avsändare/belopp/förfallodatum/fritext,
+        klickar — systemet genererar PDF (samma reportlab-stack som
+        kontoutdrag och lönespec) och skapar en
+        <code>SupplierInvoice</code> i varje vald elevs scope. Massutskick är
+        obligatoriskt; annars blir det tjatigt med 30 elever. Detta är
+        läraren-som-leverantör; pedagogiska oväntade händelser
+        ("miljöskatt", "datorn gick sönder") matas in den vägen.
+      </p>
+      <p>
+        Tredje kortet är <em>Granska kundfakturor</em>: lista över alla
+        fakturor eleverna skickat ut. Läraren kan kommentera, märka som
+        "ej godkänd" (tvingar eleven att korrigera) eller godkänna. Detta
+        är lärar-som-granskare och uppfyller kravet att läraren ska kunna
+        se elevens kundfakturor utan att bryta scope-isolering — läraren
+        impersonerar inte, läraren har en aggregerad vy.
+      </p>
+      <p>
+        En "Klassens nyckeltal"-flik visar aggregerat: snittomsättning,
+        vanligaste bokföringsfel, mest framgångsrika branschval. Användbart
+        för helklassgenomgång, men inte rangordnande mellan elever — samma
+        princip som i lärarvy 01.
+      </p>
+    </div>
+  </section>
+
+  <section id="pipeline-ai-phases">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">51 · Pipeline · AI och faser</div>
+    <h2 class="h-section">Sju nya AI-funktioner — <em>fem faser</em> i utbyggnad.</h2>
+    <div class="prose">
+      <p>
+        Sju nya AI-funktioner kommer i <code>ai.py</code>:
+        <em>generate_job_description</em> (Haiku, autenticitet i kundtext),
+        <em>evaluate_marketing_copy</em> (Haiku, kvalitetsfaktor 0,5–1,5
+        till engine), <em>evaluate_quote_pitch</em> (Haiku, matchningsfaktor
+        till acceptansmodellen), <em>suggest_bookkeeping_entry</em> (Haiku
+        med tool_use, eleven kan säga emot), <em>review_business_idea</em>
+        (Haiku, modereringsspår — fångar uppenbart olagligt/oetiskt innan
+        affärsidén sparas), plus utökningar av befintliga
+        <em>answer_student_question</em> (Sonnet, "vad är moms?") och
+        <em>score_with_rubric</em> (Sonnet, peer-revision).
+      </p>
+      <p>
+        AI-kostnaden är den största risken: 30 elever × 16 veckor × 5 LLM-anrop
+        ≈ 2 400 anrop per modulkörning. Mitigering är aggressiv caching
+        (<code>cache_control: ephemeral</code> på alla bransch- och
+        segment-prompts som är stabila), kvotlimit per elev per vecka i
+        <code>Teacher</code>-tabellen med varning vid 80 %, och ett
+        <em>ai_enabled=False</em>-läge där simulatorn kör med fasta texter —
+        försämrad upplevelse men inte broken, exakt som CLAUDE.md kräver.
+      </p>
+      <p>
+        Implementationsplanen är fem faser, totalt 6–7 veckor:
+        <strong>Fas 1</strong> grunden (1–2 v) — Business/Customer/Quote/Job/
+        CustomerInvoice, onboarding-wizard, statisk kundpool, manuell tick.
+        <strong>Fas 2</strong> modul + lärar-MVP (1 v) — systemmodul "Mitt
+        företag — från idé till revision" (8 basics-steg), klassöversikt,
+        AI för pitch + jobbeskrivning. <strong>Fas 3</strong> marknadsföring
+        + beslut (1 v) — MarketingCampaign, BusinessDecision, lärarens
+        leverantörsfakturor med massutskick. <strong>Fas 4</strong> avancerat
+        läge (2 v) — LedgerEntry, ChartOfAccount, kontering-AI,
+        bankavstämning, nyckeltalsdashboard. <strong>Fas 5</strong>
+        peer-revision + polish (1 v) — AuditAssignment, spot-check-AI mot
+        kollusion, finjustering efter klassrumstester.
+      </p>
+      <p>
+        Mellan varje fas: släpp till en testlärare, samla feedback, justera.
+        Modulen är "spel-design" lika mycket som "mjukvaru-design", så
+        iteration är obligatorisk — vilket är samma filosofi som har drivit
+        de befintliga 14 aktörerna fram till var de är idag.
+      </p>
+    </div>
+  </section>
+
+  <section id="pipeline-risks">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">52 · Pipeline · öppna beslut + fallgropar</div>
+    <h2 class="h-section">Fem <em>öppna frågor</em> och fyra <em>kända fallgropar</em>.</h2>
+    <div class="prose">
+      <p>
+        Innan första raden kod skrivs ska fem strategiska val göras.
+        (1) <em>Tidsuppfattning</em> — manuell vecko-stegning eller realtid?
+        Rekommendation: börja manuellt, lägg auto-advance vid lärar-kommando
+        senare. (2) <em>Klass-ekonomi vs individ</em> — kan elever handla av
+        varandra? Spännande pedagogiskt, mardröm tekniskt eftersom det
+        kräver delad tabell utanför scope-DB:n. Rekommendation: nej i V1.
+        (3) <em>Manuell resultaträkning som ny step-typ?</em> Rekommendation:
+        utöka <code>task</code> med specifika params, inga nya step-typer.
+        (4) <em>Lås från läraren eller fritt val mellan basics/advanced?</em>
+        Rekommendation: läraren sätter taket per klass, eleven stiger inom
+        det. (5) <em>Kundpool</em> — handgjorda eller AI-genererade?
+        Rekommendation: hybrid — 20 grundkunder per bransch i seed,
+        AI varierar pitchtext per förfrågan.
+      </p>
+      <p>
+        Fyra kända fallgropar att designa runt. <em>Beräkningstunga ticks</em>
+        — "stega vecka framåt" gör mycket; om 30 elever stegar samtidigt
+        fryser UI:n. Lösning: bakgrundsjobb via ny
+        <code>BusinessTickJob</code>-tabell, vilket bryter mot dagens
+        synkrona pattern men är nödvändigt. <em>Determinism för rättvisa</em>
+        — seed:a slumpgeneratorn på <code>(business_id, week_number)</code>,
+        inte på <code>time()</code>; två elever med samma beslut samma vecka
+        ska få liknande utfall.
+      </p>
+      <p>
+        <em>Multi-tenant-fallgrop</em> — bakgrundsuppgifter körs utan
+        HTTP-kontext, alltså utan <code>StudentScopeMiddleware</code>.
+        ContextVar:n måste sättas explicit via
+        <code>set_current_scope(scope_for_student(student))</code> i
+        tick-jobbet; bygg en helper-dekorator för alla bakgrundsfunktioner.
+        <em>PDF-prestanda</em> — reportlab är trögt vid bulk; massutskick av
+        leverantörsfakturor till 30 elever genereras lazy (vid första
+        nedladdning), inte vid skapande. Mall + parametrar lagras tills
+        någon faktiskt klickar.
+      </p>
+      <p>
+        Modulen är dessutom den första som på allvar kommer pressa systemet
+        mot Postgres-fallback (<code>HEMBUDGET_DATABASE_URL</code>). Den
+        path:en finns redan; den behöver bara aktiveras när belastningen
+        kräver det. Tills dess fungerar den under
+        <code>--max-instances=1</code> precis som resten av plattformen.
+      </p>
+    </div>
+  </section>
+
+  <div class="foot">
+    <a href="./index.html">← Tillbaka till förslagen</a>
+  </div>
+</div>
+
+</body>
+</html>

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import type { Account } from "@/types/models";
 
 // OBS: Decimal-fält (units, market_value, last_price osv.) serialiseras
@@ -23,6 +24,20 @@ interface Holding {
   last_update_date: string;
 }
 
+interface StockSummary {
+  ticker: string;
+  name: string;
+  quantity: number;
+  avg_cost: Num;
+  last_price: Num | null;
+  market_value: Num;
+  market_value_native: Num;
+  cost_basis: Num;
+  unrealized_pnl: Num;
+  currency: string;
+  sector: string;
+}
+
 interface Summary {
   account_id: number;
   account_name: string;
@@ -31,6 +46,8 @@ interface Summary {
   fund_count: number;
   last_update_date: string | null;
   holdings: Holding[];
+  stocks?: StockSummary[];
+  stocks_value?: Num;
 }
 
 interface HistoryPoint {
@@ -60,6 +77,7 @@ function formatPct(n: number | string | null | undefined): string {
 
 export default function FundsPage() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const accountsQ = useQuery({
     queryKey: ["accounts"],
     queryFn: () => api<Account[]>("/accounts"),
@@ -112,7 +130,7 @@ export default function FundsPage() {
   const history = historyQ.data?.points ?? [];
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <h1 className="serif text-3xl leading-tight">Fonder &amp; ISK</h1>
 
       {fundAccounts.length === 0 ? (
@@ -146,7 +164,7 @@ export default function FundsPage() {
 
           {summary && (
             <Card title={`${summary.account_name} — aktuella innehav`}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                 <Kpi label="Totalt värde" value={formatKr(summary.total_value)} />
                 <Kpi
                   label="Tillgängligt"
@@ -156,12 +174,92 @@ export default function FundsPage() {
                       : "—"
                   }
                 />
-                <Kpi label="Antal fonder" value={String(summary.fund_count)} />
+                <Kpi label="Fonder" value={String(summary.fund_count)} />
                 <Kpi
-                  label="Senast uppdaterad"
+                  label="Aktievärde"
+                  value={
+                    summary.stocks_value
+                      ? formatKr(summary.stocks_value)
+                      : "0 kr"
+                  }
+                />
+                <Kpi
+                  label="Senast"
                   value={summary.last_update_date ?? "—"}
                 />
               </div>
+
+              {summary.stocks && summary.stocks.length > 0 && (
+                <div className="mb-5 border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-50 px-3 py-2 text-sm font-medium border-b">
+                    Aktier ({summary.stocks.length})
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-slate-600 border-b">
+                      <tr>
+                        <th className="py-2 px-3">Aktie</th>
+                        <th className="py-2 px-2 text-right">Antal</th>
+                        <th className="py-2 px-2 text-right">Snittkurs</th>
+                        <th className="py-2 px-2 text-right">Senaste</th>
+                        <th className="py-2 px-2 text-right">Värde (SEK)</th>
+                        <th className="py-2 px-2 text-right">P/L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.stocks.map((s) => {
+                        const isUsd = s.currency === "USD";
+                        const fmtNative = (v: Num): string => {
+                          const n = Number(v);
+                          if (!Number.isFinite(n)) return "—";
+                          return isUsd
+                            ? `$${n.toFixed(2)}`
+                            : formatKr(n);
+                        };
+                        const pnl = Number(s.unrealized_pnl);
+                        return (
+                          <tr key={s.ticker} className="border-b last:border-0">
+                            <td className="py-2 px-3">
+                              <div className="font-medium flex items-center gap-2">
+                                {s.ticker}
+                                {isUsd && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                    USD
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500">
+                                {s.name} · {s.sector}
+                              </div>
+                            </td>
+                            <td className="px-2 text-right">{s.quantity}</td>
+                            <td className="px-2 text-right">
+                              {fmtNative(s.avg_cost)}
+                            </td>
+                            <td className="px-2 text-right">
+                              {s.last_price != null ? fmtNative(s.last_price) : "—"}
+                            </td>
+                            <td className="px-2 text-right font-medium">
+                              {formatKr(s.market_value)}
+                              {isUsd && (
+                                <div className="text-[10px] text-slate-500">
+                                  {fmtNative(s.market_value_native)}
+                                </div>
+                              )}
+                            </td>
+                            <td
+                              className={`px-2 text-right ${
+                                pnl >= 0 ? "text-emerald-700" : "text-red-700"
+                              }`}
+                            >
+                              {pnl >= 0 ? "+" : ""}{formatKr(pnl)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               {summary.holdings.length === 0 ? (
                 <div className="text-sm text-slate-700">
                   Inga innehav än. Ladda upp en skärmdump av fondvyn nedan.
@@ -233,40 +331,44 @@ export default function FundsPage() {
             </Card>
           )}
 
-          <Card title="Uppdatera med skärmdump (vision AI)">
-            <div className="text-sm text-slate-700 mb-3">
-              Logga in på bankens ISK-sida, ta en skärmdump av fondöversikten
-              (så hela tabellen syns) och ladda upp den här. Gör det en gång
-              per månad — historiken sparas så du kan följa utvecklingen per
-              fond över tid.
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input
-                type="file"
-                accept="image/png,image/jpeg,application/pdf"
-                onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-                className="md:col-span-2 border rounded px-2 py-1.5 text-sm"
-              />
-              <input
-                type="date"
-                value={snapDate}
-                onChange={(e) => setSnapDate(e.target.value)}
-                className="border rounded px-2 py-1.5 text-sm"
-              />
-            </div>
-            <button
-              className="mt-3 bg-brand-600 text-white px-4 py-2 rounded disabled:opacity-50"
-              disabled={!image || activeId == null || parseMut.isPending}
-              onClick={() => parseMut.mutate()}
-            >
-              {parseMut.isPending ? "Läser bilden…" : "Analysera & uppdatera"}
-            </button>
-            {parseResult !== null && (
-              <pre className="mt-3 bg-slate-900 text-slate-100 text-xs p-3 rounded overflow-x-auto max-h-64">
-                {JSON.stringify(parseResult, null, 2)}
-              </pre>
-            )}
-          </Card>
+          {/* Vision-AI-uppload döljs i school-läget — Ekonomilabbet seedar
+              fonder internt och eleven använder inte sin egen bank-skärmdump. */}
+          {!schoolMode && (
+            <Card title="Uppdatera med skärmdump (vision AI)">
+              <div className="text-sm text-slate-700 mb-3">
+                Logga in på bankens ISK-sida, ta en skärmdump av fondöversikten
+                (så hela tabellen syns) och ladda upp den här. Gör det en gång
+                per månad — historiken sparas så du kan följa utvecklingen per
+                fond över tid.
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,application/pdf"
+                  onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                  className="md:col-span-2 border rounded px-2 py-1.5 text-sm"
+                />
+                <input
+                  type="date"
+                  value={snapDate}
+                  onChange={(e) => setSnapDate(e.target.value)}
+                  className="border rounded px-2 py-1.5 text-sm"
+                />
+              </div>
+              <button
+                className="mt-3 bg-brand-600 text-white px-4 py-2 rounded disabled:opacity-50"
+                disabled={!image || activeId == null || parseMut.isPending}
+                onClick={() => parseMut.mutate()}
+              >
+                {parseMut.isPending ? "Läser bilden…" : "Analysera & uppdatera"}
+              </button>
+              {parseResult !== null && (
+                <pre className="mt-3 bg-slate-900 text-slate-100 text-xs p-3 rounded overflow-x-auto max-h-64">
+                  {JSON.stringify(parseResult, null, 2)}
+                </pre>
+              )}
+            </Card>
+          )}
 
           {history.length > 1 && (
             <Card title="Utveckling över tid (totalvärde)">

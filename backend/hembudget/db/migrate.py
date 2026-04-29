@@ -1,41 +1,88 @@
-"""In-place schema migrations for SQLite.
+"""In-place schema migrations för scope-DB:n (SQLite-per-scope ELLER
+delad Postgres i prod).
 
 Kör alla vid startup efter `create_all()`. Nya kolumner läggs till om de
-saknas. Idempotent — säker att köra flera gånger.
+saknas. Idempotent — säker att köra flera gånger. Cross-dialect: stödjer
+både SQLite (lokalt + pytest) och Postgres (Cloud Run-prod).
 """
 from __future__ import annotations
 
 import logging
 
-from sqlalchemy import text
+from sqlalchemy import inspect as _inspect, text
 from sqlalchemy.engine import Engine
 
 log = logging.getLogger(__name__)
 
 
 def _columns(engine: Engine, table: str) -> set[str]:
-    with engine.connect() as conn:
-        rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
-    return {row[1] for row in rows}
+    """Cross-dialect kolumn-lookup. SQLAlchemy-inspector funkar för
+    både SQLite och Postgres. Tom set om tabellen inte finns."""
+    try:
+        return {c["name"] for c in _inspect(engine).get_columns(table)}
+    except Exception:
+        return set()
 
 
 def _table_exists(engine: Engine, table: str) -> bool:
-    with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name=:n"),
-            {"n": table},
-        ).first()
-    return row is not None
+    try:
+        return _inspect(engine).has_table(table)
+    except Exception:
+        return False
 
 
 def _add_column(engine: Engine, table: str, column_sql: str) -> None:
-    with engine.begin() as conn:
-        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column_sql}"))
+    """Idempotent ALTER TABLE ADD COLUMN. Fail-soft: en kraschad
+    migration får inte ta ner scope-init eftersom det gör hela elev-
+    DB:n oanvändbar (404 på alla endpoints).
+
+    Vi använder INTE 'IF NOT EXISTS' (gav 'syntax error near OR' i
+    Cloud SQL-loggar). Istället litar vi på _columns-guarden som körs
+    INNAN _add_column anropas.
+
+    Översätter SQLite-typer (DATETIME) till Postgres-ekvivalenter
+    (TIMESTAMP) — annars 'type "datetime" does not exist'.
+    """
+    is_postgres = engine.dialect.name == "postgresql"
+    if is_postgres:
+        # SQLite-typer → Postgres-ekvivalenter:
+        # - DATETIME → TIMESTAMP (annars 'type datetime does not exist')
+        # - BOOLEAN ... DEFAULT 0/1 → DEFAULT FALSE/TRUE (Postgres
+        #   kräver booleska literaler, inte heltal)
+        column_sql = column_sql.replace(" DATETIME", " TIMESTAMP")
+        column_sql = column_sql.replace(
+            "BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT FALSE",
+        ).replace(
+            "BOOLEAN NOT NULL DEFAULT 1", "BOOLEAN NOT NULL DEFAULT TRUE",
+        ).replace(
+            "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE",
+        ).replace(
+            "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE",
+        )
+    stmt = f"ALTER TABLE {table} ADD COLUMN {column_sql}"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(stmt))
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "already exists" in msg or "duplicate" in msg:
+            log.info(
+                "scope-migration: %s.%s redan tillagd — hoppar över",
+                table, column_sql.split()[0],
+            )
+        else:
+            log.exception(
+                "scope-migration: ALTER TABLE %s ADD COLUMN %s misslyckades",
+                table, column_sql,
+            )
 
 
 def run_migrations(engine: Engine) -> list[str]:
     """Apply all pending migrations. Returns list of applied changes."""
     applied: list[str] = []
+    log.info(
+        "scope-migrations: starting (dialect=%s)", engine.dialect.name,
+    )
 
     # tenant_id på alla scope-tabeller — krävs för delad Postgres
     # (DB2-migrationen) men läggs även till i SQLite-fil-per-scope så
@@ -50,6 +97,13 @@ def run_migrations(engine: Engine) -> list[str]:
         "fund_holding_snapshots", "upcoming_payments", "locked_periods",
         "dismissed_transfer_suggestions", "utility_readings",
         "app_settings", "audit_logs",
+        # Aktiehandel — lades till efter den ursprungliga listan så vi
+        # backfillar tenant_id på prod-Postgres-installationer som var
+        # uppe innan dessa tabeller fanns.
+        "stock_holdings", "stock_transactions", "stock_watchlist",
+        "pending_orders",
+        # Bank-flöde (idé 3): ScheduledPayment + PaymentReminder
+        "scheduled_payments", "payment_reminders",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):
@@ -58,6 +112,72 @@ def run_migrations(engine: Engine) -> list[str]:
         if "tenant_id" not in cols:
             _add_column(engine, tbl, "tenant_id VARCHAR(40)")
             applied.append(f"{tbl}.tenant_id")
+
+    # Backfill tenant_id på aktietabeller där det blivit NULL — kan ha
+    # hänt om tabellerna fanns innan migrate.py listade dem (data
+    # skapad utan att before_flush-event:n satte tenant_id, eller med
+    # äldre kod-path). Vi härleder rätt tenant via JOIN mot transactions
+    # / accounts — båda har korrekt tenant_id eftersom de är gamla i
+    # listan.
+    if _table_exists(engine, "stock_transactions"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE stock_transactions st SET tenant_id = t.tenant_id "
+                    "FROM transactions t "
+                    "WHERE st.transaction_id = t.id "
+                    "  AND st.tenant_id IS NULL "
+                    "  AND t.tenant_id IS NOT NULL"
+                ) if engine.dialect.name == "postgresql" else text(
+                    "UPDATE stock_transactions SET tenant_id = ("
+                    "  SELECT tenant_id FROM transactions "
+                    "  WHERE transactions.id = stock_transactions.transaction_id"
+                    ") WHERE tenant_id IS NULL AND transaction_id IS NOT NULL"
+                ))
+                applied.append("stock_transactions.tenant_id (backfill)")
+        except Exception:
+            log.exception("backfill stock_transactions.tenant_id failed")
+    if _table_exists(engine, "stock_holdings"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE stock_holdings sh SET tenant_id = a.tenant_id "
+                    "FROM accounts a "
+                    "WHERE sh.account_id = a.id "
+                    "  AND sh.tenant_id IS NULL "
+                    "  AND a.tenant_id IS NOT NULL"
+                ) if engine.dialect.name == "postgresql" else text(
+                    "UPDATE stock_holdings SET tenant_id = ("
+                    "  SELECT tenant_id FROM accounts "
+                    "  WHERE accounts.id = stock_holdings.account_id"
+                    ") WHERE tenant_id IS NULL"
+                ))
+                applied.append("stock_holdings.tenant_id (backfill)")
+        except Exception:
+            log.exception("backfill stock_holdings.tenant_id failed")
+    if _table_exists(engine, "pending_orders"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE pending_orders po SET tenant_id = a.tenant_id "
+                    "FROM accounts a "
+                    "WHERE po.account_id = a.id "
+                    "  AND po.tenant_id IS NULL "
+                    "  AND a.tenant_id IS NOT NULL"
+                ) if engine.dialect.name == "postgresql" else text(
+                    "UPDATE pending_orders SET tenant_id = ("
+                    "  SELECT tenant_id FROM accounts "
+                    "  WHERE accounts.id = pending_orders.account_id"
+                    ") WHERE tenant_id IS NULL"
+                ))
+                applied.append("pending_orders.tenant_id (backfill)")
+        except Exception:
+            log.exception("backfill pending_orders.tenant_id failed")
+    if _table_exists(engine, "stock_watchlist"):
+        # Watchlist har ingen account_id — kan inte enkelt backfillas
+        # (vet inte vilken scope rad tillhör). Den är icke-kritisk för
+        # portfölj/order-historik-buggen, så vi lämnar den.
+        pass
 
     # transactions.is_transfer
     tx_cols = _columns(engine, "transactions")
@@ -138,15 +258,41 @@ def run_migrations(engine: Engine) -> list[str]:
         applied.append("upcoming_payments (table)")
 
     # Migrera existerande matched_transaction_id till upcoming_payments
-    # så vi har EN källa av sanning (ingen dubbelräkning)
+    # så vi har EN källa av sanning (ingen dubbelräkning).
+    # SQLite stödjer 'INSERT OR IGNORE'; Postgres kräver
+    # 'ON CONFLICT DO NOTHING'. Vi använder dialekt-aware syntax.
     if _table_exists(engine, "upcoming_payments"):
-        with engine.begin() as conn:
-            conn.execute(text("""
-                INSERT OR IGNORE INTO upcoming_payments (upcoming_id, transaction_id)
-                SELECT id, matched_transaction_id
-                FROM upcoming_transactions
-                WHERE matched_transaction_id IS NOT NULL
-            """))
+        is_postgres = engine.dialect.name == "postgresql"
+        # Antag att (upcoming_id, transaction_id) har en unique constraint
+        # eller index — annars måste man specificera ON CONFLICT-target.
+        # För säkerhets skull använd DO NOTHING utan target på Postgres
+        # och låt en eventuell krash fångas av try/except — Postgres
+        # accepterar 'ON CONFLICT DO NOTHING' utan target om constraint
+        # finns på UNIQUE-kolumnerna.
+        if is_postgres:
+            stmt = (
+                "INSERT INTO upcoming_payments (upcoming_id, transaction_id) "
+                "SELECT id, matched_transaction_id "
+                "FROM upcoming_transactions "
+                "WHERE matched_transaction_id IS NOT NULL "
+                "ON CONFLICT DO NOTHING"
+            )
+        else:
+            stmt = (
+                "INSERT OR IGNORE INTO upcoming_payments "
+                "(upcoming_id, transaction_id) "
+                "SELECT id, matched_transaction_id "
+                "FROM upcoming_transactions "
+                "WHERE matched_transaction_id IS NOT NULL"
+            )
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+        except Exception:
+            log.exception(
+                "scope-migration: kunde inte migrera matched_transaction_id "
+                "till upcoming_payments — fortsätter ändå",
+            )
 
     # upcoming_transactions — rika fakturafält + debitering
     if _table_exists(engine, "upcoming_transactions"):
@@ -241,8 +387,10 @@ def run_migrations(engine: Engine) -> list[str]:
     # (ränta + amortering i en och samma bankpost). Gammal UNIQUE-constraint
     # stoppar detta — byggs om till composite unique på (transaction_id,
     # payment_type). SQLite stödjer inte ALTER DROP CONSTRAINT så vi gör
-    # table-rebuild.
-    if _table_exists(engine, "loan_payments"):
+    # table-rebuild. Postgres stödjer ALTER ... DROP CONSTRAINT direkt
+    # och PRAGMA-anrop kraschar med syntaxfel — så hela blocket är
+    # SQLite-only.
+    if engine.dialect.name == "sqlite" and _table_exists(engine, "loan_payments"):
         with engine.begin() as conn:
             # Hitta alla unique-index på tabellen
             idx_rows = conn.execute(
@@ -306,8 +454,8 @@ def run_migrations(engine: Engine) -> list[str]:
 
     # loan_schedule_entries: släpp unique på matched_transaction_id av
     # samma skäl (en bankpost matchar både amort + ränta). SQLite kräver
-    # table-rebuild.
-    if _table_exists(engine, "loan_schedule_entries"):
+    # table-rebuild via PRAGMA — hela blocket är SQLite-only.
+    if engine.dialect.name == "sqlite" and _table_exists(engine, "loan_schedule_entries"):
         with engine.begin() as conn:
             idx_rows = conn.execute(
                 text("PRAGMA index_list(loan_schedule_entries)")
@@ -371,6 +519,8 @@ def run_migrations(engine: Engine) -> list[str]:
 
     # loans.current_balance_at_creation — saldo när lånet registrerades
     # loans.category_id — valfri budgetkategori (Huslån/Billån/…)
+    # loans.loan_kind/is_high_cost_credit/applied_at/score_at_application
+    #   — credit-flow-fas: skiljer SMS-lån från huslån + audit-trail
     if _table_exists(engine, "loans"):
         loan_cols = _columns(engine, "loans")
         if "current_balance_at_creation" not in loan_cols:
@@ -387,6 +537,29 @@ def run_migrations(engine: Engine) -> list[str]:
                 "category_id INTEGER REFERENCES categories(id)",
             )
             applied.append("loans.category_id")
+        if "loan_kind" not in loan_cols:
+            # NOT NULL DEFAULT 'mortgage' — befintliga rader är pre-credit-flow
+            # och var alltid bolån eller "övrigt" som vi konservativt
+            # taggar 'mortgage'. Eleven kan ändra om det visar sig fel.
+            _add_column(
+                engine,
+                "loans",
+                "loan_kind VARCHAR(20) NOT NULL DEFAULT 'mortgage'",
+            )
+            applied.append("loans.loan_kind")
+        if "is_high_cost_credit" not in loan_cols:
+            _add_column(
+                engine,
+                "loans",
+                "is_high_cost_credit BOOLEAN NOT NULL DEFAULT 0",
+            )
+            applied.append("loans.is_high_cost_credit")
+        if "applied_at" not in loan_cols:
+            _add_column(engine, "loans", "applied_at TIMESTAMP")
+            applied.append("loans.applied_at")
+        if "score_at_application" not in loan_cols:
+            _add_column(engine, "loans", "score_at_application INTEGER")
+            applied.append("loans.score_at_application")
 
     # Fakturarader på planerade fakturor (el/vatten/bredband etc.)
     if not _table_exists(engine, "upcoming_transaction_lines"):
@@ -436,6 +609,10 @@ def run_migrations(engine: Engine) -> list[str]:
     # New tables (loans, loan_payments, upcoming_transactions) are created
     # by Base.metadata.create_all in auth routes; nothing to ALTER here.
 
+    log.info(
+        "scope-migrations: done — %d ALTERs körda: %s",
+        len(applied), ", ".join(applied) if applied else "(inga)",
+    )
     if applied:
         log.info("Schema migrations applied: %s", ", ".join(applied))
 

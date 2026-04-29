@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from .base import Base, TenantMixin
 
@@ -249,7 +249,71 @@ class Loan(TenantMixin, Base):
         ForeignKey("categories.id"), nullable=True
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Pedagogiska fält för kreditmotorn (privatlån/SMS-lån).
+    # deferred() = exkludera från default-SELECT så att SELECT på Loan
+    # inte kraschar i prod-Postgres om migrationen inte hunnit lägga
+    # till kolumnen. Värdet hämtas först vid explicit access (credit-
+    # endpoint, generator).
+    # loan_kind: "mortgage" | "private" | "sms" | "car" | "student" | "other"
+    loan_kind: Mapped[str] = deferred(mapped_column(
+        String(20), default="mortgage", nullable=False,
+    ))
+    # Snabblån/SMS-lån — lärar-UI färgmärker rött och varnar.
+    is_high_cost_credit: Mapped[bool] = deferred(mapped_column(
+        Boolean, default=False, nullable=False,
+    ))
+    # Pedagogiskt: lagra ansökningsdatum separat så lärare ser
+    # vad eleven *sökte* (inte bara när lånet startade).
+    applied_at: Mapped[Optional[datetime]] = deferred(mapped_column(
+        DateTime, nullable=True,
+    ))
+    # Kreditscoren när ansökan godkändes — för retro-analys.
+    score_at_application: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class CreditApplication(TenantMixin, Base):
+    """Audit-spår för alla kreditansökningar — även de som avslogs eller
+    eleven själv tackade nej. Pedagogiskt värdefullt: läraren ser hur
+    eleven resonerade kring kredit över tid.
+
+    result:
+      "approved"  — bank godkände
+      "declined"  — bank avslog
+      "accepted"  — eleven accepterade ett godkänt erbjudande (lån skapas)
+      "rejected"  — eleven tackade nej till ett godkänt erbjudande
+      "abandoned" — eleven stängde modalen mitt i
+    """
+    __tablename__ = "credit_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # "private" | "sms"
+    requested_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    requested_months: Mapped[int] = mapped_column(Integer, nullable=False)
+    purpose: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    result: Mapped[str] = mapped_column(String(20), nullable=False)
+    score_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    decline_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    simulated_lender: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    offered_rate: Mapped[Optional[float]] = mapped_column(nullable=True)
+    offered_monthly_payment: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True,
+    )
+    triggered_by_tx_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )
+    # Loan som skapades vid acceptans — null för avslag/abandoned.
+    resulting_loan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("loans.id"), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
 
 
 class LoanPayment(TenantMixin, Base):
@@ -627,6 +691,354 @@ class AuditLog(TenantMixin, Base):
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class StockHolding(TenantMixin, Base):
+    """Aktuell aktieposition på ett ISK-konto.
+
+    Aggregat — uppdateras efter varje StockTransaction. Snittkursen
+    (`avg_cost`) viktas mot tidigare köp + courtage. Säljs allt så
+    raderas raden (quantity = 0 är inte ett giltigt tillstånd)."""
+    __tablename__ = "stock_holdings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "account_id", "ticker", name="uq_holding_acc_ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    avg_cost: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="SEK", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class StockTransaction(TenantMixin, Base):
+    """Append-only ledger över alla aktieaffärer.
+
+    Tabellen är revisionsmässig: aldrig delete eller update. Lärare
+    kan se exakt vilken kurs (`quote_id` → master.stock_quotes.id) som
+    gällde vid varje affär.
+    """
+    __tablename__ = "stock_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String(4), nullable=False)  # "buy" | "sell"
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    courtage: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    realized_pnl: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True,
+    )  # Bara satt på sälj
+    quote_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )  # Länk till bokförda Transaction (likviden på ISK-kontot)
+    student_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    executed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+
+
+class StockWatchlist(TenantMixin, Base):
+    """Aktier som eleven flaggat som intressanta att följa."""
+    __tablename__ = "stock_watchlist"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "ticker", name="uq_watchlist_ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class PendingOrder(TenantMixin, Base):
+    """Köorder för aktiehandel — utförs när marknaden öppnar.
+
+    Pedagogiskt: eleven kan planera order utanför börstid och se
+    EXAKT till vilket pris ordern blev utförd när marknaden öppnar.
+    Visar att timing är osäkert.
+
+    status:
+      'pending'   — väntar på marknaden
+      'executed'  — utförd vid öppning, executed_price + transaction_id satt
+      'cancelled' — eleven avbröt OR insufficient_funds OR insufficient_shares
+    """
+    __tablename__ = "pending_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    side: Mapped[str] = mapped_column(String(4), nullable=False)  # 'buy' | 'sell'
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Prisreferens när ordern lades — bara informativt, vi använder
+    # senaste quote vid execution.
+    reference_price: Mapped[Decimal] = mapped_column(
+        Numeric(14, 4), nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), index=True,
+    )
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    executed_price: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 4), nullable=True,
+    )
+    # Vid sälj: lock-quantity gör att samma andelar inte kan säljas
+    # två gånger via parallella pending-order. Vid köp: lock_amount
+    # SEK reserveras från cash så användaren inte kan dubbelköpa.
+    locked_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0"), nullable=False,
+    )
+    cancel_reason: Mapped[Optional[str]] = mapped_column(
+        String(80), nullable=True,
+    )
+    student_rationale: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    # Länk till den faktiska StockTransaction efter exekvering
+    stock_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("stock_transactions.id"), nullable=True,
+    )
+
+
+class WellbeingScore(TenantMixin, Base):
+    """Sammansatt välbefinnande-poäng per månad. Pedagogisk mätare för
+    att eleven ska se att ekonomi är medel, inte mål.
+
+    Total = viktat snitt över 5 dimensioner (lika vikt i V1, V2 kan
+    nyansera per personlighet). Beräknas vid månadsskifte och lagras
+    som tidsserie över terminen.
+    """
+    __tablename__ = "wellbeing_scores"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "year_month", name="uq_wellbeing_month"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year_month: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    total_score: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-100
+    economy: Mapped[int] = mapped_column(Integer, nullable=False)
+    health: Mapped[int] = mapped_column(Integer, nullable=False)
+    social: Mapped[int] = mapped_column(Integer, nullable=False)
+    leisure: Mapped[int] = mapped_column(Integer, nullable=False)
+    safety: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Faktor-uppdelning för pedagogisk transparens
+    events_accepted: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    events_declined: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    budget_violations: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Förklarande text på svenska — visas under pentagon-radarn
+    explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class PersonalityProfile(TenantMixin, Base):
+    """En rad per elev — sätts vid onboarding via 3-frågors quiz.
+    Påverkar event-mix och Wellbeing-tröskelvärden i V2.
+
+    Alla skalor 0-100 (50 = mitten, neutral).
+    """
+    __tablename__ = "personality_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    introvert_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    thrill_seeker_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    family_oriented_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    onboarded_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class DeclineStreak(TenantMixin, Base):
+    """En rad per elev — räknar nej-streak i sociala events.
+
+    Pedagogiskt: när eleven nekat 3+ social-events i rad utan
+    ekonomiskt skäl ('valde sparande') triggar frontend en
+    nudge. Att alltid säga nej är fel — isolering har en kostnad.
+    """
+    __tablename__ = "decline_streaks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    current_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_decline_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    last_accept_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    nudge_shown_for_streak: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )  # Senaste streak vi visat nudge för — undvik spam
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class StudentEvent(TenantMixin, Base):
+    """Event-instans per elev — refererar till EventTemplate i master.
+
+    Skapas av engine vid 'tick' (var/varje vecka) eller av klasskompis-
+    bjudning. Eleven bestämmer accept/decline inom deadline. Vid
+    accept skapas en Transaction och Wellbeing-impact appliceras.
+    """
+    __tablename__ = "student_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_code: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    proposed_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    deadline: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # source: "system" | "classmate_invite" | "teacher_triggered"
+    source: Mapped[str] = mapped_column(String(20), default="system", nullable=False)
+    source_classmate_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )  # master.student_id om bjuden — ingen FK pga master/scope-split
+    # status: "pending" | "accepted" | "declined" | "expired"
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    decision_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Transaktionen som skapades vid accept (för audit)
+    resulting_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )
+    # Vilken Wellbeing-impact som faktiskt applicerades (för audit/rollback)
+    impact_applied: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Får eleven bjuda klasskompisar?
+    social_invite_allowed: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    # Är detta inte-nekbart? (oförutsedda kostnader)
+    declinable: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+
+# ---------- Bank-flöde (idé 3 i dev_v1.md) ----------
+
+class ScheduledPayment(TenantMixin, Base):
+    """En signerad betalning som väntar på execution.
+
+    Eleven signerar en eller flera UpcomingTransactions i banken
+    via BankID-flödet → en ScheduledPayment skapas per faktura.
+    När scheduled_date passerats kör execution-jobbet:
+    - Saldo räcker → skapa Transaction, status='executed'
+    - Saldo räcker inte → status='failed_no_funds', triggar
+      påminnelse-flödet (PR 7).
+
+    Idempotent execution: om status redan är 'executed' händer
+    inget vid re-run (jobbet körs varje natt).
+    """
+    __tablename__ = "scheduled_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), nullable=False, index=True,
+    )
+    # Kopia för spårbarhet — om upcoming.amount ändras ska
+    # signerad betalning hålla sin originalsumma.
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    scheduled_date: Mapped[date] = mapped_column(
+        Date, nullable=False, index=True,
+    )
+    signed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    # BankSession.token (master-DB) — kopia, ingen FK eftersom det
+    # är cross-database
+    signed_via_session_token: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True,
+    )
+    # "scheduled" | "executed" | "failed_no_funds" | "rescheduled" | "cancelled"
+    status: Mapped[str] = mapped_column(
+        String(20), default="scheduled", nullable=False, index=True,
+    )
+    executed_transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class PaymentReminder(TenantMixin, Base):
+    """En påminnelse-rad genererad när ScheduledPayment misslyckas
+    med 'failed_no_funds' eller en faktura inte signerats förrän
+    förfallodatum + 5 dagar.
+
+    Eskalerar i steg:
+    - reminder_no=1: dag 5 efter förfall, late_fee=60 kr
+    - reminder_no=2: dag 14, late_fee=120 kr
+    - reminder_no=3: dag 30, late_fee=180 kr ('inkasso-varning')
+    - reminder_no=4: dag 45, 'Kronofogden' (simulerat) — markant
+      negativ effekt på kreditbetyget (PR 7b).
+
+    Pedagogiskt: visa eleven att skuldfälla börjar smått. Påminnelse-
+    avgiften läggs till som EXTRA UpcomingTransaction(kind=bill,
+    source='reminder') så eleven måste signera och betala även den.
+    """
+    __tablename__ = "payment_reminders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upcoming_id: Mapped[int] = mapped_column(
+        ForeignKey("upcoming_transactions.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    scheduled_payment_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("scheduled_payments.id"), nullable=True,
+    )
+    reminder_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    issued_date: Mapped[date] = mapped_column(
+        Date, server_default=func.current_date(), nullable=False,
+    )
+    late_fee: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0"),
+    )
+    # Reminder-fakturan som skapas separat så eleven måste betala
+    # även den. NULL om vi inte hunnit skapa den (race-tolerant).
+    fee_upcoming_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("upcoming_transactions.id"), nullable=True,
+    )
+    settled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
 
 
 def create_all() -> None:

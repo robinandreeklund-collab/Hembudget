@@ -157,9 +157,11 @@ def init_master_engine() -> Engine:
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
         # Postgres: pre-ping så stale connections från Cloud SQL inte
-        # smäller. Pool små eftersom Cloud Run kör en instans.
+        # smäller. Cloud SQL db-f1-micro har max ~25 connections totalt.
+        # Vi delar mellan master + shared-scope + Postgres internal, så
+        # håll pools små: 2+3=5 per engine = 10 totalt med headroom.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=2, max_overflow=3,
             pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -171,13 +173,116 @@ def init_master_engine() -> Engine:
             cur.execute("PRAGMA foreign_keys = ON")
             cur.close()
 
-    MasterBase.metadata.create_all(engine)
-    _run_master_migrations(engine)
+    # Bulletproof: även om create_all eller migrationerna failar
+    # MÅSTE engine cachas så hela appen inte 500:ar varje request.
+    try:
+        MasterBase.metadata.create_all(engine)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "master create_all failed — fortsätter med befintliga tabeller",
+        )
+    try:
+        _run_master_migrations(engine)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "master migrations failed — fortsätter ändå så master-engine "
+            "kan returneras (login + demo förblir funktionella)",
+        )
     _master_engine = engine
     _master_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
     )
+    # Cacha kolumn-existens efter migrations. API-lagret konsulterar
+    # detta innan deferred-fält accessas så att SELECT inte kraschar
+    # mot prod-Postgres där en migration eventuellt failat.
+    try:
+        _refresh_master_columns_cache(engine)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "master-columns-cache refresh misslyckades",
+        )
     return engine
+
+
+# Cache av kolumner per master-tabell. Populeras av init_master_engine
+# efter att migrationerna körts. Används av master_has_column() för att
+# avgöra om en deferred-kolumn är säker att läsa.
+_master_columns: dict[str, set[str]] = {}
+
+
+def _refresh_master_columns_cache(engine: Engine) -> None:
+    from sqlalchemy import inspect as _inspect
+    try:
+        insp = _inspect(engine)
+        for table in ("teachers", "students", "student_profiles", "assignments"):
+            try:
+                _master_columns[table] = {
+                    c["name"] for c in insp.get_columns(table)
+                }
+            except Exception:
+                _master_columns[table] = set()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "kunde inte cacha master-kolumner — fortsätter med tom cache",
+        )
+
+
+def master_has_column(table: str, column: str) -> bool:
+    """True om kolumnen finns i master-DB:n. Används som guard innan
+    deferred-fält accessas — annars kraschar SELECT i prod om migration
+    inte hunnit lägga till kolumnen.
+
+    Default True om cachen inte är populerad ännu (t.ex. i test) — då
+    förlitar vi oss på att SQLAlchemy-create_all skapat kolumnerna."""
+    cols = _master_columns.get(table)
+    if cols is None:
+        return True
+    return column in cols
+
+
+# Cache för scope-DB-kolumner. Inga kolumner returneras tomt = "antar
+# att de finns" (för SQLite-fil-per-scope där create_all lagt till allt).
+# I prod-Postgres blir denna cachen källan-av-sanning för säkra
+# deferred-fält (t.ex. loans.loan_kind innan migrationen körts).
+_scope_columns: dict[str, set[str]] = {}
+
+
+def _refresh_scope_columns_cache(engine: Engine) -> None:
+    from sqlalchemy import inspect as _inspect
+    try:
+        insp = _inspect(engine)
+        for table in (
+            "loans", "transactions", "accounts", "categories",
+            "upcoming_transactions", "transaction_splits",
+            "fund_holdings", "stock_holdings", "stock_transactions",
+            "credit_applications", "wellbeing_scores",
+        ):
+            try:
+                _scope_columns[table] = {
+                    c["name"] for c in insp.get_columns(table)
+                }
+            except Exception:
+                _scope_columns[table] = set()
+    except Exception:
+        log.exception(
+            "kunde inte cacha scope-kolumner — fortsätter med tom cache",
+        )
+
+
+def scope_has_column(table: str, column: str) -> bool:
+    """Som master_has_column men för scope-DB-tabeller.
+
+    Default True om cachen är tom — då förlitar vi oss på att
+    create_all + run_migrations skapat allt. Endast i prod-Postgres
+    där en migration kan ha failat blir denna cachen viktig."""
+    cols = _scope_columns.get(table)
+    if cols is None or not cols:
+        return True
+    return column in cols
 
 
 def _run_master_migrations(engine: Engine) -> None:
@@ -200,9 +305,59 @@ def _run_master_migrations(engine: Engine) -> None:
         except Exception:
             return set()
 
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    is_postgres = engine.dialect.name == "postgresql"
+
+    def _translate(col_sql: str) -> str:
+        """Översätt SQLite-typer till Postgres-ekvivalenter när dialekten
+        är postgresql. SQLite tillåter 'DATETIME' och 'BOOLEAN DEFAULT 0'
+        men Postgres kräver 'TIMESTAMP' resp. 'DEFAULT FALSE'.
+        """
+        if is_postgres:
+            col_sql = col_sql.replace(" DATETIME", " TIMESTAMP")
+            col_sql = col_sql.replace(
+                "BOOLEAN NOT NULL DEFAULT 0", "BOOLEAN NOT NULL DEFAULT FALSE",
+            ).replace(
+                "BOOLEAN NOT NULL DEFAULT 1", "BOOLEAN NOT NULL DEFAULT TRUE",
+            ).replace(
+                "BOOLEAN DEFAULT 0", "BOOLEAN DEFAULT FALSE",
+            ).replace(
+                "BOOLEAN DEFAULT 1", "BOOLEAN DEFAULT TRUE",
+            )
+        return col_sql
+
     def _add(table: str, col_sql: str) -> None:
-        with engine.begin() as conn:
-            conn.execute(_text(f"ALTER TABLE {table} ADD COLUMN {col_sql}"))
+        """Idempotent ALTER TABLE ADD COLUMN. Fail-soft: en kraschad
+        migration får inte ta ner hela master-init eftersom det skulle
+        ge 500 på alla endpoints (login, demo, reset).
+
+        Vi använder INTE 'IF NOT EXISTS' (gav 'syntax error near OR' på
+        en del Postgres-versioner). Istället litar vi på _cols-guarden
+        som körs INNAN _add anropas.
+
+        Vid fel: logga och fortsätt. På Postgres kan 'duplicate column'
+        vara ofarligt; på SQLite kan en parallell init ha hunnit före.
+        """
+        translated = _translate(col_sql)
+        stmt = f"ALTER TABLE {table} ADD COLUMN {translated}"
+        try:
+            with engine.begin() as conn:
+                conn.execute(_text(stmt))
+            _log.info("migration: %s.%s tillagd", table, col_sql.split()[0])
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "already exists" in msg or "duplicate" in msg:
+                _log.info(
+                    "migration: %s.%s redan tillagd — hoppar över",
+                    table, col_sql.split()[0],
+                )
+            else:
+                _log.exception(
+                    "migration: ALTER TABLE %s ADD COLUMN %s misslyckades",
+                    table, col_sql,
+                )
 
     t_cols = _cols("teachers")
     if "is_super_admin" not in t_cols:
@@ -215,6 +370,8 @@ def _run_master_migrations(engine: Engine) -> None:
         _add("teachers", "ai_input_tokens INTEGER NOT NULL DEFAULT 0")
     if "ai_output_tokens" not in t_cols:
         _add("teachers", "ai_output_tokens INTEGER NOT NULL DEFAULT 0")
+    if "ai_chat_daily_quota" not in t_cols:
+        _add("teachers", "ai_chat_daily_quota INTEGER NOT NULL DEFAULT 10")
     a_cols = _cols("assignments")
     if "teacher_feedback" not in a_cols:
         _add("assignments", "teacher_feedback TEXT")
@@ -236,6 +393,98 @@ def _run_master_migrations(engine: Engine) -> None:
             ))
     if "is_family_account" not in t_cols:
         _add("teachers", "is_family_account BOOLEAN NOT NULL DEFAULT 0")
+
+    # Student.bank_pin_hash (idé 3 i dev_v1.md): 4-siffrig PIN för
+    # BankID-simulering, hashad med bcrypt. NULL tills eleven satt
+    # sin första PIN i bank-onboardingen.
+    s_cols = _cols("students")
+    if s_cols and "bank_pin_hash" not in s_cols:
+        _add("students", "bank_pin_hash VARCHAR(120)")
+
+    # BatchArtifact.exported_to_my_batches (idé 3 i dev_v1.md):
+    # bank-flödet kräver att bank-artefakter passerar /my-batches via
+    # explicit export. Befintliga artefakter som redan är importerade
+    # backfillas till True så användarens nuvarande vy fortsätter visa
+    # dem i /my-batches.
+    ba_cols = _cols("batch_artifacts")
+    if ba_cols and "exported_to_my_batches" not in ba_cols:
+        _add(
+            "batch_artifacts",
+            "exported_to_my_batches BOOLEAN NOT NULL DEFAULT 0",
+        )
+        # Backfill: redan importerade → exported (de syns i my-batches
+        # redan idag); icke-importerade kontoutdrag/kort/lån går till
+        # bank-flödet. Lönespec lämnas False så den syns på
+        # /arbetsgivare istället.
+        with engine.begin() as conn:
+            conn.execute(_text(
+                "UPDATE batch_artifacts SET exported_to_my_batches = "
+                + ("TRUE" if is_postgres else "1")
+                + " WHERE imported_at IS NOT NULL"
+            ))
+    if ba_cols and "exported_at" not in ba_cols:
+        _add("batch_artifacts", "exported_at DATETIME")
+
+    # StudentProfile partner-fält + cost-split-preference (Wellbeing Fas
+    # 7+: 'veil of ignorance'-onboarding där eleven väljer fördelnings-
+    # modell innan partner-lön avslöjas).
+    sp_cols = _cols("student_profiles")
+    if sp_cols:  # Skippa om tabellen inte finns ännu
+        if "partner_profession" not in sp_cols:
+            _add("student_profiles", "partner_profession VARCHAR(80)")
+        if "partner_gross_salary" not in sp_cols:
+            _add("student_profiles", "partner_gross_salary INTEGER")
+        if "cost_split_preference" not in sp_cols:
+            _add("student_profiles", "cost_split_preference VARCHAR(20)")
+        if "cost_split_decided_at" not in sp_cols:
+            _add("student_profiles", "cost_split_decided_at DATETIME")
+        # Lönesamtal (idé 2 i dev_v1.md): pending salary sätts vid
+        # avslutat samtal, committas av lönespec-generatorn när
+        # effective_from passerats.
+        if "pending_salary_monthly" not in sp_cols:
+            _add("student_profiles", "pending_salary_monthly INTEGER")
+        if "pending_effective_from" not in sp_cols:
+            _add("student_profiles", "pending_effective_from DATE")
+
+    # ALTER COLUMN TYPE: konvertera INTEGER → BIGINT på seed-kolumner
+    # som lagrar uint32-värden (kan vara > 2^31-1). create_all ändrar
+    # inte typen på existerande kolumner, så prod-Postgres kan ha
+    # tabellen med INTEGER trots att modellen säger BigInteger →
+    # 'integer out of range' vid INSERT.
+    if is_postgres:
+        for table, col in (
+            ("student_generation_runs", "seed"),
+            ("scenario_batches", "seed"),
+            # stock_quotes.volume — daglig aktievolym kan vara
+            # > 2^31 (AAPL etc), modellen säger BigInteger men
+            # befintlig prod-tabell kan ha INTEGER → 'integer out of
+            # range' vid stock-poller-insert.
+            ("stock_quotes", "volume"),
+        ):
+            try:
+                inspector2 = _inspect(engine)
+                cols = inspector2.get_columns(table)
+                for c in cols:
+                    if c["name"] == col:
+                        # SQLAlchemy returnerar SQLAlchemy-typer; vi vill
+                        # se om det är 32-bit Integer
+                        col_type_str = str(c["type"]).upper()
+                        if "BIGINT" not in col_type_str and "INTEGER" in col_type_str:
+                            _log.info(
+                                "migration: %s.%s är INTEGER, alterar till BIGINT",
+                                table, col,
+                            )
+                            with engine.begin() as conn:
+                                conn.execute(_text(
+                                    f"ALTER TABLE {table} "
+                                    f"ALTER COLUMN {col} TYPE BIGINT"
+                                ))
+                        break
+            except Exception:
+                _log.exception(
+                    "migration: kunde inte ALTER %s.%s till BIGINT",
+                    table, col,
+                )
 
 
 @contextmanager
@@ -274,7 +523,12 @@ _seeded_tenants: set[str] = set()
 
 def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     """Lazy-init en gemensam Postgres-engine för ALLA scope-keys.
-    Bara när HEMBUDGET_DATABASE_URL är satt."""
+    Bara när HEMBUDGET_DATABASE_URL är satt.
+
+    Bulletproof: även om create_all eller migrationerna failar ska vi
+    kunna returnera en användbar engine + sessionmaker. Annars cachas
+    inte engine, varje request retry:ar och hela tjänsten blir 500.
+    """
     global _shared_scope_engine, _shared_scope_session
     if _shared_scope_engine is not None:
         assert _shared_scope_session is not None
@@ -282,17 +536,48 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
 
     from ..db import models as _models  # noqa: F401  (registrera modeller)
     from ..db.base import Base
+    from ..db.migrate import run_migrations
 
-    url = _master_db_url()  # samma DB som master — separata tabellset
+    url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
+        # Cloud SQL har låg connection-limit. Håll båda engines små.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=2, max_overflow=3,
             pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)
-    Base.metadata.create_all(engine)
 
+    # create_all kan misslyckas mot existerande Postgres-schema (typkonflikt,
+    # FK-konflikt, etc). Logga och fortsätt — engine är fortfarande
+    # användbar för befintliga tabeller.
+    try:
+        Base.metadata.create_all(engine)
+    except Exception:
+        log.exception(
+            "shared scope create_all failed — fortsätter ändå med "
+            "befintliga tabeller",
+        )
+
+    # ALTER-migrationer för befintliga tabeller. create_all hanterar bara
+    # NYA tabeller, så när vi lägger till kolumner på befintliga tabeller
+    # (t.ex. loans.loan_kind) MÅSTE migrationerna köras här. Annars
+    # kraschar SELECT på Postgres med 'column does not exist'.
+    try:
+        run_migrations(engine)
+    except Exception:
+        log.exception(
+            "shared scope migrations failed — fortsätter ändå (login + "
+            "nya elever ska funka, gamla kan ha schema-skev)",
+        )
+
+    try:
+        _refresh_scope_columns_cache(engine)
+    except Exception:
+        log.exception("scope-columns-cache refresh misslyckades")
+
+    # CACHE engine OBEROENDE av om migrationerna gick bra. Annars
+    # försöker varje ny request init:a om → blockerar hela skol-läget.
     _shared_scope_engine = engine
     _shared_scope_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
@@ -355,8 +640,19 @@ def get_scope_engine(scope_key: str) -> Engine:
         cur.execute("PRAGMA foreign_keys = ON")
         cur.close()
 
-    Base.metadata.create_all(engine)
-    run_migrations(engine)
+    try:
+        Base.metadata.create_all(engine)
+    except Exception:
+        log.exception(
+            "scope create_all failed for %s — fortsätter ändå", scope_key,
+        )
+    try:
+        run_migrations(engine)
+    except Exception:
+        log.exception(
+            "scope migrations failed for %s — fortsätter ändå", scope_key,
+        )
+    _refresh_scope_columns_cache(engine)
 
     _scope_engines[scope_key] = engine
     _scope_sessions[scope_key] = sessionmaker(

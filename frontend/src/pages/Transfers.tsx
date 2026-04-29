@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  ArrowRight, CheckCircle2, ChevronDown, ChevronRight, Link2, Unlink2,
+  ArrowRight, CheckCircle2, ChevronDown, ChevronRight, Link2, Plus, Unlink2,
 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card } from "@/components/Card";
+import { NewTransferModal } from "@/components/NewTransferModal";
 import type { Account } from "@/types/models";
 
 interface TxView {
@@ -30,6 +31,7 @@ interface Suggestion extends Pair {
 
 export default function Transfers() {
   const qc = useQueryClient();
+  const [showNewTransfer, setShowNewTransfer] = useState(false);
 
   const pairsQ = useQuery({
     queryKey: ["transfers-paired"],
@@ -93,7 +95,7 @@ export default function Transfers() {
   const suggestions = suggestionsQ.data?.suggestions ?? [];
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="serif text-3xl leading-tight">
@@ -104,14 +106,26 @@ export default function Transfers() {
             Hanterar överföringar mellan dina egna konton så de inte dubbelbokförs.
           </div>
         </div>
-        <button
-          onClick={() => scanMut.mutate()}
-          disabled={scanMut.isPending}
-          className="bg-brand-600 text-white px-4 py-2 rounded-lg"
-        >
-          {scanMut.isPending ? "Scannar…" : "Kör om automatmatchning"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowNewTransfer(true)}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> Ny överföring
+          </button>
+          <button
+            onClick={() => scanMut.mutate()}
+            disabled={scanMut.isPending}
+            className="bg-brand-600 text-white px-4 py-2 rounded-lg"
+          >
+            {scanMut.isPending ? "Scannar…" : "Kör om automatmatchning"}
+          </button>
+        </div>
       </div>
+      <NewTransferModal
+        open={showNewTransfer}
+        onClose={() => setShowNewTransfer(false)}
+      />
 
       {scanMut.data && (
         <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-3">

@@ -5,23 +5,27 @@ inte elev-data och student-DB:ar innehåller inte lärare/elever.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
     JSON,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase, Mapped, mapped_column, deferred, relationship,
+)
 
 
 class MasterBase(DeclarativeBase):
@@ -55,6 +59,12 @@ class Teacher(MasterBase):
     ai_requests_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Dagsgräns för AI-chatt-meddelanden per elev. Super-admin kan höja.
+    # 0 = AI-chatt avstängd även om ai_enabled=True. Default 10 = lagom
+    # för en lektion utan att eleven kan "kosta ihjäl" Anthropic-kontot.
+    ai_chat_daily_quota: Mapped[int] = mapped_column(
+        Integer, default=10, nullable=False,
+    )
     # NULL = ej verifierad (open-signup-lärare som inte klickat länk än).
     # Bootstrap-läraren + demo-läraren sätts verifierade direkt vid skapelse.
     # Login blockeras för lärare med NULL (förutom super-admin).
@@ -152,6 +162,12 @@ class Student(MasterBase):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Bank-PIN för BankID-simulering på /bank (idé 3 i dev_v1.md).
+    # 4-siffrig PIN som eleven sätter vid första bank-inlogg, hashad
+    # med bcrypt. Lärare kan resetta via /teacher/students/:id/reset-pin.
+    bank_pin_hash: Mapped[Optional[str]] = mapped_column(
+        String(120), nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
@@ -216,9 +232,44 @@ class StudentProfile(MasterBase):
 
     # Partnerns ålder (för 2-vuxen-hushåll). None om family_status == "ensam".
     partner_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Partnerns yrke och bruttolön — krävs för att hushållsekonomin ska gå
+    # ihop. Sätts vid profilgenerering om family_status != "ensam".
+    # deferred() = exkludera från default-SELECT så att lazy-load av
+    # student.profile inte kraschar när migration ännu inte hunnit lägga
+    # till kolumnen i prod-Postgres. Värdet hämtas först vid explicit
+    # access (cost-split-endpoint, generator).
+    partner_profession: Mapped[Optional[str]] = deferred(mapped_column(
+        String(80), nullable=True,
+    ))
+    partner_gross_salary: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    # Hushållets fördelningsmodell — eleven väljer vid onboarding INNAN
+    # hen ser sin egen profil ('veil of ignorance' — pedagogiskt ärligt
+    # val). Påverkar generatorn: vilken andel av gemensamma kostnader
+    # eleven får på sitt konto.
+    # "even_50_50" | "pro_rata" | "all_shared" | None (ej onboardad/ensam)
+    cost_split_preference: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    cost_split_decided_at: Mapped[Optional[datetime]] = deferred(mapped_column(
+        DateTime, nullable=True,
+    ))
 
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Lönesamtals-resultat: ny lön committas inte direkt — den lagras
+    # här tills lönespec-generatorn körs för en månad >= effective_from,
+    # då skrivs gross_salary_monthly om och pending-fälten nollas. Det
+    # speglar verkligheten där samtalet sker en månad och nya lönen syns
+    # på nästa lönespec.
+    pending_salary_monthly: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    pending_effective_from: Mapped[Optional[date]] = deferred(mapped_column(
+        Date, nullable=True,
+    ))
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
@@ -322,6 +373,17 @@ class BatchArtifact(MasterBase):
     # rätt fil och kontrollera matchning.
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     imported_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Bank-flödet (idé 3 i dev_v1.md): bank-relaterade artefakter
+    # (kontoutdrag, kreditkort_faktura, lan_besked) syns FÖRST i banken.
+    # Eleven måste exportera dem ur banken → då sätts denna flagga →
+    # de blir synliga i /my-batches. Lönespec hör inte till bank-flödet
+    # (synlig direkt på /arbetsgivare) — flaggan är NULL på dem.
+    exported_to_my_batches: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    exported_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -880,3 +942,25 @@ class StudentActivity(MasterBase):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), index=True,
     )
+
+
+# Aktie-master-modeller (StockMaster, StockQuote, LatestStockQuote,
+# MarketCalendar) — importeras här så att MasterBase.metadata känner
+# till dem vid create_all.
+from . import stock_models as _stock_models  # noqa: E402, F401
+
+# EventTemplate (delade event-mallar för Wellbeing-events) — samma
+# import-trick.
+from . import event_models as _event_models  # noqa: E402, F401
+
+# Sociala mekanismer (ClassEventInvite, ClassDisplaySettings).
+from . import social_models as _social_models  # noqa: E402, F401
+
+# Arbetsgivar-dynamik (CollectiveAgreement, ProfessionAgreement,
+# EmployerSatisfaction[+Event], WorkplaceQuestion[+Answer]) — idé 1
+# i dev_v1.md.
+from . import employer_models as _employer_models  # noqa: E402, F401
+
+# Bank-flöde (BankSession för BankID-simulering) — idé 3 i dev_v1.md.
+# ScheduledPayment + PaymentReminder ligger i scope-DB.
+from . import bank_models as _bank_models  # noqa: E402, F401

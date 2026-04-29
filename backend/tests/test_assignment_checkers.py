@@ -177,6 +177,298 @@ def test_add_upcoming_default_target_is_one(fx) -> None:
     assert res.status == "completed"
 
 
+def test_make_transfer_not_started(fx) -> None:
+    """make_transfer ska börja som 'not_started' när inga överföringar finns."""
+    from hembudget.teacher.assignments import evaluate
+    student = fx
+    a = _make_assignment("make_transfer", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+    assert "0/1" in res.progress
+
+
+def test_make_transfer_counts_paired_destinations(fx) -> None:
+    """En proaktiv överföring (parad, positivt belopp på destinationen) ska
+    räknas — räknar destinationssidan så vi inte dubbelräknar paret."""
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import Account, Transaction
+    from hembudget.school.engines import scope_context, scope_for_student
+    student = fx
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            src = Account(name="Lön", bank="Demo", type="checking", currency="SEK")
+            dst = Account(name="Spar", bank="Demo", type="savings", currency="SEK")
+            s.add_all([src, dst]); s.flush()
+            out = Transaction(
+                account_id=src.id, date=date.today(),
+                amount=Decimal("-200.00"), currency="SEK",
+                raw_description="t-out", hash="ho1", is_transfer=True,
+            )
+            inn = Transaction(
+                account_id=dst.id, date=date.today(),
+                amount=Decimal("200.00"), currency="SEK",
+                raw_description="t-in", hash="hi1", is_transfer=True,
+            )
+            s.add_all([out, inn]); s.flush()
+            out.transfer_pair_id = inn.id
+            inn.transfer_pair_id = out.id
+
+    a = _make_assignment("make_transfer", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "completed"
+    assert "1" in res.progress
+
+
+def test_make_transfer_filters_by_account_kind(fx) -> None:
+    """to_account_kind=savings ska bara räkna överföringar TILL sparkonto."""
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import Account, Transaction
+    from hembudget.school.engines import scope_context, scope_for_student
+    student = fx
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            a1 = Account(name="A", bank="Demo", type="checking", currency="SEK")
+            a2 = Account(name="B", bank="Demo", type="checking", currency="SEK")
+            s.add_all([a1, a2]); s.flush()
+            out = Transaction(
+                account_id=a1.id, date=date.today(),
+                amount=Decimal("-50.00"), currency="SEK",
+                raw_description="t-out", hash="hox", is_transfer=True,
+            )
+            inn = Transaction(
+                account_id=a2.id, date=date.today(),
+                amount=Decimal("50.00"), currency="SEK",
+                raw_description="t-in", hash="hix", is_transfer=True,
+            )
+            s.add_all([out, inn]); s.flush()
+            out.transfer_pair_id = inn.id
+            inn.transfer_pair_id = out.id
+
+    # Krav: överföring ska gå till SAVINGS — vi har bara checking → checking
+    a = _make_assignment(
+        "make_transfer", target_count=1, to_account_kind="savings",
+    )
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+
+
+def test_make_transfer_filters_by_min_amount(fx) -> None:
+    """min_amount=500 ska kräva minst 500 kr per överföring."""
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import Account, Transaction
+    from hembudget.school.engines import scope_context, scope_for_student
+    student = fx
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            a1 = Account(name="A", bank="Demo", type="checking", currency="SEK")
+            a2 = Account(name="B", bank="Demo", type="savings", currency="SEK")
+            s.add_all([a1, a2]); s.flush()
+            # 100 kr — under min_amount
+            out = Transaction(
+                account_id=a1.id, date=date.today(),
+                amount=Decimal("-100.00"), currency="SEK",
+                raw_description="t", hash="ha", is_transfer=True,
+            )
+            inn = Transaction(
+                account_id=a2.id, date=date.today(),
+                amount=Decimal("100.00"), currency="SEK",
+                raw_description="t", hash="hb", is_transfer=True,
+            )
+            s.add_all([out, inn]); s.flush()
+            out.transfer_pair_id = inn.id
+            inn.transfer_pair_id = out.id
+
+    a = _make_assignment("make_transfer", target_count=1, min_amount=500)
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+
+
+def test_stock_open_account_not_started(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    student = fx
+    a = _make_assignment("stock_open_account", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+
+
+def test_stock_open_account_completes_when_isk_exists(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import Account
+    from hembudget.school.engines import scope_context, scope_for_student
+    student = fx
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            s.add(Account(name="ISK1", bank="Demo", type="isk"))
+
+    a = _make_assignment("stock_open_account", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "completed"
+
+
+def test_stock_diversify_not_started(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    student = fx
+    a = _make_assignment(
+        "stock_diversify", min_holdings=5, min_sectors=3,
+    )
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+
+
+def test_stock_diversify_completes_with_5_across_3_sectors(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import Account, StockHolding
+    from hembudget.school.engines import (
+        master_session, scope_context, scope_for_student,
+    )
+    from hembudget.school.stock_seed import seed_stock_universe
+    from decimal import Decimal as D
+    student = fx
+
+    # Seeda master med stock universe så stock_diversify-checkern kan
+    # slå upp sektorer
+    with master_session() as ms:
+        seed_stock_universe(ms)
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            isk = Account(name="ISK", bank="Demo", type="isk")
+            s.add(isk); s.flush()
+            # 5 aktier över 3+ sektorer (Industri, Bank, Telecom)
+            for ticker in ["VOLV-B.ST", "ATCO-A.ST", "SEB-A.ST", "TELIA.ST", "ERIC-B.ST"]:
+                s.add(StockHolding(
+                    account_id=isk.id, ticker=ticker,
+                    quantity=10, avg_cost=D("100"),
+                ))
+
+    a = _make_assignment(
+        "stock_diversify", min_holdings=5, min_sectors=3,
+    )
+    res = evaluate(a, student)
+    assert res.status == "completed"
+    assert res.detail["holdings"] == 5
+    assert res.detail["sectors"] >= 3
+
+
+def test_stock_diversify_in_progress_when_only_one_sector(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import Account, StockHolding
+    from hembudget.school.engines import (
+        master_session, scope_context, scope_for_student,
+    )
+    from hembudget.school.stock_seed import seed_stock_universe
+    from decimal import Decimal as D
+    student = fx
+
+    with master_session() as ms:
+        seed_stock_universe(ms)
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            isk = Account(name="ISK", bank="Demo", type="isk")
+            s.add(isk); s.flush()
+            # 5 aktier men alla från Industri
+            for ticker in ["VOLV-B.ST", "ATCO-A.ST", "SAND.ST", "ABB.ST", "ALFA.ST"]:
+                s.add(StockHolding(
+                    account_id=isk.id, ticker=ticker,
+                    quantity=10, avg_cost=D("100"),
+                ))
+
+    a = _make_assignment(
+        "stock_diversify", min_holdings=5, min_sectors=3,
+    )
+    res = evaluate(a, student)
+    assert res.status == "in_progress"
+
+
+def test_trigger_credit_flow_not_started(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    student = fx
+    a = _make_assignment("trigger_credit_flow", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "not_started"
+
+
+def test_trigger_credit_flow_completes_with_application(fx) -> None:
+    from hembudget.teacher.assignments import evaluate
+    from hembudget.db.base import session_scope
+    from hembudget.db.models import CreditApplication
+    from hembudget.school.engines import scope_context, scope_for_student
+    from decimal import Decimal as D
+    student = fx
+
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            s.add(CreditApplication(
+                kind="private", requested_amount=D("10000"),
+                requested_months=24, result="declined",
+            ))
+
+    a = _make_assignment("trigger_credit_flow", target_count=1)
+    res = evaluate(a, student)
+    assert res.status == "completed"
+
+
+def test_credit_template_seeds(fx) -> None:
+    from hembudget.school.module_seed import seed_system_modules
+    from hembudget.school.models import Module
+    with master_session() as s:
+        seed_system_modules(s)
+    with master_session() as s:
+        m = s.query(Module).filter(
+            Module.title == "Kreditmånaden — när pengarna inte räcker",
+            Module.teacher_id.is_(None),
+        ).first()
+        assert m is not None
+        assert m.is_template is True
+        assert len(m.steps) == 6
+        kinds = [
+            (st.params or {}).get("assignment_kind")
+            for st in m.steps if st.kind == "task"
+        ]
+        assert "trigger_credit_flow" in kinds
+
+
+def test_stocks_template_seeds(fx) -> None:
+    """Aktiemodulen ska seedas som systemmodul med 8 steg."""
+    from hembudget.school.module_seed import seed_system_modules
+    from hembudget.school.models import Module
+    with master_session() as s:
+        seed_system_modules(s)
+    with master_session() as s:
+        m = s.query(Module).filter(
+            Module.title == "Aktier — komma igång",
+            Module.teacher_id.is_(None),
+        ).first()
+        assert m is not None
+        assert m.is_template is True
+        assert len(m.steps) == 8
+        kinds = [
+            (st.params or {}).get("assignment_kind")
+            for st in m.steps if st.kind == "task"
+        ]
+        assert "stock_open_account" in kinds
+        assert "make_transfer" in kinds
+        assert "stock_diversify" in kinds
+
+
 def test_system_tour_template_seeds(fx) -> None:
     """Den nya 'Lär känna systemet'-modulen ska seedas som systemmodul."""
     from hembudget.school.module_seed import seed_system_modules

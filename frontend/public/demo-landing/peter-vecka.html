@@ -1,0 +1,3114 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Peters vecka · Vardagsekonomi · Ekonomilabbet</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e5e7eb;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --ease: cubic-bezier(.77, 0, .175, 1);
+  --dur: 650ms;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  position: relative;
+}
+body.is-deep { overflow: hidden; height: 100vh; }
+
+/* ─── Scroll-triggered entrance-animationer (AOS-style) ─── */
+[data-fx] {
+  opacity: 0;
+  transition:
+    opacity .9s cubic-bezier(.4, 0, .2, 1),
+    transform .9s cubic-bezier(.34, 1.18, .64, 1),
+    letter-spacing .9s cubic-bezier(.4, 0, .2, 1),
+    filter .9s ease;
+  will-change: opacity, transform;
+}
+[data-fx="fade-up"]    { transform: translate3d(0, 36px, 0); }
+[data-fx="fade-down"]  { transform: translate3d(0, -28px, 0); }
+[data-fx="fade-left"]  { transform: translate3d(-36px, 0, 0); }
+[data-fx="fade-right"] { transform: translate3d(36px, 0, 0); }
+[data-fx="zoom-in"]    { transform: scale(0.94); }
+[data-fx="reveal"]     { letter-spacing: -2px; filter: blur(6px); transform: translate3d(0, 12px, 0); }
+[data-fx].is-in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  letter-spacing: revert;
+  filter: blur(0);
+}
+[data-fx-delay="80"]   { transition-delay: 80ms; }
+[data-fx-delay="160"]  { transition-delay: 160ms; }
+[data-fx-delay="240"]  { transition-delay: 240ms; }
+[data-fx-delay="320"]  { transition-delay: 320ms; }
+[data-fx-delay="400"]  { transition-delay: 400ms; }
+[data-fx-delay="480"]  { transition-delay: 480ms; }
+[data-fx-delay="560"]  { transition-delay: 560ms; }
+[data-fx-delay="700"]  { transition-delay: 700ms; }
+
+/* Stagger inom container */
+[data-fx-stagger] > * {
+  opacity: 0; transform: translate3d(0, 24px, 0);
+  transition: opacity .8s cubic-bezier(.4, 0, .2, 1),
+              transform .8s cubic-bezier(.34, 1.18, .64, 1);
+}
+[data-fx-stagger].is-in > *           { opacity: 1; transform: translate3d(0, 0, 0); }
+[data-fx-stagger].is-in > *:nth-child(1) { transition-delay: 0ms; }
+[data-fx-stagger].is-in > *:nth-child(2) { transition-delay: 100ms; }
+[data-fx-stagger].is-in > *:nth-child(3) { transition-delay: 200ms; }
+[data-fx-stagger].is-in > *:nth-child(4) { transition-delay: 300ms; }
+[data-fx-stagger].is-in > *:nth-child(5) { transition-delay: 400ms; }
+[data-fx-stagger].is-in > *:nth-child(6) { transition-delay: 500ms; }
+
+/* Vis-bars: animeras från 0 → --h när vis-card.is-in */
+.vis-bar-fill {
+  height: 0;
+  transition: height 1.1s cubic-bezier(.34, 1.18, .64, 1);
+}
+.vis-card.is-in .vis-bar-fill { height: var(--h, 0%); }
+.vis-card.is-in .vis-bar:nth-child(1) .vis-bar-fill { transition-delay: 200ms; }
+.vis-card.is-in .vis-bar:nth-child(2) .vis-bar-fill { transition-delay: 320ms; }
+.vis-card.is-in .vis-bar:nth-child(3) .vis-bar-fill { transition-delay: 460ms; }
+.vis-card.is-in .vis-bar:nth-child(4) .vis-bar-fill { transition-delay: 580ms; }
+.vis-card.is-in .vis-bar:nth-child(5) .vis-bar-fill { transition-delay: 680ms; }
+
+/* ─── Top-nav (höger) + hemknapp (vänster) — adaptiv färg ─── */
+.top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
+}
+.top-nav-link {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
+  color: var(--fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  /* Subtle 1px stroke-shadow ger stadig kant även utan hover */
+  text-shadow: 0 0 0.4px currentColor, 0 1px 0 rgba(255,255,255,0.4);
+  transform-origin: right center;
+  transition:
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
+  cursor: pointer;
+}
+.top-nav-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.top-nav-link-primary { color: var(--accent); }
+.top-nav-link-primary:hover { color: var(--accent); }
+
+.home-link {
+  position: fixed; top: 22px; left: 28px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
+  color: var(--fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  text-shadow: 0 0 0.4px currentColor, 0 1px 0 rgba(255,255,255,0.4);
+  transform-origin: left center;
+  transition:
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
+}
+.home-link-arrow {
+  display: inline-block;
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+.home-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.home-link:hover .home-link-arrow { transform: translateX(-6px); }
+
+/* Mörk bg: vit text + multi-stop shadow (1px outline + 2px drop) — kristallklar. */
+body.nav-on-dark .top-nav-link,
+body.nav-on-dark .home-link {
+  color: #fff;
+  text-shadow:
+    0 0 1px rgba(0,0,0,0.95),
+    0 1px 2px rgba(0,0,0,0.85),
+    0 2px 6px rgba(0,0,0,0.4);
+}
+body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
+body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.75); }
+
+/* Deep-page (slides) öppen → vit bakgrund. Tvinga svart text på nav. */
+body.is-deep .top-nav-link,
+body.is-deep .home-link {
+  color: var(--fg);
+  text-shadow: none;
+}
+body.is-deep .top-nav-link-primary { color: var(--accent); }
+body.is-deep .home-link-arrow { color: var(--muted); }
+
+@keyframes nav-name-pop {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+/* Adaptiv färg flyttad ovan — definitionerna med blurry halo borttagna. */
+
+@media (max-width: 600px) {
+  .top-nav { top: 16px; right: 18px; gap: 16px; }
+  .home-link { top: 16px; left: 18px; }
+  .top-nav-link, .home-link { font-size: 13px; }
+  .top-nav-link:hover, .home-link:hover { font-size: 17px; }
+}
+
+/* ─── Animerad nedräkning i hero h1 ─── */
+[data-hero-time], [data-hero-mins] {
+  display: inline-block;
+  transition: transform .25s var(--ease), opacity .25s var(--ease);
+  transform-origin: center;
+}
+[data-hero-time].is-tick, [data-hero-mins].is-tick {
+  transform: scale(0.92) translateY(2px);
+  opacity: 0.25;
+}
+[data-hero-time].is-zero, [data-hero-mins].is-zero {
+  color: var(--accent);
+}
+
+/* ─── Page-swipe layout: main + deep-page sliding horisontellt ─── */
+.main-flow {
+  transition: transform var(--dur) var(--ease);
+  will-change: transform;
+}
+body.is-deep .main-flow {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.deep-page {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform var(--dur) var(--ease);
+  will-change: transform;
+  display: flex; flex-direction: column;
+  pointer-events: none;
+}
+body.is-deep .deep-page {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* ─── Common typography ─── */
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+section { padding: 96px 24px; border-top: 1px solid var(--rule); }
+.shell { max-width: 1100px; margin: 0 auto; }
+h1 {
+  font-size: clamp(38px, 5.5vw, 64px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.02;
+}
+h2 {
+  font-size: clamp(26px, 3.4vw, 38px); font-weight: 600;
+  letter-spacing: -0.6px; line-height: 1.1;
+}
+
+/* ─── Hero brand-header (centrerat, scrub-fadar bort vid scroll) ─── */
+.hero-brand {
+  position: absolute; top: 32px; left: 50%;
+  z-index: 4;
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, calc(var(--hero-p, 0) * -28px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.7);
+}
+.brand-text { display: flex; flex-direction: column; gap: 4px; }
+.brand-name {
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--fg);
+  line-height: 1;
+}
+.brand-tagline {
+  font-family: var(--mono); font-size: 12px;
+  letter-spacing: 2.4px; text-transform: uppercase;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .brand-tagline { font-size: 10px; letter-spacing: 1.6px; }
+}
+
+/* ─── Hero pin-wrapper (scrub-parallax under första 180vh) ─── */
+.hero-pin {
+  position: relative;
+  height: 115vh;
+}
+.hero {
+  position: sticky; top: 0;
+  height: 100vh; min-height: 100vh;
+  overflow: hidden;
+}
+
+/* Scrub-driven transforms via --hero-p (sätts av JS, 0..1) */
+.hero h1 {
+  transform: translateY(calc(var(--hero-p, 0) * -80px))
+             scale(calc(1 - var(--hero-p, 0) * 0.06));
+  opacity: calc(1 - var(--hero-p, 0));
+  transform-origin: 0 50%;
+}
+.hero p {
+  transform: translateY(calc(var(--hero-p, 0) * -56px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.5);
+}
+.hero-stats {
+  transform: translateY(calc(var(--hero-p, 0) * -36px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.7);
+}
+.hero-eyebrow {
+  transform: translateY(calc(var(--hero-p, 0) * -20px));
+  opacity: calc(1 - var(--hero-p, 0) * 1.8);
+}
+.hero-scroll-hint {
+  opacity: calc(1 - var(--hero-p, 0) * 2.2);
+}
+.hero-bg-video {
+  filter: blur(calc(var(--hero-p, 0) * 5px))
+          brightness(calc(1 - var(--hero-p, 0) * 0.32));
+}
+.hero-bg-overlay {
+  opacity: calc(1 - var(--hero-p, 0) * 0.35);
+}
+
+/* ─── Section-divider: tunn linje "ritas" vänster→höger när section visas ─ */
+section.day::before {
+  content: ""; position: absolute;
+  top: 0; left: 0; height: 1px; width: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 25%, var(--accent) 75%, transparent 100%);
+  transition: width 1.6s cubic-bezier(.65, 0, .35, 1);
+  z-index: 4;
+}
+section.day.is-in::before { width: 100%; }
+section.day { position: relative; }
+
+/* ─── Sticky vis-card: stannar kvar medan text scrollar förbi ─ */
+@media (min-width: 901px) {
+  .day-vis {
+    position: sticky;
+    top: 12vh;
+    align-self: start;
+  }
+}
+
+/* ─── Hero ─── */
+.hero {
+  position: relative; overflow: hidden; border-top: 0;
+  padding: 120px 24px 96px;
+  background: linear-gradient(180deg, #f1f5f9 0%, var(--bg) 100%);
+}
+.hero-bg-video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; opacity: 0;
+  transition: opacity 1.2s ease;
+  pointer-events: none;
+}
+.hero-bg-video.is-ready { opacity: 1; }
+.hero-bg-overlay {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(95deg,
+      rgba(250,250,249,0.96) 0%,
+      rgba(250,250,249,0.94) 32%,
+      rgba(250,250,249,0.78) 48%,
+      rgba(250,250,249,0.32) 68%,
+      rgba(250,250,249,0.06) 88%,
+      rgba(250,250,249,0) 100%),
+    linear-gradient(180deg,
+      rgba(250,250,249,0.92) 0%,
+      rgba(250,250,249,0.4) 9%,
+      rgba(250,250,249,0) 22%,
+      rgba(250,250,249,0) 65%,
+      rgba(250,250,249,0.92) 100%);
+}
+@media (max-width: 800px) {
+  .hero-bg-overlay {
+    background: linear-gradient(180deg,
+      rgba(250,250,249,0.94) 0%,
+      rgba(250,250,249,0.78) 35%,
+      rgba(250,250,249,0.92) 100%);
+  }
+}
+.hero {
+  padding: 18vh clamp(24px, 6vw, 80px) 14vh clamp(32px, 8vw, 120px);
+  min-height: 88vh; display: flex; align-items: center;
+}
+.hero .shell { position: relative; z-index: 2; max-width: 640px; margin: 0; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px;
+  padding: 6px 14px; background: var(--fg); color: #fff;
+  border-radius: 100px; letter-spacing: 1.4px; margin-bottom: 24px;
+  box-shadow: 0 8px 24px -8px rgba(15,23,42,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+  font-weight: 500;
+}
+.hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
+.hero h1 { margin-bottom: 22px; }
+.hero h1 em {
+  color: var(--accent); font-style: italic;
+  font-family: var(--serif); font-weight: 500;
+}
+.hero p {
+  font-size: 17px; color: #475569; max-width: 480px;
+  margin-bottom: 28px; line-height: 1.55;
+}
+.hero h1 {
+  font-size: clamp(44px, 6.5vw, 78px); letter-spacing: -2.2px;
+  line-height: 0.98; max-width: 12ch;
+}
+.hero p {
+  font-size: 18px; max-width: 520px; font-weight: 500;
+  color: #1e293b; line-height: 1.55;
+}
+.hero-stats { display: flex; gap: 40px; padding-top: 28px; border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap; margin-top: 8px; }
+.hero-stat-num { display: block; font-size: 34px; font-weight: 700; letter-spacing: -0.8px; }
+.hero-stat-label {
+  font-size: 11px; color: var(--muted); font-family: var(--mono);
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.hero-scroll-hint {
+  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2.5px;
+  color: var(--muted); z-index: 3;
+}
+.hero-scroll-line {
+  width: 1px; height: 32px;
+  background: linear-gradient(180deg, var(--muted) 0%, transparent 100%);
+  animation: scroll-pulse 2.4s ease-in-out infinite;
+}
+@keyframes scroll-pulse {
+  0%, 100% { transform: scaleY(1); transform-origin: top; opacity: 0.6; }
+  50% { transform: scaleY(0.4); opacity: 1; }
+}
+
+/* ─── Day section (modern editorial-layout) ─── */
+section.day { padding: clamp(80px, 12vh, 140px) 24px; }
+.day-meta {
+  display: grid; grid-template-columns: auto 1fr; gap: 24px 36px;
+  align-items: end; margin-bottom: 64px; padding-bottom: 28px;
+  border-bottom: 1px solid var(--rule);
+}
+.day-meta-time { display: flex; align-items: baseline; gap: 14px; }
+.day-meta-dot { color: var(--accent); font-size: 12px; line-height: 1; }
+.day-meta-day {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 2.4px; text-transform: uppercase; color: var(--muted);
+}
+.day-meta-clock {
+  font-family: var(--serif); font-size: clamp(38px, 5vw, 58px);
+  font-weight: 600; letter-spacing: -1.5px; line-height: 1;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.day-meta-tagline {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(18px, 1.8vw, 22px); color: #475569;
+  letter-spacing: -0.2px; max-width: 36ch;
+  line-height: 1.4; align-self: end; padding-bottom: 6px;
+}
+@media (max-width: 720px) {
+  .day-meta { grid-template-columns: 1fr; gap: 16px; margin-bottom: 40px; }
+  .day-meta-tagline { padding-bottom: 0; }
+}
+
+.day-body {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 80px); align-items: start;
+}
+@media (max-width: 900px) { .day-body { grid-template-columns: 1fr; gap: 40px; } }
+
+.day-text h2 {
+  font-size: clamp(34px, 4.5vw, 56px); font-weight: 700;
+  letter-spacing: -1.4px; line-height: 1.02; margin-bottom: 28px;
+  max-width: 14ch;
+}
+.day-text p {
+  font-size: 17px; color: #334155; line-height: 1.6;
+  margin-bottom: 18px; max-width: 52ch;
+}
+.day-text strong { color: var(--fg); font-weight: 700; }
+
+.day-quote {
+  position: relative;
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(20px, 2vw, 24px); line-height: 1.4;
+  color: var(--fg); padding: 6px 0 6px 22px;
+  margin: 26px 0;
+  border-left: 2px solid var(--accent);
+  max-width: 30ch;
+}
+.day-quote cite {
+  display: block; margin-top: 12px;
+  font-family: var(--mono); font-style: normal;
+  font-size: 11px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+.day-result {
+  display: inline-flex; align-items: baseline; gap: 16px;
+  margin-top: 30px; padding: 20px 26px;
+  background: var(--fg); color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 14px 32px -16px rgba(15,23,42,0.5);
+}
+.day-result-num {
+  font-family: var(--serif); font-size: 38px; font-weight: 700;
+  letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.day-result-num::after {
+  content: " kr"; font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 500; opacity: 0.65; margin-left: 4px;
+}
+.day-result-label {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold); font-weight: 600;
+}
+
+/* ─── Visualisering (höger sida) ─── */
+.day-vis { position: relative; }
+.vis-card {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff; border-radius: 14px;
+  padding: 28px 30px;
+  box-shadow:
+    0 24px 60px -24px rgba(15,23,42,0.45),
+    inset 0 0 0 1px rgba(255,255,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.vis-card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+.vis-card-eye { color: var(--gold); font-weight: 600; }
+.vis-card-meta { color: rgba(255,255,255,0.45); }
+.vis-card-title {
+  font-size: 16px; font-weight: 500;
+  letter-spacing: -0.2px; margin-bottom: 24px;
+  color: rgba(255,255,255,0.92);
+}
+.vis-bars {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 8px; height: 200px; align-items: end;
+  padding-bottom: 36px; position: relative;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 20px;
+}
+.vis-bar {
+  position: relative; height: 100%;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center;
+}
+.vis-bar-fill {
+  width: 100%; background: rgba(255,255,255,0.14);
+  border-radius: 6px 6px 0 0;
+  height: var(--h, 0%);
+  transition: height .8s cubic-bezier(.34, 1.18, .64, 1);
+  position: relative;
+}
+.vis-bar.is-peak .vis-bar-fill {
+  background: linear-gradient(180deg, var(--gold) 0%, #d97706 100%);
+  box-shadow: 0 -2px 18px rgba(251,191,36,0.4);
+}
+.vis-bar.is-empty .vis-bar-fill {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  height: 8% !important;
+  border-radius: 4px;
+}
+.vis-bar-num {
+  position: absolute; top: -22px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,0.85);
+  font-variant-numeric: tabular-nums;
+}
+.vis-bar.is-peak .vis-bar-num { color: var(--gold); font-size: 14px; }
+.vis-bar.is-empty .vis-bar-num { color: rgba(255,255,255,0.25); }
+.vis-bar-r {
+  position: absolute; bottom: -22px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px;
+  color: rgba(255,255,255,0.4); white-space: nowrap;
+}
+.vis-card-foot {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-top: 4px;
+}
+.vis-card-foot span {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
+}
+.vis-card-foot strong {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Scene-CTA-rad (modernare än innan) ─── */
+.day-cta-row {
+  margin-top: 80px; padding-top: 40px;
+  border-top: 1px solid var(--rule);
+}
+.day-cta-eye {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; margin-bottom: 18px;
+}
+
+/* Lärar-måndag: mörk bg-variant */
+section.day.day-dark {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff;
+  position: relative;
+}
+section.day.day-dark::after {
+  content: ""; position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+section.day.day-dark .day-meta-day { color: var(--gold); }
+section.day.day-dark .day-meta-clock { color: #fff; }
+section.day.day-dark .day-meta-tagline { color: rgba(255,255,255,0.65); }
+section.day.day-dark .day-meta {
+  border-bottom-color: rgba(255,255,255,0.1);
+}
+section.day.day-dark h2 { color: #fff; }
+section.day.day-dark h2 em { color: var(--gold); }
+section.day.day-dark .day-text p { color: rgba(255,255,255,0.78); }
+section.day.day-dark .day-text strong { color: #fff; }
+section.day.day-dark .day-quote {
+  color: #fff;
+  border-left-color: var(--gold);
+}
+section.day.day-dark .day-quote cite { color: rgba(255,255,255,0.6); }
+section.day.day-dark .day-result {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: none;
+}
+section.day.day-dark .day-result-num { color: #fff; }
+section.day.day-dark .day-result-label { color: var(--gold); }
+
+/* Slut-CTA-sektion */
+section.day.day-cta {
+  background: linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);
+  text-align: center;
+  padding: clamp(96px, 14vh, 160px) 24px;
+}
+.day-cta-final {
+  max-width: 680px; margin: 0 auto;
+}
+.day-cta-final .day-meta-day {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 26px;
+}
+.day-cta-final h2 {
+  font-size: clamp(36px, 5vw, 60px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05; margin-bottom: 26px;
+}
+.day-cta-final h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--accent);
+  font-weight: 500;
+}
+.day-cta-final p {
+  font-size: 17px; line-height: 1.6; color: #475569;
+  max-width: 50ch; margin: 0 auto 36px;
+}
+.day-cta-final p em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.day-cta-buttons {
+  display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+}
+.day-cta-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 26px; border-radius: 100px;
+  font-family: inherit; font-size: 14.5px; font-weight: 600;
+  letter-spacing: -0.05px; text-decoration: none;
+  transition: all .22s var(--ease);
+}
+.day-cta-btn-primary {
+  background: var(--fg); color: #fff;
+  box-shadow: 0 12px 28px -10px rgba(15,23,42,0.5);
+}
+.day-cta-btn-primary:hover {
+  transform: translateY(-2px); background: #1e293b;
+}
+.day-cta-btn-secondary {
+  background: #fff; color: var(--fg); border: 1px solid var(--rule);
+}
+.day-cta-btn-secondary:hover { border-color: var(--fg); transform: translateY(-2px); }
+
+/* Scen-CTA: inline primary action ─── */
+.scene-ctas {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.scene-cta {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 22px 24px;
+  background: #fff; color: var(--fg); text-decoration: none;
+  border: 1px solid var(--rule); border-radius: 12px;
+  font-size: 15px; font-family: inherit; cursor: pointer;
+  transition: all .22s var(--ease); text-align: left;
+  position: relative; overflow: hidden;
+}
+.scene-cta::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 2px;
+  width: 0; background: var(--accent);
+  transition: width .35s var(--ease);
+}
+.scene-cta:hover {
+  border-color: var(--fg);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px -14px rgba(15,23,42,0.18);
+}
+.scene-cta:hover::after { width: 100%; }
+.scene-cta-q { font-weight: 500; line-height: 1.4; color: #334155; }
+.scene-cta-go {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px;
+  color: var(--accent); text-transform: uppercase; font-weight: 700;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* ─── Deep-page (full-viewport horisontell sidvändning) ─── */
+.deep-head {
+  display: flex; align-items: center; gap: 20px;
+  padding: 18px 28px; background: #fff;
+  border-bottom: 1px solid var(--rule); flex-shrink: 0;
+}
+.deep-back {
+  background: transparent; border: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--fg);
+  padding: 8px 14px; border-radius: 100px;
+  border: 1px solid var(--rule); transition: all .15s;
+}
+.deep-back:hover { border-color: var(--fg); background: var(--fg); color: #fff; }
+.deep-eyebrow-wrap { display: flex; flex-direction: column; gap: 2px; }
+.deep-eyebrow-kicker { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; color: var(--muted); text-transform: uppercase; }
+.deep-eyebrow-title { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+.deep-progress { margin-left: auto; display: flex; gap: 5px; }
+.deep-progress span { width: 28px; height: 3px; background: var(--rule); border-radius: 2px; transition: background .25s; }
+.deep-progress span.active { background: var(--fg); }
+.deep-stage { flex: 1; overflow: hidden; position: relative; }
+.deep-content { position: absolute; inset: 0; display: none; }
+.deep-content.is-active { display: block; }
+.deep-track { position: relative; width: 100%; height: 100%; }
+.deep-slide {
+  position: absolute; inset: 0; padding: 56px clamp(36px, 5vw, 80px);
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "text vis"
+    "system echo"
+    "foot foot";
+  gap: clamp(20px, 2.5vw, 44px) clamp(40px, 5vw, 72px);
+  align-items: start;
+  transform: translate3d(110%, 4%, 0) scale(0.96) rotate(0.8deg);
+  opacity: 0; pointer-events: none;
+  transition:
+    transform 720ms cubic-bezier(.34, 1.18, .64, 1),
+    opacity 520ms cubic-bezier(.4, 0, .2, 1);
+  will-change: transform, opacity;
+}
+.deep-slide.is-prev {
+  transform: translate3d(-110%, 4%, 0) scale(0.96) rotate(-0.8deg);
+  opacity: 0; pointer-events: none;
+}
+.deep-slide.is-active {
+  transform: translate3d(0, 0, 0) scale(1) rotate(0);
+  opacity: 1; pointer-events: auto;
+}
+@media (max-width: 900px) {
+  .deep-slide {
+    grid-template-columns: 1fr;
+    grid-template-areas: "text" "vis" "system" "echo" "foot";
+    padding: 36px clamp(20px, 5vw, 36px); gap: 24px;
+    align-items: start;
+  }
+  .deep-head { padding: 14px 18px; gap: 12px; }
+}
+.deep-slide-text   { grid-area: text;   display: flex; flex-direction: column; gap: 20px; }
+.deep-slide-vis    { grid-area: vis;    display: flex; flex-direction: column; gap: 14px; }
+.deep-slide-system { grid-area: system; }
+.deep-slide-echo   { grid-area: echo; }
+
+.deep-slide-num-wrap {
+  display: flex; align-items: baseline; gap: 16px;
+  margin-bottom: 8px;
+}
+.deep-slide-num-big {
+  font-family: var(--serif); font-size: clamp(56px, 7vw, 96px);
+  font-weight: 700; letter-spacing: -3px; line-height: 0.9;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.deep-slide-num-meta {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.deep-slide-num-meta strong { color: var(--fg); font-weight: 700; }
+.deep-slide h3 {
+  font-size: clamp(32px, 4vw, 46px); font-weight: 700;
+  letter-spacing: -1.2px; line-height: 1.05; max-width: 14ch;
+}
+.deep-slide-lede { font-size: 17px; color: #475569; max-width: 50ch; line-height: 1.6; }
+.deep-slide em { font-family: var(--serif); font-style: italic; color: var(--fg); }
+.deep-slide-foot {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted);
+  padding-top: 16px; border-top: 1px solid var(--rule); margin-top: 8px;
+}
+
+/* "Så funkar det" + "Echo coachar" callouts */
+.deep-slide-system, .deep-slide-echo {
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 11px;
+}
+.deep-slide-system {
+  background: #fff;
+  border: 1px solid var(--rule);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+}
+.deep-slide-echo {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #fff;
+  box-shadow: 0 14px 32px -16px rgba(15,23,42,0.45),
+              inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.deep-slide-callout-eye {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); font-weight: 700;
+}
+.deep-slide-echo .deep-slide-callout-eye { color: var(--gold); }
+.deep-slide-callout-title {
+  font-family: var(--serif); font-size: 19px;
+  font-weight: 600; letter-spacing: -0.3px; line-height: 1.2;
+}
+.deep-slide-echo .deep-slide-callout-title { color: #fff; }
+.deep-slide-callout-body {
+  font-size: 13.5px; line-height: 1.55; color: #475569;
+  max-width: 50ch;
+}
+.deep-slide-callout-list {
+  list-style: none; display: flex; flex-direction: column; gap: 0;
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.4;
+}
+.deep-slide-callout-list li {
+  display: grid; grid-template-columns: 110px 1fr;
+  gap: 14px; padding: 7px 0;
+  border-bottom: 1px dotted var(--rule);
+  color: var(--fg);
+}
+.deep-slide-callout-list li:last-child { border-bottom: 0; }
+.deep-slide-callout-list strong {
+  color: var(--accent); font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; font-size: 10px;
+}
+.deep-slide-echo-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.45;
+  padding: 4px 0 4px 16px;
+  border-left: 2px solid var(--gold);
+  color: rgba(255,255,255,0.95);
+}
+.deep-slide-echo-cite {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+}
+
+/* Rich foot — datakällor + meta som magazine-byline */
+.deep-slide-foot-rich {
+  grid-area: foot;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap;
+  gap: 8px 28px; align-items: baseline;
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.deep-slide-foot-rich-section {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.deep-slide-foot-rich-section strong {
+  color: var(--accent); font-weight: 700;
+}
+.deep-slide-foot-rich-section em {
+  font-style: normal; color: var(--fg); font-weight: 600;
+}
+
+/* ─── Slide-specifika visualiseringar ─── */
+/* 1: BRUTTO — money stack */
+.brutto-stack { display: flex; flex-direction: column; gap: 4px; }
+.brutto-row {
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: baseline; padding: 18px 24px;
+  background: #fff; border: 1px solid var(--rule); border-radius: 10px;
+  transition: transform .25s var(--ease), box-shadow .25s;
+}
+.brutto-row:hover { transform: translateX(4px); }
+.brutto-row.is-add { background: rgba(16,185,129,0.04); border-color: rgba(16,185,129,0.2); }
+.brutto-row.is-sum {
+  background: var(--fg); color: #fff; border-color: var(--fg);
+  box-shadow: 0 18px 40px -16px rgba(15,23,42,0.4);
+  margin-top: 8px;
+}
+.brutto-row-label { font-size: 14px; }
+.brutto-row-label small {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted); margin-top: 4px;
+}
+.brutto-row.is-sum .brutto-row-label small { color: var(--gold); }
+.brutto-row.is-sum .brutto-row-label { font-weight: 600; font-size: 15px; }
+.brutto-row-num {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.6px; font-variant-numeric: tabular-nums;
+}
+.brutto-row.is-add .brutto-row-num { color: #047857; font-size: 22px; }
+.brutto-row.is-sum .brutto-row-num { font-size: 32px; color: #fff; }
+
+/* 2: SKATT — money flow */
+.flow {
+  display: flex; flex-direction: column; gap: 0;
+  padding: 28px 24px; background: var(--fg); color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 24px 50px -22px rgba(15,23,42,0.5);
+}
+.flow-row {
+  display: grid; grid-template-columns: 1fr auto;
+  padding: 14px 4px; align-items: center;
+}
+.flow-row + .flow-row { border-top: 1px solid rgba(255,255,255,0.08); }
+.flow-row-label { font-size: 14px; opacity: 0.85; }
+.flow-row-num {
+  font-family: var(--mono); font-weight: 700; font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.flow-row.is-out .flow-row-num { color: #fca5a5; }
+.flow-row.is-out .flow-row-label::before {
+  content: "−"; color: #fca5a5; font-weight: 700;
+  margin-right: 8px;
+}
+.flow-row.is-final {
+  margin-top: 12px; padding-top: 18px;
+  border-top: 1.5px solid rgba(255,255,255,0.18) !important;
+}
+.flow-row.is-final .flow-row-label {
+  font-family: var(--serif); font-size: 18px; font-weight: 600; opacity: 1;
+}
+.flow-row.is-final .flow-row-num {
+  font-family: var(--serif); font-size: 28px; color: var(--gold);
+  letter-spacing: -0.5px;
+}
+.flow-foot {
+  margin-top: 18px; padding: 14px 16px;
+  background: rgba(255,255,255,0.06); border-radius: 8px;
+  font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.78);
+}
+.flow-foot strong { color: var(--gold); font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px; }
+
+/* 3: PDF — realistic mockup */
+.pdf-wrap { perspective: 1200px; padding: 20px 0; }
+.pdf-doc {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 32px 36px;
+  aspect-ratio: 5 / 7;
+  box-shadow:
+    0 28px 60px -20px rgba(15,23,42,0.28),
+    0 8px 18px -8px rgba(15,23,42,0.12);
+  transform: rotateY(-4deg) rotateX(2deg);
+  transition: transform .4s var(--ease);
+  display: flex; flex-direction: column; gap: 18px;
+}
+.pdf-wrap:hover .pdf-doc { transform: rotateY(0) rotateX(0); }
+.pdf-doc-head {
+  display: flex; justify-content: space-between; align-items: start;
+  padding-bottom: 14px; border-bottom: 2px solid var(--fg);
+}
+.pdf-doc-org {
+  font-family: var(--serif); font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.pdf-doc-org small {
+  display: block; font-family: 'Inter'; font-size: 9.5px;
+  font-weight: 500; letter-spacing: 0.6px; color: var(--muted);
+  margin-top: 2px;
+}
+.pdf-doc-meta {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.8px;
+  color: var(--muted); text-align: right; line-height: 1.5;
+}
+.pdf-doc-title {
+  font-size: 11px; font-family: var(--mono); letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.pdf-doc-rows { display: flex; flex-direction: column; }
+.pdf-doc-row {
+  display: grid; grid-template-columns: 1fr auto;
+  font-size: 11px; padding: 6px 0;
+  border-bottom: 1px dotted var(--rule);
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.pdf-doc-row.is-net {
+  font-weight: 700; font-size: 13px;
+  border-bottom: 0; padding-top: 10px;
+  border-top: 1.5px solid var(--fg);
+}
+.pdf-doc-row.is-net span:last-child { color: var(--accent); }
+.pdf-doc-foot {
+  margin-top: auto; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: 0.6px; color: var(--muted);
+  text-align: center; padding-top: 14px; border-top: 1px solid var(--rule);
+}
+.pdf-cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 18px; background: var(--accent); color: #fff;
+  text-decoration: none; border-radius: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  box-shadow: 0 12px 24px -10px rgba(220,76,43,0.5);
+  transition: transform .2s var(--ease), box-shadow .2s;
+  align-self: flex-start;
+}
+.pdf-cta:hover { transform: translateY(-2px); box-shadow: 0 18px 32px -10px rgba(220,76,43,0.55); }
+.deep-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 28px; border-top: 1px solid var(--rule); background: #fff;
+  flex-shrink: 0;
+}
+.deep-arrow {
+  background: #fff; border: 1px solid var(--rule); border-radius: 100px;
+  width: 38px; height: 38px; display: grid; place-items: center;
+  cursor: pointer; font-size: 16px; color: var(--fg); transition: all .12s;
+}
+.deep-arrow:hover:not(:disabled) { border-color: var(--fg); background: var(--fg); color: #fff; }
+.deep-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
+.deep-foot-counter { font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
+
+/* ─── Vertikal text-tidslinje (pure type, mix-blend för läsbarhet) ─── */
+.timeline {
+  position: fixed; right: 32px; top: 50%;
+  transform: translateY(-50%);
+  z-index: 50; max-height: 84vh;
+  display: flex; flex-direction: column;
+  font-family: var(--mono);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s var(--ease);
+}
+.timeline.is-visible { opacity: 1; }
+.timeline > * { pointer-events: auto; }
+body.is-deep .timeline { opacity: 0; pointer-events: none; }
+
+.tl-rail {
+  position: absolute;
+  left: 6px; top: 4px; bottom: 4px; width: 1.5px;
+  background: rgba(255,255,255,0.6);
+  -webkit-mask: linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%);
+          mask: linear-gradient(180deg, transparent 0%, black 8%, black 92%, transparent 100%);
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+.tl-cursor {
+  position: absolute; left: 0; top: 4px; width: 14px; height: 14px;
+  background: var(--accent); border-radius: 50%;
+  box-shadow: 0 0 0 5px rgba(220,76,43,0.2), 0 0 22px rgba(220,76,43,0.65);
+  transition: top .55s cubic-bezier(.34, 1.18, .64, 1);
+  pointer-events: none;
+  z-index: 2;
+}
+.tl-cursor::after {
+  content: ""; position: absolute; inset: -4px;
+  border-radius: 50%; border: 1.5px solid rgba(220,76,43,0.5);
+  animation: tl-cursor-pulse 2.4s ease-in-out infinite;
+}
+@keyframes tl-cursor-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.7); opacity: 0; }
+}
+.tl-scenes {
+  list-style: none; display: flex; flex-direction: column; gap: 26px;
+  padding: 4px 0 4px 32px; position: relative;
+}
+.tl-scene { position: relative; }
+/* Inaktiva dots — bara stora cursor:n markerar plats */
+.tl-scene::before {
+  content: ""; position: absolute;
+  left: -28px; top: 9px; width: 7px; height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.75);
+  transition: background .55s cubic-bezier(.65, 0, .35, 1),
+              box-shadow .55s cubic-bezier(.65, 0, .35, 1),
+              opacity .35s var(--ease);
+}
+.tl-scene.is-on-light::before {
+  box-shadow: inset 0 0 0 1.5px rgba(15,23,42,0.45);
+}
+.tl-scene.is-passed::before {
+  background: rgba(255,255,255,0.75);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.75);
+}
+.tl-scene.is-passed.is-on-light::before {
+  background: rgba(15,23,42,0.65);
+  box-shadow: inset 0 0 0 1.5px rgba(15,23,42,0.65);
+}
+.tl-scene.is-active::before { opacity: 0; }
+
+.tl-label {
+  background: 0; border: 0; padding: 0; margin: 0;
+  font-family: inherit; font-size: 14.5px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: #fff;
+  cursor: pointer; text-align: left; line-height: 1.3;
+  transition:
+    color .55s cubic-bezier(.65, 0, .35, 1),
+    letter-spacing .3s var(--ease),
+    transform .3s var(--ease),
+    font-size .3s var(--ease),
+    opacity .25s;
+}
+.tl-scene.is-on-light .tl-label { color: #0f172a; }
+.tl-label:hover { opacity: 0.78; }
+.tl-scene.is-passed .tl-label { opacity: 0.45; }
+.tl-scene.is-active .tl-label {
+  font-size: 16px; font-weight: 800; letter-spacing: 2px;
+  transform: translateX(4px);
+  opacity: 1;
+}
+.tl-dives {
+  list-style: none; margin-top: 0; padding-left: 18px;
+  display: flex; flex-direction: column; gap: 7px;
+  max-height: 0; opacity: 0; overflow: hidden;
+  transition: max-height .5s var(--ease), opacity .3s var(--ease), margin-top .35s;
+  pointer-events: none;
+}
+.tl-scene.is-active .tl-dives {
+  max-height: 280px; opacity: 1; margin-top: 14px;
+  pointer-events: auto;
+}
+.tl-dive {
+  background: 0; border: 0; padding: 3px 0;
+  font-family: 'Inter', sans-serif; font-size: 15.5px; font-weight: 600;
+  color: #fff;
+  cursor: pointer; text-align: left;
+  transition:
+    color .55s cubic-bezier(.65, 0, .35, 1),
+    transform .18s var(--ease),
+    opacity .18s;
+  letter-spacing: -0.1px; white-space: nowrap;
+  position: relative; padding-left: 20px;
+}
+.tl-scene.is-on-light .tl-dive { color: #0f172a; }
+.tl-dive::before {
+  content: "↳"; position: absolute; left: 0; top: 3px;
+  font-family: var(--mono); font-size: 14px; opacity: 0.65;
+  transition: opacity .18s, transform .18s;
+}
+.tl-dive:hover {
+  transform: translateX(4px); opacity: 0.78;
+}
+.tl-dive:hover::before { opacity: 1; transform: translateX(2px); }
+
+@media (max-width: 900px) {
+  .timeline { right: 16px; max-height: 72vh; }
+  .tl-label { font-size: 12.5px; }
+  .tl-scene.is-active .tl-label { font-size: 13.5px; }
+  .tl-dive { font-size: 13.5px; }
+}
+@media (max-width: 600px) { .timeline { display: none; } }
+</style>
+</head>
+<body>
+
+<a href="/" class="home-link" aria-label="Tillbaka till startsidan">
+  <span class="home-link-arrow" aria-hidden="true">←</span>
+  Hem
+</a>
+<nav class="top-nav" id="topNav" aria-label="Konto" data-auth-nav>
+  <a href="/login" class="top-nav-link" data-auth-when="out">Logga in</a>
+  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary" data-auth-when="out">Skapa konto</a>
+  <a href="/dashboard" class="top-nav-link" data-auth-when="in" hidden>Dashboard</a>
+  <a href="/dashboard?logout=1" class="top-nav-link top-nav-link-primary" data-auth-when="in" hidden>Logga ut</a>
+</nav>
+
+<main class="main-flow" id="main">
+
+  <div class="hero-pin" id="heroPin" data-scene="hero">
+  <section class="hero" id="hero" data-nav-theme="dark">
+    <video class="hero-bg-video" id="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+      <source src="/demo-landing/peter.mp4" type="video/mp4">
+    </video>
+    <div class="hero-bg-overlay" aria-hidden="true"></div>
+    <header class="hero-brand" id="heroBrand">
+      <div class="brand-text">
+        <div class="brand-name">Ekonomilabbet</div>
+        <div class="brand-tagline">Vardagsekonomin · Vol. 03</div>
+      </div>
+    </header>
+    <div class="shell">
+      <div class="hero-eyebrow">EN VECKA I PETERS LIV</div>
+      <h1>Klockan är <em data-hero-time>21:14</em>.<br>Peters vecka börjar<br>om <em data-hero-mins>16 minuter</em>.</h1>
+      <p>Peter är 38, småbarnsförälder i Göteborg. Barnen sover. Hyran 8&nbsp;200 kr ska dras om 4 dagar. 23 fakturor väntar på att signeras. Det här är hans vecka i Ekonomilabbet — vardagen som planering, inte gambling.</p>
+      <div class="hero-stats">
+        <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
+        <div><span class="hero-stat-num">23</span><span class="hero-stat-label">fakturor</span></div>
+        <div><span class="hero-stat-num">4</span><span class="hero-stat-label">djupdyk att utforska</span></div>
+      </div>
+      <div class="hero-scroll-hint" aria-hidden="true">
+        <span>SCROLLA</span><span class="hero-scroll-line"></span>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <section data-scene="tuesday" class="day" data-nav-theme="light">
+    <div class="shell">
+
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Tisdag</span>
+          <span class="day-meta-clock">21:38</span>
+        </div>
+        <p class="day-meta-tagline">Den 25:e närmar sig.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Peter signerar 23 fakturor på en gång.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">EkonomilabbetID är plattformens identitet — Peters BankID-motsvarighet i simuleringen. Plattformen sorterar inkomna fakturor efter förfallodatum och belopp. <strong>18 av 23</strong> är fasta autogiron — hyra, el, försäkring, mobil — och kan signeras kollektivt. <strong>5 fakturor</strong> har oregelbundna belopp och flaggas för manuell granskning.</p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Onsdag kväll. Barnen sover. Räkningstid."
+            <cite>— Peter, framför skärmen</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Han läser igenom de fem röda raderna: tandvård 1&nbsp;240 kr (avviker från senaste 3 mån), bilförsäkring som höjts, ett oklart Klarna-belopp. Han signerar 18 kollektivt med EkonomilabbetID. Resten väntar på granskning. Allt klart kl <strong>21:38</strong>.</p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="18250" data-count-prefix="">18 250</div>
+            <div class="day-result-label">signerat · 18 av 23 fakturor</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Fakturakö · november</span>
+              <span class="vis-card-meta">23 st</span>
+            </div>
+            <h3 class="vis-card-title">Peter · 5 kategorier · 18 250 kr</h3>
+            <div class="vis-bars">
+              <div class="vis-bar is-peak" style="--h: 92%;"><span class="vis-bar-num">8,2k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">HYRA</span></div>
+              <div class="vis-bar" style="--h: 48%;"><span class="vis-bar-num">2,4k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">EL</span></div>
+              <div class="vis-bar" style="--h: 38%;"><span class="vis-bar-num">1,9k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FÖRS</span></div>
+              <div class="vis-bar" style="--h: 28%;"><span class="vis-bar-num">1,4k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">MOBIL</span></div>
+              <div class="vis-bar" style="--h: 22%;"><span class="vis-bar-num">5×?</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FLAG</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Signerat</span>
+              <strong>18 / 23 · EkonomilabbetID</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="payments">
+            <span class="scene-cta-q">Hur signeras 23 fakturor i ett svep?</span>
+            <span class="scene-cta-go">Autogiro →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="wednesday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Onsdag</span>
+          <span class="day-meta-clock">14:47</span>
+        </div>
+        <p class="day-meta-tagline">Det oförutsedda igen.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Mekonomen ringer om bilen.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">Bromsskivor fram, service. Total kostnad <strong>12&nbsp;000 kr</strong> efter rabatt. Peters buffert ligger på 18&nbsp;000 — det är där den finns för. Men en knapp på telefonen halverar tryggheten.</p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Bromsar är inte gambling. Det är planering — som krävs i förväg."
+            <cite>— Echo, sokratisk fråga</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Peter accepterar. Bufferten halveras till <em>6&nbsp;000 kr</em>. Echo räknar: 1&nbsp;200 kr/mån i 10 månader återställer den. Eller pausa ISK-månadssparen i 6 mån — då går det dubbelt så snabbt. Plattformen mappar trade-off:en på fem axlar innan han trycker ja.</p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="12000" data-count-prefix="− ">− 12 000</div>
+            <div class="day-result-label">oförutsett · bufferten halveras</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Buffert · efter Mekonomen</span>
+              <span class="vis-card-meta">12 000 ut</span>
+            </div>
+            <h3 class="vis-card-title">Peter · 6 mån framåt</h3>
+            <div class="vis-bars">
+              <div class="vis-bar is-peak" style="--h: 90%;"><span class="vis-bar-num">18k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FÖRE</span></div>
+              <div class="vis-bar" style="--h: 30%;"><span class="vis-bar-num">6k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">EFTER</span></div>
+              <div class="vis-bar" style="--h: 38%;"><span class="vis-bar-num">7,2k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">DEC</span></div>
+              <div class="vis-bar" style="--h: 50%;"><span class="vis-bar-num">9,6k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FEB</span></div>
+              <div class="vis-bar" style="--h: 70%;"><span class="vis-bar-num">14k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">JUN</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Återbyggnad</span>
+              <strong>1 200 kr × 10 mån</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="buffert">
+            <span class="scene-cta-q">Hur räknar plattformen återbyggnaden av bufferten?</span>
+            <span class="scene-cta-go">Buffert →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="thursday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Torsdag</span>
+          <span class="day-meta-clock">17:08</span>
+        </div>
+        <p class="day-meta-tagline">Var tar pengarna vägen?</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Vinterskorna kostar 1 250 kr.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">Peter swishar Stadium efter förskolan. Sex sekunder efteråt syns transaktionen i Ekonomilabbet — automatiskt kategoriserad: <em>"Barn · skor · 1 250 kr"</em>. Plattformen lägger till en notis: <strong>femte barn-utgiften denna månad. Totalt 4&nbsp;870 kr.</strong></p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Är detta inflation eller dina prioriteringar?"
+            <cite>— Echo, sokratisk fråga</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Plattformen visar 6-månaderstrenden: barn-kategorin växer <strong>8 % per år</strong>. Echo coachar inte mot sparande — den coachar mot prioritering. Peter ser raden, ser totalsumman, ser tillväxten. Han bestämmer. Plattformen registrerar bara.</p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="4870" data-count-prefix="">4 870</div>
+            <div class="day-result-label">barn-kategori · november · 5 transaktioner</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Kategori · Barn</span>
+              <span class="vis-card-meta">5 trans · 1 mån</span>
+            </div>
+            <h3 class="vis-card-title">Peter · november 4 870 kr</h3>
+            <div class="vis-bars">
+              <div class="vis-bar is-peak" style="--h: 80%;"><span class="vis-bar-num">1,6k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">JACKA</span></div>
+              <div class="vis-bar" style="--h: 64%;"><span class="vis-bar-num">1,3k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">SKOR</span></div>
+              <div class="vis-bar" style="--h: 44%;"><span class="vis-bar-num">850</span><span class="vis-bar-fill"></span><span class="vis-bar-r">MAT</span></div>
+              <div class="vis-bar" style="--h: 30%;"><span class="vis-bar-num">600</span><span class="vis-bar-fill"></span><span class="vis-bar-r">IDR</span></div>
+              <div class="vis-bar" style="--h: 28%;"><span class="vis-bar-num">570</span><span class="vis-bar-fill"></span><span class="vis-bar-r">LÄG</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>6-mån-trend</span>
+              <strong>+ 8 % / år</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="kategorier">
+            <span class="scene-cta-q">Hur kategoriseras varje transaktion?</span>
+            <span class="scene-cta-go">Kategorier →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="friday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Fredag</span>
+          <span class="day-meta-clock">08:03</span>
+        </div>
+        <p class="day-meta-tagline">Hur snabbt försvinner lönen?</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">32 480 kr landar.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">Lönen kommer in <strong>08:03</strong> när bankerna öppnar — tre minuter efter att kassasystemet startat. Inom två timmar har autogirot dragit hyran, elen, försäkringen, mobilen — totalt <strong>18&nbsp;250 kr</strong>. Mer än halva lönen är borta innan Peter hunnit till lunchen.</p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Hur snabbt försvinner lönen — och vad är kvar för dig?"
+            <cite>— Echo, sokratisk fråga</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">Kvar på lönekontot: <strong>14&nbsp;230 kr</strong>. Det är mat, drivmedel, oförutsett, ISK-spar, allt. Echo ställer ingen pekpinne, bara en spegel: så ser dina prioriteringar ut <em>efter</em> de fasta utgifterna. Inte före.</p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="14230" data-count-prefix="">14 230</div>
+            <div class="day-result-label">kvar efter 2 h · för resten av månaden</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Lönen · 08:03 → 10:14</span>
+              <span class="vis-card-meta">2 h · 18 250 ut</span>
+            </div>
+            <h3 class="vis-card-title">Peter · 32 480 → 14 230</h3>
+            <div class="vis-bars">
+              <div class="vis-bar is-peak" style="--h: 95%;"><span class="vis-bar-num">32k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">08:03</span></div>
+              <div class="vis-bar" style="--h: 72%;"><span class="vis-bar-num">24k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">08:32</span></div>
+              <div class="vis-bar" style="--h: 58%;"><span class="vis-bar-num">19k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">09:01</span></div>
+              <div class="vis-bar" style="--h: 48%;"><span class="vis-bar-num">16k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">09:45</span></div>
+              <div class="vis-bar" style="--h: 42%;"><span class="vis-bar-num">14k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">10:14</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Kvarvarande</span>
+              <strong>14 230 kr · 56 %</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Återvänd hit på söndag</span>
+        <p style="font-size: 14px; color: var(--muted); margin-top: 8px;">
+          Lönen kom och gick. Söndagens pentagon-review visar
+          var den landade — på fem axlar.
+        </p>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="sunday" class="day" data-nav-theme="light">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Söndag</span>
+          <span class="day-meta-clock">20:42</span>
+        </div>
+        <p class="day-meta-tagline">Vart pekar månaden?</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Pentagonen visar 64 — och 31 december.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            Peter öppnar månadsprognosen. Inte ett saldo — en
+            <em>femkant</em> och en framtidskurva. Ekonomi-axeln håller, relation
+            håller. Karriär och fritid ligger lågt — barnen sover sent, jobbet är
+            stabilt men inte expansivt. Total: <strong>64 / 100</strong>.
+          </p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Vardagen är inte gambling. Det är planering — och planering syns över tid."
+            <cite>— Peter, söndag review</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">
+            Plattformen extrapolerar mot 31 december: julutgifter 8&nbsp;200, försäkring
+            4&nbsp;800 i januari, halverad bil-buffert. Prognos vid årsskiftet:
+            ekonomi-axel <strong>56</strong> — gränsen för larm. Echo erbjuder tre justeringar
+            innan månaden börjar. Peter sparar dem för måndag morgon.
+          </p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num" data-count-to="64" data-count-prefix="">64</div>
+            <div class="day-result-label">WB-index · prognos 31 dec · 56</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Veckorapport · v.48</span>
+              <span class="vis-card-meta">5 dimensioner</span>
+            </div>
+            <h3 class="vis-card-title">Peter · söndag 20:42</h3>
+            <div class="vis-bars">
+              <div class="vis-bar is-peak" style="--h: 78%;"><span class="vis-bar-num">78</span><span class="vis-bar-fill"></span><span class="vis-bar-r">EKO</span></div>
+              <div class="vis-bar" style="--h: 64%;"><span class="vis-bar-num">64</span><span class="vis-bar-fill"></span><span class="vis-bar-r">HÄL</span></div>
+              <div class="vis-bar" style="--h: 76%;"><span class="vis-bar-num">76</span><span class="vis-bar-fill"></span><span class="vis-bar-r">REL</span></div>
+              <div class="vis-bar" style="--h: 48%;"><span class="vis-bar-num">48</span><span class="vis-bar-fill"></span><span class="vis-bar-r">KAR</span></div>
+              <div class="vis-bar" style="--h: 42%;"><span class="vis-bar-num">42</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FRI</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Total WB</span>
+              <strong>64 / 100</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="day-cta-row" data-fx="fade-up">
+        <span class="day-cta-eye">Utforska scenens delar</span>
+        <div class="scene-ctas" data-fx-stagger data-fx-delay="160">
+          <button class="scene-cta" data-deep="prognos">
+            <span class="scene-cta-q">Hur räknar plattformen prognosen mot 31 december?</span>
+            <span class="scene-cta-go">Prognos →</span>
+          </button>
+        </div>
+      </footer>
+
+    </div>
+  </section>
+
+  <section data-scene="monday-teacher" class="day day-dark" data-nav-theme="dark">
+    <div class="shell">
+      <header class="day-meta" data-fx-stagger>
+        <div class="day-meta-time">
+          <span class="day-meta-dot">●</span>
+          <span class="day-meta-day">Måndag</span>
+          <span class="day-meta-clock">19:08 · LÄRARVY</span>
+        </div>
+        <p class="day-meta-tagline">Andra sidan av samma plattform.</p>
+      </header>
+
+      <div class="day-body">
+        <div class="day-text">
+          <h2 data-fx="reveal">Anna ser hela kvällskursen.</h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            Anna är komvuxlärare på vuxenutbildningen i Göteborg. Hennes kvällskurs
+            <strong>Privatekonomi VUX</strong> har <strong>22 elever</strong> — vuxna
+            i åldrarna 26 till 54. Peter 64. Karin 71. Joakim — inte loggat in på
+            <strong>8 dagar</strong>.
+          </p>
+
+          <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
+            "Mina elever är vuxna med riktiga räkningar. Plattformen ger oss ett gemensamt språk innan kaffepausen."
+            <cite>— Anna · komvuxlärare · vuxenkurs</cite>
+          </blockquote>
+
+          <p data-fx="fade-up" data-fx-delay="320">
+            Hon klickar på Joakim, 42. Senaste val: <em>"Bil-kris · 14&nbsp;000 kr ·
+            buffert tom."</em> Sen tystnad. Anna skickar ett kort mail — inte ett
+            uppföljningssamtal, bara en hand. Plattformen flaggar inte för henne
+            att skicka mail. Den flaggar att <em>någon</em> behöver bli sedd.
+          </p>
+
+          <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
+            <div class="day-result-num">19 / 22</div>
+            <div class="day-result-label">aktiva · 2 röda · 1 offline</div>
+          </div>
+        </div>
+
+        <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
+          <div class="vis-card">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Kurs · PRIV-VUX-A</span>
+              <span class="vis-card-meta">22 elever</span>
+            </div>
+            <h3 class="vis-card-title">Annas dashboard · 19:08</h3>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(16,185,129,0.14); border-radius: 6px; font-size: 13px;">
+                <span>Peter Lindqvist</span>
+                <span style="color: rgba(255,255,255,0.5); font-family: var(--mono); font-size: 11px;">aktiv 20:42</span>
+                <strong style="color: #10b981;">64</strong>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(220,76,43,0.18); border-radius: 6px; font-size: 13px;">
+                <span>Joakim Nyström</span>
+                <span style="color: rgba(255,255,255,0.5); font-family: var(--mono); font-size: 11px;">8 dgr sen</span>
+                <strong style="color: #fca5a5;">38</strong>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(16,185,129,0.14); border-radius: 6px; font-size: 13px;">
+                <span>Karin Bjurman</span>
+                <span style="color: rgba(255,255,255,0.5); font-family: var(--mono); font-size: 11px;">aktiv 22:14</span>
+                <strong style="color: #10b981;">71</strong>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 9px 12px; background: rgba(255,255,255,0.04); border-radius: 6px; font-size: 13px;">
+                <span style="color: rgba(255,255,255,0.5);">+ 19 elever till</span>
+                <span></span>
+                <span style="color: rgba(255,255,255,0.4); font-family: var(--mono); font-size: 11px;">⌄</span>
+              </div>
+            </div>
+            <div class="vis-card-foot" style="margin-top: 14px;">
+              <span>Klassgenomsnitt</span>
+              <strong>63 / 100</strong>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </section>
+
+  <section data-scene="cta" class="day day-cta" data-nav-theme="light">
+    <div class="shell">
+      <div class="day-cta-final" data-fx-stagger>
+        <div class="day-meta-day" style="color: var(--accent);">● SLUTET</div>
+        <h2>Peters vecka är en av <em>tusentals</em>.</h2>
+        <p>
+          Varje deltagare får sin egen, simulerad i realtid mot Bankgirot,
+          Skatteverket och faktiska räntor. Du som lärare ser hela
+          klassen. Du som vuxen elev lär dig <em>sortera prioriteringar</em>
+          — inte maximera avkastning. Vardagen som planering, inte gambling.
+        </p>
+        <div class="day-cta-buttons">
+          <a href="/signup/teacher" class="day-cta-btn day-cta-btn-primary">Skapa konto<span>→</span></a>
+          <a href="/" class="day-cta-btn day-cta-btn-secondary">Tillbaka till start<span>→</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<aside class="deep-page" id="deep" aria-hidden="true" data-saga-persona="Peter">
+  <header class="deep-head">
+    <button class="deep-back" data-close>← Tillbaka till <span data-back-persona>Peter</span></button>
+    <div class="deep-eyebrow-wrap">
+      <span class="deep-eyebrow-kicker" data-current-kicker>Funktion</span>
+      <span class="deep-eyebrow-title" data-current-title>—</span>
+    </div>
+    <div class="deep-progress" data-progress aria-hidden="true"></div>
+  </header>
+  <div class="deep-stage" data-stage></div>
+  <footer class="deep-foot">
+    <button class="deep-arrow" data-prev aria-label="Föregående slide">←</button>
+    <span class="deep-foot-counter">Slide <span data-current-num>1</span> / <span data-total>3</span> · scrolla eller pil</span>
+    <button class="deep-arrow" data-next aria-label="Nästa slide">→</button>
+  </footer>
+</aside>
+
+<!-- Deep-content templates flyttas in i deep-stage av JS vid behov.
+     Första: Lönespec (3 slides) — fler funktioner kommer i R3. -->
+<template id="tpl-payments">
+  <div class="deep-content" data-deep-content="payments"
+       data-kicker="Betalningar / Autogiro · EkonomilabbetID" data-title="Hur 23 fakturor blir 1 signering">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>EkonomilabbetID</strong>1 av tre</span>
+          </div>
+          <h3>Plattformens identitet — simuleringens egen BankID-motsvarighet.</h3>
+          <p class="deep-slide-lede">
+            EkonomilabbetID ersätter BankID inom plattformen — det är en
+            simulerad 2-faktor-identitet som låter Peter signera <em>flera</em>
+            autogiron i ett svep. När han loggar in kopplas hans personnummer
+            till plattformens transaktionsmotor. OCR-listan från Bankgirot
+            mappas mot fakturor han fått in via mail, brev eller direkt till
+            banken. Resultatet: allt på ett ställe, en signering räcker.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">EkonomilabbetID<small>personnummer · 2-faktor · simulerad</small></div>
+              <div class="brutto-row-num">aktiv</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Bankgirot OCR-lista<small>23 inkomna fakturor</small></div>
+              <div class="brutto-row-num">+ 23</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Mail-mottagna PDF<small>parsas automatiskt</small></div>
+              <div class="brutto-row-num">+ 4</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">EkonomilabbetID-vy<small>allt på ett ställe</small></div>
+              <div class="brutto-row-num">23 st</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">EkonomilabbetID + Bankgirot + OCR-parser</div>
+          <p class="deep-slide-callout-body">
+            Plattformen läser in fakturor från tre källor och de-duplicerar mot
+            OCR-numret. Peter slipper logga in på sex olika fakturaportaler.
+            Allt är en bild av <em>vad som ska dras</em> innan det dras.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>EkonomilabbetID</strong>2-faktor · 5 min session · simulerad</li>
+            <li><strong>Bankgirot</strong>OCR-listan · 1×/dygn</li>
+            <li><strong>Transaktionsfeed</strong>Simulerad · 4×/dygn</li>
+            <li><strong>PDF-parser</strong>Mail in → OCR-extrakt</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Du har fakturor från sex olika utskickare. Vad skulle hända om du
+            missade en — och vilken skulle det troligast vara?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · tisdag kväll</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>EkonomilabbetID · Bankgirot · OCR-listan</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>4×/dygn</div>
+          <div class="deep-slide-foot-rich-section"><strong>YTD</strong><em>274 fakturor · 218 kollektivt</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Kollektiv signering</strong>2 av tre</span>
+          </div>
+          <h3>18 av 23 godkänns med ett EkonomilabbetID-tryck.</h3>
+          <p class="deep-slide-lede">
+            Plattformen separerar <em>vana</em> fakturor från <em>nya</em>. Om
+            beloppet ligger inom 5 % av senaste tre månaderna och utskickaren är
+            känd — räknas raden som vana. Peter signerar 18 sådana kollektivt med
+            EkonomilabbetID. De fem röda raderna kräver manuellt godkännande: en tandvård
+            som avviker, en bilförsäkring som höjts, ett oklart Klarna-belopp.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Inkomna fakturor</div>
+              <div class="flow-row-num">23</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">Vana · känd avsändare + belopp ±5 %</div>
+              <div class="flow-row-num">18</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Avvikande · manuell granskning</div>
+              <div class="flow-row-num">5</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Signerat kollektivt · 1× EkonomilabbetID</div>
+              <div class="flow-row-num">18 250</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Tröskelregler:</strong> ny avsändare = manuell. Belopp
+              ±5 % från median = manuell. Allt annat = vana. Peter sätter
+              tröskeln själv — plattformen föreslår, han bestämmer.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Avvikelse-detektor · regelbaserad</div>
+          <p class="deep-slide-callout-body">
+            Plattformens regelmotor jämför varje faktura mot 6 månaders historik.
+            Statistisk avvikelse (z-score &gt; 1,5) flaggar för granskning.
+            Ingen LLM här — bara klassisk regelmotor som Peter förstår.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Tröskel</strong>z-score &gt; 1,5 · 6 mån-fönster</li>
+            <li><strong>Vana</strong>Samma avs. · belopp ±5 %</li>
+            <li><strong>Avvikande</strong>5 fakturor denna månad</li>
+            <li><strong>Signering</strong>1× EkonomilabbetID · 18 fakturor</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Vilka fakturor accepterar du blint, vilka granskar du? Och stämmer den
+            indelningen med vad du <em>verkligen</em> vill ha kontroll över?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · tisdag 21:38</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>Z-score · regelbaserad</div>
+          <div class="deep-slide-foot-rich-section"><strong>Vana / Avvikande</strong>18 / 5</div>
+          <div class="deep-slide-foot-rich-section"><strong>Tid sparad</strong><em>~ 38 min/mån</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Skydd och kontroll</strong>3 av tre</span>
+          </div>
+          <h3>Senast 1 bankdag innan dragning kan stoppas.</h3>
+          <p class="deep-slide-lede">
+            Plattformen mailar Peter <strong>3 dagar innan</strong> varje
+            autogiro-dragning. Om något känns fel kan han stoppa dragningen via
+            Bankgirot — senast en bankdag innan. Stoppet är direkt och
+            kostnadsfritt. Peter signerade 18 fakturor — han <em>äger</em> dem
+            fortfarande, ända fram till dragningen. Det är skillnaden mellan
+            tillit och blind autopilot.
+          </p>
+          <a href="#" class="pdf-cta" onclick="return false;">Hämta kvittolista PDF →</a>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="pdf-wrap">
+            <div class="pdf-doc">
+              <div class="pdf-doc-head">
+                <div class="pdf-doc-org">Bankgirot<small>222-1234 · AUTOGIRO-MEDGIVANDE</small></div>
+                <div class="pdf-doc-meta">SIGNERAT<br>2026-11-24<br>EkonomilabbetID 4587 12</div>
+              </div>
+              <div class="pdf-doc-title">Peter Lindqvist · 18 fakturor · november</div>
+              <div class="pdf-doc-rows">
+                <div class="pdf-doc-row"><span>HSB Göteborg · hyra</span><span>8 200</span></div>
+                <div class="pdf-doc-row"><span>Göteborg Energi · el</span><span>2 380</span></div>
+                <div class="pdf-doc-row"><span>If · hemförsäkring</span><span>1 950</span></div>
+                <div class="pdf-doc-row"><span>Tele2 · mobil</span><span>1 420</span></div>
+                <div class="pdf-doc-row"><span>+ 14 fakturor till</span><span>4 300</span></div>
+                <div class="pdf-doc-row is-net"><span>SUMMA · 25 nov</span><span>18 250</span></div>
+              </div>
+              <div class="pdf-doc-foot">Stoppfrist: 24 nov 16:00 · 1 bankdag innan</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Stoppmail · 3 dagar innan</div>
+          <p class="deep-slide-callout-body">
+            Plattformen schemalägger ett mail tre dagar innan varje dragning med
+            länk till Bankgirots stopp-portal. Det är inte en pekpinne — det är
+            <em>kontroll</em>. Peter kan stoppa varje rad enskilt, även den han
+            signerade kollektivt.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Stopp-portal</strong>Bankgirot · gratis</li>
+            <li><strong>Mail</strong>3 dgr innan · per dragning</li>
+            <li><strong>Frist</strong>1 bankdag innan · 16:00</li>
+            <li><strong>Signerat ≠ låst</strong>kontrollen kvar</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Att signera är inte att tappa kontrollen. När du fick stoppmailet
+            i förra månaden — öppnade du det? Eller försvann det i inkorgen?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · efterhand</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakälla</strong>Bankgirot</div>
+          <div class="deep-slide-foot-rich-section"><strong>Frist</strong>1 bankdag · 16:00</div>
+          <div class="deep-slide-foot-rich-section"><strong>Stoppmail</strong><em>3 dgr innan · per rad</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<template id="tpl-buffert">
+  <div class="deep-content" data-deep-content="buffert"
+       data-kicker="Hushållsbuffert" data-title="När bilen krossar månaden">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Bufferten innan</strong>1 av tre</span>
+          </div>
+          <h3>18 000 kr — drygt 60 % av en månadshyra plus mat.</h3>
+          <p class="deep-slide-lede">
+            Peter började bygga bufferten för 14 månader sen, 1&nbsp;200 kr/mån
+            via stående överföring. Idag står den på <strong>18&nbsp;000 kr</strong>.
+            Plattformen jämför mot SCB:s siffror för småbarnsfamilj i Göteborg —
+            <em>medianen ligger mellan 12&nbsp;000 och 25&nbsp;000 kr</em>. Han ligger
+            i mitten. Det är inte en pengabuffert mot katastrof — det är en
+            <em>tidsbuffert</em>. Två månader att tänka, agera, undvika lån.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Buffert · stående konto<small>SBAB Sparkonto · 3,4 % ränta</small></div>
+              <div class="brutto-row-num">18 000</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Månadens hyra<small>HSB Göteborg</small></div>
+              <div class="brutto-row-num">8 200</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Månadens matkostnad<small>snitt 6 mån</small></div>
+              <div class="brutto-row-num">7 400</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Buffertens täckning<small>hyra + mat</small></div>
+              <div class="brutto-row-num">~ 1,2 mån</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">SCB-jämförelse + målsättning</div>
+          <p class="deep-slide-callout-body">
+            Plattformen hämtar SCB:s hushållsstatistik en gång per år och visar
+            Peters buffert mot medianen för hans hushållstyp och region. Inget
+            shaming — bara kontext. Han ser var han står, inte var han borde stå.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>SCB HEK</strong>Hushållsekonomi · 1×/år</li>
+            <li><strong>Median</strong>Småbarnsfamilj GBG · 12–25 000</li>
+            <li><strong>Bygg-takt</strong>1 200 kr/mån · 14 mån</li>
+            <li><strong>Ränta</strong>3,4 % · SBAB Sparkonto</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            18 000 räcker till 1,2 månaders fasta utgifter. Är det <em>tryggt nog</em>
+            för dig — eller är det bara <em>siffran du har</em>?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · innan krisen</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>SCB HEK · SBAB</div>
+          <div class="deep-slide-foot-rich-section"><strong>Bygg-tid</strong>14 mån · 1 200/mån</div>
+          <div class="deep-slide-foot-rich-section"><strong>Täckning</strong><em>1,2 mån fast</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Krisen</strong>2 av tre</span>
+          </div>
+          <h3>Mekonomen ringer · 12 000 kr för bromsservice.</h3>
+          <p class="deep-slide-lede">
+            Bromsskivor fram, service. Originaldelar. Mekanikern säger att skivorna
+            ligger på minimum — kör en månad till och det blir ett haveri istället.
+            Peter har ett val: betala 12&nbsp;000 nu, eller skjuta upp och riskera
+            ett dyrare ingrepp om sex veckor. Han accepterar. Bufferten faller från
+            <strong>18&nbsp;000 till 6&nbsp;000</strong> på en knapptryckning.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Buffert innan</div>
+              <div class="flow-row-num">18 000</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Mekonomen · bromsservice</div>
+              <div class="flow-row-num">12 000</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Buffert efter</div>
+              <div class="flow-row-num">6 000</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Trade-off:</strong> betala nu eller skjut upp. Plattformen
+              räknar förväntat värde: 12&nbsp;000 nu vs. 22&nbsp;000 vid haveri ×
+              45 % sannolikhet = väntad kostnad 9&nbsp;900. Att betala nu är
+              billigare i förväntan. Echo visar tabellen — Peter bestämmer.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Förväntat-värde-kalkyl · synlig</div>
+          <p class="deep-slide-callout-body">
+            Plattformen modellerar oförutsedda utgifter med två siffror: kostnad
+            nu, och kostnad × sannolikhet om uppskjutet. Sannolikheterna är
+            kalibrerade mot Konsumentverkets fordonsdata. Peter ser båda
+            kolumnerna innan han trycker.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Modell</strong>Förväntat värde · EV</li>
+            <li><strong>Källa</strong>Konsumentverket · fordon</li>
+            <li><strong>P(haveri)</strong>45 % · inom 6 v</li>
+            <li><strong>Beslut</strong>Peters · transparent kalkyl</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Bufferten halverades — men du undvek troligen en dubbelt så stor smäll
+            om sex veckor. Var detta ett <em>misslyckande</em> eller <em>exakt vad
+            bufferten finns för</em>?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · onsdag 14:47</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>EV-kalkyl · 6 v-fönster</div>
+          <div class="deep-slide-foot-rich-section"><strong>Buffert efter</strong>6 000 kr</div>
+          <div class="deep-slide-foot-rich-section"><strong>Täckning</strong><em>~ 0,4 mån fast</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Återbyggnad</strong>3 av tre</span>
+          </div>
+          <h3>1 200 kr/mån i 10 mån — eller pausa ISK.</h3>
+          <p class="deep-slide-lede">
+            Echo räknar två vägar. Väg A: behåll nuvarande takt, 1&nbsp;200 kr/mån
+            till bufferten — fullt återställd om <strong>10 månader</strong>. Väg B:
+            pausa ISK-månadssparen i sex månader och flytta de 2&nbsp;000 kr till
+            bufferten — fullt återställd om <strong>4,5 månader</strong>, men 12&nbsp;000
+            kr mindre i ISK vid årsskiftet. Plattformen mappar båda mot
+            wellbeing-pentagonen. Peter väljer A. Han prioriterar <em>tempo</em>
+            framför <em>tempo</em>.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">Väg A · 1 200/mån</div>
+              <div class="flow-row-num">10 mån</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">Väg B · pausa ISK 6 mån</div>
+              <div class="flow-row-num">4,5 mån</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Väg B · ISK-bortfall</div>
+              <div class="flow-row-num">12 000</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Peters val · väg A</div>
+              <div class="flow-row-num">10 mån</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Trade-off på pentagon:</strong> Väg A: ekonomi-axel ↓ 1
+              under 10 mån. Väg B: ekonomi-axel ↓ 3 under 4,5 mån + karriär ↓ 2
+              (mindre långsiktig sparkraft). Echo visar — Peter väljer.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Multi-väg-jämförelse · 5-axel-konsekvens</div>
+          <p class="deep-slide-callout-body">
+            Plattformen genererar 2–4 vägar för varje större val och mappar var
+            och en mot pentagonen. Peter ser inte bara <em>kronor</em> utan
+            <em>vad valet gör med honom</em> över tid. Det är vardagsekonomin
+            som planering, inte gambling.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Vägar</strong>2 huvudvägar · 1 hybrid</li>
+            <li><strong>Mapping</strong>5-axel delta-vy</li>
+            <li><strong>Justerbart</strong>Per användare · spar-takt</li>
+            <li><strong>Beslut</strong>Peters · informerat</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Du valde 10 månader. Det är inte snabbast — men det krockar inte med
+            ISK-vanan. Vad lär det dig om hur du vill prioritera <em>nästa</em>
+            kris?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · efterhand-reflektion · onsdag kväll</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Vägar</strong>A: 10 mån · B: 4,5 mån</div>
+          <div class="deep-slide-foot-rich-section"><strong>Vald</strong>Väg A</div>
+          <div class="deep-slide-foot-rich-section"><strong>Återställning</strong><em>aug 2027</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<template id="tpl-kategorier">
+  <div class="deep-content" data-deep-content="kategorier"
+       data-kicker="Huvudbok · Kategorisering" data-title="Var tar pengarna vägen?">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Auto-kategorisering</strong>1 av tre</span>
+          </div>
+          <h3>Varje transaktion får en kategori — automatiskt.</h3>
+          <p class="deep-slide-lede">
+            När Peter swishar Stadium läser plattformen den simulerade
+            transaktionsfeeden och kör texten genom regelmotorn. <em>"STADIUM GBG"</em>
+            matchar regeln <em>handelsplats: Stadium → kategori: Barn/Skor</em>.
+            Inom sex sekunder är raden synlig, kategoriserad, och taggad med
+            summa, plats, tid. Ingen LLM — bara en regelmotor med 1&nbsp;800
+            kända handelsplatser. Det Peter inte känner igen kan han märka
+            manuellt en gång; sen lärs regeln in.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Transaktionsfeed<small>simulerad bank · 4×/dygn</small></div>
+              <div class="brutto-row-num">73 trans</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Regelmotor matchar<small>1 800 handelsplatser</small></div>
+              <div class="brutto-row-num">+ 71</div>
+            </div>
+            <div class="brutto-row is-add">
+              <div class="brutto-row-label">+ Manuell tagg av Peter<small>2 okända · ovanlig butik</small></div>
+              <div class="brutto-row-num">+ 2</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Kategoriserat denna månad<small>5 huvudkategorier</small></div>
+              <div class="brutto-row-num">73 / 73</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Transaktionsfeed + regelmotor · ingen LLM</div>
+          <p class="deep-slide-callout-body">
+            Plattformen läser den simulerade transaktionsfeeden fyra gånger
+            per dygn. Regelmotorn är deterministisk: samma butik i morgon =
+            samma kategori. Ingen LLM-randomness. Peters manuella taggar matas
+            tillbaka in i hans privata regelträd.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Feed</strong>Simulerad transaktionslista</li>
+            <li><strong>Regelträd</strong>1 800 globala + Peters 14 egna</li>
+            <li><strong>Mappning</strong>Mekonomen → Bil/Service</li>
+            <li><strong>Mappning</strong>ICA → Mat/Hushåll</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Plattformen vet vad du köpte — men inte <em>varför</em>. Två
+            handelsplatser med samma namn kan vara två olika kategorier för dig.
+            Vill du sätta egna regler?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · första gången</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Datakälla</strong>Simulerad transaktionsfeed</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>4×/dygn</div>
+          <div class="deep-slide-foot-rich-section"><strong>Träffsäkerhet</strong><em>97 % auto · 3 % manuell</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Barn-budgeten</strong>2 av tre</span>
+          </div>
+          <h3>5 utgifter, 4 870 kr, en månad.</h3>
+          <p class="deep-slide-lede">
+            November visar fem transaktioner i kategorin <em>Barn</em>: vinterskor,
+            idrottsklubb, förskolemat, vinterjacka, frukost-läger. Totalt
+            <strong>4&nbsp;870 kr</strong>. Plattformen vet inte att jackan var
+            arvegods från storasystern, eller att frukost-lägret var en gåva från
+            mormor. Den vet bara <em>kort + datum + butik</em>. Resten är Peters
+            tolkning.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row">
+              <div class="flow-row-label">3 nov · Lindex · vinterjacka</div>
+              <div class="flow-row-num">1 600</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">8 nov · Stadium · skor</div>
+              <div class="flow-row-num">1 250</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">12 nov · Förskolan · matavgift</div>
+              <div class="flow-row-num">850</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">18 nov · IFK Göteborg · medlem</div>
+              <div class="flow-row-num">600</div>
+            </div>
+            <div class="flow-row">
+              <div class="flow-row-label">22 nov · Skola · frukost-läger</div>
+              <div class="flow-row-num">570</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Kategori Barn · november</div>
+              <div class="flow-row-num">4 870</div>
+            </div>
+            <div class="flow-foot">
+              <strong>15 % av Peters disponibla netto.</strong> Varken bra eller
+              dåligt — bara synligt. Vissa månader är det 2 %, vissa 18 %.
+              Plattformen visar fördelningen, Peter värderar den.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Drill-down per kategori</div>
+          <p class="deep-slide-callout-body">
+            Varje kategori kan öppnas till en lista med varje transaktion,
+            sökbar och sorterbar. Peter kan tagga om en rad om regelmotorn
+            missförstod. Han kan också gruppera kategorier — t.ex. <em>Barn</em>
+            som paraply över <em>Skor, Mat, Idrott</em>.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Drill-down</strong>5 utgifter · november</li>
+            <li><strong>Snitt 6 mån</strong>4 200 kr/mån</li>
+            <li><strong>% av netto</strong>15 % i nov · 11 % snitt</li>
+            <li><strong>Justerbart</strong>Egna paraplyer · taggar</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            5 transaktioner i Barn-kategorin denna månad. Vilken av dem var
+            <em>nödvändig</em>, vilken var <em>vanans makt</em>, vilken var
+            <em>kärlek</em>?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · torsdag 17:08</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Kategori</strong>Barn · 4 870 kr</div>
+          <div class="deep-slide-foot-rich-section"><strong>Andel</strong>15 % av netto</div>
+          <div class="deep-slide-foot-rich-section"><strong>Trans</strong><em>5 st · november</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Mönster över tid</strong>3 av tre</span>
+          </div>
+          <h3>Barn-kategorin växer 8 % per år.</h3>
+          <p class="deep-slide-lede">
+            12 månader bakåt visar att Barn-kategorin gått från <strong>3&nbsp;800 kr</strong>
+            i snitt till <strong>4&nbsp;200 kr</strong>. Det är <em>+8 % per år</em> —
+            mer än KPI (3,1 %). Plattformen frågar inte <em>varför</em>. Den visar
+            bara att tillväxten finns. Echo ställer frågan: är det
+            <em>inflation</em> (priser stiger), <em>livet</em> (barnen växer ur
+            saker) eller <em>prioriteringar</em> (Peter köper mer)? Svaret är
+            antagligen alla tre. Men först måste han se mönstret.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="vis-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); padding: 28px;">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● Barn-kategori · 12 mån</span>
+              <span class="vis-card-meta">+ 8 % / år</span>
+            </div>
+            <h3 class="vis-card-title">Peter · trend nov 2025 → nov 2026</h3>
+            <div class="vis-bars">
+              <div class="vis-bar" style="--h: 60%;"><span class="vis-bar-num">3,8k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">N-25</span></div>
+              <div class="vis-bar" style="--h: 64%;"><span class="vis-bar-num">3,9k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">FEB</span></div>
+              <div class="vis-bar" style="--h: 68%;"><span class="vis-bar-num">4,1k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">MAJ</span></div>
+              <div class="vis-bar" style="--h: 70%;"><span class="vis-bar-num">4,2k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">AUG</span></div>
+              <div class="vis-bar is-peak" style="--h: 80%;"><span class="vis-bar-num">4,9k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">N-26 ★</span></div>
+            </div>
+            <div class="vis-card-foot">
+              <span>Förändring</span>
+              <strong>+ 8 % / år · KPI 3,1 %</strong>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Trendlinje · per kategori · KPI-justerad</div>
+          <p class="deep-slide-callout-body">
+            Plattformen räknar 12-månaders rullande snitt per kategori och
+            jämför mot SCB:s KPI för motsvarande varugrupp. Om kategorin växer
+            snabbare än KPI flaggar plattformen mjukt — inte som varning, som
+            <em>fråga</em>.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Modell</strong>Linjär regression · 12 mån</li>
+            <li><strong>Jämförelse</strong>SCB KPI per varugrupp</li>
+            <li><strong>Tröskel</strong>+5 % över KPI = mjuk flagga</li>
+            <li><strong>Refresh</strong>Söndag 23:59</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Är detta inflation eller dina prioriteringar? Plattformen vet bara
+            siffran — du vet svaret. Och det är <em>okej</em> om svaret är
+            "lite av varje".
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · söndag review</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Trend</strong>+ 8 % / år</div>
+          <div class="deep-slide-foot-rich-section"><strong>Mot KPI</strong>+ 4,9 pp</div>
+          <div class="deep-slide-foot-rich-section"><strong>Flagga</strong><em>mjuk · ej larm</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<template id="tpl-prognos">
+  <div class="deep-content" data-deep-content="prognos"
+       data-kicker="Månadsprognos" data-title="Vad väntar 31 december">
+    <div class="deep-track">
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">01</span>
+            <span class="deep-slide-num-meta"><strong>Prognos-modell</strong>1 av tre</span>
+          </div>
+          <h3>Plattformen extrapolerar — inte gissar.</h3>
+          <p class="deep-slide-lede">
+            Söndag kväll bygger plattformen Peters månadsprognos från fyra
+            byggstenar: <strong>nuvarande spendmönster</strong> (12 mån
+            rullande), <strong>kommande fakturor</strong> (signerade autogiron),
+            <strong>säsongsutgifter</strong> (jul, försäkringar, semester) och
+            <strong>kända intäkter</strong> (lön den 25:e). Resultatet är inte en
+            gissning — det är en linjär projektion mot 31 december baserad på
+            data som redan finns.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="brutto-stack">
+            <div class="brutto-row">
+              <div class="brutto-row-label">Spendmönster<small>12 mån rullande snitt</small></div>
+              <div class="brutto-row-num">14 600 / mån</div>
+            </div>
+            <div class="brutto-row">
+              <div class="brutto-row-label">Kommande fakturor<small>signerade · ej dragna</small></div>
+              <div class="brutto-row-num">8 400</div>
+            </div>
+            <div class="brutto-row">
+              <div class="brutto-row-label">Säsongsutgifter<small>jul + försäkring jan</small></div>
+              <div class="brutto-row-num">13 000</div>
+            </div>
+            <div class="brutto-row is-sum">
+              <div class="brutto-row-label">Total prognos · v.48 → 31 dec<small>5 veckor framåt</small></div>
+              <div class="brutto-row-num">36 000</div>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Linjär projektion · 4 byggstenar</div>
+          <p class="deep-slide-callout-body">
+            Modellen är medvetet enkel: linjär extrapolation, ingen ML. Peter
+            ska kunna förstå <em>varför</em> prognosen ser ut som den gör.
+            Säsongsutgifter hämtas från SCB:s konsumtionsenkät för
+            småbarnsfamilj. Försäkringar är hans egna, registrerade i
+            plattformen.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Modell</strong>Linjär · ingen ML</li>
+            <li><strong>Säsong</strong>SCB konsumtion · småbarn</li>
+            <li><strong>Refresh</strong>Söndag 23:59</li>
+            <li><strong>Horisont</strong>5 veckor · 31 dec</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            En prognos är inte en spådom — det är en spegel av <em>vad du redan
+            gör</em>. Vill du ändra prognosen, ändra inte siffrorna. Ändra
+            valen.
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · söndag 20:42</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Modell</strong>Linjär · 4 byggstenar</div>
+          <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>Söndag 23:59</div>
+          <div class="deep-slide-foot-rich-section"><strong>Prognos</strong><em>36 000 kr · 5 v</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">02</span>
+            <span class="deep-slide-num-meta"><strong>Flaggor</strong>2 av tre</span>
+          </div>
+          <h3>Tre röda flaggor — ekonomi-axel mot 56.</h3>
+          <p class="deep-slide-lede">
+            Plattformen flaggar tre punkter mot 31 december. <strong>1.</strong>
+            Bil-bufferten halverad efter Mekonomen — 6&nbsp;000 kvar. <strong>2.</strong>
+            Julutgifter prognoseras till 8&nbsp;200 kr (snitt SCB för småbarn).
+            <strong>3.</strong> Försäkringar drar 4&nbsp;800 kr i januari som klumpsumma.
+            Tillsammans pressar de ekonomi-axeln från 78 i dag till
+            <strong>56</strong> vid årsskiftet — under 60 räknas som larm.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="flow">
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Bil-buffert · halverad</div>
+              <div class="flow-row-num">6 000</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Julutgifter · prognos</div>
+              <div class="flow-row-num">8 200</div>
+            </div>
+            <div class="flow-row is-out">
+              <div class="flow-row-label">Försäkringar · jan klumpsumma</div>
+              <div class="flow-row-num">4 800</div>
+            </div>
+            <div class="flow-row is-final">
+              <div class="flow-row-label">Ekonomi-axel · 31 dec</div>
+              <div class="flow-row-num">56</div>
+            </div>
+            <div class="flow-foot">
+              <strong>Larmtröskel: 60.</strong> Plattformen tystnar inte under
+              60 — den ber Peter välja: justera spendmönster, justera
+              tidpunkten för försäkringen, eller acceptera och bygga tillbaka
+              i februari. Tre vägar, ett val.
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Tröskel-larm · sokratiskt</div>
+          <p class="deep-slide-callout-body">
+            Plattformens larm är inte panikknappar. När en axel passerar 60
+            ber Echo Peter välja mellan 2–3 justeringar. Inga är "rätt".
+            Larmet är en spegling av att <em>nu kostar valen mer än tidigare</em>.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Tröskel</strong>60 · ekonomi-axel</li>
+            <li><strong>Flaggor</strong>3 i denna prognos</li>
+            <li><strong>Vägar</strong>2–3 justeringar erbjuds</li>
+            <li><strong>Beslut</strong>Peters · ingen pekpinne</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Tre flaggor och ekonomin landar på 56 vid årsskiftet. Är detta en
+            <em>kris</em> eller en <em>signal</em>? Och vad gör skillnaden — siffran
+            eller hur du svarar?
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · söndag review</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Flaggor</strong>3 · röda</div>
+          <div class="deep-slide-foot-rich-section"><strong>Prognos · 31 dec</strong>56</div>
+          <div class="deep-slide-foot-rich-section"><strong>Larmtröskel</strong><em>60</em></div>
+        </div>
+      </article>
+
+      <article class="deep-slide">
+        <div class="deep-slide-text">
+          <div class="deep-slide-num-wrap">
+            <span class="deep-slide-num-big">03</span>
+            <span class="deep-slide-num-meta"><strong>Justeringsval</strong>3 av tre</span>
+          </div>
+          <h3>Echo erbjuder tre vägar.</h3>
+          <p class="deep-slide-lede">
+            Inte en optimering, inte ett facit — tre konkreta justeringar som
+            Peter kan göra <em>nu</em>, vars konsekvenser plattformen mappar mot
+            alla fem axlar. <strong>A.</strong> Skjut julpresenter −2&nbsp;000 (ekonomi
+            ↑, relation ↓ 2). <strong>B.</strong> Pausa ISK 2 mån +1&nbsp;200/mån
+            (ekonomi ↑, karriär ↓ 1). <strong>C.</strong> Extrajobb v.51 +3&nbsp;000
+            (ekonomi ↑↑, fritid ↓ 3, relation ↓ 2). Peter sparar valet till
+            måndag morgon. Han väljer aldrig under tidspress.
+          </p>
+        </div>
+        <div class="deep-slide-vis">
+          <div class="vis-card" style="background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); padding: 28px;">
+            <div class="vis-card-head">
+              <span class="vis-card-eye">● 3 justeringar · 5-axel-vy</span>
+              <span class="vis-card-meta">31 dec-prognos</span>
+            </div>
+            <h3 class="vis-card-title">Peter · konsekvens per väg</h3>
+            <div style="display:flex; justify-content:center; padding: 12px 0;">
+              <svg width="240" height="200" viewBox="0 0 240 200">
+                <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="rgba(255,255,255,0.2)" stroke-dasharray="3 3"/>
+                <polygon points="120,40 200,90 170,160 70,160 40,90" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.4)" stroke-width="1.2"/>
+                <polygon points="120,28 198,86 172,166 72,164 36,86" fill="rgba(251,191,36,0.18)" stroke="var(--gold)" stroke-width="1.8"/>
+                <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="var(--gold)" font-weight="700">EKONOMI ↑</text>
+                <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">RELATION</text>
+                <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">FRITID</text>
+                <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">KARRIÄR</text>
+                <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="rgba(255,255,255,0.85)">HÄLSA</text>
+              </svg>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1); font-family: var(--mono); font-size: 12px;">
+              <span style="color: rgba(255,255,255,0.78);">A · Jul −2 000</span><strong style="color: #fff;">EKO +6 / REL −2</strong>
+              <span style="color: rgba(255,255,255,0.78);">B · ISK paus 2 mån</span><strong style="color: #fff;">EKO +4 / KAR −1</strong>
+              <span style="color: rgba(255,255,255,0.78);">C · Extrajobb v.51</span><strong style="color: var(--gold);">EKO +9 / FRI −3 / REL −2</strong>
+            </div>
+          </div>
+        </div>
+        <div class="deep-slide-system">
+          <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
+          <div class="deep-slide-callout-title">Multi-axel-konsekvens · per väg</div>
+          <p class="deep-slide-callout-body">
+            Varje justering mappas mot pentagonen via samma 5-tuple-modell som
+            övriga val. Peter ser inte bara <em>kronor sparade</em> utan
+            <em>vad valet gör med hans liv över tid</em>. Det är planerings-vyn,
+            inte gambling-vyn. Inget val är gratis, inget är fel.
+          </p>
+          <ul class="deep-slide-callout-list">
+            <li><strong>Vägar</strong>3 förslag · ej rangordnade</li>
+            <li><strong>Mapping</strong>5-tuple delta per väg</li>
+            <li><strong>Beslut</strong>Sparas · max 7 dagar</li>
+            <li><strong>Hybrid</strong>Peter kan kombinera A + B</li>
+          </ul>
+        </div>
+        <div class="deep-slide-echo">
+          <div class="deep-slide-callout-eye">● Echo coachar</div>
+          <p class="deep-slide-echo-quote">
+            Tre vägar, inget facit. Plattformen kan inte säga vilken som är bäst
+            — bara du vet vad julpresenten betyder för dig, vad ISK:n betyder
+            för 67-åringen, vad fritid betyder denna vecka.
+          </p>
+          <div class="deep-slide-echo-cite">— Echo · prioritets-coaching · sparar till måndag</div>
+        </div>
+        <div class="deep-slide-foot-rich">
+          <div class="deep-slide-foot-rich-section"><strong>Vägar</strong>A · B · C</div>
+          <div class="deep-slide-foot-rich-section"><strong>Hybrid</strong>tillåtet</div>
+          <div class="deep-slide-foot-rich-section"><strong>Tidsfrist</strong><em>måndag morgon</em></div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</template>
+
+<nav class="timeline" id="timeline" aria-label="Kontextuell tidslinje">
+  <span class="tl-rail" aria-hidden="true"></span>
+  <span class="tl-cursor" aria-hidden="true"></span>
+  <ol class="tl-scenes" data-scenes></ol>
+</nav>
+
+<script>
+// ─── Scen-mappning + ordning: tidslinjen följer denna sekvens ──
+const SCENE_ORDER = ['hero', 'tuesday', 'wednesday', 'thursday', 'friday', 'sunday', 'monday-teacher', 'cta'];
+const SCENES = {
+  hero:             { label: 'Söndag kväll',           dives: [] },
+  tuesday:          { label: 'Tisdag · Fakturor',      dives: ['payments'] },
+  wednesday:        { label: 'Onsdag · Bilen',         dives: ['buffert'] },
+  thursday:         { label: 'Torsdag · Vinterskor',   dives: ['kategorier'] },
+  friday:           { label: 'Fredag · Lönen',         dives: [] },
+  sunday:           { label: 'Söndag · Review',        dives: ['prognos'] },
+  'monday-teacher': { label: 'Måndag · Lärarvy',       dives: [] },
+  cta:              { label: 'Slutet',                 dives: [] },
+};
+const DIVE_LABELS = {
+  payments:   'Autogiro',
+  buffert:    'Buffert',
+  kategorier: 'Kategorier',
+  prognos:    'Prognos',
+};
+</script>
+
+<script>
+// ─── Page-swipe + deep-page-motor ──────────────────────────────
+(function() {
+  const body = document.body;
+  const deep = document.getElementById('deep');
+  const stage = deep.querySelector('[data-stage]');
+  const kicker = deep.querySelector('[data-current-kicker]');
+  const titleEl = deep.querySelector('[data-current-title]');
+  const progress = deep.querySelector('[data-progress]');
+  const currentNum = deep.querySelector('[data-current-num]');
+  const totalEl = deep.querySelector('[data-total]');
+  const prevBtn = deep.querySelector('[data-prev]');
+  const nextBtn = deep.querySelector('[data-next]');
+
+  let lastY = 0;
+  let activeContent = null;
+  let activeSlideIdx = 0;
+  let slideAnimLock = false;
+
+  function getOrCreateContent(key) {
+    let el = stage.querySelector(`[data-deep-content="${key}"]`);
+    if (el) return el;
+    const tpl = document.getElementById('tpl-' + key);
+    if (!tpl) return null;
+    el = tpl.content.firstElementChild.cloneNode(true);
+    stage.appendChild(el);
+    return el;
+  }
+
+  function setProgress(idx, total) {
+    progress.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+      const dot = document.createElement('span');
+      if (i === idx) dot.classList.add('active');
+      progress.appendChild(dot);
+    }
+    if (currentNum) currentNum.textContent = (idx + 1);
+    if (totalEl) totalEl.textContent = total;
+    if (prevBtn) prevBtn.disabled = idx === 0;
+    if (nextBtn) nextBtn.disabled = idx === total - 1;
+  }
+
+  function applySlideClasses(slides, idx) {
+    slides.forEach((s, i) => {
+      s.classList.remove('is-active', 'is-prev');
+      if (i < idx) s.classList.add('is-prev');
+      else if (i === idx) s.classList.add('is-active');
+    });
+  }
+
+  function activate(key) {
+    const el = getOrCreateContent(key);
+    if (!el) return false;
+    stage.querySelectorAll('.deep-content').forEach(c => c.classList.toggle('is-active', c === el));
+    activeContent = el;
+    if (kicker) kicker.textContent = el.dataset.kicker || '';
+    if (titleEl) titleEl.textContent = el.dataset.title || '';
+    const slides = el.querySelectorAll('.deep-slide');
+    activeSlideIdx = 0;
+    applySlideClasses(slides, 0);
+    setProgress(0, slides.length);
+    return true;
+  }
+
+  function goSlide(dir) {
+    if (!activeContent || slideAnimLock) return;
+    const slides = activeContent.querySelectorAll('.deep-slide');
+    const next = Math.max(0, Math.min(slides.length - 1, activeSlideIdx + dir));
+    if (next === activeSlideIdx) return;
+    activeSlideIdx = next;
+    applySlideClasses(slides, next);
+    setProgress(next, slides.length);
+    slideAnimLock = true;
+    setTimeout(() => { slideAnimLock = false; }, 740);
+  }
+
+  function open(key) {
+    if (body.classList.contains('is-deep')) return;
+    if (!activate(key)) return;
+    // Spara EXAKT position så vi kan återställa när användaren stänger.
+    // (overflow:hidden + height:100vh på body hade annars nollställt scroll
+    //  i Safari/iOS — så vi pin:ar med scrollTo efter klassbytet.)
+    lastY = window.scrollY || window.pageYOffset || 0;
+    body.classList.add('is-deep');
+    deep.setAttribute('aria-hidden', 'false');
+  }
+  function close() {
+    if (!body.classList.contains('is-deep')) return;
+    body.classList.remove('is-deep');
+    deep.setAttribute('aria-hidden', 'true');
+    // Återställ scrollpositionen explicit så användaren landar exakt
+    // där hen var i sagan — inte överst på sidan.
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: lastY, left: 0, behavior: 'instant' });
+    });
+  }
+  window.openDeep = open;
+  window.closeDeep = close;
+
+  // Klick på alla [data-deep] (scen-CTAs och ctx-nav-chips)
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('[data-deep]');
+    if (trigger) { e.preventDefault(); open(trigger.dataset.deep); return; }
+    if (e.target.closest('[data-close]')) { e.preventDefault(); close(); return; }
+  });
+
+  prevBtn.addEventListener('click', () => goSlide(-1));
+  nextBtn.addEventListener('click', () => goSlide(1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && body.classList.contains('is-deep')) close();
+    if (!body.classList.contains('is-deep')) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); goSlide(1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   { e.preventDefault(); goSlide(-1); }
+  });
+
+  // ─── Wheel + touch: dirigera vertikal/horisontell input → slide-byte ─
+  let wheelLock = false;
+  deep.addEventListener('wheel', e => {
+    if (!body.classList.contains('is-deep')) return;
+    // Tillåt vertikal scroll inuti aktiv slide om innehållet är högre
+    const slide = activeContent && activeContent.querySelector('.deep-slide.is-active');
+    const canScrollDown = slide && slide.scrollTop + slide.clientHeight < slide.scrollHeight - 2;
+    const canScrollUp   = slide && slide.scrollTop > 2;
+    const dy = e.deltaY, dx = e.deltaX;
+    const dominant = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    // Liten dödzon, undvik trackpad-jitter
+    if (Math.abs(dominant) < 14) return;
+    // Om vertikal scroll inuti slide kan ta hand om det → låt browsern
+    if (Math.abs(dy) > Math.abs(dx) && ((dy > 0 && canScrollDown) || (dy < 0 && canScrollUp))) return;
+    e.preventDefault();
+    if (wheelLock) return;
+    goSlide(dominant > 0 ? 1 : -1);
+    wheelLock = true;
+    setTimeout(() => { wheelLock = false; }, 760);
+  }, { passive: false });
+
+  // Touch-swipe på mobil
+  let tStartX = 0, tStartY = 0, tStartT = 0;
+  deep.addEventListener('touchstart', e => {
+    tStartX = e.touches[0].clientX;
+    tStartY = e.touches[0].clientY;
+    tStartT = Date.now();
+  }, { passive: true });
+  deep.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - tStartX;
+    const dy = e.changedTouches[0].clientY - tStartY;
+    const dt = Date.now() - tStartT;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dt > 700) return;
+    goSlide(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
+</script>
+
+<script>
+// ─── Vertikal tidslinje: rendera + följ scrollen ───────────────
+(function() {
+  const tl = document.getElementById('timeline');
+  const scenesEl = tl.querySelector('[data-scenes]');
+  const cursor = tl.querySelector('.tl-cursor');
+  const sections = Array.from(document.querySelectorAll('[data-scene]'));
+  const sectionsByKey = Object.fromEntries(sections.map(s => [s.dataset.scene, s]));
+
+  // Bygg upp listan i SCENE_ORDER (även scener som ännu inte har sektion)
+  const sceneNodes = {};
+  SCENE_ORDER.forEach(key => {
+    const cfg = SCENES[key];
+    if (!cfg) return;
+    const li = document.createElement('li');
+    li.className = 'tl-scene';
+    li.dataset.scene = key;
+    if (!sectionsByKey[key]) li.dataset.empty = '1';
+
+    const labelBtn = document.createElement('button');
+    labelBtn.className = 'tl-label';
+    labelBtn.textContent = cfg.label;
+    labelBtn.addEventListener('click', () => scrollToScene(key));
+    li.appendChild(labelBtn);
+
+    if (cfg.dives.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'tl-dives';
+      cfg.dives.forEach(d => {
+        const dliBtn = document.createElement('button');
+        dliBtn.className = 'tl-dive';
+        dliBtn.dataset.deep = d;
+        dliBtn.textContent = DIVE_LABELS[d] || d;
+        const dli = document.createElement('li');
+        dli.appendChild(dliBtn);
+        ul.appendChild(dli);
+      });
+      li.appendChild(ul);
+    }
+    scenesEl.appendChild(li);
+    sceneNodes[key] = li;
+  });
+
+  function scrollToScene(key) {
+    const el = sectionsByKey[key];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  let currentScene = null;
+  let cursorRaf = 0;
+
+  function setActive(key) {
+    if (key === currentScene) return;
+    currentScene = key;
+    const idx = SCENE_ORDER.indexOf(key);
+    SCENE_ORDER.forEach((k, i) => {
+      const node = sceneNodes[k];
+      if (!node) return;
+      node.classList.toggle('is-active', i === idx);
+      node.classList.toggle('is-passed', i < idx);
+    });
+    moveCursor();
+  }
+
+  function moveCursor() {
+    const active = scenesEl.querySelector('.tl-scene.is-active');
+    if (!active) return;
+    cancelAnimationFrame(cursorRaf);
+    cursorRaf = requestAnimationFrame(() => {
+      const tlRect = tl.getBoundingClientRect();
+      const aRect = active.getBoundingClientRect();
+      // Dot: top:9 i scen, 7px → centrum y = 12.5
+      // Cursor 14px → cursor.top i scen = 12.5 - 7 = 5.5
+      const top = (aRect.top - tlRect.top) + 5.5;
+      cursor.style.top = top + 'px';
+    });
+  }
+  window.addEventListener('resize', moveCursor);
+
+  // IntersectionObserver för aktiv scen
+  const observer = new IntersectionObserver(() => {
+    let best = null, bestScore = -1;
+    sections.forEach(s => {
+      const r = s.getBoundingClientRect();
+      const visibleH = Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(0, r.top));
+      const ratio = visibleH / Math.min(window.innerHeight, r.height || 1);
+      if (ratio > bestScore) { bestScore = ratio; best = s; }
+    });
+    if (best) setActive(best.dataset.scene);
+  }, { threshold: [0, 0.15, 0.35, 0.55, 0.75, 1] });
+
+  sections.forEach(s => observer.observe(s));
+
+  // Visa när första scenen detekteras
+  setTimeout(() => tl.classList.add('is-visible'), 250);
+
+  // Per-rad-färgbyte: varje scen får is-on-light när dess label
+  // passerar hero-brytlinjen i viewporten
+  const hero = document.getElementById('hero');
+  if (hero) {
+    let crossRaf = 0;
+    const updateCrossings = () => {
+      cancelAnimationFrame(crossRaf);
+      crossRaf = requestAnimationFrame(() => {
+        const heroBottom = hero.getBoundingClientRect().bottom;
+        Object.values(sceneNodes).forEach(li => {
+          const label = li.querySelector('.tl-label');
+          if (!label) return;
+          const lbY = label.getBoundingClientRect().top + label.offsetHeight / 2;
+          // Om hero-bottom är OVAN labelns mitt → label är över ljus bg
+          li.classList.toggle('is-on-light', heroBottom < lbY);
+        });
+      });
+    };
+    window.addEventListener('scroll', updateCrossings, { passive: true });
+    window.addEventListener('resize', updateCrossings);
+    setTimeout(updateCrossings, 50);
+  }
+})();
+</script>
+
+<script>
+// ─── AOS-style entrance: fade/slide/zoom när element når viewport ──
+(function() {
+  const items = document.querySelectorAll('[data-fx], [data-fx-stagger], .vis-card');
+  if (!items.length) return;
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.12) {
+        e.target.classList.add('is-in');
+        // Trigga count-up om elementet eller dess descendant har data-count-to
+        const counters = e.target.querySelectorAll('[data-count-to]:not(.is-counted)');
+        counters.forEach(animateCount);
+        if (e.target.matches('[data-count-to]:not(.is-counted)')) animateCount(e.target);
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.12, 0.3], rootMargin: '0px 0px -8% 0px' });
+  items.forEach(el => obs.observe(el));
+
+  function animateCount(el) {
+    el.classList.add('is-counted');
+    const target = parseInt(el.dataset.countTo, 10);
+    if (isNaN(target)) return;
+    const prefix = el.dataset.countPrefix || '';
+    const dur = 1200;
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min(1, (now - start) / dur);
+      // Ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      const val = Math.round(target * eased);
+      el.textContent = prefix + val.toLocaleString('sv-SE');
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+})();
+
+// ─── Hero-tid: animerad nedräkning 21:14 → 21:30 ────────────
+(function() {
+  const timeEl = document.querySelector('[data-hero-time]');
+  const minsEl = document.querySelector('[data-hero-mins]');
+  if (!timeEl || !minsEl) return;
+  const startMins = 21 * 60 + 14;
+  const endMins   = 21 * 60 + 30;
+  let cur = startMins;
+  const TICK_MS = 900;
+  const REACH_PAUSE_MS = 2400;
+
+  function fmt(t) {
+    const h = Math.floor(t / 60);
+    const m = t % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+  function minsLabel(rem) {
+    if (rem === 0) return 'NU';
+    if (rem === 1) return '1 minut';
+    return rem + ' minuter';
+  }
+  function paint(animate) {
+    if (animate) {
+      timeEl.classList.add('is-tick');
+      minsEl.classList.add('is-tick');
+    }
+    setTimeout(() => {
+      const remaining = endMins - cur;
+      timeEl.textContent = fmt(cur);
+      minsEl.textContent = minsLabel(remaining);
+      timeEl.classList.toggle('is-zero', remaining === 0);
+      minsEl.classList.toggle('is-zero', remaining === 0);
+      timeEl.classList.remove('is-tick');
+      minsEl.classList.remove('is-tick');
+    }, animate ? 180 : 0);
+  }
+  paint(false);
+
+  function tick() {
+    cur++;
+    if (cur > endMins) {
+      // pausa kort på "07:00 / NU", återställ sen
+      setTimeout(() => { cur = startMins; paint(true); setTimeout(tick, TICK_MS); }, REACH_PAUSE_MS);
+      return;
+    }
+    paint(true);
+    setTimeout(tick, TICK_MS);
+  }
+  setTimeout(tick, TICK_MS);
+})();
+
+// ─── Hero scrub-parallax: räknar progress 0..1 över hero-pin-area ──
+(function() {
+  const heroPin = document.getElementById('heroPin');
+  const video = document.getElementById('hero-video');
+  if (!heroPin) return;
+
+  let isReady = false;
+  let raf = 0;
+  const root = document.documentElement;
+
+  const update = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const r = heroPin.getBoundingClientRect();
+      const total = heroPin.offsetHeight - window.innerHeight;
+      const p = total > 0 ? Math.max(0, Math.min(1, -r.top / total)) : 0;
+      root.style.setProperty('--hero-p', p.toFixed(4));
+
+      // Pausa videon när vi är förbi pin-zonen (sparar CPU/batteri)
+      if (video) {
+        if (r.bottom < 0 && !video.paused) video.pause();
+        else if (r.bottom > 0 && video.paused) video.play().catch(() => {});
+      }
+    });
+  };
+
+  if (video) {
+    const reveal = () => {
+      if (isReady) return;
+      isReady = true;
+      video.classList.add('is-ready');
+      video.style.opacity = '';  // clear ev. tidigare inline-stil
+      video.play().catch(() => {});
+      update();
+    };
+    if (video.readyState >= 2) reveal();
+    else {
+      video.addEventListener('loadeddata', reveal, { once: true });
+      video.addEventListener('canplay', reveal, { once: true });
+    }
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+})();
+
+// ─── Section-divider: rita linje när day-section når viewport ─────
+(function() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.05) {
+        e.target.classList.add('is-in');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.05] });
+  document.querySelectorAll('section.day').forEach(el => obs.observe(el));
+})();
+</script>
+
+<script>
+// ─── Adaptiv nav-färg: vit text på mörka sektioner, mörk text på ljusa.
+// Scroll-driven recompute är primär, IntersectionObserver är backup.
+// Vi tittar på sektion som täcker y=80px från toppen (precis under nav-
+// raden). Mer lead-time än tidigare — bytet hinner ske MEDAN bg-färgen
+// fortfarande växlar in i viewporten.
+(function () {
+  const body = document.body;
+  const sections = Array.from(document.querySelectorAll('[data-nav-theme]'));
+  if (!sections.length) return;
+
+  const PROBE = 80; // y-koord att kolla mot (precis under nav)
+
+  function applyTheme(theme) {
+    if (!theme) return;
+    body.classList.toggle('nav-on-dark', theme === 'dark');
+    body.classList.toggle('nav-on-light', theme === 'light');
+  }
+
+  function recompute() {
+    // Skipa under deep-page-overlay (slides-läge), då har nav egen
+    // body.is-deep-stil som vinner ändå.
+    if (body.classList.contains('is-deep')) return;
+
+    let active = null;
+    let activeTop = -Infinity;
+    for (const s of sections) {
+      const r = s.getBoundingClientRect();
+      // Sektion vars topp har passerat PROBE och vars botten ligger under
+      // PROBE = sektion synlig vid PROBE-linjen. Välj den vars topp är
+      // störst (dvs. senast börjat).
+      if (r.top <= PROBE && r.bottom > PROBE) {
+        if (r.top > activeTop) {
+          active = s;
+          activeTop = r.top;
+        }
+      }
+    }
+    // Fallback: om ingen sektion matchar, hitta nästa som ligger
+    // direkt över viewporten och använd dess tema.
+    if (!active) {
+      const above = sections
+        .filter(s => s.getBoundingClientRect().bottom <= PROBE)
+        .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+      if (above[0]) active = above[0];
+    }
+    if (active && active.dataset.navTheme) applyTheme(active.dataset.navTheme);
+  }
+
+  // Trigger på alla relevanta event
+  let raf = 0;
+  function schedule() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; recompute(); });
+  }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  window.addEventListener('load', recompute);
+  document.addEventListener('DOMContentLoaded', recompute);
+
+  // IntersectionObserver-backup: fångar fall där scroll-event uteblir
+  // (t.ex. överlappande transform-context).
+  if ('IntersectionObserver' in window) {
+    const obs = new IntersectionObserver(schedule, {
+      rootMargin: `-${PROBE}px 0px -50% 0px`,
+      threshold: [0, 0.01, 0.25, 0.5, 0.75, 1],
+    });
+    sections.forEach(s => obs.observe(s));
+  }
+
+  // Initial paint
+  applyTheme('dark');
+  recompute();
+})();
+</script>
+
+<script>
+// ─── Auth-aware top-nav: visa Logga in/Skapa konto för utloggade,
+// Dashboard/Logga ut för inloggade. SPA:n lagrar token i sessionStorage
+// (key "hembudget_token"), så vi läser samma key. Klick på "Logga ut"
+// rensar nyckeln och navigerar till /.
+(function () {
+  const KEY = "hembudget_token";
+  function paint() {
+    const token = sessionStorage.getItem(KEY);
+    const isIn = !!token;
+    document.querySelectorAll('[data-auth-when="out"]').forEach(el => {
+      el.hidden = isIn;
+    });
+    document.querySelectorAll('[data-auth-when="in"]').forEach(el => {
+      el.hidden = !isIn;
+    });
+  }
+  paint();
+  window.addEventListener("storage", paint);
+  window.addEventListener("pageshow", paint);
+
+  document.querySelectorAll('a[href="/dashboard?logout=1"]').forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      sessionStorage.removeItem(KEY);
+      window.location.href = "/";
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

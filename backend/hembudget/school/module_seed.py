@@ -940,6 +940,659 @@ SYSTEM_TOUR_TEMPLATE = {
 }
 
 
+STOCKS_TEMPLATE = {
+    "title": "Aktier — komma igång",
+    "summary": (
+        "Från första ISK-kontot till en diversifierad portfölj. Steg-för-"
+        "steg-modul som lär dig riskspridning, courtage och hur "
+        "aktiehandel fungerar i praktiken."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är en aktie?",
+            "content": (
+                "En aktie är en del av ett företag. När du köper en aktie "
+                "blir du delägare i företaget — om de går bra ökar värdet, "
+                "om de går dåligt minskar det. Värdet på en aktie bestäms "
+                "av utbud och efterfrågan på börsen.\n\n"
+                "Tänk på det så här: Volvo har ungefär 2 miljarder aktier. "
+                "Om du köper 10 stycken äger du 0,000 000 5 % av Volvo. "
+                "Du har också rätt till en del av vinsten — det kallas "
+                "utdelning."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Skapa ditt första aktiekonto (ISK)",
+            "content": (
+                "Gå till 'Konton' i menyn och skapa ett nytt konto med "
+                "typen 'ISK'. Det är ett särskilt konto för aktier och "
+                "fonder där skatten är schablonmässig — du betalar en "
+                "liten procent på värdet varje år istället för "
+                "kapitalvinstskatt på varje sälj."
+            ),
+            "params": {
+                "assignment_kind": "stock_open_account",
+                "target_count": 1,
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Flytta 10 000 kr till ditt aktiekonto",
+            "content": (
+                "Gå till 'Överföringar' och klicka 'Ny överföring'. "
+                "Flytta 10 000 kr från ditt sparkonto till ditt nya "
+                "ISK. Det kallas att 'fonda kontot' — pengarna behöver "
+                "ligga där för att du ska kunna handla."
+            ),
+            "params": {
+                "assignment_kind": "make_transfer",
+                "target_count": 1,
+                "min_amount": 1000,
+                "to_account_kind": "isk",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Riskspridning — varför du inte ska lägga alla ägg i en korg",
+            "content": (
+                "Om du satsar alla pengar på en aktie och företaget går "
+                "i konkurs — då är allt borta. Lösningen är "
+                "diversifiering: sprid pengarna mellan flera olika "
+                "företag i flera olika branscher.\n\n"
+                "På Stockholmsbörsen finns t.ex. Industri (Volvo, "
+                "Atlas Copco), Bank (SEB, Swedbank), Telecom (Telia, "
+                "Ericsson), Hälsa (AstraZeneca), Konsument (H&M), "
+                "och fler. När en bransch går dåligt går oftast en "
+                "annan bra — det jämnar ut svängningarna."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Köp 5 aktier från minst 3 olika sektorer",
+            "content": (
+                "Gå till 'Aktier' i menyn → fliken 'Marknad'. Välj 5 "
+                "aktier som passar dig — men minst 3 olika sektorer. "
+                "Lägg max ~2 000 kr per aktie så du hinner sprida "
+                "innan likviden tar slut. Skriv en kort motivering "
+                "för varje köp."
+            ),
+            "params": {
+                "assignment_kind": "stock_diversify",
+                "min_holdings": 5,
+                "min_sectors": 3,
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Courtage — den dolda kostnaden",
+            "content": (
+                "Varje gång du köper eller säljer aktier tar mäklaren ut "
+                "en avgift. Vi använder Avanza Mini-courtage: minst 1 kr "
+                "per affär, eller 0,25 % av beloppet — det som är högst.\n\n"
+                "Räkneexempel: köper du för 100 kr betalar du 1 kr "
+                "(minimi). Köper du för 4 000 kr betalar du 10 kr "
+                "(0,25 %). Vid 100 köp om året på 1 000 kr blir det "
+                "100 kr i avgifter — pengar som äter upp vinsten. "
+                "Stora och få affärer är billigare än många små."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Snabbkoll på det du lärt dig",
+            "content": None,
+            "params": {
+                "question": (
+                    "Du köper 20 Volvo-aktier för 200 kr/styck. Hur "
+                    "mycket courtage betalar du (Mini-modell)?"
+                ),
+                "options": [
+                    "1 kr",
+                    "10 kr",
+                    "20 kr",
+                    "100 kr",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "20 × 200 = 4 000 kr × 0,25 % = 10 kr. Det är "
+                    "över minimumet på 1 kr, så procenten gäller."
+                ),
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Var det svårt att välja?",
+            "content": (
+                "När du valde dina 5 aktier — vad styrde dig? Var det "
+                "namn du kände igen, sektorer du tror på, eller "
+                "siffrorna i dagens kurs? Vad lärde du dig om "
+                "diversifiering?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "risk_understanding",
+                        "name": "Förståelse för risk",
+                        "levels": [
+                            "Nämner inte risk",
+                            "Pratar om en risk",
+                            "Förklarar varför spridning minskar risken",
+                        ],
+                    },
+                    {
+                        "key": "courtage_understanding",
+                        "name": "Förståelse för courtage",
+                        "levels": [
+                            "Nämner inte avgifter",
+                            "Vet att courtage finns",
+                            "Räknar med courtage i sina beslut",
+                        ],
+                    },
+                    {
+                        "key": "own_reflection",
+                        "name": "Egen reflektion",
+                        "levels": [
+                            "Återger fakta",
+                            "Bedömer sina egna val",
+                            "Drar pedagogiska slutsatser",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
+CREDIT_TEMPLATE = {
+    "title": "Kreditmånaden — när pengarna inte räcker",
+    "summary": (
+        "Vad händer när lönekontot går mot noll? Du övar att fatta "
+        "kreditbeslut i en simulerad bank. Lär dig skillnaden mellan "
+        "privatlån och SMS-lån — och varför båda kostar mer än du tror."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad händer när pengarna tar slut?",
+            "content": (
+                "Hyran kommer den 1:a, men lönen den 25:e. Mellan dem "
+                "kan kontot stå tomt. I verkligheten stoppar banken "
+                "uttag som skulle ge minus — eller tar ut hög "
+                "straffränta. I Ekonomilabbet triggar systemet ett "
+                "kreditflöde som tvingar dig att aktivt välja:\n\n"
+                "1. Skjuta upp utgiften (förfallen räkning + risk för "
+                "betalningsanmärkning)\n"
+                "2. Ta privatlån (kräver kreditupplysning, lägre ränta "
+                "om du har ordnat ekonomi)\n"
+                "3. Ta SMS-lån (snabbt men dyrt)\n\n"
+                "Det viktiga är inte att 'välja rätt' utan att förstå "
+                "konsekvenserna av vart och ett."
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Kreditscore — så bedömer bankerna dig",
+            "content": (
+                "När du söker privatlån får banken se en sammanfattning "
+                "av din ekonomi. De räknar ut en kreditscore på en "
+                "skala 300–850. Faktorer som påverkar:\n\n"
+                "• Inkomst (snittlön senaste 3 mån)\n"
+                "• Skuldkvot (hur mycket du redan lånat / årsinkomst)\n"
+                "• Sparkonto-buffert\n"
+                "• Antal nyligt tagna lån\n"
+                "• Tidigare avslag\n"
+                "• Hur stort belopp du söker\n\n"
+                "I Ekonomilabbet ser du exakt vilken faktor som drog "
+                "ner eller gav poäng — så du kan förstå vad du kan "
+                "ändra till nästa månad."
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Vilken faktor påverkar mest?",
+            "content": None,
+            "params": {
+                "question": (
+                    "Du har 35 000 kr i månadsinkomst men ett bolån på "
+                    "3 miljoner. Vad sänker din kreditscore mest?"
+                ),
+                "options": [
+                    "Att du har för låg inkomst",
+                    "Att din skuldkvot är 7x årsinkomsten",
+                    "Att du saknar sparkonto",
+                    "Att du tar ett nytt lån",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "7x årsinkomsten är väldigt högt — banker oroar "
+                    "sig redan vid 4–5x. Det är därför skuldkvot är "
+                    "den enskilt största faktorn vid bolåneprövning."
+                ),
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Privatlån vs SMS-lån — räkneexempel",
+            "content": (
+                "Säg att du behöver 8 000 kr.\n\n"
+                "**Privatlån, 24 mån, 7 % ränta:**\n"
+                "  Månadskostnad ≈ 358 kr\n"
+                "  Total tillbakabetalning ≈ 8 600 kr\n"
+                "  Total räntekostnad ≈ 600 kr\n\n"
+                "**SMS-lån, 1 mån, ~117 % effektiv ränta:**\n"
+                "  Tillbakabetalning på 30 dagar ≈ 9 200 kr\n"
+                "  Total räntekostnad ≈ 1 200 kr\n\n"
+                "På samma belopp kostar SMS-lånet ungefär 600 kr mer "
+                "trots att löptiden är kortare. Effektiv ränta tar "
+                "hänsyn till alla avgifter (uppläggning + aviavgift), "
+                "inte bara den nominella räntan banken marknadsför."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Försök att övertrassera lönekontot",
+            "content": (
+                "Gå till 'Överföringar' → 'Ny överföring'. Försök "
+                "föra över mer pengar än vad som finns på lönekontot. "
+                "Modalen 'Din ekonomi går inte ihop' ska dyka upp.\n\n"
+                "Klicka 'Avbryt' eller 'Tacka nej' — vi vill bara att "
+                "du sett flödet en gång. Steget markeras klart när du "
+                "har minst en kreditansökan i loggen (oavsett resultat)."
+            ),
+            "params": {
+                "assignment_kind": "trigger_credit_flow",
+                "target_count": 1,
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad skulle du göra på riktigt?",
+            "content": (
+                "Tänk dig att du står med 3 000 kr i hyresskuld och "
+                "lönen kommer om 12 dagar. Vad skulle du välja: ta "
+                "SMS-lån, be om förlängning hos hyresvärden, eller "
+                "låna av en familjemedlem? Varför? Vad är "
+                "konsekvenserna av vart och ett?"
+            ),
+            "params": {
+                "rubric": [
+                    {
+                        "key": "konsekvensanalys",
+                        "name": "Konsekvensanalys",
+                        "levels": [
+                            "Nämner bara ett alternativ",
+                            "Jämför två alternativ",
+                            "Resonerar om konsekvenser av tre alternativ",
+                        ],
+                    },
+                    {
+                        "key": "egen_situation",
+                        "name": "Förankring i egen situation",
+                        "levels": [
+                            "Generell text",
+                            "Hänvisar till sin egen ekonomi",
+                            "Identifierar konkreta åtgärder framåt",
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+}
+
+
+EMPLOYER_TEMPLATE = {
+    "title": "Arbete och avtal",
+    "summary": (
+        "Lär dig hur arbetslivet faktiskt fungerar: vad ett kollektivavtal "
+        "är, vad ditt yrke har för spelregler, hur tjänstepensionen "
+        "byggs upp och varför ditt agerande på jobbet följer dig "
+        "längre än du tror."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett kollektivavtal?",
+            "content": (
+                "Ett kollektivavtal är en överenskommelse mellan facket "
+                "och arbetsgivar-organisationen om dina villkor — lön, "
+                "övertid, semester, tjänstepension. Du är skyddad av "
+                "avtalet om din arbetsgivare har tecknat det.\n\n"
+                "Cirka 9 av 10 svenska arbetstagare omfattas av "
+                "kollektivavtal. På små företag utan avtal regleras "
+                "din lön bara av semesterlagen + sjuklönelagen — det "
+                "är minimum, inte maximum.\n\n"
+                "Öppna fliken **Kollektivavtal** under /arbetsgivare "
+                "för att se exakt vilket avtal som gäller dig och "
+                "vad det betyder för din lön och pension."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Slå upp ditt eget avtal",
+            "content": (
+                "Gå till /arbetsgivare → fliken **Kollektivavtal**. "
+                "Läs avtalet som matchar ditt yrke. Kolla särskilt "
+                "tjänstepensionssatsen — varje procent där blir "
+                "hundratusentals kronor över ett arbetsliv."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "open_employer_agreement",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Tjänstepension — den dolda lönen",
+            "content": (
+                "Tjänstepensionen är pengar din arbetsgivare betalar "
+                "in till din pension UTÖVER din månadslön. Du ser "
+                "den inte på lönespecen, men över 30–40 års jobb "
+                "blir den ofta lika stor som hela den allmänna "
+                "pensionen.\n\n"
+                "Vanliga system:\n"
+                "- **ITP1** (privat tjänsteman): 4,5 % av brutto under "
+                "  7,5 IBB, 30 % över\n"
+                "- **AKAP-KR / KAP-KL** (kommun/region): 6 % under, "
+                "  31,5 % över\n"
+                "- **SAF-LO** (LO-anslutna): 4,5 % under, 30 % över\n\n"
+                "Småföretag utan avtal? **Ingen tjänstepension**. "
+                "Då måste du spara själv (ISK eller kapitalförsäkring) "
+                "för att kompensera."
+            ),
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad gör du när din kollega ber dig täcka för henom?",
+            "content": (
+                "Tänk dig att en kollega ber dig täcka för henom under "
+                "ett pass — utan att hen sjukanmäler sig. Vad svarar "
+                "du? Skriv 3–5 meningar om hur du resonerar och varför."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Svara på 3 frågor från arbetsgivaren",
+            "content": (
+                "Gå till /arbetsgivare → fliken **Frågor**. Svara på "
+                "3 frågor från din arbetsgivare. Varje svar påverkar "
+                "din satisfaction-score. Tänk över alternativen — "
+                "det 'rätta' valet är inte alltid det snabbaste."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "answer_workplace_questions",
+                "target_count": 3,
+            },
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad sa avtalet?",
+            "content": "Vilket av följande gäller för ditt avtal?",
+            "params": {
+                "question": (
+                    "Hur många semesterdagar har du grundläggande "
+                    "rätt till enligt semesterlagen?"
+                ),
+                "options": [
+                    "20 dagar",
+                    "25 dagar",
+                    "28 dagar",
+                    "30 dagar",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Semesterlagen ger 25 dagar som minimum — alla "
+                    "kollektivavtal i Sverige följer minst detta. "
+                    "Många avtal ger mer från 40 års ålder."
+                ),
+            },
+        },
+    ],
+}
+
+
+SALARY_NEGOTIATION_TEMPLATE = {
+    "title": "Förhandla din lön",
+    "summary": (
+        "Lönesamtalet är en av de viktigaste 30-minutersna i ditt "
+        "arbetsliv. Här lär du dig att förbereda argument, läsa "
+        "motpartens 'nej' och hänvisa till ditt kollektivavtal — "
+        "med ett 5-ronds samtal mot AI-chefen Maria."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett lönesamtal?",
+            "content": (
+                "Ett lönesamtal är ett strukturerat möte mellan dig och "
+                "din chef där ni går igenom dina prestationer och kommer "
+                "överens om en lönehöjning för året framåt.\n\n"
+                "Tre viktiga saker att veta:\n\n"
+                "1. **Avtalets revisionsutrymme** är ramen. Är det "
+                "3 % i år så är 3 % det förväntade — men du kan "
+                "förhandla ±1–2 procentenheter.\n\n"
+                "2. **Argument > känslor.** 'Jag är värd det' är "
+                "svagt. 'Jag tog över ansvar X i juni och projekt Y "
+                "kom in på tid' är starkt.\n\n"
+                "3. **Hot funkar inte.** Säger du 'annars säger jag "
+                "upp mig' utan en faktisk plan håller chefen sitt "
+                "bud — eller blir hen sur."
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Lönerevisionsutrymme — hur funkar det?",
+            "content": (
+                "I de flesta avtal finns en **central pott** som "
+                "förhandlas mellan facket och arbetsgivar-organi-"
+                "sationen. Den centralt avtalade procenten (t.ex. "
+                "3 %) är inte automatisk höjning — den är ett "
+                "snitt som ska fördelas i hela kollektivet.\n\n"
+                "Dvs: om alla får 3 % blir det fackets pott. Men "
+                "din chef kan välja att ge **dig** mer (4 %) om "
+                "någon annan får mindre (2 %) — så länge "
+                "totalsumman blir 3 % på avdelningen.\n\n"
+                "**Det här är samtalet:** övertyga chefen att DU "
+                "är den som ska få mer än snittet.\n\n"
+                "Öppna /arbetsgivare → fliken **Kollektivavtal** "
+                "för att se din ram."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Förbered 3 argument inför samtalet",
+            "content": (
+                "Innan du startar lönesamtalet, skriv ner i dina egna "
+                "anteckningar 3 konkreta argument. Förslag:\n\n"
+                "- Vad har du levererat som chefen kanske inte minns?\n"
+                "- Vilken kompetens har du tagit på dig (kurser, "
+                "  ansvar, certifieringar)?\n"
+                "- Vad säger marknadsdata om din roll? (SCB.se eller "
+                "  jobbportalers lönedata)\n\n"
+                "Bra argument är **specifika** och **mätbara** — inte "
+                "'jag är hängiven', utan 'projekt X kom in 2 veckor "
+                "före deadline med uppskattning från kund Y'."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "prepare_negotiation_arguments",
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Genomför ditt lönesamtal",
+            "content": (
+                "Gå till /arbetsgivare → fliken **Lönesamtal**. "
+                "Du har 5 ronder med Maria (HR-chef). Börja med "
+                "ditt starkaste argument. Lyssna på hennes svar — "
+                "ofta säger hon vad som är OK eller inte OK i "
+                "förhandlingen.\n\n"
+                "Acceptera när du tycker du landat bra, eller pressa "
+                "tills sista ronden om du tror du kan få mer."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "complete_salary_negotiation",
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad gick bra? Vad skulle du göra annorlunda?",
+            "content": (
+                "När samtalet är klart, reflektera över ditt eget "
+                "agerande. Skriv 3–5 meningar:\n\n"
+                "- Vilka argument flyttade chefen mest?\n"
+                "- Var det något du sa som backade dig?\n"
+                "- Hur skulle du formulera om dig nästa år?"
+            ),
+        },
+        {
+            "kind": "quiz",
+            "title": "Förhandlingstaktik",
+            "content": "Vilket alternativ är **mest sannolikt** att ge dig högre lön?",
+            "params": {
+                "question": (
+                    "Du är på lönesamtal och har fått 2,8 % i bud. "
+                    "Avtalet ger 3 %. Vad är bäst att säga?"
+                ),
+                "options": [
+                    "'Jag säger upp mig om jag inte får 5 %.'",
+                    "'Avtalet ger 3 % — varför ligger ni under?'",
+                    "'Jag har jobbat hårt, jag förtjänar mer.'",
+                    "'OK, jag tar 2,8 %.'",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Att hänvisa till avtalet är konkret och svårt "
+                    "att avfärda — chefen måste förklara varför du "
+                    "ligger under norm. 'Jag är värd det' är "
+                    "subjektivt; hot om uppsägning utan plan funkar "
+                    "inte; och att direkt acceptera ger ingen "
+                    "förhandlingsfördel."
+                ),
+            },
+        },
+    ],
+}
+
+
+BANK_TEMPLATE = {
+    "title": "Banken — så funkar pengaflöden",
+    "summary": (
+        "Banken är där dina pengar faktiskt rör sig. Här lär du dig "
+        "hur kontoutdrag, signering med BankID och försenade "
+        "betalningar fungerar — och hur ditt agerande påverkar "
+        "kreditbetyget."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett kontoutdrag?",
+            "content": (
+                "Kontoutdraget är bankens lista över allt som hänt på "
+                "ditt konto under en månad: löner in, fakturor ut, "
+                "korttransaktioner, ränta. Banken skickar det till dig "
+                "i slutet av månaden — sedan är det DITT jobb att "
+                "föra in det i din bokföring.\n\n"
+                "I /bank → fliken **Kontoutdrag** ser du månads-PDF:erna "
+                "som banken genererat. Klicka **Exportera** på en rad "
+                "för att flytta den till **Dina dokument**, sedan "
+                "importerar du till bokföringen från /my-batches."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Exportera ditt senaste kontoutdrag",
+            "content": (
+                "Logga in i /bank med din PIN. Gå till fliken "
+                "Kontoutdrag och tryck Exportera på det senaste. "
+                "Sedan: gå till /my-batches och importera till "
+                "bokföringen."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "export_kontoutdrag",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Signering, BankID, och varför du aldrig delar PIN",
+            "content": (
+                "BankID kombinerar **något du har** (din telefon) med "
+                "**något du vet** (din PIN). Om du delar PIN med någon "
+                "kan de logga in som du — banken har ingen säker "
+                "metod att veta om det är du eller någon annan.\n\n"
+                "**Säkerhetsregler:**\n"
+                "- Banken ringer aldrig och ber om din PIN\n"
+                "- Polisen ringer aldrig och ber om din PIN\n"
+                "- Familjemedlemmar ska inte heller använda din PIN\n"
+                "- Om du tappat PIN: lärare nollställer i Inställningar"
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Signera dina kommande fakturor",
+            "content": (
+                "Gå till /bank → Kommande betalningar. Markera de "
+                "fakturor du vill betala, välj konto (lönekonto), och "
+                "tryck Signera. BankID-flödet startar. Schemaläggs i "
+                "fliken **Schemalagda** tills förfallodag — då dras "
+                "pengarna automatiskt om saldot räcker."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "sign_payments",
+            },
+        },
+        {
+            "kind": "quiz",
+            "title": "Vad händer vid sen betalning?",
+            "content": (
+                "En faktura går 5 dagar över förfallodagen utan att "
+                "betalas. Vad händer?"
+            ),
+            "params": {
+                "question": (
+                    "Vilket är den vanligaste konsekvensen av en sen "
+                    "betalning på 5 dagar i Sverige?"
+                ),
+                "options": [
+                    "Inget händer — fordringsägaren glömmer.",
+                    "Påminnelseavgift på ~60 kr läggs på.",
+                    "Du blir omedelbart svartlistad.",
+                    "Polisen kontaktas.",
+                ],
+                "correct_index": 1,
+                "explanation": (
+                    "Efter 5 dagar kommer vanligtvis en påminnelse-"
+                    "faktura med en avgift på ~60 kr. Eskalation "
+                    "fortsätter: 14 dagar = ny avgift (120 kr), "
+                    "30 dagar = inkasso-varning. Vid riktigt långa "
+                    "förseningar (45+ dagar) kan ärendet gå till "
+                    "Kronofogden — DET påverkar kreditbetyget hårt "
+                    "och kan ligga kvar i 3 år."
+                ),
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Hur skulle du hantera ett halvt års sen hyra?",
+            "content": (
+                "Tänk dig att du blivit av med jobbet och inte kan "
+                "betala hyran. Skriv 5-7 meningar:\n\n"
+                "- Vad är ditt FÖRSTA telefonsamtal?\n"
+                "- Hur prioriterar du vilka räkningar att betala?\n"
+                "- Vad gör du för att skydda din kreditvärdighet?\n"
+                "- När börjar du tänka på att låna?"
+            ),
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -961,6 +1614,11 @@ def seed_system_modules(master_session) -> int:
         SAVING_TEMPLATE,
         FAMILY_TEMPLATE,
         SYSTEM_TOUR_TEMPLATE,
+        STOCKS_TEMPLATE,
+        CREDIT_TEMPLATE,
+        EMPLOYER_TEMPLATE,
+        SALARY_NEGOTIATION_TEMPLATE,
+        BANK_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue

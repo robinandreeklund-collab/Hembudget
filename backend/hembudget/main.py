@@ -15,10 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 faulthandler.enable()
 
 from .api import (
-    admin, ai, ai_admin, auth, backup, balances, budget, chat, elpris,
-    email_auth, funds, landing, ledger, loans, modules, reports, scenarios,
-    school, settings_kv, smtp_admin, tax, transactions, transfers,
-    upcoming, upload, utility,
+    admin, ai, ai_admin, auth, backup, balances, bank, budget, chat,
+    credit, elpris, email_auth, employer, funds, landing, ledger, loans,
+    modules, reports, scenarios, school, settings_kv, smtp_admin,
+    stock_trading, stocks, tax, events, teacher_credit, teacher_employer,
+    teacher_stocks, teacher_wellbeing, transactions, transfers, upcoming,
+    upload, utility, wellbeing,
 )
 from .config import settings
 
@@ -33,6 +35,11 @@ def build_app() -> FastAPI:
         title="Hembudget API",
         version="0.1.0",
         description="Lokal AI-driven familjeekonomi (Nemotron Nano 3 via LM Studio)",
+        # FastAPI:s auto-docs flyttas till /api/* så /docs är fri för
+        # editorial-dokumentationen som SPA:n serverar.
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        openapi_url="/api/openapi.json",
     )
     # CORS:
     # - demo-mode: tillåt alla origins (publik Render-deploy)
@@ -155,6 +162,21 @@ def build_app() -> FastAPI:
     app.include_router(smtp_admin.router)
     app.include_router(landing.router)
     app.include_router(ai.router)
+    # stock_trading måste includeas FÖRE stocks: stocks.py har en
+    # catch-all `/stocks/{ticker}`-route som annars matchar
+    # `/stocks/portfolio`, `/stocks/ledger`, `/stocks/orders`,
+    # `/stocks/watchlist` etc. och svarar 404 'Okänd ticker'.
+    app.include_router(stock_trading.router)
+    app.include_router(stocks.router)
+    app.include_router(teacher_stocks.router)
+    app.include_router(credit.router)
+    app.include_router(teacher_credit.router)
+    app.include_router(wellbeing.router)
+    app.include_router(events.router)
+    app.include_router(teacher_wellbeing.router)
+    app.include_router(employer.router)
+    app.include_router(teacher_employer.router)
+    app.include_router(bank.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
@@ -202,7 +224,36 @@ def _mount_frontend_static(app: FastAPI) -> None:
 
     @app.get("/", include_in_schema=False)
     def _spa_root() -> FileResponse:
+        # Public landing = demo-landing/index.html (editorial sida som
+        # presenterar Linda/Peter/Evelina). SPA-shellet bor på /login
+        # och underliggande react-routes; alla SPA-routes faller tillbaka
+        # via _spa_fallback nedan.
+        landing = dist / "demo-landing" / "index.html"
+        if landing.is_file():
+            return FileResponse(str(landing))
         return FileResponse(str(dist / "index.html"))
+
+    # Snygga URLs för persona-sagorna — pekar på respektive saga-HTML
+    # som ligger statiskt under demo-landing/. Linda kvar på pretty-URL
+    # `/linda` istället för dess legacy-filnamn.
+    _SAGA_FILES = {
+        "linda":   dist / "demo-landing" / "4-vecka-djupdyk.html",
+        "peter":   dist / "demo-landing" / "peter-vecka.html",
+        "evelina": dist / "demo-landing" / "evelina-vecka.html",
+    }
+    for _slug, _path in _SAGA_FILES.items():
+        def _make(p: Path):
+            def _serve() -> FileResponse:
+                if p.is_file():
+                    return FileResponse(str(p))
+                return FileResponse(str(dist / "index.html"))
+            return _serve
+        app.add_api_route(
+            "/" + _slug,
+            _make(_path),
+            methods=["GET"],
+            include_in_schema=False,
+        )
 
     # Catch-all för React Router-paths (ej /api, ej /healthz, ej /assets).
     # Måste registreras SIST efter alla API-routers annars fångar den
@@ -217,6 +268,13 @@ def _mount_frontend_static(app: FastAPI) -> None:
         target = dist / full_path
         if target.is_file():
             return FileResponse(str(target))
+        # Directory? → serva dess egna index.html om den finns
+        # (gör att /demo-landing/ pekar på frontend/dist/demo-landing/index.html
+        # istället för huvudappens SPA)
+        if target.is_dir():
+            dir_index = target / "index.html"
+            if dir_index.is_file():
+                return FileResponse(str(dir_index))
         return FileResponse(str(dist / "index.html"))
 
 
@@ -350,6 +408,49 @@ def _school_bootstrap() -> None:
                 logging.getLogger(__name__).info(
                     "school: seeded %d landing asset slots", nl,
                 )
+            # Seed aktie-universum + börskalender (idempotent).
+            # Krävs innan POST /stocks/internal/poll-quotes kan användas.
+            from .school.stock_seed import seed_all as seed_stocks_all
+            ns = seed_stocks_all(s)
+            if ns["stocks_added"] or ns["calendar_days_added"]:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d stocks + %d calendar days",
+                    ns["stocks_added"], ns["calendar_days_added"],
+                )
+            # Seed event-templates (Wellbeing-events fas 2). Idempotent.
+            from .school.event_seed import seed_event_templates
+            ne = seed_event_templates(s)
+            if ne > 0:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d event templates", ne,
+                )
+            # Seed kollektivavtal + yrke→avtal-mappningar
+            # (idé 1 i dev_v1.md). Idempotent.
+            from .school.employer_seed import seed_all as seed_employer_all
+            ner = seed_employer_all(s)
+            if ner["agreements_added"] or ner["profession_mappings_added"]:
+                logging.getLogger(__name__).info(
+                    "school: seeded %d agreements + %d profession mappings",
+                    ner["agreements_added"], ner["profession_mappings_added"],
+                )
+            # Bootstrap: om LatestStockQuote är tom efter att StockMaster
+            # har seedats, kör en force-poll så det finns kursdata direkt
+            # vid boot — annars visar frontend tomma rader tills nästa
+            # marknadsöppning.
+            from .school.stock_models import LatestStockQuote
+            from .stocks.poller import poll_quotes
+            if s.query(LatestStockQuote).count() == 0:
+                try:
+                    pr = poll_quotes(s, force=True)
+                    logging.getLogger(__name__).info(
+                        "school: bootstrap-pollade %d kursrader (provider %s)",
+                        pr["fetched"],
+                        s.bind.dialect.name if s.bind else "?",
+                    )
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "school: bootstrap-poll misslyckades — fortsätter ändå"
+                    )
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 

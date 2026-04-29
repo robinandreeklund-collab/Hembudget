@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
-import { AuthShell, PaperButton } from "@/components/paper";
+import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
+import { LiveTime, LiveSecondsCountdown } from "@/components/editorial/LiveClock";
 
 export default function StudentLogin() {
   const { studentLogin, schoolStatus } = useAuth();
@@ -30,46 +32,59 @@ export default function StudentLogin() {
   }
 
   return (
-    <AuthShell
-      eyebrow="Ekonomilabbet"
-      title="Elevinloggning"
-      intro="Ange din 6-teckens kod som din lärare har gett dig."
+    <EditorialAuthShell
+      topNavRight={<AuthAwareTopLinks />}
     >
-      <form onSubmit={handle} className="space-y-4">
-        <input
-          type="text"
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="ABC123"
-          autoFocus
-          maxLength={6}
-          className="w-full px-3 py-4 border-[1.5px] border-rule bg-white text-ink focus:border-ink outline-none font-mono tracking-[0.4em] text-center text-2xl placeholder:text-[#bbb]"
-        />
-        <Turnstile
-          siteKey={siteKey}
-          onToken={setTurnstileToken}
-          onExpire={() => setTurnstileToken(null)}
-        />
-        {err && (
-          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
-            {err}
-          </div>
-        )}
-        <PaperButton
-          type="submit"
-          disabled={busy || code.length < 4}
-          size="lg"
-          className="w-full justify-center disabled:opacity-50"
-        >
-          {busy ? "Loggar in…" : "Logga in"}
-        </PaperButton>
-        <div className="text-center text-sm text-[#666] pt-3 border-t border-rule">
-          Är du lärare eller skolledare?{" "}
-          <Link to="/login/teacher" className="nav-link">
-            Lärarinloggning
-          </Link>
+      <div className="ed-eyebrow">Elevinloggning · Sex tecken</div>
+
+      <div className="ed-clock">
+        <div className="ed-clock-time">
+          Klockan är <LiveTime />.
         </div>
-      </form>
-    </AuthShell>
+        <LiveSecondsCountdown start={6} />
+      </div>
+
+      <p className="ed-subhead">
+        Skriv din <em>sex-teckens-kod</em> som du fått av din lärare eller
+        förälder. Inget lösenord, ingen e-post — bara koden.
+      </p>
+
+      <div className="ed-card">
+        <form onSubmit={handle} className="ed-form" noValidate>
+          <input
+            className="ed-input ed-input-code"
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="ABC123"
+            autoFocus
+            maxLength={6}
+            inputMode="text"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <Turnstile
+            siteKey={siteKey}
+            onToken={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+          />
+          {err && <div className="ed-error">{err}</div>}
+          <button
+            type="submit"
+            className="ed-btn"
+            disabled={busy || code.length < 4}
+          >
+            {busy ? "Loggar in…" : "Logga in"}
+            <span className="ed-btn-arrow">→</span>
+          </button>
+          <div className="ed-foot-note">
+            Är du lärare eller skolledare?{" "}
+            <Link to="/login/teacher" className="ed-foot-link">
+              Lärarinloggning
+            </Link>
+          </div>
+        </form>
+      </div>
+    </EditorialAuthShell>
   );
 }

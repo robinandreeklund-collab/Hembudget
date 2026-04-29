@@ -1,11 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, Trash2, TrendingDown, TrendingUp, Users, Zap,
+  AlertTriangle, Trash2, TrendingDown, TrendingUp, Users,
 } from "lucide-react";
 import { api, formatSEK } from "@/api/client";
 import { Card, Stat } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
+import { ClassLeaderboard } from "@/components/ClassLeaderboard";
+import { EventInbox } from "@/components/EventInbox";
+import { HouseholdSplitQuiz } from "@/components/HouseholdSplitQuiz";
+import { HouseholdSummaryCard } from "@/components/HouseholdSummaryCard";
+import { InvitationsInbox } from "@/components/InvitationsInbox";
 import { ResetDialog } from "@/components/ResetDialog";
+import { StudentPedagogyCards } from "@/components/StudentPedagogyCards";
+import { WellbeingCard } from "@/components/WellbeingCard";
 import { Bar, BarChart, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ForecastPoint, HouseholdUser, MonthSummary } from "@/types/models";
 
@@ -31,21 +39,6 @@ interface NetWorthPoint {
   assets: number;
   debt: number;
   net_worth: number;
-}
-
-interface ElprisHour {
-  start: string;
-  end: string;
-  sek_per_kwh: number;
-  sek_per_kwh_inc_vat: number;
-}
-
-interface ElprisDay {
-  date: string;
-  zone: string;
-  avg_sek_per_kwh_inc_vat: number;
-  cheapest_hours: Array<{ start: string; end: string; sek_per_kwh_inc_vat: number }>;
-  hours: ElprisHour[];
 }
 
 interface FamilyBreakdown {
@@ -81,6 +74,8 @@ interface BalanceRow {
 
 export default function Dashboard() {
   const qc = useQueryClient();
+  const { role } = useAuth();
+  const isStudent = role === "student";
   const [showReset, setShowReset] = useState(false);
   const [month, setMonth] = useState<string>(currentMonth());
   const [editBalanceFor, setEditBalanceFor] = useState<number | null>(null);
@@ -165,13 +160,6 @@ export default function Dashboard() {
     queryFn: () => api<FamilyBreakdown>(`/budget/family/${month}`),
     enabled: !!month,
   });
-  const elprisZone = (localStorage.getItem("elpris_zone") || "SE3") as
-    | "SE1" | "SE2" | "SE3" | "SE4";
-  const elprisQ = useQuery({
-    queryKey: ["elpris", "today", elprisZone],
-    queryFn: () => api<ElprisDay>(`/elpris/today?zone=${elprisZone}`),
-    retry: false,
-  });
   const usersQ = useQuery({
     queryKey: ["users"],
     queryFn: () => api<HouseholdUser[]>("/users"),
@@ -230,14 +218,18 @@ export default function Dashboard() {
               ))}
             </select>
           )}
-          <button
-            onClick={() => setShowReset(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-rose-200 text-rose-600 bg-white hover:bg-rose-50"
-            title="Nollställ all data"
-          >
-            <Trash2 className="w-4 h-4" />
-            Nollställ
-          </button>
+          {/* Elever får inte nollställa sin data — det är klassrumets-data
+              och måste hanteras av läraren via lärar-panelen. */}
+          {!isStudent && (
+            <button
+              onClick={() => setShowReset(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-rose-200 text-rose-600 bg-white hover:bg-rose-50"
+              title="Nollställ all data"
+            >
+              <Trash2 className="w-4 h-4" />
+              Nollställ
+            </button>
+          )}
         </div>
       </div>
 
@@ -271,6 +263,24 @@ export default function Dashboard() {
           onClose={() => setBreakdownMode(null)}
         />
       )}
+
+      {/* Pedagogiska elev-vy-element (greeting, budget-bars, oväntade
+          utgifter, uppdrag, streak, mastery). Tidigare bara i den
+          separata EkoDashboard. Visas för båda elev OCH lärare-via-
+          impersonation så vyn är konsistent. */}
+      <StudentPedagogyCards month={month} />
+
+      <HouseholdSplitQuiz />
+
+      <HouseholdSummaryCard />
+
+      <WellbeingCard />
+
+      <InvitationsInbox />
+
+      <EventInbox />
+
+      <ClassLeaderboard />
 
       {ytdIncomeQ.data && ytdIncomeQ.data.grand_total > 0 && (
         <Card
@@ -639,141 +649,116 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {elprisQ.data && elprisQ.data.hours.length > 0 && (
-        <Card
-          title={`Elpris idag — ${elprisQ.data.zone}`}
-          action={
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-700">Snitt</span>
-              <span className="font-semibold">
-                {(elprisQ.data.avg_sek_per_kwh_inc_vat * 100).toFixed(0)} öre/kWh
-              </span>
-              <select
-                value={elprisZone}
-                onChange={(e) => {
-                  localStorage.setItem("elpris_zone", e.target.value);
-                  location.reload();
-                }}
-                className="border rounded px-1.5 py-0.5 text-xs"
-              >
-                <option value="SE1">SE1</option>
-                <option value="SE2">SE2</option>
-                <option value="SE3">SE3</option>
-                <option value="SE4">SE4</option>
-              </select>
-            </div>
-          }
-        >
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart
-              data={elprisQ.data.hours.map((h) => ({
-                hour: new Date(h.start).getHours(),
-                öre: Math.round(h.sek_per_kwh_inc_vat * 100),
-              }))}
-            >
-              <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}`} />
-              <Tooltip
-                formatter={(v: number) => `${v} öre/kWh`}
-                labelFormatter={(h) => `Timme ${h}:00`}
-              />
-              <Bar dataKey="öre" fill="#4f46e5" radius={[2, 2, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-2 text-xs text-slate-600">
-            <Zap className="inline w-3.5 h-3.5 mr-1 text-amber-500" />
-            Billigaste timmar:{" "}
-            {elprisQ.data.cheapest_hours.map((h) => {
-              const hr = new Date(h.start).getHours();
-              return (
-                <span key={h.start} className="mx-1 font-mono">
-                  {String(hr).padStart(2, "0")}:00 ({(h.sek_per_kwh_inc_vat * 100).toFixed(0)}öre)
-                </span>
-              );
-            })}
-          </div>
-        </Card>
-      )}
+      {/* Elpris-widgeten flyttad till /utility — naturlig plats där
+          eleven också ser sin förbrukning. */}
 
-      {netWorthQ.data && netWorthQ.data.points.length > 0 && (
-        <Card
-          title="Nettoförmögenhet (12 mån)"
-          action={
-            (() => {
-              const pts = netWorthQ.data.points;
-              const latest = pts[pts.length - 1];
-              return (
+      {netWorthQ.data && (() => {
+        const pts = netWorthQ.data.points;
+        const latest = pts.length ? pts[pts.length - 1] : null;
+        const hasAnyData = pts.some(
+          (p) => p.assets !== 0 || p.debt !== 0,
+        );
+        return (
+          <Card
+            title="Nettoförmögenhet (12 mån)"
+            action={
+              latest && (
                 <span className="text-sm font-semibold">
                   {formatSEK(latest.net_worth)}
                 </span>
-              );
-            })()
-          }
-        >
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={netWorthQ.data.points}>
-              <XAxis
-                dataKey="date"
-                tickFormatter={(v) => v.slice(0, 7)}
-                tick={{ fontSize: 11 }}
-              />
-              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-              <Tooltip
-                formatter={(v: number) => formatSEK(v)}
-                labelFormatter={(v) => `Slutet av ${v}`}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="assets"
-                name="Tillgångar"
-                stroke="#10b981"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="debt"
-                name="Skuld"
-                stroke="#ef4444"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="net_worth"
-                name="Netto"
-                stroke="#4f46e5"
-                strokeWidth={3}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="text-xs text-slate-700 mt-2">
-            Tillgångar = summa alla bankkonton. Skuld = aktuellt lånesaldo
-            (approximation — historisk låneutveckling kommer i framtida version).
-          </div>
-        </Card>
-      )}
+              )
+            }
+          >
+            {hasAnyData ? (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={pts}>
+                    <XAxis
+                      dataKey="date"
+                      tickFormatter={(v) => v.slice(0, 7)}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                    <Tooltip
+                      formatter={(v: number) => formatSEK(v)}
+                      labelFormatter={(v) => `Slutet av ${v}`}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="assets"
+                      name="Tillgångar"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="debt"
+                      name="Skuld"
+                      stroke="#ef4444"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="net_worth"
+                      name="Netto"
+                      stroke="#4f46e5"
+                      strokeWidth={3}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="text-xs text-slate-700 mt-2">
+                  Tillgångar = summa alla bankkonton. Skuld = aktuellt
+                  lånesaldo (approximation — historisk låneutveckling kommer
+                  i framtida version).
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-slate-700 leading-relaxed">
+                Inga konton eller lån registrerade ännu. När du importerar
+                ditt första kontoutdrag eller lånebesked från{" "}
+                <a href="/my-batches" className="text-brand-700 underline">
+                  Dina dokument
+                </a>{" "}
+                börjar din nettoförmögenhet räknas månad för månad.
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       <Card title="Kassaflödesprognos (6 mån)">
-        {fc.length === 0 ? (
-          <div className="text-sm text-slate-700">Behöver minst 2 månaders historik.</div>
+        {fc.length === 0 ||
+        fc.every((p) => p.income === 0 && p.expenses === 0) ? (
+          <div className="text-sm text-slate-700 leading-relaxed">
+            Prognosen baseras på snittet av föregående månaders inkomster
+            och utgifter. Importera minst en hel månad — när nästa månad
+            börjar har systemet underlag för att projicera framåt 6 månader.
+          </div>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={fc}>
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-              <Tooltip formatter={(v: number) => formatSEK(v)} />
-              <Legend />
-              <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} />
-              <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} />
-              <Line type="monotone" dataKey="net" stroke="#4f46e5" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+          <>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={fc}>
+                <XAxis dataKey="month" />
+                <YAxis tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                <Tooltip formatter={(v: number) => formatSEK(v)} />
+                <Legend />
+                <Line type="monotone" dataKey="income" name="Inkomst" stroke="#10b981" strokeWidth={2} />
+                <Line type="monotone" dataKey="expenses" name="Utgift" stroke="#ef4444" strokeWidth={2} />
+                <Line type="monotone" dataKey="net" name="Netto" stroke="#4f46e5" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+            <div className="text-xs text-slate-700 mt-2">
+              Prognosen är ett snitt av historiska månader — den blir bättre
+              ju fler hela månader du importerat.
+            </div>
+          </>
         )}
       </Card>
 
-      {showReset && <ResetDialog onClose={() => setShowReset(false)} />}
+      {showReset && !isStudent && <ResetDialog onClose={() => setShowReset(false)} />}
     </div>
   );
 }

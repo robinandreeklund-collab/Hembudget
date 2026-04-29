@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Korridoren · Elev · Vol. 04</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body { background: #f6f5f3; }
+
+/* === APP SHELL === */
+.app {
+  display: grid;
+  grid-template-columns: 256px 1fr 340px;
+  grid-template-rows: 56px 1fr;
+  grid-template-areas: "topbar topbar topbar" "side main right";
+  min-height: 100vh;
+}
+@media (max-width: 1300px) { .app { grid-template-columns: 240px 1fr 0; } .right { display: none; } }
+@media (max-width: 900px)  { .app { grid-template-columns: 1fr; grid-template-areas: "topbar" "main"; } .side, .right { display: none; } }
+
+/* === TOPBAR === */
+.topbar {
+  grid-area: topbar; background: #fff;
+  border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center;
+  padding: 0 22px; gap: 22px;
+  position: sticky; top: 0; z-index: 50;
+}
+.tb-brand {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  color: var(--fg); text-decoration: none;
+  display: flex; align-items: center; gap: 9px;
+}
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted);
+  margin-left: 4px;
+}
+.tb-crumbs {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1px; color: var(--muted);
+  text-transform: uppercase;
+}
+.tb-crumbs strong { color: var(--fg); font-weight: 700; }
+.tb-spacer { flex: 1; }
+.tb-meter {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.6px; color: var(--muted);
+}
+.tb-meter-bar {
+  width: 80px; height: 5px; background: #f1f5f9;
+  border-radius: 100px; overflow: hidden; position: relative;
+}
+.tb-meter-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
+  border-radius: 100px;
+}
+.tb-echo {
+  background: var(--fg); color: #fff; border: 0;
+  padding: 8px 14px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  text-decoration: none;
+}
+.tb-echo::before { content: "●"; color: var(--gold); }
+.tb-user {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #a83817);
+  color: #fff; font-family: var(--serif); font-weight: 700;
+  font-size: 14px;
+  display: grid; place-items: center;
+  text-decoration: none;
+}
+
+/* === SIDEBAR === */
+.side {
+  grid-area: side; background: #fff;
+  border-right: 1px solid var(--rule);
+  padding: 18px 12px 24px;
+  overflow-y: auto;
+}
+.dock-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 8px 6px;
+}
+.dock-eye:first-child { margin-top: 0; }
+.dock-link {
+  display: flex; align-items: center;
+  padding: 7px 10px; margin: 1px 0;
+  border-radius: 5px;
+  font-family: "Inter", sans-serif;
+  font-size: 13.5px; font-weight: 500;
+  color: #334155; text-decoration: none;
+  gap: 10px;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.dock-link .ic {
+  font-family: var(--mono); font-size: 10px;
+  width: 18px; text-align: center; color: var(--muted);
+  letter-spacing: 0;
+}
+.dock-link .nm { flex: 1; }
+.dock-link .badge {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 100px;
+  background: rgba(220,76,43,0.1); color: var(--accent);
+  letter-spacing: 0.4px;
+}
+.dock-link .badge.gold { background: rgba(251,191,36,0.18); color: #92400e; }
+.dock-link .badge.gray { background: #f1f5f9; color: var(--muted); }
+.dock-link:hover { background: rgba(220,76,43,0.05); color: var(--fg); }
+.dock-link:hover .ic { color: var(--accent); }
+.dock-link.active {
+  background: var(--fg); color: #fff;
+}
+.dock-link.active .ic { color: var(--gold); }
+.dock-link.active .badge { background: rgba(255,255,255,0.18); color: #fff; }
+
+/* === MAIN === */
+.main {
+  grid-area: main;
+  padding: 28px 32px 60px;
+  overflow-y: auto;
+}
+.head {
+  margin-bottom: 26px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 24px; align-items: end;
+}
+.head h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(28px, 3.6vw, 42px);
+  letter-spacing: -1.2px; line-height: 1.04;
+}
+.head h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.head .h-eyebrow { margin-bottom: 10px; }
+.head-meta {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.3px; text-transform: uppercase;
+  color: var(--muted); text-align: right; line-height: 1.7;
+}
+.head-meta strong { color: var(--fg); }
+
+/* Two-column inom main */
+.layout {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 24px; align-items: start;
+}
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+.col-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.col-eye::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
+
+/* === KORRIDOREN === */
+.corridor {
+  border: 1px solid var(--rule);
+  border-radius: 6px; background: #fff; overflow: hidden;
+}
+.room {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center; gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule);
+  text-decoration: none; color: var(--fg);
+  position: relative;
+  transition: background .2s var(--ease);
+}
+.room:last-child { border-bottom: 0; }
+.room:hover { background: rgba(220,76,43,0.03); }
+.room::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--rule); transition: background .2s var(--ease);
+}
+.room:hover::before { background: var(--accent); }
+.room-num {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; color: var(--muted);
+}
+.room-name {
+  font-family: var(--serif); font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.room-sub {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.4px; color: var(--muted); margin-top: 2px;
+}
+.room-num-side {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 18px; letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.room-num-side em { font-style: italic; color: var(--accent); font-weight: 500; }
+.room-num-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--muted); margin-top: 2px;
+}
+.room-pulse {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent);
+  animation: pulse 2.4s ease-in-out infinite;
+  margin-left: 4px; vertical-align: middle;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50%      { opacity: 1; transform: scale(1.2); }
+}
+
+/* === SKRIVBORDET === */
+.desk { display: flex; flex-direction: column; gap: 10px; }
+.tool {
+  border: 1px solid var(--rule); border-radius: 6px;
+  padding: 13px 16px; background: #fff;
+  text-decoration: none; color: var(--fg);
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 12px; align-items: center;
+  transition: border-color .2s var(--ease);
+}
+.tool:hover { border-color: var(--accent); }
+.tool-name {
+  font-family: var(--serif); font-size: 15px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.tool-sub {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--muted); margin-top: 2px;
+  letter-spacing: 0.4px;
+}
+.tool-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 18px; letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.tool-num em { font-style: italic; color: var(--accent); font-weight: 500; }
+.tool.flag { border-color: rgba(220,76,43,0.4); background: rgba(220,76,43,0.025); }
+
+/* === RIGHT PANEL === */
+.right {
+  grid-area: right; background: #fff;
+  border-left: 1px solid var(--rule);
+  padding: 22px 22px 24px;
+  overflow-y: auto;
+}
+.rp-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px;
+}
+.rp-eye::before { content: "● "; }
+.rp-section { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--rule); }
+.rp-section:last-child { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+.rp-title {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  letter-spacing: -0.3px; margin-bottom: 8px;
+}
+.rp-title em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+/* Module card */
+.mod {
+  background: #f6f5f3; border-radius: 6px;
+  padding: 12px 14px; margin-bottom: 8px;
+  text-decoration: none; color: var(--fg);
+  display: block;
+  transition: background .2s var(--ease);
+}
+.mod:hover { background: #efece8; }
+.mod-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.mod-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--muted); margin-top: 3px;
+  letter-spacing: 0.4px;
+}
+.mod-bar {
+  margin-top: 8px; height: 4px;
+  background: rgba(220,76,43,0.12); border-radius: 100px; overflow: hidden;
+}
+.mod-bar-fill { height: 100%; background: var(--accent); border-radius: 100px; }
+
+/* Assignment */
+.asgn {
+  background: rgba(220,76,43,0.04);
+  border: 1px solid rgba(220,76,43,0.2);
+  border-radius: 6px;
+  padding: 11px 13px; margin-bottom: 8px;
+  text-decoration: none; color: var(--fg); display: block;
+}
+.asgn-name {
+  font-family: var(--serif); font-size: 13.5px; font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.asgn-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--accent); margin-top: 3px;
+  letter-spacing: 0.5px; font-weight: 700;
+  text-transform: uppercase;
+}
+.asgn-from {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--muted); margin-top: 2px; letter-spacing: 0.4px;
+}
+
+/* Echo last */
+.echo-last {
+  background: #0f172a; color: #fff;
+  border-radius: 6px;
+  padding: 14px 16px; position: relative; overflow: hidden;
+}
+.echo-last::after {
+  content: ""; position: absolute; right: -30px; top: -30px;
+  width: 110px; height: 110px;
+  background: radial-gradient(circle, rgba(251,191,36,0.18), transparent 70%);
+}
+.echo-last-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: 13.5px; line-height: 1.45;
+  position: relative; z-index: 2;
+}
+.echo-last-meta {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--gold); margin-top: 8px;
+  position: relative; z-index: 2;
+}
+.echo-open {
+  display: inline-block; margin-top: 10px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--gold); text-decoration: none;
+  border: 1px solid var(--gold); padding: 6px 11px;
+  border-radius: 100px;
+  position: relative; z-index: 2;
+}
+
+/* Competencies mini */
+.comp-list { display: flex; flex-direction: column; gap: 6px; }
+.comp {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px; align-items: center;
+  font-family: "Inter", sans-serif; font-size: 12px;
+  color: #334155;
+}
+.comp-name { font-weight: 500; }
+.comp-lv {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.comp-lv.basis  { color: var(--muted); }
+.comp-lv.grund  { color: var(--accent); }
+.comp-lv.fordj  { color: #15803d; }
+
+/* === ECHO DRAWER === */
+.drawer {
+  position: fixed; right: 0; top: 56px; bottom: 0;
+  width: 380px; max-width: 100vw;
+  background: #0f172a; color: #fff;
+  z-index: 60; transform: translateX(100%);
+  transition: transform .35s var(--ease);
+  display: flex; flex-direction: column;
+  box-shadow: -10px 0 40px -10px rgba(15,23,42,0.4);
+}
+.drawer.open { transform: translateX(0); }
+.drawer-head {
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.drawer-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold);
+}
+.drawer-eye::before { content: "● "; }
+.drawer-close {
+  background: transparent; border: 0; color: rgba(255,255,255,0.6);
+  cursor: pointer; font-size: 22px; line-height: 1;
+}
+.drawer-body {
+  flex: 1; overflow-y: auto;
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 14px;
+}
+.msg {
+  font-family: var(--serif); font-size: 14.5px; line-height: 1.5;
+  padding: 12px 14px; border-radius: 6px;
+}
+.msg.echo {
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.18);
+  font-style: italic;
+}
+.msg.user {
+  background: rgba(255,255,255,0.06);
+  align-self: flex-end; max-width: 80%;
+}
+.drawer-foot {
+  padding: 14px 22px; border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex; gap: 10px;
+}
+.drawer-foot input {
+  flex: 1; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff; padding: 10px 14px; border-radius: 100px;
+  font-family: "Inter", sans-serif; font-size: 13px;
+}
+.drawer-foot input::placeholder { color: rgba(255,255,255,0.4); }
+.drawer-foot button {
+  background: var(--gold); color: #422006;
+  border: 0; padding: 10px 16px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer;
+}
+
+.scrim {
+  position: fixed; inset: 56px 0 0 0;
+  background: rgba(15,23,42,0.3); z-index: 55;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s var(--ease);
+}
+.scrim.on { opacity: 1; pointer-events: auto; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+    <div class="tb-crumbs">Inloggad som <strong>Sara A.</strong> · 9C · onsdag <strong>29 april</strong></div>
+    <div class="tb-spacer"></div>
+    <div class="tb-meter" title="AI-tokens kvar denna vecka">
+      <span>AI</span>
+      <div class="tb-meter-bar"><div class="tb-meter-fill" style="width:38%;"></div></div>
+      <span>62 % kvar</span>
+    </div>
+    <button class="tb-echo" id="echoBtn">Echo</button>
+    <a href="#" class="tb-user" title="Sara A.">SA</a>
+  </header>
+
+  <!-- SIDEBAR (fylls i nästa commit) -->
+  <aside class="side" id="side"></aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <header class="head">
+      <div>
+        <div class="h-eyebrow">Översikt · Korridoren</div>
+        <h1>Det är onsdag <em>29 april</em>.</h1>
+      </div>
+      <div class="head-meta">
+        Vecka 18 · 2026<br>
+        <strong>Lönedag</strong> 25 maj · 26 dgr<br>
+        <strong>Hyra</strong> 1 maj · 2 dgr
+      </div>
+    </header>
+
+    <div class="layout">
+      <section>
+        <div class="col-eye">Aktörer · 8 rum</div>
+        <div class="corridor" id="corridor"></div>
+      </section>
+      <aside>
+        <div class="col-eye">Verktyg · snabbtillgång</div>
+        <div class="desk" id="desk"></div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL (fylls i nästa commit) -->
+  <aside class="right" id="right"></aside>
+
+</div>
+
+<!-- ECHO DRAWER (fylls i nästa commit) -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer"></aside>
+
+<script>
+// === SIDOMENY ===
+const NAV = {
+  verktyg: [
+    { ic: "▤",  nm: "Översikt",         badge: "",        active: true,  href: "#" },
+    { ic: "≡",  nm: "Transaktioner",    badge: "12 ok",   href: "#" },
+    { ic: "▦",  nm: "Budget april",     badge: "78 %",    href: "#" },
+    { ic: "◎",  nm: "Mål & sparande",   badge: "4",       href: "#" },
+    { ic: "↗",  nm: "Investeringssim",  badge: "",        href: "#" },
+    { ic: "%",  nm: "Lånekalkylator",   badge: "",        href: "#" },
+    { ic: "◷",  nm: "Pension",          badge: "",        href: "#" },
+    { ic: "§",  nm: "Skattedeklaration", badge: "öppen",  badgeKind: "gold", href: "#" },
+    { ic: "□",  nm: "Kvitton & filer",  badge: "",        href: "#" },
+    { ic: "⚙",  nm: "Inställningar",    badge: "",        href: "#" },
+  ],
+  aktorer: [
+    { ic: "B",  nm: "Banken",                 badge: "1", badgeKind: "gold", href: "#" },
+    { ic: "A",  nm: "Arbetsgivaren",          badge: "",  href: "#" },
+    { ic: "$",  nm: "Avanza",                 badge: "",  href: "#" },
+    { ic: "L",  nm: "Lånegivaren",            badge: "",  href: "#" },
+    { ic: "⚡", nm: "Tibber & Folksam",       badge: "",  href: "#" },
+    { ic: "S",  nm: "Skatteverket",           badge: "!",  badgeKind: "gold", href: "#" },
+    { ic: "P",  nm: "Pensionsmyndigheten",    badge: "",  href: "#" },
+    { ic: "H",  nm: "Hyresvärden",            badge: "1 maj", badgeKind: "gray", href: "#" },
+  ],
+  skola: [
+    { ic: "✦",  nm: "Mina moduler",       badge: "1 ny", href: "#" },
+    { ic: "★",  nm: "Min portfolio",      badge: "",     href: "#" },
+    { ic: "❝",  nm: "Reflektioner",       badge: "1 prompt", badgeKind: "gold", href: "#" },
+    { ic: "▷",  nm: "Mina uppdrag",       badge: "2",    href: "#" },
+    { ic: "✉",  nm: "Meddelanden",        badge: "1",    href: "#" },
+  ],
+};
+
+function renderNav() {
+  const box = document.getElementById("side");
+  const sections = [
+    { eye: "Verktyg",  items: NAV.verktyg },
+    { eye: "Aktörer",  items: NAV.aktorer },
+    { eye: "Skola",    items: NAV.skola },
+  ];
+  let html = "";
+  sections.forEach(s => {
+    html += `<div class="dock-eye">${s.eye}</div>`;
+    s.items.forEach(it => {
+      const cls = it.active ? "dock-link active" : "dock-link";
+      const badgeCls = it.badgeKind ? "badge " + it.badgeKind : "badge";
+      const badge = it.badge ? `<span class="${badgeCls}">${it.badge}</span>` : "";
+      html += `<a class="${cls}" href="${it.href}"><span class="ic">${it.ic}</span><span class="nm">${it.nm}</span>${badge}</a>`;
+    });
+  });
+  box.innerHTML = html;
+}
+renderNav();
+
+// === KORRIDOR (8 aktörer) ===
+const ROOMS = [
+  { num: "01", name: "Banken",            sub: "Privatkonto · ISK · Sparkonto · Kreditkort", v: "14 282", vu: "kr", meta: "Tillgänglig", pulse: true },
+  { num: "02", name: "Arbetsgivaren",     sub: "Sthlm Sjukhus AB · 80 % tjänst",              v: "25 maj", vu: "",   meta: "Nästa lön" },
+  { num: "03", name: "Avanza",            sub: "ISK · 4 fonder · 600 kr/mån",                  v: "8 460",  vu: "kr", meta: "+2,1 % i april" },
+  { num: "04", name: "Lånegivaren",       sub: "Studielån · CSN · ränta 1,7 %",                v: "38 200", vu: "kr", meta: "Skuld kvar" },
+  { num: "05", name: "Tibber & Folksam",  sub: "El · Hemförsäkring · Olycksfall",              v: "812",    vu: "kr", meta: "El april" },
+  { num: "06", name: "Skatteverket",      sub: "Förifylld deklaration · 1 ändring föreslås",   v: "2 maj",  vu: "",   meta: "Sista dag", pulse: true },
+  { num: "07", name: "Pensionsmyndigheten", sub: "Inkomst- + premiepension · prognos 2061",     v: "12 800", vu: "/mån", meta: "Vid 67" },
+  { num: "08", name: "Hyresvärden",       sub: "Stockholmshem · 2:a · Hökarängen",             v: "7 240",  vu: "kr", meta: "1 maj" },
+];
+function renderCorridor() {
+  const box = document.getElementById("corridor");
+  box.innerHTML = ROOMS.map(r => `
+    <a class="room" href="#">
+      <span class="room-num">${r.num}</span>
+      <div>
+        <div class="room-name">${r.name}${r.pulse ? '<span class="room-pulse"></span>' : ''}</div>
+        <div class="room-sub">${r.sub}</div>
+      </div>
+      <div>
+        <div class="room-num-side">${r.v}<em>${r.vu}</em></div>
+        <div class="room-num-meta">${r.meta}</div>
+      </div>
+    </a>
+  `).join("");
+}
+renderCorridor();
+
+// === SKRIVBORDET (5 verktyg-genvägar) ===
+const TOOLS = [
+  { name: "Bokföring",        sub: "Senast: 28 april",      num: "12 ok", numMeta: "Att klassa", flag: true,  emValue: true },
+  { name: "Budget april",     sub: "15 kategorier · 22 dgr", num: "78 %",  numMeta: "Förbrukad" },
+  { name: "Mina mål",         sub: "Buffert · Körkort · Interrail", num: "4", numMeta: "Aktiva" },
+  { name: "Skattedeklaration", sub: "Granska 1 förslag",    num: "Öppen", numMeta: "2 maj",      flag: true },
+  { name: "Reflektioner",     sub: "Senast 17 april",        num: "1",     numMeta: "Prompt" },
+];
+function renderDesk() {
+  const box = document.getElementById("desk");
+  box.innerHTML = TOOLS.map(t => `
+    <a class="tool ${t.flag ? 'flag' : ''}" href="#">
+      <div>
+        <div class="tool-name">${t.name}</div>
+        <div class="tool-sub">${t.sub}</div>
+      </div>
+      <div>
+        <div class="tool-num">${t.emValue ? `<em>${t.num.split(' ')[0]}</em> ${t.num.split(' ').slice(1).join(' ')}` : t.num}</div>
+        <div class="tool-sub">${t.numMeta}</div>
+      </div>
+    </a>
+  `).join("");
+}
+renderDesk();
+
+// === HÖGER PANEL ===
+function renderRight() {
+  const box = document.getElementById("right");
+  box.innerHTML = `
+    <div class="rp-section">
+      <div class="rp-eye">Pågående moduler</div>
+      <div class="rp-title">3 i <em>arbete</em></div>
+      <a class="mod" href="#">
+        <div class="mod-name">Ditt första bolån</div>
+        <div class="mod-meta">Steg 4/12 · KALP-räkning · 14 min kvar</div>
+        <div class="mod-bar"><div class="mod-bar-fill" style="width:33%;"></div></div>
+      </a>
+      <a class="mod" href="#">
+        <div class="mod-name">Lönesamtalet</div>
+        <div class="mod-meta">Runda 2/5 med Maria · pågår</div>
+        <div class="mod-bar"><div class="mod-bar-fill" style="width:40%;"></div></div>
+      </a>
+      <a class="mod" href="#">
+        <div class="mod-name">Skatten i april</div>
+        <div class="mod-meta">Steg 7/9 · deklaration kvar</div>
+        <div class="mod-bar"><div class="mod-bar-fill" style="width:78%;"></div></div>
+      </a>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Aktiva uppdrag</div>
+      <div class="rp-title">2 från <em>Anders Lind</em></div>
+      <a class="asgn" href="#">
+        <div class="asgn-name">Bolåneansökan · 2,4 Mkr</div>
+        <div class="asgn-meta">Förfaller 5 maj · 6 dagar</div>
+        <div class="asgn-from">Anders Lind · klass 9C · alla elever</div>
+      </a>
+      <a class="asgn" href="#">
+        <div class="asgn-name">Peer-review · Hassan O.</div>
+        <div class="asgn-meta">Förfaller 30 april · 1 dag</div>
+        <div class="asgn-from">Anders Lind · matchad partner</div>
+      </a>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Echo · senaste</div>
+      <div class="echo-last">
+        <div class="echo-last-text">"Du har 12 transaktioner från Coop, Ica och Hemköp ovettade. Vill du gå igenom dem nu — eller efter att du tittat på din mat-kategori i budgeten?"</div>
+        <div class="echo-last-meta">Echo · 14:22 idag · Haiku 4.5</div>
+        <a href="#" class="echo-open" onclick="document.getElementById('echoBtn').click(); return false;">Öppna chatten →</a>
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Kompetenser · 12 system</div>
+      <div class="rp-title">Nivå <em>grund</em> i 7 av 12</div>
+      <div class="comp-list">
+        <div class="comp"><span class="comp-name">Bokföring</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Budget</span><span class="comp-lv fordj">fördj.</span></div>
+        <div class="comp"><span class="comp-name">Sparande</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Skatte-grund</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Lön</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Lån & räntor</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Investering</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Pensionsförst.</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Kreditförståelse</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Försäkring</span><span class="comp-lv basis">basis</span></div>
+        <div class="comp"><span class="comp-name">Konsumenträtt</span><span class="comp-lv grund">grund</span></div>
+        <div class="comp"><span class="comp-name">Reflektion</span><span class="comp-lv grund">grund</span></div>
+      </div>
+    </div>
+  `;
+}
+renderRight();
+
+// === ECHO DRAWER ===
+function renderDrawer() {
+  const box = document.getElementById("drawer");
+  box.innerHTML = `
+    <div class="drawer-head">
+      <div>
+        <div class="drawer-eye">Echo · sokratisk</div>
+        <div style="font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:0.6px;">Claude Haiku 4.5 · 1 240 tokens denna chatt</div>
+      </div>
+      <button class="drawer-close" id="drawerClose" aria-label="Stäng">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="msg echo">"Hej Sara. Jag har tittat på din april — vad vill du börja med? De 12 ovettade transaktionerna, eller restaurang-kategorin som ligger 75 % över budget?"</div>
+      <div class="msg user">Restaurang. Det är samma som förra månaden känns det.</div>
+      <div class="msg echo">"Du har rätt. Mars var 1 940 kr på restaurang — april blev 2 100. Båda mot en budget på 1 200. Vad hände den 17:e april? Jag ser tre poster på Max under 47 minuter."</div>
+      <div class="msg user">Det var efter laxsim-träningen, vi var fyra som gick.</div>
+      <div class="msg echo">"Fyra på Max blir snabbt 600 kr. Hur ofta händer det i månaden — och är 1 200 kr/mån realistisk för en budget då?"</div>
+      <div class="msg user" style="opacity:0.45;font-style:italic;">Sara skriver...</div>
+    </div>
+    <div class="drawer-foot">
+      <input type="text" placeholder="Skriv till Echo…" />
+      <button>Skicka</button>
+    </div>
+  `;
+  document.getElementById("drawerClose").addEventListener("click", () => {
+    document.getElementById("drawer").classList.remove("open");
+    document.getElementById("scrim").classList.remove("on");
+  });
+}
+renderDrawer();
+
+const SIDE = document.getElementById("side");
+const CORRIDOR = document.getElementById("corridor");
+const DESK = document.getElementById("desk");
+const RIGHT = document.getElementById("right");
+const DRAWER = document.getElementById("drawer");
+const SCRIM = document.getElementById("scrim");
+const ECHOBTN = document.getElementById("echoBtn");
+
+ECHOBTN.addEventListener("click", () => {
+  DRAWER.classList.add("open");
+  SCRIM.classList.add("on");
+});
+SCRIM.addEventListener("click", () => {
+  DRAWER.classList.remove("open");
+  SCRIM.classList.remove("on");
+});
+</script>
+</body>
+</html>

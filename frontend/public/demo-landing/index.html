@@ -1,0 +1,2958 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ekonomilabbet · Privatekonomi som händer</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e5e7eb;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --ease: cubic-bezier(.77, 0, .175, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg); color: var(--fg);
+  -webkit-font-smoothing: antialiased; line-height: 1.5;
+}
+.shell { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+section { padding: clamp(80px, 12vh, 140px) 0; position: relative; }
+section + section { border-top: 1px solid var(--rule); }
+h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
+
+/* ─── Top-nav (höger hörn, text-only — adaptiv färg, samma serif-bounce
+       som persona-nav). Default = mörk text, body.nav-on-dark = vit. ─── */
+.top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
+}
+.top-nav-link {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
+  color: var(--fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  /* Subtle 1px stroke-shadow ger stadig kant även utan hover */
+  text-shadow: 0 0 0.4px currentColor, 0 1px 0 rgba(255,255,255,0.4);
+  transform-origin: right center;
+  transition:
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
+  cursor: pointer;
+}
+.top-nav-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+.top-nav-link-primary { color: var(--accent); }
+.top-nav-link-primary:hover { color: var(--accent); }
+
+/* På mörk bg: vit text + multi-stop shadow (1px outline + 2px drop)
+   för kristallklar läsbarhet mot rörlig video, ingen halo-blur. */
+body.nav-on-dark .top-nav-link {
+  color: #fff;
+  text-shadow:
+    0 0 1px rgba(0,0,0,0.95),
+    0 1px 2px rgba(0,0,0,0.85),
+    0 2px 6px rgba(0,0,0,0.4);
+}
+body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
+
+@media (max-width: 600px) {
+  .top-nav { top: 16px; right: 18px; gap: 18px; }
+  .top-nav-link { font-size: 13px; }
+  .top-nav-link:hover { font-size: 18px; }
+}
+
+/* ─── AOS-style entrance ─── */
+[data-fx] {
+  opacity: 0;
+  transition:
+    opacity .9s cubic-bezier(.4,0,.2,1),
+    transform .9s cubic-bezier(.34,1.18,.64,1);
+  will-change: opacity, transform;
+}
+[data-fx="fade-up"]    { transform: translate3d(0, 36px, 0); }
+[data-fx="fade-down"]  { transform: translate3d(0, -28px, 0); }
+[data-fx="fade-left"]  { transform: translate3d(-36px, 0, 0); }
+[data-fx="fade-right"] { transform: translate3d(36px, 0, 0); }
+[data-fx="zoom-in"]    { transform: scale(0.94); }
+[data-fx].is-in {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+[data-fx-delay="80"]   { transition-delay: 80ms; }
+[data-fx-delay="160"]  { transition-delay: 160ms; }
+[data-fx-delay="240"]  { transition-delay: 240ms; }
+[data-fx-delay="320"]  { transition-delay: 320ms; }
+[data-fx-delay="400"]  { transition-delay: 400ms; }
+[data-fx-stagger] > * {
+  opacity: 0; transform: translate3d(0, 24px, 0);
+  transition: opacity .8s cubic-bezier(.4,0,.2,1),
+              transform .8s cubic-bezier(.34,1.18,.64,1);
+}
+[data-fx-stagger].is-in > * { opacity: 1; transform: translate3d(0, 0, 0); }
+[data-fx-stagger].is-in > *:nth-child(1) { transition-delay: 0ms; }
+[data-fx-stagger].is-in > *:nth-child(2) { transition-delay: 120ms; }
+[data-fx-stagger].is-in > *:nth-child(3) { transition-delay: 240ms; }
+[data-fx-stagger].is-in > *:nth-child(4) { transition-delay: 360ms; }
+
+/* ─── Hero ─── */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  padding: 90px clamp(24px, 6vw, 80px) 18px clamp(32px, 8vw, 120px);
+  position: relative; overflow: hidden;
+  background: #0f172a;
+}
+
+/* Full-bleed bakgrunds-video-stack: 3 videos staplade, aktiv = opacity 1 */
+.hero-bg-stack {
+  position: absolute; inset: 0; z-index: 0;
+}
+.hero-bg-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center 30%;
+  opacity: 0;
+  transition: opacity .65s cubic-bezier(.4, 0, .2, 1);
+  pointer-events: none;
+}
+.hero-bg-video.is-active { opacity: 1; }
+
+/* Mörk gradient-scrim över videon för text-läsbarhet */
+.hero-bg-scrim {
+  position: absolute; inset: 0; z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      rgba(15,23,42,0.55) 0%,
+      rgba(15,23,42,0.15) 25%,
+      rgba(15,23,42,0.15) 55%,
+      rgba(15,23,42,0.85) 100%),
+    linear-gradient(90deg,
+      rgba(15,23,42,0.45) 0%,
+      rgba(15,23,42,0) 50%);
+}
+
+.hero-inner {
+  max-width: 1400px; margin: 0 auto;
+  width: 100%; position: relative; z-index: 2;
+  display: flex; flex-direction: column;
+  flex: 1;
+  min-height: calc(100vh - 126px);
+}
+/* Ambient gradient-mesh som driftar långsamt */
+.hero::before {
+  content: ""; position: absolute; inset: -10% -5%;
+  background:
+    radial-gradient(ellipse 50% 40% at 20% 30%, rgba(220,76,43,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 35% at 80% 20%, rgba(251,191,36,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 70% 75%, rgba(99,102,241,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 35% at 15% 85%, rgba(220,76,43,0.04) 0%, transparent 60%),
+    linear-gradient(180deg, #f8fafc 0%, var(--bg) 50%, #f8fafc 100%);
+  z-index: 0;
+  animation: ambient-drift 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes ambient-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(-2%, 1%) scale(1.04); }
+  66%  { transform: translate(1.5%, -1.5%) scale(1.02); }
+  100% { transform: translate(-1%, 0.5%) scale(1.06); }
+}
+/* Hairline grid med radial mask */
+.hero::after {
+  content: ""; position: absolute; inset: 0;
+  background-image:
+    linear-gradient(0deg, transparent 0%, transparent 49.5%, rgba(15,23,42,0.025) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 0%, transparent 49.5%, rgba(15,23,42,0.025) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  z-index: 0;
+  opacity: 0.7;
+}
+.hero-shell { position: relative; z-index: 2; max-width: 720px; margin: 0; flex: 0 0 auto; }
+.hero-stage {
+  position: relative; z-index: 2;
+  flex: 1 1 auto;
+  margin: clamp(24px, 3vh, 40px) 0 0;
+  display: flex; flex-direction: column;
+}
+.hero-stage-head {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 56px); align-items: end;
+  padding-bottom: clamp(20px, 3vh, 36px);
+}
+@media (max-width: 800px) {
+  .hero-stage-head { grid-template-columns: 1fr; gap: 14px; padding-bottom: 18px; }
+}
+.hero-stage-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 12px;
+}
+.hero-stage-title {
+  font-size: clamp(22px, 2.6vw, 32px); font-weight: 700;
+  letter-spacing: -0.8px; line-height: 1.1; max-width: 22ch;
+}
+.hero-stage-title em {
+  font-family: var(--serif); font-style: italic; color: var(--accent);
+  font-weight: 500;
+}
+.hero-stage-lede {
+  font-size: 14.5px; color: #475569; line-height: 1.55;
+  font-family: var(--serif); font-style: italic;
+  max-width: 42ch; padding-bottom: 4px;
+}
+.hero-brand {
+  position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+  z-index: 4; text-align: center;
+}
+.brand-name {
+  font-family: var(--serif);
+  font-size: clamp(26px, 3.6vw, 38px);
+  font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; line-height: 1;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0,0,0,0.4);
+}
+.brand-tagline {
+  margin-top: 4px;
+  font-family: var(--mono); font-size: 11.5px;
+  letter-spacing: 2.4px; text-transform: uppercase;
+  font-weight: 500; color: rgba(255,255,255,0.75); white-space: nowrap;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.5);
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 11px;
+  padding: 9px 16px;
+  background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  border-radius: 4px; letter-spacing: 1.4px; font-weight: 600;
+  margin-bottom: 28px;
+}
+.hero-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--gold); border-radius: 50%; }
+.hero h1 {
+  font-size: clamp(48px, 7vw, 96px);
+  letter-spacing: -2.6px; line-height: 0.96;
+  max-width: 14ch; margin-bottom: 22px;
+  color: #fff;
+  text-shadow: 0 4px 32px rgba(0,0,0,0.5);
+}
+.hero h1 em {
+  color: var(--accent); font-style: italic;
+  font-family: var(--serif); font-weight: 500;
+}
+/* Per-persona headline: animera in när byter */
+.hero h1 [data-h1-a], .hero h1 [data-h1-b], .hero h1 [data-h1-c] {
+  display: inline-block;
+}
+.hero h1.is-flipping [data-h1-a],
+.hero h1.is-flipping [data-h1-b],
+.hero h1.is-flipping [data-h1-c] {
+  animation: h1-flip-in 0.8s cubic-bezier(.34, 1.18, .64, 1) both;
+}
+.hero h1.is-flipping [data-h1-a] { animation-delay: 0s; }
+.hero h1.is-flipping [data-h1-b] { animation-delay: 0.12s; }
+.hero h1.is-flipping [data-h1-c] { animation-delay: 0.22s; }
+@keyframes h1-flip-in {
+  from { opacity: 0; letter-spacing: 0.4em; transform: translateY(14px); filter: blur(4px); }
+  to   { opacity: 1; letter-spacing: -2.6px; transform: translateY(0); filter: blur(0); }
+}
+.hero p {
+  font-size: 17px; max-width: 540px; font-weight: 500;
+  color: rgba(255,255,255,0.88); line-height: 1.55; margin-bottom: 28px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.hero p.is-flipping {
+  animation: subhead-flip 0.7s cubic-bezier(.34, 1.18, .64, 1) both;
+}
+@keyframes subhead-flip {
+  from { opacity: 0; transform: translateY(10px); filter: blur(2px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.hero-stats {
+  display: flex; gap: 36px; padding-top: 24px;
+  border-top: 1px solid rgba(15,23,42,0.08); flex-wrap: wrap;
+}
+.hero-stat-num { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.6px; }
+.hero-stat-label {
+  font-size: 11px; color: var(--muted); font-family: var(--mono);
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.hero-scroll-hint {
+  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2.5px;
+  color: var(--muted); z-index: 3;
+}
+.hero-scroll-line {
+  width: 1px; height: 32px;
+  background: linear-gradient(180deg, var(--muted) 0%, transparent 100%);
+  animation: scroll-pulse 2.4s ease-in-out infinite;
+}
+@keyframes scroll-pulse {
+  0%, 100% { transform: scaleY(1); transform-origin: top; opacity: 0.6; }
+  50% { transform: scaleY(0.4); opacity: 1; }
+}
+
+/* ─── System-intro ─── */
+.intro {
+  background: var(--bg);
+}
+.intro-grid {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 96px); align-items: start;
+}
+@media (max-width: 900px) { .intro-grid { grid-template-columns: 1fr; gap: 40px; } }
+.intro-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 22px;
+}
+.intro h2 {
+  font-size: clamp(34px, 4.4vw, 56px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05;
+  max-width: 16ch; margin-bottom: 28px;
+}
+.intro h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--accent);
+  font-weight: 500;
+}
+.intro p {
+  font-size: 17px; color: #334155; line-height: 1.65;
+  margin-bottom: 18px; max-width: 56ch;
+}
+.intro p strong { color: var(--fg); font-weight: 700; }
+
+.intro-pillars {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.pillar {
+  display: grid; grid-template-columns: 56px 1fr;
+  gap: 18px; padding: 22px 4px;
+  border-bottom: 1px solid var(--rule);
+}
+.pillar:last-child { border-bottom: 0; }
+.pillar-num {
+  font-family: var(--serif); font-size: 28px; font-weight: 700;
+  letter-spacing: -0.6px; color: var(--accent); line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.pillar-text h3 {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.2px;
+  margin-bottom: 5px;
+}
+.pillar-text p {
+  font-size: 14.5px; color: #475569; line-height: 1.55;
+  max-width: 44ch; margin: 0;
+}
+
+/* ─── Personas ─── */
+.personas {
+  background: linear-gradient(180deg, var(--bg) 0%, #f1f5f9 100%);
+}
+.personas-head {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 80px); align-items: end;
+  margin-bottom: 56px;
+}
+@media (max-width: 800px) { .personas-head { grid-template-columns: 1fr; gap: 24px; } }
+.personas-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 22px;
+}
+.personas h2 {
+  font-size: clamp(34px, 4.4vw, 56px); font-weight: 700;
+  letter-spacing: -1.6px; line-height: 1.05; max-width: 14ch;
+}
+.personas-lede {
+  font-size: 16px; color: #475569; line-height: 1.6; max-width: 42ch;
+  font-family: var(--serif); font-style: italic; padding-bottom: 8px;
+}
+
+/* ─── Stage: massive backdrop + 3 figurer på samma baseline ─── */
+.figures-stage {
+  position: relative;
+  isolation: isolate;
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 0 clamp(8px, 2vw, 32px);
+}
+
+/* Gigantisk serif-text BAKOM figurerna */
+.figures-backdrop {
+  position: absolute;
+  left: 50%; bottom: clamp(120px, 18vh, 220px);
+  transform: translateX(-50%);
+  z-index: 0;
+  font-family: var(--serif);
+  font-size: clamp(120px, 22vw, 280px);
+  font-weight: 700; letter-spacing: -0.08em;
+  color: rgba(15, 23, 42, 0.045);
+  line-height: 0.85;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+.figures-backdrop em {
+  font-style: italic; font-weight: 500;
+  color: rgba(220, 76, 43, 0.07);
+}
+
+.figures {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 56px);
+  align-items: end;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .figures { grid-template-columns: 1fr; gap: 32px; }
+  .figures-backdrop { font-size: 22vw; }
+}
+
+/* Tunn ground-rule under hela figur-raden */
+.figures-ground {
+  position: relative; z-index: 1;
+  height: 1px;
+  margin-top: -1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(15,23,42,0.18) 12%,
+    rgba(15,23,42,0.18) 88%,
+    transparent 100%);
+  pointer-events: none;
+}
+
+.figure {
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end;
+  cursor: pointer;
+  text-decoration: none; color: inherit;
+  outline: 0;
+  transition:
+    transform .55s cubic-bezier(.34, 1.18, .64, 1),
+    filter .35s var(--ease),
+    opacity .35s var(--ease);
+  transform-origin: center bottom;
+}
+.figure-video-wrap {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  min-height: 320px;
+  position: relative;
+}
+.figure-video {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: contain; object-position: center bottom;
+  display: block;
+  pointer-events: none;
+}
+
+.figure-caption {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 18px 0 0;
+  text-align: center;
+  transition: transform .35s var(--ease);
+}
+.figure-caption strong {
+  font-family: var(--serif); font-size: clamp(20px, 2.4vw, 28px);
+  font-weight: 700; letter-spacing: -0.5px; line-height: 1;
+  color: var(--fg);
+}
+.figure-caption span {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* Aktiv (auto eller hover): störst och mest synlig.
+   Övriga: dead state — mindre, gråtonad, dimmad. */
+.figures .figure {
+  transform: scale(0.86);
+  opacity: 0.42;
+  filter: saturate(0.4) brightness(1.02);
+}
+.figures .figure.is-active,
+.figure:hover, .figure:focus-visible {
+  transform: translateY(-14px) scale(1.08);
+  opacity: 1;
+  filter: none;
+  z-index: 3;
+}
+/* När någon HOVRAS: alla utom hovrade fryses i dead-state */
+.figures:hover .figure {
+  transform: scale(0.86);
+  opacity: 0.42;
+  filter: saturate(0.4) brightness(1.02);
+}
+.figures:hover .figure:hover,
+.figures:hover .figure:focus-visible {
+  transform: translateY(-14px) scale(1.08);
+  opacity: 1;
+  filter: none;
+  z-index: 3;
+}
+.figure:hover .figure-caption,
+.figure:focus-visible .figure-caption {
+  transform: translateY(2px);
+}
+.figure:focus-visible .figure-video-wrap {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Subtil ambient-puls när inget är hovrat (sätter inte opacity, bara scale) */
+.figures:not(:hover) .figure[data-breathe] {
+  animation: figure-breath 6s ease-in-out infinite;
+}
+.figures:not(:hover) .figure[data-breathe]:nth-child(2) { animation-delay: -2s; }
+.figures:not(:hover) .figure[data-breathe]:nth-child(3) { animation-delay: -4s; }
+@keyframes figure-breath {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.005); }
+}
+
+/* "Coming soon"-pill för Peter & Evelina — i caption-området, inte
+   på figuren */
+.figure[data-soon] .figure-caption::before {
+  content: "KOMMER SNART";
+  display: inline-block;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.4px;
+  background: rgba(15,23,42,0.88); color: #fff;
+  padding: 4px 9px; border-radius: 100px;
+  margin-bottom: 6px;
+}
+
+/* Mikro-data-float: liten badge som driftar nära figuren */
+.figure-float {
+  position: absolute; z-index: 3;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.4px;
+  background: #fff; color: var(--fg);
+  padding: 7px 11px; border-radius: 100px;
+  border: 1px solid var(--rule);
+  box-shadow: 0 8px 22px -8px rgba(15,23,42,0.18);
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  animation:
+    float-in 0.6s cubic-bezier(.34, 1.4, .64, 1) 3.4s forwards,
+    float-drift 7s ease-in-out 4.0s infinite;
+}
+.figure[data-persona="linda"] .figure-float   { top: 28%; right: -8%; }
+.figure[data-persona="evelina"] .figure-float { top: 22%; left: -10%; }
+.figure[data-persona="peter"] .figure-float   { top: 18%; right: -6%; }
+.figure-float::before {
+  content: ""; display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); margin-right: 7px;
+  vertical-align: middle;
+  animation: float-pulse 1.8s ease-in-out infinite;
+}
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes float-drift {
+  0%, 100% { transform: translate(0, 0); }
+  25%      { transform: translate(2px, -3px); }
+  50%      { transform: translate(-1px, -1px); }
+  75%      { transform: translate(-2px, 2px); }
+}
+@keyframes float-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.3); }
+}
+/* Floats syns bara på aktiv figur — dead-state har inga floats */
+.figure-float { transition: opacity .35s var(--ease); }
+.figure:not(.is-active) .figure-float { opacity: 0; }
+.figures:hover .figure-float { opacity: 0; }
+.figures:hover .figure:hover .figure-float { opacity: 1; }
+
+/* ─── Vertikal persona-nav (höger sida, Linda-tidslinje-pattern) ─── */
+.hero-persona-nav {
+  position: absolute;
+  right: clamp(20px, 3vw, 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex; flex-direction: column; gap: 16px;
+  pointer-events: auto;
+}
+@media (max-width: 1000px) { .hero-persona-nav { display: none; } }
+.hero-persona-nav-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--gold);
+  padding-left: 26px;
+}
+.hero-persona-nav-stack {
+  position: relative;
+  display: flex; flex-direction: column;
+  padding: 6px 0;
+}
+.hero-persona-nav-rail {
+  position: absolute;
+  left: 8px; top: 14px; bottom: 14px; width: 1.5px;
+  background: rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+.hero-persona-nav-cursor {
+  position: absolute; left: 1px; top: 14px;
+  width: 16px; height: 16px;
+  background: var(--accent); border-radius: 50%;
+  box-shadow:
+    0 0 0 5px rgba(220,76,43,0.18),
+    0 0 22px rgba(220,76,43,0.65),
+    inset 0 0 0 1px rgba(255,255,255,0.3);
+  transition: top .65s cubic-bezier(.34, 1.18, .64, 1);
+  pointer-events: none;
+  z-index: 2;
+}
+.hero-persona-nav-cursor::after {
+  content: ""; position: absolute; inset: -5px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(220, 76, 43, 0.5);
+  animation: nav-cursor-pulse 2.4s ease-in-out infinite;
+}
+@keyframes nav-cursor-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.7); opacity: 0; }
+}
+.hero-persona-nav-list {
+  list-style: none; display: flex; flex-direction: column;
+  gap: 26px; padding: 0 0 0 26px;
+  position: relative;
+}
+.hero-persona-nav-item {
+  position: relative;
+  cursor: pointer;
+  outline: 0;
+  transition:
+    color .3s var(--ease),
+    transform .3s var(--ease),
+    opacity .3s var(--ease);
+  opacity: 0.55;
+}
+.hero-persona-nav-item:hover { opacity: 0.85; }
+.hero-persona-nav-item.is-active { opacity: 1; transform: translateX(4px); }
+.hero-persona-nav-item::before {
+  content: ""; position: absolute;
+  left: -22px; top: 6px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.3);
+  transition: opacity .3s;
+}
+.hero-persona-nav-item.is-active::before { opacity: 0; }
+.hero-persona-nav-name {
+  display: block;
+  font-family: var(--serif);
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.2px; line-height: 1.05;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  transform-origin: left center;
+  transition:
+    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
+    font-weight .3s var(--ease),
+    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1);
+}
+.hero-persona-nav-item.is-active .hero-persona-nav-name {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+}
+@keyframes nav-name-pop {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.hero-persona-nav-role {
+  display: block;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 3px;
+  transition: color .3s var(--ease), font-size .3s var(--ease);
+}
+.hero-persona-nav-item.is-active .hero-persona-nav-role {
+  color: var(--gold);
+  font-size: 10.5px;
+}
+
+/* ─── Magazine credits — sitter precis under info-panelen ─── */
+.cover-credits {
+  position: relative; z-index: 2;
+  margin: 14px 0 6px;
+  padding: 0 50px;
+  display: flex; justify-content: flex-start; align-items: center;
+  gap: clamp(14px, 2vw, 32px);
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  flex-wrap: wrap;
+}
+/* Wrap kring info-panel + vertikal scroll-text — krymper till samma
+   bredd som panelen så att CTA:n (position absolute) hamnar på panelens
+   högerkant, inte ute i hero-innerns fulla bredd. */
+.hero-info-wrap {
+  position: relative;
+  margin-top: auto;
+  max-width: calc(100% - clamp(220px, 18vw, 280px));
+}
+@media (max-width: 1100px) {
+  .hero-info-wrap { max-width: 100%; }
+}
+/* Vertikal scroll-text på vänster kant av info-panelen — sitter
+   utanför panelen så den inte clippas av overflow:hidden */
+.hero-info-scroll {
+  position: absolute;
+  left: 0; bottom: 0; top: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  width: 50px;  /* matchar info-panelens margin-left */
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 2.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 3;
+}
+.hero-info-scroll-text {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+.hero-info-scroll-arrow {
+  font-size: 14px;
+  animation: scroll-arrow-bounce 5s cubic-bezier(.34, 1.56, .64, 1) infinite;
+  transform-origin: center;
+}
+@keyframes scroll-arrow-bounce {
+  0%, 80%, 100% { transform: scale(1) translateY(0); color: rgba(255,255,255,0.55); }
+  84%           { transform: scale(1.4) translateY(2px); color: var(--gold); }
+  88%           { transform: scale(0.92) translateY(6px); }
+  92%           { transform: scale(1.15) translateY(3px); }
+  96%           { transform: scale(1) translateY(0); }
+}
+@media (max-width: 800px) { .hero-info-scroll { display: none; } }
+.cover-credits-sep {
+  display: inline-block; width: 4px; height: 4px;
+  background: var(--accent); border-radius: 50%;
+  flex-shrink: 0;
+}
+.cover-credits-vol {
+  font-family: var(--serif); font-size: 12px; font-style: italic;
+  text-transform: none; letter-spacing: 0; color: rgba(255,255,255,0.95);
+}
+
+/* ─── Rich info-panel — frostat mörkt glas overlay (editorial, kompakt) ─── */
+.hero-info {
+  position: relative; z-index: 2;
+  margin: 0 0 0 50px;
+  padding: 22px clamp(20px, 2.6vw, 32px) 24px;
+  display: grid;
+  grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: clamp(18px, 2.5vw, 36px);
+  align-items: start;
+  /* Min-height så panelen inte hoppar i höjd när persona byts, men
+     overflow visible så långt innehåll faktiskt syns. */
+  min-height: 200px;
+  background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border-radius: 4px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.92);
+}
+@media (max-width: 1100px) {
+  .hero-info { grid-template-columns: 1fr; gap: 14px; }
+}
+@media (max-width: 1000px) {
+  .hero-info { grid-template-columns: 1fr 1fr; gap: 28px; }
+  .hero-info-aside { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) { .hero-info { grid-template-columns: 1fr; } }
+
+/* Animerad accent-line som ritas in när panelen aktiveras */
+.hero-info::before {
+  content: ""; position: absolute;
+  top: -1px; left: 0; height: 2px; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  transition: width .8s cubic-bezier(.65, 0, .35, 1);
+  z-index: 3;
+}
+.hero-info[data-active]::before { width: 100%; }
+
+/* Empty state — när inget är hovrat innan auto-rotation startat */
+.hero-info-empty {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted);
+  grid-column: 1 / -1; text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  align-self: center; padding: 60px 0;
+}
+.hero-info-empty::before, .hero-info-empty::after {
+  content: ""; flex: 0 0 80px; height: 1px;
+  background: var(--rule);
+}
+.hero-info[data-active] .hero-info-empty { display: none; }
+
+.hero-info-content { display: contents; }
+.hero-info:not([data-active]) .hero-info-content { display: none; }
+
+/* Vänster: meta + stort serif-namn + ålder/yrke + CTA */
+.hero-info-left {
+  display: flex; flex-direction: column; gap: 14px;
+}
+.hero-info-meta {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+}
+.hero-info[data-auto] .hero-info-meta::before {
+  content: "● Auto · "; color: var(--gold);
+}
+.hero-info-left {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hero-info-name {
+  font-family: var(--serif);
+  font-size: clamp(28px, 3.6vw, 44px);
+  font-weight: 700; letter-spacing: -1.2px; line-height: 0.95;
+  margin: 0; color: #fff;
+}
+.hero-info-name em {
+  font-family: var(--serif); font-style: italic;
+  color: var(--gold); font-weight: 500;
+}
+.hero-info-role {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.3px;
+  text-transform: uppercase; color: rgba(255,255,255,0.6); font-weight: 600;
+  margin-top: 0;
+}
+/* Stor CTA — VILAR PÅ boxens överkant. Position absolute mot
+   .hero-info-wrap (som har samma bredd som panelen). `bottom: 100%`
+   gör att elementets nedre kant ligger exakt där panelen börjar — som
+   en label som står på en hylla. Boxen rör sig inte, CTA är OVANFÖR.
+   Levande baseline-animering (subtle text-shadow-pulse) + dramatisk
+   hover-sekvens (split-line från båda håll, sheen, arrow-tail). */
+.hero-info-cta {
+  position: absolute;
+  bottom: 100%;
+  right: clamp(18px, 2.6vw, 32px);
+  margin-bottom: 0;
+  z-index: 4;
+  display: inline-flex; align-items: baseline; gap: 14px;
+  padding: 0 0 6px 0;
+  background: transparent; border: 0; box-shadow: none;
+  text-decoration: none;
+  font-family: var(--serif);
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+  transform-origin: right bottom;
+  /* Levande breathe när inte hovrad — guld-aura pulserar mjukt */
+  animation: cta-breathe 4.6s cubic-bezier(.4, 0, .6, 1) infinite;
+  transition:
+    color .35s var(--ease),
+    letter-spacing .4s var(--ease),
+    transform .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+@keyframes cta-breathe {
+  0%, 100% {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.85),
+      0 0 0 rgba(251,191,36,0);
+  }
+  50% {
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.85),
+      0 0 22px rgba(251,191,36,0.22);
+  }
+}
+/* Vänster halva av accent-linje — växer från center till vänster på hover */
+.hero-info-cta::before {
+  content: ""; position: absolute;
+  right: 50%; bottom: 0; width: 0; height: 2px;
+  background: linear-gradient(-90deg, var(--gold), var(--accent));
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+}
+/* Höger halva — växer från center till höger */
+.hero-info-cta::after {
+  content: ""; position: absolute;
+  left: 50%; bottom: 0; width: 0; height: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
+  transition: width .55s cubic-bezier(.65, 0, .35, 1);
+}
+.hero-info-cta:hover {
+  color: var(--gold);
+  letter-spacing: -1.4px;
+  transform: translateY(-3px);
+  animation: none; /* pausa breathe medan hovrad */
+  text-shadow:
+    0 1px 2px rgba(0,0,0,0.85),
+    0 0 28px rgba(251,191,36,0.45);
+}
+.hero-info-cta:hover::before { width: calc(50% - 14px); }
+.hero-info-cta:hover::after  { width: calc(50% - 14px); }
+.hero-info-cta-arrow {
+  position: relative;
+  font-family: var(--mono); font-weight: 400;
+  font-size: 0.7em;
+  transition:
+    transform .55s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .4s var(--ease);
+  display: inline-block;
+}
+/* Arrow-tail: visa pseudo-streck efter pilen som "tail" på hover */
+.hero-info-cta-arrow::before {
+  content: ""; position: absolute;
+  right: 100%; top: 50%;
+  width: 0; height: 1.5px;
+  margin-right: 4px;
+  background: var(--gold);
+  transform: translateY(-50%);
+  transition: width .35s cubic-bezier(.65, 0, .35, 1);
+  opacity: 0;
+}
+.hero-info-cta:hover .hero-info-cta-arrow {
+  transform: translateX(12px);
+}
+.hero-info-cta:hover .hero-info-cta-arrow::before {
+  width: 22px;
+  opacity: 0.85;
+  transition-delay: .15s;
+}
+/* Disabled (Evelina/Peter): tystare italic, ingen line, ingen pil */
+.hero-info-cta[aria-disabled="true"] {
+  color: rgba(255,255,255,0.55); cursor: default;
+  font-style: italic; font-weight: 500;
+  font-size: clamp(20px, 2.2vw, 28px);
+  letter-spacing: 0;
+}
+.hero-info-cta[aria-disabled="true"]:hover {
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0;
+  transform: none;
+}
+.hero-info-cta[aria-disabled="true"]::after { display: none; }
+.hero-info-cta[aria-disabled="true"] .hero-info-cta-arrow { display: none; }
+/* Visa endast när panelen är aktiv */
+.hero-info-wrap:not(:has(.hero-info[data-active])) .hero-info-cta { display: none; }
+/* På smala viewports: positionera i flow ovanför panelen */
+@media (max-width: 700px) {
+  .hero-info-cta {
+    position: static;
+    bottom: auto;
+    margin: 0 0 8px 50px;
+    font-size: 22px;
+  }
+}
+
+/* Mitten: story-paragraf + week-chips horisontellt */
+.hero-info-middle {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.hero-info-eyebrow {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 600;
+}
+.hero-info-story {
+  font-size: 14.5px; line-height: 1.5; color: rgba(255,255,255,0.88);
+  max-width: 52ch; font-weight: 400;
+  /* Begränsa till 4 rader — tillräckligt att hela mening ryms. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hero-info-story em {
+  font-family: var(--serif); font-style: italic; color: #fff; font-weight: 500;
+}
+.hero-info-story strong {
+  color: var(--gold); font-weight: 700;
+}
+.hero-info-tags {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
+}
+.hero-info-tag {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  padding: 5px 11px; border-radius: 100px;
+  background: rgba(251, 191, 36, 0.14); color: var(--gold);
+  letter-spacing: 0.4px;
+}
+
+/* Höger: pull-quote + vecko-chips */
+.hero-info-aside {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.hero-info-quote {
+  font-family: var(--serif); font-style: italic;
+  font-size: 14.5px; line-height: 1.4;
+  color: #fff;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--gold);
+  margin: 0; max-width: 32ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hero-info-quote cite {
+  display: block; margin-top: 6px;
+  font-family: var(--mono); font-style: normal;
+  font-size: 9.5px; letter-spacing: 1.3px;
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
+}
+.hero-info-week {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.hero-info-week-title {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55); font-weight: 700;
+}
+/* Week som horisontella chips istället för stacked rows. Tre rader
+   max så längsta vecko-listan inte trycker panelen för långt. */
+.hero-info-week-list {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  max-height: 92px;
+  overflow: hidden;
+}
+.hero-info-week-item {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 7px; border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px;
+  white-space: nowrap;
+}
+.hero-info-week-day {
+  font-weight: 700; color: var(--gold);
+  letter-spacing: 0.6px;
+}
+.hero-info-week-label {
+  color: rgba(255,255,255,0.85); font-weight: 500;
+  letter-spacing: -0.05px;
+}
+
+/* Stagger entrance per text-rad — samma "AOS"-stil som resten
+   av sidan men triggad varje gång data-active byter */
+@keyframes line-reveal {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes name-reveal {
+  from {
+    opacity: 0;
+    letter-spacing: 0.4em;
+    transform: translateY(14px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    letter-spacing: -1.8px;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.hero-info[data-active] .hero-info-meta,
+.hero-info[data-active] .hero-info-role,
+.hero-info[data-active] .hero-info-eyebrow,
+.hero-info[data-active] .hero-info-story,
+.hero-info[data-active] .hero-info-tags,
+.hero-info[data-active] .hero-info-quote,
+.hero-info[data-active] .hero-info-week-title,
+.hero-info[data-active] .hero-info-week-item,
+.hero-info-wrap:has(.hero-info[data-active]) .hero-info-cta {
+  animation: line-reveal 0.6s cubic-bezier(.34, 1.18, .64, 1) both;
+}
+.hero-info[data-active] .hero-info-name {
+  animation: name-reveal 0.85s cubic-bezier(.34, 1.18, .64, 1) both;
+}
+
+/* Stagger delays */
+.hero-info[data-active] .hero-info-meta    { animation-delay: 0.05s; }
+.hero-info[data-active] .hero-info-name    { animation-delay: 0.10s; }
+.hero-info[data-active] .hero-info-role    { animation-delay: 0.30s; }
+.hero-info-wrap:has(.hero-info[data-active]) .hero-info-cta { animation-delay: 0.45s; }
+
+.hero-info[data-active] .hero-info-eyebrow { animation-delay: 0.20s; }
+.hero-info[data-active] .hero-info-story   { animation-delay: 0.30s; }
+.hero-info[data-active] .hero-info-tags    { animation-delay: 0.50s; }
+
+.hero-info[data-active] .hero-info-quote      { animation-delay: 0.35s; }
+.hero-info[data-active] .hero-info-week-title { animation-delay: 0.50s; }
+.hero-info[data-active] .hero-info-week-item:nth-child(1) { animation-delay: 0.58s; }
+.hero-info[data-active] .hero-info-week-item:nth-child(2) { animation-delay: 0.66s; }
+.hero-info[data-active] .hero-info-week-item:nth-child(3) { animation-delay: 0.74s; }
+.hero-info[data-active] .hero-info-week-item:nth-child(4) { animation-delay: 0.82s; }
+.hero-info[data-active] .hero-info-week-item:nth-child(5) { animation-delay: 0.90s; }
+.hero-info[data-active] .hero-info-week-item:nth-child(6) { animation-delay: 0.98s; }
+
+/* ─── Hint längst ned ─── */
+.hero-hint {
+  position: relative; z-index: 2;
+  text-align: center; padding-top: 18px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted);
+}
+.hero-hint::before { content: "● "; color: var(--accent); }
+
+/* ─── Intro: bara info-panel + credits fade-in (figurerna visas direkt) ─── */
+body:not(.is-loaded) .hero-info { opacity: 0; }
+body:not(.is-loaded) .cover-credits { opacity: 0; }
+
+body.is-loaded .hero-info { animation: hero-fade-in .6s ease 0.6s both; }
+body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
+@keyframes hero-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Lärar-perspektiv (mörk) ─── */
+.teacher {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  color: #fff;
+  position: relative;
+  padding-top: clamp(80px, 12vh, 140px);
+  padding-bottom: clamp(80px, 12vh, 140px);
+}
+.teacher::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+/* Header-block */
+.teacher-head {
+  max-width: 880px; margin: 0 auto;
+  text-align: center; margin-bottom: clamp(56px, 8vh, 96px);
+}
+.teacher-head .teacher-eye {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--gold); font-weight: 700;
+  margin-bottom: 22px; display: inline-block;
+}
+.teacher-head h2 {
+  font-size: clamp(38px, 5vw, 64px); font-weight: 700;
+  letter-spacing: -2px; line-height: 1; margin-bottom: 22px;
+}
+.teacher-head h2 em {
+  font-family: var(--serif); font-style: italic; color: var(--gold);
+  font-weight: 500;
+}
+.teacher-head p {
+  font-size: 18px; line-height: 1.55; color: rgba(255,255,255,0.7);
+  max-width: 56ch; margin: 0 auto;
+}
+
+/* Feature-grid: 6 features i 3x2 desktop, 2x3 tablet, 1x6 mobil */
+.teacher-features {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; max-width: 1280px; margin: 0 auto;
+}
+@media (max-width: 1100px) { .teacher-features { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px)  { .teacher-features { grid-template-columns: 1fr; } }
+
+/* Animerad rotating border-glow runt kortet — conic-gradient roterar
+   via custom property (kräver @property-stöd, fallback = bara opacity-fade). */
+@property --tf-ang {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.teacher-feature {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px;
+  position: relative;
+  isolation: isolate;
+  cursor: pointer;
+  perspective: 1400px;
+  /* Höjd-låsning så fram + back har samma footprint */
+  min-height: 320px;
+  transition: transform .25s var(--ease), background .25s var(--ease), border-color .25s var(--ease);
+}
+.teacher-feature:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-3px);
+}
+/* Roterande conic-glöd som åker runt kantens hela perimeter på hover */
+.teacher-feature::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--tf-ang, 0deg),
+    transparent 0%,
+    rgba(251, 191, 36, 0.0) 12%,
+    var(--gold) 22%,
+    var(--accent) 32%,
+    transparent 46%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .35s var(--ease);
+  z-index: 1;
+}
+.teacher-feature:hover::after,
+.teacher-feature.is-flipped::after {
+  opacity: 1;
+  animation: tf-spin 3.6s linear infinite;
+}
+@keyframes tf-spin { to { --tf-ang: 360deg; } }
+
+/* Inre wrapper som kan vridas i 3D — innehåller fram + back */
+.teacher-feature-inner {
+  position: relative;
+  width: 100%; height: 100%;
+  min-height: inherit;
+  transform-style: preserve-3d;
+  transition: transform .85s cubic-bezier(.4, 0, .2, 1);
+}
+.teacher-feature.is-flipped .teacher-feature-inner {
+  transform: rotateY(180deg);
+}
+.tf-front, .tf-back {
+  position: absolute;
+  inset: 0;
+  padding: 28px 26px 30px;
+  display: flex; flex-direction: column; gap: 14px;
+  -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
+  border-radius: inherit;
+}
+.tf-back {
+  transform: rotateY(180deg);
+  background: linear-gradient(135deg, rgba(220, 76, 43, 0.06) 0%, rgba(251, 191, 36, 0.05) 100%);
+}
+.tf-back-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.tf-back h4 {
+  font-family: var(--serif);
+  font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1.1;
+  color: #fff;
+  margin: 0;
+}
+.tf-back p {
+  font-size: 13.5px; line-height: 1.55;
+  color: rgba(255,255,255,0.7);
+  margin: 0;
+}
+.tf-back ul {
+  list-style: none; padding: 0; margin: 4px 0 0;
+  display: flex; flex-direction: column; gap: 7px;
+  font-family: var(--mono); font-size: 11px;
+  color: rgba(255,255,255,0.78);
+}
+.tf-back ul li {
+  padding-left: 14px; position: relative;
+}
+.tf-back ul li::before {
+  content: "→";
+  position: absolute; left: 0;
+  color: var(--gold);
+  font-weight: 700;
+}
+.tf-flip-hint {
+  margin-top: auto; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tf-flip-hint .tf-flip-arrow {
+  display: inline-block;
+  transition: transform .35s var(--ease);
+}
+.teacher-feature:hover .tf-flip-hint .tf-flip-arrow,
+.teacher-feature.is-flipped .tf-flip-hint .tf-flip-arrow {
+  transform: rotate(180deg);
+}
+.teacher-feature-icon {
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.22);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  color: var(--gold); letter-spacing: 0.5px;
+}
+.teacher-feature-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold);
+}
+.teacher-feature h3 {
+  font-size: 19px; font-weight: 700; letter-spacing: -0.4px;
+  line-height: 1.15; color: #fff;
+}
+.teacher-feature p {
+  font-size: 14px; line-height: 1.55; color: rgba(255,255,255,0.7);
+  flex: 1;
+}
+.teacher-feature-mini {
+  margin-top: 4px; padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Mini-mockups inuti varje feature */
+.tf-mock-row {
+  display: grid; grid-template-columns: auto 1fr auto;
+  gap: 10px; padding: 6px 0;
+  border-bottom: 1px dotted rgba(255,255,255,0.06);
+  font-family: var(--mono); font-size: 11px;
+}
+.tf-mock-row:last-child { border-bottom: 0; }
+.tf-mock-row strong {
+  color: var(--gold); font-weight: 700; letter-spacing: 0.4px;
+  font-size: 10px; text-transform: uppercase;
+}
+.tf-mock-row span { color: rgba(255,255,255,0.78); }
+.tf-mock-num {
+  color: #fff; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.tf-mock-num.is-good { color: #10b981; }
+.tf-mock-num.is-warn { color: #fca5a5; }
+
+/* Time-on-task heatmap */
+.tf-heatmap {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.tf-heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.05);
+}
+.tf-heatmap-cell[data-h="1"] { background: rgba(251,191,36,0.15); }
+.tf-heatmap-cell[data-h="2"] { background: rgba(251,191,36,0.35); }
+.tf-heatmap-cell[data-h="3"] { background: rgba(251,191,36,0.55); }
+.tf-heatmap-cell[data-h="4"] { background: rgba(251,191,36,0.85); }
+
+/* Kompetens-bars */
+.tf-bar {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px; align-items: center; padding: 5px 0;
+  font-family: var(--mono); font-size: 10.5px;
+}
+.tf-bar-label { color: rgba(255,255,255,0.85); letter-spacing: 0.3px; }
+.tf-bar-value { color: var(--gold); font-weight: 700; }
+.tf-bar-track {
+  grid-column: 1 / -1; height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px; overflow: hidden;
+  margin-top: 2px;
+}
+.tf-bar-fill {
+  height: 100%; background: var(--gold);
+  border-radius: 2px;
+}
+
+/* AI chat-preview */
+.tf-chat-bubble {
+  padding: 8px 10px; border-radius: 8px;
+  font-size: 11.5px; line-height: 1.4;
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-style: italic;
+}
+.tf-chat-bubble.is-echo {
+  background: rgba(251,191,36,0.1);
+  border-left: 2px solid var(--gold);
+  color: rgba(255,255,255,0.95);
+}
+.tf-chat-bubble.is-student {
+  background: rgba(255,255,255,0.05);
+  margin-left: 14px;
+  color: rgba(255,255,255,0.78);
+}
+
+/* Stats-bar med 4 stora siffror */
+.teacher-stats {
+  margin-top: clamp(48px, 6vh, 80px);
+  max-width: 1280px; margin-left: auto; margin-right: auto;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 1px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; overflow: hidden;
+}
+@media (max-width: 700px) { .teacher-stats { grid-template-columns: 1fr 1fr; } }
+.teacher-stat {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  padding: 26px 22px; text-align: left;
+}
+.teacher-stat-num {
+  font-family: var(--serif); font-size: clamp(36px, 4.5vw, 56px);
+  font-weight: 700; letter-spacing: -1.5px; line-height: 1;
+  color: #fff;
+}
+.teacher-stat-num em {
+  font-style: italic; color: var(--gold); font-weight: 500;
+}
+.teacher-stat-label {
+  margin-top: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+/* Quote-card */
+.teacher-quote {
+  margin-top: clamp(48px, 6vh, 80px);
+  max-width: 880px; margin-left: auto; margin-right: auto;
+  text-align: center;
+  padding: clamp(28px, 4vh, 48px) clamp(28px, 4vw, 56px);
+  background: rgba(251,191,36,0.04);
+  border-top: 1px solid rgba(251,191,36,0.2);
+  border-bottom: 1px solid rgba(251,191,36,0.2);
+  border-radius: 4px;
+}
+.teacher-quote-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(22px, 2.6vw, 32px); line-height: 1.35;
+  color: #fff; margin: 0 0 18px;
+}
+.teacher-quote-text::before { content: "\201C"; color: var(--gold); margin-right: 4px; }
+.teacher-quote-text::after  { content: "\201D"; color: var(--gold); margin-left: 4px; }
+.teacher-quote-cite {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+}
+.teacher-quote-cite::before, .teacher-quote-cite::after {
+  content: ""; width: 30px; height: 1px;
+  background: rgba(255,255,255,0.25);
+  display: inline-block;
+}
+
+/* Dash-card kvar för original-mockupen om vi vill behålla den */
+
+.dash-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 22px 24px;
+  box-shadow: 0 30px 60px -28px rgba(0,0,0,0.45);
+}
+.dash-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+.dash-head-class { color: var(--gold); font-weight: 700; }
+.dash-head-stats { color: rgba(255,255,255,0.55); }
+.dash-rows { display: flex; flex-direction: column; gap: 5px; }
+.dash-row {
+  display: grid; grid-template-columns: 26px 1fr auto auto;
+  gap: 14px; padding: 10px 14px;
+  border-radius: 8px; font-size: 13.5px;
+  align-items: center;
+  background: rgba(255,255,255,0.03);
+  transition: background .18s;
+}
+.dash-row:hover { background: rgba(255,255,255,0.07); }
+.dash-row.is-good { background: rgba(16,185,129,0.1); }
+.dash-row.is-warn { background: rgba(220,76,43,0.16); }
+.dash-row-init {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 700; font-size: 13px;
+}
+.dash-row-name { font-weight: 500; letter-spacing: -0.1px; }
+.dash-row-name small {
+  display: block; font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1px; color: rgba(255,255,255,0.5);
+  margin-top: 3px; text-transform: uppercase;
+}
+.dash-row-time {
+  font-family: var(--mono); font-size: 10.5px;
+  color: rgba(255,255,255,0.45); letter-spacing: 0.6px;
+}
+.dash-row-wb {
+  font-family: var(--serif); font-weight: 700; font-size: 18px;
+  letter-spacing: -0.3px; min-width: 32px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.dash-row.is-good .dash-row-wb { color: #10b981; }
+.dash-row.is-warn .dash-row-wb { color: #fca5a5; }
+
+/* ─── Final CTA ─── */
+.cta-final {
+  text-align: center; padding-top: clamp(96px, 14vh, 160px);
+  padding-bottom: clamp(96px, 14vh, 160px);
+}
+.cta-eye {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--accent); font-weight: 700;
+  margin-bottom: 24px;
+}
+.cta-final h2 {
+  font-size: clamp(38px, 5.5vw, 72px); font-weight: 700;
+  letter-spacing: -2px; line-height: 1; max-width: 16ch;
+  margin: 0 auto 28px;
+}
+.cta-final h2 em { font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 500; }
+.cta-final p {
+  font-size: 18px; color: #475569; line-height: 1.55; max-width: 52ch;
+  margin: 0 auto 44px;
+}
+.cta-buttons { display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 28px; border-radius: 100px;
+  font-family: inherit; font-size: 15px; font-weight: 600;
+  text-decoration: none; cursor: pointer;
+  transition: all .22s var(--ease);
+  letter-spacing: -0.05px;
+}
+.btn-primary {
+  background: var(--fg); color: #fff;
+  box-shadow: 0 14px 32px -12px rgba(15,23,42,0.45),
+              inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+.btn-primary:hover {
+  transform: translateY(-2px); background: #1e293b;
+  box-shadow: 0 20px 40px -14px rgba(15,23,42,0.55);
+}
+.btn-secondary {
+  background: #fff; color: var(--fg); border: 1px solid var(--rule);
+}
+.btn-secondary:hover { border-color: var(--fg); transform: translateY(-2px); }
+.btn-arrow { font-family: var(--mono); font-size: 13px; transition: transform .2s; }
+.btn:hover .btn-arrow { transform: translateX(3px); }
+
+/* ─── Vad är Ekonomilabbet? (editorial-artikel) ─── */
+.about {
+  background: var(--bg);
+  position: relative;
+  padding: clamp(96px, 14vh, 160px) 24px;
+}
+.about::before {
+  content: ""; position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 80px; height: 1px;
+  background: var(--accent);
+}
+.about-shell {
+  max-width: 1080px; margin: 0 auto;
+}
+.about-head {
+  text-align: center;
+  margin-bottom: clamp(48px, 6vh, 64px);
+}
+.about-eye {
+  display: inline-block;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 24px;
+  /* Hjärtslag på den ledande pricken via separat span */
+}
+.about-eye-pulse {
+  display: inline-block;
+  margin-right: 2px;
+  animation: about-pulse 1.6s cubic-bezier(.4, 0, .6, 1) infinite;
+  transform-origin: center;
+}
+@keyframes about-pulse {
+  0%, 60%, 100% { transform: scale(1); opacity: 1; }
+  10% { transform: scale(1.5); opacity: 0.85; }
+  20% { transform: scale(0.95); opacity: 1; }
+  30% { transform: scale(1.3); opacity: 0.9; }
+  40% { transform: scale(1); }
+}
+.about-head h2 {
+  font-size: clamp(40px, 5.5vw, 72px);
+  font-weight: 700; letter-spacing: -2.2px; line-height: 1;
+  max-width: 18ch; margin: 0 auto;
+  position: relative;
+}
+.about-head h2 em {
+  font-family: var(--serif); font-style: italic;
+  font-weight: 500;
+  /* "levande" andas — färg + skugga går mellan accent/gold */
+  background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 50%, var(--accent) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: about-living 6.4s linear infinite;
+}
+@keyframes about-living {
+  0%   { background-position: 0% 0; }
+  100% { background-position: 220% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-eye-pulse, .about-head h2 em { animation: none; }
+  .about-head h2 em {
+    color: var(--accent);
+    -webkit-text-fill-color: var(--accent);
+  }
+}
+.about-lead {
+  font-family: var(--serif);
+  font-size: clamp(20px, 2.4vw, 26px);
+  line-height: 1.5; color: #1e293b;
+  text-align: center;
+  max-width: 56ch;
+  margin: 0 auto clamp(56px, 8vh, 80px);
+}
+.about-lead strong {
+  color: var(--fg); font-weight: 600;
+}
+.about-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: clamp(28px, 4vw, 56px);
+  margin-bottom: clamp(56px, 7vh, 80px);
+}
+@media (max-width: 900px) { .about-grid { grid-template-columns: 1fr; gap: 36px; } }
+
+/* 2-kolumnsvariant — manifest-blocken under huvudgriden, lite tystare
+   typografi, gold accent istället för orange för att markera stegvis
+   fördjupning av samma resonemang. */
+.about-grid-2 {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: clamp(28px, 4vw, 56px);
+  margin-bottom: clamp(56px, 7vh, 80px);
+  padding-top: clamp(40px, 5vh, 56px);
+  border-top: 1px solid var(--rule);
+}
+@media (max-width: 900px) { .about-grid-2 { grid-template-columns: 1fr; gap: 36px; } }
+.about-grid-2 .about-block {
+  border-top: 2px solid var(--gold);
+}
+.about-grid-2 .about-block-num { color: var(--gold); }
+.about-block {
+  position: relative;
+  padding-top: 22px;
+  border-top: 2px solid var(--accent);
+}
+.about-block-num {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 12px;
+}
+.about-block h3 {
+  font-size: clamp(20px, 2.1vw, 26px); font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1.15;
+  margin-bottom: 14px; color: var(--fg);
+}
+.about-block p {
+  font-size: 14.5px; line-height: 1.6; color: #334155;
+}
+.about-block p strong { color: var(--fg); font-weight: 700; }
+.about-block p em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.about-close {
+  text-align: center;
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(18px, 2vw, 24px); line-height: 1.55;
+  color: var(--fg);
+  max-width: 64ch; margin: 0 auto;
+  padding-top: 36px;
+  border-top: 1px solid var(--rule);
+  position: relative;
+}
+.about-close::before {
+  content: ""; position: absolute;
+  top: -1px; left: 50%; transform: translateX(-50%);
+  width: 40px; height: 1px;
+  background: var(--accent);
+}
+.about-close em {
+  color: var(--accent); font-weight: 500;
+}
+
+/* Credo-citat under slutorden — Robin signerar visionen */
+.about-credo {
+  max-width: 56ch; margin: 56px auto 0;
+  padding: 28px 32px 24px;
+  text-align: center; position: relative;
+  border-top: 1px solid var(--accent);
+  border-bottom: 1px solid var(--rule);
+}
+.about-credo::before, .about-credo::after {
+  content: "\201C"; position: absolute;
+  font-family: var(--serif);
+  font-size: 64px; line-height: 1;
+  color: var(--accent); opacity: 0.15;
+}
+.about-credo::before { top: -8px; left: 8px; }
+.about-credo::after { content: "\201D"; bottom: -28px; right: 8px; }
+.about-credo-line {
+  font-family: var(--serif);
+  font-size: clamp(17px, 1.8vw, 22px);
+  line-height: 1.55; color: var(--fg);
+  margin: 0;
+}
+.about-credo-line + .about-credo-line { margin-top: 14px; }
+.about-credo-line em {
+  font-family: var(--serif); font-style: italic;
+  color: var(--accent); font-weight: 500;
+}
+.about-credo-line strong {
+  color: var(--accent); font-weight: 700; font-style: normal;
+}
+.about-credo-cite {
+  display: block; margin-top: 22px;
+  font-family: var(--mono); font-style: normal;
+  font-size: 11px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* ─── Footer ─── */
+.site-footer {
+  background: #0f172a; color: rgba(255,255,255,0.85);
+  padding: clamp(64px, 8vh, 96px) 24px clamp(40px, 5vh, 56px);
+  position: relative;
+}
+.site-footer::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+}
+.footer-shell {
+  max-width: 1280px; margin: 0 auto;
+}
+.footer-grid {
+  display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: clamp(32px, 4vw, 64px);
+  padding-bottom: clamp(40px, 5vh, 64px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+@media (max-width: 800px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 500px) {
+  .footer-grid { grid-template-columns: 1fr; gap: 28px; }
+}
+.footer-brand-name {
+  font-family: var(--serif); font-size: 24px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  color: #fff; margin-bottom: 8px;
+}
+.footer-brand-tagline {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55); font-weight: 600;
+  margin-bottom: 18px;
+}
+.footer-brand-blurb {
+  font-size: 13.5px; line-height: 1.55; color: rgba(255,255,255,0.7);
+  max-width: 36ch;
+}
+.footer-brand-blurb strong { color: #fff; font-weight: 600; }
+.footer-col h4 {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 16px;
+}
+.footer-col ul {
+  list-style: none; display: flex; flex-direction: column; gap: 10px;
+}
+.footer-col a {
+  font-size: 14px; color: rgba(255,255,255,0.78);
+  text-decoration: none; transition: color .15s var(--ease);
+  letter-spacing: -0.05px;
+}
+.footer-col a:hover { color: var(--gold); }
+.footer-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: clamp(20px, 3vh, 32px);
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  flex-wrap: wrap; gap: 14px;
+}
+.footer-bottom-meta { display: flex; gap: 18px; align-items: center; }
+.footer-bottom-meta span:not(:last-child)::after {
+  content: " · "; margin-left: 18px; color: var(--accent);
+}
+
+/* ─── Smooth-scroll: Lenis hanterar wheel — ingen krockande CSS ─── */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
+.lenis.lenis-smooth iframe { pointer-events: none; }
+</style>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://unpkg.com">
+</head>
+<body>
+
+<nav class="top-nav" id="topNav" aria-label="Konto" data-auth-nav>
+  <a href="/login" class="top-nav-link" data-auth-when="out">Logga in</a>
+  <a href="/signup/teacher" class="top-nav-link top-nav-link-primary" data-auth-when="out">Skapa konto</a>
+  <a href="/dashboard" class="top-nav-link" data-auth-when="in" hidden>Dashboard</a>
+  <a href="/dashboard?logout=1" class="top-nav-link top-nav-link-primary" data-auth-when="in" hidden>Logga ut</a>
+</nav>
+
+<main>
+
+  <section class="hero" id="hero" data-nav-theme="dark">
+
+    <!-- Full-bleed video-stack: aktiv persona spelar, övriga pausade på frame 0.
+         Crossfade mellan dem vid byte. -->
+    <div class="hero-bg-stack" aria-hidden="true">
+      <video class="hero-bg-video is-active" data-persona="linda" muted loop playsinline preload="auto">
+        <source src="/demo-landing/linda.mp4" type="video/mp4">
+      </video>
+      <video class="hero-bg-video" data-persona="evelina" muted loop playsinline preload="metadata">
+        <source src="/demo-landing/evelina.mp4" type="video/mp4">
+      </video>
+      <video class="hero-bg-video" data-persona="peter" muted loop playsinline preload="metadata">
+        <source src="/demo-landing/peter.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="hero-bg-scrim" aria-hidden="true"></div>
+
+    <header class="hero-brand">
+      <div class="brand-name">Ekonomilabbet</div>
+      <div class="brand-tagline">Konsekvensdriven ekonomi och lärande</div>
+    </header>
+
+    <div class="hero-inner">
+      <div class="hero-shell">
+        <div class="hero-eyebrow">PRIVATEKONOMI SOM HÄNDER</div>
+        <h1 id="heroHeadline">
+          <span data-h1-a>Lärobok</span>
+          <span data-h1-b> blir </span>
+          <em data-h1-c>verklighet</em><span>.</span>
+        </h1>
+        <p id="heroSubhead">Tre karaktärer. Tre veckor. Hela systemet på riktigt — varje val har en konsekvens, varje konsekvens lär en lektion.</p>
+      </div>
+
+      <!-- Info-panel + vertikal scroll-text wrappas så credits kan
+           ligga utanför utan att scroll-texten tappar position. -->
+      <div class="hero-info-wrap">
+        <!-- Vertikal scroll-text på vänster kant av info-panelen -->
+        <span class="hero-info-scroll" aria-hidden="true">
+          <span class="hero-info-scroll-text">Scrolla för mer</span>
+          <span class="hero-info-scroll-arrow">↓</span>
+        </span>
+
+        <!-- Stor CTA — vilar PÅ boxens överkant. Bottnen av texten är
+             exakt vid panelens topp, texten lever ovanför med descendrar
+             som dippar mot kanten. Som en label som står på en hylla. -->
+        <a class="hero-info-cta" data-info-cta href="#">
+          <span data-info-cta-label>Utforska</span>
+          <span class="hero-info-cta-arrow" aria-hidden="true">→</span>
+        </a>
+
+        <!-- Frostat-glas info-panel som overlay på videon, uppdateras
+             via auto-rotation eller klick på höger-nav. -->
+        <div class="hero-info" id="heroInfo">
+        <div class="hero-info-empty">Hovra över en karaktär</div>
+        <div class="hero-info-content">
+
+          <div class="hero-info-left">
+            <div class="hero-info-meta" data-info-meta>—</div>
+            <h3 class="hero-info-name" data-info-name>—</h3>
+            <div class="hero-info-role" data-info-role>—</div>
+          </div>
+
+          <div class="hero-info-middle">
+            <div class="hero-info-eyebrow" data-info-eyebrow>● Hennes vecka</div>
+            <p class="hero-info-story" data-info-story>—</p>
+            <div class="hero-info-tags" data-info-tags></div>
+          </div>
+
+          <aside class="hero-info-aside">
+            <blockquote class="hero-info-quote">
+              <span data-info-quote>—</span>
+              <cite data-info-cite>—</cite>
+            </blockquote>
+            <div class="hero-info-week">
+              <div class="hero-info-week-title">● 6 dagar i veckan</div>
+              <div class="hero-info-week-list" data-info-week></div>
+            </div>
+          </aside>
+
+        </div>
+        </div>
+      </div>
+
+      <!-- Magazine-credits ligger precis under info-panelen. -->
+      <div class="cover-credits">
+        <span class="cover-credits-vol">Vol. 01</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>Ill. Ekonomilabbet 2026</span>
+        <span class="cover-credits-sep" aria-hidden="true"></span>
+        <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
+      </div>
+    </div>
+
+    <!-- Vertikal persona-nav höger sida (likt Linda-tidslinjen) -->
+    <nav class="hero-persona-nav" id="personaNav" aria-label="Välj karaktär">
+      <div class="hero-persona-nav-eye">● TRÄFFA</div>
+      <div class="hero-persona-nav-stack">
+        <span class="hero-persona-nav-rail" aria-hidden="true"></span>
+        <span class="hero-persona-nav-cursor" aria-hidden="true"></span>
+        <ol class="hero-persona-nav-list">
+          <li class="hero-persona-nav-item is-active" data-persona-nav="linda"
+              data-href="/linda">
+            <span class="hero-persona-nav-name">Linda</span>
+            <span class="hero-persona-nav-role">22 · IT-konsult</span>
+          </li>
+          <li class="hero-persona-nav-item" data-persona-nav="evelina"
+              data-href="/evelina">
+            <span class="hero-persona-nav-name">Evelina</span>
+            <span class="hero-persona-nav-role">27 · ekonom</span>
+          </li>
+          <li class="hero-persona-nav-item" data-persona-nav="peter"
+              data-href="/peter">
+            <span class="hero-persona-nav-name">Peter</span>
+            <span class="hero-persona-nav-role">38 · småbarnsförälder</span>
+          </li>
+        </ol>
+      </div>
+    </nav>
+
+    <!-- Hidden data-bärare för info-panel-content (oförändrad) -->
+    <div class="figures" id="figures" hidden>
+      <a class="figure" data-persona="linda" href="/linda"
+         data-theme="Arbetslivet · Vol. 01"
+         data-h1a="Lärobok" data-h1b=" blir " data-h1c="verklighet"
+         data-subhead="Lönesamtal med AI-Maria, pension som växer från 7 %, en pentagon som tippar när tandläkaren ringer. Hennes vecka är full av val."
+         data-name="Linda"
+         data-role="22 · IT-konsult · Stockholm"
+         data-story="En vecka full av val: ett <strong>lönesamtal</strong> som ger 1 295 kr/mån, en oväntad <em>tandläkarakut</em> torsdag, en chef som föreslår karriärutbildning fredag. Varje val flyttar något — saldot, pensionspotten, eller pentagonens balans."
+         data-quote="Akavia 2026 säger 39 500 kr för min roll. Jag ligger 1 500 kr under."
+         data-cite="— Linda · lönesamtalet · rond 1"
+         data-week="Tis|Lönesamtal · Visma;Ons|Pensionsavgiften upptäcks;Tor|Akut tandläkare;Fre|Karriärsamtal;Sön|WB-pentagon · review;Mån|Lärar-Anna ser klassen"
+         data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
+         data-eyebrow="● Hennes vecka"
+         data-cta="Utforska min vardag"></a>
+      <a class="figure" data-persona="evelina" href="/evelina"
+         data-theme="Investering · Vol. 02"
+         data-h1a="Krasch" data-h1b=" blir " data-h1c="kunskap"
+         data-subhead="ISK växer 12,4 %. Globalfond ner 8 % på en dag. Echo coachar — tid i marknaden, inte timing av marknaden."
+         data-name="Evelina"
+         data-role="27 · ekonom · Malmö"
+         data-story="Hon har följt börsen sedan 22, sett <em>Coronakraschen 2020</em> och vet att marknaden inte är gambling — det är planering. ISK växer <strong>12,4 %</strong> i år, men det är inte siffran som lär henne mest. Det är hur hon hanterar −8 %-dagar."
+         data-quote="Tid i marknaden, inte timing av marknaden."
+         data-cite="— Evelina · efter krasch-fredagen"
+         data-week="Mån|Marknadsöppning;Tis|ISK-spar 5 000 kr;Tor|Globalfond −8 %;Fre|Skattedeklaration · ISK;Sön|12-mån-review · index;Mån|Lärarvy"
+         data-tags="Portfölj,Marknadsdata,ISK-skatt,Krasch"
+         data-eyebrow="● Hennes vecka"
+         data-cta="Utforska min vardag"></a>
+      <a class="figure" data-persona="peter" href="/peter"
+         data-theme="Vardagsekonomin · Vol. 03"
+         data-h1a="Räkningar" data-h1b=" blir " data-h1c="rutin"
+         data-subhead="23 fakturor i månaden, autogiron som signeras, en buffert som testas. Vardagen blir hanterbar genom plan."
+         data-name="Peter"
+         data-role="38 · småbarnsförälder · Göteborg"
+         data-story="<strong>23 fakturor</strong> i månaden, hyra 8 200 kr, autogiron som måste signeras innan löningen den 25:e. Echo coachar Peter att <em>sortera prioriteringar</em> — inte att maximera avkastning. Vardagen är inte gambling, det är planering."
+         data-quote="Onsdag kväll. Barnen sover. Räkningstid."
+         data-cite="— Peter · vardagen"
+         data-week="Mån|Räkningar trillar in;Tis|EkonomilabbetID · autogiron;Ons|Bil i verkstad 12 000 kr;Tor|Kategorisera utgifter;Sön|Månadsprognos 31 dec;Mån|Lärar-Anna ser röd"
+         data-tags="Huvudbok,Kommande fakturor,EkonomilabbetID,Buffert"
+         data-eyebrow="● Hans vecka"
+         data-cta="Utforska min vardag"></a>
+    </div>
+
+  </section>
+
+  <section class="intro" id="intro" data-nav-theme="light">
+    <div class="shell">
+      <div class="intro-grid">
+        <div>
+          <div class="intro-eye" data-fx="fade-up">● Om plattformen</div>
+          <h2 data-fx="fade-up" data-fx-delay="80">
+            Eleven möter ekonomin <em>innan</em> den möter dem.
+          </h2>
+          <p data-fx="fade-up" data-fx-delay="160">
+            På Ekonomilabbet är privatekonomi inte en bok som ska läsas — det
+            är en vecka som händer. Eleven får en simulerad livssituation,
+            möter konsekvenser i realtid och coachas av <strong>Echo</strong>,
+            en sokratisk AI som ställer frågor istället för att ge svar.
+          </p>
+          <p data-fx="fade-up" data-fx-delay="240">
+            Skatteverkets siffror, kollektivavtalen, faktiska räntor — allt
+            är på riktigt. Lärobokens "ha en buffert" blir
+            <strong>1,8 månader på ditt eget konto</strong>.
+          </p>
+        </div>
+        <div class="intro-pillars" data-fx-stagger>
+          <div class="pillar">
+            <div class="pillar-num">01</div>
+            <div class="pillar-text">
+              <h3>Konsekvensdriven simulering</h3>
+              <p>Varje val flyttar saldot, pensionsavgiften, eller wellbeing-pentagon. Inget är hypotetiskt.</p>
+            </div>
+          </div>
+          <div class="pillar">
+            <div class="pillar-num">02</div>
+            <div class="pillar-text">
+              <h3>Echo · Sokratisk AI-coach</h3>
+              <p>Frågar istället för att svara. "Var det 2&nbsp;000 kr du planerade i 30 år, eller spendera den här månaden?"</p>
+            </div>
+          </div>
+          <div class="pillar">
+            <div class="pillar-num">03</div>
+            <div class="pillar-text">
+              <h3>Wellbeing före saldo</h3>
+              <p>5 dimensioner: ekonomi, hälsa, relation, karriär, fritid. Vägd 25/20/20/15/20. Ekonomi är en av fem axlar — inte den enda.</p>
+            </div>
+          </div>
+          <div class="pillar">
+            <div class="pillar-num">04</div>
+            <div class="pillar-text">
+              <h3>Lärar-vy med hela klassen</h3>
+              <p>Anna ser varje elev, varje val, varje WB-index. Hon ser inte bara siffror — hon ser vem som behöver prat.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="teacher" data-nav-theme="dark">
+    <div class="shell">
+
+      <header class="teacher-head">
+        <div class="teacher-eye">● För läraren · föräldern · coachen</div>
+        <h2>Ingen administration.<br><em>Bara lärande.</em></h2>
+        <p>
+          Ge eleven, ditt barn eller hela klassen en 6-teckenskod —
+          de är inloggade direkt. Du ser allt i realtid: val, wellbeing-index,
+          time on task, kompetenser. Funkar lika väl vid köksbordet som i
+          klassrummet — ingen Google Classroom, ingen import, inget krångel.
+        </p>
+      </header>
+
+      <div class="teacher-features">
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
+          <div class="teacher-feature-icon">Kl</div>
+          <div class="teacher-feature-eye">● Klassdashboard</div>
+          <h3>Hela klassen i ett ögonkast.</h3>
+          <p>28 elever, 28 veckor parallellt. WB-index, senaste val, vem som inte loggat in på 5 dagar.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-mock-row">
+              <strong>Linda</strong><span>SH3A · aktiv 19:30</span><span class="tf-mock-num is-good">72</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Peter</strong><span>5 dgr sen · buffert</span><span class="tf-mock-num is-warn">41</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Evelina</strong><span>aktiv NU · ISK</span><span class="tf-mock-num is-good">88</span>
+            </div>
+          </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Lärarens flow</div>
+            <h4>Innan provet — inte efter.</h4>
+            <p>Du klickar en röd elev → ser val-historik → Echo-konversationer → skickar mail. Tre klick.</p>
+            <ul>
+          <li>26 / 28 elever på grönt</li>
+          <li>Auto-larm vid 5 dagars passivitet</li>
+          <li>Ingen lärare missar någon</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
+          <div class="teacher-feature-icon">Tt</div>
+          <div class="teacher-feature-eye">● Time on task</div>
+          <h3>Varje minut, varje modul, varje dag.</h3>
+          <p>Heatmap över aktivitet per elev. Du ser vem som lägger 90 minuter på pension och vem som klickade fel sek 30.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-heatmap">
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="4"></span>
+              <span class="tf-heatmap-cell" data-h="3"></span>
+              <span class="tf-heatmap-cell" data-h="2"></span>
+              <span class="tf-heatmap-cell" data-h="1"></span>
+              <span class="tf-heatmap-cell"></span>
+            </div>
+          </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Aggregerat</div>
+            <h4>47 timmar — varje minut räknas.</h4>
+            <p>Klassens snitt 1 h 41 m / vecka. Lindas 2 h 18 m. Peak: tisdag 19–21 (lönesamtal).</p>
+            <ul>
+          <li>Per elev, per modul, per dag</li>
+          <li>Heatmap visar intensitet</li>
+          <li>Zooma in: scrollade hen 90 min på pension?</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
+          <div class="teacher-feature-icon">12</div>
+          <div class="teacher-feature-eye">● Kompetensspårning</div>
+          <h3>12 kompetenser, automatiskt.</h3>
+          <p>Mappade mot Lgr/Gy-kursplanen. Eleven övar i ett scenario — du får färdiga kompetenstavlor.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-bar">
+              <span class="tf-bar-label">Lönesamtal</span>
+              <span class="tf-bar-value">82 %</span>
+              <span class="tf-bar-track"><span class="tf-bar-fill" style="width:82%"></span></span>
+            </div>
+            <div class="tf-bar">
+              <span class="tf-bar-label">ISK · skatt</span>
+              <span class="tf-bar-value">64 %</span>
+              <span class="tf-bar-track"><span class="tf-bar-fill" style="width:64%"></span></span>
+            </div>
+            <div class="tf-bar">
+              <span class="tf-bar-label">Buffert</span>
+              <span class="tf-bar-value">71 %</span>
+              <span class="tf-bar-track"><span class="tf-bar-fill" style="width:71%"></span></span>
+            </div>
+          </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Lgr22 / Gy25</div>
+            <h4>Kunskapskrav — automatiskt mappade.</h4>
+            <p>Varje scenario tickar in mot rätt kunskapskrav. Du behöver inte koda om bedömningen — den är inbyggd.</p>
+            <ul>
+          <li>Lönesamtal → samhällsekonomins delar (sh)</li>
+          <li>ISK · skatt → privatekonomi (gy)</li>
+          <li>Buffert → ekonomi & konsumtion (hk)</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
+          <div class="teacher-feature-icon">Ai</div>
+          <div class="teacher-feature-eye">● Echo · sokratisk AI</div>
+          <h3>Du sätter takten på AI:n.</h3>
+          <p>Echo ställer frågor istället för att ge svar. Du toggle:ar AI per klass eller per modul, ser varje konversation.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-chat-bubble is-echo">"Var detta avdrag som händer dig — eller en investering du gör i ditt 67-åriga jag?"</div>
+            <div class="tf-chat-bubble is-student" style="margin-top:6px;">"Jag har aldrig tänkt på det så förut..."</div>
+          </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Lärarens kontroll</div>
+            <h4>Du sätter takten.</h4>
+            <p>Slå av/på per klass eller per modul. Justera ton. Sätt budget. Granska varje konversation.</p>
+            <ul>
+          <li>23 frågor / klass / vecka i snitt</li>
+          <li>0,42 kr / elev / vecka i tokens</li>
+          <li>Fullständig logg per anrop</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
+          <div class="teacher-feature-icon">Mo</div>
+          <div class="teacher-feature-eye">● Moduler & scenarier</div>
+          <h3>Färdiga och egna moduler.</h3>
+          <p>"Din första månad", "Lönesamtalet", "ISK-portföljen". Tilldela klassen — eller bygg egen modul med dina egna scenarier.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-mock-row">
+              <strong>Mod 01</strong><span>Din första månad</span><span class="tf-mock-num">28/28</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Mod 02</strong><span>Lönesamtalet</span><span class="tf-mock-num">22/28</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>Mod 03</strong><span>ISK-portföljen</span><span class="tf-mock-num">14/28</span>
+            </div>
+          </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Bygg eget</div>
+            <h4>12 systemmoduler — eller dina egna.</h4>
+            <p>Drag & drop scenarier. Versionera. Tilldela en klass eller en enskild elev. Ingen kodning.</p>
+            <ul>
+          <li>Förinlästa: Din första månad, Lönesamtalet, ISK</li>
+          <li>Skapa egna scenarier per ämne</li>
+          <li>Versionering — eleverna ser inte halvfärdigt</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
+        </article>
+
+        <article class="teacher-feature">
+          <div class="teacher-feature-inner">
+          <div class="tf-front">
+          <div class="teacher-feature-icon">Lp</div>
+          <div class="teacher-feature-eye">● Lärarguide & PDF-export</div>
+          <h3>Material som matchar kursplanen.</h3>
+          <p>Lärarguider, lektionsplanering, bedömningsmallar. Hämta lönespec, kontoutdrag och portfolio-rapporter eleven har skapat.</p>
+          <div class="teacher-feature-mini">
+            <div class="tf-mock-row">
+              <strong>PDF</strong><span>Lärarguide · Lgr22</span><span class="tf-mock-num">↓</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>PDF</strong><span>Bedömningsmall</span><span class="tf-mock-num">↓</span>
+            </div>
+            <div class="tf-mock-row">
+              <strong>PDF</strong><span>Lindas lönespec</span><span class="tf-mock-num">↓</span>
+            </div>
+          </div>
+            <div class="tf-flip-hint"><span>Vänd kortet</span><span class="tf-flip-arrow" aria-hidden="true">↻</span></div>
+          </div>
+          <div class="tf-back">
+            <div class="tf-back-eye">● Hämta material</div>
+            <h4>PDF:er som matchar kursplanen.</h4>
+            <p>Lärarguider, lektionsplanering, bedömningsmallar — och elevens egna lönespec, kontoutdrag, portfolio.</p>
+            <ul>
+          <li>Lärarguide · Lgr22-mappad</li>
+          <li>Bedömningsmall i 4 nivåer</li>
+          <li>Klass-portfolio som ZIP</li>
+            </ul>
+            <div class="tf-flip-hint"><span class="tf-flip-arrow" aria-hidden="true">↺</span><span>Tillbaka</span></div>
+          </div>
+          </div>
+
+        </article>
+
+      </div>
+
+      <div class="teacher-stats">
+        <div class="teacher-stat">
+          <div class="teacher-stat-num"><em>0</em></div>
+          <div class="teacher-stat-label">administration</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-num">12</div>
+          <div class="teacher-stat-label">systemkompetenser</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-num">6</div>
+          <div class="teacher-stat-label">teckenskod per elev</div>
+        </div>
+        <div class="teacher-stat">
+          <div class="teacher-stat-num"><em>∞</em></div>
+          <div class="teacher-stat-label">elevers vägar</div>
+        </div>
+      </div>
+
+      <blockquote class="teacher-quote">
+        <p class="teacher-quote-text">Eleverna lär sig saker jag aldrig hade kunnat lära ut traditionellt — och jag ser exakt var de fastnar, innan provet.</p>
+      </blockquote>
+
+    </div>
+  </section>
+
+  <section class="about" data-nav-theme="light">
+    <div class="about-shell">
+
+      <header class="about-head">
+        <div class="about-eye"><span class="about-eye-pulse">●</span> Vad är Ekonomilabbet?</div>
+        <h2>En levande simulering av <em>hela ekonomilivet</em>.</h2>
+      </header>
+
+      <p class="about-lead">
+        Ekonomilabbet är en djupgående lärplattform för privatekonomi och en unik simuleringsmiljö som fångar hela den ekonomiska livscykeln — från första sparpengen till pension, skuldsanering eller välstånd. <strong>För elever, lärare, föräldrar och barn.</strong>
+      </p>
+
+      <div class="about-grid">
+        <article class="about-block">
+          <div class="about-block-num">● 01 · Konsekvensbaserat lärande i realtid</div>
+          <h3>Varje val flyttar både saldot och välmåendet.</h3>
+          <p>
+            <strong>Impulsiva köp</strong> tömmer saldot och sänker välmåndsindexet,
+            medan <strong>konsekvent sparande</strong> bygger trygghet och självförtroende.
+            Plattformen saknar slut — dåliga val leder inte till game over utan till
+            verklighetsnära konsekvenser som betalningspåminnelser, Kronofogden och
+            skuldsanering, precis som i verkliga livet. Det skapar
+            <em>autentisk känslomässig inlärning</em> där användaren upplever både
+            euforin av ekonomisk framgång och stressen av misskötsel.
+          </p>
+        </article>
+
+        <article class="about-block">
+          <div class="about-block-num">● 02 · Holistisk modell</div>
+          <h3>Ekonomi och välmående hänger ihop.</h3>
+          <p>
+            Unikt är integrationen av finansiella och psykologiska mått. Ett
+            underskott påverkar inte bara kontot utan även
+            <strong>wellbeing-parametrar</strong> — sömnkvalitet, relationer,
+            självkänsla — baserat på forskning om hur finansiell stress försämrar
+            mental hälsa. Plattformen modellerar beteendeeffekter: rädsla för skulder
+            leder till undvikande beteenden, medan små vinster bygger
+            <em>momentum</em> för långsiktiga vanor.
+          </p>
+        </article>
+
+        <article class="about-block">
+          <div class="about-block-num">● 03 · Från teori till erfarenhet</div>
+          <h3>Learning by doing — på riktigt.</h3>
+          <p>
+            Komplexa begrepp som <em>ränta-på-ränta</em>, marginalskatt och livsvalens
+            långsiktiga effekter internaliseras genom att användas. Användaren testar
+            karriärvägar, boendeformer, konsumtionsmönster och ser hur varje väg
+            formar både <strong>nettoförmögenhet och livskvalitet</strong> över
+            decennier. Inga kortsiktiga quiz — en levande simulering där alla vägar
+            är realistiska och alla misstag lärorika.
+          </p>
+        </article>
+      </div>
+
+      <div class="about-grid-2">
+        <article class="about-block">
+          <div class="about-block-num">● 04 · Ett svar på skolans fyrkantighet</div>
+          <h3>Bortom PDF:en där svaret fortfarande är 1+1.</h3>
+          <p>
+            Utifrån egna erfarenheter är den svenska skolan fortfarande
+            <em>fyrkantig</em> i en värld där teknik och kunskap utvecklas i rasande
+            takt. Skolans digitala plattformar är ofta kvar på <strong>PDF i digitalt
+            format</strong> — där svaret fortfarande är 1+1. Vi går bortom detta med
+            en fullständig simulering där läraren har komplett insyn i elevens resa.
+            Vi ser det goda i dagens spel och upplevelser som engagerar, lär ut och
+            sprider kunskap som aldrig förr. Istället för att se tekniken som ett
+            hinder använder Ekonomilabbet den för att skapa <em>nya, levande vägar
+            till lärande</em> — från teori till verklighetsnära erfarenhet.
+          </p>
+        </article>
+
+        <article class="about-block">
+          <div class="about-block-num">● 05 · Vårt mål: Nya vägar för kunskap</div>
+          <h3>Beslut leder till konsekvenser — inte ett slut.</h3>
+          <p>
+            Vi söker andra vägar för kunskap, ökar engagemang och gör resan rolig och
+            spännande genom <strong>uppdrag och utmaningar med dynamiska mått</strong>.
+            Beslut leder till konsekvenser — inte ett slut. Vi simulerar inte
+            <em>"fel"</em>, utan förståelsen att avvägningar öppnar andra vägar bortom
+            drömmar som aldrig nås. Avgörande exempel: realistisk aktiehandel där
+            eleven direkt ser <strong>risker</strong> och att rikedom sällan kommer
+            över en natt.
+          </p>
+        </article>
+      </div>
+
+      <p class="about-close">
+        Resultatet är en plattform som inte bara lär ut privatekonomi, utan
+        <em>formar ekonomiskt medvetna, resilienta individer</em> som förstår
+        sambandet mellan sina val, deras plånbok och deras liv.
+      </p>
+
+      <blockquote class="about-credo">
+        <p class="about-credo-line">
+          I matteuppgifter finns ett facit. <em>I livet finns bara avvägningar.</em>
+        </p>
+        <p class="about-credo-line">
+          När eleven slutar leta efter rätt svar och börjar söka en balans hen själv kan stå för — <strong>då är vi framme</strong>.
+        </p>
+        <cite class="about-credo-cite">— Robin Fröjd · Ekonomilabbet</cite>
+      </blockquote>
+
+    </div>
+  </section>
+
+  <section class="cta-final" id="cta" data-nav-theme="light">
+    <div class="shell">
+      <div class="cta-eye" data-fx="fade-up">● Privatekonomi som händer</div>
+      <h2 data-fx="fade-up" data-fx-delay="80">
+        Lärobok blir verklighet.<br><em>Boka en demo.</em>
+      </h2>
+      <p data-fx="fade-up" data-fx-delay="160">
+        20 minuter. Vi går igenom Lindas, Peters och Evelinas veckor,
+        visar hur lärarvyn fungerar och svarar på alla frågor.
+      </p>
+      <div class="cta-buttons" data-fx="fade-up" data-fx-delay="240">
+        <a href="/signup/teacher" class="btn btn-primary">Skapa konto<span class="btn-arrow">→</span></a>
+        <a href="/login" class="btn btn-secondary">Logga in<span class="btn-arrow">→</span></a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer" data-nav-theme="dark">
+  <div class="footer-shell">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="footer-brand-name">Ekonomilabbet</div>
+        <div class="footer-brand-tagline">Konsekvensdriven ekonomi och lärande</div>
+        <p class="footer-brand-blurb">
+          En plattform där användaren möter privatekonomin innan den möter dem.
+          <strong>För elever, lärare, föräldrar och barn.</strong>
+        </p>
+      </div>
+      <div class="footer-col">
+        <h4>Plattformen</h4>
+        <ul>
+          <li><a href="/linda">Träffa Linda</a></li>
+          <li><a href="/peter">Träffa Peter</a></li>
+          <li><a href="/evelina">Träffa Evelina</a></li>
+          <li><a href="/signup/teacher">Skapa konto</a></li>
+          <li><a href="/login">Logga in</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Hjälp</h4>
+        <ul>
+          <li><a href="/docs">Dokumentation</a></li>
+          <li><a href="/faq">Vanliga frågor</a></li>
+          <li><a href="/terms">Villkor &amp; simulering</a></li>
+          <li><a href="mailto:info@ekonomilabbet.org">Kontakt</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Material</h4>
+        <ul>
+          <li><a href="/larguider">Lärarguider</a></li>
+          <li><a href="/lgr22">Lgr22-mappning</a></li>
+          <li><a href="/rubriker">Bedömningsmallar</a></li>
+          <li><a href="/echo">Echo · sokratisk AI</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Ekonomilabbet</span>
+      <div class="footer-bottom-meta">
+        <span>Hjo</span>
+        <span>info@ekonomilabbet.org</span>
+        <span>byggt med konsekvenser</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+
+<script>
+// ─── Intro-sekvens trigger ─────────────────────────────────
+requestAnimationFrame(() => document.body.classList.add('is-loaded'));
+
+// ─── AOS-style entrance ──────────────────────────────────────
+(function() {
+  const items = document.querySelectorAll('[data-fx], [data-fx-stagger]');
+  if (!items.length) return;
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.12) {
+        e.target.classList.add('is-in');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: [0.12], rootMargin: '0px 0px -8% 0px' });
+  items.forEach(el => obs.observe(el));
+})();
+
+// ─── Säker video-loop ──────────────────────────────────────
+(function() {
+  document.querySelectorAll('.hero-bg-video').forEach(v => {
+    v.addEventListener('ended', () => {
+      try { v.currentTime = 0; v.play().catch(() => {}); } catch(e) {}
+    });
+  });
+})();
+
+// ─── Hero-cinema: video-crossfade + info-panel sync + nav-cursor ──
+(function() {
+  const heroInfo = document.getElementById('heroInfo');
+  const figures = Array.from(document.querySelectorAll('#figures .figure'));
+  const navItems = Array.from(document.querySelectorAll('.hero-persona-nav-item'));
+  const navCursor = document.querySelector('.hero-persona-nav-cursor');
+  const bgVideos = Array.from(document.querySelectorAll('.hero-bg-video'));
+  if (!heroInfo || !figures.length || !navItems.length) return;
+
+  const metaEl  = heroInfo.querySelector('[data-info-meta]');
+  const nameEl  = heroInfo.querySelector('[data-info-name]');
+  const roleEl  = heroInfo.querySelector('[data-info-role]');
+  const eyebrowEl = heroInfo.querySelector('[data-info-eyebrow]');
+  const storyEl = heroInfo.querySelector('[data-info-story]');
+  const tagsEl  = heroInfo.querySelector('[data-info-tags]');
+  const quoteEl = heroInfo.querySelector('[data-info-quote]');
+  const citeEl  = heroInfo.querySelector('[data-info-cite]');
+  const weekEl  = heroInfo.querySelector('[data-info-week]');
+  const ctaEl   = document.querySelector('[data-info-cta]');
+  const ctaLabel = document.querySelector('[data-info-cta-label]');
+
+  function findFig(persona) {
+    return figures.find(f => f.dataset.persona === persona);
+  }
+  function findBgVideo(persona) {
+    return bgVideos.find(v => v.dataset.persona === persona);
+  }
+
+  function moveCursorTo(personaKey) {
+    const item = navItems.find(n => n.dataset.personaNav === personaKey);
+    if (!item || !navCursor) return;
+    const stack = item.closest('.hero-persona-nav-stack');
+    const itemRect = item.getBoundingClientRect();
+    const stackRect = stack.getBoundingClientRect();
+    // Cursor centreras på item-toppens första 14 px
+    const top = (itemRect.top - stackRect.top) + 6 - 1;
+    navCursor.style.top = top + 'px';
+  }
+
+  function showFor(personaKey, isAuto) {
+    const fig = findFig(personaKey);
+    if (!fig) return;
+
+    metaEl.textContent  = fig.dataset.theme || '';
+    nameEl.textContent  = fig.dataset.name || '';
+    if (eyebrowEl) eyebrowEl.textContent = fig.dataset.eyebrow || '● Veckan';
+    roleEl.textContent  = fig.dataset.role || '';
+    storyEl.innerHTML   = fig.dataset.story || '';
+    quoteEl.textContent = fig.dataset.quote || '';
+    citeEl.textContent  = fig.dataset.cite || '';
+
+    tagsEl.innerHTML = '';
+    (fig.dataset.tags || '').split(',').forEach(t => {
+      if (!t.trim()) return;
+      const span = document.createElement('span');
+      span.className = 'hero-info-tag';
+      span.textContent = t.trim();
+      tagsEl.appendChild(span);
+    });
+
+    weekEl.innerHTML = '';
+    (fig.dataset.week || '').split(';').forEach(item => {
+      if (!item.trim()) return;
+      const [day, label] = item.split('|');
+      const row = document.createElement('div');
+      row.className = 'hero-info-week-item';
+      row.innerHTML = '<span class="hero-info-week-day">' + (day || '') + '</span>' +
+                      '<span class="hero-info-week-label">' + (label || '') + '</span>';
+      weekEl.appendChild(row);
+    });
+
+    ctaLabel.textContent = fig.dataset.cta || 'Träffa';
+    if (fig.dataset.soon !== undefined) {
+      ctaEl.setAttribute('aria-disabled', 'true');
+      ctaEl.removeAttribute('href');
+    } else {
+      ctaEl.removeAttribute('aria-disabled');
+      ctaEl.setAttribute('href', fig.getAttribute('href'));
+    }
+
+    // Uppdatera h1-headline + trigga flip-animation
+    const h1 = document.getElementById('heroHeadline');
+    if (h1 && fig.dataset.h1a) {
+      const a = h1.querySelector('[data-h1-a]');
+      const b = h1.querySelector('[data-h1-b]');
+      const c = h1.querySelector('[data-h1-c]');
+      if (a) a.textContent = fig.dataset.h1a;
+      if (b) b.textContent = fig.dataset.h1b;
+      if (c) c.textContent = fig.dataset.h1c;
+      h1.classList.remove('is-flipping');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          h1.classList.add('is-flipping');
+        });
+      });
+    }
+
+    // Uppdatera subhead-paragraf med fade-up animation
+    const subhead = document.getElementById('heroSubhead');
+    if (subhead && fig.dataset.subhead) {
+      subhead.classList.remove('is-flipping');
+      requestAnimationFrame(() => {
+        subhead.textContent = fig.dataset.subhead;
+        requestAnimationFrame(() => {
+          subhead.classList.add('is-flipping');
+        });
+      });
+    }
+
+    // Force animation restart via dubbel requestAnimationFrame —
+    // garanterar att browsern processar removeAttribute innan setAttribute
+    heroInfo.removeAttribute('data-active');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        heroInfo.setAttribute('data-active', personaKey);
+        if (isAuto) heroInfo.setAttribute('data-auto', '1');
+        else heroInfo.removeAttribute('data-auto');
+      });
+    });
+
+    // Crossfade bakgrunds-video
+    bgVideos.forEach(v => {
+      if (v.dataset.persona === personaKey) {
+        v.classList.add('is-active');
+        v.currentTime = 0;
+        v.play().catch(() => {});
+      } else {
+        v.classList.remove('is-active');
+        v.pause();
+        try { v.currentTime = 0; } catch(e) {}
+      }
+    });
+
+    // Uppdatera höger-nav active-state
+    navItems.forEach(n => {
+      n.classList.toggle('is-active', n.dataset.personaNav === personaKey);
+    });
+    moveCursorTo(personaKey);
+  }
+
+  let userInteracted = false;
+  let autoTimer = null;
+  let autoIdx = 0;
+  const ORDER = ['linda', 'evelina', 'peter'];
+
+  function autoRotate() {
+    if (userInteracted) return;
+    showFor(ORDER[autoIdx], true);
+    autoIdx = (autoIdx + 1) % ORDER.length;
+  }
+
+  // Klick på höger-nav byter persona och pausar auto i 8 sek
+  navItems.forEach(n => {
+    n.addEventListener('click', () => {
+      const key = n.dataset.personaNav;
+      const fig = findFig(key);
+      // Om det är en data-soon, navigera inte. Bara byt visning.
+      if (!n.dataset.soon && fig && fig.getAttribute('href') &&
+          fig.getAttribute('href') !== '#') {
+        // Klick på aktiv eller dubbelklick → följ länken
+        if (n.classList.contains('is-active')) {
+          window.location.href = fig.getAttribute('href');
+          return;
+        }
+      }
+      userInteracted = true;
+      clearInterval(autoTimer);
+      showFor(key, false);
+      // Återstart auto-rotation efter 8s grace
+      setTimeout(() => {
+        userInteracted = false;
+        autoIdx = (ORDER.indexOf(key) + 1) % ORDER.length;
+        autoTimer = setInterval(autoRotate, 6000);
+      }, 8000);
+    });
+  });
+
+  // CTA-klick följer Lindas href om aktiv
+  ctaEl.addEventListener('click', e => {
+    if (ctaEl.getAttribute('aria-disabled') === 'true') {
+      e.preventDefault();
+    }
+  });
+
+  // Starta med Linda
+  showFor('linda', true);
+  autoIdx = 1;
+
+  // Auto-rotation var 6:e s (matchar video-loop)
+  setTimeout(() => {
+    if (!userInteracted) {
+      autoTimer = setInterval(autoRotate, 6000);
+    }
+  }, 6000);
+
+  // Re-positionera cursor vid resize
+  window.addEventListener('resize', () => {
+    const active = navItems.find(n => n.classList.contains('is-active'));
+    if (active) moveCursorTo(active.dataset.personaNav);
+  });
+})();
+
+// ─── Lenis smooth-scroll + GSAP ScrollTrigger ───────────────
+window.addEventListener('load', () => {
+  if (typeof Lenis === 'undefined' || typeof gsap === 'undefined') {
+    console.warn('Lenis or GSAP failed to load — fallback till native scroll');
+    return;
+  }
+
+  // Initiera Lenis (Lenis v1 API)
+  const lenis = new Lenis({
+    duration: 1.15,
+    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    orientation: 'vertical',
+    gestureOrientation: 'vertical',
+    smoothWheel: true,
+    wheelMultiplier: 1,
+    touchMultiplier: 2,
+  });
+
+  // GSAP ScrollTrigger om plugin laddat
+  if (typeof ScrollTrigger !== 'undefined') {
+    gsap.registerPlugin(ScrollTrigger);
+
+    // Synka Lenis med ScrollTrigger
+    lenis.on('scroll', ScrollTrigger.update);
+    gsap.ticker.add((time) => lenis.raf(time * 1000));
+    gsap.ticker.lagSmoothing(0);
+
+    // ─── Hero parallax: video flyttas långsammare än content ───
+    gsap.to('.hero-bg-stack', {
+      yPercent: 18,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 0.6,
+      }
+    });
+
+    // Hero-content fadar bort när användaren scrollar
+    gsap.to('.hero-inner', {
+      yPercent: -12,
+      opacity: 0.3,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        end: 'bottom 30%',
+        scrub: 0.8,
+      }
+    });
+
+    // Höger-nav fadar bort när hero lämnar
+    gsap.to('.hero-persona-nav', {
+      opacity: 0,
+      x: 30,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        end: 'bottom 50%',
+        scrub: 0.5,
+      }
+    });
+
+    // ─── Section reveals — fromTo med immediateRender:false så
+    //     content INTE göms innan trigger fyrar (annars osynligt
+    //     om något skulle slå fel) ────────────────────────────
+    gsap.utils.toArray('section.intro, section.teacher, section.cta-final').forEach(section => {
+      const items = section.querySelectorAll(
+        '.intro-eye, .intro h2, .intro p, .pillar, ' +
+        '.teacher-eye, .teacher h2, .teacher p, .dash-card, ' +
+        '.cta-eye, .cta-final h2, .cta-final p, .cta-buttons'
+      );
+      if (!items.length) return;
+      gsap.fromTo(items,
+        { opacity: 0, y: 40 },
+        {
+          opacity: 1, y: 0,
+          duration: 0.9,
+          stagger: 0.08,
+          ease: 'power3.out',
+          immediateRender: false,
+          scrollTrigger: {
+            trigger: section,
+            start: 'top 80%',
+            toggleActions: 'play none none none',
+          }
+        }
+      );
+    });
+
+    // ─── Teacher dashboard rows — extra dramatisk entrance ───
+    const dashCard = document.querySelector('.dash-card');
+    if (dashCard) {
+      gsap.fromTo(dashCard.querySelectorAll('.dash-row'),
+        { opacity: 0, x: 40 },
+        {
+          opacity: 1, x: 0,
+          duration: 0.6,
+          stagger: 0.1,
+          ease: 'back.out(1.4)',
+          immediateRender: false,
+          scrollTrigger: {
+            trigger: dashCard,
+            start: 'top 75%',
+            toggleActions: 'play none none none',
+          }
+        }
+      );
+    }
+  }
+});
+
+// ─── Adaptiv nav-färg: vit text på mörka sektioner, mörk text på ljusa.
+// Bevakar [data-nav-theme]-sektioner och flippar body-klassen när överst
+// i viewporten korsas.
+(function () {
+  const body = document.body;
+  const sections = document.querySelectorAll('[data-nav-theme]');
+  if (!sections.length) return;
+
+  function applyTheme(theme) {
+    body.classList.toggle('nav-on-dark', theme === 'dark');
+    body.classList.toggle('nav-on-light', theme === 'light');
+  }
+  applyTheme('dark'); // hero är default
+
+  function recompute() {
+    let top = null;
+    sections.forEach(s => {
+      const r = s.getBoundingClientRect();
+      if (r.top <= 60 && r.bottom > 60) top = s;
+    });
+    if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
+  }
+
+  let raf = 0;
+  window.addEventListener('scroll', () => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => { raf = 0; recompute(); });
+  }, { passive: true });
+  window.addEventListener('resize', recompute);
+  recompute();
+})();
+</script>
+
+<script>
+// ─── Card-flip för teacher-features: klick toggle:ar is-flipped.
+// Tangentbordsstöd via Enter/Space, aria-pressed uppdateras.
+(function () {
+  const cards = document.querySelectorAll(".teacher-feature");
+  cards.forEach((card) => {
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-pressed", "false");
+    function flip() {
+      card.classList.toggle("is-flipped");
+      card.setAttribute(
+        "aria-pressed",
+        card.classList.contains("is-flipped") ? "true" : "false",
+      );
+    }
+    card.addEventListener("click", flip);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        flip();
+      }
+    });
+  });
+})();
+</script>
+
+<script>
+// ─── Auth-aware top-nav: visa Logga in/Skapa konto för utloggade,
+// Dashboard/Logga ut för inloggade. SPA:n lagrar token i sessionStorage
+// (key "hembudget_token"), så vi läser samma key. Klick på "Logga ut"
+// rensar nyckeln och navigerar till /.
+(function () {
+  const KEY = "hembudget_token";
+  function paint() {
+    const token = sessionStorage.getItem(KEY);
+    const isIn = !!token;
+    document.querySelectorAll('[data-auth-when="out"]').forEach(el => {
+      el.hidden = isIn;
+    });
+    document.querySelectorAll('[data-auth-when="in"]').forEach(el => {
+      el.hidden = !isIn;
+    });
+  }
+  paint();
+  // Re-paint vid storage-event (annan flik) + vid sidovisning
+  window.addEventListener("storage", paint);
+  window.addEventListener("pageshow", paint);
+
+  // "Logga ut"-länken: rensa token och navigera till /
+  document.querySelectorAll('a[href="/dashboard?logout=1"]').forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      sessionStorage.removeItem(KEY);
+      window.location.href = "/";
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

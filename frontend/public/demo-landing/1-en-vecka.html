@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idé 1 · En vecka i Lindas liv · Ekonomilabbet</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e2e8f0;
+  --serif: 'Source Serif 4', Georgia, serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+.back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 50;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--fg);
+  background: #fff;
+  border: 1px solid var(--rule);
+  padding: 6px 12px;
+  border-radius: 100px;
+}
+.back:hover { border-color: var(--fg); }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+section { padding: 80px 24px; border-top: 1px solid var(--rule); }
+.shell { max-width: 1100px; margin: 0 auto; }
+h1 {
+  font-size: clamp(38px, 5.5vw, 64px);
+  font-weight: 700;
+  letter-spacing: -1.6px;
+  line-height: 1.02;
+}
+h2 {
+  font-size: clamp(26px, 3.4vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+}
+
+/* ─── HERO — Lindas mobil måndag 06:48 ──────────────────────── */
+.hero {
+  padding: 64px 24px 96px;
+  border-top: none;
+  background: linear-gradient(180deg, #f8fafc 0%, #fafaf9 100%);
+}
+.hero .shell {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+@media (max-width: 800px) {
+  .hero .shell { grid-template-columns: 1fr; gap: 40px; }
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  background: #fef3c7;
+  color: #78350f;
+  border-radius: 100px;
+  letter-spacing: 1.2px;
+  margin-bottom: 24px;
+}
+.hero-eyebrow::before {
+  content: "";
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.hero h1 { margin-bottom: 22px; }
+.hero h1 em {
+  color: var(--accent);
+  font-style: italic;
+  font-family: var(--serif);
+  font-weight: 500;
+}
+.hero p {
+  font-size: 17px;
+  color: #475569;
+  max-width: 480px;
+  margin-bottom: 28px;
+}
+.hero-stats {
+  display: flex;
+  gap: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+  flex-wrap: wrap;
+}
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+}
+.hero-stat-num {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+.hero-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Phone mockup */
+.phone {
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 9 / 18;
+  background: #0f172a;
+  border-radius: 36px;
+  padding: 12px;
+  box-shadow: 0 30px 60px -15px rgba(15,23,42,0.4);
+  margin: 0 auto;
+  position: relative;
+}
+.phone-screen {
+  background: #fff;
+  border-radius: 26px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.phone-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.phone-status .time { font-weight: 600; color: var(--fg); }
+.phone-app-bar {
+  padding: 12px 18px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-family: var(--mono);
+  letter-spacing: 1px;
+}
+.phone-notif {
+  margin: 18px 14px;
+  padding: 14px 16px;
+  background: #fef3c7;
+  border: 1px solid rgba(120,53,15,0.25);
+  border-radius: 14px;
+  animation: fadeIn 0.6s 0.3s both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.phone-notif-app {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  color: #78350f;
+  margin-bottom: 6px;
+}
+.phone-notif-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.phone-notif-body {
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.4;
+}
+.phone-actions {
+  margin: 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.phone-action {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  font-size: 13px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.phone-action.primary {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+  font-weight: 500;
+}
+.phone-action small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.phone-action.primary small { color: rgba(255,255,255,0.6); }
+
+/* ─── DAY SECTIONS ─────────────────────────────────────────── */
+.day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.day-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.day-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 48px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .day-grid { grid-template-columns: 1fr; gap: 28px; }
+}
+.day-narrative h2 { margin-bottom: 16px; }
+.day-narrative p {
+  font-size: 16px;
+  color: #475569;
+  margin-bottom: 14px;
+}
+.day-narrative em {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--fg);
+  font-size: 17px;
+}
+.day-tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: #fef3c7;
+  color: #78350f;
+  padding: 4px 10px;
+  border-radius: 100px;
+  margin-top: 12px;
+  border: 1px solid rgba(120,53,15,0.2);
+}
+
+/* Mockup-card (visualisering till höger) */
+.mockup {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
+}
+.mockup-eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.mockup h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin-bottom: 16px;
+}
+</style>
+</head>
+<body>
+<a href="./" class="back">← tillbaka</a>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HERO — Måndag 06:48, Lindas mobil ploppar in en notis
+     ═══════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="shell">
+    <div>
+      <div class="hero-eyebrow">EN VECKA I LINDAS LIV</div>
+      <h1>
+        Klockan är <em>06:48</em>.<br>
+        Lindas vecka<br>
+        börjar om <em>2 minuter</em>.
+      </h1>
+      <p>
+        Linda är 22, IT-konsult i Stockholm, hyr en etta i Aspudden. Det här är
+        hennes vecka i Ekonomilabbet — varje dag har ett moment som hela
+        plattformen vrider sig kring. Scrolla för att följa henne.
+      </p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-num">7</span>
+          <span class="hero-stat-label">dagar</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-num">9</span>
+          <span class="hero-stat-label">val att göra</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-num">5</span>
+          <span class="hero-stat-label">dimensioner</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-status">
+          <span class="time">06:48</span>
+          <span>● Mån 27 nov</span>
+        </div>
+        <div class="phone-app-bar">EKONOMILABBET</div>
+        <div class="phone-notif">
+          <div class="phone-notif-app">● ARBETSPLATS-FRÅGA · TIS 06:45</div>
+          <div class="phone-notif-title">Maria har glömt passerkortet</div>
+          <div class="phone-notif-body">
+            "Min kollega ringer 06:45 och frågar om du kan hämta henne. Ert
+            pass startar 07:00. Vad svarar du?"
+          </div>
+        </div>
+        <div class="phone-actions">
+          <button class="phone-action primary">
+            Ja, jag kör. Vi täcker varandra.
+            <small>+4 satisfaction</small>
+          </button>
+          <button class="phone-action">
+            Be henne ta taxi och ersätta dig.
+            <small>+1 satisfaction</small>
+          </button>
+          <button class="phone-action">
+            Säg till chefen att hon är sen.
+            <small>−5 satisfaction</small>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- ═══════════════════════════════════════════════════════════
+     TISDAG — Lönesamtalet med AI-chefen Maria
+     ═══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time">● Tisdag · 10:14</span>
+      <span class="eyebrow">Det enda samtalet på året</span>
+    </div>
+    <div class="day-grid">
+      <div class="day-narrative">
+        <h2>Linda öppnar lönesamtalet.</h2>
+        <p>
+          Maria — HR-chef på Visma, AI-driven på Claude Haiku — väntar på
+          Linda. Fem ronder. Linda börjar med marknadsdata: <em>"Akavia 2026
+          säger 39 500 kr för min roll. Jag ligger 1 500 kr under."</em>
+        </p>
+        <p>
+          Maria balanserar avtalet (2,5 % revision), Lindas
+          satisfaction-score (72/100) och budgeten. Efter tre ronder landar
+          de på <strong>3,5 %</strong>. Linda accepterar.
+        </p>
+        <span class="day-tag">+ 1 295 KR / MÅN · GÄLLER 1 MAJ</span>
+      </div>
+
+      <div class="mockup">
+        <div class="mockup-eyebrow">Lönesamtalet 2026 · 5 ronder</div>
+        <h3>Linda · IT-konsult · Visma</h3>
+        <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 18px;">
+          <div style="padding:10px 8px; background:#f1f5f9; border-radius:8px; font-family:var(--mono); font-size:10px; line-height:1.3;">
+            <div style="color:#94a3b8; letter-spacing:1px;">R 01</div>
+            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">2,5 %</div>
+          </div>
+          <div style="padding:10px 8px; background:#f1f5f9; border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#94a3b8; letter-spacing:1px;">R 02</div>
+            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">3,2 %</div>
+          </div>
+          <div style="padding:10px 8px; background:#fef3c7; border-radius:8px; border:2px solid var(--gold); font-family:var(--mono); font-size:10px;">
+            <div style="color:#78350f; letter-spacing:1px;">R 03 ★</div>
+            <div style="font-size:14px; font-weight:700; color:var(--fg); margin-top:4px;">3,5 %</div>
+          </div>
+          <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#cbd5e1; letter-spacing:1px;">R 04</div>
+            <div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div>
+          </div>
+          <div style="padding:10px 8px; background:#fafaf9; border:1px dashed var(--rule); border-radius:8px; font-family:var(--mono); font-size:10px;">
+            <div style="color:#cbd5e1; letter-spacing:1px;">R 05</div>
+            <div style="font-size:14px; font-weight:700; color:#cbd5e1; margin-top:4px;">—</div>
+          </div>
+        </div>
+        <div style="background:#fef3c7; padding:14px 16px; border-radius:10px; font-family:var(--mono); font-size:12.5px; line-height:1.7; color:#78350f;">
+          <div style="color:#92400e; font-size:10px; letter-spacing:1px; margin-bottom:6px; text-transform:uppercase;">● MARIAS FAKTAGRUND</div>
+          <div>Aktuell lön: <strong>37 000 kr</strong></div>
+          <div>Avtal: Tjänstemanna IT (2,5 %)</div>
+          <div>Förhandlingsrum: <strong style="color:var(--fg);">+2,5 → +4,0 %</strong></div>
+        </div>
+        <div style="margin-top:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); padding:10px 14px; border-radius:8px; font-size:13px; color:#065f46;">
+          ● Resultat: <strong>3,5 %</strong> · ny lön <strong>38 295 kr</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ONSDAG — 5 000 kr till ISK + Volvo + Ericsson
+     ═══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time">● Onsdag · 12:30</span>
+      <span class="eyebrow">Sparmål · 25 % av lönen</span>
+    </div>
+    <div class="day-grid">
+      <div class="day-narrative">
+        <h2>Linda flyttar 5 000 kr till sitt ISK.</h2>
+        <p>
+          Hon har bestämt: 25 % av lönen direkt till investeringar innan hon
+          hinner spendera. Bufferten ligger redan på två månadshyror — det
+          här är överskottet.
+        </p>
+        <p>
+          Hon köper <em>Volvo B (10 st @ 312,40 kr)</em> och <em>Ericsson B
+          (15 st @ 78,65 kr)</em> — tio minuters research baserat på Q4-
+          rapporterna. Avanza Mini-courtage: 1 kr.
+        </p>
+        <span class="day-tag">EKONOMI ↗ · TRYGGHET ↗</span>
+      </div>
+
+      <div class="mockup">
+        <div class="mockup-eyebrow">ISK · Aktiekonto</div>
+        <h3>Två innehav · 4 290 kr totalt</h3>
+
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
+          <div style="display:flex; align-items:center; gap:12px; padding:10px 14px; background:#fafaf9; border:1px solid var(--rule); border-radius:8px;">
+            <div style="width:36px; height:36px; border-radius:7px; background:#0f172a; color:#fef3c7; display:grid; place-items:center; font-family:var(--mono); font-weight:700; font-size:11px;">VO</div>
+            <div style="flex:1;">
+              <div style="font-size:14px; font-weight:600;">Volvo B</div>
+              <div style="font-size:11.5px; color:var(--muted); font-family:var(--mono);">10 st · 312,40 kr</div>
+            </div>
+            <div style="font-family:var(--mono); font-size:13px; color:#dc4c2b; font-weight:600;">▼ 2,1 %</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; padding:10px 14px; background:#fafaf9; border:1px solid var(--rule); border-radius:8px;">
+            <div style="width:36px; height:36px; border-radius:7px; background:#0f172a; color:#fef3c7; display:grid; place-items:center; font-family:var(--mono); font-weight:700; font-size:11px;">ER</div>
+            <div style="flex:1;">
+              <div style="font-size:14px; font-weight:600;">Ericsson B</div>
+              <div style="font-size:11.5px; color:var(--muted); font-family:var(--mono);">15 st · 78,65 kr</div>
+            </div>
+            <div style="font-family:var(--mono); font-size:13px; color:#10b981; font-weight:600;">▲ 1,8 %</div>
+          </div>
+        </div>
+
+        <div style="font-family:var(--mono); font-size:12px; line-height:1.85; color:#475569; padding-top:14px; border-top:1px solid var(--rule);">
+          <div style="display:flex; justify-content:space-between;"><span>Köpta för</span><strong style="color:var(--fg);">4 289,75 kr</strong></div>
+          <div style="display:flex; justify-content:space-between;"><span>Courtage (Mini · 0,25 %)</span><strong style="color:var(--fg);">10,72 kr</strong></div>
+          <div style="display:flex; justify-content:space-between; padding-top:8px; margin-top:8px; border-top:1px solid var(--rule);"><span>Totalt</span><strong style="color:var(--accent);">4 300,47 kr</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TORSDAG — Akut tandläkare 2 400 kr
+     ═══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time">● Torsdag · 14:02</span>
+      <span class="eyebrow">Det oväntade</span>
+    </div>
+    <div class="day-grid">
+      <div class="day-narrative">
+        <h2>Tandläkare. 2 400 kr. Akut.</h2>
+        <p>
+          En ilning under en bit choklad. Bokar nödtid hos Folktandvården.
+          Diagnos: lagning + rotbehandling. <em>Linda hade lagt 2 000 kr
+          extra på upplevelser denna månad — men det här går inte att
+          skjuta upp.</em>
+        </p>
+        <p>
+          Bufferten dippar med en månads sparande. Wellbeing-Trygghet
+          rasar 8 poäng. Echo-coachen pingar: <em>"Hur kändes det?"</em>
+        </p>
+        <span class="day-tag">−2 400 KR · TRYGGHET ↘</span>
+      </div>
+
+      <div class="mockup">
+        <div class="mockup-eyebrow">Bank-dokument · Folktandvården</div>
+        <h3>Faktura · 2 400 kr</h3>
+
+        <div style="background:#fafaf9; border:1px dashed #cbd5e1; border-radius:8px; padding:18px 16px; font-family:var(--mono); font-size:13px; line-height:1.8; color:var(--fg); margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; color:#475569;"><span>Vårdgivare</span><strong>Folktandvården</strong></div>
+          <div style="display:flex; justify-content:space-between; color:#475569;"><span>Datum</span><strong>14 nov 2026</strong></div>
+          <div style="display:flex; justify-content:space-between; color:#475569;"><span>Förfaller</span><strong>28 nov 2026</strong></div>
+          <div style="display:flex; justify-content:space-between; padding-top:10px; margin-top:10px; border-top:1px solid var(--rule); font-size:18px;"><span style="color:#475569; font-size:13px;">Belopp</span><strong style="color:var(--accent);">2 400 kr</strong></div>
+        </div>
+
+        <div style="background:#0f172a; color:#fff; padding:14px 16px; border-radius:10px; font-family:var(--mono); font-size:12.5px; line-height:1.7;">
+          <div style="color:#94a3b8; font-size:10px; letter-spacing:1px; margin-bottom:6px; text-transform:uppercase;">SALDO LÖNEKONTO</div>
+          <div>Före: <strong style="color:#fff;">+ 24 318 kr</strong></div>
+          <div>Efter: <strong style="color:var(--gold);">+ 21 918 kr</strong></div>
+          <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.1); color:#fca5a5; font-style:italic; font-family: var(--serif);">
+            "Bra att bufferten räckte. Nästa månad: backa upp 1 000 kr."
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     FREDAG — Aktiemarknaden ner 3,2 % · loss aversion smärtar
+     ═══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time">● Fredag · 17:31</span>
+      <span class="eyebrow">När förlust gör dubbelt så ont</span>
+    </div>
+    <div class="day-grid">
+      <div class="day-narrative">
+        <h2>Volvo B drar ner. Linda säljer i panik.</h2>
+        <p>
+          Marknaden ner 3,2 % på en dag. Linda ser sin portfölj minus 784 kr
+          och säljer båda innehaven kl 17:28 — minuterna innan stängning.
+          <em>"Säkrare att ta förlusten nu än vänta."</em>
+        </p>
+        <p>
+          Sextio dagar senare öppnas Aktie-eftertanke. Volvo står i 312 kr —
+          om hon väntat hade hon haft + 450 kr. Hennes loss-aversion-quotient
+          är <strong>1,8×</strong> — hon säljer 1,8 gånger oftare i förlust
+          än i vinst. Klassiskt nybörjarmönster — och fixbart.
+        </p>
+        <span class="day-tag">TRYGGHET RASAR DUBBELT SÅ HÅRT</span>
+      </div>
+
+      <div class="mockup">
+        <div class="mockup-eyebrow">Loss aversion · λ ≈ 2,0 (Kahneman/Tversky)</div>
+        <h3>En förlust gör dubbelt så ont som motsvarande vinst</h3>
+
+        <div style="margin-top:18px; display:flex; flex-direction:column; gap:18px;">
+          <div>
+            <div style="font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:1px; margin-bottom:6px;">VINST + 3,2 %</div>
+            <div style="height:18px; background:#f1f5f9; border-radius:4px; overflow:hidden;">
+              <div style="height:100%; width:32%; background:#10b981;"></div>
+            </div>
+            <div style="font-family:var(--mono); font-size:11px; color:#10b981; margin-top:4px;">Trygghet + 2 poäng</div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:1px; margin-bottom:6px;">FÖRLUST − 3,2 %</div>
+            <div style="height:18px; background:#f1f5f9; border-radius:4px; overflow:hidden;">
+              <div style="height:100%; width:64%; background:#dc4c2b;"></div>
+            </div>
+            <div style="font-family:var(--mono); font-size:11px; color:#dc4c2b; margin-top:4px;">Trygghet − 4 poäng (2× hårdare)</div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--rule); display:flex; align-items:center; gap:14px;">
+          <div style="width:56px; height:56px; border-radius:50%; background:#fef3c7; border:2px solid var(--gold); display:grid; place-items:center; font-family:var(--mono); font-size:17px; font-weight:700; color:#78350f;">1,8×</div>
+          <div style="font-size:12.5px; color:#475569; line-height:1.45;">
+            <strong style="color:var(--fg);">Loss-aversion-quotient.</strong>
+            Linda säljer 1,8× oftare i förlust än i vinst.
+            Mätbart. Fixbart. Spegeln driver lärande.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SÖNDAG — Veckans Wellbeing-pentagon
+     ═══════════════════════════════════════════════════════════ -->
+<section style="background:#0f172a; color:#fff; border-top:none;">
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time" style="color:var(--gold);">● Söndag · 21:14</span>
+      <span class="eyebrow" style="color:#94a3b8;">Veckan i en bild</span>
+    </div>
+    <div class="day-grid" style="grid-template-columns: 1.1fr 1fr;">
+      <div>
+        <h2 style="color:#fff;">Linda öppnar dashboarden.</h2>
+        <p style="color:#cbd5e1; font-size:16px; margin-bottom:14px;">
+          Pentagonen i centrum visar veckans rörelse. Trygghet ↘ (tandläkare,
+          aktier). Sociala band ↗ (passerkort-frågan). Ekonomi neutral
+          (lönehöjning balanserad mot oväntad utgift).
+        </p>
+        <p style="color:#cbd5e1; font-size:16px; margin-bottom:14px;">
+          Echo-coachen sammanfattar: <em style="font-family:var(--serif); color:var(--gold);">
+          "Du blev klokare den här veckan. Tandläkaren tvingade dig att se
+          värdet på bufferten. Aktierna lärde dig något om dig själv."</em>
+        </p>
+        <span class="day-tag" style="background:rgba(251,191,36,0.12); color:var(--gold); border-color:rgba(251,191,36,0.3);">WELLBEING 60 / 100</span>
+      </div>
+
+      <div style="display:grid; place-items:center;">
+        <svg viewBox="0 0 400 400" style="width:100%; max-width:340px;">
+          <!-- Concentric rings -->
+          <polygon points="200,90 305,148 287,265 113,265 95,148" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+          <polygon points="200,130 271,168 259,247 141,247 129,168" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+          <polygon points="200,170 237,189 232,229 168,229 163,189" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+          <!-- Axes -->
+          <line x1="200" y1="200" x2="200" y2="60" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+          <line x1="200" y1="200" x2="333" y2="143" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+          <line x1="200" y1="200" x2="282" y2="333" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+          <line x1="200" y1="200" x2="118" y2="333" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+          <line x1="200" y1="200" x2="67" y2="143" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+          <!-- Data polygon (Lindas värden vecka 1) -->
+          <polygon points="200,116 290,164 256,288 134,267 90,159"
+                   fill="rgba(251,191,36,0.18)" stroke="#fbbf24" stroke-width="2.4"/>
+          <!-- Dots -->
+          <circle cx="200" cy="116" r="4.5" fill="#fbbf24"/>
+          <circle cx="290" cy="164" r="4.5" fill="#fbbf24"/>
+          <circle cx="256" cy="288" r="4.5" fill="#fbbf24"/>
+          <circle cx="134" cy="267" r="4.5" fill="#fbbf24"/>
+          <circle cx="90" cy="159" r="4.5" fill="#fbbf24"/>
+          <!-- Labels -->
+          <text x="200" y="46" text-anchor="middle" font-size="11" font-weight="600" fill="#cbd5e1" font-family="ui-monospace, monospace">EKONOMI</text>
+          <text x="358" y="143" text-anchor="middle" font-size="11" font-weight="600" fill="#cbd5e1" font-family="ui-monospace, monospace">MAT &amp; HÄLSA</text>
+          <text x="282" y="358" text-anchor="middle" font-size="11" font-weight="600" fill="#cbd5e1" font-family="ui-monospace, monospace">SOCIALA</text>
+          <text x="118" y="358" text-anchor="middle" font-size="11" font-weight="600" fill="#cbd5e1" font-family="ui-monospace, monospace">FRITID</text>
+          <text x="42" y="143" text-anchor="middle" font-size="11" font-weight="600" fill="#cbd5e1" font-family="ui-monospace, monospace">TRYGGHET</text>
+          <!-- Center score -->
+          <text x="200" y="200" text-anchor="middle" font-size="56" font-weight="700" fill="#fff">60</text>
+          <text x="200" y="226" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="ui-monospace, monospace" letter-spacing="2">WELLBEING</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LÄRAR-MÅNDAG — Klassens värmekarta
+     ═══════════════════════════════════════════════════════════ -->
+<section>
+  <div class="shell">
+    <div class="day-header">
+      <span class="day-time">● Måndag · 08:30 — nu lärarens vy</span>
+      <span class="eyebrow">/teacher · klass 9C · 28 elever</span>
+    </div>
+    <div class="day-grid">
+      <div class="day-narrative">
+        <h2>Karin öppnar sin klassvy.</h2>
+        <p>
+          Linda är en av 28 elever. Karin ser värmekartan — Wellbeing per
+          dimension per elev. <em>"Linda" har en röd flagga: SMS-lån
+          riskerade förra veckan, valde privatlån istället. Bra val — men
+          värt att kolla in.</em>
+        </p>
+        <p>
+          Karin klickar på Lindas rad. Hela veckans logg syns: 9 beslut,
+          22 min on task, 2 ISK-överföringar, 1 lönehöjning, 1 oväntad
+          tandläkare. Hon bokar in ett 15-minuters samtal nästa onsdag.
+        </p>
+        <span class="day-tag">ALLT LOGGAT · ALLT SYNS</span>
+      </div>
+
+      <div class="mockup">
+        <div class="mockup-eyebrow">Mastery-värmekarta · klass 9C</div>
+        <h3>28 elever × 5 dimensioner</h3>
+
+        <div style="display:grid; grid-template-columns: 60px repeat(5, 1fr); gap:3px; font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-top:14px;">
+          <div></div>
+          <div style="text-align:center; padding:3px;">EK</div>
+          <div style="text-align:center; padding:3px;">HL</div>
+          <div style="text-align:center; padding:3px;">SB</div>
+          <div style="text-align:center; padding:3px;">FR</div>
+          <div style="text-align:center; padding:3px;">TR</div>
+
+          <div style="padding:3px 6px; color:var(--fg); font-weight:600;">Linda</div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#dc4c2b; border-radius:3px; box-shadow:0 0 0 2px var(--accent);" title="röd flagga"></div>
+
+          <div style="padding:3px 6px; color:#475569;">Edvar</div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+
+          <div style="padding:3px 6px; color:#475569;">Mai</div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+
+          <div style="padding:3px 6px; color:#475569;">Theo</div>
+          <div style="aspect-ratio:1; background:#dc4c2b; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#dc4c2b; border-radius:3px;"></div>
+
+          <div style="padding:3px 6px; color:#475569;">Sara</div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#fbbf24; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#10b981; border-radius:3px;"></div>
+
+          <div style="padding:3px 6px; color:var(--muted);">… 23 till</div>
+          <div style="aspect-ratio:1; background:#f1f5f9; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#f1f5f9; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#f1f5f9; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#f1f5f9; border-radius:3px;"></div>
+          <div style="aspect-ratio:1; background:#f1f5f9; border-radius:3px;"></div>
+        </div>
+
+        <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--rule); display:flex; align-items:flex-start; gap:12px; padding:12px 14px; background:rgba(220,76,43,0.06); border:1px solid rgba(220,76,43,0.25); border-radius:8px;">
+          <div style="width:36px; height:36px; border-radius:8px; background:rgba(220,76,43,0.12); display:grid; place-items:center; color:var(--accent); font-size:18px; flex-shrink:0;">⚑</div>
+          <div>
+            <div style="font-family:var(--mono); font-size:10.5px; color:var(--accent); letter-spacing:1.2px; text-transform:uppercase; margin-bottom:2px;">UPPMÄRKSAMHET · LINDA</div>
+            <div style="font-size:13px; color:#7f1d1d; line-height:1.4;">
+              Privatlån vald över SMS-lån (lugnt val) men Wellbeing-trend
+              negativ. Boka 15 min samtal?
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CTA
+     ═══════════════════════════════════════════════════════════ -->
+<section style="background:linear-gradient(180deg, #fafaf9 0%, #fef3c7 100%); padding:96px 24px;">
+  <div class="shell" style="max-width:720px; text-align:center;">
+    <div class="eyebrow" style="margin-bottom:14px;">● 1 av 78 SCENARIER</div>
+    <h2 style="margin-bottom:18px;">Det här var Lindas vecka.</h2>
+    <p style="font-size:17px; color:#475569; margin-bottom:32px; line-height:1.55;">
+      Det finns 77 till. Varje elev får sitt eget — slumpat på personlighet,
+      yrke, stad, livssituation. Samma plattform, olika liv. Och
+      Wellbeing-pentagonen i centrum, alltid.
+    </p>
+    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+      <a href="/signup/teacher" style="display:inline-flex; align-items:center; gap:8px; padding:12px 22px; background:#0f172a; color:#fff; border-radius:10px; text-decoration:none; font-size:14.5px; font-weight:500;">
+        Starta som lärare →
+      </a>
+      <a href="/signup/parent" style="display:inline-flex; align-items:center; gap:8px; padding:12px 22px; background:#fff; color:#0f172a; border:1px solid #cbd5e1; border-radius:10px; text-decoration:none; font-size:14.5px; font-weight:500;">
+        Starta som förälder →
+      </a>
+    </div>
+    <div class="eyebrow" style="margin-top:36px; color:var(--muted);">
+      Gratis under pilotåret 2026 · ingen bindningstid
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
+
+

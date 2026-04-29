@@ -1,0 +1,503 @@
+# Fullständig analys: Modulen "Mitt företag"
+
+Entreprenörskaps- och företagsekonomi-simulator för Ekonomilabbet.
+
+Nedan är en komplett designanalys för att lyfta pappersmaterialet till en
+fullt integrerad modul i Ekonomilabbet, med egen undersida, eget datalager
+och full koppling till befintlig modul-, AI- och lärarinfrastruktur.
+Inga kodändringar — bara arkitektur, pedagogik, mekanik och konkreta
+integrationspunkter.
+
+---
+
+## 1. Konceptet i en mening
+
+En **dynamisk företagssimulator** där eleven driver ett självvalt enskilt
+företag över 8–16 simulerade veckor: får offerter från en AI-driven
+kundpool, fakturerar, bokför, stämmer av bank, tar strategiska beslut
+(marknadsföring, anställning, friskvård), och får läraren som
+"myndighet/leverantör" som matar in skatter, leverantörsfakturor och
+granskning. Allt finns på en egen undersida `/business` (elev) och
+`/teacher/business` (lärare), men kompetensmål, AI-feedback,
+rubric-bedömning och progress-spårning återanvänder den befintliga
+modul-infrastrukturen från `school/models.py`.
+
+---
+
+## 2. Hur det passar i befintlig arkitektur
+
+Det stora värdet är att **ingenting ska byggas från noll** — ni har redan
+alla byggstenar:
+
+| Behov i nya modulen | Befintlig komponent som återanvänds |
+|---|---|
+| Stegbaserad genomgång (intro, teori, kvitto, reflektion) | `Module` + `ModuleStep` (`school/models.py:472-524`) med kinds `read/watch/reflect/task/quiz` |
+| Per-elev-progress, heartbeat, tid på uppgift | `StudentModule`, `StudentStepProgress`, `StudentStepHeartbeat` |
+| Kompetensmål per delmoment | `Competency` + `ModuleStepCompetency` (`competency_seed.py`) — bara nya kompetenser läggs till |
+| Lärar-feedback på reflektion + AI-rubric | `ai.py::generate_feedback_suggestion` och `score_with_rubric` |
+| Eleven frågar AI om regler/skatt/bokföring | `ai.py::answer_student_question` (`/ai/student/ask` + stream) |
+| Multi-tenant isolering av företaget per elev | `StudentScopeMiddleware` + `TenantMixin` — nya tabeller ärver bara mixin |
+| Fakturor som PDF | `teacher/pdfs.py` (reportlab) — samma motor som lönespec/kontoutdrag |
+| Lärar-genererade artefakter (leverantörsfaktura, skattebesked) | `ScenarioBatch` + `BatchArtifact` (`school/models.py:260-332`) — utöka enbart med nya `kind`-värden |
+| Bokförda transaktioner och kontoplan | `Account`, `Transaction`, `Category` (i scope-DB) — utökas med dimensionerna `debit_account`/`credit_account` |
+| Token-räkning per lärare för all AI | `ai.py::_record_usage` |
+
+**Slutsats:** modulen blir ett *nytt domänlager ovanpå* dagens motor, inte
+en parallell stack. Ny kod behöver i princip bara: nya scope-tabeller
+(företag, offerter, kunder, jobb), en ny seed-mall i `module_seed.py`, ett
+par nya `Assignment.kind`, fyra–fem nya AI-funktioner i `ai.py`, en ny
+router (`api/business.py`) och en ny frontend-sektion `pages/business/`.
+
+---
+
+## 3. Två svårighetsnivåer i en och samma simulator
+
+Materialet ska serva **Företagsekonomi 1 / Entreprenörskap** (grund) **och
+Företagsekonomi 2** (fördjupning). Lös detta med ett *läge* på
+företagsnivån istället för två moduler:
+
+- **Grundläge** (`level: "basics"`)
+  - Manuell resultaträkning som steg (eleven fyller i belopp i ett
+    formulär; systemet visar facit)
+  - Förenklad bokföring: bara intäkter/kostnader/resultat — inga T-konton
+  - Marknadsföring och beslut är "knappval", inte fri text
+  - Avstämning sker veckovis automatiskt
+  - Inga nyckeltal, ingen revision
+
+- **Fördjupningsläge** (`level: "advanced"`)
+  - Riktig dubbel bokföring (debet/kredit) mot en pedagogiskt förenklad
+    BAS-kontoplan (~30 konton)
+  - Bankavstämning: läraren genererar kontoutdrag (befintlig
+    `render_kontoutdrag`!) som eleven matchar mot egna bokförda poster
+  - Nyckeltal: bruttomarginal, soliditet, likviditet,
+    omsättningshastighet — räknas och redovisas
+  - **Peer-revision**: en elev tilldelas en kamrats bokföring, går igenom
+    checklist, lämnar revisionsrapport (rubric-bedömd av AI)
+
+Spara läget på själva företagsentiteten så att samma lärare kan ge en
+åttonde-klass enklare läge och en gymnasieelev avancerat — utan att
+klona modulen.
+
+---
+
+## 4. Kärndomänmodell (nya tabeller, scope-isolerade)
+
+Allt ärver `TenantMixin` så att `StudentScopeMiddleware` automatiskt
+isolerar per elev. Inga kolumner anges här (det är design, inte schema),
+bara entiteterna och varför de finns.
+
+1. **Business** — själva företaget. Affärsidé (fritext från eleven,
+   AI-modererad), bransch (vald från enum: hantverk, IT-tjänster, café,
+   hundpassning, e-handel, konsult, kreativ tjänst …), startdatum, läge
+   (basics/advanced), simuleringstakt (1 vecka i spelet = X minuter
+   realtid eller "stega manuellt"), nuvarande "rykte" (0–100, drivs av
+   kvalitet på leveranser).
+2. **Customer** — kundpool genererad av systemet. Har segment
+   (privat/företag/kommun), priskänslighet, kvalitetskänslighet,
+   betalningsmoral.
+3. **JobOpportunity** — en offertförfrågan. Beskrivning, marknadsmässigt
+   riktpris, deadline, status (open/quoted/won/lost/done/cancelled).
+4. **Quote** — elevens offert på en JobOpportunity. Pris, leveranstid,
+   beskrivning, ev. fritextpitch.
+5. **Job** — vunnen offert som blir uppdrag. Status
+   (in_progress/delivered/disputed), kvalitetspoäng vid leverans (sätts
+   av eleven själv eller ett "kvalitetsbeslut"-steg).
+6. **CustomerInvoice** — kundfaktura kopplad till Job. Förfallodatum,
+   status (sent/paid/overdue), bokföringsförslag.
+7. **SupplierInvoice** — leverantörsfaktura inkommande. Källa: antingen
+   genererad av systemet (hyra, abonnemang) eller skapad manuellt av
+   läraren (för pedagogiska oväntade händelser: "du har fått en
+   miljöskatt", "datorn gick sönder").
+8. **MarketingCampaign** — typ (sociala medier, flygblad,
+   Google-annonser, sponsring), kostnad, varaktighet, kvalitet (eleven
+   får välja innehåll, AI-bedömer).
+9. **BusinessDecision** — generisk "stora beslut": anställa timanställd,
+   friskvårdsbidrag, byta lokal, leasingbil, försäkring. Param-driven
+   (samma mönster som `Assignment.params`).
+10. **LedgerEntry** — bokföringspost i avancerat läge: datum,
+    verifikationsnummer, debet-konto, kredit-konto, belopp, motpart. Två
+    rader per affärshändelse.
+11. **ChartOfAccount** — pedagogisk kontoplan (bara avancerat läge),
+    seedad globalt.
+12. **ReconciliationSession** — bankavstämning: lista över bokförda
+    poster + lista över bankposter + matchningar.
+13. **AuditAssignment** — peer-revision: en elev får en kamrats
+    bokföringspaket att granska.
+
+Det viktiga: **alla "händelser" mynnar ut i en eller flera
+`Transaction`+`LedgerEntry`** så att resultaträkningen byggs på samma
+motor ni redan har. Kundfaktura → en transaktion på "Försäljning";
+faktura betald → överföring till bankkontot. Det här är direkt analogt
+med hur ert nuvarande system kategoriserar privata transaktioner.
+
+---
+
+## 5. Spelmekanik: "Programmet avgör"
+
+Det här är hjärtat i materialet och behöver vara *transparent men inte
+för enkelt*. Två separata mekanismer:
+
+### 5.1 Tar kunden offerten?
+
+En **acceptansmodell** med viktade faktorer, beräknad deterministiskt
+(inte LLM — du vill att läraren ska kunna förklara varför):
+
+```
+P(accept) = sigmoid(
+    w1 * (riktpris - elevpris) / riktpris        # priskänslighet per kund
+  + w2 * företagets_rykte                         # 0–100
+  + w3 * marknadsföringseffekt_just_nu            # avtagande över tid
+  + w4 * matchning_pitch_mot_behov                # AI-bedömt 0–1
+  - w5 * leveranstid_avvikelse                    # för långsam = nej
+)
+```
+
+Slumptal jämförs mot P(accept). Eleven får alltid se en kort motivering
+("Kunden tyckte priset var rimligt men du lovade leverans 3 veckor —
+för långsamt"). Det här uppfyller "programmet avgör om kunden accepterar
+offerten".
+
+### 5.2 Får eleven fler liknande jobb?
+
+En **pipeline-genererare** som körs när simuleringen stegar fram en
+vecka:
+
+```
+antal_nya_jobb_denna_vecka = base
+  + bonus(rykte)
+  + bonus(aktiva_marknadsföringskampanjer)
+  + bonus(senaste_levererade_kvalitet)
+  - penalty(öppna_klagomål)
+```
+
+Branschmix viktas av elevens historiska affärsidé och eventuellt nya
+kompetenser (köpte de en kurs i webbutveckling? Då dyker fler IT-jobb
+upp). Det är "programmet avgör om eleven får fler liknande jobb".
+
+**Varför inte LLM här?** För att läraren behöver kunna säga "därför
+fick du tre jobb istället för ett" och eleven måste kunna räkna ut
+samband — annars går pedagogiken förlorad. LLM används bara för
+*innehåll* (kundtext, jobbeskrivning, pitch-bedömning), inte för
+*beslut* (acceptans, antal jobb). Det är en viktig arkitekturprincip.
+
+---
+
+## 6. Marknadsföring och företagsbeslut
+
+Två spår:
+
+**Marknadsföring (pågående):** Eleven väljer kampanjtyp + skriver kort
+kampanjtext (t.ex. en Instagrampost). Systemet räknar ut kostnad,
+varaktighet och baseffekt. Kampanjtexten skickas till
+`ai.py::evaluate_marketing_copy` (ny funktion, Haiku, ~300 tokens) som
+ger en kvalitetsfaktor 0.5–1.5 som multipliceras på baseffekten. Eleven
+ser **både** vad AI:n tyckte och hur det påverkade — pedagogiskt guld.
+
+**Strategiska beslut (engångs):** Anställa timanställd (löpande
+lönekostnad, men ökar leveranskapacitet → kan ta fler jobb samtidigt).
+Friskvårdsbidrag (kostnad men höjer "rykte" via pseudo-medarbetarnöjdhet).
+Försäkring (skyddar mot slumpmässiga händelser i `RandomEventEngine`).
+Leasingbil (transportkostnad men låser upp jobb som kräver utkörning).
+Varje beslut är en `BusinessDecision`-rad som påverkar parametrar i
+acceptans-/pipeline-modellerna.
+
+Båda spåren genererar `Transaction` + `LedgerEntry` automatiskt. Inget
+extra bokföringsarbete för eleven utöver att verifiera.
+
+---
+
+## 7. Bokföring och avstämning
+
+### Grundläge (Företagsekonomi 1)
+
+Var fjärde simulerad vecka triggas en `task`-step "Stäm av månaden".
+Eleven får ett formulär: lista över intäkter, kostnader, beräknad vinst.
+Systemet visar facit när eleven svarat. Detta är direkt analogt med hur
+ni redan gör i kontoutdrags-modulen — pedagogen är "räkna själv, få
+facit". `StudentStepProgress.data` lagrar elevens svar, AI ger feedback
+via befintlig `generate_feedback_suggestion`.
+
+### Avancerat läge (Företagsekonomi 2)
+
+- **Löpande bokföring:** Vid varje affärshändelse föreslår systemet ett
+  bokföringsförslag (t.ex. "1930 Bank D, 3000 Försäljning K"). Eleven
+  kan acceptera eller redigera. Felaktiga konteringar markeras inte på
+  en gång — de fångas vid avstämning, vilket är hur det fungerar i
+  verkligheten.
+- **Bankavstämning:** Var fjärde vecka genererar systemet ett
+  *kontoutdrag* (återanvänd `teacher/pdfs.py::render_kontoutdrag` med
+  en ny `kontoutdrag_business`-variant). Eleven får en split-vy:
+  bokförda poster vänster, bankposter höger. Drar matchningar med
+  drag-och-släpp. Diff = avvikelse → måste utredas. Systemet sätter
+  avsiktligt in vissa "fel" (en post med fel datum, en saknad post)
+  för att simulera verkligheten.
+- **Nyckeltal:** Beräknas automatiskt i en dashboard-flik men eleven
+  ska först **gissa själv** i ett quiz-steg innan facit visas.
+- **Peer-revision:** Elev A får tilldelat sig elev B:s bokföringspaket
+  (anonymiserat). Checklista: stämmer ingående/utgående saldo? Är moms
+  rätt? Saknas verifikationer? Skriver kort revisionsberättelse. AI
+  ger rubric-feedback (`score_with_rubric` finns redan), läraren
+  modererar.
+
+---
+
+## 8. Lärarverktyg — den dolda hjälten
+
+Lärarens roll är att vara "omvärlden" — Skatteverket, leverantörer,
+banken. Lägg detta som en flik `/teacher/business` med tre kort:
+
+1. **Klassöversikt:** tabell över alla elever — företagsnamn,
+   omsättning, vinst, antal kundfakturor, antal förfallna fakturor,
+   status på senaste avstämning, AI-tokens använda. Sortbar och
+   filtrerbar — *exakt* samma mönster som ni redan har på
+   `/teacher/reflections`.
+2. **Skicka leverantörsfaktura:** välj en eller flera elever, fyll i
+   avsändare/belopp/förfallodatum/fritext, klicka. Systemet genererar
+   PDF (samma stack som `BatchArtifact`) och skapar en
+   `SupplierInvoice` i varje vald elevs scope. Använd massutskick —
+   annars blir det tjatigt.
+3. **Granska kundfakturor:** lista över alla fakturor eleven skickat
+   ut. Kan kommentera, märka som "ej godkänd" (tvingar eleven att
+   korrigera), eller godkänna. Detta blir lärarens kontrollpunkt och
+   uppfyller kravet "läraren har möjlighet att se elevens kundfakturor".
+
+Lärar-PDF-mallen för leverantörsfaktura ärver direkt från befintlig
+reportlab-mall — ny mall, samma motor.
+
+---
+
+## 9. AI-integration — var och varför
+
+LLM ska göra det den är bra på (språk, bedömning) och inte det den är
+dålig på (deterministiska siffror). Konkret:
+
+| Funktion | Modell | Var i `ai.py` | Pedagogiskt syfte |
+|---|---|---|---|
+| Generera realistisk jobbeskrivning från en branschseed | Haiku | ny `generate_job_description` | Variation, autenticitet |
+| Bedöma kvalitet på elevens marknadsföringscopy | Haiku | ny `evaluate_marketing_copy` | Får kvalitetsfaktor till engine |
+| Bedöma elevens pitch i en offert | Haiku | ny `evaluate_quote_pitch` | Får matchningsfaktor till acceptansmodellen |
+| Föreslå bokföringskontering | Haiku, tool_use | ny `suggest_bookkeeping_entry` | Förslag — eleven ska kunna säga emot |
+| Granska elevs revisionsrapport | Sonnet, rubric | befintlig `score_with_rubric` | Peer-revision |
+| Föreslå förbättringar i affärsidé (modererad) | Haiku | ny `review_business_idea` | "Inom lagliga gränser" — fångar uppenbart olagligt/oetiskt |
+| Eleven frågar "vad är moms?" "hur bokför jag friskvård?" | Sonnet, befintlig | `answer_student_question` med utökad kontext | Domänspecifika svar |
+
+**Viktigt:** all AI-användning passerar `_gate_ai()`, räknas mot
+lärarens token-konto, och cachas via `cache_control` på systemprompten —
+exakt samma mönster som idag. Inget nytt rate limit-system behövs.
+
+**Modereringsspår:** elevens fria affärsidé skickas alltid genom
+`review_business_idea` *innan* den sparas. Olagligt/oetiskt → returneras
+med pedagogiskt avslag. Detta är ett krav, inte en finess — annars
+riskerar ni klassrum med "drogförsäljning AB".
+
+---
+
+## 10. Egen undersida — UX-flödet
+
+### Elev-vyn `/business`
+
+En egen toppnivå i sidofältet (lägg till efter "Moduler" i
+`Sidebar.tsx`). När eleven klickar in:
+
+- Om inget företag finns → onboarding-wizard (3 steg: affärsidé →
+  bransch → företagsnamn → välj svårighetsnivå om läraren tillåter
+  eleven att välja).
+- Om företag finns → en **dashboard** med:
+  - Översta raden: vecka X av Y, kontosaldo, denna månads resultat,
+    rykte (badge), nästa avstämningsdeadline.
+  - Vänster panel: pågående jobb, inkommande offertförfrågningar (med
+    "ge offert"-knapp), förfallna fakturor.
+  - Höger panel: marknadsföringskampanjer, senaste lärar-meddelanden,
+    AI-rådgivare.
+  - Knappen "Stega vecka framåt" — utlöser engine-tick.
+- Underflikar: `Offerter`, `Jobb`, `Fakturor`, `Bokföring`,
+  `Avstämning`, `Beslut`, `Rapporter`.
+
+Modulkopplingen är subtil men viktig: när eleven jobbar med simulatorn
+så **markeras ModuleStep:s automatiskt klara** när motsvarande aktivitet
+utförs (skickade offert → "Skicka din första offert"-steg klar). Det
+binder ihop simulator och modul utan dubbelarbete.
+
+### Lärar-vyn `/teacher/business`
+
+Egen sektion under "Lärare" i navigationen. Beskrivs i avsnitt 8. Visa
+även en "Klassens nyckeltal" — aggregerade siffror som "klassens
+snitt-omsättning", "vanligaste bokföringsfel" — användbart för
+helklassgenomgång.
+
+---
+
+## 11. Integration med befintliga moduler
+
+Lägg en ny systemmodul i `module_seed.py`: **"Mitt företag — från idé
+till revision"** med 12–16 steg som *guidar* eleven genom simulatorn:
+
+1. `read` — Vad är ett företag? (text, lättläst svenska)
+2. `task` — Skapa ditt företag (påminner: "öppna `/business` och kör
+   onboarding")
+3. `read` — Vad är en offert? Vad ska den innehålla?
+4. `task` — Skicka din första offert
+5. `quiz` — Skillnad bruttovinst/nettovinst
+6. `task` — Vunnit ett jobb! Skicka faktura
+7. `read` — Vad är bokföring och varför?
+8. `task` — Bokför första intäkten (basics: bara fyll i; advanced:
+   debet/kredit)
+9. `reflect` — Vad var svårast med din första kund? (rubric-bedömt)
+10. `task` — Genomför en marknadsföringskampanj
+11. `task` — Stäm av första månaden
+12. `read` — Resultatrapport: vad säger den? (länkar till elevens egna
+    rapport)
+13. `reflect` — Vad ska du ändra på till nästa månad?
+14. *(advanced)* `task` — Bankavstämning vecka 8
+15. *(advanced)* `task` — Beräkna fyra nyckeltal
+16. *(advanced)* `task` — Revidera en kamrats bokföring
+
+Stegen kopplas till nya `Competency`-rader: `business_idea`,
+`quote_writing`, `invoicing`, `bookkeeping_basics`,
+`bank_reconciliation`, `key_ratios`, `audit_skills`.
+
+Eleven kan jobba i simulatorn utan att vara i modulen — men modulen ger
+den pedagogiska scaffoldingen och rapporteringen till läraren.
+
+---
+
+## 12. Optimeringar och fallgropar
+
+**Beräkningstunga ticks:** "Stega vecka framåt" gör mycket: genererar
+nya jobb, accepterar/avslår offerter, bokför löpande utgifter, betalar
+löner, kör event-engine. Lägg det som en **bakgrundsuppgift** med en
+jobs-tabell `BusinessTickJob` (status: queued/running/done) snarare än
+synkron HTTP — annars frisar UI:n när 30 elever stegar samtidigt. Detta
+är en arkitekturprincip ni *inte* har idag (allt är synkront), så det
+blir en ny pattern. Alternativ: håll det synkront men begränsa
+scope-locking via `_current_scope`-ContextVar och låta varje tick ta
+<500 ms.
+
+**Determinism för rättvisa:** Två elever med samma affärsidé, samma
+beslut och samma vecka ska få *liknande* utfall. Seed:a
+slumpgeneratorn på `(business_id, week_number)` — inte på `time()`.
+Detta gör också att läraren kan "spela om" en elevs vecka för att
+förstå varför något hände.
+
+**Lärartokenkostnad:** AI-funktionerna i den här modulen kommer att bli
+**den dyraste** AI-användningen i hela systemet, eftersom varje vecka
+kan trigga 5–10 LLM-anrop per elev. Mätning:
+- Vid 30 elever × 16 veckor × 5 LLM-anrop = 2 400 anrop per
+  modulkörning.
+- Cacha aggressivt: bransch-/segment-prompts är stabila →
+  `cache_control: ephemeral` på allt.
+- Ge läraren en kvotlimit per elev per vecka i `Teacher`-tabellen.
+  Lägg till varning vid 80 %.
+- Erbjud `ai_enabled=False`-läge: simulatorn fungerar med fasta texter
+  (försämrad upplevelse men inte broken). Det här är viktigt eftersom
+  CLAUDE.md säger att avsaknad av nyckel ska vara "tyst av", inte 500.
+
+**Multi-tenant-fallgrop:** Bakgrundsuppgifter körs *utan* HTTP-kontext,
+alltså utan `StudentScopeMiddleware`. ContextVar:n måste sättas
+explicit i tick-jobbet via `set_current_scope(scope_for_student(student))`.
+Det här är dokumenterat-men-lätt-glömt; bygg en helper som dekorerar
+alla bakgrundsfunktioner.
+
+**Master-DB-migrationer:** `ScenarioBatch.kind` får nya värden
+(`leverantorsfaktura`, `kundfaktura_kopia`). Lägg ALTER TABLE-koll i
+`school/engines.py::_run_master_migrations` om ni stoppar in nya
+kolumner, annars räcker värde-utvidgning utan schema-ändring.
+Per-scope-tabellerna (Business, Quote, …) hanteras av
+`db/migrate.py::run_migrations`.
+
+**PDF-prestanda:** reportlab är trögt vid bulk. Massutskick av
+leverantörsfaktura till 30 elever = 30 PDF-genereringar. Generera lazy
+(vid första visning/nedladdning), inte vid skapande. Lagra mall +
+parametrar tills någon faktiskt klickar.
+
+**Frontend-bundle:** ny vy med dashboard, drag-and-drop-avstämning,
+flera tabeller — håll koll på chunk-size. Lazy-load `/business`-rutten
+med React.lazy. CLAUDE.md noterar att 500 kB-varningen är
+OK-att-ignorera, men passa på att inte *väsentligt* förvärra.
+
+**Pedagogisk komplexitet:** modulen riskerar bli överväldigande. Lös
+detta genom att **dölja flikar** i grundläge (bara `Offerter`, `Jobb`,
+`Fakturor`, `Resultat` syns; bokföring, avstämning, nyckeltal är
+låsta tills läraren slår på dem eller eleven byter till advanced).
+
+**Cheating/kollusion:** Peer-revisionen kan missbrukas (kompisar
+godkänner allt). Lägg en "spot check"-mekanik: AI granskar 1 av 5
+revisioner och flaggar uppenbart slarviga rapporter.
+
+**Persistens i Cloud Run:** Hela ert system är `--max-instances=1`
+p.g.a. SQLite. Den här modulen ändrar inte det villkoret — men tunga
+bakgrundsjobb kan blockera HTTP-instansen. Om belastningen blir hög är
+det här *exakt* den modul som först kommer pressa er mot
+Postgres-fallback (ni har den path:en redan via `HEMBUDGET_DATABASE_URL`).
+
+---
+
+## 13. Implementationsplan i faser
+
+Att bygga allt på en gång är garanterat att misslyckas. Föreslagen
+sekvens:
+
+**Fas 1 — Grunden (1–2 veckor):** Domänmodellerna `Business`, `Customer`,
+`JobOpportunity`, `Quote`, `Job`, `CustomerInvoice`. Onboarding-wizard.
+Statisk kundpool (ingen LLM-text än). Manuell tick-knapp.
+Acceptansmodell utan pitch-AI. Fakturor som rena Transactions, ingen
+separat ledger. → Fungerar end-to-end i grundläge.
+
+**Fas 2 — Modul + lärar-MVP (1 vecka):** Seed systemmodulen "Mitt
+företag — från idé till revision" (8 steg, bara basics-relevanta).
+Lärarvyn med klassöversikt och kundfaktura-granskning. Token-räknad
+AI för pitch-bedömning och jobbeskrivning.
+
+**Fas 3 — Marknadsföring och beslut (1 vecka):** `MarketingCampaign`,
+`BusinessDecision`. AI-bedömning av kampanjcopy. Påverkan på engine.
+Lärarens leverantörsfakturor (PDF + masskickning).
+
+**Fas 4 — Avancerat läge (2 veckor):** `LedgerEntry`, `ChartOfAccount`,
+kontering-förslag-AI. Bankavstämnings-UI. Nyckeltalsdashboard. Lägg
+till advanced-stegen i modulen.
+
+**Fas 5 — Peer-revision och polish (1 vecka):** `AuditAssignment`.
+Spot-check-AI. Spelmekaniska finjusteringar baserat på tidiga
+klassrumstester. Optimera AI-kostnader.
+
+Mellan varje fas: släpp till en testlärare, samla feedback, justera.
+Den här modulen är "spel-design" lika mycket som "mjukvaru-design",
+så iteration är obligatorisk.
+
+---
+
+## 14. Vad ni ska ta ställning till innan första raden kod
+
+1. **Tidsuppfattning i simulatorn:** Stegar eleven manuellt vecka för
+   vecka, eller går simuleringen i realtid (1 vecka = X timmar)?
+   Manuell stegning är *betydligt* enklare arkitekturellt men mindre
+   engagerande. Min rekommendation: börja manuellt; lägg till
+   "auto-advance vid lärarens kommando" senare.
+2. **Klass-ekonomi eller individ-ekonomi:** Kan elever handla av
+   varandra? (Spännande pedagogiskt, mardröm tekniskt — kräver delad
+   tabell utanför scope-DB:n.) Min rekommendation: nej i V1, ja som
+   möjlig V2.
+3. **Verifiering på allvar i basics?** Idag har ni quiz/reflect/task.
+   För manuell resultaträkning behövs en ny step-typ — `compute` —
+   eller så återanvänder ni `task` med specifika `params`. Min
+   rekommendation: utöka `task`, inga nya step-typer.
+4. **Lås av läraren eller fritt val?** Får eleven byta mellan basics
+   och advanced själv? Min rekommendation: läraren sätter taket per
+   klass, eleven kan stiga inom det.
+5. **Hur stor är "kundpoolen"?** Hand-skrivna kunder ger pedagogisk
+   kontroll, AI-genererade ger variation. Min rekommendation: hybrid
+   — 20 grundkunder per bransch i seed, AI varierar pitchtext per
+   förfrågan.
+
+---
+
+## Sammanfattning
+
+Detta passar utmärkt i er befintliga arkitektur, kräver inga
+revolutioner — bara nya domäntabeller, en ny seed-modul, fyra–fem nya
+AI-funktioner, en ny router och en ny frontend-sektion. Den största
+risken är AI-token-kostnaden och tick-prestandan; det första hanteras
+med caching och kvoter, det andra med bakgrundsjobb och deterministisk
+seedning. Den största pedagogiska vinsten är att ni får ett verktyg som
+täcker både Företagsekonomi 1 och 2 i samma simulator, med läraren som
+aktiv motpart snarare än passiv granskare.

@@ -30,6 +30,7 @@ from ..school.engines import (
     drop_student_db,
     get_scope_engine,
     get_student_engine,
+    master_has_column,
     master_session,
     reset_scope_db,
     reset_student_db,
@@ -99,6 +100,11 @@ class TeacherAuthOut(BaseModel):
     name: str
     email: str
     is_family_account: bool = False
+    # AI-funktioner: True om super-admin slagit på Anthropic-anrop
+    # för det här lärarkontot. Frontend använder denna flagga för att
+    # visa eller dölja AI-chatt och andra AI-beroende UI-delar.
+    ai_enabled: bool = False
+    ai_chat_daily_quota: int = 0
 
 
 class StudentIn(BaseModel):
@@ -127,6 +133,10 @@ class StudentOut(BaseModel):
     personality: Optional[str] = None
     last_login_at: Optional[datetime]
     created_at: datetime
+    # True om StudentProfile-raden finns. False = "föräldralös" elev
+    # (raden i `students` skapades men profile-INSERTen kraschade — då
+    # behöver läraren reparera eller ta bort eleven).
+    has_profile: bool = True
 
 
 class StudentWithRunsOut(StudentOut):
@@ -163,6 +173,10 @@ class StudentProfileOut(BaseModel):
     has_credit_card: bool
     children_ages: list[int] = []
     partner_age: Optional[int] = None
+    partner_profession: Optional[str] = None
+    partner_gross_salary: Optional[int] = None
+    cost_split_preference: Optional[str] = None
+    cost_split_decided_at: Optional[datetime] = None
     backstory: Optional[str]
 
 
@@ -242,10 +256,18 @@ def _gen_login_code() -> str:
 
 
 def _create_profile_for_student(session, student: Student) -> StudentProfile:
-    """Slumpa fram en deterministisk profil + cache:a netto-lön."""
+    """Slumpa fram en deterministisk profil + cache:a netto-lön.
+
+    Defensiv: om DB:n saknar de nyaste partner-kolumnerna (migration
+    har inte körts) skapar vi profilen utan dem och loggar — då
+    fungerar elev-skapande även om _run_master_migrations failade.
+    """
+    import logging
     gen = generate_profile(student.id, student.display_name)
     tax = compute_net_salary(gen.gross_salary_monthly)
-    profile = StudentProfile(
+
+    # Bas-fält som funnits sedan länge
+    profile_kwargs = dict(
         student_id=student.id,
         profession=gen.profession,
         employer=gen.employer,
@@ -266,9 +288,46 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
         children_ages=gen.children_ages,
         partner_age=gen.partner_age,
     )
-    session.add(profile)
-    session.flush()
-    return profile
+
+    # Lägg bara på partner-fälten om kolumnerna finns i DB:n. Då kan
+    # vi aldrig generera en INSERT som refererar saknade kolumner.
+    if master_has_column("student_profiles", "partner_profession"):
+        profile_kwargs["partner_profession"] = gen.partner_profession
+    if master_has_column("student_profiles", "partner_gross_salary"):
+        profile_kwargs["partner_gross_salary"] = gen.partner_gross_salary
+
+    try:
+        profile = StudentProfile(**profile_kwargs)
+        session.add(profile)
+        session.flush()
+        return profile
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "_create_profile_for_student: oväntat fel för student %s",
+            student.id,
+        )
+        raise
+
+
+def _safe_profile_attr(p: StudentProfile, field: str):
+    """Läs ett deferred-fält om kolumnen finns i master-DB:n. Om
+    migrationen ännu inte hunnit lägga till kolumnen i prod-Postgres
+    returnerar vi None — då kraschar inte requesten."""
+    if not master_has_column("student_profiles", field):
+        return None
+    try:
+        return getattr(p, field)
+    except Exception:
+        # Defensiv fallback: om deferred-load kraschar, rulla tillbaka
+        # session-state och returnera None.
+        from sqlalchemy.orm import object_session
+        sess = object_session(p)
+        if sess is not None:
+            try:
+                sess.rollback()
+            except Exception:
+                pass
+        return None
 
 
 def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
@@ -291,6 +350,10 @@ def _profile_to_out(p: StudentProfile) -> StudentProfileOut:
         has_credit_card=p.has_credit_card,
         children_ages=p.children_ages or [],
         partner_age=p.partner_age,
+        partner_profession=_safe_profile_attr(p, "partner_profession"),
+        partner_gross_salary=_safe_profile_attr(p, "partner_gross_salary"),
+        cost_split_preference=_safe_profile_attr(p, "cost_split_preference"),
+        cost_split_decided_at=_safe_profile_attr(p, "cost_split_decided_at"),
         backstory=p.backstory,
     )
 
@@ -416,7 +479,89 @@ def _student_to_out(s: Student) -> StudentOut:
         personality=s.profile.personality if s.profile else None,
         last_login_at=s.last_login_at,
         created_at=s.created_at,
+        has_profile=s.profile is not None,
     )
+
+
+class StudentPulseRow(BaseModel):
+    """Minimal ekonomi-puls per elev så läraren snabbt ser vilka som
+    behöver hjälp. Visas inline i elev-tabellen.
+
+    flag tolkning:
+      - 'good' (grön): sparkvot >= 10 % OCH månadsnetto >= 0
+      - 'watch' (gul): månadsnetto >= 0 men sparkvot < 10 %
+      - 'alert' (röd): månadsnetto < 0 (eleven spenderar mer än hen
+        tjänar denna månad)
+      - 'no_data' (grå): ingen budget/transaktion för månaden
+    """
+    student_id: int
+    flag: str  # "good" | "watch" | "alert" | "no_data"
+    month_balance: float  # income - expenses, kan vara negativt
+    savings_rate_pct: float  # 0-100, eller 0 om income==0
+
+
+@router.get(
+    "/teacher/students/pulse", response_model=list[StudentPulseRow],
+)
+def students_pulse(
+    info: TokenInfo = Depends(require_teacher),
+) -> list[StudentPulseRow]:
+    """Snabb ekonomi-status per elev för läraren — minimalt så hen
+    direkt ser vilka som ligger i röd zon (utgifter > inkomster) eller
+    bara nätt-och-jämnt klarar månaden (sparkvot < 10 %)."""
+    _require_school_mode()
+    from datetime import date as _d
+    from ..budget.monthly import MonthlyBudgetService
+    from ..db.base import session_scope as _ss
+    from ..school.engines import get_scope_engine, scope_context, scope_for_student
+
+    today = _d.today()
+    month = f"{today.year}-{today.month:02d}"
+
+    rows: list[StudentPulseRow] = []
+    with master_session() as s:
+        students = (
+            s.query(Student)
+            .filter(Student.teacher_id == info.teacher_id)
+            .all()
+        )
+        for st in students:
+            # Säkerställ scope-engine + öppna scope-session
+            try:
+                get_scope_engine(scope_for_student(st))
+                with scope_context(scope_for_student(st)):
+                    with _ss() as scope_s:
+                        summary = MonthlyBudgetService(scope_s).summary(month)
+                        income = float(summary.income)
+                        expenses = float(summary.expenses)
+                        bal = income - expenses
+                        rate = (
+                            float(summary.savings_rate) * 100
+                            if summary.savings_rate else 0.0
+                        )
+                        if income <= 0 and expenses <= 0:
+                            flag = "no_data"
+                        elif bal < 0:
+                            flag = "alert"
+                        elif rate < 10:
+                            flag = "watch"
+                        else:
+                            flag = "good"
+                        rows.append(StudentPulseRow(
+                            student_id=st.id,
+                            flag=flag,
+                            month_balance=round(bal, 2),
+                            savings_rate_pct=round(rate, 1),
+                        ))
+            except Exception:
+                # Scope-DB inte initierad eller annat — markera som
+                # no_data så läraren inte får 500.
+                log.exception("pulse: scope-query failed for student %s", st.id)
+                rows.append(StudentPulseRow(
+                    student_id=st.id, flag="no_data",
+                    month_balance=0.0, savings_rate_pct=0.0,
+                ))
+    return rows
 
 
 @router.get("/teacher/students", response_model=list[StudentWithRunsOut])
@@ -433,17 +578,28 @@ def list_students(
         )
         out: list[StudentWithRunsOut] = []
         for st in students:
-            runs = (
+            # Det nya batch-flödet (/teacher/batches) använder ScenarioBatch,
+            # inte den gamla StudentDataGenerationRun-tabellen. Visa båda
+            # för bakåtkompat så historik från gamla körningar inte
+            # försvinner.
+            batch_months = {
+                m for (m,) in
+                s.query(ScenarioBatch.year_month)
+                .filter(ScenarioBatch.student_id == st.id)
+                .all()
+            }
+            run_months = {
+                m for (m,) in
                 s.query(StudentDataGenerationRun.year_month)
                 .filter(StudentDataGenerationRun.student_id == st.id)
-                .order_by(StudentDataGenerationRun.year_month)
                 .all()
-            )
+            }
+            months = sorted(batch_months | run_months)
             base = _student_to_out(st)
             out.append(
                 StudentWithRunsOut(
                     **base.model_dump(),
-                    months_generated=[r[0] for r in runs],
+                    months_generated=months,
                 )
             )
         return out
@@ -605,6 +761,42 @@ def delete_student(
     if scope_to_drop:
         drop_scope_db(scope_to_drop)
     return {"ok": True}
+
+
+@router.post("/teacher/students/{student_id}/repair-profile", response_model=StudentOut)
+def repair_student_profile(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+) -> StudentOut:
+    """Skapa StudentProfile-raden för en "föräldralös" elev.
+
+    Bakgrund: om master-migrationerna inte hunnit köra när första
+    eleven skapades så kunde profile-INSERTen krascha medan
+    Student-raden redan var commitad — då blev eleven "föräldralös"
+    (Student finns men StudentProfile saknas). Defensiv-fixen i
+    `_create_profile_for_student` förhindrar nya sådana fall, men
+    befintliga elever måste lagas.
+
+    Endpointen är idempotent: kan köras flera gånger, gör bara något
+    om profilen faktiskt saknas. Returnerar uppdaterad StudentOut.
+    """
+    _require_school_mode()
+    with master_session() as s:
+        student = (
+            s.query(Student)
+            .filter(Student.id == student_id, Student.teacher_id == info.teacher_id)
+            .first()
+        )
+        if not student:
+            raise HTTPException(404, "Student not found")
+        if student.profile is not None:
+            # Idempotent: redan reparerad / aldrig trasig
+            return _student_to_out(student)
+        _create_profile_for_student(s, student)
+        # Säkerställ att scope-DB:n finns (kategorier seedas där)
+        get_scope_engine(scope_for_student(student))
+        s.refresh(student)
+        return _student_to_out(student)
 
 
 @router.post("/teacher/students/{student_id}/reset")
@@ -783,19 +975,177 @@ def update_student_profile(
 def student_get_own_profile(
     info: TokenInfo = Depends(require_token),
 ) -> StudentProfileOut:
-    """Eleven läser sin egen profil (för onboarding och info-vy)."""
+    """Eleven läser sin egen profil. Pedagogiskt: partner-lön döljs
+    förrän eleven gjort cost-split-valet ('veil of ignorance').
+
+    Stödjer även lärar-impersonering via x-as-student så lärare kan
+    se exakt vad eleven ser (utan att tappa session)."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     with master_session() as s:
         student = s.query(Student).filter(
-            Student.id == info.student_id
+            Student.id == student_id
         ).first()
         if not student:
             raise HTTPException(404, "Student not found")
         if not student.profile:
             _create_profile_for_student(s, student)
-        return _profile_to_out(student.profile)
+        out = _profile_to_out(student.profile)
+        # Dölj partner-lön tills eleven gjort cost-split-valet. Annars
+        # förstör vi ärligheten i pedagogiken.
+        is_household = student.profile.family_status in (
+            "sambo", "familj_med_barn",
+        )
+        if is_household and not _safe_profile_attr(
+            student.profile, "cost_split_preference",
+        ):
+            out.partner_gross_salary = None
+            # Behåll partner_profession + partner_age — eleven får veta
+            # ATT hen har en partner och vad partnern gör, men inte
+            # exakt lön.
+        return out
+
+
+# ---------- Cost-split-preference ('veil of ignorance'-onboarding) ----------
+#
+# Pedagogiskt: eleven måste välja fördelningsmodell INNAN partner-lönen
+# avslöjas. Det blir ett ärligt etiskt val (Rawls 'veil of ignorance')
+# istället för ett rationellt självoptimerings-val. Endpointen
+# blockerar att se partner-lön förrän valet gjorts.
+
+class CostSplitOut(BaseModel):
+    family_status: str
+    needs_decision: bool  # True om sambo/familj OCH ej beslutat
+    cost_split_preference: Optional[str] = None
+    cost_split_decided_at: Optional[datetime] = None
+    # Visa BARA om beslut gjorts:
+    partner_profession: Optional[str] = None
+    partner_gross_salary: Optional[int] = None
+    student_share_pct: Optional[float] = None  # Beräknad andel (0-100)
+
+
+class CostSplitIn(BaseModel):
+    preference: str  # "even_50_50" | "pro_rata" | "all_shared"
+
+
+def _calc_student_share(
+    pref: str, student_salary: int, partner_salary: int,
+) -> float:
+    """Räknar elevens andel av gemensamma kostnader baserat på modellen."""
+    if pref == "even_50_50":
+        return 50.0
+    total = student_salary + partner_salary
+    if total <= 0:
+        return 50.0
+    # pro_rata och all_shared använder samma formel — i all_shared går
+    # alla pengar via gemensamma konton men bokföringen är samma.
+    return round(student_salary / total * 100, 1)
+
+
+@router.get("/student/cost-split", response_model=CostSplitOut)
+def student_get_cost_split(
+    info: TokenInfo = Depends(require_token),
+) -> CostSplitOut:
+    """Returnerar elevens cost-split-status. Visar partner_profession +
+    partner_gross_salary BARA om eleven redan beslutat — annars är
+    fälten None ('veil of ignorance').
+
+    Stödjer även lärar-impersonering så banner:n syns för lärare
+    som tittar in via x-as-student."""
+    _require_school_mode()
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id
+        ).first()
+        if not student or not student.profile:
+            raise HTTPException(404, "Profil saknas")
+        p = student.profile
+
+        is_household = p.family_status in ("sambo", "familj_med_barn")
+        pref = _safe_profile_attr(p, "cost_split_preference")
+        decided = pref is not None
+
+        out = CostSplitOut(
+            family_status=p.family_status,
+            needs_decision=is_household and not decided,
+            cost_split_preference=pref,
+            cost_split_decided_at=_safe_profile_attr(p, "cost_split_decided_at"),
+        )
+        # Avslöja partner-info bara om eleven redan beslutat
+        if decided and is_household:
+            partner_salary = _safe_profile_attr(p, "partner_gross_salary")
+            out.partner_profession = _safe_profile_attr(p, "partner_profession")
+            out.partner_gross_salary = partner_salary
+            out.student_share_pct = _calc_student_share(
+                pref,
+                p.gross_salary_monthly,
+                partner_salary or 0,
+            )
+        return out
+
+
+@router.post("/student/cost-split", response_model=CostSplitOut)
+def student_set_cost_split(
+    payload: CostSplitIn,
+    info: TokenInfo = Depends(require_token),
+) -> CostSplitOut:
+    """Eleven sätter sin fördelningsmodell. Idempotent: kan ändras
+    senare men cost_split_decided_at uppdateras inte (vi sparar det
+    *första* valet — det är det pedagogiskt centrala)."""
+    from datetime import datetime as _dt
+
+    _require_school_mode()
+    # Lärare som tittar in via x-as-student ska också kunna sätta valet
+    # (för testning och demo). _resolve_student_actor stödjer båda fallen.
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
+    if payload.preference not in {"even_50_50", "pro_rata", "all_shared"}:
+        raise HTTPException(400, "Ogiltig preference")
+
+    with master_session() as s:
+        student = s.query(Student).filter(
+            Student.id == student_id
+        ).first()
+        if not student or not student.profile:
+            raise HTTPException(404, "Profil saknas")
+        p = student.profile
+        if p.family_status == "ensam":
+            raise HTTPException(
+                400, "Ensamhushåll har ingen partner att dela kostnader med",
+            )
+        if not master_has_column("student_profiles", "cost_split_preference"):
+            # Migration ej körd ännu — be admin reparera DB-schemat innan
+            # eleven gör cost-split-valet.
+            raise HTTPException(
+                503,
+                "DB-schemat är inte fullständigt — be administratören "
+                "köra migrationerna (POST /admin/ai/db/run-migrations).",
+            )
+
+        first_time = _safe_profile_attr(p, "cost_split_preference") is None
+        p.cost_split_preference = payload.preference
+        if first_time:
+            p.cost_split_decided_at = _dt.utcnow()
+        s.flush()
+
+        partner_salary = _safe_profile_attr(p, "partner_gross_salary")
+        share = _calc_student_share(
+            payload.preference,
+            p.gross_salary_monthly,
+            partner_salary or 0,
+        )
+        return CostSplitOut(
+            family_status=p.family_status,
+            needs_decision=False,
+            cost_split_preference=payload.preference,
+            cost_split_decided_at=_safe_profile_attr(p, "cost_split_decided_at"),
+            partner_profession=_safe_profile_attr(p, "partner_profession"),
+            partner_gross_salary=partner_salary,
+            student_share_pct=share,
+        )
 
 
 # ---------- Tax-helper ----------
@@ -1564,14 +1914,14 @@ def delete_assignment(
 def student_my_assignments(
     info: TokenInfo = Depends(require_token),
 ) -> list[AssignmentStatusOut]:
+    """Lista uppdrag för aktiv elev. Tillåter lärar-impersonation via
+    x-as-student-headern så lärare kan kolla elevens vy utan 403."""
     _require_school_mode()
-    if info.role != "student":
-        raise HTTPException(403, "Not a student token")
+    from ..api.modules import _resolve_student_actor
+    student_id = _resolve_student_actor(info)
     from ..teacher.assignments import evaluate
     with master_session() as s:
-        student = s.query(Student).filter(
-            Student.id == info.student_id
-        ).first()
+        student = s.query(Student).filter(Student.id == student_id).first()
         if not student:
             raise HTTPException(404, "Student not found")
         assignments = s.query(Assignment).filter(
@@ -1629,6 +1979,32 @@ class CreateBatchesIn(BaseModel):
     overwrite: bool = False
 
 
+# ---------- Recent batch errors ring-buffer (debug-hjälp) ----------
+
+# Senaste 20 batch-fel — så super-admin kan inspektera tracebacks utan
+# att gräva i Cloud Run-loggar. Ringbuffer i minnet, försvinner vid
+# omstart men det är OK för tillfällig debug.
+_RECENT_BATCH_ERRORS: list[dict] = []
+
+
+def _record_batch_error(
+    *, student_id: int, student_name: str,
+    error_class: str, message: str, traceback: str,
+) -> None:
+    from datetime import datetime as _dt
+    _RECENT_BATCH_ERRORS.append({
+        "ts": _dt.utcnow().isoformat(),
+        "student_id": student_id,
+        "student_name": student_name,
+        "error_class": error_class,
+        "message": message,
+        "traceback": traceback,
+    })
+    # Behåll bara 20 senaste
+    if len(_RECENT_BATCH_ERRORS) > 20:
+        del _RECENT_BATCH_ERRORS[: len(_RECENT_BATCH_ERRORS) - 20]
+
+
 class CreateBatchResultRow(BaseModel):
     student_id: int
     display_name: str
@@ -1639,18 +2015,50 @@ class CreateBatchResultRow(BaseModel):
     error: Optional[str] = None
 
 
-def _batch_to_out(b: ScenarioBatch) -> ScenarioBatchOut:
-    imported = sum(1 for a in b.artifacts if a.imported_at is not None)
+_BANK_KINDS = {"kontoutdrag", "kreditkort_faktura", "lan_besked"}
+
+
+def _visible_artifacts(b: ScenarioBatch, visible_in: Optional[str]) -> list:
+    """Filtrera artefakter beroende på vilken vy som hämtar:
+
+    - 'my_batches'  → bank-artefakter måste vara exporterade; lönespec
+                      exkluderas (den hör till /arbetsgivare)
+    - 'arbetsgivare' → bara lönespec
+    - 'bank'         → bara bank-artefakter (oavsett export-status)
+    - None / annat   → allt (bakåtkompat: lärar-vyer + tester)
+    """
+    arts = b.artifacts
+    if visible_in == "my_batches":
+        return [
+            a for a in arts
+            if a.kind != "lonespec"
+            and (a.kind not in _BANK_KINDS or a.exported_to_my_batches)
+        ]
+    if visible_in == "arbetsgivare":
+        return [a for a in arts if a.kind == "lonespec"]
+    if visible_in == "bank":
+        return [a for a in arts if a.kind in _BANK_KINDS]
+    return list(arts)
+
+
+def _batch_to_out(
+    b: ScenarioBatch, visible_in: Optional[str] = None,
+) -> ScenarioBatchOut:
+    arts = _visible_artifacts(b, visible_in)
+    imported = sum(1 for a in arts if a.imported_at is not None)
     return ScenarioBatchOut(
         id=b.id, student_id=b.student_id, year_month=b.year_month,
         created_at=b.created_at,
-        artifact_count=len(b.artifacts),
+        artifact_count=len(arts),
         imported_count=imported,
     )
 
 
-def _batch_to_detail(b: ScenarioBatch) -> ScenarioBatchDetailOut:
-    base = _batch_to_out(b)
+def _batch_to_detail(
+    b: ScenarioBatch, visible_in: Optional[str] = None,
+) -> ScenarioBatchDetailOut:
+    base = _batch_to_out(b, visible_in)
+    arts = _visible_artifacts(b, visible_in)
     return ScenarioBatchDetailOut(
         **base.model_dump(),
         artifacts=[
@@ -1659,7 +2067,7 @@ def _batch_to_detail(b: ScenarioBatch) -> ScenarioBatchDetailOut:
                 sort_order=a.sort_order, imported_at=a.imported_at,
                 meta=a.meta,
             )
-            for a in b.artifacts
+            for a in arts
         ],
     )
 
@@ -1744,13 +2152,57 @@ def create_batches(
                     ))
             except Exception as e:
                 log.exception("Batch creation failed for %d", student.id)
+                # Inkludera exception-klassen + meddelandet + första
+                # raden av traceback så vi alltid har något att visa
+                # även för exceptions med tom .__str__().
+                import traceback as _tb
+                tb_lines = _tb.format_exception(type(e), e, e.__traceback__)
+                # Plocka sista 3 raderna av traceback för UI:n
+                tb_summary = "".join(tb_lines[-3:]).strip().replace("\n", " | ")
+                err_msg = (
+                    f"{type(e).__name__}: {e}" if str(e)
+                    else type(e).__name__
+                )
+                if not err_msg.strip():
+                    err_msg = "Okänt fel"
+                # Spara hela traceback i global ring-buffer för
+                # /admin/ai/recent-errors-endpointen
+                _record_batch_error(
+                    student_id=student.id,
+                    student_name=student.display_name,
+                    error_class=type(e).__name__,
+                    message=str(e),
+                    traceback="".join(tb_lines),
+                )
                 results.append(CreateBatchResultRow(
                     student_id=student.id,
                     display_name=student.display_name,
                     year_month=payload.year_month,
-                    status="error", error=str(e),
+                    status="error",
+                    error=f"{err_msg} | {tb_summary[:300]}",
                 ))
     return results
+
+
+@router.get("/teacher/recent-batch-errors")
+def recent_batch_errors(
+    info: TokenInfo = Depends(require_teacher),
+) -> dict:
+    """Returnerar de 20 senaste batch-genererings-felen med traceback.
+    Bara senast inloggade lärarens egna elever. Snabb debug-hjälp utan
+    att gräva i Cloud Run-loggar."""
+    _require_school_mode()
+    with master_session() as s:
+        student_ids = {
+            sid for (sid,) in
+            s.query(Student.id).filter(Student.teacher_id == info.teacher_id).all()
+        }
+    return {
+        "errors": [
+            e for e in reversed(_RECENT_BATCH_ERRORS)
+            if e["student_id"] in student_ids
+        ],
+    }
 
 
 @router.get(
@@ -2159,6 +2611,82 @@ def student_unread_count(
             .count()
         )
         return {"unread": n}
+
+
+@router.get("/student/notifications/counts")
+def student_notification_counts(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Samlad oläst-räknare per kategori — sidebar pollar denna var
+    30:e sek och visar små röda badges på nav-länkar.
+
+    Kategorier:
+      - messages: nya lärar-meddelanden (read_at NULL)
+      - batches: BatchArtifacts som inte ännu importerats av eleven
+      - assignments: aktiva uppdrag som inte är klarmarkerade
+      - peer_review: peer-review-uppdrag som väntar på elevens
+        respons (om man bygger ut peer-flödet senare)
+
+    Stödjer även lärar-impersonering så banner:n syns för läraren
+    som tittar in via x-as-student."""
+    _require_school_mode()
+    from ..api.modules import _resolve_student_actor
+    try:
+        student_id = _resolve_student_actor(info)
+    except HTTPException:
+        return {
+            "messages": 0, "batches": 0,
+            "assignments": 0, "peer_review": 0, "total": 0,
+        }
+
+    with master_session() as s:
+        # 1. Olästa lärar-meddelanden
+        messages = (
+            s.query(Message)
+            .filter(
+                Message.student_id == student_id,
+                Message.sender_role == "teacher",
+                Message.read_at.is_(None),
+            )
+            .count()
+        )
+
+        # 2. Batches med oimporterade artefakter
+        batches = (
+            s.query(BatchArtifact.id)
+            .join(ScenarioBatch, ScenarioBatch.id == BatchArtifact.batch_id)
+            .filter(
+                ScenarioBatch.student_id == student_id,
+                BatchArtifact.imported_at.is_(None),
+            )
+            .count()
+        )
+
+        # 3. Aktiva uppdrag (Assignment) som inte är klar-markerade.
+        # Enkel approximation: räkna assignments där
+        # manually_completed_at är NULL. Servern har en finare
+        # auto-checker per kind (import_batch, set_budget etc) men
+        # för badge-räknaren räcker manuell-status — eleven ser
+        # detaljerad checklist på /modules-sidan.
+        assignments = (
+            s.query(Assignment.id)
+            .filter(
+                Assignment.student_id == student_id,
+                Assignment.manually_completed_at.is_(None),
+            )
+            .count()
+        )
+
+        peer_review = 0  # Plats för framtida peer-review-räknare
+
+    total = messages + batches + assignments + peer_review
+    return {
+        "messages": messages,
+        "batches": batches,
+        "assignments": assignments,
+        "peer_review": peer_review,
+        "total": total,
+    }
 
 
 @router.get("/teacher/messages/threads",
@@ -2622,14 +3150,27 @@ def list_all_batch_months(
 
 @router.get(
     "/student/batches",
-    response_model=list[ScenarioBatchOut],
+    response_model=list[ScenarioBatchDetailOut],
 )
 def student_list_batches(
+    visible_in: Optional[str] = None,
     info: TokenInfo = Depends(require_token),
-) -> list[ScenarioBatchOut]:
+) -> list[ScenarioBatchDetailOut]:
     """Lista elevens egna batchar. Tillåter lärar-impersonation
     (x-as-student-headern) så lärare kan kolla elevens vy utan att
-    smällas ut med 403."""
+    smällas ut med 403.
+
+    `visible_in` filtrerar artefakter (idé 3 i dev_v1.md):
+    - my_batches   → bank-artefakter måste vara exporterade,
+                     lönespec exkluderas
+    - arbetsgivare → bara lönespec
+    - bank         → bara bank-artefakter
+    - None         → allt (bakåtkompat)
+
+    Returnerar detail-shape (med ``artifacts``-array) så att vyer
+    som /arbetsgivare och /my-batches kan rendera filtrerade artefakter
+    direkt utan en N+1-runda av detail-fetchar per batch.
+    """
     _require_school_mode()
     # Använd actor_student_id från middleware — fungerar för både
     # elev-token och lärare med x-as-student.
@@ -2642,7 +3183,7 @@ def student_list_batches(
             .order_by(ScenarioBatch.year_month.desc())
             .all()
         )
-        return [_batch_to_out(b) for b in batches]
+        return [_batch_to_detail(b, visible_in) for b in batches]
 
 
 def _resolve_batch_for_actor(
@@ -2670,12 +3211,13 @@ def _resolve_batch_for_actor(
 )
 def student_batch_detail(
     batch_id: int,
+    visible_in: Optional[str] = None,
     info: TokenInfo = Depends(require_token),
 ) -> ScenarioBatchDetailOut:
     _require_school_mode()
     with master_session() as s:
         batch = _resolve_batch_for_actor(info, batch_id, s)
-        return _batch_to_detail(batch)
+        return _batch_to_detail(batch, visible_in)
 
 
 @router.get("/student/batches/{batch_id}/artifacts/{artifact_id}/download")
@@ -2921,6 +3463,8 @@ def teacher_me(info: TokenInfo = Depends(require_teacher)) -> TeacherAuthOut:
         return TeacherAuthOut(
             token=info.token, teacher_id=t.id, name=t.name, email=t.email,
             is_family_account=t.is_family_account,
+            ai_enabled=bool(t.ai_enabled),
+            ai_chat_daily_quota=int(t.ai_chat_daily_quota or 0),
         )
 
 

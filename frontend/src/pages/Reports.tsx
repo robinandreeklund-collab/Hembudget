@@ -123,76 +123,8 @@ export default function Reports() {
   const ledger = ledgerQ.data;
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <h1 className="serif text-3xl leading-tight">Rapporter</h1>
-
-      <Card title="Månadsrapport (export)">
-        <div className="text-sm text-slate-700 mb-3">
-          En visuell månadsöversikt som går att dela med din partner. PDF:en
-          innehåller KPI-ruta (inkomst, utgifter, sparat, sparkvot),{" "}
-          <strong>tårtdiagram</strong> över utgifter per kategori och inkomst
-          per person, <strong>förslag på överföringar</strong> till gemensamt
-          konto (50/50 + prorata på inkomst), staplar med budget vs utfall samt
-          en jämförelse mot föregående månad.
-        </div>
-        <div className="flex items-end gap-3 flex-wrap">
-          <label className="text-sm">
-            <div className="text-slate-700">Månad</div>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="border rounded px-2 py-1"
-            />
-          </label>
-          <button
-            className="bg-brand-600 text-white px-3 py-1.5 rounded hover:bg-brand-700"
-            onClick={() => download(`/reports/month/${month}/pdf`, `hembudget-${month}.pdf`)}
-            title="Visuell PDF med diagram och överföringsförslag"
-          >
-            📄 Ladda ner PDF
-          </button>
-          <button
-            className="bg-slate-700 text-white px-3 py-1.5 rounded hover:bg-slate-800"
-            onClick={() => download(`/reports/month/${month}/excel`, `hembudget-${month}.xlsx`)}
-            title="Tre flikar: Budget, Överföringar, Förändring mot förra månaden"
-          >
-            📊 Ladda ner Excel
-          </button>
-        </div>
-      </Card>
-
-      <Card title="Överföringsplan (kommande månad)">
-        <div className="text-sm text-slate-700 mb-3">
-          En framåtriktad PDF för att skicka till din partner — visar{" "}
-          <strong>förväntad lön</strong> per person, kommande{" "}
-          <strong>gemensamma fakturor</strong> + <strong>lån</strong>, och
-          tydligt <strong>hur mycket hon ska flytta</strong> till gemensamma
-          kontot (både 50/50- och prorata-förslag). Inga bakåtblickande siffror,
-          ingen förvirrande kolumn för privata utgifter.
-        </div>
-        <div className="flex items-end gap-3 flex-wrap">
-          <label className="text-sm">
-            <div className="text-slate-700">Månad</div>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="border rounded px-2 py-1"
-            />
-          </label>
-          <button
-            className="bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700"
-            onClick={() => download(
-              `/reports/upcoming/${month}/pdf`,
-              `overforingsplan-${month}.pdf`,
-            )}
-            title="Skicka till partnern"
-          >
-            📧 Ladda ner överföringsplan
-          </button>
-        </div>
-      </Card>
 
       <Card
         title="Huvudbok — avstämning av ekonomin"
@@ -473,6 +405,56 @@ export default function Reports() {
           </div>
         )}
       </Card>
+
+      {/* Hembudget-rapporter (månads-PDF + överföringsplan) tonas ner —
+          de är desktop-funktioner för par som vill skicka något till
+          varandra. Huvudboken ovan är den primära rapporten i
+          undervisningen. */}
+      <details className="border border-slate-200 rounded-md bg-white">
+        <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          Övriga exporter (månadsrapport, överföringsplan)
+        </summary>
+        <div className="px-4 pb-4 pt-1 space-y-3 text-sm">
+          <div className="text-xs text-slate-600">
+            Visuella partnar-rapporter — månads-PDF med diagram och
+            överföringsförslag, samt en framåtriktad överföringsplan med
+            förväntad lön och kommande fakturor. Praktiska för hushåll men
+            sekundära i klassrumsanvändning.
+          </div>
+          <div className="flex items-end gap-2 flex-wrap">
+            <label className="text-xs">
+              <div className="text-slate-600">Månad</div>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="border rounded px-2 py-1 text-sm"
+              />
+            </label>
+            <button
+              className="bg-slate-200 text-slate-800 px-3 py-1 rounded text-xs hover:bg-slate-300"
+              onClick={() => download(`/reports/month/${month}/pdf`, `hembudget-${month}.pdf`)}
+            >
+              Månadsrapport (PDF)
+            </button>
+            <button
+              className="bg-slate-200 text-slate-800 px-3 py-1 rounded text-xs hover:bg-slate-300"
+              onClick={() => download(`/reports/month/${month}/excel`, `hembudget-${month}.xlsx`)}
+            >
+              Månadsrapport (Excel)
+            </button>
+            <button
+              className="bg-slate-200 text-slate-800 px-3 py-1 rounded text-xs hover:bg-slate-300"
+              onClick={() => download(
+                `/reports/upcoming/${month}/pdf`,
+                `overforingsplan-${month}.pdf`,
+              )}
+            >
+              Överföringsplan
+            </button>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

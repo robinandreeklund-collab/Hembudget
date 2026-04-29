@@ -220,20 +220,21 @@ class LandingVariantIn(BaseModel):
 
 
 def _read_variant() -> str:
-    """Läs aktiv variant från AppConfig. Default = "default" om
-    inget satt eller school-mode är av."""
+    """Läs aktiv variant från AppConfig. Default = "c" (Ekonomilabbet
+    v5-rebuild) — super-admin kan toggla tillbaka till "default" (paper-
+    stilen) i admin-panelen om så önskas."""
     if not school_enabled():
-        return "default"
+        return "c"
     try:
         with master_session() as s:
             row = s.get(AppConfig, VARIANT_CONFIG_KEY)
             if row and isinstance(row.value, dict):
-                v = str(row.value.get("variant", "default"))
+                v = str(row.value.get("variant", "c"))
                 if v in ALLOWED_VARIANTS:
                     return v
     except Exception:
         log.exception("kunde inte läsa landing_variant")
-    return "default"
+    return "c"
 
 
 @router.get("/landing/variant", response_model=LandingVariantOut)

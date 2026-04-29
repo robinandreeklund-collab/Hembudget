@@ -103,7 +103,7 @@ export default function Budget() {
   }
 
   return (
-    <div className="p-3 md:p-6 space-y-4 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="serif text-3xl leading-tight">Budget</h1>
         <div className="flex items-center gap-2 flex-wrap">

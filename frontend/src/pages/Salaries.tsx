@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK, getApiBase, getToken, uploadFile } from "@/api/client";
 import { Card } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import type { Account, HouseholdUser } from "@/types/models";
 
 interface IncomeUpcoming {
@@ -68,6 +69,7 @@ function todayIso(): string {
 
 export default function Salaries() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const [showAddForm, setShowAddForm] = useState(false);
 
   const incomesQ = useQuery({
@@ -193,7 +195,7 @@ export default function Salaries() {
   }, [past]);
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-6xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="serif text-3xl leading-tight">
           <Briefcase className="w-6 h-6" />
@@ -257,19 +259,23 @@ export default function Salaries() {
         </Card>
       )}
 
-      {/* AI text-snabbinmatning */}
-      <TextQuickAdd
-        busy={textParseMut.isPending}
-        error={textParseMut.error as Error | null}
-        result={textParseMut.data ?? null}
-        onSubmit={(text) => textParseMut.mutate(text)}
-      />
+      {/* AI text-snabbinmatning — döljs i school-läget eftersom Ekonomilabbet
+          inte använder lokal LM Studio och eleven lär sig formulär bättre. */}
+      {!schoolMode && (
+        <TextQuickAdd
+          busy={textParseMut.isPending}
+          error={textParseMut.error as Error | null}
+          result={textParseMut.data ?? null}
+          onSubmit={(text) => textParseMut.mutate(text)}
+        />
+      )}
 
       {/* PDF löneparser */}
       <SalaryPdfUploader
         accounts={accounts}
         users={users}
         onImported={invalidate}
+        schoolMode={schoolMode}
       />
 
       {/* Skatteprognos */}
@@ -973,10 +979,12 @@ function SalaryPdfUploader({
   accounts,
   users,
   onImported,
+  schoolMode = false,
 }: {
   accounts: Account[];
   users: HouseholdUser[];
   onImported: () => void;
+  schoolMode?: boolean;
 }) {
   const [dragging, setDragging] = useState(false);
   const [owner, setOwner] = useState<string>("");
@@ -1018,12 +1026,26 @@ function SalaryPdfUploader({
   return (
     <Card title="Ladda upp lönespec-PDF (auto-tolkning)">
       <div className="text-sm text-slate-700 mb-3">
-        Stöder <strong>INKAB</strong> (Nybergs Konstruktion),{" "}
-        <strong>Vättaporten AB</strong> och{" "}
-        <strong>Försäkringskassan</strong> (barnbidrag + föräldrapenning).
-        Extraherar brutto, skatt, extra skatt, förmån, netto, semester-
-        dagar och datum automatiskt. PDF:en länkas till raden så du kan
-        granska originalet senare.
+        {schoolMode ? (
+          <>
+            Ladda ner Ekonomilabbets lönespecar från
+            {" "}<strong>Dina dokument</strong> och släpp dem här. Stöder
+            kursens egna arbetsgivare samt
+            {" "}<strong>Försäkringskassan</strong> (barnbidrag och
+            föräldrapenning). Extraherar brutto, skatt, förmån och netto
+            automatiskt och länkar PDF:en till raden så du kan granska
+            originalet senare.
+          </>
+        ) : (
+          <>
+            Stöder <strong>INKAB</strong> (Nybergs Konstruktion),{" "}
+            <strong>Vättaporten AB</strong> och{" "}
+            <strong>Försäkringskassan</strong> (barnbidrag + föräldrapenning).
+            Extraherar brutto, skatt, extra skatt, förmån, netto, semester-
+            dagar och datum automatiskt. PDF:en länkas till raden så du kan
+            granska originalet senare.
+          </>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 text-sm">
         <label className="block">

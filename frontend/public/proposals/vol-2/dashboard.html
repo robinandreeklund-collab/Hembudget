@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idag · Vol. 02 · Tidslinje</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body { background: #fff; }
+
+/* Top-strip — datum-nav */
+.date-strip {
+  position: sticky; top: 0; z-index: 30;
+  background: #fff;
+  border-bottom: 1px solid var(--rule);
+  padding: 18px clamp(24px, 6vw, 80px);
+  display: flex; gap: 14px; align-items: center;
+  flex-wrap: wrap;
+}
+.date-strip-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.date-strip-eye::before { content: "● "; }
+.date-tabs { display: flex; gap: 4px; }
+.date-tab {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 6px 11px; border-radius: 100px;
+  border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); text-decoration: none; cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.date-tab.active { background: var(--fg); color: #fff; border-color: var(--fg); }
+.date-tab:hover:not(.active) { border-color: var(--fg); color: var(--fg); }
+
+.date-strip-spaces {
+  margin-left: auto;
+  display: flex; gap: 6px;
+}
+.space-tab {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 6px 11px; border-radius: 100px;
+  border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); text-decoration: none; cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.space-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.space-tab:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+/* Hero-band: idag */
+.today-hero {
+  padding: 56px clamp(24px, 6vw, 80px) 48px;
+  background: linear-gradient(180deg, #fafaf9 0%, #fff 100%);
+  border-bottom: 1px solid var(--rule);
+}
+.today-shell { max-width: 1200px; margin: 0 auto; }
+.today-meta {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 22px;
+  display: flex; gap: 18px; align-items: center;
+}
+.today-clock {
+  font-family: var(--serif); font-style: italic;
+  font-size: 16px; color: var(--fg);
+  text-transform: none; letter-spacing: 0;
+}
+.today-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(40px, 5.6vw, 72px);
+  letter-spacing: -2px; line-height: 1;
+  margin-bottom: 22px;
+}
+.today-h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.today-lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(17px, 1.5vw, 19px);
+  line-height: 1.55; color: #334155;
+  max-width: 60ch;
+}
+
+/* Timeline */
+.timeline-wrap {
+  padding: 56px clamp(24px, 6vw, 80px) 80px;
+  max-width: 1280px; margin: 0 auto;
+}
+
+.timeline-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 28px;
+}
+.timeline-eye::before { content: "● "; }
+
+.tracks {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* Header row — dagsmarkeringar */
+.tracks-header {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 2px solid var(--fg);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  position: sticky; top: 80px; background: #fff; z-index: 5;
+}
+.tracks-header-day {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+.tracks-header-day.is-today {
+  color: var(--accent);
+}
+.tracks-header-day strong {
+  display: block;
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  color: var(--fg); margin-top: 2px; letter-spacing: -0.2px;
+  text-transform: none;
+}
+.tracks-header-day.is-today strong { color: var(--accent); }
+
+.track-label {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--fg);
+  padding: 12px 8px 12px 0;
+  border-right: 1px solid var(--rule);
+  position: sticky; left: 0;
+}
+.track-label-name {
+  display: block;
+  font-family: var(--serif); font-weight: 700; font-size: 17px;
+  color: var(--fg); letter-spacing: -0.3px;
+  text-transform: none; margin-top: 2px;
+}
+.track-label-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent);
+}
+
+.track-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--rule);
+  position: relative;
+  min-height: 70px;
+}
+.track-row:last-child { border-bottom: 0; }
+
+.track-cell {
+  border-radius: 4px;
+  padding: 6px 8px;
+  display: flex; flex-direction: column; justify-content: center;
+  min-height: 56px;
+  cursor: pointer;
+  transition: all .2s var(--ease);
+  text-decoration: none;
+  color: var(--fg);
+}
+.track-cell:hover { transform: translateY(-1px); }
+.track-cell.is-empty {
+  background: rgba(15, 23, 42, 0.02);
+  border: 1px dashed var(--rule);
+}
+.track-cell.is-money {
+  background: rgba(220, 76, 43, 0.08);
+  border: 1px solid rgba(220, 76, 43, 0.18);
+}
+.track-cell.is-money:hover { background: rgba(220, 76, 43, 0.14); }
+.track-cell.is-contract {
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.18);
+}
+.track-cell.is-learn {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+.track-cell.is-balance {
+  background: rgba(251, 191, 36, 0.10);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+.track-cell.is-now {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.track-cell-time {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted);
+}
+.track-cell-name {
+  font-family: var(--serif); font-weight: 600; font-size: 13px;
+  letter-spacing: -0.2px; line-height: 1.15;
+  margin-top: 2px;
+}
+.track-cell-num {
+  font-family: var(--serif); font-weight: 700; font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px; letter-spacing: -0.3px;
+}
+.track-cell-num.is-out { color: #b91c1c; }
+.track-cell-num.is-in  { color: #047857; }
+
+/* Now-line */
+.now-line {
+  position: absolute;
+  top: 0; bottom: 0; width: 2px;
+  background: var(--accent);
+  z-index: 2;
+  /* placering — vi sätter via inline style */
+}
+.now-line::before {
+  content: ""; position: absolute;
+  top: -4px; left: -4px;
+  width: 10px; height: 10px;
+  background: var(--accent); border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* Echo-strip nederst */
+.echo-band {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.06) 0%, rgba(220, 76, 43, 0.04) 100%);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 36px clamp(24px, 6vw, 80px);
+}
+.echo-band-shell {
+  max-width: 880px; margin: 0 auto;
+  display: grid; grid-template-columns: 80px 1fr auto; gap: 22px;
+  align-items: center;
+}
+.echo-band-icon {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 56px; color: var(--gold);
+  line-height: 1;
+}
+.echo-band-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.45;
+  color: #422006;
+}
+.echo-band-text strong { color: #92400e; font-style: normal; }
+.echo-band-cite {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: #92400e;
+  margin-top: 8px;
+  font-style: normal;
+}
+.echo-band-cta {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 10px 16px; border-radius: 100px;
+  background: #92400e; color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .2s var(--ease);
+}
+.echo-band-cta:hover { background: #78350f; }
+
+/* Bottom — pentagon snapshot + WB */
+.foot-snapshot {
+  padding: 56px clamp(24px, 6vw, 80px);
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  max-width: 1200px; margin: 0 auto;
+}
+@media (max-width: 800px) { .foot-snapshot { grid-template-columns: 1fr; } }
+.foot-block-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 14px;
+}
+.foot-block-eye::before { content: "● "; }
+.foot-block h3 {
+  font-family: var(--serif); font-size: 28px; font-weight: 700;
+  letter-spacing: -0.7px; line-height: 1.1; margin-bottom: 12px;
+}
+.foot-block h3 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.foot-block p {
+  font-size: 14.5px; line-height: 1.6; color: #475569;
+  max-width: 50ch; margin-bottom: 16px;
+}
+
+.pentagon-svg { display: block; margin: 0 auto; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 02 · Tidslinje</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="#" class="logout">Logga ut</a>
+</nav>
+
+<!-- Date strip -->
+<div class="date-strip">
+  <span class="date-strip-eye">Tidslinje</span>
+  <div class="date-tabs">
+    <a href="#" class="date-tab">Idag</a>
+    <a href="#" class="date-tab active">Veckan</a>
+    <a href="#" class="date-tab">Månaden</a>
+    <a href="#" class="date-tab">Året</a>
+  </div>
+  <div class="date-strip-spaces">
+    <a href="#" class="space-tab active">Idag</a>
+    <a href="#" class="space-tab">Bokföring</a>
+    <a href="banken.html" class="space-tab">Pengar</a>
+    <a href="#" class="space-tab">Avtal</a>
+    <a href="#" class="space-tab">Utveckling</a>
+  </div>
+</div>
+
+<!-- Hero -->
+<section class="today-hero">
+  <div class="today-shell">
+    <div class="today-meta">
+      <span class="today-clock">Onsdag 29 april · <strong>14:32</strong></span>
+      <span>·</span>
+      <span>Vecka 18 · Linda</span>
+    </div>
+    <h1 class="today-h1">Onsdag <em>14:32</em>.</h1>
+    <p class="today-lead">
+      Tre val kvar att fatta innan kvällen. Tandläkaren tippar hälsa,
+      lönesamtalet kommer i fredag, autogirot tickar 16:00. Allt har
+      en tid och en plats.
+    </p>
+  </div>
+</section>
+
+<!-- Timeline -->
+<section class="timeline-wrap">
+  <div class="timeline-eye">Veckan i fyra spår</div>
+
+  <div class="tracks">
+    <div></div>
+    <div class="tracks-header">
+      <span class="tracks-header-day">Mån<strong>27</strong></span>
+      <span class="tracks-header-day">Tis<strong>28</strong></span>
+      <span class="tracks-header-day is-today">Ons<strong>29</strong></span>
+      <span class="tracks-header-day">Tor<strong>30</strong></span>
+      <span class="tracks-header-day">Fre<strong>1</strong></span>
+      <span class="tracks-header-day">Lör<strong>2</strong></span>
+      <span class="tracks-header-day">Sön<strong>3</strong></span>
+    </div>
+
+    <!-- Spår 1: Pengar -->
+    <div class="track-label">
+      <span class="track-label-eye">01</span>
+      <span class="track-label-name">Pengar</span>
+    </div>
+    <div class="track-row">
+      <a href="banken.html" class="track-cell is-money">
+        <span class="track-cell-time">06:02</span>
+        <span class="track-cell-name">Spotify</span>
+        <span class="track-cell-num is-out">−169</span>
+      </a>
+      <a href="banken.html" class="track-cell is-money">
+        <span class="track-cell-time">16:00</span>
+        <span class="track-cell-name">Visma · lön</span>
+        <span class="track-cell-num is-in">+27 795</span>
+      </a>
+      <a href="banken.html" class="track-cell is-money is-now">
+        <span class="track-cell-time">14:22 · NU</span>
+        <span class="track-cell-name">Tandläkaren</span>
+        <span class="track-cell-num is-out">−3 200</span>
+      </a>
+      <span class="track-cell is-empty"></span>
+      <span class="track-cell is-empty"></span>
+      <span class="track-cell is-empty"></span>
+      <span class="track-cell is-empty"></span>
+    </div>
+
+    <!-- Spår 2: Avtal -->
+    <div class="track-label">
+      <span class="track-label-eye">02</span>
+      <span class="track-label-name">Avtal</span>
+    </div>
+    <div class="track-row">
+      <span class="track-cell is-empty"></span>
+      <a href="#" class="track-cell is-contract">
+        <span class="track-cell-time">06:02</span>
+        <span class="track-cell-name">Akavia · medlem</span>
+        <span class="track-cell-num is-out">−298</span>
+      </a>
+      <a href="#" class="track-cell is-contract is-now">
+        <span class="track-cell-time">16:00 · 2h</span>
+        <span class="track-cell-name">Autogiro · 18/23</span>
+      </a>
+      <a href="#" class="track-cell is-contract">
+        <span class="track-cell-time">10:00</span>
+        <span class="track-cell-name">Mail: AI-utbildning</span>
+      </a>
+      <a href="#" class="track-cell is-contract">
+        <span class="track-cell-time">15:00</span>
+        <span class="track-cell-name">Karriärsamtal</span>
+      </a>
+      <span class="track-cell is-empty"></span>
+      <span class="track-cell is-empty"></span>
+    </div>
+
+    <!-- Spår 3: Lärande -->
+    <div class="track-label">
+      <span class="track-label-eye">03</span>
+      <span class="track-label-name">Lärande</span>
+    </div>
+    <div class="track-row">
+      <a href="#" class="track-cell is-learn">
+        <span class="track-cell-time">19:30</span>
+        <span class="track-cell-name">Mod 02 · Lönesamtalet 41%</span>
+      </a>
+      <a href="#" class="track-cell is-learn">
+        <span class="track-cell-time">20:14</span>
+        <span class="track-cell-name">Reflektion · Marias bud</span>
+      </a>
+      <a href="#" class="track-cell is-learn is-now">
+        <span class="track-cell-time">21:00</span>
+        <span class="track-cell-name">Quiz · A-skatt-tabell</span>
+      </a>
+      <span class="track-cell is-empty"></span>
+      <a href="#" class="track-cell is-learn">
+        <span class="track-cell-time">19:00</span>
+        <span class="track-cell-name">Mod 03 · Buffert</span>
+      </a>
+      <span class="track-cell is-empty"></span>
+      <a href="#" class="track-cell is-learn">
+        <span class="track-cell-time">19:30</span>
+        <span class="track-cell-name">Söndag-review</span>
+      </a>
+    </div>
+
+    <!-- Spår 4: Balans (WB) -->
+    <div class="track-label">
+      <span class="track-label-eye">04</span>
+      <span class="track-label-name">Balans</span>
+    </div>
+    <div class="track-row">
+      <a href="#" class="track-cell is-balance">
+        <span class="track-cell-time">22:00</span>
+        <span class="track-cell-name">WB 72</span>
+      </a>
+      <a href="#" class="track-cell is-balance">
+        <span class="track-cell-time">22:00</span>
+        <span class="track-cell-name">WB 74</span>
+      </a>
+      <a href="#" class="track-cell is-balance is-now">
+        <span class="track-cell-time">14:32</span>
+        <span class="track-cell-name">WB 68 · hälsa ↓</span>
+      </a>
+      <span class="track-cell is-empty"></span>
+      <span class="track-cell is-empty"></span>
+      <span class="track-cell is-empty"></span>
+      <a href="#" class="track-cell is-balance">
+        <span class="track-cell-time">19:30</span>
+        <span class="track-cell-name">Pentagon-review</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Echo-band -->
+<section class="echo-band">
+  <div class="echo-band-shell">
+    <div class="echo-band-icon">“</div>
+    <div>
+      <div class="echo-band-text">
+        Tre val kvar idag, men <strong>tandläkaren är den enda som ändrar
+        pentagonen</strong>. Vad gör du om bufferten halveras igen
+        innan månadens slut?
+        <div class="echo-band-cite">— Echo · sokratisk fråga · onsdag 14:32</div>
+      </div>
+    </div>
+    <a href="#" class="echo-band-cta">Reflektera ↗</a>
+  </div>
+</section>
+
+<!-- Foot snapshot -->
+<section class="foot-snapshot">
+  <div class="foot-block">
+    <div class="foot-block-eye">Pentagon · idag 14:32</div>
+    <h3>Hälsa <em>tippar</em>.</h3>
+    <p>
+      Ekonomi 78, Karriär 85, Relation 80, Hälsa 56, Fritid 56. Den
+      största ändringen senaste 24h: hälsa-axeln −6 efter tandläkaren.
+      Söndagens review-vy visar veckans mönster komplett.
+    </p>
+    <svg class="pentagon-svg" width="240" height="200" viewBox="0 0 240 200">
+      <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="#cbd5e1" stroke-dasharray="2 3"/>
+      <polygon points="120,38 196,90 168,170 70,170 42,90" fill="rgba(220,76,43,0.18)" stroke="#dc4c2b" stroke-width="1.6"/>
+      <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">EKONOMI 78</text>
+      <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">RELATION 80</text>
+      <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#dc4c2b" font-weight="700">HÄLSA 56 ↓</text>
+      <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">KARRIÄR 85</text>
+      <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">FRITID 56</text>
+    </svg>
+  </div>
+  <div class="foot-block">
+    <div class="foot-block-eye">Mastery · vecka 18</div>
+    <h3><em>9 av 12</em> kompetenser säkra.</h3>
+    <p>
+      Du går från Påbörjad till Säker på ISK-skatt nästa fredag om du
+      klarar quizen. Pension, lönespec och kollektivavtal är redan på
+      Förebild-nivå.
+    </p>
+    <a href="#" style="font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); text-decoration: none;">
+      Hela mastery-trappan →
+    </a>
+  </div>
+</section>
+
+</body>
+</html>

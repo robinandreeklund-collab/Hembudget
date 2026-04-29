@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
-import { AuthShell, PaperButton, PaperInput } from "@/components/paper";
+import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
+import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
 
 export default function TeacherSignup() {
   const { schoolStatus } = useAuth();
@@ -49,82 +51,101 @@ export default function TeacherSignup() {
 
   if (done) {
     return (
-      <AuthShell
-        eyebrow="Snart klart"
-        title="Kolla din inkorg"
-        back="/login/teacher"
-        backLabel="Tillbaka till inloggning"
+      <EditorialAuthShell
+        topNavRight={
+          <Link to="/login" className="ed-top-link">Logga in</Link>
+        }
       >
-        <p className="body-prose text-sm">
-          Vi har skickat ett bekräftelsemail till{" "}
-          <span className="kbd">{email}</span>. Klicka på länken i mailet
-          för att aktivera ditt konto. Länken är giltig i 24 timmar.
-        </p>
-        <p className="text-xs text-[#888] serif-italic mt-3">
+        <div className="ed-eyebrow">Snart klart · Kolla inkorgen</div>
+        <h1 className="ed-headline">
+          Mailet är på <em>väg</em>.
+        </h1>
+        <p className="ed-subhead">
+          Vi har skickat ett bekräftelsemail till <strong>{email}</strong>.
+          Klicka på länken så är ditt lärarkonto aktivt. Länken är giltig i 24 timmar.
           Hittar du inte mailet? Kolla skräpposten.
         </p>
-        <Link
-          to="/login/teacher"
-          className="btn-dark mt-6 inline-block w-full text-center px-5 py-3 rounded-md"
-        >
-          Till inloggning
+        <Link to="/login" className="ed-btn" style={{ textDecoration: "none" }}>
+          Till inloggning <span className="ed-btn-arrow">→</span>
         </Link>
-      </AuthShell>
+      </EditorialAuthShell>
     );
   }
 
   return (
-    <AuthShell
-      eyebrow="Ekonomilabbet"
-      title="Skapa lärarkonto"
-      intro="Skapa ett konto och bekräfta din e-post så är du igång."
-      back="/login/teacher"
-      backLabel="Tillbaka till inloggning"
+    <EditorialAuthShell
+      topNavRight={<AuthAwareTopLinks />}
     >
-      <form onSubmit={handle} className="space-y-3">
-        <PaperInput
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="E-post"
-          autoFocus
-        />
-        <PaperInput
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Namn"
-        />
-        <PaperInput
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Lösenord (minst 8 tecken)"
-        />
-        <PaperInput
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          placeholder="Bekräfta lösenord"
-        />
-        <Turnstile
-          siteKey={siteKey}
-          onToken={setTurnstileToken}
-          onExpire={() => setTurnstileToken(null)}
-        />
-        {err && (
-          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
-            {err}
+      <div className="ed-eyebrow">Skapa lärarkonto · Vol. 01</div>
+
+      <div className="ed-clock">
+        <div className="ed-clock-time">
+          Klockan är <LiveTime />.
+        </div>
+        <LiveCountdown minutes={1} />
+      </div>
+
+      <p className="ed-subhead">
+        Ett konto, ett bekräftelsemail. <em>Sextio sekunder</em> till klassen
+        är på plats — sen ser du varje elevs vecka som en pentagon.
+      </p>
+
+      <div className="ed-card">
+        <form onSubmit={handle} className="ed-form" noValidate>
+          <input
+            className="ed-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="E-post · skola eller jobb"
+            autoFocus
+            required
+          />
+          <input
+            className="ed-input"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ditt namn"
+          />
+          <input
+            className="ed-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Lösenord (minst 8 tecken)"
+            required
+          />
+          <input
+            className="ed-input"
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder="Bekräfta lösenord"
+            required
+          />
+          <Turnstile
+            siteKey={siteKey}
+            onToken={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+          />
+          {err && <div className="ed-error">{err}</div>}
+          <button
+            type="submit"
+            className="ed-btn"
+            disabled={busy || (Boolean(siteKey) && !turnstileToken)}
+          >
+            {busy ? "Skapar konto…" : "Skapa lärarkonto"}
+            <span className="ed-btn-arrow">→</span>
+          </button>
+          <div className="ed-foot-note">
+            Är du istället förälder?{" "}
+            <Link to="/signup/parent" className="ed-foot-link">
+              Skapa familjekonto
+            </Link>
           </div>
-        )}
-        <PaperButton
-          type="submit"
-          disabled={busy || (Boolean(siteKey) && !turnstileToken)}
-          className="w-full justify-center disabled:opacity-50"
-        >
-          {busy ? "Skapar konto…" : "Skapa konto"}
-        </PaperButton>
-      </form>
-    </AuthShell>
+        </form>
+      </div>
+    </EditorialAuthShell>
   );
 }
