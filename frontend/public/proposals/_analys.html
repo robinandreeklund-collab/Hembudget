@@ -2228,6 +2228,39 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="routes-teacher">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">40 · Mappning · lärar-routes</div>
+    <h2 class="h-section">Lärar-routes — 13 stycken under <code>/teacher/*</code>.</h2>
+    <div class="prose">
+      <p>
+        Lärar-ekosystemet är tyngre än det lät i förra avsnittet. Faktisk
+        inventering: <code>/teacher</code> (översikt),
+        <code>/teacher/students/:studentId</code> (elevdetalj),
+        <code>/teacher/all-batches</code> (alla pågående batchuppdrag),
+        <code>/teacher/matrix</code> (uppdragsmatris klass × modul),
+        <code>/teacher/modules</code> + <code>/teacher/modules/:moduleId</code>
+        (modul-bibliotek + editor),
+        <code>/teacher/reflections</code> (alla elevers reflektioner i en ström),
+        <code>/teacher/rubrics</code> (bedömningsmatriser),
+        <code>/teacher/time-on-task</code> (engagemangsstatistik),
+        <code>/teacher/negotiations</code> (alla pågående lönesamtal),
+        <code>/teacher/admin-ai</code> (AI-konfig + token-budget),
+        <code>/teacher/investments</code> (klassens investeringsprestanda),
+        <code>/teacher/credit</code> (kreditprövningsfacit),
+        <code>/teacher/wellbeing</code> (mental hälsa-signaler).
+      </p>
+      <p>
+        Plus två "delade" routes som teknisk är lärar-orkestrerade men öppnas
+        av eleven: <code>/mortgage/:assignmentId</code> (bolåneuppdrag som
+        läraren delar ut, eleven löser),
+        <code>/peer-review</code> (peer review där lärare matchat två elever).
+        Detta är 13 + 2 = 15 lärar-orienterade routes utöver de publika.
+        Min ursprungliga "tre lärarvyer" var en pedagogisk förenkling — det
+        verkliga lärar-systemet är betydligt rikare.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
