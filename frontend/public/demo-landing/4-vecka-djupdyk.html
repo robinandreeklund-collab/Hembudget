@@ -94,8 +94,8 @@ body.is-deep { overflow: hidden; height: 100vh; }
 .top-nav-link {
   display: inline-block;
   font-family: var(--serif);
-  font-size: 16px; font-weight: 700;
-  letter-spacing: -0.2px; line-height: 1.05;
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
@@ -103,9 +103,10 @@ body.is-deep { overflow: hidden; height: 100vh; }
   text-rendering: geometricPrecision;
   transform-origin: right center;
   transition:
-    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
-    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease);
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
   cursor: pointer;
 }
 .top-nav-link:hover {
@@ -120,8 +121,8 @@ body.is-deep { overflow: hidden; height: 100vh; }
   position: fixed; top: 22px; left: 28px; z-index: 70;
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--serif);
-  font-size: 16px; font-weight: 700;
-  letter-spacing: -0.2px; line-height: 1.05;
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
@@ -129,9 +130,10 @@ body.is-deep { overflow: hidden; height: 100vh; }
   text-rendering: geometricPrecision;
   transform-origin: left center;
   transition:
-    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
-    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease);
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
 }
 .home-link-arrow {
   display: inline-block;
@@ -144,14 +146,26 @@ body.is-deep { overflow: hidden; height: 100vh; }
 }
 .home-link:hover .home-link-arrow { transform: translateX(-6px); }
 
-/* Skarp text mot rörlig video — tight 1px shadow, ingen blurry halo. */
+/* Mörk bg: vit text + multi-stop shadow (1px outline + 2px drop) — kristallklar. */
 body.nav-on-dark .top-nav-link,
 body.nav-on-dark .home-link {
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+  text-shadow:
+    0 0 1px rgba(0,0,0,0.95),
+    0 1px 2px rgba(0,0,0,0.85),
+    0 2px 6px rgba(0,0,0,0.4);
 }
 body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.75); }
+
+/* Deep-page (slides) öppen → vit bakgrund. Tvinga svart text på nav. */
+body.is-deep .top-nav-link,
+body.is-deep .home-link {
+  color: var(--fg);
+  text-shadow: none;
+}
+body.is-deep .top-nav-link-primary { color: var(--accent); }
+body.is-deep .home-link-arrow { color: var(--muted); }
 
 @keyframes nav-name-pop {
   0%   { transform: scale(0.85); opacity: 0.7; }
@@ -2851,10 +2865,10 @@ const DIVE_LABELS = {
     let top = null;
     sections.forEach(s => {
       const r = s.getBoundingClientRect();
-      if (r.top <= 60 && r.bottom > 60) top = s;
+      if (r.top <= 40 && r.bottom > 40) top = s;
     });
     if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
-  }, { rootMargin: '-60px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
+  }, { rootMargin: '-40px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
   sections.forEach(s => obs.observe(s));
 
   // Backup: scroll-baserad recompute (Safari kan missa edge cases)
@@ -2866,7 +2880,7 @@ const DIVE_LABELS = {
       let top = null;
       sections.forEach(s => {
         const r = s.getBoundingClientRect();
-        if (r.top <= 60 && r.bottom > 60) top = s;
+        if (r.top <= 40 && r.bottom > 40) top = s;
       });
       if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
     });

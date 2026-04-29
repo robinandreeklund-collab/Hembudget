@@ -94,8 +94,8 @@ body.is-deep { overflow: hidden; height: 100vh; }
 .top-nav-link {
   display: inline-block;
   font-family: var(--serif);
-  font-size: 16px; font-weight: 700;
-  letter-spacing: -0.2px; line-height: 1.05;
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
@@ -103,9 +103,10 @@ body.is-deep { overflow: hidden; height: 100vh; }
   text-rendering: geometricPrecision;
   transform-origin: right center;
   transition:
-    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
-    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease);
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
   cursor: pointer;
 }
 .top-nav-link:hover {
@@ -120,8 +121,8 @@ body.is-deep { overflow: hidden; height: 100vh; }
   position: fixed; top: 22px; left: 28px; z-index: 70;
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--serif);
-  font-size: 16px; font-weight: 700;
-  letter-spacing: -0.2px; line-height: 1.05;
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px; line-height: 1;
   color: var(--fg);
   text-decoration: none;
   -webkit-font-smoothing: antialiased;
@@ -129,9 +130,10 @@ body.is-deep { overflow: hidden; height: 100vh; }
   text-rendering: geometricPrecision;
   transform-origin: left center;
   transition:
-    font-size .55s cubic-bezier(.34, 1.56, .64, 1),
-    letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease);
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .45s var(--ease),
+    text-shadow .45s var(--ease);
 }
 .home-link-arrow {
   display: inline-block;
@@ -144,14 +146,26 @@ body.is-deep { overflow: hidden; height: 100vh; }
 }
 .home-link:hover .home-link-arrow { transform: translateX(-6px); }
 
-/* Skarp text mot rörlig video — tight 1px shadow, ingen blurry halo. */
+/* Mörk bg: vit text + multi-stop shadow (1px outline + 2px drop) — kristallklar. */
 body.nav-on-dark .top-nav-link,
 body.nav-on-dark .home-link {
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+  text-shadow:
+    0 0 1px rgba(0,0,0,0.95),
+    0 1px 2px rgba(0,0,0,0.85),
+    0 2px 6px rgba(0,0,0,0.4);
 }
 body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.75); }
+
+/* Deep-page (slides) öppen → vit bakgrund. Tvinga svart text på nav. */
+body.is-deep .top-nav-link,
+body.is-deep .home-link {
+  color: var(--fg);
+  text-shadow: none;
+}
+body.is-deep .top-nav-link-primary { color: var(--accent); }
+body.is-deep .home-link-arrow { color: var(--muted); }
 
 @keyframes nav-name-pop {
   0%   { transform: scale(0.85); opacity: 0.7; }
@@ -1181,7 +1195,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
     </header>
     <div class="shell">
       <div class="hero-eyebrow">EN VECKA I PETERS LIV</div>
-      <h1>Klockan är <em data-hero-time>21:14</em>.<br>Peters räkningar dras<br>om <em data-hero-mins>16 minuter</em>.</h1>
+      <h1>Klockan är <em data-hero-time>21:14</em>.<br>Peters vecka börjar<br>om <em data-hero-mins>16 minuter</em>.</h1>
       <p>Peter är 38, småbarnsförälder i Göteborg. Barnen sover. Hyran 8&nbsp;200 kr ska dras om 4 dagar. 23 fakturor väntar på att signeras. Det här är hans vecka i Ekonomilabbet — vardagen som planering, inte gambling.</p>
       <div class="hero-stats">
         <div><span class="hero-stat-num">7</span><span class="hero-stat-label">dagar</span></div>
@@ -1210,14 +1224,14 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
       <div class="day-body">
         <div class="day-text">
           <h2 data-fx="reveal">Peter signerar 23 fakturor på en gång.</h2>
-          <p data-fx="fade-up" data-fx-delay="160">EkonomilabbetID kompletteras med BankID. Plattformen sorterar inkomna fakturor efter förfallodatum och belopp. <strong>18 av 23</strong> är fasta autogiron — hyra, el, försäkring, mobil — och kan signeras kollektivt. <strong>5 fakturor</strong> har oregelbundna belopp och flaggas för manuell granskning.</p>
+          <p data-fx="fade-up" data-fx-delay="160">EkonomilabbetID är plattformens identitet — Peters BankID-motsvarighet i simuleringen. Plattformen sorterar inkomna fakturor efter förfallodatum och belopp. <strong>18 av 23</strong> är fasta autogiron — hyra, el, försäkring, mobil — och kan signeras kollektivt. <strong>5 fakturor</strong> har oregelbundna belopp och flaggas för manuell granskning.</p>
 
           <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
             "Onsdag kväll. Barnen sover. Räkningstid."
             <cite>— Peter, framför skärmen</cite>
           </blockquote>
 
-          <p data-fx="fade-up" data-fx-delay="320">Han läser igenom de fem röda raderna: tandvård 1&nbsp;240 kr (avviker från senaste 3 mån), bilförsäkring som höjts, ett oklart Klarna-belopp. Han signerar 18 kollektivt med BankID. Resten väntar på granskning. Allt klart kl <strong>21:38</strong>.</p>
+          <p data-fx="fade-up" data-fx-delay="320">Han läser igenom de fem röda raderna: tandvård 1&nbsp;240 kr (avviker från senaste 3 mån), bilförsäkring som höjts, ett oklart Klarna-belopp. Han signerar 18 kollektivt med EkonomilabbetID. Resten väntar på granskning. Allt klart kl <strong>21:38</strong>.</p>
 
           <div class="day-result" data-fx="zoom-in" data-fx-delay="400">
             <div class="day-result-num" data-count-to="18250" data-count-prefix="">18 250</div>
@@ -1241,7 +1255,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             </div>
             <div class="vis-card-foot">
               <span>Signerat</span>
-              <strong>18 / 23 · BankID</strong>
+              <strong>18 / 23 · EkonomilabbetID</strong>
             </div>
           </div>
         </aside>
@@ -1394,7 +1408,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         <div class="day-meta-time">
           <span class="day-meta-dot">●</span>
           <span class="day-meta-day">Fredag</span>
-          <span class="day-meta-clock">06:02</span>
+          <span class="day-meta-clock">08:03</span>
         </div>
         <p class="day-meta-tagline">Hur snabbt försvinner lönen?</p>
       </header>
@@ -1402,7 +1416,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
       <div class="day-body">
         <div class="day-text">
           <h2 data-fx="reveal">32 480 kr landar.</h2>
-          <p data-fx="fade-up" data-fx-delay="160">Lönen kommer in <strong>06:02</strong>, två minuter sent. Den är där medan Peter borstar tänderna. Inom två timmar har autogirot dragit hyran, elen, försäkringen, mobilen — totalt <strong>18&nbsp;250 kr</strong>. Mer än halva lönen är borta innan han hunnit till jobbet.</p>
+          <p data-fx="fade-up" data-fx-delay="160">Lönen kommer in <strong>08:03</strong> när bankerna öppnar — tre minuter efter att kassasystemet startat. Inom två timmar har autogirot dragit hyran, elen, försäkringen, mobilen — totalt <strong>18&nbsp;250 kr</strong>. Mer än halva lönen är borta innan Peter hunnit till lunchen.</p>
 
           <blockquote class="day-quote" data-fx="fade-left" data-fx-delay="240">
             "Hur snabbt försvinner lönen — och vad är kvar för dig?"
@@ -1420,16 +1434,16 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         <aside class="day-vis" data-fx="fade-right" data-fx-delay="240">
           <div class="vis-card">
             <div class="vis-card-head">
-              <span class="vis-card-eye">● Lönen · 06:02 → 08:14</span>
+              <span class="vis-card-eye">● Lönen · 08:03 → 10:14</span>
               <span class="vis-card-meta">2 h · 18 250 ut</span>
             </div>
             <h3 class="vis-card-title">Peter · 32 480 → 14 230</h3>
             <div class="vis-bars">
-              <div class="vis-bar is-peak" style="--h: 95%;"><span class="vis-bar-num">32k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">06:02</span></div>
-              <div class="vis-bar" style="--h: 72%;"><span class="vis-bar-num">24k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">06:30</span></div>
-              <div class="vis-bar" style="--h: 58%;"><span class="vis-bar-num">19k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">07:00</span></div>
-              <div class="vis-bar" style="--h: 48%;"><span class="vis-bar-num">16k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">07:45</span></div>
-              <div class="vis-bar" style="--h: 42%;"><span class="vis-bar-num">14k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">08:14</span></div>
+              <div class="vis-bar is-peak" style="--h: 95%;"><span class="vis-bar-num">32k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">08:03</span></div>
+              <div class="vis-bar" style="--h: 72%;"><span class="vis-bar-num">24k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">08:32</span></div>
+              <div class="vis-bar" style="--h: 58%;"><span class="vis-bar-num">19k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">09:01</span></div>
+              <div class="vis-bar" style="--h: 48%;"><span class="vis-bar-num">16k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">09:45</span></div>
+              <div class="vis-bar" style="--h: 42%;"><span class="vis-bar-num">14k</span><span class="vis-bar-fill"></span><span class="vis-bar-r">10:14</span></div>
             </div>
             <div class="vis-card-foot">
               <span>Kvarvarande</span>
@@ -1610,7 +1624,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         <h2>Peters vecka är en av <em>tusentals</em>.</h2>
         <p>
           Varje deltagare får sin egen, simulerad i realtid mot Bankgirot,
-          Skatteverket, PSD2-data och faktiska räntor. Du som lärare ser hela
+          Skatteverket och faktiska räntor. Du som lärare ser hela
           klassen. Du som vuxen elev lär dig <em>sortera prioriteringar</em>
           — inte maximera avkastning. Vardagen som planering, inte gambling.
         </p>
@@ -1654,20 +1668,20 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             <span class="deep-slide-num-big">01</span>
             <span class="deep-slide-num-meta"><strong>EkonomilabbetID</strong>1 av tre</span>
           </div>
-          <h3>En BankID-kopplad identitet inom plattformen.</h3>
+          <h3>Plattformens identitet — simuleringens egen BankID-motsvarighet.</h3>
           <p class="deep-slide-lede">
-            EkonomilabbetID är inte en ny inloggning — det är ett lager ovanpå
-            BankID som låter Peter signera <em>flera</em> autogiron i ett svep.
-            När han loggar in kopplas hans personnummer till plattformens
-            transaktionsmotor. OCR-listan från Bankgirot mappas mot fakturor
-            han fått in via mail, brev eller direkt till banken. Resultatet:
-            allt på ett ställe, en signering räcker.
+            EkonomilabbetID ersätter BankID inom plattformen — det är en
+            simulerad 2-faktor-identitet som låter Peter signera <em>flera</em>
+            autogiron i ett svep. När han loggar in kopplas hans personnummer
+            till plattformens transaktionsmotor. OCR-listan från Bankgirot
+            mappas mot fakturor han fått in via mail, brev eller direkt till
+            banken. Resultatet: allt på ett ställe, en signering räcker.
           </p>
         </div>
         <div class="deep-slide-vis">
           <div class="brutto-stack">
             <div class="brutto-row">
-              <div class="brutto-row-label">BankID-koppling<small>personnummer · 2-faktor</small></div>
+              <div class="brutto-row-label">EkonomilabbetID<small>personnummer · 2-faktor · simulerad</small></div>
               <div class="brutto-row-num">aktiv</div>
             </div>
             <div class="brutto-row is-add">
@@ -1686,16 +1700,16 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         </div>
         <div class="deep-slide-system">
           <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
-          <div class="deep-slide-callout-title">BankID + Bankgirot + OCR-parser</div>
+          <div class="deep-slide-callout-title">EkonomilabbetID + Bankgirot + OCR-parser</div>
           <p class="deep-slide-callout-body">
             Plattformen läser in fakturor från tre källor och de-duplicerar mot
             OCR-numret. Peter slipper logga in på sex olika fakturaportaler.
             Allt är en bild av <em>vad som ska dras</em> innan det dras.
           </p>
           <ul class="deep-slide-callout-list">
-            <li><strong>BankID</strong>2-faktor · 5 min session</li>
+            <li><strong>EkonomilabbetID</strong>2-faktor · 5 min session · simulerad</li>
             <li><strong>Bankgirot</strong>OCR-listan · 1×/dygn</li>
-            <li><strong>PSD2</strong>Kontoutdrag · 4×/dygn</li>
+            <li><strong>Transaktionsfeed</strong>Simulerad · 4×/dygn</li>
             <li><strong>PDF-parser</strong>Mail in → OCR-extrakt</li>
           </ul>
         </div>
@@ -1708,7 +1722,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
           <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · tisdag kväll</div>
         </div>
         <div class="deep-slide-foot-rich">
-          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>BankID · Bankgirot · OCR-listan</div>
+          <div class="deep-slide-foot-rich-section"><strong>Datakällor</strong>EkonomilabbetID · Bankgirot · OCR-listan</div>
           <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>4×/dygn</div>
           <div class="deep-slide-foot-rich-section"><strong>YTD</strong><em>274 fakturor · 218 kollektivt</em></div>
         </div>
@@ -1720,12 +1734,12 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             <span class="deep-slide-num-big">02</span>
             <span class="deep-slide-num-meta"><strong>Kollektiv signering</strong>2 av tre</span>
           </div>
-          <h3>18 av 23 godkänns med ett BankID-tryck.</h3>
+          <h3>18 av 23 godkänns med ett EkonomilabbetID-tryck.</h3>
           <p class="deep-slide-lede">
             Plattformen separerar <em>vana</em> fakturor från <em>nya</em>. Om
             beloppet ligger inom 5 % av senaste tre månaderna och utskickaren är
             känd — räknas raden som vana. Peter signerar 18 sådana kollektivt med
-            BankID. De fem röda raderna kräver manuellt godkännande: en tandvård
+            EkonomilabbetID. De fem röda raderna kräver manuellt godkännande: en tandvård
             som avviker, en bilförsäkring som höjts, ett oklart Klarna-belopp.
           </p>
         </div>
@@ -1744,7 +1758,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
               <div class="flow-row-num">5</div>
             </div>
             <div class="flow-row is-final">
-              <div class="flow-row-label">Signerat kollektivt · 1× BankID</div>
+              <div class="flow-row-label">Signerat kollektivt · 1× EkonomilabbetID</div>
               <div class="flow-row-num">18 250</div>
             </div>
             <div class="flow-foot">
@@ -1766,7 +1780,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             <li><strong>Tröskel</strong>z-score &gt; 1,5 · 6 mån-fönster</li>
             <li><strong>Vana</strong>Samma avs. · belopp ±5 %</li>
             <li><strong>Avvikande</strong>5 fakturor denna månad</li>
-            <li><strong>Signering</strong>1× BankID · 18 fakturor</li>
+            <li><strong>Signering</strong>1× EkonomilabbetID · 18 fakturor</li>
           </ul>
         </div>
         <div class="deep-slide-echo">
@@ -1806,7 +1820,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
             <div class="pdf-doc">
               <div class="pdf-doc-head">
                 <div class="pdf-doc-org">Bankgirot<small>222-1234 · AUTOGIRO-MEDGIVANDE</small></div>
-                <div class="pdf-doc-meta">SIGNERAT<br>2026-11-24<br>BankID 4587 12</div>
+                <div class="pdf-doc-meta">SIGNERAT<br>2026-11-24<br>EkonomilabbetID 4587 12</div>
               </div>
               <div class="pdf-doc-title">Peter Lindqvist · 18 fakturor · november</div>
               <div class="pdf-doc-rows">
@@ -2087,19 +2101,19 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
           </div>
           <h3>Varje transaktion får en kategori — automatiskt.</h3>
           <p class="deep-slide-lede">
-            När Peter swishar Stadium läser plattformen kontoutdraget via PSD2
-            och kör texten genom regelmotorn. <em>"STADIUM GBG"</em> matchar regeln
-            <em>handelsplats: Stadium → kategori: Barn/Skor</em>. Inom sex sekunder
-            är raden synlig, kategoriserad, och taggad med summa, plats, tid.
-            Ingen LLM — bara en regelmotor med 1&nbsp;800 kända handelsplatser.
-            Det Peter inte känner igen kan han märka manuellt en gång; sen lärs
-            regeln in.
+            När Peter swishar Stadium läser plattformen den simulerade
+            transaktionsfeeden och kör texten genom regelmotorn. <em>"STADIUM GBG"</em>
+            matchar regeln <em>handelsplats: Stadium → kategori: Barn/Skor</em>.
+            Inom sex sekunder är raden synlig, kategoriserad, och taggad med
+            summa, plats, tid. Ingen LLM — bara en regelmotor med 1&nbsp;800
+            kända handelsplatser. Det Peter inte känner igen kan han märka
+            manuellt en gång; sen lärs regeln in.
           </p>
         </div>
         <div class="deep-slide-vis">
           <div class="brutto-stack">
             <div class="brutto-row">
-              <div class="brutto-row-label">PSD2-feed · Swedbank<small>kontoutdrag · 4×/dygn</small></div>
+              <div class="brutto-row-label">Transaktionsfeed<small>simulerad bank · 4×/dygn</small></div>
               <div class="brutto-row-num">73 trans</div>
             </div>
             <div class="brutto-row is-add">
@@ -2118,15 +2132,15 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
         </div>
         <div class="deep-slide-system">
           <div class="deep-slide-callout-eye">● Så funkar det i plattformen</div>
-          <div class="deep-slide-callout-title">PSD2 + regelmotor · ingen LLM</div>
+          <div class="deep-slide-callout-title">Transaktionsfeed + regelmotor · ingen LLM</div>
           <p class="deep-slide-callout-body">
-            Plattformen läser kontoutdrag via PSD2 (Open Banking) fyra gånger
+            Plattformen läser den simulerade transaktionsfeeden fyra gånger
             per dygn. Regelmotorn är deterministisk: samma butik i morgon =
             samma kategori. Ingen LLM-randomness. Peters manuella taggar matas
             tillbaka in i hans privata regelträd.
           </p>
           <ul class="deep-slide-callout-list">
-            <li><strong>PSD2</strong>Open Banking · Swedbank</li>
+            <li><strong>Feed</strong>Simulerad transaktionslista</li>
             <li><strong>Regelträd</strong>1 800 globala + Peters 14 egna</li>
             <li><strong>Mappning</strong>Mekonomen → Bil/Service</li>
             <li><strong>Mappning</strong>ICA → Mat/Hushåll</li>
@@ -2142,7 +2156,7 @@ body.is-deep .timeline { opacity: 0; pointer-events: none; }
           <div class="deep-slide-echo-cite">— Echo · sokratisk fråga · första gången</div>
         </div>
         <div class="deep-slide-foot-rich">
-          <div class="deep-slide-foot-rich-section"><strong>Datakälla</strong>PSD2 · Open Banking</div>
+          <div class="deep-slide-foot-rich-section"><strong>Datakälla</strong>Simulerad transaktionsfeed</div>
           <div class="deep-slide-foot-rich-section"><strong>Refresh</strong>4×/dygn</div>
           <div class="deep-slide-foot-rich-section"><strong>Träffsäkerhet</strong><em>97 % auto · 3 % manuell</em></div>
         </div>
@@ -3003,10 +3017,10 @@ const DIVE_LABELS = {
     let top = null;
     sections.forEach(s => {
       const r = s.getBoundingClientRect();
-      if (r.top <= 60 && r.bottom > 60) top = s;
+      if (r.top <= 40 && r.bottom > 40) top = s;
     });
     if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
-  }, { rootMargin: '-60px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
+  }, { rootMargin: '-40px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
   sections.forEach(s => obs.observe(s));
 
   // Backup: scroll-baserad recompute (Safari kan missa edge cases)
@@ -3018,7 +3032,7 @@ const DIVE_LABELS = {
       let top = null;
       sections.forEach(s => {
         const r = s.getBoundingClientRect();
-        if (r.top <= 60 && r.bottom > 60) top = s;
+        if (r.top <= 40 && r.bottom > 40) top = s;
       });
       if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
     });
