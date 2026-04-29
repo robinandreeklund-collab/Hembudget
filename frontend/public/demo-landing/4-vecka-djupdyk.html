@@ -94,23 +94,22 @@ body.is-deep { overflow: hidden; height: 100vh; }
 .top-nav-link {
   display: inline-block;
   font-family: var(--serif);
-  font-size: 15px; font-weight: 600;
+  font-size: 16px; font-weight: 700;
   letter-spacing: -0.2px; line-height: 1.05;
   color: var(--fg);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.5);
   text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
   transform-origin: right center;
   transition:
     font-size .55s cubic-bezier(.34, 1.56, .64, 1),
-    font-weight .3s var(--ease),
     letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease),
-    text-shadow .3s var(--ease);
+    color .3s var(--ease);
   cursor: pointer;
 }
 .top-nav-link:hover {
   font-size: 22px;
-  font-weight: 700;
   letter-spacing: -0.5px;
   animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
 }
@@ -121,17 +120,18 @@ body.is-deep { overflow: hidden; height: 100vh; }
   position: fixed; top: 22px; left: 28px; z-index: 70;
   display: inline-flex; align-items: center; gap: 8px;
   font-family: var(--serif);
-  font-size: 15px; font-weight: 600;
+  font-size: 16px; font-weight: 700;
   letter-spacing: -0.2px; line-height: 1.05;
   color: var(--fg);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.5);
   text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
   transform-origin: left center;
   transition:
     font-size .55s cubic-bezier(.34, 1.56, .64, 1),
     letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease),
-    text-shadow .3s var(--ease);
+    color .3s var(--ease);
 }
 .home-link-arrow {
   display: inline-block;
@@ -144,6 +144,15 @@ body.is-deep { overflow: hidden; height: 100vh; }
 }
 .home-link:hover .home-link-arrow { transform: translateX(-6px); }
 
+/* Skarp text mot rörlig video — tight 1px shadow, ingen blurry halo. */
+body.nav-on-dark .top-nav-link,
+body.nav-on-dark .home-link {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+}
+body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
+body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.75); }
+
 @keyframes nav-name-pop {
   0%   { transform: scale(0.85); opacity: 0.7; }
   60%  { transform: scale(1.08); opacity: 1; }
@@ -151,15 +160,7 @@ body.is-deep { overflow: hidden; height: 100vh; }
   100% { transform: scale(1); }
 }
 
-/* Adaptiv färg: vit på mörkt, mörkgrå på ljust. Default = ljus
-   (passar dagsavsnitten). Body.nav-on-dark = mörk bakgrund. */
-body.nav-on-dark .top-nav-link,
-body.nav-on-dark .home-link {
-  color: #fff;
-  text-shadow: 0 2px 14px rgba(0,0,0,0.55);
-}
-body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
-body.nav-on-dark .home-link-arrow { color: rgba(255,255,255,0.7); }
+/* Adaptiv färg flyttad ovan — definitionerna med blurry halo borttagna. */
 
 @media (max-width: 600px) {
   .top-nav { top: 16px; right: 18px; gap: 16px; }

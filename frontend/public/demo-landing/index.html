@@ -37,32 +37,35 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
 .top-nav-link {
   display: inline-block;
   font-family: var(--serif);
-  font-size: 15px; font-weight: 600;
+  font-size: 16px; font-weight: 700;
   letter-spacing: -0.2px; line-height: 1.05;
   color: var(--fg);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.4);
   text-decoration: none;
+  /* Skarpa kanter — ingen sub-pixel-AA, ingen blurry shadow */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
   transform-origin: right center;
   transition:
     font-size .55s cubic-bezier(.34, 1.56, .64, 1),
     font-weight .3s var(--ease),
     letter-spacing .55s cubic-bezier(.34, 1.56, .64, 1),
-    color .3s var(--ease),
-    text-shadow .3s var(--ease);
+    color .3s var(--ease);
   cursor: pointer;
 }
 .top-nav-link:hover {
   font-size: 22px;
-  font-weight: 700;
   letter-spacing: -0.5px;
   animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
 }
 .top-nav-link-primary { color: var(--accent); }
 .top-nav-link-primary:hover { color: var(--accent); }
 
+/* På mörk bg: vit text + tight 1px shadow (ingen blur-halo) för
+   skarp läsbarhet mot rörlig video. */
 body.nav-on-dark .top-nav-link {
   color: #fff;
-  text-shadow: 0 2px 14px rgba(0,0,0,0.55);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.85);
 }
 body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 
@@ -719,11 +722,16 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   color: rgba(255,255,255,0.55);
   flex-wrap: wrap;
 }
-/* Wrap kring info-panel + vertikal scroll-text — gör så credits kan
-   ligga utanför utan att scroll-texten tappar sin position. */
+/* Wrap kring info-panel + vertikal scroll-text — krymper till samma
+   bredd som panelen så att CTA:n (position absolute) hamnar på panelens
+   högerkant, inte ute i hero-innerns fulla bredd. */
 .hero-info-wrap {
   position: relative;
   margin-top: auto;
+  max-width: calc(100% - clamp(220px, 18vw, 280px));
+}
+@media (max-width: 1100px) {
+  .hero-info-wrap { max-width: 100%; }
 }
 /* Vertikal scroll-text på vänster kant av info-panelen — sitter
    utanför panelen så den inte clippas av overflow:hidden */
@@ -784,13 +792,9 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   border-radius: 4px;
   border-top: 1px solid rgba(255,255,255,0.12);
   color: rgba(255,255,255,0.92);
-  max-width: calc(100% - clamp(220px, 18vw, 280px));
 }
 @media (max-width: 1100px) {
-  .hero-info { grid-template-columns: 1fr; gap: 14px; max-width: 100%; }
-}
-@media (max-width: 1000px) {
-  .hero-info { max-width: 100%; }
+  .hero-info { grid-template-columns: 1fr; gap: 14px; }
 }
 @media (max-width: 1000px) {
   .hero-info { grid-template-columns: 1fr 1fr; gap: 28px; }
@@ -1760,7 +1764,7 @@ html.lenis, html.lenis body { height: auto; }
          data-cite="— Linda · lönesamtalet · rond 1"
          data-week="Tis|Lönesamtal · Visma;Ons|Pensionsavgiften upptäcks;Tor|Akut tandläkare;Fre|Karriärsamtal;Sön|WB-pentagon · review;Mån|Lärar-Anna ser klassen"
          data-tags="Lönespec,Kollektivavtal,Pension,Wellbeing"
-         data-cta="Träffa Linda"></a>
+         data-cta="Utforska min vardag"></a>
       <a class="figure" data-persona="evelina" href="#" data-soon
          data-theme="Investering · Vol. 02"
          data-h1a="Krasch" data-h1b=" blir " data-h1c="kunskap"
