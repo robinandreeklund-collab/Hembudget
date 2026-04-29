@@ -1142,7 +1142,17 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .btn-secondary:hover { border-color: var(--fg); transform: translateY(-2px); }
 .btn-arrow { font-family: var(--mono); font-size: 13px; transition: transform .2s; }
 .btn:hover .btn-arrow { transform: translateX(3px); }
+
+/* ─── Smooth-scroll: Lenis hanterar wheel, men har CSS som fallback ─── */
+html { scroll-behavior: smooth; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
+.lenis.lenis-smooth iframe { pointer-events: none; }
 </style>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://unpkg.com">
 </head>
 <body>
 
@@ -1431,6 +1441,10 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 
 </main>
 
+<script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+
 <script>
 // ─── Intro-sekvens trigger ─────────────────────────────────
 requestAnimationFrame(() => document.body.classList.add('is-loaded'));
@@ -1658,6 +1672,109 @@ requestAnimationFrame(() => document.body.classList.add('is-loaded'));
     if (active) moveCursorTo(active.dataset.personaNav);
   });
 })();
+
+// ─── Lenis smooth-scroll + GSAP ScrollTrigger ───────────────
+window.addEventListener('load', () => {
+  if (typeof Lenis === 'undefined' || typeof gsap === 'undefined') return;
+
+  // Initiera Lenis (smooth wheel-scroll med momentum)
+  const lenis = new Lenis({
+    duration: 1.15,
+    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    direction: 'vertical',
+    smoothWheel: true,
+    wheelMultiplier: 1,
+    touchMultiplier: 2,
+  });
+
+  // GSAP ScrollTrigger om plugin laddat
+  if (typeof ScrollTrigger !== 'undefined') {
+    gsap.registerPlugin(ScrollTrigger);
+
+    // Synka Lenis med ScrollTrigger
+    lenis.on('scroll', ScrollTrigger.update);
+    gsap.ticker.add((time) => lenis.raf(time * 1000));
+    gsap.ticker.lagSmoothing(0);
+
+    // ─── Hero parallax: video flyttas långsammare än content ───
+    gsap.to('.hero-bg-stack', {
+      yPercent: 18,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 0.6,
+      }
+    });
+
+    // Hero-content fadar bort när användaren scrollar
+    gsap.to('.hero-inner', {
+      yPercent: -12,
+      opacity: 0.3,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        end: 'bottom 30%',
+        scrub: 0.8,
+      }
+    });
+
+    // Höger-nav fadar bort när hero lämnar
+    gsap.to('.hero-persona-nav', {
+      opacity: 0,
+      x: 30,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.hero',
+        start: 'top top',
+        end: 'bottom 50%',
+        scrub: 0.5,
+      }
+    });
+
+    // ─── Section reveals — varje sektion har staggered entry ───
+    gsap.utils.toArray('section.intro, section.personas, section.teacher, section.cta-final').forEach(section => {
+      const items = section.querySelectorAll(
+        '.intro-eye, .intro-grid h2, .intro p, .pillar, ' +
+        '.personas-eye, .personas-head h2, .personas-lede, .persona-card, ' +
+        '.teacher-eye, .teacher-grid h2, .teacher p, .dash-card, ' +
+        '.cta-eye, .cta-final h2, .cta-final p, .cta-buttons'
+      );
+      if (!items.length) return;
+      gsap.from(items, {
+        opacity: 0,
+        y: 40,
+        duration: 0.9,
+        stagger: 0.08,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: section,
+          start: 'top 75%',
+          toggleActions: 'play none none reverse',
+        }
+      });
+    });
+
+    // ─── Teacher dashboard-card pinnat med stagger reveal ───
+    const dashCard = document.querySelector('.dash-card');
+    if (dashCard) {
+      gsap.from(dashCard.querySelectorAll('.dash-row'), {
+        opacity: 0,
+        x: 40,
+        duration: 0.6,
+        stagger: 0.1,
+        ease: 'back.out(1.4)',
+        scrollTrigger: {
+          trigger: dashCard,
+          start: 'top 70%',
+          toggleActions: 'play none none reverse',
+        }
+      });
+    }
+  }
+});
 
 </script>
 
