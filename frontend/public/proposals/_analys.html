@@ -2592,6 +2592,45 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="pipeline-teacher">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">50 · Pipeline · läraren som omvärld</div>
+    <h2 class="h-section">Lärarens roll — <em>Skatteverket</em>, <em>leverantören</em>, <em>granskaren</em>.</h2>
+    <div class="prose">
+      <p>
+        I "Mitt företag"-modulen får läraren en mer aktiv motpart-roll än
+        i resten av systemet. Lärarvyn <code>/teacher/business</code> har tre
+        kort. Först <em>klassöversikt</em>: tabell med företagsnamn,
+        omsättning, vinst, antal kundfakturor, antal förfallna fakturor,
+        senaste avstämningens status, AI-tokens använda — sortbar och
+        filtrerbar enligt samma mönster som <code>/teacher/reflections</code>.
+      </p>
+      <p>
+        Andra kortet är <em>Skicka leverantörsfaktura</em>: läraren markerar
+        en eller flera elever, fyller i avsändare/belopp/förfallodatum/fritext,
+        klickar — systemet genererar PDF (samma reportlab-stack som
+        kontoutdrag och lönespec) och skapar en
+        <code>SupplierInvoice</code> i varje vald elevs scope. Massutskick är
+        obligatoriskt; annars blir det tjatigt med 30 elever. Detta är
+        läraren-som-leverantör; pedagogiska oväntade händelser
+        ("miljöskatt", "datorn gick sönder") matas in den vägen.
+      </p>
+      <p>
+        Tredje kortet är <em>Granska kundfakturor</em>: lista över alla
+        fakturor eleverna skickat ut. Läraren kan kommentera, märka som
+        "ej godkänd" (tvingar eleven att korrigera) eller godkänna. Detta
+        är lärar-som-granskare och uppfyller kravet att läraren ska kunna
+        se elevens kundfakturor utan att bryta scope-isolering — läraren
+        impersonerar inte, läraren har en aggregerad vy.
+      </p>
+      <p>
+        En "Klassens nyckeltal"-flik visar aggregerat: snittomsättning,
+        vanligaste bokföringsfel, mest framgångsrika branschval. Användbart
+        för helklassgenomgång, men inte rangordnande mellan elever — samma
+        princip som i lärarvy 01.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
