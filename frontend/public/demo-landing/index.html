@@ -697,17 +697,20 @@ h1, h2, h3 { font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
   color: rgba(255,255,255,0.6);
   flex-wrap: wrap;
 }
-/* Vertikal scroll-text på vänster kant av info-panelen */
+/* Vertikal scroll-text på vänster kant av info-panelen — sitter
+   utanför panelen så den inte clippas av overflow:hidden */
 .hero-info-scroll {
   position: absolute;
-  left: -36px; top: 50%;
-  transform: translateY(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  left: 0; bottom: 0; height: 188px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  width: 50px;  /* matchar info-panelens margin-left */
   font-family: var(--mono); font-size: 9.5px; font-weight: 700;
   letter-spacing: 2.4px; text-transform: uppercase;
   color: rgba(255,255,255,0.55);
   pointer-events: none;
   white-space: nowrap;
+  z-index: 3;
 }
 .hero-info-scroll-text {
   writing-mode: vertical-rl;
@@ -1191,14 +1194,16 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
         <span>3 karaktärer · 12 kompetenser · 4 djupdyk</span>
       </div>
 
+      <!-- Vertikal scroll-text på vänster kant av info-panelen -->
+      <span class="hero-info-scroll" aria-hidden="true">
+        <span class="hero-info-scroll-text">Scrolla för mer</span>
+        <span class="hero-info-scroll-arrow">↓</span>
+      </span>
+
       <!-- Frostat-glas info-panel som overlay på videon, uppdateras
            via auto-rotation eller klick på höger-nav. Sist i DOM så
            den ligger mot bottnen av hero. -->
       <div class="hero-info" id="heroInfo">
-        <span class="hero-info-scroll" aria-hidden="true">
-          <span class="hero-info-scroll-text">Scrolla för mer</span>
-          <span class="hero-info-scroll-arrow">↓</span>
-        </span>
         <div class="hero-info-empty">Hovra över en karaktär</div>
         <div class="hero-info-content">
 
