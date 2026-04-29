@@ -2998,45 +2998,77 @@ const DIVE_LABELS = {
 
 <script>
 // ─── Adaptiv nav-färg: vit text på mörka sektioner, mörk text på ljusa.
-// IntersectionObserver bevakar ett tunt band överst i viewporten — när en
-// [data-nav-theme]-sektion korsar bandet sätts body-klassen om.
+// Scroll-driven recompute är primär, IntersectionObserver är backup.
+// Vi tittar på sektion som täcker y=80px från toppen (precis under nav-
+// raden). Mer lead-time än tidigare — bytet hinner ske MEDAN bg-färgen
+// fortfarande växlar in i viewporten.
 (function () {
   const body = document.body;
-  const sections = document.querySelectorAll('[data-nav-theme]');
+  const sections = Array.from(document.querySelectorAll('[data-nav-theme]'));
   if (!sections.length) return;
 
+  const PROBE = 80; // y-koord att kolla mot (precis under nav)
+
   function applyTheme(theme) {
+    if (!theme) return;
     body.classList.toggle('nav-on-dark', theme === 'dark');
     body.classList.toggle('nav-on-light', theme === 'light');
   }
-  // Initial: hero är överst
-  applyTheme('dark');
 
-  const obs = new IntersectionObserver(entries => {
-    // Hitta den sektion som täcker top-bandet (~0–60 px från toppen)
-    let top = null;
-    sections.forEach(s => {
+  function recompute() {
+    // Skipa under deep-page-overlay (slides-läge), då har nav egen
+    // body.is-deep-stil som vinner ändå.
+    if (body.classList.contains('is-deep')) return;
+
+    let active = null;
+    let activeTop = -Infinity;
+    for (const s of sections) {
       const r = s.getBoundingClientRect();
-      if (r.top <= 40 && r.bottom > 40) top = s;
-    });
-    if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
-  }, { rootMargin: '-40px 0px -40% 0px', threshold: [0, 0.05, 0.5, 1] });
-  sections.forEach(s => obs.observe(s));
+      // Sektion vars topp har passerat PROBE och vars botten ligger under
+      // PROBE = sektion synlig vid PROBE-linjen. Välj den vars topp är
+      // störst (dvs. senast börjat).
+      if (r.top <= PROBE && r.bottom > PROBE) {
+        if (r.top > activeTop) {
+          active = s;
+          activeTop = r.top;
+        }
+      }
+    }
+    // Fallback: om ingen sektion matchar, hitta nästa som ligger
+    // direkt över viewporten och använd dess tema.
+    if (!active) {
+      const above = sections
+        .filter(s => s.getBoundingClientRect().bottom <= PROBE)
+        .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+      if (above[0]) active = above[0];
+    }
+    if (active && active.dataset.navTheme) applyTheme(active.dataset.navTheme);
+  }
 
-  // Backup: scroll-baserad recompute (Safari kan missa edge cases)
+  // Trigger på alla relevanta event
   let raf = 0;
-  window.addEventListener('scroll', () => {
+  function schedule() {
     if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      let top = null;
-      sections.forEach(s => {
-        const r = s.getBoundingClientRect();
-        if (r.top <= 40 && r.bottom > 40) top = s;
-      });
-      if (top && top.dataset.navTheme) applyTheme(top.dataset.navTheme);
+    raf = requestAnimationFrame(() => { raf = 0; recompute(); });
+  }
+  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', schedule);
+  window.addEventListener('load', recompute);
+  document.addEventListener('DOMContentLoaded', recompute);
+
+  // IntersectionObserver-backup: fångar fall där scroll-event uteblir
+  // (t.ex. överlappande transform-context).
+  if ('IntersectionObserver' in window) {
+    const obs = new IntersectionObserver(schedule, {
+      rootMargin: `-${PROBE}px 0px -50% 0px`,
+      threshold: [0, 0.01, 0.25, 0.5, 0.75, 1],
     });
-  }, { passive: true });
+    sections.forEach(s => obs.observe(s));
+  }
+
+  // Initial paint
+  applyTheme('dark');
+  recompute();
 })();
 </script>
 
