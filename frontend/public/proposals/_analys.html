@@ -2200,6 +2200,34 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="routes-public">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">39 · Mappning · publika routes</div>
+    <h2 class="h-section">Publika routes — innan inloggning.</h2>
+    <div class="prose">
+      <p>
+        Faktisk inventering från <code>frontend/src/App.tsx</code>. Före
+        autentisering finns 14 routes synliga: <code>/</code> (landningsväxlare
+        som visar Hembudget eller Ekonomilabbet beroende på env-flag),
+        <code>/login</code> (val mellan elev/lärare),
+        <code>/login/teacher</code>, <code>/signup/teacher</code>,
+        <code>/signup/parent</code>, <code>/verify-email</code>,
+        <code>/forgot-password</code>, <code>/reset-password</code>,
+        <code>/login/student</code> (sexsiffrig kod), <code>/demo</code>
+        (val mellan demoupplägg), <code>/demo/scroll-story</code>,
+        <code>/bank/sign</code> (BankID-mock som även är åtkomlig publikt
+        för signering från externa flöden), och informationssidor
+        <code>/docs</code>, <code>/terms</code>, <code>/faq</code>.
+      </p>
+      <p>
+        Plus <em>läs-alltid</em>-routes <code>/larguider</code>,
+        <code>/lgr22</code>, <code>/rubriker</code> (lärarmaterial),
+        <code>/echo</code> (publik EchoAi-sandbox). Alla okända paths
+        fångas av en catch-all som leder tillbaka till
+        <code>LandingSwitch</code>.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
