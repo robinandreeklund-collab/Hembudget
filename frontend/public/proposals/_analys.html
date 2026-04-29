@@ -1456,6 +1456,73 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-13">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">17 · Aktör 13</div>
+    <h2 class="h-section">Maria — AI-driven <em>HR-chef</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Ma</div>
+        <div>
+          <div class="actor-name">Maria</div>
+          <div class="actor-role">Förhandlingsmotor · 5-rond lönesamtal · employer-AI</div>
+        </div>
+        <div class="actor-routes">
+          <code>(under /arbetsgivare)</code>
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Maria är inte Echo — hon är arbetsgivarens röst. När eleven
+          går in i lönesamtalet möter hen Maria som en faktisk motpart
+          med egna mål: hålla budgeten, fördela höjningar rättvist över
+          24 anställda, bibehålla satisfaction. Maria är deterministisk
+          — ger samma svar på samma argument. Hon "viker sig" inte av
+          empati, utan av matematik.
+        </p>
+
+        <div class="actor-section-eye">Marias logik</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Budget-driven.</strong> Visma har 4 % i totalbudget
+            över 24 anställda. Maria fördelar — högpresterare får mer,
+            låga får mindre.
+          </li>
+          <li>
+            <strong>5 ronder.</strong> Eleven kan argumentera 5 gånger.
+            Varje rond ändrar Marias bud baserat på elevens argument:
+            Akavia-data → bud upp; "jag är värd det" utan data → bud
+            ned.
+          </li>
+          <li>
+            <strong>Satisfaction-koppling.</strong> Hög satisfaction-
+            score → Maria är generösare. Låg → Maria är fast.
+          </li>
+          <li>
+            <strong>Sparad konversation.</strong> Hela 5-rond-samtalet
+            sparas och visas i lärar-vyn (<code>/teacher/negotiations</code>)
+            för bedömning av argumentationsförmåga.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Claude Haiku 4.5 (Anthropic) trimmad för svensk HR-dialog</li>
+          <li>Förhandlings­modell: Akavia-medel ± individual prestation ± budget</li>
+          <li>Inte rådgivare — eleven får aldrig "tips" från Maria, bara svar på argument</li>
+          <li>Determinism: samma input → samma output (för pedagogisk fairness)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Implementerad inom Arbetsgivare.tsx. Logiken bor i backend
+          (<code>school/ai-client</code>) och kommunicerar via Anthropic
+          SDK. Tokenkostnad räknas mot lärarens budget.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
