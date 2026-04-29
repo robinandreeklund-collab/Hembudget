@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idag · Vol. 03 · Pentagon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body {
+  background: #0c1426;
+  color: rgba(255,255,255,0.92);
+  position: relative;
+  min-height: 100vh;
+}
+body::before {
+  content: ""; position: fixed; inset: -10% -5%;
+  background:
+    radial-gradient(ellipse 50% 40% at 20% 30%, rgba(220,76,43,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 35% at 80% 20%, rgba(251,191,36,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 70% 75%, rgba(99,102,241,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #0c1426 0%, #0f172a 50%, #0c1426 100%);
+  z-index: 0;
+  animation: drift 24s ease-in-out infinite alternate;
+}
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.025) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.025) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  z-index: 0; opacity: 0.6;
+}
+@keyframes drift {
+  0%   { transform: translate(0,0) scale(1); }
+  50%  { transform: translate(-1.5%, 1%) scale(1.04); }
+  100% { transform: translate(1%, -1.5%) scale(1.02); }
+}
+
+.brand-tag, .top-nav a {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+.brand-tag-meta { color: rgba(255,255,255,0.55) !important; }
+
+.shell {
+  max-width: 1200px; margin: 0 auto;
+  padding: 88px clamp(24px, 6vw, 80px) 80px;
+  position: relative; z-index: 2;
+}
+
+.head {
+  text-align: center; margin-bottom: 32px;
+}
+.head-eye {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.head-eye::before { content: "● "; }
+.head-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(36px, 5vw, 56px);
+  letter-spacing: -1.6px; line-height: 1; color: #fff;
+  margin-bottom: 14px;
+}
+.head-h1 em { font-style: italic; color: var(--gold); font-weight: 500; }
+.head-meta {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+/* Pentagon-stage */
+.pentagon-stage {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  aspect-ratio: 1;
+  display: grid; place-items: center;
+}
+
+.pentagon-svg {
+  width: 100%; height: 100%;
+  display: block;
+}
+
+.pentagon-axis {
+  fill: rgba(255,255,255,0.08);
+  stroke: rgba(255,255,255,0.18);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.pentagon-now {
+  fill: rgba(220, 76, 43, 0.22);
+  stroke: var(--accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 16px rgba(220, 76, 43, 0.4));
+  animation: pent-breathe 5s ease-in-out infinite;
+}
+@keyframes pent-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(0.985); }
+}
+.pentagon-now-prev {
+  fill: none;
+  stroke: rgba(255,255,255,0.4);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+}
+
+/* Axis labels — länkar in i resp. utrymme */
+.axis-label {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 14px 18px;
+  text-decoration: none;
+  color: #fff;
+  width: 200px;
+  transition: all .35s var(--ease);
+  cursor: pointer;
+}
+.axis-label:hover {
+  background: rgba(15, 23, 42, 1);
+  border-color: var(--gold);
+  transform: scale(1.04);
+}
+.axis-label-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+.axis-label-name {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.axis-label-name em {
+  font-style: italic; color: var(--gold); font-weight: 500;
+}
+.axis-label-meta {
+  font-family: var(--mono); font-size: 10px;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+  letter-spacing: 1px;
+}
+.axis-label-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 36px; letter-spacing: -0.8px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+}
+.axis-label-num em {
+  font-style: italic; font-weight: 500; color: var(--gold);
+}
+.axis-label-trend {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  margin-top: 4px;
+}
+.axis-label-trend.up { color: #34d399; }
+.axis-label-trend.down { color: #fca5a5; }
+
+/* Positionering — runt pentagonen */
+.axis-eko { top: -10px; left: 50%; transform: translateX(-50%); }
+.axis-rel { top: 28%; right: -10%; }
+.axis-fri { top: 28%; left: -10%; }
+.axis-har { bottom: -10px; right: 8%; transform: translateX(0); }
+.axis-kar { bottom: -10px; left: 8%; transform: translateX(0); }
+
+@media (max-width: 1100px) {
+  .axis-label {
+    position: static;
+    transform: none !important;
+    width: 100%;
+  }
+  .axis-eko, .axis-rel, .axis-fri, .axis-har, .axis-kar {
+    top: auto; left: auto; right: auto; bottom: auto;
+  }
+  .axis-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-top: 24px;
+  }
+}
+@media (max-width: 600px) {
+  .axis-row { grid-template-columns: 1fr; }
+}
+
+.center-card {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  text-align: center;
+  pointer-events: none;
+}
+.center-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 6px;
+}
+.center-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 64px; line-height: 1; letter-spacing: -2px;
+  color: var(--gold);
+  text-shadow: 0 4px 24px rgba(251,191,36,0.4);
+}
+.center-meta {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .pentagon-stage { aspect-ratio: auto; }
+  .center-card { position: static; transform: none; margin: 24px auto; }
+}
+
+/* Bottom dock — andra spaces */
+.dock-band {
+  margin-top: 64px;
+  padding-top: 32px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+.dock-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+  text-align: center;
+}
+.dock-eye::before { content: "● "; }
+
+.dock-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 800px) { .dock-row { grid-template-columns: 1fr; } }
+
+.dock-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 18px 20px;
+  text-decoration: none;
+  color: #fff;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: all .25s var(--ease);
+}
+.dock-card:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+.dock-card-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent);
+}
+.dock-card-name {
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.dock-card-num {
+  font-family: var(--mono); font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 2px;
+  letter-spacing: 0.6px;
+}
+
+/* Echo-bubble */
+.echo-bubble {
+  margin: 56px auto 0;
+  max-width: 720px;
+  padding: 26px 30px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 6px;
+  position: relative;
+}
+.echo-bubble-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.echo-bubble-eye::before { content: "● "; }
+.echo-bubble-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.45;
+  color: rgba(255,255,255,0.92);
+}
+.echo-bubble-cite {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin-top: 14px;
+}
+.echo-bubble-actions {
+  display: flex; gap: 10px; margin-top: 16px;
+}
+.echo-btn {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 8px 14px; border-radius: 100px;
+  border: 1px solid var(--gold); background: var(--gold);
+  color: #422006; text-decoration: none; cursor: pointer;
+}
+.echo-btn.outline {
+  background: transparent; color: var(--gold);
+}
+.echo-btn:hover { background: #fcd34d; }
+.echo-btn.outline:hover { background: rgba(251,191,36,0.1); }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 03 · Pentagon</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="#">Logga ut</a>
+</nav>
+
+<div class="shell">
+
+  <header class="head">
+    <div class="head-eye">Pentagon · idag 14:32</div>
+    <h1 class="head-h1">Din vecka i <em>fem axlar</em>.</h1>
+    <div class="head-meta">Vecka 18 · Linda · WB-snitt 68 · −4 från i går</div>
+  </header>
+
+  <!-- Pentagon stage -->
+  <div class="pentagon-stage">
+    <svg class="pentagon-svg" viewBox="0 0 600 540">
+      <!-- Background pentagon (max) -->
+      <polygon
+        class="pentagon-axis"
+        points="300,40 560,210 470,470 130,470 40,210"
+      />
+      <!-- Inner ring -->
+      <polygon
+        class="pentagon-axis"
+        points="300,140 460,250 410,400 190,400 140,250"
+        style="fill: rgba(255,255,255,0.04);"
+      />
+      <!-- Förra veckans WB -->
+      <polygon
+        class="pentagon-now-prev"
+        points="300,80 510,222 440,440 168,440 92,222"
+      />
+      <!-- Veckans aktuella -->
+      <polygon
+        class="pentagon-now"
+        points="300,90 530,232 432,448 184,448 100,234"
+      />
+
+      <!-- Axis lines -->
+      <line x1="300" y1="270" x2="300" y2="40" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+      <line x1="300" y1="270" x2="560" y2="210" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+      <line x1="300" y1="270" x2="470" y2="470" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+      <line x1="300" y1="270" x2="130" y2="470" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+      <line x1="300" y1="270" x2="40" y2="210" stroke="rgba(255,255,255,0.2)" stroke-width="1" />
+    </svg>
+
+    <div class="center-card">
+      <div class="center-eye">WB-index</div>
+      <div class="center-num">68</div>
+      <div class="center-meta">av 100 · vägt snitt</div>
+    </div>
+
+    <a href="banken.html" class="axis-label axis-eko">
+      <div class="axis-label-eye">● Ekonomi · 25 %</div>
+      <div class="axis-label-name">Pengar</div>
+      <div class="axis-label-meta">Bank · budget · ISK · pension</div>
+      <div class="axis-label-num">78</div>
+      <div class="axis-label-trend up">+2 sen i går</div>
+    </a>
+
+    <a href="#" class="axis-label axis-rel">
+      <div class="axis-label-eye">● Relation · 20 %</div>
+      <div class="axis-label-name">Familj</div>
+      <div class="axis-label-meta">Meddelanden · samtal · planering</div>
+      <div class="axis-label-num">80</div>
+      <div class="axis-label-trend up">+0</div>
+    </a>
+
+    <a href="#" class="axis-label axis-fri">
+      <div class="axis-label-eye">● Fritid · 20 %</div>
+      <div class="axis-label-name">Tid</div>
+      <div class="axis-label-meta">Vila · hobby · glädje</div>
+      <div class="axis-label-num">56</div>
+      <div class="axis-label-trend down">−4 (övertid)</div>
+    </a>
+
+    <a href="#" class="axis-label axis-kar">
+      <div class="axis-label-eye">● Karriär · 15 %</div>
+      <div class="axis-label-name">Utveckling</div>
+      <div class="axis-label-meta">Mastery · moduler · jobbavtal</div>
+      <div class="axis-label-num">85</div>
+      <div class="axis-label-trend up">+3 (utbildning)</div>
+    </a>
+
+    <a href="#" class="axis-label axis-har">
+      <div class="axis-label-eye">● Hälsa · 20 %</div>
+      <div class="axis-label-name">Kropp</div>
+      <div class="axis-label-meta">Sömn · stress · fysisk</div>
+      <div class="axis-label-num">56</div>
+      <div class="axis-label-trend down">−6 (tandläkare)</div>
+    </a>
+  </div>
+
+  <!-- Echo bubble -->
+  <div class="echo-bubble">
+    <div class="echo-bubble-eye">Echo · sokratisk fråga</div>
+    <div class="echo-bubble-text">
+      Pentagonen tippar mot karriär — men hälsa-axeln är 6 lägre än i
+      går. Är det medvetet, eller hände det medan du tittade åt andra
+      hållet?
+    </div>
+    <div class="echo-bubble-cite">— Onsdag 14:32 · efter tandläkaren</div>
+    <div class="echo-bubble-actions">
+      <a href="#" class="echo-btn">Reflektera ↗</a>
+      <a href="#" class="echo-btn outline">Läs mer om hälsa-axeln</a>
+    </div>
+  </div>
+
+  <!-- Other spaces -->
+  <div class="dock-band">
+    <div class="dock-eye">Mer · andra utrymmen</div>
+    <div class="dock-row">
+      <a href="#" class="dock-card">
+        <span class="dock-card-eye">Bokföring</span>
+        <span class="dock-card-name">Senaste rörelser</span>
+        <span class="dock-card-num">14 transaktioner · v.18</span>
+      </a>
+      <a href="#" class="dock-card">
+        <span class="dock-card-eye">Avtal</span>
+        <span class="dock-card-name">Bindande &amp; aktuellt</span>
+        <span class="dock-card-num">3 autogiron · 1 deklaration kvar</span>
+      </a>
+      <a href="#" class="dock-card">
+        <span class="dock-card-eye">Utveckling</span>
+        <span class="dock-card-name">Mastery &amp; moduler</span>
+        <span class="dock-card-num">9 / 12 säkra · 2 påbörjade</span>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

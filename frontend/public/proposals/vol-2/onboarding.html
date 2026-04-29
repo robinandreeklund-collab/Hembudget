@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onboarding · Vol. 02 · Tidslinje</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body { background: #fff; }
+
+.shell {
+  max-width: 1100px; margin: 0 auto;
+  padding: 96px clamp(24px, 6vw, 60px) 80px;
+}
+
+.head {
+  text-align: center; max-width: 720px; margin: 0 auto 56px;
+}
+.head .h-eyebrow { margin-bottom: 18px; }
+.head .h-display { margin-bottom: 22px; font-size: clamp(40px, 5.6vw, 72px); }
+.head .lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.5; color: #334155;
+}
+
+/* Onboarding-tidslinje (4 steg horisontellt) */
+.steps-rail {
+  position: relative;
+  margin: 56px 0;
+  padding: 0 20px;
+}
+.steps-rail-line {
+  position: absolute;
+  top: 26px; left: 30px; right: 30px;
+  height: 2px; background: var(--rule);
+}
+.steps-rail-line-fill {
+  position: absolute;
+  top: 26px; left: 30px;
+  height: 2px; width: 30%;
+  background: var(--accent);
+  transition: width .6s var(--ease);
+}
+.steps-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  position: relative;
+  z-index: 2;
+}
+.step-dot {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+  cursor: pointer;
+}
+.step-dot-circle {
+  width: 54px; height: 54px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--rule);
+  display: grid; place-items: center;
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 22px; color: var(--muted);
+  margin-bottom: 12px;
+  transition: all .25s var(--ease);
+}
+.step-dot.is-done .step-dot-circle {
+  background: #047857; color: #fff; border-color: #047857;
+}
+.step-dot.is-active .step-dot-circle {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+  animation: step-pulse 2s ease-in-out infinite;
+}
+@keyframes step-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,76,43,0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(220,76,43,0); }
+}
+.step-dot-label {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.step-dot.is-active .step-dot-label,
+.step-dot.is-done .step-dot-label { color: var(--fg); }
+.step-dot-name {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  color: var(--fg);
+  margin-top: 2px; letter-spacing: -0.3px;
+}
+
+/* Hero block för aktivt steg */
+.active-block {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 48px clamp(24px, 4vw, 56px);
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+}
+@media (max-width: 800px) { .active-block { grid-template-columns: 1fr; } }
+
+.active-h2 {
+  font-family: var(--serif); font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 700; letter-spacing: -1.2px; line-height: 1.05;
+  margin-bottom: 16px;
+}
+.active-h2 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.active-body {
+  font-size: 15.5px; line-height: 1.65; color: #1f2937;
+  max-width: 50ch;
+}
+.active-body strong { color: var(--fg); }
+.active-body em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+
+.preview-track {
+  background: rgba(15, 23, 42, 0.03);
+  border-radius: 6px; padding: 22px;
+  border: 1px solid var(--rule);
+}
+.preview-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 12px;
+}
+.preview-eye::before { content: "● "; }
+.preview-track h4 {
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.15; margin-bottom: 14px;
+}
+.preview-row {
+  display: grid; grid-template-columns: 60px 1fr auto; gap: 12px;
+  padding: 8px 0; border-bottom: 1px dotted var(--rule);
+  font-size: 13.5px;
+}
+.preview-row:last-child { border-bottom: 0; }
+.preview-row .day {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted);
+}
+.preview-row .name {
+  font-family: var(--serif); font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.preview-row .val {
+  font-family: var(--serif); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.preview-row .val.in { color: #047857; }
+.preview-row .val.out { color: #b91c1c; }
+
+.row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; margin: 18px 0;
+}
+.cell {
+  border: 1px solid var(--rule); border-radius: 6px;
+  padding: 14px 16px; cursor: pointer;
+  transition: all .2s var(--ease); background: #fff;
+}
+.cell:hover { border-color: var(--accent); transform: translateY(-1px); }
+.cell.is-selected { border-color: var(--accent); background: rgba(220,76,43,0.04); }
+.cell-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px;
+}
+.cell.is-selected .cell-eye { color: var(--accent); }
+.cell-name {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.cell-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.actions {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 24px; margin-top: 24px;
+  border-top: 1px solid var(--rule);
+  grid-column: 1 / -1;
+}
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 20px; border-radius: 4px;
+  background: var(--accent); color: #fff;
+  font-family: var(--serif); font-size: 15px; font-weight: 700;
+  letter-spacing: -0.2px; cursor: pointer; text-decoration: none;
+  transition: background .2s var(--ease), transform .2s var(--ease);
+  border: 0;
+}
+.btn-primary:hover { background: #b83b1f; transform: translateY(-1px); }
+.btn-text {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted); text-decoration: none;
+}
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 02 · Onboarding</span></a>
+<nav class="top-nav">
+  <a href="dashboard.html">Hoppa över</a>
+  <a href="dashboard.html" class="primary">Tidslinjen</a>
+</nav>
+
+<div class="shell">
+  <header class="head">
+    <div class="h-eyebrow">Din första vecka · Tidslinje</div>
+    <h1 class="h-display">Vi <em>ritar</em> din vecka.</h1>
+    <p class="head .lead">
+      Fyra steg → du har en personlig tidslinje med pengar, avtal,
+      lärande och balans. Echo lägger sokratiska frågor på rätt dag.
+    </p>
+  </header>
+
+  <!-- Steps rail -->
+  <div class="steps-rail">
+    <div class="steps-rail-line"></div>
+    <div class="steps-rail-line-fill"></div>
+    <div class="steps-row">
+      <div class="step-dot is-done">
+        <div class="step-dot-circle">✓</div>
+        <div class="step-dot-label">Steg 1</div>
+        <div class="step-dot-name">Karaktär</div>
+      </div>
+      <div class="step-dot is-active">
+        <div class="step-dot-circle">2</div>
+        <div class="step-dot-label">Steg 2 · Nu</div>
+        <div class="step-dot-name">Banken</div>
+      </div>
+      <div class="step-dot">
+        <div class="step-dot-circle">3</div>
+        <div class="step-dot-label">Steg 3</div>
+        <div class="step-dot-name">Avtal</div>
+      </div>
+      <div class="step-dot">
+        <div class="step-dot-circle">4</div>
+        <div class="step-dot-label">Steg 4</div>
+        <div class="step-dot-name">Pentagon</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active block -->
+  <div class="active-block">
+    <div>
+      <div class="h-eyebrow" style="margin-bottom: 12px;">Steg 02 · Banken</div>
+      <h2 class="active-h2">Var ska <em>lönen</em> landa?</h2>
+      <p class="active-body">
+        Välj din primära bank — den lönen kommer in på den 25:e. Vi
+        ritar in den på <em>Pengar</em>-spåret i din tidslinje, så du
+        ser exakt när siffran tickar in. Du kan ändra bank närsomhelst,
+        eller lägga till fler.
+      </p>
+
+      <div class="row">
+        <div class="cell is-selected">
+          <div class="cell-eye">Lönekonto</div>
+          <div class="cell-name">SEB</div>
+          <div class="cell-meta">Vardags · OCR slutar 12</div>
+        </div>
+        <div class="cell">
+          <div class="cell-eye">Sparkonto</div>
+          <div class="cell-name">Nordea</div>
+          <div class="cell-meta">2,0 % ränta · buffert</div>
+        </div>
+        <div class="cell">
+          <div class="cell-eye">ISK</div>
+          <div class="cell-name">Avanza</div>
+          <div class="cell-meta">Schablon 3,8 % · investeringar</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="preview-track">
+      <div class="preview-eye">Förhandsvisning · pengar-spåret v.18</div>
+      <h4>Så ser din kommande vecka ut.</h4>
+      <div class="preview-row">
+        <span class="day">Mån<br>06:02</span>
+        <span class="name">Spotify · prenumeration</span>
+        <span class="val out">−169</span>
+      </div>
+      <div class="preview-row">
+        <span class="day">Tis<br>16:00</span>
+        <span class="name">Visma Lön AB</span>
+        <span class="val in">+27 795</span>
+      </div>
+      <div class="preview-row">
+        <span class="day">Tis<br>18:00</span>
+        <span class="name">SL · månadskort</span>
+        <span class="val out">−995</span>
+      </div>
+      <div class="preview-row">
+        <span class="day">Ons<br>14:22</span>
+        <span class="name">Folktandvården (oväntat)</span>
+        <span class="val out">−3 200</span>
+      </div>
+      <div class="preview-row">
+        <span class="day">Lör<br>09:14</span>
+        <span class="name">ICA Maxi · veckohandel</span>
+        <span class="val out">−872</span>
+      </div>
+      <div class="preview-row">
+        <span class="day">Sön<br>—</span>
+        <span class="name">Veckans nettoflöde</span>
+        <span class="val in">+22 559</span>
+      </div>
+    </aside>
+
+    <div class="actions">
+      <a href="#" class="btn-text">← Tillbaka till karaktär</a>
+      <a href="#" class="btn-primary">Nästa: avtal <span>→</span></a>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

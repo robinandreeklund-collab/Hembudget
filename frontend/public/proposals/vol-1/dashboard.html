@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idag · Vol. 01 · Ekonomilabbet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+.cover {
+  position: relative;
+  border-bottom: 1px solid var(--rule);
+  padding: 64px clamp(24px, 6vw, 80px) 56px;
+  background: linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+}
+.cover-grid {
+  max-width: 1200px; margin: 0 auto;
+  display: grid; grid-template-columns: 2fr 1fr;
+  gap: 48px; align-items: end;
+}
+@media (max-width: 900px) { .cover-grid { grid-template-columns: 1fr; } }
+
+.cover-meta {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 28px;
+  display: flex; gap: 18px; align-items: center;
+  flex-wrap: wrap;
+}
+.cover-meta .live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%; background: var(--accent);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.7); }
+}
+.cover-meta-sep { color: var(--rule); }
+
+.cover-title {
+  font-family: var(--serif);
+  font-size: clamp(48px, 7vw, 96px);
+  font-weight: 700; letter-spacing: -3px;
+  line-height: 0.95;
+  margin-bottom: 24px;
+}
+.cover-title em {
+  font-style: italic; font-weight: 500; color: var(--accent);
+}
+
+.cover-lead {
+  font-family: var(--serif);
+  font-size: clamp(18px, 1.6vw, 21px);
+  line-height: 1.5;
+  color: #334155;
+  font-style: italic;
+  max-width: 52ch;
+}
+
+.cover-side {
+  border-left: 2px solid var(--accent);
+  padding-left: 22px;
+}
+.cover-side-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.cover-side-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(40px, 4.5vw, 56px);
+  letter-spacing: -1.6px; line-height: 1;
+  color: var(--fg);
+  margin-bottom: 6px;
+}
+.cover-side-num em {
+  font-style: italic; color: var(--accent); font-weight: 500;
+}
+.cover-side-cap {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Sektion-band */
+.section-band {
+  display: flex; align-items: center; gap: 18px;
+  padding: 18px clamp(24px, 6vw, 80px);
+  background: #fff;
+  border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; z-index: 30;
+  backdrop-filter: blur(18px);
+}
+.section-band-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.section-band-eye::before { content: "● "; }
+.section-band-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.section-band-tab {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 6px 12px; border-radius: 100px;
+  border: 1px solid var(--rule); background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  transition: all .2s var(--ease);
+}
+.section-band-tab.active { background: var(--fg); color: #fff; border-color: var(--fg); }
+.section-band-tab:hover:not(.active) { border-color: var(--fg); color: var(--fg); }
+
+/* Spread (story-block + sidebar) */
+.spread {
+  max-width: 1200px; margin: 0 auto;
+  padding: 64px clamp(24px, 6vw, 80px);
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 56px;
+}
+@media (max-width: 1100px) { .spread { grid-template-columns: 1fr; } }
+
+.story-block {
+  margin-bottom: 56px;
+  padding-bottom: 56px;
+  border-bottom: 1px solid var(--rule);
+}
+.story-block:last-child { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+.story-eye {
+  display: flex; gap: 14px; align-items: center;
+  margin-bottom: 18px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.story-eye-num {
+  font-family: var(--serif); font-weight: 700; font-style: italic;
+  font-size: 22px; color: var(--accent);
+  letter-spacing: -0.4px;
+  text-transform: none;
+}
+.story-h2 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(28px, 3.4vw, 42px);
+  letter-spacing: -1.2px; line-height: 1.05;
+  margin-bottom: 14px;
+}
+.story-h2 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.story-lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: 17px; line-height: 1.55;
+  color: #334155;
+  max-width: 56ch;
+  margin-bottom: 24px;
+}
+.story-lead strong { color: var(--fg); font-style: normal; }
+
+/* Echo pull-quote */
+.echo-quote {
+  position: relative;
+  padding: 22px 28px 22px 36px;
+  background: rgba(251, 191, 36, 0.06);
+  border-left: 3px solid var(--gold);
+  border-radius: 0 4px 4px 0;
+  margin: 22px 0;
+}
+.echo-quote::before {
+  content: "“";
+  position: absolute;
+  top: -6px; left: 8px;
+  font-family: var(--serif); font-style: italic;
+  font-size: 56px; color: rgba(251, 191, 36, 0.5);
+  line-height: 1;
+}
+.echo-quote-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: 18px; line-height: 1.45;
+  color: var(--fg);
+}
+.echo-quote-cite {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: #92400e;
+  margin-top: 12px;
+}
+.echo-actions {
+  display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
+}
+.echo-btn {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 8px 14px; border-radius: 100px;
+  border: 1px solid #92400e; background: transparent;
+  color: #92400e; cursor: pointer;
+  transition: all .2s var(--ease);
+  text-decoration: none;
+}
+.echo-btn:hover { background: #92400e; color: #fff; }
+.echo-btn.primary { background: #92400e; color: #fff; }
+
+/* Bal-tabell */
+.bal-row {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 18px; align-items: baseline;
+  padding: 14px 0; border-bottom: 1px dotted var(--rule);
+}
+.bal-row:last-child { border-bottom: 0; }
+.bal-label {
+  font-family: var(--serif); font-size: 17px; font-weight: 600;
+  color: var(--fg);
+}
+.bal-meta {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted);
+}
+.bal-num {
+  font-family: var(--serif); font-weight: 700; font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+  color: var(--fg);
+}
+.bal-num.is-good { color: #047857; }
+.bal-num.is-warn { color: #b91c1c; }
+
+/* Sidebar */
+.spread-aside {
+  position: sticky; top: 72px; align-self: start;
+  display: flex; flex-direction: column; gap: 22px;
+}
+@media (max-width: 1100px) { .spread-aside { position: static; } }
+
+.aside-block {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 22px;
+  background: #fff;
+}
+.aside-block-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.aside-block h4 {
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.15;
+  margin-bottom: 8px;
+}
+.aside-block p {
+  font-size: 13.5px; line-height: 1.55;
+  color: #475569;
+}
+.aside-link {
+  display: inline-block;
+  margin-top: 12px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent);
+  text-decoration: none;
+}
+.aside-link:hover { color: var(--fg); }
+
+/* WB-pentagon mini */
+.pentagon-mini {
+  display: grid; place-items: center;
+  padding: 14px 0;
+}
+.pentagon-mini svg { display: block; }
+
+/* Module-rad */
+.mod-row {
+  display: flex; gap: 12px; align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--rule);
+  font-size: 13.5px;
+}
+.mod-row:last-child { border-bottom: 0; }
+.mod-row .num {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: rgba(220, 76, 43, 0.08);
+  color: var(--accent);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  flex-shrink: 0;
+}
+.mod-row .name { flex: 1; font-weight: 600; color: var(--fg); }
+.mod-row .pct {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--muted);
+}
+
+/* Footer band */
+.foot-band {
+  border-top: 1px solid var(--rule);
+  padding: 32px clamp(24px, 6vw, 80px);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 14px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+}
+.foot-band-vol {
+  font-family: var(--serif); font-style: italic;
+  text-transform: none; letter-spacing: 0; font-size: 13px;
+  color: #475569;
+}
+
+/* Day-card / val-att-fatta */
+.day-card {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center;
+  padding: 16px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: #fff;
+  margin-bottom: 10px;
+  transition: all .25s var(--ease);
+  text-decoration: none;
+  color: var(--fg);
+}
+.day-card:hover { border-color: var(--accent); transform: translateX(3px); }
+.day-card-time {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  min-width: 56px;
+}
+.day-card-text strong {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  display: block; margin-bottom: 2px;
+  letter-spacing: -0.2px;
+}
+.day-card-text span {
+  font-size: 13px; color: #475569;
+}
+.day-card-arrow {
+  color: var(--accent); font-size: 20px;
+  transition: transform .2s var(--ease);
+}
+.day-card:hover .day-card-arrow { transform: translateX(4px); }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 01 · Magazine</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="#" class="logout">Logga ut</a>
+</nav>
+
+<!-- Cover -->
+<header class="cover">
+  <div class="cover-grid">
+    <div>
+      <div class="cover-meta">
+        <span class="live-dot"></span>
+        <span>Onsdag 29 april 2026 · 14:32</span>
+        <span class="cover-meta-sep">·</span>
+        <span>Linda · IT-konsult · Stockholm</span>
+        <span class="cover-meta-sep">·</span>
+        <span>Vecka 18</span>
+      </div>
+      <h1 class="cover-title">Tandläkaren <em>ringer</em>.</h1>
+      <p class="cover-lead">
+        En akut rotfyllning, 3 200 kr efter subvention. Bufferten håller
+        — men hälsa-axeln tippar. Det är dagens enda val som verkligen
+        ändrar pentagonen.
+      </p>
+    </div>
+    <aside class="cover-side">
+      <div class="cover-side-eye">Saldo · Lönekonto</div>
+      <div class="cover-side-num">27 <em>795</em></div>
+      <div class="cover-side-cap">kr · Efter pensionsavg.</div>
+    </aside>
+  </div>
+</header>
+
+<!-- Sektion-band: 5 spaces -->
+<div class="section-band">
+  <span class="section-band-eye">Mina utrymmen</span>
+  <div class="section-band-tabs">
+    <a href="#" class="section-band-tab active">Idag</a>
+    <a href="#" class="section-band-tab">Bokföring</a>
+    <a href="banken.html" class="section-band-tab">Pengar</a>
+    <a href="#" class="section-band-tab">Avtal</a>
+    <a href="#" class="section-band-tab">Utveckling</a>
+  </div>
+</div>
+
+<!-- Spread -->
+<main class="spread">
+
+  <div class="story-blocks">
+
+    <article class="story-block">
+      <div class="story-eye">
+        <span class="story-eye-num">01</span>
+        <span>Dagens händelser · Tre val att fatta</span>
+      </div>
+      <h2 class="story-h2">Tre <em>beslut</em> innan kvällen.</h2>
+      <p class="story-lead">
+        Plattformen har sorterat dagens händelser efter konsekvens.
+        Tandläkaren först — den ändrar mest. Sen lönerådgivningen som
+        Marcus skickade, sen autogirot som tickar på 16:00.
+      </p>
+
+      <a href="#" class="day-card">
+        <div class="day-card-time">14:22<br>nu</div>
+        <div class="day-card-text">
+          <strong>Folktandvården: rotfyllning 3 200 kr</strong>
+          <span>Bufferten håller. Hälsa-axeln tippar.</span>
+        </div>
+        <span class="day-card-arrow">→</span>
+      </a>
+      <a href="#" class="day-card">
+        <div class="day-card-time">15:08<br>nu</div>
+        <div class="day-card-text">
+          <strong>Mail från chefen: AI-säkerhetsutbildning</strong>
+          <span>40 timmar, 8 % löneökning. Beslut till fredag.</span>
+        </div>
+        <span class="day-card-arrow">→</span>
+      </a>
+      <a href="#" class="day-card">
+        <div class="day-card-time">16:00<br>2h</div>
+        <div class="day-card-text">
+          <strong>Autogiro signeras: 18 av 23 fakturor</strong>
+          <span>Hyra · El · Försäkring · Mobil. 5 manuella.</span>
+        </div>
+        <span class="day-card-arrow">→</span>
+      </a>
+    </article>
+
+    <article class="story-block">
+      <div class="story-eye">
+        <span class="story-eye-num">02</span>
+        <span>Echo coachar · Sokratisk fråga</span>
+      </div>
+      <h2 class="story-h2">Echo <em>frågar</em>.</h2>
+      <div class="echo-quote">
+        <p class="echo-quote-text">
+          3 200 kr på en eftermiddag. Hade du gjort samma val om bufferten
+          legat på 6 000 istället för 18 700? Var börjar du tänka i andra
+          banor — och varför just där?
+        </p>
+        <div class="echo-quote-cite">— Echo · sokratisk fråga · efter tandläkaren</div>
+        <div class="echo-actions">
+          <a href="#" class="echo-btn primary">Reflektera ↗</a>
+          <a href="#" class="echo-btn">Hoppa över</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="story-block">
+      <div class="story-eye">
+        <span class="story-eye-num">03</span>
+        <span>Dagens balans · Snapshot 14:32</span>
+      </div>
+      <h2 class="story-h2">Vad <em>ändrades</em> idag?</h2>
+      <p class="story-lead">
+        Sammanfattat på en yta. Tandläkaren tippar hälsa-axeln; löne­
+        rådgivningen påverkar inte än. Veckan håller riktning.
+      </p>
+      <div class="bal-row">
+        <div>
+          <div class="bal-label">Buffert · sparkonto</div>
+          <div class="bal-meta">SEB · Nordea · justerat 14:22</div>
+        </div>
+        <div></div>
+        <div class="bal-num is-warn">−3 200</div>
+      </div>
+      <div class="bal-row">
+        <div>
+          <div class="bal-label">Pension · ackumulerat</div>
+          <div class="bal-meta">Allmän + ITP1 · maj-projektion</div>
+        </div>
+        <div></div>
+        <div class="bal-num is-good">+2 671</div>
+      </div>
+      <div class="bal-row">
+        <div>
+          <div class="bal-label">WB-index · idag</div>
+          <div class="bal-meta">Vägt 25/20/20/15/20 · −6 hälsa</div>
+        </div>
+        <div></div>
+        <div class="bal-num is-warn">68</div>
+      </div>
+      <div class="bal-row">
+        <div>
+          <div class="bal-label">Mastery · vecka 18</div>
+          <div class="bal-meta">12 kompetenser · 9 säkra</div>
+        </div>
+        <div></div>
+        <div class="bal-num is-good">3,2 / 4</div>
+      </div>
+    </article>
+
+  </div>
+
+  <!-- Sidebar -->
+  <aside class="spread-aside">
+
+    <div class="aside-block">
+      <div class="aside-block-eye">● Pentagon idag</div>
+      <h4>Hälsa tippar.</h4>
+      <p>Ekonomi 78 / Karriär 85 / Relation 80 / Hälsa 56 / Fritid 56.</p>
+      <div class="pentagon-mini">
+        <svg width="180" height="160" viewBox="0 0 240 200">
+          <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="#cbd5e1" stroke-dasharray="2 3"/>
+          <polygon points="120,38 196,90 168,170 70,170 42,90" fill="rgba(220,76,43,0.18)" stroke="#dc4c2b" stroke-width="1.6"/>
+          <text x="120" y="14" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">EKONOMI</text>
+          <text x="232" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">RELATION</text>
+          <text x="186" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#dc4c2b" font-weight="700">HÄLSA ↓</text>
+          <text x="54" y="194" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">KARRIÄR</text>
+          <text x="8" y="84" font-family="JetBrains Mono" font-size="9" text-anchor="middle" fill="#64748b">FRITID</text>
+        </svg>
+      </div>
+      <a href="#" class="aside-link">Söndag-review →</a>
+    </div>
+
+    <div class="aside-block">
+      <div class="aside-block-eye">● Pågående moduler</div>
+      <h4>Mastery-resa</h4>
+      <div class="mod-row"><span class="num">1</span><span class="name">Lönesamtalet</span><span class="pct">82%</span></div>
+      <div class="mod-row"><span class="num">2</span><span class="name">Pensionspotten</span><span class="pct">64%</span></div>
+      <div class="mod-row"><span class="num">3</span><span class="name">Buffert &amp; krasch</span><span class="pct">71%</span></div>
+      <div class="mod-row"><span class="num">4</span><span class="name">ISK-skatten</span><span class="pct">12%</span></div>
+      <a href="#" class="aside-link">Alla moduler →</a>
+    </div>
+
+    <div class="aside-block">
+      <div class="aside-block-eye">● Anslag</div>
+      <h4>Lärar-Anna</h4>
+      <p style="font-style: italic; font-family: var(--serif);">"Bra att du klickade igenom tandläkaren idag. Ses imorgon."</p>
+      <a href="#" class="aside-link">Svara →</a>
+    </div>
+
+  </aside>
+</main>
+
+<footer class="foot-band">
+  <span class="foot-band-vol">Vol. 01 · Linda · 2026 maj</span>
+  <span>Senast aktiv 14:32 · uppdateras live</span>
+</footer>
+
+</body>
+</html>

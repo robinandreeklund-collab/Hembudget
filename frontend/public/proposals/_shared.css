@@ -1,0 +1,190 @@
+/* Shared editorial base — alla tre koncept ärver färger + typografi
+   från startsidan så den grafiska profilen är identisk. */
+
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e5e7eb;
+  --serif: "Source Serif 4", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --ease: cubic-bezier(.77, 0, .175, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overflow-x: hidden; }
+body {
+  font-family: "Inter", "Helvetica Neue", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Top-nav (samma som startsidan) */
+.top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
+}
+.top-nav a {
+  display: inline-block;
+  font-family: var(--serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
+  color: var(--fg);
+  text-decoration: none;
+  font-variation-settings: "opsz" 24;
+  transition: font-size .45s cubic-bezier(.34, 1.56, .64, 1), color .25s var(--ease);
+}
+.top-nav a:hover { font-size: 22px; color: var(--accent); }
+.top-nav a.primary { color: var(--accent); }
+.top-nav a.logout { color: var(--muted); }
+
+.brand-tag {
+  position: fixed; top: 22px; left: 28px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--serif); font-weight: 700;
+  font-size: 16px; color: var(--fg);
+  text-decoration: none;
+}
+.brand-tag::before {
+  content: "●"; color: var(--accent); font-size: 11px;
+}
+.brand-tag-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+/* Concept-pill för proposals/index */
+.concept-card {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 28px;
+  background: #fff;
+  text-decoration: none;
+  color: var(--fg);
+  display: flex; flex-direction: column; gap: 16px;
+  transition: transform .3s var(--ease), border-color .3s var(--ease), box-shadow .3s var(--ease);
+}
+.concept-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.18);
+}
+.concept-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.concept-title {
+  font-family: var(--serif);
+  font-size: 32px; font-weight: 700;
+  letter-spacing: -1px; line-height: 1.05;
+}
+.concept-title em {
+  font-style: italic; color: var(--accent); font-weight: 500;
+}
+.concept-body {
+  font-size: 14.5px; line-height: 1.6; color: #334155;
+}
+.concept-pages {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto;
+}
+.concept-page-pill {
+  font-family: var(--mono); font-size: 10px;
+  padding: 4px 10px; border-radius: 100px;
+  background: rgba(220, 76, 43, 0.06);
+  border: 1px solid rgba(220, 76, 43, 0.2);
+  color: var(--accent);
+  text-transform: uppercase; letter-spacing: 1.2px;
+}
+
+/* Stora editorial-rubriker — användbart i alla koncept */
+.h-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+}
+.h-eyebrow::before { content: "●"; }
+
+.h-display {
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 700; letter-spacing: -1.6px;
+  line-height: 1;
+}
+.h-display em {
+  font-style: italic; font-weight: 500; color: var(--accent);
+}
+
+.h-section {
+  font-family: var(--serif);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 700; letter-spacing: -0.7px;
+  line-height: 1.1;
+}
+.h-section em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+/* Persistent secondary nav inom inloggat — speglas på alla koncept */
+.dock {
+  position: fixed; left: 0; top: 0; bottom: 0;
+  width: 220px;
+  background: #fff;
+  border-right: 1px solid var(--rule);
+  padding: 80px 18px 24px;
+  z-index: 50;
+  overflow-y: auto;
+}
+.dock-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+.dock-eye:first-child { margin-top: 0; }
+.dock a {
+  display: block;
+  padding: 8px 12px;
+  margin: 0 -12px;
+  border-radius: 4px;
+  font-family: var(--serif);
+  font-size: 15px; font-weight: 600;
+  color: var(--fg);
+  text-decoration: none;
+  transition: background .2s var(--ease), color .2s var(--ease);
+}
+.dock a:hover { background: rgba(220, 76, 43, 0.06); color: var(--accent); }
+.dock a.active {
+  background: var(--fg);
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .dock { display: none; }
+}
+
+.with-dock { padding-left: 220px; }
+@media (max-width: 900px) { .with-dock { padding-left: 0; } }
+
+/* Bättre länkstil för analysida etc */
+.prose a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(220, 76, 43, 0.4);
+}
+.prose a:hover { border-bottom-color: var(--accent); }
+.prose strong { color: var(--fg); font-weight: 700; }
+.prose em {
+  font-family: var(--serif); font-style: italic; color: var(--fg);
+}
+.prose p { margin: 0 0 16px; }
+.prose ul, .prose ol { margin: 0 0 18px 22px; }
+.prose ul li, .prose ol li { margin: 6px 0; }
