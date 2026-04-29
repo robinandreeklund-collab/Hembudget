@@ -737,7 +737,7 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
    utanför panelen så den inte clippas av overflow:hidden */
 .hero-info-scroll {
   position: absolute;
-  left: 0; bottom: 0; height: 188px;
+  left: 0; bottom: 0; height: 232px;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px;
   width: 50px;  /* matchar info-panelens margin-left */
@@ -775,16 +775,19 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   text-transform: none; letter-spacing: 0; color: rgba(255,255,255,0.95);
 }
 
-/* ─── Rich info-panel — frostat mörkt glas overlay (editorial, kompakt) ─── */
+/* ─── Rich info-panel — frostat mörkt glas overlay (editorial) ─── */
 .hero-info {
   position: relative; z-index: 2;
   margin: 0 0 0 50px;
-  padding: 18px clamp(20px, 2.6vw, 32px);
+  /* Topp-padding gör plats åt CTA:n som sitter absolut i panelens
+     övre högra hörn — den är PÅ panelen och får sin egen yta utan att
+     krocka med kolumninnehållet. */
+  padding: 60px clamp(20px, 2.6vw, 32px) 18px clamp(20px, 2.6vw, 32px);
   display: grid;
   grid-template-columns: minmax(160px, 0.85fr) minmax(0, 1.3fr) minmax(0, 1fr);
   gap: clamp(18px, 2.5vw, 36px);
   align-items: start;
-  height: 188px;
+  height: 232px;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.72) 100%);
   backdrop-filter: blur(22px) saturate(140%);
@@ -858,77 +861,73 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
   text-transform: uppercase; color: rgba(255,255,255,0.6); font-weight: 600;
   margin-top: 0;
 }
-/* Stor "Träffa [Name]"-CTA — sitter PÅ info-boxens kant, halvt utanför
-   panelen så den sticker upp som en tabbed-titel. Skarp, stor, kallar
-   på klick. Position absolute relativt .hero-info-wrap. */
+/* Stor CTA — sitter PÅ panelen, i högra övre hörnet INNE i boxen.
+   Position absolute relativt .hero-info. Skarp, lugn typografi —
+   hover skiftar färg, drar ut accent-line under och knuffar pilen. */
 .hero-info-cta {
   position: absolute;
-  top: -22px; right: clamp(18px, 3vw, 36px);
+  top: 18px; right: clamp(18px, 2.4vw, 30px);
   z-index: 4;
-  display: inline-flex; align-items: baseline; gap: 12px;
+  display: inline-flex; align-items: baseline; gap: 10px;
   padding: 0;
   background: transparent; border: 0; box-shadow: none;
   text-decoration: none;
   font-family: var(--serif);
-  font-size: clamp(30px, 3.6vw, 46px);
+  font-size: clamp(22px, 2.4vw, 30px);
   font-weight: 700;
-  letter-spacing: -1.4px;
+  letter-spacing: -0.8px;
   line-height: 1;
   color: #fff;
-  text-shadow:
-    0 2px 12px rgba(0,0,0,0.55),
-    0 12px 30px rgba(0,0,0,0.4);
   white-space: nowrap;
-  transform-origin: right bottom;
   cursor: pointer;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
   transition:
-    transform .45s cubic-bezier(.34, 1.56, .64, 1),
     color .3s var(--ease),
-    text-shadow .3s var(--ease);
+    letter-spacing .3s var(--ease);
 }
-.hero-info-cta::before {
-  /* Tunn accent-streck under texten — knyter ihop med info-boxens topp-line */
+.hero-info-cta::after {
+  /* Accent-line under texten — kommer in från vänster på hover */
   content: ""; position: absolute;
-  left: 0; right: 26px; bottom: -4px;
+  left: 0; right: 24px; bottom: -4px;
   height: 2px;
   background: linear-gradient(90deg, var(--accent), var(--gold));
   transform: scaleX(0); transform-origin: left center;
   transition: transform .5s cubic-bezier(.65, 0, .35, 1);
 }
 .hero-info-cta:hover {
-  transform: scale(1.06);
   color: var(--gold);
-  text-shadow:
-    0 2px 14px rgba(0,0,0,0.6),
-    0 16px 40px rgba(251,191,36,0.35);
-  animation: nav-name-pop .7s cubic-bezier(.34, 1.56, .64, 1);
+  letter-spacing: -1.1px;
 }
-.hero-info-cta:hover::before { transform: scaleX(1); }
+.hero-info-cta:hover::after { transform: scaleX(1); }
 .hero-info-cta-arrow {
   font-family: var(--mono); font-weight: 400;
-  font-size: 0.7em;
+  font-size: 0.75em;
   transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
   display: inline-block;
 }
-.hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(10px); }
-/* Disabled-state (Evelina/Peter): tystare italic, ingen pop */
+.hero-info-cta:hover .hero-info-cta-arrow { transform: translateX(8px); }
+/* Disabled (Evelina/Peter): tystare italic, ingen line, ingen pil */
 .hero-info-cta[aria-disabled="true"] {
-  color: rgba(255,255,255,0.55); cursor: default;
+  color: rgba(255,255,255,0.5); cursor: default;
   font-style: italic; font-weight: 500;
-  font-size: clamp(22px, 2.6vw, 32px);
-  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  font-size: clamp(16px, 1.8vw, 22px);
+  letter-spacing: 0;
 }
 .hero-info-cta[aria-disabled="true"]:hover {
-  transform: none; color: rgba(255,255,255,0.55);
-  animation: none;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0;
 }
-.hero-info-cta[aria-disabled="true"]::before { display: none; }
+.hero-info-cta[aria-disabled="true"]::after { display: none; }
 .hero-info-cta[aria-disabled="true"] .hero-info-cta-arrow { display: none; }
+/* Visa endast när panelen är aktiv (annars syns ingen text under) */
+.hero-info:not([data-active]) .hero-info-cta { display: none; }
+/* På smala viewports — flytta in i flow under headern istället */
 @media (max-width: 700px) {
   .hero-info-cta {
-    position: relative; top: 0; right: 0;
-    margin: 0 0 12px 50px;
+    position: static;
+    margin: 4px 0 0 0;
+    font-size: 22px;
   }
 }
 
@@ -1041,13 +1040,13 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 
 .hero-info[data-active] .hero-info-meta,
 .hero-info[data-active] .hero-info-role,
+.hero-info[data-active] .hero-info-cta,
 .hero-info[data-active] .hero-info-eyebrow,
 .hero-info[data-active] .hero-info-story,
 .hero-info[data-active] .hero-info-tags,
 .hero-info[data-active] .hero-info-quote,
 .hero-info[data-active] .hero-info-week-title,
-.hero-info[data-active] .hero-info-week-item,
-.hero-info-wrap:has(.hero-info[data-active]) .hero-info-cta {
+.hero-info[data-active] .hero-info-week-item {
   animation: line-reveal 0.6s cubic-bezier(.34, 1.18, .64, 1) both;
 }
 .hero-info[data-active] .hero-info-name {
@@ -1058,7 +1057,7 @@ body.nav-on-dark .top-nav-link-primary { color: var(--gold); }
 .hero-info[data-active] .hero-info-meta    { animation-delay: 0.05s; }
 .hero-info[data-active] .hero-info-name    { animation-delay: 0.10s; }
 .hero-info[data-active] .hero-info-role    { animation-delay: 0.30s; }
-.hero-info-wrap:has(.hero-info[data-active]) .hero-info-cta { animation-delay: 0.45s; }
+.hero-info[data-active] .hero-info-cta     { animation-delay: 0.45s; }
 
 .hero-info[data-active] .hero-info-eyebrow { animation-delay: 0.20s; }
 .hero-info[data-active] .hero-info-story   { animation-delay: 0.30s; }
@@ -1676,18 +1675,17 @@ html.lenis, html.lenis body { height: auto; }
           <span class="hero-info-scroll-arrow">↓</span>
         </span>
 
-        <!-- Stor "Träffa [Name]"-CTA — sitter PÅ boxens kant (lyfter ut
-             ur panelen, sticker upp över överkanten så det är glasklart
-             att personen leder vidare till en saga). -->
-        <a class="hero-info-cta" data-info-cta href="#">
-          <span data-info-cta-label>Träffa</span>
-          <span class="hero-info-cta-arrow" aria-hidden="true">→</span>
-        </a>
-
         <!-- Frostat-glas info-panel som overlay på videon, uppdateras
              via auto-rotation eller klick på höger-nav. -->
         <div class="hero-info" id="heroInfo">
         <div class="hero-info-empty">Hovra över en karaktär</div>
+        <!-- Stor "Utforska min vardag"-CTA — sitter PÅ boxens högra
+             övre hörn, ovanpå panelen. Tydlig kall till handling som
+             bekräftar att personen leder till en hel saga. -->
+        <a class="hero-info-cta" data-info-cta href="#">
+          <span data-info-cta-label>Utforska</span>
+          <span class="hero-info-cta-arrow" aria-hidden="true">→</span>
+        </a>
         <div class="hero-info-content">
 
           <div class="hero-info-left">
