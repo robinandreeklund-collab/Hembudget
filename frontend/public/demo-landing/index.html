@@ -1223,8 +1223,8 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   font-size: clamp(22px, 2.6vw, 32px); line-height: 1.35;
   color: #fff; margin: 0 0 18px;
 }
-.teacher-quote-text::before { content: "" "; color: var(--gold); }
-.teacher-quote-text::after  { content: "" "; color: var(--gold); }
+.teacher-quote-text::before { content: "\201C"; color: var(--gold); margin-right: 4px; }
+.teacher-quote-text::after  { content: "\201D"; color: var(--gold); margin-left: 4px; }
 .teacher-quote-cite {
   font-family: var(--mono); font-size: 11px; font-weight: 700;
   letter-spacing: 1.4px; text-transform: uppercase;
@@ -1376,12 +1376,14 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   position: relative;
 }
 .manifesto-quote p:first-child::before {
-  content: "" "; color: var(--accent);
+  content: "\201C"; color: var(--accent);
   font-family: var(--serif); font-style: italic;
+  margin-right: 4px;
 }
 .manifesto-quote p:first-child::after {
-  content: " "";color: var(--accent);
+  content: "\201D"; color: var(--accent);
   font-family: var(--serif); font-style: italic;
+  margin-left: 4px;
 }
 .manifesto-quote p:last-child { margin-bottom: 0; }
 .manifesto-quote em {
