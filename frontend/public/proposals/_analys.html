@@ -1014,6 +1014,92 @@ section h2 { margin-bottom: 22px; }
     </div>
   </section>
 
+  <section id="aktor-7">
+    <div class="h-eyebrow" style="margin-bottom: 14px;">11 · Aktör 07</div>
+    <h2 class="h-section">Hyresvärd &amp; utility — bostaden som <em>kostnadsmotor</em>.</h2>
+
+    <div class="actor">
+      <header class="actor-head">
+        <div class="actor-chip">Hy</div>
+        <div>
+          <div class="actor-name">Hyresvärd &amp; utility</div>
+          <div class="actor-role">Bostadskontrakt · el · vatten · bredband · uppvärmning</div>
+        </div>
+        <div class="actor-routes">
+          <code>/utility</code><br>
+          <code>/Callback</code> (Tibber)
+        </div>
+      </header>
+      <div class="actor-body">
+
+        <p>
+          Bostaden är inte en rad i budgeten — det är en samling
+          fakturor som varierar månad till månad och som har egna
+          relationer (Stockholmsbostäder, Vattenfall, Tele2, Stadsnät).
+          Eleven har en hyresvärd som höjer hyran 1 maj, en
+          elleverantör som svänger 30 % mellan vinter och sommar,
+          ett bredband som är fast pris. Tibber kan kopplas in på
+          riktigt via OAuth (<code>/Callback</code>) — eleven ser
+          timpriser och förstår spotpris-modellen.
+        </p>
+
+        <div class="actor-section-eye">Vad eleven gör hos hyresvärden / utility</div>
+        <ul class="actor-list">
+          <li>
+            <strong>Granskar hyreskontraktet.</strong> Yta, hyra/mån,
+            uppsägningstid (3 mån standard), inflyttning, depositionen
+            (1 hyra hos privat hyresvärd). Hyreshöjning 1 maj enligt
+            avtal — eleven ser exakt motivering.
+          </li>
+          <li>
+            <strong>Hanterar elavtal.</strong> Fast pris, rörligt,
+            mixavtal. Förbrukning per månad (kWh). Spotpris per timme
+            via Tibber-koppling. Plattformen lär ut prisskillnaden
+            mellan Stockholm (SE3) och Skåne (SE4).
+          </li>
+          <li>
+            <strong>Förbrukningshistorik.</strong> El, vatten, bredband,
+            uppvärmning över 12 månader — eleven ser säsongsvariationen
+            tydligt och kan jämföra mot snittet för sitt typhushåll.
+          </li>
+          <li>
+            <strong>Byter leverantör.</strong> Spotpris vs fast pris —
+            eleven jämför och fattar beslut. Bytesprocess + uppsägningstid.
+          </li>
+          <li>
+            <strong>Säger upp / söker andrahand.</strong> Vid flytt
+            (modul "Flytta hemifrån" eller "Flytta ihop"). Andrahand
+            kräver hyresvärdens godkännande.
+          </li>
+        </ul>
+
+        <div class="actor-section-eye">Primära data hyresvärd / utility äger</div>
+        <ul class="actor-list">
+          <li>Hyreskontrakt (yta, hyra, uppsägning, deposition)</li>
+          <li>Hyreshöjnings­historik (datum, %, motivering)</li>
+          <li>Elförbrukning per månad + per timme (vid Tibber)</li>
+          <li>Spotpriser per timme och elområde (SE1–SE4)</li>
+          <li>Vatten-, bredbands-, uppvärmningsfakturor</li>
+        </ul>
+
+        <div class="actor-section-eye">Verklighetsmappning</div>
+        <ul class="actor-list">
+          <li>Hyresvärd: kommunal (Stockholmsbostäder), privat, bostadsrätt</li>
+          <li>Elavtal: Vattenfall, Fortum, Skellefteå Kraft, m.fl.</li>
+          <li>Tibber: faktisk OAuth-koppling fungerar (har en TibberCallback-route)</li>
+          <li>Bredband: Telia, Tele2, Comhem — typiskt 359–599 kr/mån fast</li>
+          <li>Vatten: kommunalt, oftast i hyran (BR) eller separat (HR)</li>
+        </ul>
+
+        <p class="actor-cite">
+          Se Utility.tsx (1281 rader) — månadsvis förbrukningshistorik
+          för el, vatten, bredband, uppvärmning. TibberCallback hanterar
+          OAuth-flödet vid integration.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <div class="foot">
     <a href="./index.html">← Tillbaka till förslagen</a>
   </div>
