@@ -1262,6 +1262,234 @@ body::after {
 .spec-table tr.tot td:last-child { color: var(--warm); font-style: italic; }
 .spec-table tr.tot td:first-child { font-weight: 700; color: #fff; }
 
+/* === BUSINESS-MODE STYLES === */
+/* Pill-färg byts till indigo i business */
+body[data-mode="business"] .pill {
+  background: rgba(15,21,37,0.7); border-color: rgba(99,102,241,0.35);
+}
+body[data-mode="business"] .pill::before { color: #818cf8; }
+body[data-mode="business"] .actor-name em,
+body[data-mode="business"] .hub-h1 em,
+body[data-mode="business"] .head-h1 em { color: #c7d2fe; }
+
+/* Business char-card med indigo border */
+.biz-char-card {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid rgba(99,102,241,0.30);
+  border-top: 2px solid #818cf8;
+  border-radius: 6px;
+  padding: 22px 24px;
+  backdrop-filter: blur(8px);
+}
+.biz-char-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: #c7d2fe; margin-bottom: 10px;
+}
+.biz-char-eye::before { content: "● "; }
+.biz-char-name {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 32px; letter-spacing: -0.9px; color: #fff;
+}
+.biz-char-meta {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 6px;
+}
+.biz-char-divider { display: inline-block; color: #818cf8; margin: 0 6px; }
+.biz-char-section {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.3px; text-transform: uppercase;
+  color: var(--text-mid);
+  margin-top: 18px; margin-bottom: 8px;
+}
+.biz-char-section::before { content: "● "; color: #818cf8; }
+.biz-char-prose {
+  font-family: var(--serif); font-size: 15px; line-height: 1.55;
+  color: var(--text);
+}
+.biz-char-prose em { font-style: italic; color: #c7d2fe; }
+.biz-char-prose strong { color: #818cf8; font-weight: 700; }
+.biz-char-pills {
+  margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;
+}
+.biz-char-pill {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 6px 12px; border-radius: 100px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.30);
+  color: #c7d2fe; letter-spacing: 0.6px;
+  text-decoration: none; cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.biz-char-pill:hover { background: rgba(99,102,241,0.18); border-color: #818cf8; }
+.biz-char-pill.alert {
+  background: rgba(220,76,43,0.10); border-color: rgba(220,76,43,0.35);
+  color: var(--accent);
+}
+
+/* Biz-pentagon — annan färg + andra axlar */
+.biz-pent-now {
+  fill: rgba(99,102,241,0.22);
+  stroke: #818cf8;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 18px rgba(99,102,241,0.45));
+  animation: pent-breathe 5s ease-in-out infinite;
+}
+.biz-pent-prev {
+  fill: none; stroke: rgba(255,255,255,0.4);
+  stroke-width: 1.2; stroke-dasharray: 4 4;
+}
+
+/* Biz axis labels — indigo accent */
+.biz-axis-label {
+  position: absolute;
+  background: rgba(15,21,37,0.92);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(99,102,241,0.30);
+  border-radius: 6px;
+  padding: 13px 18px;
+  text-decoration: none; color: #fff;
+  width: 200px;
+  transition: all .35s var(--ease);
+  cursor: pointer;
+}
+.biz-axis-label:hover {
+  background: rgba(15,21,37,1);
+  border-color: #818cf8;
+  transform: scale(1.04);
+}
+.biz-axis-label-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: #c7d2fe; margin-bottom: 4px;
+}
+.biz-axis-label-name {
+  font-family: var(--serif); font-size: 20px; font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.biz-axis-label-name em { font-style: italic; color: #c7d2fe; font-weight: 500; }
+.biz-axis-label-meta { font-family: var(--mono); font-size: 10px; color: var(--text-mid); margin-top: 4px; letter-spacing: 0.8px; }
+
+/* Biz event-card */
+.biz-event-card {
+  background: rgba(15,21,37,0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-left: 3px solid #818cf8;
+  border-radius: 6px;
+  padding: 22px 26px;
+  margin-top: 18px;
+  position: relative; overflow: hidden;
+}
+.biz-event-card::before {
+  content: ""; position: absolute; right: -40px; top: -40px;
+  width: 160px; height: 160px;
+  background: radial-gradient(circle, rgba(99,102,241,0.16), transparent 70%);
+}
+.biz-event-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: #818cf8; margin-bottom: 10px;
+}
+.biz-event-eye::before { content: "● "; }
+.biz-event-headline {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.7px; line-height: 1.1;
+}
+.biz-event-headline em { font-style: italic; color: #c7d2fe; }
+.biz-event-prose {
+  font-family: var(--serif); font-size: 15px; line-height: 1.5;
+  color: var(--text-mid); margin-top: 10px;
+}
+.biz-event-prose strong { color: #818cf8; font-weight: 700; }
+.biz-event-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.biz-btn {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 11px 18px; border-radius: 100px;
+  border: 1px solid rgba(99,102,241,0.35); color: #fff;
+  background: rgba(99,102,241,0.06);
+  cursor: pointer; text-decoration: none;
+  transition: all .25s var(--ease);
+}
+.biz-btn:hover { background: rgba(99,102,241,0.16); border-color: #818cf8; }
+.biz-btn.solid {
+  background: #6366f1; border-color: #6366f1; color: #fff;
+}
+.biz-btn.solid:hover { background: #4f46e5; }
+
+/* Biz compass-noder */
+.biz-compass-node {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px; padding: 14px 12px;
+  text-align: center; cursor: pointer;
+  text-decoration: none; color: #fff;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: all .2s var(--ease);
+  position: relative;
+}
+.biz-compass-node:hover {
+  background: rgba(15,21,37,1);
+  border-color: #818cf8;
+  transform: translateY(-2px);
+}
+.biz-compass-node-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.biz-compass-node-name {
+  font-family: var(--serif); font-size: 13px; font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.biz-compass-node-val {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-mid); letter-spacing: 0.4px;
+  margin-top: 2px;
+}
+.biz-compass-node-val em { color: #c7d2fe; font-family: var(--serif); font-style: italic; }
+
+/* Biz-tabell stil */
+.biz-table {
+  background: rgba(15,21,37,0.5);
+  border: 1px solid var(--line);
+  border-radius: 6px; overflow: hidden;
+}
+.biz-table-row {
+  display: grid; gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none; color: var(--text);
+  font-family: "Inter", sans-serif; font-size: 13.5px;
+  align-items: center;
+}
+.biz-table-row:last-child { border-bottom: 0; }
+.biz-table-row:hover { background: rgba(99,102,241,0.04); }
+.biz-table-row.head {
+  background: rgba(255,255,255,0.03);
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: default;
+}
+.biz-table-row.head:hover { background: rgba(255,255,255,0.03); }
+
+.biz-status {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 4px 9px; border-radius: 100px;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  text-align: center; white-space: nowrap;
+}
+.biz-status.draft { background: rgba(255,255,255,0.05); color: var(--text-mid); border: 1px solid var(--line); }
+.biz-status.sent { background: rgba(99,102,241,0.16); color: #c7d2fe; border: 1px solid rgba(99,102,241,0.3); }
+.biz-status.paid { background: rgba(110,231,183,0.16); color: #6ee7b7; border: 1px solid rgba(110,231,183,0.3); }
+.biz-status.overdue { background: rgba(220,76,43,0.18); color: #fda594; border: 1px solid rgba(220,76,43,0.35); }
+.biz-status.won { background: rgba(110,231,183,0.16); color: #6ee7b7; border: 1px solid rgba(110,231,183,0.3); }
+.biz-status.lost { background: rgba(255,255,255,0.04); color: var(--text-dim); border: 1px solid var(--line); }
+.biz-status.open { background: rgba(251,191,36,0.16); color: var(--warm); border: 1px solid rgba(251,191,36,0.3); }
+
 /* === MODE-SWITCH (PRIVAT ↔ FÖRETAG) === */
 /* Hela app:en flips i 3D när man byter mode. Animation-sequence:
    1. flip-out (rotateY 0 → 90, opacity 1 → 0)
