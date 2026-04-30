@@ -106,7 +106,24 @@ export function LanV2() {
           </div>
         </header>
 
-        {/* LÅNETYPER · 4 kort */}
+        {/* LÅNETYPER · aktiva lån (möjliga produkter visas i Fas 2 när
+            LoanProduct-modellen finns) */}
+        {cards.length === 0 ? (
+          <div
+            style={{
+              padding: "32px 24px",
+              border: "1px solid var(--line)",
+              borderRadius: 6,
+              fontFamily: "var(--serif)",
+              color: "var(--text-mid)",
+              marginBottom: 22,
+            }}
+          >
+            Inga aktiva lån registrerade. När du får ett CSN-lån, bolån
+            eller annat lån från Lånegivaren visas det här som ett kort
+            med saldo + amortering.
+          </div>
+        ) : (
         <div className="acct-grid">
           {cards.map((c, idx) => (
             <div
@@ -147,6 +164,7 @@ export function LanV2() {
             </div>
           ))}
         </div>
+        )}
 
         <div className="act-grid">
           <div>
@@ -202,7 +220,9 @@ export function LanV2() {
               </div>
             )}
 
-            {/* KREDITPRÖVNING */}
+            {/* KREDITPRÖVNING · visas bara om vi har riktig data */}
+            {credit_factors.length > 0 && (
+              <>
             <div className="section-eye" style={{ marginTop: 24 }}>
               Kreditprövning · av dig själv som låntagare
             </div>
@@ -231,27 +251,11 @@ export function LanV2() {
                 </div>
               ))}
             </div>
+              </>
+            )}
 
-            {/* CTA */}
-            <article className="cta-card">
-              <div className="cta-eye">Aktivt uppdrag · läraren</div>
-              <div className="cta-h">
-                Kreditprövning för <em>2,4 Mkr bolån</em>.
-              </div>
-              <p className="cta-prose">
-                Bolån-modulen tar dig genom kreditprövningens 6 steg.
-                Lånegivaren räknar din KALP, stresstestar mot 7 % ränta,
-                kollar belåningsgrad. Om allt går rätt vägs ditt UC-score in
-                — A/B-klass innebär inga problem.
-              </p>
-              <button
-                type="button"
-                className="cta-btn"
-                onClick={() => navigate("/v2/hub")}
-              >
-                Öppna bolån-modulen →
-              </button>
-            </article>
+            {/* CTA · "Aktivt uppdrag" tas in i Fas 2 när Assignment-
+                modellen kopplas till Lånegivaren. Tills dess inget. */}
 
             {/* PEDAGOGIK */}
             <div className="peda">
@@ -327,11 +331,12 @@ export function LanV2() {
             <div className="side-card">
               <div className="side-card-eye">Snabbamortering</div>
               <div className="side-card-h">
-                Lönar sig <em>marginellt</em>
+                Beror på <em>räntan</em>
               </div>
               <div className="side-card-meta">
-                CSN-räntan på 1,7 % är låg. Att amortera extra ger 1,7 %
-                "garanterad avkastning" — Avanza-fonder ger ~7 %. Tänk efter.
+                Att amortera extra på ett lån ger en "garanterad avkastning"
+                lika hög som räntan. Jämför mot vad du kan tjäna i ISK-fond
+                (~7 % real avk. historiskt) innan du beslutar.
               </div>
             </div>
             <div className="side-card">

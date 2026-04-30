@@ -1507,17 +1507,14 @@ def test_v2_arbetsgivaren_with_profile_returns_basics(fx) -> None:
     assert data["employer"] == "Sthlm Sjukhus AB"
     assert data["gross_salary_monthly"] == 31250
     assert data["net_salary_monthly"] == 22400
-    # Marknadsspann auto-räknat ±5-8 % runt brutto
-    assert data["market_low"] is not None
-    assert data["market_high"] is not None
-    assert data["market_low"] < data["gross_salary_monthly"]
-    assert data["market_high"] > data["gross_salary_monthly"]
-    # Default-förmåner finns alltid (även utan agreement)
-    assert len(data["agreement_benefits"]) >= 3
-    benefit_names = [b["name"] for b in data["agreement_benefits"]]
-    assert "Friskvårdsbidrag" in benefit_names
-    assert "OB-tillägg" in benefit_names
-    assert "Lönerevision" in benefit_names
+    # Marknadsspann läses ENDAST från CollectiveAgreement.meta —
+    # utan strukturerad meta finns inga schabloner.
+    assert data["market_low"] is None
+    assert data["market_high"] is None
+    # Förmåner returneras BARA om profession har avtalad pension OCH/ELLER
+    # CollectiveAgreement.meta innehåller benefits-lista. Utan profil-
+    # kopplat avtal i denna test-fixture är listan tom.
+    assert isinstance(data["agreement_benefits"], list)
     # Satisfaction default 70
     assert data["satisfaction"]["score"] == 70
     assert data["satisfaction"]["delta_4w"] == 0
@@ -1625,25 +1622,26 @@ def test_v2_lan_with_profile_has_credit_factors_and_cards(fx) -> None:
     data = r.json()
     # Annual gross = 26000 * 12 = 312000
     assert data["annual_income"] == 312000
-    # Inga aktiva lån → debt_ratio = 0, credit_class = A
+    # Inga aktiva lån → debt_ratio = 0
     assert data["total_debt"] == 0
     assert data["debt_ratio"] == 0
-    assert data["credit_class"] == "A"
-    # Möjliga produkter: bolån + privatlån + billån (3 kort utan aktiva)
+    # credit_class är "" tills CreditCheck-modellen finns (Fas 2)
+    assert data["credit_class"] == ""
+    # Inga möjliga-låneprodukter visas tills LoanProduct-modell finns (Fas 2)
     cards = data["cards"]
-    assert len(cards) == 3
-    eyes = [c["eyebrow"] for c in cards]
-    assert "Möjligt" in eyes
-    assert "Avråds" in eyes
-    # Alla 5 kreditprövnings-faktorer
+    assert cards == []
+    # Endast riktiga kreditprövnings-faktorer visas:
+    # - Inkomst (alltid om profile har gross_salary_monthly)
+    # - Skuldkvot (BARA om eleven har aktiva lån — här är total_debt=0)
     factors = data["credit_factors"]
-    assert len(factors) == 5
     factor_names = [f["factor"] for f in factors]
     assert "Inkomst (årlig brutto)" in factor_names
-    assert "Skuldkvot" in factor_names
-    assert "KALP · stresstest 7 %" in factor_names
-    assert "Betalningsanmärkningar" in factor_names
-    assert "UC-score" in factor_names
+    # Skuldkvot ska INTE visas när total_debt=0
+    assert "Skuldkvot" not in factor_names
+    # KALP, betalningsanmärkningar, UC-score kräver Fas 2-modeller
+    assert "KALP · stresstest 7 %" not in factor_names
+    assert "Betalningsanmärkningar" not in factor_names
+    assert "UC-score" not in factor_names
 
 
 def test_v2_lan_with_active_loan_in_scope(fx) -> None:
@@ -1773,8 +1771,9 @@ def test_v2_skatten_with_profile_returns_basic_lines(fx) -> None:
     assert "-05-02" in data["deadline"]
 
 
-def test_v2_skatten_with_student_loan_has_csn_proposal(fx) -> None:
-    """has_student_loan=True → ett CSN-ränteavdrag-förslag dyker upp."""
+def test_v2_skatten_no_schablon_deductions(fx) -> None:
+    """has_student_loan/has_car_loan ska INTE generera schablon-avdrag.
+    Riktiga avdrag kräver TaxDeduction-modellen (Fas 2)."""
     client, _tch, _sa, stu, _tid, _said, sid = fx
     with master_session() as db:
         db.add(StudentProfile(
@@ -1788,6 +1787,7 @@ def test_v2_skatten_with_student_loan_has_csn_proposal(fx) -> None:
             family_status="ensam", housing_type="hyresratt",
             housing_monthly=8000, personality="blandad",
             has_student_loan=True,
+            has_car_loan=True,
         ))
         db.commit()
 
@@ -1797,14 +1797,13 @@ def test_v2_skatten_with_student_loan_has_csn_proposal(fx) -> None:
     )
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["pending_proposal_count"] == 1
+    # Inga förslag tills TaxProposal-modellen finns
+    assert data["pending_proposal_count"] == 0
     proposals = [i for i in data["items"] if i["is_proposal"]]
-    assert len(proposals) == 1
-    assert proposals[0]["proposal_id"] == "csn-interest"
-    # Avdraget gör skatten ~142 kr lägre (548 × 30 %)
-    assert proposals[0]["amount"] < 0
-    assert abs(proposals[0]["amount"]) > 100
-    assert abs(proposals[0]["amount"]) < 200
+    assert proposals == []
+    # Inga schablon-avdrag i items — bara inkomst + ev. ISK + skatt + diff
+    deduction_items = [i for i in data["items"] if i["category"] == "deduction"]
+    assert deduction_items == []
 
 
 def test_v2_skatten_year_query_param(fx) -> None:

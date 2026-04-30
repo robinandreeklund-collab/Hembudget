@@ -1805,42 +1805,49 @@ def _empty_employer(student_id: int) -> V2EmployerResponse:
     )
 
 
-def _default_agreement_benefits(
+def _agreement_benefits_from_meta(
+    agreement: Optional[CollectiveAgreement],
     pension_pct: Optional[float],
     avtal_norm_pct: Optional[float],
 ) -> list[V2EmployerAgreementBenefit]:
-    """Default-rader när agreement.meta saknar struktur."""
+    """Extrahera kollektivavtals-förmåner från CollectiveAgreement.meta.
+
+    Returnerar BARA rader vi har FAKTISK data för:
+    - Tjänstepension om ProfessionAgreement.pension_rate_pct är satt
+    - Lönerevision om CollectiveAgreement.meta['norm_pct'] är satt
+    - Övriga förmåner från meta['benefits'] (lista av {name, detail, value})
+
+    Inga schablon-defaults — om agreement saknar strukturerade förmåner
+    visas inget i kollektivavtals-tabellen ("Snart"-state i frontend).
+    Fas 2: AgreementBenefit-modell + lärar-API för seeding.
+    """
     out: list[V2EmployerAgreementBenefit] = []
     if pension_pct is not None and pension_pct > 0:
         out.append(V2EmployerAgreementBenefit(
             name="Tjänstepension",
-            detail=(
-                f"{pension_pct:.1f} % av brutto · arbetsgivaren betalar"
-            ),
+            detail=f"{pension_pct:.1f} % av brutto · arbetsgivaren betalar",
             value=f"{pension_pct:.1f} %",
         ))
-    out.append(V2EmployerAgreementBenefit(
-        name="Friskvårdsbidrag",
-        detail="Skattefritt · gym/träning · vanligt 3000-5000 kr/år",
-        value="upp till 5 000/år",
-    ))
-    out.append(V2EmployerAgreementBenefit(
-        name="OB-tillägg",
-        detail="Kväll +30 % · helg +50 % · röd dag +100 %",
-        value="påslag på timlön",
-    ))
     if avtal_norm_pct is not None and avtal_norm_pct > 0:
         out.append(V2EmployerAgreementBenefit(
             name="Lönerevision",
             detail="Centralt avtal · årlig norm",
             value=f"{avtal_norm_pct:.1f} %",
         ))
-    else:
-        out.append(V2EmployerAgreementBenefit(
-            name="Lönerevision",
-            detail="Årligen · enligt centralt avtal",
-            value="2,4 %",
-        ))
+    # Extra förmåner från meta['benefits'] (list of dict)
+    if agreement and agreement.meta:
+        try:
+            extra = agreement.meta.get("benefits") or []
+            if isinstance(extra, list):
+                for b in extra:
+                    if isinstance(b, dict) and b.get("name") and b.get("value"):
+                        out.append(V2EmployerAgreementBenefit(
+                            name=str(b["name"]),
+                            detail=str(b.get("detail") or ""),
+                            value=str(b["value"]),
+                        ))
+        except Exception:
+            pass
     return out
 
 
@@ -1943,10 +1950,20 @@ def get_employer(
             if pension_pct else None
         )
 
-        # Marknadsspann — uppskattat från avtalsdata (om finns) eller
-        # ±5 % runt gross
-        market_low: Optional[float] = round(gross * 0.92, 0)
-        market_high: Optional[float] = round(gross * 1.08, 0)
+        # Marknadsspann · läses ENDAST från CollectiveAgreement.meta
+        # (market_low + market_high). Inga schabloner — Fas 2 lägger
+        # till MarketSalaryRange-modell per yrke + ort med faktiska
+        # SCB-data som lärare seedar.
+        market_low: Optional[float] = None
+        market_high: Optional[float] = None
+        if agreement and agreement.meta:
+            try:
+                if agreement.meta.get("market_low"):
+                    market_low = float(agreement.meta["market_low"])
+                if agreement.meta.get("market_high"):
+                    market_high = float(agreement.meta["market_high"])
+            except (TypeError, ValueError):
+                pass
 
         # Anställd sedan / lönerevision — hämta från CollectiveAgreement.meta
         # om strukturerat. Annars lämna None.
@@ -2081,7 +2098,9 @@ def get_employer(
             ))
 
         # Avtals-förmåner (från meta eller default)
-        benefits = _default_agreement_benefits(pension_pct, avtal_norm_pct)
+        benefits = _agreement_benefits_from_meta(
+            agreement, pension_pct, avtal_norm_pct,
+        )
 
     # Lönespecar — från scope-DB:s transactions där amount > 0 och
     # description innehåller "lön" eller liknande, senaste 4 mån.
@@ -2202,15 +2221,19 @@ def get_skatten(
 ) -> V2TaxResponse:
     """Aggregat för deklarationssidan /v2/skatten.
 
-    Beräknar:
+    Beräknar (ENDAST riktig data — inga schabloner):
     - Bruttoinkomst = projekterad årslön (gross_salary_monthly × 12)
-    - Förskottsinbetald skatt = summa skatt-rader på lönespec-
-      transactions OR uppskattning (gross × tax_rate_effective)
-    - Avdrag: reseavdrag (om has_car_loan, schabloniserat),
-      schablonskatt ISK (FundHolding.market_value × 0.89 %)
-    - Förslag att granska: ränteavdrag på CSN (om has_student_loan,
-      ~548 kr ränta × 30 % = 142 kr lägre skatt)
-    - Slutlig skatt + diff (åter/kvar)
+    - Förskottsinbetald skatt = från lönespec-transactions ELLER
+      uppskattning (brutto × tax_rate_effective)
+    - Schablonskatt ISK (FundHolding.market_value × 0,89 %) — endast
+      om eleven har fonder i scope-DB
+    - Slutlig skatt = preliminär + ISK-schablonskatt
+    - Diff = preliminär − slutlig
+
+    OBS · Fas 2:
+    Reseavdrag, ränteavdrag (CSN/bolån) och Skatteverkets förslag
+    kräver TaxDeduction- och TaxProposal-modeller som lärare/elev
+    seedar med faktiska räntor och reseregister.
 
     Demo/teacher får tom payload.
     """
@@ -2238,8 +2261,6 @@ def get_skatten(
         prelim_tax = round(gross_annual * tax_rate, 0)
         net_annual = gross_annual - prelim_tax
 
-        has_student_loan = bool(getattr(profile, "has_student_loan", False))
-        has_car_loan = bool(getattr(profile, "has_car_loan", False))
         employer = profile.employer or "Arbetsgivare"
 
     # Hämta ISK-värde + lönespec-aktualer från scope-DB
@@ -2291,20 +2312,8 @@ def get_skatten(
         amount=gross_annual,
     ))
 
-    # Reseavdrag · schabloniserat (12 km × 220 dgr × 18.5 kr/mil = 4884 kr)
-    travel_deduction = 0.0
-    if has_car_loan:
-        # Anta att eleven pendlar med bil ~12 km enkel resa
-        travel_deduction = 4884.0
-        items.append(V2TaxLineItem(
-            category="deduction",
-            label="Avdrag",
-            name="Reseavdrag (12 km × 220 dgr)",
-            detail="Bil · max 18,5 kr/mil",
-            amount=-travel_deduction,
-        ))
-
-    # Schablonskatt ISK (0,89 % av underlaget — förenklad)
+    # Schablonskatt ISK (0,89 % av FAKTISKT underlag från FundHolding).
+    # Detta är riktig data — räknas alltid när eleven har fonder.
     isk_tax = 0.0
     if isk_value > 0:
         isk_tax = round(isk_value * 0.0089, 0)
@@ -2316,28 +2325,16 @@ def get_skatten(
             amount=-isk_tax,
         ))
 
-    # Förslag att granska: CSN-ränteavdrag
-    csn_interest_deduction = 0.0
-    if has_student_loan:
-        # Schabloniserad ränta ~548 kr/år × 30 % = 142 kr
-        csn_interest = 548.0
-        csn_interest_deduction = round(csn_interest * 0.30, 0)
-        pending_proposals += 1
-        items.append(V2TaxLineItem(
-            category="deduction",
-            label="Avdrag",
-            name="Ränta CSN-lån · förslag",
-            detail=f"Räntor {int(csn_interest)} kr · 30 % avdrag",
-            amount=-csn_interest_deduction,
-            is_proposal=True,
-            proposal_id="csn-interest",
-        ))
+    # Reseavdrag, ränteavdrag (CSN/bolån) och andra avdrag kräver
+    # FAKTISK data per elev — de bygger på real räntor betalda och
+    # real reseregister. Fas 2 lägger till TaxDeduction-modellen som
+    # eleven själv eller läraren kan registrera. Tills dess visas inga
+    # schabloner, så talet eleven ser är ärligt.
+    pending_proposals = 0  # Tas in när TaxProposal-modellen finns
 
-    # Slutlig skatt = preliminär skatt − avdrag (skattereduktion på
-    # avdragen, schabloniserat 30 %) + ISK-schablonskatt
-    deductions_total = travel_deduction + csn_interest_deduction
-    deduction_tax_reduction = round(deductions_total * 0.30, 0) if deductions_total else 0
-    final_tax = round(prelim_tax - deduction_tax_reduction + isk_tax, 0)
+    # Slutlig skatt = preliminär skatt + ISK-schablonskatt (inga
+    # avdrag att räkna in tills TaxDeduction-modellen finns)
+    final_tax = round(prelim_tax + isk_tax, 0)
 
     items.append(V2TaxLineItem(
         category="tax",
@@ -2519,113 +2516,51 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
                         status="betald",
                     ))
     except Exception:
-        # Scope-DB saknas — fortsätt med tom lista, vi visar ändå
-        # möjliga låneprodukter + kreditprövning från profil
+        # Scope-DB saknas — vi returnerar ändå riktig data där den finns
+        # (annual_income från profil) men inga aktiva lån eller schedule.
         pass
 
-    # Lägg till möjliga låneprodukter (illustrativa, inte aktiva)
-    if not has_mortgage:
-        cards.append(V2LoanCard(
-            eyebrow="Möjligt",
-            name="Bolån (via modul)",
-            detail="2,4 Mkr · 3,8 % rörlig",
-            balance=None,
-            monthly_text="i kreditprövning",
-            is_active=False,
-        ))
-    cards.append(V2LoanCard(
-        eyebrow="Avråds",
-        name="Privatlån (blanco)",
-        detail="~ 14 % effektiv ränta",
-        balance=None,
-        monthly_text="5–10 × dyrare än CSN",
-        is_active=False,
-        is_warning=True,
-    ))
-    if not has_car_loan:
-        no_car_hint = (
-            "behöver inte bil" if city.lower() in ("stockholm", "göteborg", "malmö")
-            else "5–8 % · max 80 % av bilvärdet"
-        )
-        cards.append(V2LoanCard(
-            eyebrow="Möjligt",
-            name="Billån",
-            detail="5–8 % · max 80 % av bilvärdet",
-            balance=None,
-            monthly_text=no_car_hint,
-            is_active=False,
-        ))
-
-    # Skuldkvot
+    # Skuldkvot räknas på riktiga aktiva lån
     debt_ratio = (
         float(total_debt) / annual_gross if annual_gross > 0 else 0.0
     )
 
-    # Kreditklass — enkel heuristik från skuldkvot + profil
-    if debt_ratio < 0.5 and not has_car_loan:
-        credit_class = "A"
-    elif debt_ratio < 1.5:
-        credit_class = "B"
-    elif debt_ratio < 3.0:
-        credit_class = "C"
-    elif debt_ratio < 4.5:
-        credit_class = "D"
-    else:
-        credit_class = "E"
-
-    # Kreditprövnings-rader
-    credit_factors: list[V2CreditFactor] = [
-        V2CreditFactor(
+    # Kreditprövnings-rader: bara fält där vi har FAKTISK data.
+    # KALP, betalningsanmärkningar, UC-score och låneprodukter kräver
+    # nya backend-modeller (LoanProduct, KALPCalculation, CreditCheck,
+    # PaymentMark) som lärare seedar — Fas 2.
+    credit_factors: list[V2CreditFactor] = []
+    if annual_gross > 0:
+        credit_factors.append(V2CreditFactor(
             factor="Inkomst (årlig brutto)",
             detail=(
-                f"{(profile.employer if profile else 'Arbetsgivare')} · "
-                f"{(profile.profession if profile else 'yrke')}"
+                f"{profile.employer} · {profile.profession}"
+                if profile else "från StudentProfile"
             ),
-            value=f"{int(annual_gross):,}".replace(",", " ") if annual_gross else "—",
-            assessment="Stabil · kollektivavtal" if annual_gross > 200000 else "Begränsad",
-            severity="good" if annual_gross > 200000 else "warn",
-        ),
-        V2CreditFactor(
+            value=f"{int(annual_gross):,}".replace(",", " "),
+            assessment="Stabil · kollektivavtal",
+            severity="good",
+        ))
+    if total_debt > 0:
+        credit_factors.append(V2CreditFactor(
             factor="Skuldkvot",
             detail="Total skuld / årsinkomst",
             value=f"{debt_ratio:.2f}×",
             assessment=(
                 "Långt under tak (4,5×)" if debt_ratio < 1.5
-                else "Måttlig — under tak" if debt_ratio < 3
-                else "Hög — närmar sig tak" if debt_ratio < 4.5
-                else "Över tak — ingen mer skuld"
+                else "Måttlig" if debt_ratio < 3
+                else "Hög — närmar sig tak"
             ),
-            severity="good" if debt_ratio < 1.5 else "warn" if debt_ratio < 4.5 else "bad",
-        ),
-        V2CreditFactor(
-            factor="KALP · stresstest 7 %",
-            detail="Konsumentverket-schablon",
-            value="räknas",
-            assessment="Beror på bostadens kostnad",
-            severity="warn",
-        ),
-        V2CreditFactor(
-            factor="Betalningsanmärkningar",
-            detail="Senaste 3 åren",
-            value="0",
-            assessment="Ren historik",
-            severity="good",
-        ),
-        V2CreditFactor(
-            factor="UC-score",
-            detail="Kreditupplysning · simulerad",
-            value=f"{credit_class} ({90 - (ord(credit_class)-65)*15}/100)",
-            assessment="Hög kreditvärdighet" if credit_class in ("A", "B") else "Medel",
-            severity="good" if credit_class in ("A", "B") else "warn",
-        ),
-    ]
+            severity="good" if debt_ratio < 1.5 else "warn",
+        ))
 
+    # Kreditklass: returnera tom string tills CreditCheck-modell finns.
     return V2LoanResponse(
         student_id=info.student_id,
         total_debt=float(total_debt),
         debt_ratio=round(debt_ratio, 2),
         annual_income=annual_gross,
-        credit_class=credit_class,
+        credit_class="",  # Fas 2: hämtas från CreditCheck-tabellen
         cards=cards,
         schedule=schedule,
         credit_factors=credit_factors,
