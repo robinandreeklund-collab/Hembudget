@@ -1676,6 +1676,266 @@ body[data-mode="business"] .head-h1 em { color: #c7d2fe; }
 .biz-status.lost { background: rgba(255,255,255,0.04); color: var(--text-dim); border: 1px solid var(--line); }
 .biz-status.open { background: rgba(251,191,36,0.16); color: var(--warm); border: 1px solid rgba(251,191,36,0.3); }
 
+/* === NOTIS-SYSTEM === */
+.notif-bell {
+  position: relative;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line-strong);
+  display: grid; place-items: center;
+  cursor: pointer; text-decoration: none;
+  transition: all .2s var(--ease);
+}
+.notif-bell:hover { background: rgba(251,191,36,0.12); border-color: var(--warm); }
+.notif-bell svg { width: 16px; height: 16px; fill: var(--text); }
+.notif-bell:hover svg { fill: var(--warm); }
+.notif-count {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--accent); color: #fff;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 2px solid var(--bg-deep);
+  animation: notif-pulse 2.4s ease-in-out infinite;
+}
+@keyframes notif-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,76,43,0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(220,76,43,0); }
+}
+
+/* Notis-drawer (samma som Echo-drawer fast olika styling) */
+.notif-drawer {
+  position: fixed; right: 0; top: 56px; bottom: 0;
+  width: 420px; max-width: 100vw; z-index: 95;
+  background: var(--bg-mid);
+  border-left: 1px solid var(--line-strong);
+  transform: translateX(100%);
+  transition: transform .4s var(--ease);
+  display: flex; flex-direction: column;
+  box-shadow: -20px 0 60px -10px rgba(0,0,0,0.6);
+}
+.notif-drawer.open { transform: translateX(0); }
+.notif-drawer-head {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.notif-drawer-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.notif-drawer-eye::before { content: "● "; }
+.notif-drawer-meta {
+  font-family: var(--mono); font-size: 9.5px; color: var(--text-dim);
+  margin-top: 4px; letter-spacing: 0.4px;
+}
+.notif-drawer-actions {
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.notif-tab {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  padding: 6px 11px; border-radius: 100px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong);
+  color: var(--text-mid); cursor: pointer; text-decoration: none;
+}
+.notif-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.notif-tab .count {
+  margin-left: 4px; padding: 1px 5px; border-radius: 100px;
+  background: rgba(0,0,0,0.25); font-size: 8px;
+}
+
+.notif-list {
+  flex: 1; overflow-y: auto;
+}
+.notif-item {
+  display: grid; grid-template-columns: 36px 1fr;
+  gap: 12px; padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer; text-decoration: none; color: var(--text);
+  position: relative;
+  transition: background .2s var(--ease);
+}
+.notif-item:hover { background: rgba(251,191,36,0.04); }
+.notif-item.unread { background: rgba(220,76,43,0.04); }
+.notif-item.unread::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent);
+}
+.notif-icon {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: #fff; letter-spacing: 0.4px;
+}
+.notif-icon.teacher { background: linear-gradient(135deg, #1e3a8a, #3b82f6); }
+.notif-icon.uppdrag { background: linear-gradient(135deg, var(--accent), #a83817); }
+.notif-icon.modul   { background: linear-gradient(135deg, #581c87, #c084fc); }
+.notif-icon.social  { background: linear-gradient(135deg, #14532d, #6ee7b7); color: #064e3b; }
+.notif-icon.echo    { background: linear-gradient(135deg, var(--warm), #d97706); color: #422006; }
+.notif-icon.bank    { background: linear-gradient(135deg, #0c4a6e, #0ea5e9); }
+.notif-icon.system  { background: rgba(255,255,255,0.08); color: var(--text-mid); }
+
+.notif-time {
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-dim); letter-spacing: 0.4px;
+  margin-bottom: 3px;
+}
+.notif-title {
+  font-family: "Inter", sans-serif; font-size: 13px; font-weight: 600;
+  color: #fff; margin-bottom: 3px;
+}
+.notif-item.unread .notif-title { font-weight: 700; }
+.notif-body {
+  font-family: var(--serif); font-size: 13px; line-height: 1.4;
+  color: var(--text-mid);
+}
+.notif-body em { font-style: italic; color: var(--warm); }
+
+/* Toast — push-notiser i hörnet */
+.notif-toast {
+  position: fixed; right: 22px; top: 70px; z-index: 90;
+  background: var(--bg-mid);
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px 18px;
+  width: 320px; max-width: calc(100vw - 44px);
+  box-shadow: 0 16px 48px -10px rgba(0,0,0,0.5);
+  transform: translateX(120%);
+  transition: transform .35s var(--ease);
+  cursor: pointer;
+}
+.notif-toast.show { transform: translateX(0); }
+.notif-toast-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 4px;
+}
+.notif-toast-eye::before { content: "● "; }
+.notif-toast-title {
+  font-family: var(--serif); font-size: 15px; font-weight: 700;
+  color: #fff; margin-bottom: 4px;
+}
+.notif-toast-body {
+  font-family: var(--serif); font-size: 13px; line-height: 1.4;
+  color: var(--text-mid);
+}
+
+/* === GUIDE-DROPDOWN === */
+.guide-dropdown {
+  position: fixed; top: 56px; right: 90px;
+  width: 320px; z-index: 95;
+  background: var(--bg-mid);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px -10px rgba(0,0,0,0.5);
+  display: none;
+  overflow: hidden;
+}
+.guide-dropdown.show { display: block; }
+.guide-dropdown-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.guide-dropdown-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 4px;
+}
+.guide-dropdown-eye::before { content: "✦ "; }
+.guide-dropdown-title {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  color: #fff;
+}
+.guide-dropdown-meta {
+  font-family: var(--mono); font-size: 9.5px; color: var(--text-dim);
+  margin-top: 3px; letter-spacing: 0.4px;
+}
+.guide-dropdown-list { padding: 6px 0; }
+.guide-dropdown-item {
+  display: grid; grid-template-columns: 32px 1fr 60px;
+  gap: 12px; padding: 11px 20px;
+  text-decoration: none; color: var(--text);
+  cursor: pointer; align-items: center;
+  transition: background .15s var(--ease);
+}
+.guide-dropdown-item:hover { background: rgba(251,191,36,0.06); }
+.guide-dropdown-icon {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.25);
+  color: var(--warm);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.guide-dropdown-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+  color: #fff;
+}
+.guide-dropdown-sub {
+  font-family: var(--mono); font-size: 9px; color: var(--text-dim);
+  margin-top: 2px; letter-spacing: 0.4px;
+}
+.guide-dropdown-time {
+  font-family: var(--mono); font-size: 9px; color: var(--text-mid);
+  letter-spacing: 0.5px; text-align: right;
+}
+.guide-dropdown-time strong { color: var(--warm); }
+.guide-dropdown-foot {
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  background: rgba(255,255,255,0.02);
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-dim); letter-spacing: 0.5px;
+}
+
+/* === BUDGET REDIGERBAR === */
+.budget-form-row {
+  display: grid;
+  grid-template-columns: 30px 1.4fr 100px 100px 90px 1fr;
+  gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  background: rgba(15,21,37,0.7);
+}
+.budget-form-row:hover { background: rgba(255,255,255,0.02); }
+.budget-input {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line-strong);
+  color: #fff; padding: 6px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 12px;
+  width: 100%; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.budget-input:focus {
+  outline: none; border-color: var(--warm);
+  background: rgba(251,191,36,0.06);
+}
+.budget-input.over { border-color: var(--accent); background: rgba(220,76,43,0.06); }
+.budget-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 100px;
+  overflow: hidden;
+  position: relative;
+}
+.budget-bar-fill {
+  height: 100%; border-radius: 100px;
+  transition: width .35s var(--ease);
+}
+.budget-bar-fill.under { background: linear-gradient(90deg, #6ee7b7, #34d399); }
+.budget-bar-fill.near  { background: linear-gradient(90deg, var(--warm), #f59e0b); }
+.budget-bar-fill.over  { background: linear-gradient(90deg, var(--accent), #c43a1c); }
+.budget-bar-marker {
+  position: absolute; top: -2px; bottom: -2px;
+  width: 2px; background: rgba(255,255,255,0.5);
+}
+
 /* === MODE-SWITCH (PRIVAT ↔ FÖRETAG) === */
 /* Hela app:en flips i 3D när man byter mode. Animation-sequence:
    1. flip-out (rotateY 0 → 90, opacity 1 → 0)
@@ -2421,10 +2681,23 @@ body[data-mode="business"] .ms-knob {
     <div class="tb-meter-bar"><div class="tb-meter-fill" style="width:38%;"></div></div>
     <span>62 % kvar</span>
   </div>
-  <a href="#" class="tb-echo" id="guideBtn" style="background: rgba(255,255,255,0.06); color: #fff; border: 1px solid var(--line-strong);" onclick="startGuide(); return false;">Guide ✦</a>
+  <a href="#" class="tb-echo" id="guideBtn" style="background: rgba(255,255,255,0.06); color: #fff; border: 1px solid var(--line-strong);" onclick="toggleGuideDropdown(); return false;">Guide ✦</a>
+  <a href="#" class="notif-bell" id="notifBell" onclick="toggleNotifDrawer(); return false;" title="Notiser">
+    <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+    <span class="notif-count" id="notifCount">5</span>
+  </a>
   <button class="tb-echo" id="echoBtn">Echo</button>
   <a href="#" class="tb-user">SA</a>
 </header>
+
+<!-- NOTIS-DRAWER -->
+<aside class="notif-drawer" id="notifDrawer"></aside>
+
+<!-- GUIDE-DROPDOWN -->
+<div class="guide-dropdown" id="guideDropdown"></div>
+
+<!-- TOAST -->
+<div class="notif-toast" id="notifToast"></div>
 
 <main class="app">
   <!-- ============ ONBOARDING ============ -->
@@ -6340,17 +6613,114 @@ body[data-mode="business"] .ms-knob {
         </div>
       </header>
 
-      <div class="section-eye">Kategorier · plan vs utfall · vs Konsumentverket</div>
-      <div class="biz-table">
-        <div class="biz-table-row head" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;"><span></span><span>Kategori</span><span>Budget</span><span>Förbrukat</span><span>Kons.verk</span><span>Status</span></div>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Hyra &amp; boende</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Stockholmshem</div></div><span style="font-family: var(--serif); color: #fff;">7 240</span><span style="font-family: var(--serif); color: #fff;">7 240</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— fast</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Mat &amp; livsmedel</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Coop, Hemköp</div></div><span style="font-family: var(--serif); color: #fff;">4 000</span><span style="font-family: var(--serif); color: #fff;">3 880</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 600 (snitt)</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">−120</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px; background: rgba(220,76,43,0.06);" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Restaurang &amp; nöje</div><div style="font-family: var(--mono); font-size: 9px; color: var(--accent);">Max, Foodora, bio</div></div><span style="font-family: var(--serif); color: #fff;">1 200</span><span style="font-family: var(--serif); color: var(--accent); font-style: italic; font-weight: 700;">2 100</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 400</span><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">+ 900 över</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Transport (SL)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Reskassa-autoladd</div></div><span style="font-family: var(--serif); color: #fff;">1 100</span><span style="font-family: var(--serif); color: #fff;">1 100</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">990</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Sparmål</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Buffert + körkort + interrail</div></div><span style="font-family: var(--serif); color: #fff;">1 800</span><span style="font-family: var(--serif); color: #fff;">1 800</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— eget</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">räkning till sig själv</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Avanza ISK</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Månadssparat</div></div><span style="font-family: var(--serif); color: #fff;">600</span><span style="font-family: var(--serif); color: #fff;">600</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— eget</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Förbrukning</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">El (Tibber) + bredband + mobil</div></div><span style="font-family: var(--serif); color: #fff;">1 320</span><span style="font-family: var(--serif); color: #fff;">1 320</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 200</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Försäkringar</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Folksam hem + olycksfall</div></div><span style="font-family: var(--serif); color: #fff;">320</span><span style="font-family: var(--serif); color: #fff;">320</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">300</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
+      <!-- TOTAL-BAR -->
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong); border-radius: 8px; padding: 18px 22px; margin-bottom: 22px;">
+        <div style="display: flex; justify-content: space-between; align-items: end; margin-bottom: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1.2px; text-transform: uppercase;">Total budget april</div>
+            <div style="font-family: var(--serif); font-weight: 700; font-size: 32px; color: #fff; letter-spacing: -0.8px; margin-top: 4px;">17 580 kr <span style="font-size: 14px; color: var(--text-mid); font-weight: 400;">/ 23 200 inkomst</span></div>
+            <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); margin-top: 4px; letter-spacing: 0.5px;">Sparkvot 24,2 % · över mål 15 %</div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button style="background: var(--accent); color: #fff; border: 0; padding: 10px 16px; border-radius: 100px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Spara budget</button>
+            <button style="background: transparent; color: var(--text); border: 1px solid var(--line-strong); padding: 10px 16px; border-radius: 100px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Återställ till Konsumentverket</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-eye">Kategorier · skriv din budget · jämför med utfall &amp; Konsumentverket</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 22px;">
+        <div class="budget-form-row" style="background: rgba(0,0,0,0.15); font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim);">
+          <span></span><span>Kategori</span><span>Din budget</span><span>Förbrukat</span><span>Kons.verk</span><span>Progress · status</span>
+        </div>
+
+        <div class="budget-form-row">
+          <span style="font-family: var(--mono); font-size: 14px;">▥</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Hyra &amp; boende</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Stockholmshem · fast</div></div>
+          <input class="budget-input" type="number" value="7240" disabled title="Fast kostnad — kan inte ändras">
+          <input class="budget-input" type="number" value="7240" disabled style="opacity: 0.5;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— fast</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill near" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); margin-top: 4px;">Klart · autogiro</div></div>
+        </div>
+
+        <div class="budget-form-row">
+          <span style="font-family: var(--mono); font-size: 14px;">🍴</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Mat &amp; livsmedel</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Coop, Hemköp, Lidl</div></div>
+          <input class="budget-input" type="number" value="4000">
+          <input class="budget-input" type="number" value="3880" disabled style="opacity: 0.5;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 600 snitt</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill under" style="width: 97%;"></div><div class="budget-bar-marker" style="left: 90%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; margin-top: 4px;">97 % · under budget</div></div>
+        </div>
+
+        <div class="budget-form-row" style="background: rgba(220,76,43,0.06);">
+          <span style="font-family: var(--mono); font-size: 14px;">🍽</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Restaurang &amp; nöje</div><div style="font-family: var(--mono); font-size: 9px; color: var(--accent);">Max, Foodora, bio · över budget</div></div>
+          <input class="budget-input over" type="number" value="1200">
+          <input class="budget-input" type="number" value="2100" disabled style="opacity: 0.5; color: var(--accent);">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 400 snitt</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill over" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: var(--accent); margin-top: 4px; font-weight: 700;">175 % · + 900 över</div></div>
+        </div>
+
+        <div class="budget-form-row">
+          <span style="font-family: var(--mono); font-size: 14px;">🚇</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Transport (SL)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Reskassa autoladd</div></div>
+          <input class="budget-input" type="number" value="1100">
+          <input class="budget-input" type="number" value="1100" disabled style="opacity: 0.5;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">990 snitt</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill near" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); margin-top: 4px;">Klart · återkommande</div></div>
+        </div>
+
+        <div class="budget-form-row" style="background: rgba(110,231,183,0.04);">
+          <span style="font-family: var(--mono); font-size: 14px;">◎</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Sparmål</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Buffert + körkort + interrail</div></div>
+          <input class="budget-input" type="number" value="1800" style="border-color: rgba(110,231,183,0.4);">
+          <input class="budget-input" type="number" value="1800" disabled style="opacity: 0.5; color: #6ee7b7;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— eget</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill under" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; margin-top: 4px;">100 % · pay yourself first</div></div>
+        </div>
+
+        <div class="budget-form-row" style="background: rgba(110,231,183,0.04);">
+          <span style="font-family: var(--mono); font-size: 14px;">↗</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Avanza ISK</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Månadssparat · indexfond</div></div>
+          <input class="budget-input" type="number" value="600" style="border-color: rgba(110,231,183,0.4);">
+          <input class="budget-input" type="number" value="600" disabled style="opacity: 0.5; color: #6ee7b7;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— eget</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill under" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; margin-top: 4px;">100 % · auto 25:e</div></div>
+        </div>
+
+        <div class="budget-form-row">
+          <span style="font-family: var(--mono); font-size: 14px;">⚡</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Förbrukning</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">El + bredband + mobil + Spotify</div></div>
+          <input class="budget-input" type="number" value="1320">
+          <input class="budget-input" type="number" value="1320" disabled style="opacity: 0.5;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 200 snitt</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill near" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); margin-top: 4px;">100 % · varierar med säsong</div></div>
+        </div>
+
+        <div class="budget-form-row">
+          <span style="font-family: var(--mono); font-size: 14px;">⛨</span>
+          <div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Försäkringar</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Folksam hem + olycksfall</div></div>
+          <input class="budget-input" type="number" value="320">
+          <input class="budget-input" type="number" value="320" disabled style="opacity: 0.5;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">300 snitt</span>
+          <div><div class="budget-bar"><div class="budget-bar-fill near" style="width: 100%;"></div></div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); margin-top: 4px;">Klart · autogiro</div></div>
+        </div>
+
+        <!-- Lägg till ny kategori -->
+        <div class="budget-form-row" style="background: rgba(255,255,255,0.02); border-bottom: 0;">
+          <span style="font-family: var(--mono); font-size: 14px; color: var(--text-dim);">+</span>
+          <div><input type="text" placeholder="Lägg till egen kategori (ex: Träning, Bok-klubb...)" style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 6px 10px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12.5px; width: 100%;"></div>
+          <input class="budget-input" type="number" placeholder="0">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">—</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">—</span>
+          <button style="background: var(--warm); color: #422006; border: 0; padding: 6px 12px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;">Lägg till</button>
+        </div>
+      </div>
+
+      <!-- Echo-tip om budget -->
+      <div style="background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.25); border-radius: 6px; padding: 16px 20px; margin-bottom: 22px;">
+        <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--warm); margin-bottom: 6px;">● Echo · efter du sparat</div>
+        <p style="font-family: var(--serif); font-style: italic; font-size: 14.5px; color: var(--text); line-height: 1.45;">"Restaurang ligger på 1 200 igen — fast utfallet är 2 100. <em>Är budgeten orealistisk eller är beteendet det?</em> Du kan höja till 1 800 så känns det inte som ett ständigt nederlag, eller behålla 1 200 som ett mål du jobbar mot."</p>
       </div>
 
       <div class="peda">
@@ -7927,6 +8297,229 @@ function unflipPentagon() {
 }
 window.flipPentagon = flipPentagon;
 window.unflipPentagon = unflipPentagon;
+
+// === NOTIS-SYSTEM ===
+const NOTIFS = [
+  { type: "teacher", icon: "AL", time: "14:08 idag", title: "Anders Lind", body: "Buffert-strategi efter tandläkaren. Vill du diskutera i klass eller separat?", unread: true, view: "meddelanden" },
+  { type: "uppdrag", icon: "▷", time: "13:42 idag", title: "NYTT UPPDRAG · Anders Lind", body: "<em>Räkna KALP för 2,4 Mkr-bolån</em>. Förfaller 5 maj. Gäller hela 9C.", unread: true, view: "uppdrag" },
+  { type: "social", icon: "✉", time: "12:30 idag", title: "Hassan O. · klasskamrat", body: "Vill du <em>peer-reviewa</em> hans Maria-portfolio? Klar onsdag.", unread: true, view: "uppdrag" },
+  { type: "echo", icon: "✦", time: "11:42 idag", title: "Echo har en fråga", body: "<em>Du har 12 ovettade transaktioner</em>. Vill du gå igenom dem nu?", unread: true, view: "bok" },
+  { type: "modul", icon: "M", time: "09:14 idag", title: "Anders Lind tilldelade modul", body: "<em>Pension om 40 år</em> · 5 steg · ~25 min · rekommenderad", unread: true, view: "modul-pension" },
+  { type: "bank", icon: "B", time: "i går 18:42", title: "Folktandvården-faktura", body: "Ny faktura i postlådan: <em>4 200 kr</em>, förfaller 30 maj.", unread: false, view: "mail" },
+  { type: "social", icon: "✉", time: "i går 16:08", title: "Linus B. · sambo", body: "Svarade på sambo-frågan: <em>50/50</em>. Diskutera?", unread: false, view: "partner" },
+  { type: "system", icon: "i", time: "27 apr 09:00", title: "Vecko-summary v17", body: "Pentagon 76 → 72 (−4) efter veckan. Ekonomi tippade. Karriär +3.", unread: false, view: "hub" },
+];
+
+function renderNotifDrawer() {
+  const drawer = document.getElementById("notifDrawer");
+  if (!drawer) return;
+  const items = NOTIFS.map((n, i) => `
+    <a class="notif-item ${n.unread ? "unread" : ""}" onclick="goNotif(${i}); return false;" href="#">
+      <div class="notif-icon ${n.type}">${n.icon}</div>
+      <div>
+        <div class="notif-time">${n.time}</div>
+        <div class="notif-title">${n.title}</div>
+        <div class="notif-body">${n.body}</div>
+      </div>
+    </a>
+  `).join("");
+  drawer.innerHTML = `
+    <div class="notif-drawer-head">
+      <div>
+        <div class="notif-drawer-eye">Notiser</div>
+        <div class="notif-drawer-meta">5 olästa · 3 nya idag</div>
+      </div>
+      <button class="drawer-close" onclick="closeNotifDrawer()" aria-label="Stäng">×</button>
+    </div>
+    <div class="notif-drawer-actions">
+      <a class="notif-tab active" href="#">Alla <span class="count">8</span></a>
+      <a class="notif-tab" href="#">Olästa <span class="count">5</span></a>
+      <a class="notif-tab" href="#">Lärare <span class="count">2</span></a>
+      <a class="notif-tab" href="#">Klass <span class="count">2</span></a>
+      <a class="notif-tab" href="#">System <span class="count">2</span></a>
+    </div>
+    <div class="notif-list">${items}</div>
+  `;
+}
+function toggleNotifDrawer() {
+  const d = document.getElementById("notifDrawer");
+  if (!d) return;
+  if (d.classList.contains("open")) closeNotifDrawer();
+  else { renderNotifDrawer(); d.classList.add("open"); }
+}
+function closeNotifDrawer() {
+  const d = document.getElementById("notifDrawer");
+  if (d) d.classList.remove("open");
+}
+function goNotif(idx) {
+  const n = NOTIFS[idx]; if (!n) return;
+  closeNotifDrawer();
+  if (n.view) go(n.view);
+}
+window.toggleNotifDrawer = toggleNotifDrawer;
+window.closeNotifDrawer = closeNotifDrawer;
+window.goNotif = goNotif;
+
+// Toast — push när något nytt händer
+function showToast(eye, title, body, view, ms) {
+  const t = document.getElementById("notifToast");
+  if (!t) return;
+  t.innerHTML = `
+    <div class="notif-toast-eye">${eye}</div>
+    <div class="notif-toast-title">${title}</div>
+    <div class="notif-toast-body">${body}</div>
+  `;
+  t.onclick = () => { t.classList.remove("show"); if (view) go(view); };
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), ms || 6000);
+}
+window.showToast = showToast;
+
+// Demo: push-toast 4 sek efter onboarding klar (simulera realtids-händelse)
+setTimeout(() => {
+  if (document.getElementById("p-hub").classList.contains("active")) {
+    showToast("Live · ny händelse", "Hassan O. · social förfrågan", "Vill du <em>peer-reviewa</em> hans Maria-portfolio?", "uppdrag", 8000);
+  }
+}, 6000);
+
+// === GUIDE-DROPDOWN ===
+const GUIDES = {
+  intro: {
+    label: "Intro till plattformen", icon: "1", time: "8 steg · 3 min",
+    sub: "Pentagonen, händelsekort, Echo, AI-budget",
+    steps: GUIDE_STEPS,
+  },
+  postladan: {
+    label: "Postlådan", icon: "✉", time: "5 steg · 2 min",
+    sub: "Hur du läser, klassar, exporterar brev",
+    steps: [
+      { selector: ".tb-crumbs", view: "mail", eye: "Postlådan · 1 / 5", h: "Postlådan är <em>källan</em>.", prose: "Alla räkningar, lönespecar, myndighetspost landar här. Ingen bokföring förrän du <em>granskat</em>.", placement: "bottom" },
+    ],
+  },
+  banken: {
+    label: "Banken", icon: "B", time: "6 steg · 3 min",
+    sub: "Konton, kontoutdrag, kommande fakturor, BankID",
+    steps: [
+      { selector: ".tb-crumbs", view: "bank", eye: "Banken · 1 / 6", h: "Banken är <em>infrastruktur</em>.", prose: "Fyra konton: lönekonto, sparkonto, ISK, kreditkort. Tillgängligt saldo är inte hela bilden.", placement: "bottom" },
+    ],
+  },
+  pentagon: {
+    label: "Pentagonen i detalj", icon: "▲", time: "5 steg · 2 min",
+    sub: "Klicka på axlar, se vad som påverkar",
+    steps: [
+      { selector: ".tb-crumbs", view: "hub", eye: "Pentagonen · 1 / 5", h: "Pentagon = <em>balans</em>.", prose: "Fem axlar (ekonomi, karriär, hälsa, relation, fritid). Klicka en axel för att se vad som påverkar den.", placement: "bottom" },
+    ],
+  },
+  maria: {
+    label: "Lönesamtalet · Maria", icon: "M", time: "4 steg · 2 min",
+    sub: "Förhandlingsstrategi, BATNA, smärtgräns",
+    steps: [
+      { selector: ".tb-crumbs", view: "maria", eye: "Maria · 1 / 4", h: "Maria är AI · <em>spelar realistiskt</em>.", prose: "5 rundor. Du anchorar med marknadsdata. Maria har dold smärtgräns.", placement: "bottom" },
+    ],
+  },
+  bankid: {
+    label: "BankID-signering", icon: "B", time: "6 steg · 3 min",
+    sub: "Hur du signerar 23 fakturor",
+    steps: [
+      { selector: ".tb-crumbs", view: "bankid", eye: "BankID · 1 / 6", h: "BankID-flödet är <em>med flit</em> i 6 steg.", prose: "Friktionen är meningen. Du måste se vad du signerar.", placement: "bottom" },
+    ],
+  },
+  bokforing: {
+    label: "Bokföring · klassa", icon: "≡", time: "5 steg · 2 min",
+    sub: "Regelmotor, AI-förslag, manuella val",
+    steps: [
+      { selector: ".tb-crumbs", view: "bok", eye: "Bokföring · 1 / 5", h: "Klassa = <em>se</em>.", prose: "Att klassa en transaktion = du bestämmer vad det betyder. Spegeln av dina vanor.", placement: "bottom" },
+    ],
+  },
+  budget: {
+    label: "Budget · sätt din", icon: "▦", time: "4 steg · 2 min",
+    sub: "Plan vs utfall, Konsumentverket",
+    steps: [
+      { selector: ".tb-crumbs", view: "budget", eye: "Budget · 1 / 4", h: "Budget är <em>kärlek</em>.", prose: "Sätt en restaurang-budget = lovord till framtida-dig som vill ha buffert.", placement: "bottom" },
+    ],
+  },
+  avanza: {
+    label: "Avanza · ISK + aktier", icon: "$", time: "5 steg · 3 min",
+    sub: "Fonder, schablonskatt, ränta-på-ränta",
+    steps: [
+      { selector: ".tb-crumbs", view: "avanza", eye: "Avanza · 1 / 5", h: "ISK gör <em>tiden</em> till din vän.", prose: "Schablonskatt 0,89 %. Spara 600 kr/mån i 40 år = 1,47 Mkr.", placement: "bottom" },
+    ],
+  },
+  skatt: {
+    label: "Skatteverket · deklaration", icon: "§", time: "4 steg · 2 min",
+    sub: "Förifyllt, avdrag, ISK-schablon",
+    steps: [
+      { selector: ".tb-crumbs", view: "skatt", eye: "Skatt · 1 / 4", h: "Skatten är <em>förhandlingsbar</em>.", prose: "Det förifyllda är ett förslag. Avdrag är dina pengar.", placement: "bottom" },
+    ],
+  },
+  modul: {
+    label: "Moduler · pedagogik", icon: "✦", time: "4 steg · 2 min",
+    sub: "Steg, kompetenshöjning, lärar-feedback",
+    steps: [
+      { selector: ".tb-crumbs", view: "modules", eye: "Moduler · 1 / 4", h: "Moduler är <em>scaffolding</em>.", prose: "Stegen leder genom appen. Kompetenser höjs. Anders bedömer manuellt.", placement: "bottom" },
+    ],
+  },
+};
+
+function renderGuideDropdown() {
+  const dd = document.getElementById("guideDropdown");
+  if (!dd) return;
+  const items = Object.entries(GUIDES).map(([key, g]) => `
+    <a class="guide-dropdown-item" onclick="startGuideKey('${key}'); return false;" href="#">
+      <div class="guide-dropdown-icon">${g.icon}</div>
+      <div>
+        <div class="guide-dropdown-name">${g.label}</div>
+        <div class="guide-dropdown-sub">${g.sub}</div>
+      </div>
+      <div class="guide-dropdown-time"><strong>${g.time.split(" · ")[0]}</strong><br>${g.time.split(" · ")[1] || ""}</div>
+    </a>
+  `).join("");
+  dd.innerHTML = `
+    <div class="guide-dropdown-head">
+      <div class="guide-dropdown-eye">Interaktiva guider</div>
+      <div class="guide-dropdown-title">Vilken vill du <em style="font-style: italic; color: var(--warm);">öva på</em>?</div>
+      <div class="guide-dropdown-meta">11 guider · klicka för att starta · kan när som helst pausas</div>
+    </div>
+    <div class="guide-dropdown-list">${items}</div>
+    <div class="guide-dropdown-foot">Tip: kör Intro först om det är din första gång. Övriga guider antar grundläggande förståelse.</div>
+  `;
+}
+function toggleGuideDropdown() {
+  const dd = document.getElementById("guideDropdown");
+  if (!dd) return;
+  if (dd.classList.contains("show")) dd.classList.remove("show");
+  else { renderGuideDropdown(); dd.classList.add("show"); }
+}
+function startGuideKey(key) {
+  const g = GUIDES[key]; if (!g) return;
+  document.getElementById("guideDropdown").classList.remove("show");
+  const target = (g.steps[0] && g.steps[0].view) || "hub";
+  if (!document.getElementById("p-" + target).classList.contains("active")) {
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("p-" + target).classList.add("active");
+    renderCrumbs(target);
+    checkOnboardingMode();
+  }
+  // Använd existerande guide-system med dessa steg
+  setTimeout(() => {
+    if (key === "intro") { startGuide(); return; }
+    // För andra guider: bara visa första steget som demo (visar att infrastruktur finns)
+    showToast("Guide startad", g.label, "Guiden är konfigurerad. I produktionen körs alla " + g.time + ".", target, 5000);
+  }, 250);
+}
+
+// Stäng dropdown om man klickar utanför
+document.addEventListener("click", (e) => {
+  const dd = document.getElementById("guideDropdown");
+  const btn = document.getElementById("guideBtn");
+  if (!dd || !dd.classList.contains("show")) return;
+  if (!dd.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+    dd.classList.remove("show");
+  }
+});
+
+window.toggleGuideDropdown = toggleGuideDropdown;
+window.startGuideKey = startGuideKey;
 
 // Globala helpers
 window.startGuide = startGuide;
