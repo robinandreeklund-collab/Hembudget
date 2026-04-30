@@ -301,7 +301,129 @@ body::after {
 </header>
 
 <main class="app">
-  <section class="panel active" id="p-hub"></section>
+  <!-- HUB -->
+  <section class="panel active" id="p-hub">
+    <div class="shell">
+
+      <header class="head">
+        <div>
+          <span class="pill">9C · 28 elever · onsdag 29 april</span>
+          <h1 class="head-h1">Klassens <em>pentagon</em> i rörelse.</h1>
+        </div>
+        <div class="head-meta">
+          Anders Lind · Nordstjärnan gymnasium<br>
+          21 / 28 <strong>aktiva idag</strong><br>
+          14 reflektioner att läsa
+        </div>
+      </header>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-eye">Klass-balans</div><div class="stat-num"><em>68</em>/100</div><div class="stat-sub">−4 sedan förra v</div></div>
+        <div class="stat"><div class="stat-eye">Sparkvot snitt</div><div class="stat-num">14,7 %</div><div class="stat-sub">mål 15 %</div></div>
+        <div class="stat"><div class="stat-eye">Pågående moduler</div><div class="stat-num">3</div><div class="stat-sub">Bolån · Skatt · Lön</div></div>
+        <div class="stat"><div class="stat-eye">Lönesamtal i Maria</div><div class="stat-num"><em>3</em></div><div class="stat-sub">runda 1, 2, 4</div></div>
+        <div class="stat"><div class="stat-eye">AI-budget april</div><div class="stat-num">62 %</div><div class="stat-sub">av månadstak</div></div>
+      </div>
+
+      <div class="class-stage">
+
+        <article class="class-pent">
+          <div class="class-pent-eye">Klassens aggregerade pentagon · v18</div>
+          <h2 class="class-pent-h">68 av 100 — <em>tippad</em> mot karriär &amp; fritid.</h2>
+
+          <svg class="pent-svg" viewBox="0 0 600 600">
+            <g transform="translate(300,300)">
+              <polygon points="0,-260 247,-80 153,210 -153,210 -247,-80" class="p-axis-line"/>
+              <polygon points="0,-195 185,-60 115,158 -115,158 -185,-60" class="p-axis-line"/>
+              <polygon points="0,-130 124,-40 76,105 -76,105 -124,-40" class="p-axis-line"/>
+              <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="0" y2="-260" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="247" y2="-80" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-247" y2="-80" class="p-axis-line"/>
+              <polygon points="0,-180 175,-55 95,150 -110,140 -195,-65" class="p-class-prev"/>
+              <polygon points="0,-160 215,-70 135,180 -110,165 -200,-70" class="p-class"/>
+              <text x="0" y="6" text-anchor="middle" font-family="Source Serif 4" font-style="italic" font-weight="700" font-size="64" fill="#fbbf24">68</text>
+              <text x="0" y="26" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.55)" letter-spacing="2">AV 100</text>
+            </g>
+          </svg>
+
+          <div class="axis-tags">
+            <span>Ekonomi<strong>72</strong></span>
+            <span>Karriär<strong>75</strong></span>
+            <span>Hälsa<strong>61</strong></span>
+            <span>Relation<strong>69</strong></span>
+            <span>Fritid<strong>63</strong></span>
+          </div>
+        </article>
+
+        <aside class="side-stack">
+          <div class="s-card">
+            <div class="s-card-eye">Behöver stöd nu</div>
+            <div class="s-card-h">4 <em>elever</em> idag</div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Filip Ö.</div><div class="attn-why">Inloggad senast 7 dgr · pent 31</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Noah J.</div><div class="attn-why">14 dgr · pent 28 · 3 röda axlar</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Jamil A.</div><div class="attn-why">Skattedeklaration förfaller 3 dgr</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Ayan H.</div><div class="attn-why">Reflektion: "vet inte hur jag deklarerar"</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">AI-budget · april</div>
+            <div class="s-card-h">62 % av <em>månadstaket</em></div>
+            <div class="tok-meter"><div class="tok-fill" style="width:62%;"></div></div>
+            <div class="tok-meta"><span>1,4M tokens</span><span>2,3M tak</span></div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 8px; letter-spacing: 0.4px;">
+              Echo 64 % · Maria 28 % · Anna 8 %
+            </div>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Pågående lönesamtal</div>
+            <div class="s-card-h">3 elever <em>i Maria</em></div>
+            <a class="maria-mini" onclick="go('maria'); return false;" href="#">
+              <div class="maria-mini-name">Hanna L. · runda 4 / 5</div>
+              <div class="maria-mini-meta">yrkat 28 500 · senaste bud 27 200 · nära mål</div>
+            </a>
+            <a class="maria-mini" onclick="go('maria'); return false;" href="#">
+              <div class="maria-mini-name">Sara A. · runda 2 / 5</div>
+              <div class="maria-mini-meta">yrkat 27 500 · pågår · Maria nära smärtgräns</div>
+            </a>
+            <a class="maria-mini" onclick="go('maria'); return false;" href="#">
+              <div class="maria-mini-name">Adam B. · runda 1 / 5</div>
+              <div class="maria-mini-meta">KALP klar · 24 800 utgångsbud · just startat</div>
+            </a>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Reflektioner att läsa</div>
+            <div class="s-card-h">14 <em>nya</em> sedan 22 april</div>
+            <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('refl'); return false;" href="#">öppna alla 14 reflektioner →</a>
+          </div>
+        </aside>
+
+      </div>
+
+      <!-- 28 mini-pentagoner -->
+      <div class="section-title">28 elever · klicka för att zooma</div>
+      <div class="mini-grid" id="miniGrid"></div>
+
+    </div>
+  </section>
   <section class="panel" id="p-elev"></section>
   <section class="panel" id="p-maria"></section>
   <section class="panel" id="p-refl"></section>
@@ -332,6 +454,73 @@ function renderCrumbs(view) {
 }
 renderCrumbs("hub");
 window.go = go;
+
+// === 28 mini-pentagoner ===
+const STUDENTS = [
+  { n: "Adam B.",    score: 78, status: "green", axes: [80, 88, 70, 72, 78] },
+  { n: "Alma K.",    score: 92, status: "green", axes: [95, 92, 88, 95, 90] },
+  { n: "Ayan H.",    score: 54, status: "amber", axes: [60, 50, 45, 65, 50] },
+  { n: "Elias R.",   score: 76, status: "green", axes: [78, 75, 72, 80, 75] },
+  { n: "Filip Ö.",   score: 31, status: "red",   axes: [25, 35, 30, 40, 25] },
+  { n: "Hanna L.",   score: 88, status: "green", axes: [90, 92, 82, 88, 88] },
+  { n: "Hassan O.",  score: 68, status: "green", axes: [70, 65, 60, 75, 70] },
+  { n: "Ida P.",     score: 95, status: "green", axes: [96, 95, 92, 98, 94] },
+  { n: "Isak T.",    score: 65, status: "amber", axes: [68, 70, 60, 65, 62] },
+  { n: "Jamil A.",   score: 48, status: "red",   axes: [40, 45, 50, 55, 50] },
+  { n: "Lisa N.",    score: 86, status: "green", axes: [88, 85, 82, 90, 85] },
+  { n: "Mira S.",    score: 75, status: "amber", axes: [78, 80, 70, 72, 75] },
+  { n: "Noah J.",    score: 28, status: "red",   axes: [22, 30, 25, 35, 28] },
+  { n: "Sara A.",    score: 72, status: "amber", axes: [70, 78, 60, 75, 65], current: true },
+  { n: "Bilal R.",   score: 81, status: "green", axes: [82, 80, 78, 85, 80] },
+  { n: "Cleo M.",    score: 73, status: "amber", axes: [75, 70, 68, 78, 72] },
+  { n: "Edgar P.",   score: 79, status: "green", axes: [80, 82, 75, 78, 80] },
+  { n: "Felicia D.", score: 84, status: "green", axes: [86, 88, 78, 85, 83] },
+  { n: "Gusti N.",   score: 62, status: "amber", axes: [60, 70, 55, 65, 60] },
+  { n: "Iris B.",    score: 90, status: "green", axes: [92, 88, 90, 92, 88] },
+  { n: "Jakob S.",   score: 58, status: "amber", axes: [55, 60, 50, 65, 60] },
+  { n: "Klara H.",   score: 87, status: "green", axes: [88, 85, 82, 92, 88] },
+  { n: "Liam V.",    score: 70, status: "amber", axes: [72, 68, 65, 75, 70] },
+  { n: "Maja F.",    score: 82, status: "green", axes: [85, 80, 78, 85, 82] },
+  { n: "Nelly W.",   score: 67, status: "amber", axes: [65, 72, 60, 70, 68] },
+  { n: "Otto L.",    score: 74, status: "amber", axes: [75, 78, 70, 72, 75] },
+  { n: "Petra G.",   score: 89, status: "green", axes: [90, 85, 88, 92, 90] },
+  { n: "Robin Z.",   score: 71, status: "amber", axes: [72, 75, 65, 75, 70] },
+];
+
+function renderMiniPent(axes, status) {
+  // 5 hörn på enhet -1..1, axes 0-100
+  const corners = [
+    [0,    -1],
+    [0.95, -0.31],
+    [0.59,  0.81],
+    [-0.59, 0.81],
+    [-0.95, -0.31]
+  ];
+  const pts = corners.map((c,i) => {
+    const r = (axes[i] / 100);
+    return [c[0]*r*40, c[1]*r*40];
+  });
+  const polyPts = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const axisLines = corners.map(c => `<line x1="0" y1="0" x2="${(c[0]*40).toFixed(1)}" y2="${(c[1]*40).toFixed(1)}" class="mini-axes"/>`).join("");
+  const ringPts = corners.map(c => `${(c[0]*40).toFixed(1)},${(c[1]*40).toFixed(1)}`).join(" ");
+  return `
+    <svg class="mini-svg" viewBox="-50 -50 100 100">
+      <polygon points="${ringPts}" class="mini-axes" fill="none"/>
+      ${axisLines}
+      <polygon points="${polyPts}" class="mini-pent ${status}"/>
+    </svg>
+  `;
+}
+
+const grid = document.getElementById("miniGrid");
+grid.innerHTML = STUDENTS.map(s => {
+  const cls = "mini" + (s.status === "red" ? " alert" : "") + (s.current ? " current" : "");
+  return `<a class="${cls}" onclick="go('elev'); return false;" href="#">
+    ${renderMiniPent(s.axes, s.status)}
+    <div class="mini-name">${s.n.split(" ")[0]}</div>
+    <div class="mini-num">${s.score}/100</div>
+  </a>`;
+}).join("");
 </script>
 </body>
 </html>
