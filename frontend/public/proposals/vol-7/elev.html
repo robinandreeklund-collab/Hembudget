@@ -4446,7 +4446,172 @@ body[data-mode="business"] .mode-switch {
       </div>
     </div>
   </section>
-  <section class="panel biz-only" id="p-biz-faktura"></section>
+  <section class="panel biz-only" id="p-biz-faktura">
+    <div class="shell">
+      <a class="actor-back" onclick="window.go('biz-hub'); return false;" href="#">Tillbaka till biz-hubben</a>
+
+      <header class="actor-head">
+        <div>
+          <span class="pill">Aktör · biz · Kundfakturor</span>
+          <h1 class="actor-name" style="margin-top:14px;">Fakturera <em>kunden</em>.</h1>
+          <p class="actor-sub">5 utskickade · 3 betalda · 1 förfaller idag · 1 utkast</p>
+        </div>
+        <div class="actor-meta">
+          Förfaller idag: <strong>1 (Hökarängens HP)</strong><br>
+          Total utestående: <strong>9 400 kr</strong><br>
+          Snitt-betaltid: <strong>9 dgr</strong>
+        </div>
+      </header>
+
+      <div class="cc-summary" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Fakturerat hittills</div>
+          <div class="cc-stat-num"><em style="color: #c7d2fe;">23 400</em> kr</div>
+          <div class="cc-stat-sub">v 8–12</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Inbetalt</div>
+          <div class="cc-stat-num" style="color: #6ee7b7;">14 000 kr</div>
+          <div class="cc-stat-sub">3 av 5 fakturor</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Utestående</div>
+          <div class="cc-stat-num" style="color: var(--warm);">9 400 kr</div>
+          <div class="cc-stat-sub">2 öppna</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Försenade</div>
+          <div class="cc-stat-num">0</div>
+          <div class="cc-stat-sub">snitt-betaltid 9 dgr</div>
+        </div>
+      </div>
+
+      <!-- Faktura-lista -->
+      <div class="section-eye" style="color: #c7d2fe;">Alla fakturor · v 8 → v 12</div>
+      <div class="biz-table">
+        <div class="biz-table-row head" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px;">
+          <span>#</span>
+          <span>Datum</span>
+          <span>Kund / specifikation</span>
+          <span>Belopp</span>
+          <span>Förfaller</span>
+          <span>Status</span>
+        </div>
+
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">F1234</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">v 11 · 17 apr</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Tatueringsstudion 14</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Bokningssystem · 8 400 ex moms · 2 100 moms</div>
+          </div>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">10 500 kr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald 22 apr</span>
+          <span class="biz-status paid">Betald</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">F1233</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">v 10 · 9 apr</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Linnéa Frisör</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">SoMe-paket · 4 200 ex moms · 1 050 moms</div>
+          </div>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">5 250 kr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald 14 apr</span>
+          <span class="biz-status paid">Betald</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">F1232</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">v 9 · 31 mar</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Coffee Joint</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Logo · 2 800 ex moms · 700 moms</div>
+          </div>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">3 500 kr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald 7 apr</span>
+          <span class="biz-status paid">Betald</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px; background: rgba(220,76,43,0.06); border-left: 3px solid var(--accent);" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">F1235</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">v 12 · 22 apr</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Hökarängens Hundpassning</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Bokningssystem · 5 760 ex moms · 1 440 moms · OCR 1235 7</div>
+          </div>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">7 200 kr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">förfaller IDAG</span>
+          <span class="biz-status sent">Skickad</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">F1236</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">v 12 · 26 apr</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Klang Café</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Logo + visitkort · delfaktura · 1 760 ex · 440 moms</div>
+          </div>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">2 200 kr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">förfaller 10 maj</span>
+          <span class="biz-status sent">Skickad</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.6fr 100px 110px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">F1237</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— · utkast</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: var(--text-mid); font-weight: 600;">Selma Konsult AB <em style="color: var(--text-dim); font-size: 11px; font-style: italic;">(utkast — ej utskickad)</em></div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Excel-mall · pris ej satt</div>
+          </div>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--text-dim); font-weight: 700;">— kr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">—</span>
+          <span class="biz-status draft">Utkast</span>
+        </a>
+      </div>
+
+      <!-- Skapa ny faktura-CTA -->
+      <article class="cta-card" style="margin-top: 28px; background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(15,21,37,0.5)); border-color: rgba(99,102,241,0.45);">
+        <div class="cta-eye" style="color: #c7d2fe;">Skapa ny faktura</div>
+        <div class="cta-h">Fakturera <em>Klang Café</em> slutet av maj.</div>
+        <p class="cta-prose">
+          Klang Café-jobbet ska levereras 5 maj — final-faktura på resten (<em>1 400 kr</em> ex moms · 350 moms = 1 750 kr inkl). Du kan generera fakturan automatiskt från jobbet eller skriva manuellt. PDF skapas automatiskt och kan postlådas till kunden.
+        </p>
+        <button class="cta-btn" style="background: #6366f1;">Generera från jobb →</button>
+        <button class="cta-btn" style="background: transparent; border: 1px solid var(--line-strong); margin-left: 8px;">Skriv manuellt</button>
+      </article>
+
+      <!-- Pedagogik -->
+      <div class="peda" style="border-color: rgba(99,102,241,0.3); border-left-color: #818cf8;">
+        <div class="peda-eye" style="color: #c7d2fe;">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Faktura är ett <em>juridiskt dokument</em>.</div>
+        <p class="peda-prose">
+          Det är inte ett mejl med belopp. Den måste innehålla: <code>fakturanummer</code>,
+          <code>fakturadatum</code>, <code>förfallodatum</code>, <code>F-skatt-uppgift</code>,
+          <code>OCR-nummer</code>, specifikation av tjänsten, ev. <code>moms 25 %</code>
+          (på tjänster). Saknas något kan kunden bestrida. Med kollektiv faktura
+          (helår) finns andra regler. Allt registreras hos Skatteverket via
+          <em>kontrolluppgift</em> nästa år.
+        </p>
+        <ul class="peda-bullets">
+          <li><strong>Moms in vs ut</strong>Du tar ut 25 % på faktura, redovisar månadsvis. Skillnaden = nettomoms.</li>
+          <li><strong>Påminnelse</strong>Efter 14 dagar skicka påminnelse + 60 kr avgift. Efter 30 dgr → inkasso.</li>
+          <li><strong>Dröjsmålsränta</strong>Referensränta + 8 % på obetalt belopp. Du har rätt — men måste fakturera den.</li>
+          <li><strong>Bokföringspost</strong>Faktura skickad → kundfordran ↑, ej intäkt än. Betald → bank ↑, fordran ↓.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">Kundfordran</span>
+          <span class="peda-concept">Moms-redovisning</span>
+          <span class="peda-concept">F-skatt</span>
+          <span class="peda-concept">OCR-nummer</span>
+          <span class="peda-concept">Periodisering</span>
+          <span class="peda-concept">Inkasso</span>
+        </div>
+        <div class="peda-tip">När Hökarängens Hundpassning betalar idag — bokningen sker automatiskt: kundfordran 7 200 ↓, företagskonto 7 200 ↑. Pentagon-axeln "Likviditet" tippar upp samtidigt.</div>
+      </div>
+    </div>
+  </section>
   <section class="panel biz-only" id="p-biz-leverantor"></section>
   <section class="panel biz-only" id="p-biz-bokforing"></section>
   <section class="panel biz-only" id="p-biz-skatt"></section>
