@@ -3,6 +3,7 @@
  * All data hämtas live från /v2/hub-endpointen.
  */
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { v2Api, type HubData } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./hub.css";
@@ -296,6 +297,117 @@ export function HubV2() {
             </div>
           </div>
         )}
+
+        {/* === KOMPASSEN · navigation till alla aktörer + verktyg === */}
+        <div className="compass">
+          <div className="compass-eye">Aktörerna · åtta rum + postlådan</div>
+          <div className="compass-grid" style={{ marginBottom: 18 }}>
+            <Link
+              to="/v2/postladan"
+              className="compass-node alert"
+              style={{
+                background: "rgba(220,76,43,0.08)",
+                borderColor: "rgba(220,76,43,0.4)",
+              }}
+            >
+              <div className="compass-node-eye" style={{ color: "var(--warm)" }}>
+                Meta
+              </div>
+              <div className="compass-node-name">Postlådan</div>
+              <div className="compass-node-val">brev som landar</div>
+            </Link>
+            <Link to="/v2/banken" className="compass-node">
+              <div className="compass-node-eye">Aktör 01</div>
+              <div className="compass-node-name">Banken</div>
+              <div className="compass-node-val">
+                <em>{SEK(total_balance)}</em> kr
+              </div>
+            </Link>
+            <Link to="/v2/arbetsgivaren" className="compass-node">
+              <div className="compass-node-eye">Aktör 02</div>
+              <div className="compass-node-name">Arbetsgivaren</div>
+              <div className="compass-node-val">
+                {character.employer || "Lön + samtal"}
+              </div>
+            </Link>
+            <Link to="/v2/skatten" className="compass-node alert">
+              <div className="compass-node-eye">Aktör 03</div>
+              <div className="compass-node-name">Skatteverket</div>
+              <div className="compass-node-val">deklaration</div>
+            </Link>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Aktör 04</div>
+              <div className="compass-node-name">Lånegivaren</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Aktör 05</div>
+              <div className="compass-node-name">Avanza · ISK</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Aktör 06</div>
+              <div className="compass-node-name">Försäkringar</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Aktör 07</div>
+              <div className="compass-node-name">Förbrukning</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Aktör 08</div>
+              <div className="compass-node-name">Hyresvärden</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Aktör 09</div>
+              <div className="compass-node-name">Pension</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+          </div>
+
+          <div className="compass-eye" style={{ marginTop: 18 }}>
+            Verktygen · där du tänker
+          </div>
+          <div className="compass-grid">
+            <Link to="/v2/budget" className="compass-node">
+              <div className="compass-node-eye">Verktyg 03</div>
+              <div className="compass-node-name">Budget</div>
+              <div className="compass-node-val">plan vs utfall</div>
+            </Link>
+            <Link to="/v2/mal" className="compass-node">
+              <div className="compass-node-eye">Verktyg 04</div>
+              <div className="compass-node-name">Mål</div>
+              <div className="compass-node-val">sparmål</div>
+            </Link>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Verktyg 02</div>
+              <div className="compass-node-name">Bokföring</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Verktyg 05</div>
+              <div className="compass-node-name">Investeringssim</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Verktyg 06</div>
+              <div className="compass-node-name">Lånekalkylator</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Skola 09</div>
+              <div className="compass-node-name">Mina moduler</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+            <span className="compass-node disabled">
+              <div className="compass-node-eye">Skola</div>
+              <div className="compass-node-name">Lärar-feedback</div>
+              <div className="compass-node-val">snart</div>
+            </span>
+          </div>
+        </div>
 
         <div className="hub-peda">
           <div className="hub-peda-eye">Hub · live från DB</div>

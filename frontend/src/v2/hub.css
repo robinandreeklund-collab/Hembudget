@@ -304,3 +304,117 @@
   letter-spacing: 1.4px; text-transform: uppercase;
   color: var(--text-mid);
 }
+
+/* === KOMPASSEN · navigation till alla aktörer + verktyg === */
+.v2-hub-root .compass {
+  margin-top: 36px;
+  border-top: 1px solid var(--line);
+  padding-top: 28px;
+}
+.v2-hub-root .compass-eye {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  margin-bottom: 16px;
+  text-align: center;
+}
+.v2-hub-root .compass-eye::before {
+  content: "● ";
+  color: var(--warm);
+}
+.v2-hub-root .compass-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+@media (max-width: 1100px) {
+  .v2-hub-root .compass-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .v2-hub-root .compass-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.v2-hub-root .compass-node {
+  background: rgba(15, 21, 37, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 12px;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: none;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.v2-hub-root .compass-node:hover {
+  background: rgba(15, 21, 37, 1);
+  border-color: var(--warm);
+  transform: translateY(-2px);
+}
+.v2-hub-root .compass-node.alert::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: hub-compass-pulse 2.4s ease-in-out infinite;
+}
+.v2-hub-root .compass-node.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.v2-hub-root .compass-node.disabled:hover {
+  transform: none;
+  border-color: var(--line);
+}
+@keyframes hub-compass-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+.v2-hub-root .compass-node-eye {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.v2-hub-root .compass-node-name {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: #fff;
+}
+.v2-hub-root .compass-node-val {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-mid);
+  letter-spacing: 0.4px;
+  margin-top: 2px;
+}
+.v2-hub-root .compass-node-val em {
+  color: var(--warm);
+  font-family: var(--serif);
+  font-style: italic;
+}
