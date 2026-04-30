@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veckans val · Elev · Vol. 08</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+:root {
+  --bg-deep: #0a0e1a; --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --line: rgba(255,255,255,0.1); --line-strong: rgba(255,255,255,0.18);
+  --text: rgba(255,255,255,0.92); --text-mid: rgba(255,255,255,0.6); --text-dim: rgba(255,255,255,0.4);
+}
+body { background: var(--bg-deep); color: var(--text); position: relative; min-height: 100vh; overflow-x: hidden; }
+
+/* Scen-bakgrunder förändrar atmosfär per scen */
+body[data-scene="kitchen-morning"]::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 75% 25%, rgba(251,191,36,0.16) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 30% 70%, rgba(220,76,43,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #1a1410 0%, var(--bg-deep) 50%, var(--bg-mid) 100%);
+}
+body[data-scene="phone-call"]::before {
+  background:
+    radial-gradient(ellipse 50% 60% at 80% 30%, rgba(220,76,43,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 70% at 25% 75%, rgba(15,21,37,0.6) 0%, transparent 60%),
+    linear-gradient(180deg, #1a0f0c 0%, var(--bg-deep) 60%, #1a0f0c 100%);
+}
+body[data-scene="bank-evening"]::before {
+  background:
+    radial-gradient(ellipse 65% 55% at 50% 30%, rgba(99,102,241,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 70% at 50% 100%, rgba(15,21,37,0.6) 0%, transparent 60%),
+    linear-gradient(180deg, #0f1a26 0%, var(--bg-deep) 60%, #0f1525 100%);
+}
+body[data-scene="reflection"]::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 50%, rgba(251,191,36,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #14110a 0%, var(--bg-deep) 100%);
+}
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  transition: background 1.2s var(--ease);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.018) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.018) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.4;
+}
+
+/* TOPBAR */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 80;
+  background: rgba(10,14,26,0.85); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 22px; gap: 22px;
+}
+.tb-brand { font-family: var(--serif); font-weight: 700; font-size: 16px; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 9px; }
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-dim); margin-left: 4px; }
+.tb-progress { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; color: var(--text-dim); text-transform: uppercase; }
+.tb-progress strong { color: #fff; }
+.tb-spacer { flex: 1; }
+.tb-bookmark {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 7px 12px; border-radius: 100px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong);
+  color: var(--text); cursor: pointer; text-decoration: none;
+}
+.tb-bookmark:hover { background: rgba(251,191,36,0.12); border-color: var(--warm); color: var(--warm); }
+.tb-echo {
+  background: var(--warm); color: #422006; border: 0;
+  padding: 8px 14px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tb-echo::before { content: "●"; }
+.tb-user { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a83817); color: #fff; font-family: var(--serif); font-weight: 700; font-size: 14px; display: grid; place-items: center; text-decoration: none; }
+
+/* SCEN-SYSTEM */
+.app { padding-top: 56px; position: relative; z-index: 5; min-height: 100vh; }
+.scene { display: none; min-height: calc(100vh - 56px); }
+.scene.active { display: flex; flex-direction: column; animation: scenefade .5s var(--ease); }
+@keyframes scenefade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.shell { max-width: 1100px; margin: 0 auto; padding: 56px clamp(20px, 5vw, 60px) 80px; width: 100%; }
+
+/* PILL */
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  padding: 7px 14px; border-radius: 100px;
+  background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.pill::before { content: "●"; color: var(--accent); font-size: 10px; }
+.pill.warm::before { color: var(--warm); }
+</style>
+</head>
+<body data-scene="kitchen-morning">
+
+<header class="topbar">
+  <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+  <div class="tb-progress" id="progress">SARA · VOL. 18 · KAP. <strong>1 / 6</strong></div>
+  <div class="tb-spacer"></div>
+  <a href="#" class="tb-bookmark" id="modulesBtn">Mina moduler · 3</a>
+  <a href="#" class="tb-bookmark" id="hubBtn">Hubben</a>
+  <button class="tb-echo" id="echoBtn">Echo</button>
+  <a href="#" class="tb-user">SA</a>
+</header>
+
+<main class="app">
+  <section class="scene active" id="s-1"></section>
+  <section class="scene" id="s-2"></section>
+  <section class="scene" id="s-3"></section>
+  <section class="scene" id="s-4"></section>
+  <section class="scene" id="s-5"></section>
+  <section class="scene" id="s-6"></section>
+</main>
+
+<script>
+const SCENES = {
+  1: { bg: "kitchen-morning", title: "1 / 6 · Onsdag morgon" },
+  2: { bg: "phone-call",      title: "2 / 6 · Tandläkaren ringer" },
+  3: { bg: "kitchen-morning", title: "3 / 6 · Saras val" },
+  4: { bg: "bank-evening",    title: "4 / 6 · Banken · 23 fakturor" },
+  5: { bg: "phone-call",      title: "5 / 6 · Maria väntar (lönesamtal)" },
+  6: { bg: "reflection",      title: "6 / 6 · Echo · reflektion" },
+};
+function goScene(n) {
+  document.querySelectorAll(".scene").forEach(s => s.classList.remove("active"));
+  const s = document.getElementById("s-" + n);
+  if (s) s.classList.add("active");
+  const meta = SCENES[n];
+  if (meta) {
+    document.body.setAttribute("data-scene", meta.bg);
+    document.getElementById("progress").innerHTML = "SARA · VOL. 18 · KAP. <strong>" + meta.title.split(" · ")[0] + "</strong>";
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+window.goScene = goScene;
+</script>
+</body>
+</html>
