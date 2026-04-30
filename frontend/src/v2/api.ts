@@ -294,6 +294,32 @@ export const v2Api = {
     api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
   budget: (month?: string) =>
     api<BudgetData>(`/v2/budget${month ? `?month=${month}` : ""}`),
+  /** Uppdatera planerad budget för en kategori. */
+  updateBudgetCategory: (
+    categoryId: number,
+    body: { planned_amount: number; month?: string; is_income?: boolean },
+  ) =>
+    api<V2BudgetCategoryRow>(`/v2/budget/${categoryId}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Skapa ny kategori + sätt initial budget. */
+  createBudgetCategory: (body: {
+    category_name: string;
+    planned_amount: number;
+    month?: string;
+    is_income?: boolean;
+  }) =>
+    api<V2BudgetCategoryRow>("/v2/budget/category", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Radera budget-raden för en kategori i en månad. */
+  deleteBudgetRow: (categoryId: number, month?: string) =>
+    api<void>(
+      `/v2/budget/${categoryId}${month ? `?month=${month}` : ""}`,
+      { method: "DELETE" },
+    ),
   goals: () => api<GoalsData>("/v2/mal"),
   postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),

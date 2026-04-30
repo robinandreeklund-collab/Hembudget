@@ -51,12 +51,141 @@ export function BudgetV2() {
   const monthParam = params.get("month") || undefined;
   const navigate = useNavigate();
 
+  // Editor-state per rad: draft-värde (string för att tillåta tom input
+  // och decimaler), spara-status, ev. felmeddelande.
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [savedFlash, setSavedFlash] = useState<Record<number, number>>({});
+  const [rowError, setRowError] = useState<Record<number, string>>({});
+
+  // Ny-kategori-form
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatAmount, setNewCatAmount] = useState("");
+  const [creatingCat, setCreatingCat] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Currently rendered month (eller fallback till budget.month om laddat)
+  const ym = monthParam || budget?.month;
+
+  function refreshBudget() {
+    return v2Api
+      .budget(monthParam)
+      .then(setBudget)
+      .catch((e) => setError(String((e as Error)?.message || e)));
+  }
+
   useEffect(() => {
     v2Api
       .budget(monthParam)
       .then(setBudget)
       .catch((e) => setError(String((e as Error)?.message || e)));
   }, [monthParam]);
+
+  async function saveCategoryAmount(
+    categoryId: number,
+    raw: string,
+    isIncome: boolean,
+  ): Promise<void> {
+    const parsed = parseFloat(raw.replace(/\s/g, "").replace(",", "."));
+    if (isNaN(parsed) || parsed < 0) {
+      setRowError((r) => ({
+        ...r,
+        [categoryId]: "Ogiltigt belopp",
+      }));
+      return;
+    }
+    setRowError((r) => {
+      const next = { ...r };
+      delete next[categoryId];
+      return next;
+    });
+    setSavingId(categoryId);
+    try {
+      await v2Api.updateBudgetCategory(categoryId, {
+        planned_amount: parsed,
+        month: ym,
+        is_income: isIncome,
+      });
+      // Hämta hela budget på nytt så summary + alla progress-staplar
+      // räknas om konsistent (sparkvot, total etc.)
+      await refreshBudget();
+      setSavedFlash((f) => ({ ...f, [categoryId]: Date.now() }));
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[categoryId];
+        return next;
+      });
+      // Auto-rensa "sparat"-tag efter 1.5 s
+      setTimeout(() => {
+        setSavedFlash((f) => {
+          const next = { ...f };
+          delete next[categoryId];
+          return next;
+        });
+      }, 1500);
+    } catch (e) {
+      setRowError((r) => ({
+        ...r,
+        [categoryId]: String((e as Error)?.message || e),
+      }));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deleteCategoryRow(categoryId: number): Promise<void> {
+    if (
+      !confirm(
+        "Ta bort budget-raden? Kategorin behålls — bara budgeten för månaden raderas.",
+      )
+    ) {
+      return;
+    }
+    setSavingId(categoryId);
+    try {
+      await v2Api.deleteBudgetRow(categoryId, ym);
+      await refreshBudget();
+    } catch (e) {
+      setRowError((r) => ({
+        ...r,
+        [categoryId]: String((e as Error)?.message || e),
+      }));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function createCategory(): Promise<void> {
+    const name = newCatName.trim();
+    const parsed = parseFloat(
+      newCatAmount.replace(/\s/g, "").replace(",", "."),
+    );
+    if (!name) {
+      setCreateError("Skriv ett kategori-namn");
+      return;
+    }
+    if (isNaN(parsed) || parsed < 0) {
+      setCreateError("Ogiltigt belopp");
+      return;
+    }
+    setCreateError(null);
+    setCreatingCat(true);
+    try {
+      await v2Api.createBudgetCategory({
+        category_name: name,
+        planned_amount: parsed,
+        month: ym,
+        is_income: false,
+      });
+      await refreshBudget();
+      setNewCatName("");
+      setNewCatAmount("");
+    } catch (e) {
+      setCreateError(String((e as Error)?.message || e));
+    } finally {
+      setCreatingCat(false);
+    }
+  }
 
   if (error) {
     return (
@@ -201,45 +330,72 @@ export function BudgetV2() {
             </div>
 
             {/* Inkomst-rader först */}
-            {incomeCategories.map((c) => (
-              <div className="budget-form-row" key={c.category_id}>
-                <span className="budget-icon">{c.icon}</span>
-                <div>
-                  <div className="budget-cat-name">{c.category_name}</div>
-                  <div className="budget-cat-sub">Inkomst · månadsvis</div>
-                </div>
-                <input
-                  className="budget-input"
-                  type="number"
-                  value={Math.round(c.planned)}
-                  readOnly
-                />
-                <input
-                  className="budget-input"
-                  type="number"
-                  value={Math.round(c.actual)}
-                  disabled
-                  style={{ opacity: 0.5, color: "#6ee7b7" }}
-                />
-                <span className="budget-ref">— inkomst</span>
-                <div>
-                  <div className="budget-bar">
+            {incomeCategories.map((c) => {
+              const draft = drafts[c.category_id];
+              const display =
+                draft !== undefined ? draft : String(Math.round(c.planned));
+              const saving = savingId === c.category_id;
+              const justSaved = savedFlash[c.category_id] != null;
+              const errMsg = rowError[c.category_id];
+              return (
+                <div className="budget-form-row" key={c.category_id}>
+                  <span className="budget-icon">{c.icon}</span>
+                  <div>
+                    <div className="budget-cat-name">{c.category_name}</div>
+                    <div className="budget-cat-sub">
+                      Inkomst · månadsvis
+                      {saving && " · sparar…"}
+                      {justSaved && !saving && " · sparat ✓"}
+                      {errMsg && ` · ${errMsg}`}
+                    </div>
+                  </div>
+                  <input
+                    className="budget-input"
+                    type="number"
+                    inputMode="numeric"
+                    value={display}
+                    onChange={(e) =>
+                      setDrafts((d) => ({
+                        ...d,
+                        [c.category_id]: e.target.value,
+                      }))
+                    }
+                    onBlur={() => {
+                      if (draft !== undefined && draft !== String(Math.round(c.planned))) {
+                        saveCategoryAmount(c.category_id, draft, true);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                  />
+                  <input
+                    className="budget-input"
+                    type="number"
+                    value={Math.round(c.actual)}
+                    disabled
+                    style={{ opacity: 0.5, color: "#6ee7b7" }}
+                  />
+                  <span className="budget-ref">— inkomst</span>
+                  <div>
+                    <div className="budget-bar">
+                      <div
+                        className="budget-bar-fill under"
+                        style={{ width: "100%" }}
+                      />
+                    </div>
                     <div
-                      className="budget-bar-fill under"
-                      style={{ width: "100%" }}
-                    />
-                  </div>
-                  <div
-                    className="budget-bar-status under"
-                    style={{ marginTop: 4 }}
-                  >
-                    {c.actual > 0
-                      ? `+ ${SEK(c.actual)} mottagit`
-                      : "Väntar på lön"}
+                      className="budget-bar-status under"
+                      style={{ marginTop: 4 }}
+                    >
+                      {c.actual > 0
+                        ? `+ ${SEK(c.actual)} mottagit`
+                        : "Väntar på lön"}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Utgifts-rader */}
             {expenseCategories.map((c) => {
@@ -288,6 +444,10 @@ export function BudgetV2() {
                   ? "under"
                   : "";
 
+              const saving = savingId === c.category_id;
+              const justSaved = savedFlash[c.category_id] != null;
+              const errMsg = rowError[c.category_id];
+
               return (
                 <div
                   className={`budget-form-row${rowClass}`}
@@ -295,13 +455,31 @@ export function BudgetV2() {
                 >
                   <span className="budget-icon">{c.icon}</span>
                   <div>
-                    <div className="budget-cat-name">{c.category_name}</div>
+                    <div className="budget-cat-name">
+                      {c.category_name}
+                      {!c.is_fixed && !saving && !justSaved && (
+                        <button
+                          type="button"
+                          onClick={() => deleteCategoryRow(c.category_id)}
+                          title="Ta bort budget-raden"
+                          className="budget-row-delete"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     <div
                       className={`budget-cat-sub${
                         c.status === "over" ? " over" : ""
                       }`}
                     >
-                      {c.is_fixed
+                      {saving
+                        ? "Sparar…"
+                        : justSaved
+                        ? "Sparat ✓"
+                        : errMsg
+                        ? errMsg
+                        : c.is_fixed
                         ? "Fast kostnad · autogiro"
                         : c.status === "savings"
                         ? "Sparmål · pay yourself first"
@@ -315,12 +493,38 @@ export function BudgetV2() {
                   <input
                     className={`budget-input${inputClass}`}
                     type="number"
-                    value={Math.round(c.planned)}
+                    inputMode="numeric"
+                    value={
+                      drafts[c.category_id] !== undefined
+                        ? drafts[c.category_id]
+                        : String(Math.round(c.planned))
+                    }
                     readOnly={c.is_fixed}
-                    onChange={() => {
-                      /* TODO: PATCH /v2/budget i kommande fas */
+                    onChange={(e) =>
+                      setDrafts((d) => ({
+                        ...d,
+                        [c.category_id]: e.target.value,
+                      }))
+                    }
+                    onBlur={() => {
+                      const draft = drafts[c.category_id];
+                      if (
+                        !c.is_fixed &&
+                        draft !== undefined &&
+                        draft !== String(Math.round(c.planned))
+                      ) {
+                        saveCategoryAmount(c.category_id, draft, false);
+                      }
                     }}
-                    title={c.is_fixed ? "Fast kostnad — kan inte ändras" : ""}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        (e.target as HTMLInputElement).blur();
+                    }}
+                    title={
+                      c.is_fixed
+                        ? "Fast kostnad — kan inte ändras direkt"
+                        : "Tryck Enter eller flytta fokus för att spara"
+                    }
                   />
                   <input
                     className="budget-input"
@@ -358,6 +562,80 @@ export function BudgetV2() {
                 </div>
               );
             })}
+
+            {/* Lägg till ny kategori — matchar prototypens sista rad */}
+            <div className="budget-form-row budget-form-add">
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 14,
+                  color: "var(--text-dim)",
+                }}
+              >
+                +
+              </span>
+              <div>
+                <input
+                  type="text"
+                  placeholder="Lägg till egen kategori (ex: Träning, Bok-klubb…)"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") createCategory();
+                  }}
+                  className="budget-cat-input"
+                />
+                {createError && (
+                  <div
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 9,
+                      color: "var(--accent)",
+                      marginTop: 4,
+                    }}
+                  >
+                    {createError}
+                  </div>
+                )}
+              </div>
+              <input
+                className="budget-input"
+                type="number"
+                inputMode="numeric"
+                placeholder="0"
+                value={newCatAmount}
+                onChange={(e) => setNewCatAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createCategory();
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10,
+                  color: "var(--text-dim)",
+                }}
+              >
+                —
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10,
+                  color: "var(--text-dim)",
+                }}
+              >
+                —
+              </span>
+              <button
+                type="button"
+                onClick={createCategory}
+                disabled={creatingCat}
+                className="budget-add-btn"
+              >
+                {creatingCat ? "Sparar…" : "Lägg till"}
+              </button>
+            </div>
           </div>
         )}
 

@@ -847,6 +847,280 @@ def get_budget(
         return _empty_budget(info.student_id, ym)
 
 
+# === Budget · skriv-endpoints (PATCH/POST per kategori) ===
+
+class V2BudgetUpdateRequest(BaseModel):
+    """Uppdatera planerad budget för en kategori i en månad.
+
+    Beloppet skickas alltid som POSITIV summa. Backend lagrar
+    expense-budgetar som negativa internt (konsistent med
+    transaktionstecken), men v2-API:et exponerar absoluta belopp.
+    """
+    planned_amount: float = Field(..., ge=0)
+    month: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}$")
+    is_income: bool = Field(default=False)
+
+
+class V2BudgetCreateCategoryRequest(BaseModel):
+    """Skapa ny kategori + sätt initial budget i ett anrop."""
+    category_name: str = Field(..., min_length=1, max_length=80)
+    planned_amount: float = Field(..., ge=0)
+    month: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}$")
+    is_income: bool = Field(default=False)
+
+
+def _build_category_row(
+    s, line, _fuzzy_minimum, over_acc: list,
+) -> V2BudgetCategoryRow:
+    """Bygg en V2BudgetCategoryRow från en MonthlyBudgetService.CategoryLine."""
+    planned_abs = abs(Decimal(line.planned or 0))
+    actual_abs = abs(Decimal(line.actual or 0))
+    is_inc = line.kind == "income"
+    ref = _fuzzy_minimum(line.category)
+
+    if is_inc:
+        status: str = "income"
+    elif _is_savings(line.category):
+        status = "savings"
+    elif _is_fixed(line.category):
+        status = "fixed"
+    elif planned_abs == 0:
+        status = "near"
+    else:
+        ratio = actual_abs / planned_abs
+        if ratio > Decimal("1.05"):
+            status = "over"
+            over_acc.append(actual_abs - planned_abs)
+        elif ratio >= Decimal("1.0"):
+            status = "near"
+        else:
+            status = "under"
+
+    progress = (
+        float(actual_abs / planned_abs * 100)
+        if planned_abs > 0 else 0.0
+    )
+    return V2BudgetCategoryRow(
+        category_id=line.category_id,
+        category_name=line.category,
+        group_name=line.group,
+        icon=_icon_for(line.category),
+        planned=float(planned_abs if not is_inc else line.planned or 0),
+        actual=float(actual_abs if not is_inc else line.actual or 0),
+        consumer_reference=float(ref) if ref else None,
+        progress_pct=round(progress, 1),
+        status=status,  # type: ignore[arg-type]
+        is_fixed=_is_fixed(line.category),
+        is_income=is_inc,
+    )
+
+
+@router.post("/budget/category", response_model=V2BudgetCategoryRow)
+def create_budget_category_first(
+    body: V2BudgetCreateCategoryRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2BudgetCategoryRow:
+    """OBS: registrerad här FÖRST (före /budget/{category_id}) så
+    FastAPI inte matchar 'category' som ett int-id. Implementationen
+    delegerar till create_budget_category nedan."""
+    return _create_budget_category_impl(body, info)
+
+
+@router.post("/budget/{category_id}", response_model=V2BudgetCategoryRow)
+def update_budget_category(
+    category_id: int,
+    body: V2BudgetUpdateRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2BudgetCategoryRow:
+    """Uppdatera planerad budget för en kategori.
+
+    - Income-kategorier sparas som POSITIVA belopp.
+    - Expense-kategorier sparas som NEGATIVA belopp internt
+      (konsistent med transaktionstecken).
+    - Returnerar den färska V2BudgetCategoryRow med uppdaterat
+      progress/status så frontend kan rendera direkt utan att
+      refetcha hela /v2/budget.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan uppdatera sin budget",
+        )
+
+    ym = body.month or _current_year_month()
+
+    from ..budget.monthly import MonthlyBudgetService
+    from ..wellbeing.minimums import (
+        lookup_minimum, CATEGORY_MINIMUMS_SEK_MONTH,
+    )
+    from ..db.models import Category as _Cat
+
+    def _fuzzy_minimum(category: str) -> Optional[int]:
+        if not category:
+            return None
+        exact = lookup_minimum(category)
+        if exact is not None:
+            return exact
+        lower = category.lower()
+        for key, val in CATEGORY_MINIMUMS_SEK_MONTH.items():
+            if key.lower() in lower:
+                return val
+        return None
+
+    with session_scope() as s:
+        cat = s.get(_Cat, category_id)
+        if cat is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Kategori {category_id} hittades inte",
+            )
+        # Internt teckenkonvention: expense → negativ, income → positiv
+        signed = (
+            Decimal(str(body.planned_amount)) if body.is_income
+            else -Decimal(str(body.planned_amount))
+        )
+        svc = MonthlyBudgetService(s)
+        svc.set_budget(ym, category_id, signed)
+        s.flush()
+
+        # Bygg svar via summary för att få färsk progress/status
+        summ = svc.summary(ym)
+        for line in summ.lines:
+            if line.category_id == category_id:
+                over_acc: list = []
+                return _build_category_row(s, line, _fuzzy_minimum, over_acc)
+        # Fallback om kategorin inte syns i summary än (ingen actual)
+        return V2BudgetCategoryRow(
+            category_id=category_id,
+            category_name=cat.name,
+            group_name=None,
+            icon=_icon_for(cat.name),
+            planned=float(body.planned_amount),
+            actual=0.0,
+            consumer_reference=(
+                float(_fuzzy_minimum(cat.name) or 0) or None
+            ),
+            progress_pct=0.0,
+            status=(
+                "income" if body.is_income
+                else "savings" if _is_savings(cat.name)
+                else "fixed" if _is_fixed(cat.name)
+                else "near"
+            ),  # type: ignore[arg-type]
+            is_fixed=_is_fixed(cat.name),
+            is_income=body.is_income,
+        )
+
+
+def _create_budget_category_impl(
+    body: V2BudgetCreateCategoryRequest,
+    info: TokenInfo,
+) -> V2BudgetCategoryRow:
+    """Skapa ny kategori + sätt initial budget för månaden.
+
+    Idempotent: om kategorin redan finns, sätt bara budgeten.
+    Returnerar den färska V2BudgetCategoryRow.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan lägga till kategorier i sin budget",
+        )
+
+    ym = body.month or _current_year_month()
+    name = body.category_name.strip()
+    if not name:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Kategori-namn får inte vara tomt",
+        )
+
+    from ..budget.monthly import MonthlyBudgetService
+    from ..wellbeing.minimums import (
+        lookup_minimum, CATEGORY_MINIMUMS_SEK_MONTH,
+    )
+    from ..db.models import Category as _Cat
+
+    def _fuzzy_minimum(category: str) -> Optional[int]:
+        if not category:
+            return None
+        exact = lookup_minimum(category)
+        if exact is not None:
+            return exact
+        lower = category.lower()
+        for key, val in CATEGORY_MINIMUMS_SEK_MONTH.items():
+            if key.lower() in lower:
+                return val
+        return None
+
+    with session_scope() as s:
+        # Hitta eller skapa kategori
+        cat = s.query(_Cat).filter(_Cat.name == name).first()
+        if cat is None:
+            cat = _Cat(name=name)
+            s.add(cat)
+            s.flush()
+        signed = (
+            Decimal(str(body.planned_amount)) if body.is_income
+            else -Decimal(str(body.planned_amount))
+        )
+        svc = MonthlyBudgetService(s)
+        svc.set_budget(ym, cat.id, signed)
+        s.flush()
+        summ = svc.summary(ym)
+        for line in summ.lines:
+            if line.category_id == cat.id:
+                over_acc: list = []
+                return _build_category_row(s, line, _fuzzy_minimum, over_acc)
+        return V2BudgetCategoryRow(
+            category_id=cat.id,
+            category_name=cat.name,
+            group_name=None,
+            icon=_icon_for(cat.name),
+            planned=float(body.planned_amount),
+            actual=0.0,
+            consumer_reference=(
+                float(_fuzzy_minimum(cat.name) or 0) or None
+            ),
+            progress_pct=0.0,
+            status=(
+                "income" if body.is_income
+                else "near"
+            ),  # type: ignore[arg-type]
+            is_fixed=_is_fixed(cat.name),
+            is_income=body.is_income,
+        )
+
+
+@router.delete("/budget/{category_id}", status_code=204)
+def delete_budget_row(
+    category_id: int,
+    month: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    """Ta bort budget-raden för en kategori i en månad.
+
+    Kategorin själv tas INTE bort (transaktionerna behåller sin
+    tagg). Bara Budget-raden för månaden raderas.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan ta bort budget-rader",
+        )
+
+    ym = month or _current_year_month()
+    from ..db.models import Budget as _Bd
+    with session_scope() as s:
+        row = (
+            s.query(_Bd)
+            .filter(_Bd.month == ym, _Bd.category_id == category_id)
+            .first()
+        )
+        if row is not None:
+            s.delete(row)
+            s.flush()
+
+
 # === Sparmål (Goal-tabellen) ===
 
 class V2GoalRow(BaseModel):

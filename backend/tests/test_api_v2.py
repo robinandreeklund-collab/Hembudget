@@ -899,6 +899,191 @@ def test_v2_budget_fixed_category_status(fx) -> None:
     assert cats["Hyra-test-fixed"]["icon"] == "▥"
 
 
+# === /v2/budget POST/DELETE (editerbar budget) ===
+
+def test_v2_budget_update_category(fx) -> None:
+    """POST /v2/budget/{id} uppdaterar planerad budget för en kategori."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Category as _Cat
+
+    today = _d.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    cat_id_holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        cat = _Cat(name="Mat-update-test")
+        s.add(cat); s.flush()
+        cat_id_holder["id"] = cat.id
+
+    _seed_scope(sid, seed)
+    cat_id = cat_id_holder["id"]
+
+    # Sätt budget till 4000 (utgift)
+    r = client.post(
+        f"/v2/budget/{cat_id}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"planned_amount": 4000, "month": ym, "is_income": False},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["category_id"] == cat_id
+    assert data["category_name"] == "Mat-update-test"
+    assert data["planned"] == 4000
+    assert data["is_income"] is False
+
+    # Höj till 5000
+    r = client.post(
+        f"/v2/budget/{cat_id}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"planned_amount": 5000, "month": ym, "is_income": False},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["planned"] == 5000
+
+    # Verifiera via GET
+    r = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    cats = {c["category_name"]: c for c in r.json()["categories"]}
+    assert cats["Mat-update-test"]["planned"] == 5000
+
+
+def test_v2_budget_update_unknown_category_returns_404(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/budget/9999",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"planned_amount": 100},
+    )
+    assert r.status_code == 404
+
+
+def test_v2_budget_update_negative_amount_returns_422(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/budget/1",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"planned_amount": -100},
+    )
+    assert r.status_code == 422
+
+
+def test_v2_budget_update_for_teacher_returns_403(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/budget/1",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"planned_amount": 100},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_budget_create_category(fx) -> None:
+    """POST /v2/budget/category skapar ny kategori + sätter budget."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    from datetime import date as _d
+    today = _d.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    r = client.post(
+        "/v2/budget/category",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "category_name": "Träning-test",
+            "planned_amount": 500,
+            "month": ym,
+            "is_income": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["category_name"] == "Träning-test"
+    assert data["planned"] == 500
+    assert data["is_income"] is False
+    assert data["category_id"] > 0
+
+    # Idempotent: anropa igen → samma kategori, ny planned
+    r2 = client.post(
+        "/v2/budget/category",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "category_name": "Träning-test",
+            "planned_amount": 800,
+            "month": ym,
+        },
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["planned"] == 800
+    # Samma category_id → idempotent
+    assert r2.json()["category_id"] == data["category_id"]
+
+
+def test_v2_budget_create_empty_name_returns_400(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/budget/category",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"category_name": "   ", "planned_amount": 100},
+    )
+    assert r.status_code in (400, 422)  # min_length=1 efter strip
+
+
+def test_v2_budget_delete_row(fx) -> None:
+    """DELETE /v2/budget/{id} raderar budget-raden men inte kategorin."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    today = _d.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    # Skapa kategori + budget via POST
+    r = client.post(
+        "/v2/budget/category",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "category_name": "Tillfällig-test",
+            "planned_amount": 200,
+            "month": ym,
+        },
+    )
+    cat_id = r.json()["category_id"]
+
+    # Verifiera att raden finns i /v2/budget
+    r2 = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    names = [c["category_name"] for c in r2.json()["categories"]]
+    assert "Tillfällig-test" in names
+
+    # Radera budget-raden
+    r3 = client.delete(
+        f"/v2/budget/{cat_id}?month={ym}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r3.status_code == 204, r3.text
+
+    # /v2/budget ska inte längre lista raden
+    r4 = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    names = [c["category_name"] for c in r4.json()["categories"]]
+    assert "Tillfällig-test" not in names
+
+
+def test_v2_budget_delete_for_teacher_returns_403(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.delete(
+        "/v2/budget/1",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 403
+
+
 # === /v2/mal (sparmål) ===
 
 def test_v2_mal_unauthenticated_401(fx) -> None:
