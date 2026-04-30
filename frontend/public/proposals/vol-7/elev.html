@@ -1042,6 +1042,226 @@ body::after {
 }
 .pain-meta em { font-style: italic; color: var(--accent); }
 
+/* === POSTLÅDAN === */
+.mail-head {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 28px; align-items: end;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+.mail-stat-row {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  background: rgba(15,21,37,0.7); border: 1px solid var(--line);
+  border-radius: 6px; overflow: hidden;
+  margin-bottom: 24px;
+}
+@media (max-width: 800px) { .mail-stat-row { grid-template-columns: repeat(2, 1fr); } }
+.mail-stat { padding: 14px 18px; border-right: 1px solid var(--line); }
+.mail-stat:last-child { border-right: 0; }
+.mail-stat-eye { font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
+.mail-stat-num { font-family: var(--serif); font-weight: 700; font-size: 22px; letter-spacing: -0.6px; color: #fff; font-variant-numeric: tabular-nums; }
+.mail-stat-num em { font-style: italic; color: var(--accent); font-weight: 500; }
+.mail-stat-num.warm em { color: var(--warm); }
+.mail-stat-num.green em { color: #6ee7b7; }
+.mail-stat-sub { font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 2px; letter-spacing: 0.4px; }
+
+/* Tabs i postlådan */
+.mail-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+.mail-tab {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 9px 14px; border-radius: 100px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong);
+  color: var(--text-mid); text-decoration: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.mail-tab:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.mail-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.mail-tab .count {
+  background: rgba(0,0,0,0.25); padding: 2px 7px; border-radius: 100px;
+  font-size: 9px; font-weight: 700;
+}
+.mail-tab.active .count { background: rgba(255,255,255,0.25); }
+
+/* Inkorg lista */
+.mail-list { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.mail-item {
+  background: rgba(15,21,37,0.7);
+  display: grid;
+  grid-template-columns: 12px 36px 1.6fr 2fr 110px 130px 90px;
+  align-items: center; gap: 14px;
+  padding: 14px 18px;
+  text-decoration: none; color: var(--text);
+  cursor: pointer;
+  transition: background .2s var(--ease);
+  position: relative;
+}
+.mail-item:hover { background: rgba(220,76,43,0.06); }
+.mail-item.unread { background: rgba(220,76,43,0.04); }
+.mail-item.unread::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent);
+}
+.mail-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+}
+.mail-item:not(.unread) .mail-dot { background: transparent; }
+.mail-icon {
+  width: 36px; height: 36px; border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--text-mid);
+  letter-spacing: 0.4px;
+}
+.mail-icon.bank   { background: rgba(220,76,43,0.18); color: #fda594; }
+.mail-icon.work   { background: rgba(110,231,183,0.16); color: #6ee7b7; }
+.mail-icon.skv    { background: rgba(99,102,241,0.18); color: #a5b4fc; }
+.mail-icon.util   { background: rgba(251,191,36,0.18); color: var(--warm); }
+.mail-icon.pen    { background: rgba(168,85,247,0.18); color: #d8b4fe; }
+.mail-icon.ins    { background: rgba(14,165,233,0.18); color: #7dd3fc; }
+.mail-icon.land   { background: rgba(234,88,12,0.18); color: #fdba74; }
+.mail-icon.cred   { background: rgba(244,114,182,0.18); color: #f9a8d4; }
+
+.mail-from { font-family: "Inter", sans-serif; font-size: 12.5px; font-weight: 600; color: #fff; }
+.mail-from-meta { font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px; text-transform: uppercase; }
+
+.mail-subject { font-family: "Inter", sans-serif; font-size: 13.5px; color: var(--text); }
+.mail-item.unread .mail-subject { font-weight: 700; color: #fff; }
+.mail-subject em { font-style: italic; color: var(--warm); }
+
+.mail-amount {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  letter-spacing: -0.3px; font-variant-numeric: tabular-nums;
+  text-align: right; color: #fff;
+}
+.mail-amount em { font-style: italic; color: var(--warm); font-weight: 500; }
+.mail-amount.in { color: #6ee7b7; }
+
+.mail-due {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--text-mid); text-align: right; letter-spacing: 0.5px;
+}
+.mail-due strong { color: #fff; font-weight: 700; }
+.mail-due.urgent { color: var(--accent); }
+.mail-due.urgent strong { color: var(--accent); }
+
+.mail-status {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 4px 9px; border-radius: 100px;
+  letter-spacing: 1.1px; text-transform: uppercase; text-align: center;
+}
+.mail-status.unhandled { background: rgba(220,76,43,0.18); color: #fda594; border: 1px solid rgba(220,76,43,0.35); }
+.mail-status.viewed    { background: rgba(251,191,36,0.14); color: var(--warm); border: 1px solid rgba(251,191,36,0.3); }
+.mail-status.exported  { background: rgba(99,102,241,0.16); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }
+.mail-status.paid      { background: rgba(110,231,183,0.16); color: #6ee7b7; border: 1px solid rgba(110,231,183,0.3); }
+.mail-status.expired   { background: rgba(255,255,255,0.04); color: var(--text-mid); border: 1px solid var(--line); }
+
+/* Detalj-vy för brev */
+.mail-detail {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+.mail-detail-head {
+  padding: 22px 28px; border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: 1fr auto; gap: 20px;
+  align-items: center;
+}
+.mail-detail-from-line {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 8px;
+}
+.mail-detail-from-line .mail-icon { width: 44px; height: 44px; font-size: 14px; }
+.mail-detail-from { font-family: var(--serif); font-size: 18px; font-weight: 700; color: #fff; }
+.mail-detail-from-meta { font-family: var(--mono); font-size: 10px; color: var(--text-mid); margin-top: 3px; letter-spacing: 0.4px; }
+.mail-detail-title {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.6px; color: #fff; margin-top: 14px; line-height: 1.15;
+}
+.mail-detail-title em { font-style: italic; color: var(--warm); font-weight: 500; }
+.mail-detail-meta {
+  text-align: right;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-mid); letter-spacing: 0.5px;
+  line-height: 1.7; text-transform: uppercase;
+}
+.mail-detail-meta strong { color: #fff; }
+.mail-detail-body { padding: 24px 28px; }
+.mail-detail-actions {
+  padding: 16px 28px;
+  background: rgba(255,255,255,0.02);
+  border-top: 1px solid var(--line);
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.mail-action-btn {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 10px 16px; border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: #fff; background: rgba(255,255,255,0.04);
+  cursor: pointer; text-decoration: none;
+  transition: all .25s var(--ease);
+}
+.mail-action-btn.solid { background: var(--accent); border-color: var(--accent); }
+.mail-action-btn.solid:hover { background: #c43a1c; }
+.mail-action-btn.warm { background: var(--warm); color: #422006; border-color: var(--warm); }
+.mail-action-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
+
+/* Kreditkortsfaktura — transaktionslista */
+.cc-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; margin-bottom: 22px;
+}
+.cc-stat { padding: 14px 18px; background: rgba(255,255,255,0.04); border-radius: 6px; }
+.cc-stat-eye { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
+.cc-stat-num { font-family: var(--serif); font-weight: 700; font-size: 22px; letter-spacing: -0.5px; color: #fff; font-variant-numeric: tabular-nums; }
+.cc-stat-num em { font-style: italic; color: var(--warm); font-weight: 500; }
+.cc-stat-sub { font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 2px; letter-spacing: 0.4px; }
+
+.cc-tx-list { background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cc-tx {
+  display: grid; grid-template-columns: 70px 1fr 110px 100px 90px;
+  gap: 14px; padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  font-family: "Inter", sans-serif; font-size: 12.5px;
+  align-items: center;
+}
+.cc-tx:last-child { border-bottom: 0; }
+.cc-tx-date { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.4px; }
+.cc-tx-name { color: #fff; font-weight: 500; }
+.cc-tx-meta { font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 1px; letter-spacing: 0.3px; }
+.cc-tx-cat {
+  font-family: var(--mono); font-size: 9px; padding: 3px 8px;
+  border-radius: 100px; background: rgba(255,255,255,0.05);
+  color: var(--text-mid); letter-spacing: 0.5px; text-align: center;
+  text-transform: uppercase; font-weight: 700;
+}
+.cc-tx-cat.unset { color: var(--accent); border: 1px dashed rgba(220,76,43,0.4); background: transparent; }
+.cc-tx-amt { font-family: var(--serif); font-weight: 700; font-size: 13.5px; letter-spacing: -0.2px; font-variant-numeric: tabular-nums; text-align: right; color: #fff; }
+.cc-tx-act { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--warm); cursor: pointer; text-align: right; }
+.cc-tx.unset { background: rgba(220,76,43,0.04); }
+
+/* Lönespec-detalj — kompakt tabell */
+.spec-table { width: 100%; border-collapse: collapse; }
+.spec-table tr { border-bottom: 1px solid var(--line); }
+.spec-table tr:last-child { border-bottom: 0; }
+.spec-table td { padding: 10px 0; font-family: "Inter", sans-serif; font-size: 13px; color: var(--text); }
+.spec-table td:first-child { color: var(--text-mid); }
+.spec-table td:last-child { font-family: var(--serif); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; color: #fff; }
+.spec-table tr.tot td { font-size: 15px; padding-top: 14px; }
+.spec-table tr.tot td:last-child { color: var(--warm); font-style: italic; }
+.spec-table tr.tot td:first-child { font-weight: 700; color: #fff; }
+
 /* Suggestion buttons under chat */
 .sug-list {
   margin-top: 12px;
