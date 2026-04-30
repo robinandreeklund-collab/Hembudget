@@ -1212,8 +1212,8 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
   isolation: isolate;
   cursor: pointer;
   perspective: 1400px;
-  /* Höjd-låsning så fram + back har samma footprint */
-  min-height: 320px;
+  /* Lägre min-höjd, men låter grid-stack expandera till största barnet */
+  min-height: 380px;
   transition: transform .25s var(--ease), background .25s var(--ease), border-color .25s var(--ease);
 }
 .teacher-feature:hover {
@@ -1254,30 +1254,39 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 }
 @keyframes tf-spin { to { --tf-ang: 360deg; } }
 
-/* Inre wrapper som kan vridas i 3D — innehåller fram + back */
+/* Inre wrapper som kan vridas i 3D — innehåller fram + back. Använder grid-stack
+   så container expanderar till största barnets storlek (= ingen overflow oavsett
+   vilken sida som har mest innehåll). */
 .teacher-feature-inner {
   position: relative;
-  width: 100%; height: 100%;
+  width: 100%;
   min-height: inherit;
+  display: grid;
+  grid-template-areas: "stack";
   transform-style: preserve-3d;
+  transform: translateZ(0);  /* tvinga egen render-layer */
   transition: transform .85s cubic-bezier(.4, 0, .2, 1);
 }
 .teacher-feature.is-flipped .teacher-feature-inner {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(0);
 }
 .tf-front, .tf-back {
-  position: absolute;
-  inset: 0;
+  grid-area: stack;
+  width: 100%;
   padding: 28px 26px 30px;
   display: flex; flex-direction: column; gap: 14px;
   -webkit-backface-visibility: hidden;
           backface-visibility: hidden;
   border-radius: inherit;
 }
+.tf-front { z-index: 2; }
+.teacher-feature.is-flipped .tf-front { z-index: 1; }
 .tf-back {
   transform: rotateY(180deg);
   background: linear-gradient(135deg, rgba(220, 76, 43, 0.06) 0%, rgba(251, 191, 36, 0.05) 100%);
+  z-index: 1;
 }
+.teacher-feature.is-flipped .tf-back { z-index: 2; }
 .tf-back-eye {
   font-family: var(--mono); font-size: 9.5px; font-weight: 700;
   letter-spacing: 1.6px; text-transform: uppercase;
