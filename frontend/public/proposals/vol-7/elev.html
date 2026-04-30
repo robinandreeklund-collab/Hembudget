@@ -2303,7 +2303,89 @@ body::after {
       </article>
     </div>
   </section>
-  <section class="panel" id="p-lonespec"></section>
+  <!-- ============ LÖNESPEC (DETAIL) ============ -->
+  <section class="panel" id="p-lonespec">
+    <div class="shell">
+      <a class="actor-back" onclick="go('mail'); return false;" href="#">Tillbaka till postlådan</a>
+
+      <article class="mail-detail">
+        <header class="mail-detail-head">
+          <div>
+            <div class="mail-detail-from-line">
+              <div class="mail-icon work">LÖN</div>
+              <div>
+                <div class="mail-detail-from">Sthlm Sjukhus AB</div>
+                <div class="mail-detail-from-meta">Lönespec · april 2026 (preliminär) · brevdatum 26 april</div>
+              </div>
+            </div>
+            <div class="mail-detail-title">Lönespec april — <em>22 880 kr</em> netto.</div>
+          </div>
+          <div class="mail-detail-meta">
+            Utbet <strong>25 maj</strong><br>
+            Period <strong>1–30 april</strong><br>
+            OCR <strong>18 5840 21</strong>
+          </div>
+        </header>
+
+        <div class="mail-detail-body">
+
+          <div class="cc-summary">
+            <div class="cc-stat">
+              <div class="cc-stat-eye">Bruttolön</div>
+              <div class="cc-stat-num">31 730 kr</div>
+              <div class="cc-stat-sub">31 250 grund + 480 OB</div>
+            </div>
+            <div class="cc-stat">
+              <div class="cc-stat-eye">Skatt</div>
+              <div class="cc-stat-num">−6 970 kr</div>
+              <div class="cc-stat-sub">tabellskatt 30 % + jobbskatteavdrag</div>
+            </div>
+            <div class="cc-stat">
+              <div class="cc-stat-eye">Netto till banken</div>
+              <div class="cc-stat-num"><em>22 880</em> kr</div>
+              <div class="cc-stat-sub">+480 mer än mars (OB lax-jour)</div>
+            </div>
+          </div>
+
+          <div class="section-eye" style="margin-bottom: 14px;">Specifikation</div>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; padding: 18px 22px;">
+            <table class="spec-table">
+              <tr><td>Grundlön (80 % tjänst)</td><td>31 250 kr</td></tr>
+              <tr><td>OB-tillägg · kväll 30 %</td><td>+ 320 kr</td></tr>
+              <tr><td>OB-tillägg · helg 50 %</td><td>+ 160 kr</td></tr>
+              <tr><td>Bruttolön</td><td>31 730 kr</td></tr>
+              <tr><td>Preliminärskatt (tabell 33, kol 1)</td><td>−6 850 kr</td></tr>
+              <tr><td>Jobbskatteavdrag (steg 4)</td><td>+ 0 kr</td></tr>
+              <tr><td>Allmän pensionsavgift (justering)</td><td>−120 kr</td></tr>
+              <tr class="tot"><td>Netto till lönekontot 25 maj</td><td>22 880 kr</td></tr>
+            </table>
+          </div>
+
+          <div class="section-eye" style="margin-top: 24px; margin-bottom: 14px;">Arbetsgivaravgifter (visas men dras inte från eleven)</div>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--line); border-radius: 6px; padding: 18px 22px;">
+            <table class="spec-table">
+              <tr><td>Sociala avgifter (31,42 %)</td><td>9 970 kr</td></tr>
+              <tr><td>ITP1 — tjänstepension (4,5 %)</td><td>1 428 kr</td></tr>
+              <tr><td>Friskvårdsbidrag (årligt 5 000 kr / 12)</td><td>417 kr</td></tr>
+              <tr class="tot"><td>Total kostnad för arbetsgivaren</td><td>43 545 kr</td></tr>
+            </table>
+            <p style="margin-top: 14px; font-family: var(--serif); font-size: 13.5px; line-height: 1.5; color: var(--text-mid);">
+              Det här är pedagogiskt viktigt: <em style="color: var(--warm);">arbetsgivaren betalar 43 545 kr/mån för dig</em> —
+              du ser 22 880 på kontot. Skillnaden 20 665 kr/mån går till samhälle (skatt &amp; socialavgifter)
+              och din egen pension.
+            </p>
+          </div>
+        </div>
+
+        <div class="mail-detail-actions">
+          <a class="mail-action-btn solid" onclick="go('arbg'); return false;" href="#">Se hos arbetsgivaren</a>
+          <a class="mail-action-btn warm" onclick="go('maria'); return false;" href="#">Använd i Maria-samtalet</a>
+          <a class="mail-action-btn" href="#">Bokför som lön</a>
+          <a class="mail-action-btn" onclick="go('mail'); return false;" href="#">Tillbaka till postlådan</a>
+        </div>
+      </article>
+    </div>
+  </section>
   <section class="panel" id="p-mail">
     <div class="shell">
       <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
@@ -2356,7 +2438,7 @@ body::after {
       <div class="mail-list">
 
         <!-- 1. KREDITKORTSFAKTURA — ohanterad, ny -->
-        <a class="mail-item unread" href="#">
+        <a class="mail-item unread" onclick="go('cc'); return false;" href="#">
           <span class="mail-dot"></span>
           <div class="mail-icon cred">CC</div>
           <div>
@@ -2373,7 +2455,7 @@ body::after {
         </a>
 
         <!-- 2. SKATTEVERKET — ohanterad -->
-        <a class="mail-item unread" href="#">
+        <a class="mail-item unread" onclick="go('skatt'); return false;" href="#">
           <span class="mail-dot"></span>
           <div class="mail-icon skv">SKV</div>
           <div>
@@ -2458,7 +2540,7 @@ body::after {
         </a>
 
         <!-- 7. STHLM SJUKHUS — Lönespec, granskad -->
-        <a class="mail-item" href="#">
+        <a class="mail-item" onclick="go('lonespec'); return false;" href="#">
           <span class="mail-dot"></span>
           <div class="mail-icon work">LÖN</div>
           <div>
@@ -2475,7 +2557,7 @@ body::after {
         </a>
 
         <!-- 8. STHLM SJUKHUS — Lönespec kommande -->
-        <a class="mail-item unread" href="#">
+        <a class="mail-item unread" onclick="go('lonespec'); return false;" href="#">
           <span class="mail-dot"></span>
           <div class="mail-icon work">LÖN</div>
           <div>
