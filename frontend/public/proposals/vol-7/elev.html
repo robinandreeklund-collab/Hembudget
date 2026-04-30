@@ -534,6 +534,202 @@ body::after {
   margin-top: 2px;
 }
 .compass-node-val em { color: var(--warm); font-family: var(--serif); font-style: italic; }
+
+/* === AKTÖR-VY (delad layout) === */
+.actor-head {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 28px; align-items: end;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.actor-back {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); text-decoration: none;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-bottom: 14px;
+}
+.actor-back::before { content: "←"; }
+.actor-back:hover { color: var(--warm); }
+.actor-name {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(38px, 5vw, 60px);
+  letter-spacing: -1.6px; line-height: 1; color: #fff;
+}
+.actor-name em { font-style: italic; color: var(--warm); font-weight: 500; }
+.actor-sub {
+  font-family: var(--serif); font-size: 16px;
+  color: var(--text-mid); margin-top: 10px;
+}
+.actor-meta {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); text-align: right;
+  line-height: 1.7;
+}
+.actor-meta strong { color: #fff; }
+
+/* Bank-konton */
+.acct-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 14px; margin-bottom: 26px;
+}
+@media (max-width: 800px) { .acct-grid { grid-template-columns: 1fr; } }
+.acct {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px; padding: 18px 20px;
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: end; gap: 12px;
+  text-decoration: none; color: #fff;
+  transition: all .25s var(--ease);
+  cursor: pointer;
+}
+.acct:hover { border-color: var(--warm); background: rgba(15,21,37,1); }
+.acct-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 4px;
+}
+.acct-eye::before { content: "● "; }
+.acct-name {
+  font-family: var(--serif); font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.acct-num {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-dim); margin-top: 3px; letter-spacing: 0.5px;
+}
+.acct-bal {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 24px; letter-spacing: -0.6px;
+  font-variant-numeric: tabular-nums; text-align: right;
+  color: #fff;
+}
+.acct-bal em { font-style: italic; color: var(--warm); font-weight: 500; }
+.acct-bal-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-mid); margin-top: 2px;
+  letter-spacing: 0.5px; text-align: right;
+}
+
+/* Två-kolumn inom aktör-vy */
+.act-grid {
+  display: grid; grid-template-columns: 1.4fr 1fr;
+  gap: 28px; align-items: start;
+}
+@media (max-width: 1000px) { .act-grid { grid-template-columns: 1fr; } }
+
+.section-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 14px;
+}
+.section-eye::before { content: "● "; }
+
+/* Kontoutdrag-rader */
+.tx-list {
+  background: rgba(15,21,37,0.5);
+  border: 1px solid var(--line);
+  border-radius: 6px; overflow: hidden;
+}
+.tx-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 100px 110px;
+  align-items: center; gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  font-family: "Inter", sans-serif; font-size: 13.5px;
+}
+.tx-row:last-child { border-bottom: 0; }
+.tx-date { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.4px; }
+.tx-name { color: #fff; font-weight: 500; }
+.tx-name-sub { font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px; }
+.tx-cat {
+  font-family: var(--mono); font-size: 9.5px;
+  padding: 3px 8px; border-radius: 100px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-mid); letter-spacing: 0.5px;
+  text-align: center; text-transform: uppercase;
+  font-weight: 700;
+}
+.tx-cat.unset { color: var(--accent); border: 1px dashed rgba(220,76,43,0.4); background: transparent; }
+.tx-amt {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 15px; letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums; text-align: right;
+  color: #fff;
+}
+.tx-amt.in { color: #6ee7b7; }
+.tx-amt em { font-style: italic; color: var(--warm); font-weight: 500; }
+
+/* CTA-card / signera */
+.cta-card {
+  background: linear-gradient(135deg, rgba(220,76,43,0.18), rgba(15,21,37,0.5));
+  border: 1px solid rgba(220,76,43,0.45);
+  border-radius: 6px;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+}
+.cta-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px;
+}
+.cta-eye::before { content: "● "; }
+.cta-h {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff;
+}
+.cta-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.cta-prose {
+  font-family: var(--serif); font-size: 14.5px; color: var(--text-mid);
+  margin-top: 8px; line-height: 1.5;
+}
+.cta-btn {
+  display: inline-block; margin-top: 14px;
+  background: var(--accent); color: #fff;
+  padding: 11px 18px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  text-decoration: none; border: 0; cursor: pointer;
+  transition: background .2s var(--ease);
+}
+.cta-btn:hover { background: #c43a1c; }
+
+/* Side mini-cards */
+.side-card {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px; padding: 18px 20px;
+  margin-bottom: 12px;
+}
+.side-card-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); margin-bottom: 8px;
+}
+.side-card-eye::before { content: "● "; color: var(--warm); }
+.side-card-h {
+  font-family: var(--serif); font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px; color: #fff;
+}
+.side-card-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.side-card-meta {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-mid); margin-top: 4px; letter-spacing: 0.4px;
+}
+.side-card-link {
+  display: inline-block; margin-top: 10px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--warm); text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(251,191,36,0.4);
+}
+.side-card-link:hover { border-bottom-color: var(--warm); }
 </style>
 </head>
 <body>
@@ -750,7 +946,168 @@ body::after {
 
     </div>
   </section>
-  <section class="panel" id="p-bank"></section>
+  <!-- ============ BANKEN ============ -->
+  <section class="panel" id="p-bank">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+
+      <header class="actor-head">
+        <div>
+          <span class="pill warm">Aktör 01 · Banken</span>
+          <h1 class="actor-name" style="margin-top:14px;">Banken — <em>fyra konton</em>, ett dygn att signera.</h1>
+          <p class="actor-sub">SEB · privatkund · konton synkade 14:22 idag</p>
+        </div>
+        <div class="actor-meta">
+          Inloggad via <strong>BankID</strong> 14:22<br>
+          Signerade fakturor i kö: <strong>23 st</strong><br>
+          Kreditgräns: <strong>5 000 kr</strong>
+        </div>
+      </header>
+
+      <!-- 4 konton som kort -->
+      <div class="acct-grid">
+        <a class="acct" href="#">
+          <div>
+            <div class="acct-eye">Lönekonto</div>
+            <div class="acct-name">Privatkonto</div>
+            <div class="acct-num">5 471 · 22 18 364</div>
+          </div>
+          <div>
+            <div class="acct-bal"><em>14 282</em> kr</div>
+            <div class="acct-bal-meta">Tillgängligt</div>
+          </div>
+        </a>
+        <a class="acct" href="#">
+          <div>
+            <div class="acct-eye">Sparkonto</div>
+            <div class="acct-name">Buffert</div>
+            <div class="acct-num">5 471 · 19 04 552</div>
+          </div>
+          <div>
+            <div class="acct-bal">1 800 kr</div>
+            <div class="acct-bal-meta">3 mån mål</div>
+          </div>
+        </a>
+        <a class="acct" onclick="go('avanza'); return false;" href="#">
+          <div>
+            <div class="acct-eye">ISK · på Avanza</div>
+            <div class="acct-name">Investeringssparkonto</div>
+            <div class="acct-num">Avanza · synk dagligen</div>
+          </div>
+          <div>
+            <div class="acct-bal">8 460 kr</div>
+            <div class="acct-bal-meta">+ 2,1 % i april</div>
+          </div>
+        </a>
+        <a class="acct" href="#">
+          <div>
+            <div class="acct-eye">Kreditkort</div>
+            <div class="acct-name">SEB Visa</div>
+            <div class="acct-num">··· ··· ··· 4218 · faktura 28 maj</div>
+          </div>
+          <div>
+            <div class="acct-bal" style="color: #fca5a5;">−1 240 kr</div>
+            <div class="acct-bal-meta">Använt av 5 000</div>
+          </div>
+        </a>
+      </div>
+
+      <div class="act-grid">
+        <div>
+          <!-- CTA: signera 23 fakturor -->
+          <article class="cta-card">
+            <div class="cta-eye">Att signera</div>
+            <div class="cta-h">Signera <em>23 fakturor</em> via BankID.</div>
+            <p class="cta-prose">
+              Bankgirot har samlat 23 inkommande fakturor — 18 är vanor som
+              redan klassificerats (hyra, el, abonnemang), 5 är nya och kräver
+              ditt val. Signera alla på en gång, eller hantera de fem nya manuellt.
+            </p>
+            <button class="cta-btn" onclick="go('bankid')">Öppna BankID-signering →</button>
+          </article>
+
+          <div class="section-eye">Senaste händelser · lönekontot</div>
+          <div class="tx-list">
+            <div class="tx-row">
+              <span class="tx-date">28 apr</span>
+              <div>
+                <div class="tx-name">Coop Konsum Hökarängen</div>
+                <div class="tx-name-sub">Kort 4218 · 18:42</div>
+              </div>
+              <span class="tx-cat unset">Okatt</span>
+              <span class="tx-amt">−312 kr</span>
+            </div>
+            <div class="tx-row">
+              <span class="tx-date">28 apr</span>
+              <div>
+                <div class="tx-name">Max Hökarängen</div>
+                <div class="tx-name-sub">Kort 4218 · 17:08</div>
+              </div>
+              <span class="tx-cat unset">Okatt</span>
+              <span class="tx-amt">−168 kr</span>
+            </div>
+            <div class="tx-row">
+              <span class="tx-date">25 apr</span>
+              <div>
+                <div class="tx-name">SL · Reskassa</div>
+                <div class="tx-name-sub">SL-app · autoladd</div>
+              </div>
+              <span class="tx-cat">Transport</span>
+              <span class="tx-amt">−320 kr</span>
+            </div>
+            <div class="tx-row">
+              <span class="tx-date">25 apr</span>
+              <div>
+                <div class="tx-name">Lön · Sthlm Sjukhus AB</div>
+                <div class="tx-name-sub">OCR 18 5840 21</div>
+              </div>
+              <span class="tx-cat">Lön</span>
+              <span class="tx-amt in"><em>+ 22 400</em> kr</span>
+            </div>
+            <div class="tx-row">
+              <span class="tx-date">22 apr</span>
+              <div>
+                <div class="tx-name">CSN · Studiebidrag</div>
+                <div class="tx-name-sub">OCR 9342 19</div>
+              </div>
+              <span class="tx-cat">Bidrag</span>
+              <span class="tx-amt in">+ 1 250 kr</span>
+            </div>
+            <div class="tx-row">
+              <span class="tx-date">17 apr</span>
+              <div>
+                <div class="tx-name">Hemköp Globen</div>
+                <div class="tx-name-sub">Kort 4218 · 19:14</div>
+              </div>
+              <span class="tx-cat unset">Okatt</span>
+              <span class="tx-amt">−425 kr</span>
+            </div>
+          </div>
+          <div style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 12px; letter-spacing: 0.6px; text-transform: uppercase;">+ 114 transaktioner i april · 12 ovettade</div>
+        </div>
+
+        <aside>
+          <div class="side-card">
+            <div class="side-card-eye">Kommande dragningar</div>
+            <div class="side-card-h">7 240 kr · Hyra</div>
+            <div class="side-card-meta">1 maj · Stockholmshem · autogiro klart</div>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Tandläkaren idag</div>
+            <div class="side-card-h">4 200 kr · 30 dgr</div>
+            <div class="side-card-meta">Folktandvården · faktura kommer 30 apr</div>
+            <a class="side-card-link" onclick="go('hub')">Se konsekvensen i pentagonen ↗</a>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Kreditprövning</div>
+            <div class="side-card-h">Bolån-modul</div>
+            <div class="side-card-meta">2,4 Mkr · uppdrag från Anders Lind</div>
+            <a class="side-card-link" onclick="go('modul')">Öppna modulen ↗</a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
   <section class="panel" id="p-bankid"></section>
   <section class="panel" id="p-arbg"></section>
   <section class="panel" id="p-maria"></section>
