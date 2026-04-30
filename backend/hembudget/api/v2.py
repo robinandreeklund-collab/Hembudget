@@ -19,9 +19,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from datetime import date as _date
+from decimal import Decimal
+
+from ..db.base import session_scope
+from ..db.models import Account, Transaction, FundHolding
 from ..school.engines import master_session
-from ..school.models import Student, Teacher, V2OnboardingEvent
+from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
+from ..wellbeing.calculator import calculate_wellbeing
 from .deps import TokenInfo, require_token
+from sqlalchemy import func as _func
 
 
 router = APIRouter(prefix="/v2", tags=["v2"])
@@ -76,6 +83,224 @@ class OnboardingCompleteResponse(BaseModel):
             "URL som frontend ska navigera till efter onboarding. "
             "/v2/hub om allt klart."
         ),
+    )
+
+
+# === Hub aggregate-data (riktig data från DB) ===
+
+class HubCharacter(BaseModel):
+    display_name: str
+    profession: Optional[str] = None
+    employer: Optional[str] = None
+    age: Optional[int] = None
+    city: Optional[str] = None
+    family_status: Optional[str] = None
+    housing_type: Optional[str] = None
+    housing_monthly: Optional[float] = None
+    gross_salary_monthly: Optional[float] = None
+    net_salary_monthly: Optional[float] = None
+    personality: Optional[str] = None
+
+
+class HubPentagon(BaseModel):
+    """Pentagonens 5 axlar mappade från wellbeing.
+
+    Mappning (backend → prototypens namn):
+      economy → ekonomi
+      safety  → karriär (anställning, skydd, säkerhet)
+      health  → hälsa
+      social  → relation
+      leisure → fritid
+    """
+    total_score: int
+    ekonomi: int
+    karriar: int
+    halsa: int
+    relation: int
+    fritid: int
+    year_month: str
+
+
+class HubMonthSummary(BaseModel):
+    income: float
+    expenses: float
+    saved: float
+    save_rate_pct: float
+    transactions_count: int
+
+
+class HubResponse(BaseModel):
+    student_id: int
+    character: HubCharacter
+    v2_level: int
+    v2_spend_profile: str
+    v2_fairness_choice: Optional[str] = None
+    v2_partner_model: str
+    pentagon: Optional[HubPentagon] = None
+    month_summary: HubMonthSummary
+    total_balance: float
+    accounts_count: int
+
+
+def _current_year_month() -> str:
+    today = _date.today()
+    return f"{today.year:04d}-{today.month:02d}"
+
+
+@router.get("/hub", response_model=HubResponse)
+def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
+    """Aggregerar all data hubben behöver i ett anrop.
+
+    Hämtar från:
+    - master-DB: Student, StudentProfile (karaktär, v2-fält)
+    - scope-DB: transactions, accounts (månads-summa, saldon)
+    - wellbeing-modulen (5 axlar)
+
+    Demo/teacher får en minimal placeholder utan scope-data.
+    """
+    if info.role != "student" or info.student_id is None:
+        # Teacher eller demo ser inte sin egen hub-data — de ska
+        # se elevernas via /teacher/students/* istället.
+        return HubResponse(
+            student_id=0,
+            character=HubCharacter(display_name="—"),
+            v2_level=1,
+            v2_spend_profile="sparsam",
+            v2_partner_model="solo",
+            month_summary=HubMonthSummary(
+                income=0, expenses=0, saved=0,
+                save_rate_pct=0, transactions_count=0,
+            ),
+            total_balance=0,
+            accounts_count=0,
+        )
+
+    # 1. Karaktär från master-DB
+    with master_session() as mdb:
+        student = mdb.get(Student, info.student_id)
+        if not student:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Student hittades inte",
+            )
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .one_or_none()
+        )
+        char = HubCharacter(
+            display_name=student.display_name,
+            profession=profile.profession if profile else None,
+            employer=profile.employer if profile else None,
+            age=profile.age if profile else None,
+            city=profile.city if profile else None,
+            family_status=profile.family_status if profile else None,
+            housing_type=profile.housing_type if profile else None,
+            housing_monthly=(
+                float(profile.housing_monthly) if profile and profile.housing_monthly else None
+            ),
+            gross_salary_monthly=(
+                float(profile.gross_salary_monthly)
+                if profile and profile.gross_salary_monthly else None
+            ),
+            net_salary_monthly=(
+                float(profile.net_salary_monthly)
+                if profile and profile.net_salary_monthly else None
+            ),
+            personality=profile.personality if profile else None,
+        )
+        v2_level = getattr(student, "v2_level", None) or 1
+        v2_spend = getattr(student, "v2_spend_profile", None) or "sparsam"
+        v2_fair = getattr(student, "v2_fairness_choice", None)
+        v2_partner = getattr(student, "v2_partner_model", None) or "solo"
+
+    # 2. Pentagon (live via wellbeing-calculator)
+    pentagon: Optional[HubPentagon] = None
+    month_summary = HubMonthSummary(
+        income=0, expenses=0, saved=0, save_rate_pct=0, transactions_count=0,
+    )
+    total_balance = 0.0
+    accounts_count = 0
+
+    try:
+        with session_scope() as s:
+            ym = _current_year_month()
+            wb = calculate_wellbeing(s, ym)
+            pentagon = HubPentagon(
+                total_score=wb.total_score,
+                ekonomi=wb.economy,
+                karriar=wb.safety,
+                halsa=wb.health,
+                relation=wb.social,
+                fritid=wb.leisure,
+                year_month=ym,
+            )
+
+            # 3. Månads-summa från transactions (innevarande månad)
+            today = _date.today()
+            month_start = _date(today.year, today.month, 1)
+            txs = (
+                s.query(Transaction)
+                .filter(Transaction.date >= month_start)
+                .filter(Transaction.date <= today)
+                .all()
+            )
+            income = sum(
+                float(t.amount) for t in txs if float(t.amount) > 0
+            )
+            expenses = sum(
+                -float(t.amount) for t in txs if float(t.amount) < 0
+            )
+            saved = income - expenses
+            save_rate = (saved / income * 100) if income > 0 else 0.0
+            month_summary = HubMonthSummary(
+                income=round(income, 2),
+                expenses=round(expenses, 2),
+                saved=round(saved, 2),
+                save_rate_pct=round(save_rate, 1),
+                transactions_count=len(txs),
+            )
+
+            # 4. Saldon
+            accounts = s.query(Account).all()
+            accounts_count = len(accounts)
+            tot = Decimal("0")
+            for acc in accounts:
+                ob = acc.opening_balance or Decimal("0")
+                start = acc.opening_balance_date
+                q = s.query(_func.coalesce(_func.sum(Transaction.amount), 0)).filter(
+                    Transaction.account_id == acc.id,
+                    Transaction.date <= today,
+                )
+                if start is not None:
+                    q = q.filter(Transaction.date > start)
+                movement = Decimal(str(q.scalar() or 0))
+                cur = ob + movement
+                # Lägg till fond-värde för ISK
+                fund_total = Decimal(str(
+                    s.query(_func.coalesce(_func.sum(FundHolding.market_value), 0))
+                    .filter(FundHolding.account_id == acc.id)
+                    .scalar() or 0
+                ))
+                if not bool(getattr(acc, "incognito", False)):
+                    tot += (cur + fund_total) if fund_total > 0 else cur
+            total_balance = float(tot)
+    except Exception:
+        # Scope-DB saknas eller wellbeing failar — returnera minimal
+        # data så hubben inte blir vit. Eleven kan fortfarande se
+        # karaktär + v2-fält från master.
+        pass
+
+    return HubResponse(
+        student_id=info.student_id,
+        character=char,
+        v2_level=v2_level,
+        v2_spend_profile=v2_spend,
+        v2_fairness_choice=v2_fair,
+        v2_partner_model=v2_partner,
+        pentagon=pentagon,
+        month_summary=month_summary,
+        total_balance=total_balance,
+        accounts_count=accounts_count,
     )
 
 

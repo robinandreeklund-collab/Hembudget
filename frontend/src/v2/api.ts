@@ -28,6 +28,51 @@ export type OnboardingComplete = {
   redirect_to: string;
 };
 
+export type HubCharacter = {
+  display_name: string;
+  profession: string | null;
+  employer: string | null;
+  age: number | null;
+  city: string | null;
+  family_status: string | null;
+  housing_type: string | null;
+  housing_monthly: number | null;
+  gross_salary_monthly: number | null;
+  net_salary_monthly: number | null;
+  personality: string | null;
+};
+
+export type HubPentagon = {
+  total_score: number;
+  ekonomi: number;
+  karriar: number;
+  halsa: number;
+  relation: number;
+  fritid: number;
+  year_month: string;
+};
+
+export type HubMonthSummary = {
+  income: number;
+  expenses: number;
+  saved: number;
+  save_rate_pct: number;
+  transactions_count: number;
+};
+
+export type HubData = {
+  student_id: number;
+  character: HubCharacter;
+  v2_level: number;
+  v2_spend_profile: SpendProfile;
+  v2_fairness_choice: FairnessChoice | null;
+  v2_partner_model: PartnerModel;
+  pentagon: HubPentagon | null;
+  month_summary: HubMonthSummary;
+  total_balance: number;
+  accounts_count: number;
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -46,6 +91,7 @@ export type OnboardingEventType =
 
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
+  hub: () => api<HubData>("/v2/hub"),
   completeOnboarding: (body: {
     spend_profile: SpendProfile;
     fairness_choice: FairnessChoice | null;

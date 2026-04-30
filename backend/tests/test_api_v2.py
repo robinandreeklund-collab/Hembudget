@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from hembudget.api.deps import register_token
 from hembudget.school.engines import init_master_engine, master_session
-from hembudget.school.models import Student, Teacher
+from hembudget.school.models import Student, StudentProfile, Teacher
 from hembudget.security.crypto import hash_password, random_token
 
 
@@ -390,3 +390,119 @@ def test_v2_onboarding_for_teacher_returns_200_without_writing(fx) -> None:
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["student_id"] == 0  # Markör att det inte var elev
+
+
+# === /v2/hub ===
+
+def test_v2_hub_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/hub")
+    assert r.status_code == 401
+
+
+def test_v2_hub_for_student_returns_basic_fields(fx) -> None:
+    """Eleven utan profil får ändå hub-data tillbaka — minst karaktär,
+    pentagon (ev. None) och tom månads-summa."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["character"]["display_name"] == "Eva"
+    # Defaults
+    assert data["v2_level"] == 1
+    assert data["v2_spend_profile"] == "sparsam"
+    assert data["v2_partner_model"] == "solo"
+    # Månads-summa finns alltid (tom om ingen scope-DB)
+    assert "month_summary" in data
+    ms = data["month_summary"]
+    assert "income" in ms and "expenses" in ms
+    assert "saved" in ms and "save_rate_pct" in ms
+    assert "transactions_count" in ms
+    # Saldo-fält
+    assert "total_balance" in data
+    assert "accounts_count" in data
+
+
+def test_v2_hub_includes_profile_when_set(fx) -> None:
+    """När StudentProfile finns ska hub leverera dess karaktärsfält."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    # Skapa profil för Eva
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Region Stockholm",
+            gross_salary_monthly=30000,
+            net_salary_monthly=24000,
+            tax_rate_effective=0.2,
+            age=22,
+            city="Stockholm",
+            family_status="ensam",
+            housing_type="hyresratt",
+            housing_monthly=8000,
+            personality="blandad",
+        ))
+
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    char = r.json()["character"]
+    assert char["display_name"] == "Eva"
+    assert char["profession"] == "Undersköterska"
+    assert char["employer"] == "Region Stockholm"
+    assert char["age"] == 22
+    assert char["city"] == "Stockholm"
+    assert char["family_status"] == "ensam"
+    assert char["housing_type"] == "hyresratt"
+    assert char["housing_monthly"] == 8000
+    assert char["gross_salary_monthly"] == 30000
+    assert char["net_salary_monthly"] == 24000
+    assert char["personality"] == "blandad"
+
+
+def test_v2_hub_reflects_v2_fields_after_onboarding(fx) -> None:
+    """Onboarding-svaren ska speglas direkt i /v2/hub."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    # Komplettera onboarding
+    client.post(
+        "/v2/onboarding/complete",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "spend_profile": "balanserad",
+            "fairness_choice": "proportionellt",
+            "partner_model": "ai",
+        },
+    )
+
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["v2_spend_profile"] == "balanserad"
+    assert data["v2_fairness_choice"] == "proportionellt"
+    assert data["v2_partner_model"] == "ai"
+
+
+def test_v2_hub_for_teacher_returns_placeholder(fx) -> None:
+    """Lärare har ingen egen hub-data — får tom placeholder."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["character"]["display_name"] == "—"
+    assert data["accounts_count"] == 0
+    assert data["total_balance"] == 0
+    assert data["month_summary"]["transactions_count"] == 0
