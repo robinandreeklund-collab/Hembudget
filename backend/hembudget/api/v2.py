@@ -25,6 +25,7 @@ from decimal import Decimal
 from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
+    MailItem,
 )
 from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
@@ -1020,6 +1021,341 @@ def get_goals(info: TokenInfo = Depends(require_token)) -> V2GoalsResponse:
             )
     except Exception:
         return _empty_goals(info.student_id)
+
+
+# === Postlådan (MailItem-tabellen) ===
+
+MailType = Literal["invoice", "salary_slip", "authority", "reminder", "info"]
+MailStatus = Literal["unhandled", "viewed", "exported", "paid", "expired"]
+MailSenderKind = Literal[
+    "bank", "cred", "skv", "ins", "land", "util", "work", "pen", "other",
+]
+
+
+class V2MailItemRow(BaseModel):
+    id: int
+    sender: str
+    sender_short: Optional[str] = None
+    sender_kind: MailSenderKind
+    mail_type: MailType
+    subject: str
+    body_meta: Optional[str] = None
+    amount: Optional[float] = None
+    due_date: Optional[_date] = None
+    received_at: datetime
+    status: MailStatus
+    upcoming_id: Optional[int] = None
+    transaction_id: Optional[int] = None
+    is_recurring: bool
+    ocr_reference: Optional[str] = None
+    bankgiro: Optional[str] = None
+
+
+class V2MailSummary(BaseModel):
+    total_count: int
+    unhandled_count: int
+    invoice_count: int
+    salary_slip_count: int
+    authority_count: int
+    info_count: int
+    to_pay_amount: float
+    incoming_amount: float
+    overdue_count: int
+
+
+class V2MailResponse(BaseModel):
+    student_id: int
+    summary: V2MailSummary
+    items: list[V2MailItemRow]
+
+
+def _empty_mail(student_id: int) -> V2MailResponse:
+    return V2MailResponse(
+        student_id=student_id,
+        summary=V2MailSummary(
+            total_count=0,
+            unhandled_count=0,
+            invoice_count=0,
+            salary_slip_count=0,
+            authority_count=0,
+            info_count=0,
+            to_pay_amount=0,
+            incoming_amount=0,
+            overdue_count=0,
+        ),
+        items=[],
+    )
+
+
+@router.get("/postladan", response_model=V2MailResponse)
+def get_mail(
+    filter: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2MailResponse:
+    """Postlådan · alla brev sorterade nyaste först.
+
+    `filter` kan vara: "unhandled", "invoice", "salary_slip",
+    "authority", "info", eller None (alla).
+
+    Demo/teacher får tom payload.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_mail(0)
+
+    try:
+        with session_scope() as s:
+            q = s.query(MailItem).order_by(
+                MailItem.received_at.desc(), MailItem.id.desc()
+            )
+            if filter == "unhandled":
+                q = q.filter(MailItem.status == "unhandled")
+            elif filter == "invoice":
+                q = q.filter(MailItem.mail_type == "invoice")
+            elif filter == "salary_slip":
+                q = q.filter(MailItem.mail_type == "salary_slip")
+            elif filter == "authority":
+                q = q.filter(MailItem.mail_type == "authority")
+            elif filter == "info":
+                q = q.filter(MailItem.mail_type == "info")
+
+            mails = q.all()
+            items: list[V2MailItemRow] = []
+
+            # Summary räknar ALLTID på alla mail (inte filtrerade), så
+            # tab-counts visas korrekt även när man har en aktiv filter.
+            all_mails = (
+                s.query(MailItem)
+                .order_by(MailItem.received_at.desc())
+                .all()
+                if filter else mails
+            )
+
+            today = _date.today()
+            unhandled_count = 0
+            invoice_count = 0
+            salary_slip_count = 0
+            authority_count = 0
+            info_count = 0
+            to_pay = Decimal("0")
+            incoming = Decimal("0")
+            overdue = 0
+
+            for m in all_mails:
+                if m.status == "unhandled":
+                    unhandled_count += 1
+                if m.mail_type == "invoice":
+                    invoice_count += 1
+                elif m.mail_type == "salary_slip":
+                    salary_slip_count += 1
+                elif m.mail_type == "authority":
+                    authority_count += 1
+                elif m.mail_type == "info":
+                    info_count += 1
+                if (
+                    m.amount is not None
+                    and m.amount < 0
+                    and m.status not in ("paid",)
+                ):
+                    to_pay += -m.amount
+                if (
+                    m.amount is not None
+                    and m.amount > 0
+                    and m.status not in ("paid",)
+                ):
+                    incoming += m.amount
+                if (
+                    m.due_date is not None
+                    and m.due_date < today
+                    and m.status not in ("paid", "exported")
+                ):
+                    overdue += 1
+
+            for m in mails:
+                items.append(V2MailItemRow(
+                    id=m.id,
+                    sender=m.sender,
+                    sender_short=m.sender_short,
+                    sender_kind=m.sender_kind,  # type: ignore[arg-type]
+                    mail_type=m.mail_type,  # type: ignore[arg-type]
+                    subject=m.subject,
+                    body_meta=m.body_meta,
+                    amount=float(m.amount) if m.amount is not None else None,
+                    due_date=m.due_date,
+                    received_at=m.received_at,
+                    status=m.status,  # type: ignore[arg-type]
+                    upcoming_id=m.upcoming_id,
+                    transaction_id=m.transaction_id,
+                    is_recurring=bool(m.is_recurring),
+                    ocr_reference=m.ocr_reference,
+                    bankgiro=m.bankgiro,
+                ))
+
+            return V2MailResponse(
+                student_id=info.student_id,
+                summary=V2MailSummary(
+                    total_count=len(all_mails),
+                    unhandled_count=unhandled_count,
+                    invoice_count=invoice_count,
+                    salary_slip_count=salary_slip_count,
+                    authority_count=authority_count,
+                    info_count=info_count,
+                    to_pay_amount=float(to_pay),
+                    incoming_amount=float(incoming),
+                    overdue_count=overdue,
+                ),
+                items=items,
+            )
+    except Exception:
+        return _empty_mail(info.student_id)
+
+
+class V2MailStatusUpdate(BaseModel):
+    status: MailStatus
+
+
+@router.patch(
+    "/postladan/{mail_id}/status",
+    response_model=V2MailItemRow,
+)
+def update_mail_status(
+    mail_id: int,
+    body: V2MailStatusUpdate,
+    info: TokenInfo = Depends(require_token),
+) -> V2MailItemRow:
+    """Eleven uppdaterar status på ett brev (öppnar = viewed,
+    exporterar = exported, etc.)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast eleven själv kan uppdatera brev-status.",
+        )
+
+    with session_scope() as s:
+        m = s.get(MailItem, mail_id)
+        if m is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Brevet hittades inte"
+            )
+        m.status = body.status
+        s.flush()
+        return V2MailItemRow(
+            id=m.id,
+            sender=m.sender,
+            sender_short=m.sender_short,
+            sender_kind=m.sender_kind,  # type: ignore[arg-type]
+            mail_type=m.mail_type,  # type: ignore[arg-type]
+            subject=m.subject,
+            body_meta=m.body_meta,
+            amount=float(m.amount) if m.amount is not None else None,
+            due_date=m.due_date,
+            received_at=m.received_at,
+            status=m.status,  # type: ignore[arg-type]
+            upcoming_id=m.upcoming_id,
+            transaction_id=m.transaction_id,
+            is_recurring=bool(m.is_recurring),
+            ocr_reference=m.ocr_reference,
+            bankgiro=m.bankgiro,
+        )
+
+
+# === Lärar-seed för postlådan ===
+
+class V2MailSeedItem(BaseModel):
+    sender: str
+    sender_short: Optional[str] = None
+    sender_kind: MailSenderKind = "other"
+    mail_type: MailType
+    subject: str
+    body_meta: Optional[str] = None
+    body: Optional[str] = None
+    amount: Optional[float] = None
+    due_date: Optional[_date] = None
+    is_recurring: bool = False
+    ocr_reference: Optional[str] = None
+    bankgiro: Optional[str] = None
+
+
+class V2MailSeedRequest(BaseModel):
+    items: list[V2MailSeedItem]
+    replace_existing: bool = False
+
+
+class V2MailSeedResponse(BaseModel):
+    student_id: int
+    created: int
+    deleted: int
+
+
+@router.post(
+    "/teacher/students/{student_id}/mail-seed",
+    response_model=V2MailSeedResponse,
+)
+def seed_mail_for_student(
+    student_id: int,
+    body: V2MailSeedRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2MailSeedResponse:
+    """Lärare seedar mail-rader till elevens postlåda.
+
+    `replace_existing=True` → tömmer postlådan först. Annars läggs
+    nya mail till befintliga.
+
+    Bara elevens egen lärare får göra detta.
+    """
+    if info.role != "teacher" or info.teacher_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast lärare kan seeda postlådan."
+        )
+
+    # Verifiera att eleven tillhör läraren
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as mdb:
+        student = mdb.get(Student, student_id)
+        if student is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Eleven hittades inte"
+            )
+        if student.teacher_id != info.teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Du kan bara seeda till dina egna elever.",
+            )
+        scope_key = scope_for_student(student)
+
+    # Skriv till elevens scope-DB
+    deleted = 0
+    created = 0
+    with scope_context(scope_key):
+        with session_scope() as s:
+            if body.replace_existing:
+                deleted = s.query(MailItem).delete()
+            for item in body.items:
+                amount = (
+                    Decimal(str(item.amount))
+                    if item.amount is not None else None
+                )
+                s.add(MailItem(
+                    sender=item.sender,
+                    sender_short=item.sender_short,
+                    sender_kind=item.sender_kind,
+                    mail_type=item.mail_type,
+                    subject=item.subject,
+                    body_meta=item.body_meta,
+                    body=item.body,
+                    amount=amount,
+                    due_date=item.due_date,
+                    is_recurring=item.is_recurring,
+                    ocr_reference=item.ocr_reference,
+                    bankgiro=item.bankgiro,
+                    status="unhandled",
+                ))
+                created += 1
+
+    return V2MailSeedResponse(
+        student_id=student_id,
+        created=created,
+        deleted=deleted,
+    )
 
 
 # === Endpoints ===

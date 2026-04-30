@@ -195,6 +195,72 @@ export type GoalsData = {
   goals: V2GoalRow[];
 };
 
+// === Postlådan ===
+export type V2MailType = "invoice" | "salary_slip" | "authority" | "reminder" | "info";
+export type V2MailStatus = "unhandled" | "viewed" | "exported" | "paid" | "expired";
+export type V2MailSenderKind =
+  | "bank"
+  | "cred"
+  | "skv"
+  | "ins"
+  | "land"
+  | "util"
+  | "work"
+  | "pen"
+  | "other";
+
+export type V2MailItem = {
+  id: number;
+  sender: string;
+  sender_short: string | null;
+  sender_kind: V2MailSenderKind;
+  mail_type: V2MailType;
+  subject: string;
+  body_meta: string | null;
+  amount: number | null;
+  due_date: string | null;
+  received_at: string;
+  status: V2MailStatus;
+  upcoming_id: number | null;
+  transaction_id: number | null;
+  is_recurring: boolean;
+  ocr_reference: string | null;
+  bankgiro: string | null;
+};
+
+export type V2MailSummary = {
+  total_count: number;
+  unhandled_count: number;
+  invoice_count: number;
+  salary_slip_count: number;
+  authority_count: number;
+  info_count: number;
+  to_pay_amount: number;
+  incoming_amount: number;
+  overdue_count: number;
+};
+
+export type MailData = {
+  student_id: number;
+  summary: V2MailSummary;
+  items: V2MailItem[];
+};
+
+export type V2MailSeedItem = {
+  sender: string;
+  sender_short?: string;
+  sender_kind?: V2MailSenderKind;
+  mail_type: V2MailType;
+  subject: string;
+  body_meta?: string;
+  body?: string;
+  amount?: number;
+  due_date?: string;
+  is_recurring?: boolean;
+  ocr_reference?: string;
+  bankgiro?: string;
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -219,6 +285,28 @@ export const v2Api = {
   budget: (month?: string) =>
     api<BudgetData>(`/v2/budget${month ? `?month=${month}` : ""}`),
   goals: () => api<GoalsData>("/v2/mal"),
+  postladan: (filter?: V2MailType | "unhandled") =>
+    api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
+  updateMailStatus: (mailId: number, status: V2MailStatus) =>
+    api<V2MailItem>(`/v2/postladan/${mailId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  seedMailForStudent: (
+    studentId: number,
+    items: V2MailSeedItem[],
+    replaceExisting: boolean = false,
+  ) =>
+    api<{ student_id: number; created: number; deleted: number }>(
+      `/v2/teacher/students/${studentId}/mail-seed`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          items,
+          replace_existing: replaceExisting,
+        }),
+      },
+    ),
   completeOnboarding: (body: {
     spend_profile: SpendProfile;
     fairness_choice: FairnessChoice | null;

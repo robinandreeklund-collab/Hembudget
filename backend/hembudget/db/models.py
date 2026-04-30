@@ -1041,6 +1041,85 @@ class PaymentReminder(TenantMixin, Base):
     )
 
 
+class MailItem(TenantMixin, Base):
+    """V2 Postlådan · brev/fakturor/lönespecar/myndighetspost.
+
+    Postlådan är meta-aktören som driver friktion: ett brev landar
+    → eleven måste välja (granska, exportera till banken, ignorera).
+    Modellen täcker fakturor (med belopp + förfallodag), lönespecar
+    (med belopp + utbetalningsdag), myndighetspost (utan belopp eller
+    med +/-), och rena info-brev.
+
+    Statusar (matchar prototypens mail-status-badges):
+    - "unhandled"  · ny, kräver eleven göra något
+    - "viewed"     · eleven öppnade men gjorde inget val
+    - "exported"   · eleven exporterade som UpcomingTransaction
+    - "paid"       · matchad mot en bokförd Transaction
+    - "expired"    · gammal, ingen åtgärd tagen
+
+    Lärare seedar mail genom POST /v2/teacher/students/:id/mail-seed.
+    Eleven kan PATCH:a status via /v2/postladan/:id/status.
+    """
+    __tablename__ = "mail_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # Avsändare & visning
+    sender: Mapped[str] = mapped_column(String(120), nullable=False)
+    sender_short: Mapped[Optional[str]] = mapped_column(
+        String(8), nullable=True
+    )  # "CC", "SKV", "FT" — för icon-badge
+    sender_kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="other",
+    )  # bank|cred|skv|ins|land|util|work|pen|other
+
+    # Brevet
+    mail_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True,
+    )  # invoice|salary_slip|authority|reminder|info
+    subject: Mapped[str] = mapped_column(String(240), nullable=False)
+    body_meta: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )  # andra raden i mail-list — fri text
+    body: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )  # full text om eleven öppnar brevet
+
+    # Belopp & datum
+    amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True,
+    )  # signed: positivt = inkomst, negativt = utgift, NULL = info
+    due_date: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True, index=True,
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+
+    # Status & länkar
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unhandled", index=True,
+    )
+    upcoming_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("upcoming_transactions.id"), nullable=True,
+    )  # Sätts när eleven exporterar brevet
+    transaction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True,
+    )  # Sätts när bokförd transaktion matchar
+
+    # Metadata
+    is_recurring: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    ocr_reference: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    bankgiro: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 def create_all() -> None:
     from .base import get_engine
 

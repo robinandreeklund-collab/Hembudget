@@ -104,6 +104,8 @@ def run_migrations(engine: Engine) -> list[str]:
         "pending_orders",
         # Bank-flöde (idé 3): ScheduledPayment + PaymentReminder
         "scheduled_payments", "payment_reminders",
+        # V2 Postlådan
+        "mail_items",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):

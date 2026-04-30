@@ -1007,6 +1007,218 @@ def test_v2_mal_progress_overall(fx) -> None:
     assert abs(s["overall_progress_pct"] - 33.3) < 0.5
 
 
+# === /v2/postladan ===
+
+def test_v2_postladan_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/postladan")
+    assert r.status_code == 401
+
+
+def test_v2_postladan_for_student_returns_structure(fx) -> None:
+    """Eleven utan brev får tom payload med rätt struktur."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/postladan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    s = data["summary"]
+    for f in (
+        "total_count",
+        "unhandled_count",
+        "invoice_count",
+        "salary_slip_count",
+        "authority_count",
+        "info_count",
+        "to_pay_amount",
+        "incoming_amount",
+        "overdue_count",
+    ):
+        assert f in s
+    assert isinstance(data["items"], list)
+
+
+def test_v2_postladan_for_teacher_returns_empty(fx) -> None:
+    """Lärare har ingen scope-DB — får tom payload."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/postladan",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["items"] == []
+
+
+def test_v2_postladan_seed_and_read(fx) -> None:
+    """Lärare seedar 3 mail → eleven ser dem korrekt."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+
+    # Lärare seedar 3 mail
+    seed_body = {
+        "items": [
+            {
+                "sender": "SEB Visa",
+                "sender_short": "CC",
+                "sender_kind": "cred",
+                "mail_type": "invoice",
+                "subject": "April-spend: 47 transaktioner att granska",
+                "body_meta": "Mat 2 240 · Restaurang 1 470",
+                "amount": -4822,
+                "due_date": "2026-05-28",
+                "is_recurring": False,
+            },
+            {
+                "sender": "Skatteverket",
+                "sender_short": "SKV",
+                "sender_kind": "skv",
+                "mail_type": "authority",
+                "subject": "Inkomstdeklaration 2025 — granska",
+                "body_meta": "1 förslag · prognos +1 240 kr tillbaka",
+                "amount": 1240,
+                "due_date": "2026-05-02",
+            },
+            {
+                "sender": "Sthlm Sjukhus AB",
+                "sender_short": "LÖN",
+                "sender_kind": "work",
+                "mail_type": "salary_slip",
+                "subject": "Lönespec april 2026",
+                "body_meta": "brutto 31 250 + OB 480",
+                "amount": 22880,
+                "due_date": "2026-05-25",
+            },
+        ],
+        "replace_existing": True,
+    }
+    r = client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json=seed_body,
+    )
+    assert r.status_code == 200, r.text
+    seed = r.json()
+    assert seed["created"] == 3
+    assert seed["student_id"] == sid
+
+    # Eleven läser
+    r2 = client.get(
+        "/v2/postladan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.status_code == 200, r2.text
+    data = r2.json()
+    assert data["summary"]["total_count"] == 3
+    assert data["summary"]["unhandled_count"] == 3
+    assert data["summary"]["invoice_count"] == 1
+    assert data["summary"]["salary_slip_count"] == 1
+    assert data["summary"]["authority_count"] == 1
+    # Att betala: 4822 (CC-faktura)
+    assert data["summary"]["to_pay_amount"] == 4822
+    # Inkommande: 1240 (SKV-tillbaka) + 22880 (lön) = 24120
+    assert data["summary"]["incoming_amount"] == 24120
+
+    senders = {item["sender"] for item in data["items"]}
+    assert "SEB Visa" in senders
+    assert "Skatteverket" in senders
+    assert "Sthlm Sjukhus AB" in senders
+
+
+def test_v2_postladan_filter_unhandled(fx) -> None:
+    """`?filter=unhandled` returnerar bara de som inte hanterats."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "items": [
+                {"sender": "A", "mail_type": "invoice", "subject": "x", "amount": -100},
+                {"sender": "B", "mail_type": "invoice", "subject": "y", "amount": -200},
+            ],
+            "replace_existing": True,
+        },
+    )
+    # Markera A som exporterad
+    items = client.get(
+        "/v2/postladan",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()["items"]
+    a_id = next(it["id"] for it in items if it["sender"] == "A")
+    r = client.patch(
+        f"/v2/postladan/{a_id}/status",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"status": "exported"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "exported"
+
+    # Nu ska filter=unhandled bara visa B
+    r2 = client.get(
+        "/v2/postladan?filter=unhandled",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.status_code == 200, r2.text
+    items2 = r2.json()["items"]
+    assert len(items2) == 1
+    assert items2[0]["sender"] == "B"
+    # Total-count är fortfarande 2 (filter påverkar inte summary)
+    assert r2.json()["summary"]["total_count"] == 2
+    assert r2.json()["summary"]["unhandled_count"] == 1
+
+
+def test_v2_postladan_seed_blocks_other_teacher(fx) -> None:
+    """Annan lärares elev → 403."""
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {sa}"},
+        json={"items": [], "replace_existing": False},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_postladan_seed_replace_existing(fx) -> None:
+    """replace_existing=True → tömmer befintliga rader först."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    # Första seed: 2 brev
+    client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "items": [
+                {"sender": "A", "mail_type": "invoice", "subject": "x"},
+                {"sender": "B", "mail_type": "invoice", "subject": "y"},
+            ],
+            "replace_existing": True,
+        },
+    )
+    # Andra seed: 1 brev, replace_existing=True
+    r = client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "items": [
+                {"sender": "C", "mail_type": "info", "subject": "z"},
+            ],
+            "replace_existing": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["deleted"] == 2
+    assert r.json()["created"] == 1
+
+    items = client.get(
+        "/v2/postladan",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()["items"]
+    assert len(items) == 1
+    assert items[0]["sender"] == "C"
+
+
 def test_v2_bank_upcoming_bills(fx) -> None:
     """Öppna kommande fakturor speglas i payload + upcoming_open_total."""
     client, _tch, _sa, stu, _tid, _said, sid = fx
