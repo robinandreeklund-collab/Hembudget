@@ -5,6 +5,7 @@ import { MobileTopBar, Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
 import { OnboardingV2 } from "./v2/OnboardingV2";
 import { HubV2 } from "./v2/HubV2";
+import { BankV2 } from "./v2/BankV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
 import { V2RootRedirect } from "./v2/V2RootRedirect";
 import { DashboardV2Guard } from "./v2/DashboardV2Guard";
@@ -219,6 +220,7 @@ export default function App() {
           <Route path="/v2" element={<V2Bootstrap />} />
           <Route path="/v2/onboarding" element={<OnboardingV2 />} />
           <Route path="/v2/hub" element={<HubV2 />} />
+          <Route path="/v2/banken" element={<BankV2 />} />
           <Route path="/teacher/v2" element={<V2RosterPage />} />
           {/* /dashboard har en V2-guard: super-admin och elever med
               v2_enabled redirectas till /v2/hub. Övriga får v1. */}

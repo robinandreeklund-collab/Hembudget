@@ -506,3 +506,210 @@ def test_v2_hub_for_teacher_returns_placeholder(fx) -> None:
     assert data["accounts_count"] == 0
     assert data["total_balance"] == 0
     assert data["month_summary"]["transactions_count"] == 0
+
+
+# === /v2/bank ===
+
+def test_v2_bank_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/bank")
+    assert r.status_code == 401
+
+
+def test_v2_bank_for_student_returns_structure(fx) -> None:
+    """Eleven utan transaktioner får tom payload med rätt struktur."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert "year_month" in data
+    # Summary-fält
+    s = data["summary"]
+    for field in (
+        "total_balance",
+        "accounts_count",
+        "upcoming_open_total",
+        "upcoming_open_count",
+        "income_this_month",
+        "expenses_this_month",
+        "transactions_count",
+    ):
+        assert field in s, f"saknar fält {field} i summary"
+    # Listor (kan vara tomma)
+    assert isinstance(data["accounts"], list)
+    assert isinstance(data["recent_transactions"], list)
+    assert isinstance(data["upcoming_bills"], list)
+
+
+def test_v2_bank_for_teacher_returns_empty(fx) -> None:
+    """Lärare har ingen scope-DB — får tom payload utan crash."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["summary"]["accounts_count"] == 0
+    assert data["accounts"] == []
+    assert data["recent_transactions"] == []
+    assert data["upcoming_bills"] == []
+
+
+def _seed_scope(sid: int, fn) -> None:
+    """Hjälp-funktion: kör `fn(session)` inom elevens scope-DB."""
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        assert student is not None
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            fn(s)
+
+
+def test_v2_bank_with_account_and_transactions(fx) -> None:
+    """När scope-DB har konton + transaktioner ska de speglas i bank-vyn."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("1000"),
+            opening_balance_date=_d(2026, 1, 1),
+        )
+        s.add(acc)
+        s.flush()
+        s.add(_Tx(
+            account_id=acc.id,
+            date=_d.today(),
+            amount=_D("500"),
+            currency="SEK",
+            raw_description="Test-insättning",
+            hash="hub-bank-test-1",
+            user_verified=True,
+        ))
+        s.add(_Tx(
+            account_id=acc.id,
+            date=_d.today(),
+            amount=_D("-200"),
+            currency="SEK",
+            raw_description="ICA Maxi",
+            hash="hub-bank-test-2",
+            user_verified=True,
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["accounts_count"] == 1
+    # 1000 + 500 - 200 = 1300
+    assert data["summary"]["total_balance"] == 1300
+    # 2 transaktioner denna månad
+    assert data["summary"]["transactions_count"] == 2
+    assert data["summary"]["income_this_month"] == 500
+    assert data["summary"]["expenses_this_month"] == 200
+    # Konto-data
+    assert len(data["accounts"]) == 1
+    assert data["accounts"][0]["name"] == "Lönekonto"
+    assert data["accounts"][0]["bank"] == "SEB"
+    # Transaktioner sorterade nyast först
+    assert len(data["recent_transactions"]) == 2
+    descs = [t["description"] for t in data["recent_transactions"]]
+    assert "Test-insättning" in descs
+    assert "ICA Maxi" in descs
+    # Account-namn ska följa med transaktionerna
+    for t in data["recent_transactions"]:
+        assert t["account_name"] == "Lönekonto"
+
+
+def test_v2_bank_limit_transactions_param(fx) -> None:
+    """limit_transactions kapar antalet returnerade transaktioner."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    def seed(s) -> None:
+        acc = _Acc(name="K", bank="B", type="checking", currency="SEK")
+        s.add(acc)
+        s.flush()
+        for i in range(5):
+            s.add(_Tx(
+                account_id=acc.id, date=_d.today(),
+                amount=_D("10"), currency="SEK",
+                raw_description=f"tx{i}", hash=f"limit-tx-{i}",
+                user_verified=True,
+            ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/bank?limit_transactions=3",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    assert len(r.json()["recent_transactions"]) == 3
+
+
+def test_v2_bank_upcoming_bills(fx) -> None:
+    """Öppna kommande fakturor speglas i payload + upcoming_open_total."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc, UpcomingTransaction as _Up,
+    )
+
+    def seed(s) -> None:
+        acc = _Acc(name="K", bank="B", type="checking", currency="SEK")
+        s.add(acc)
+        s.flush()
+        s.add(_Up(
+            kind="bill", name="Hyra",
+            amount=_D("8000"),
+            expected_date=_d.today() + _td(days=5),
+            debit_account_id=acc.id,
+        ))
+        s.add(_Up(
+            kind="bill", name="El",
+            amount=_D("750"),
+            expected_date=_d.today() + _td(days=10),
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/bank",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    bills = data["upcoming_bills"]
+    assert len(bills) == 2
+    # Sorterade kronologiskt — Hyra (5 dagar) före El (10 dagar)
+    assert bills[0]["name"] == "Hyra"
+    assert bills[1]["name"] == "El"
+    assert all(b["is_paid"] is False for b in bills)
+    # Total öppna fakturor: 8000 + 750
+    assert data["summary"]["upcoming_open_total"] == 8750
+    assert data["summary"]["upcoming_open_count"] == 2

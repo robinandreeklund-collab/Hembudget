@@ -23,7 +23,7 @@ from datetime import date as _date
 from decimal import Decimal
 
 from ..db.base import session_scope
-from ..db.models import Account, Transaction, FundHolding
+from ..db.models import Account, Transaction, FundHolding, UpcomingTransaction
 from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
 from ..wellbeing.calculator import calculate_wellbeing
@@ -302,6 +302,243 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         total_balance=total_balance,
         accounts_count=accounts_count,
     )
+
+
+# === Bank-aggregat (riktig data från scope-DB) ===
+
+class BankAccount(BaseModel):
+    id: int
+    name: str
+    bank: str
+    type: str
+    account_number: Optional[str] = None
+    current_balance: float
+    fund_value: float
+    total_value: float
+    incognito: bool
+
+
+class BankTransaction(BaseModel):
+    id: int
+    account_id: int
+    account_name: str
+    date: _date
+    amount: float
+    description: str
+    merchant: Optional[str] = None
+    category_id: Optional[int] = None
+    is_transfer: bool
+
+
+class BankUpcoming(BaseModel):
+    id: int
+    name: str
+    kind: Literal["bill", "income"]
+    amount: float
+    expected_date: _date
+    debit_account_id: Optional[int] = None
+    bankgiro: Optional[str] = None
+    plusgiro: Optional[str] = None
+    autogiro: bool
+    is_paid: bool
+
+
+class BankSummary(BaseModel):
+    total_balance: float
+    accounts_count: int
+    upcoming_open_total: float
+    upcoming_open_count: int
+    income_this_month: float
+    expenses_this_month: float
+    transactions_count: int
+
+
+class BankResponse(BaseModel):
+    student_id: int
+    year_month: str
+    summary: BankSummary
+    accounts: list[BankAccount]
+    recent_transactions: list[BankTransaction]
+    upcoming_bills: list[BankUpcoming]
+
+
+def _empty_bank(student_id: int) -> BankResponse:
+    return BankResponse(
+        student_id=student_id,
+        year_month=_current_year_month(),
+        summary=BankSummary(
+            total_balance=0,
+            accounts_count=0,
+            upcoming_open_total=0,
+            upcoming_open_count=0,
+            income_this_month=0,
+            expenses_this_month=0,
+            transactions_count=0,
+        ),
+        accounts=[],
+        recent_transactions=[],
+        upcoming_bills=[],
+    )
+
+
+@router.get("/bank", response_model=BankResponse)
+def get_bank(
+    limit_transactions: int = 30,
+    info: TokenInfo = Depends(require_token),
+) -> BankResponse:
+    """Aggregat-endpoint för bank-vyn.
+
+    Returnerar i ETT anrop:
+    - Alla konton med saldo (cash + fond-värde)
+    - Senaste N transaktioner kronologiskt (default 30)
+    - Öppna kommande fakturor (förfallodag framåt, ej fullbetalda)
+    - Månads-summa (in/ut/antal)
+
+    Demo/teacher får en tom payload (de har ingen scope-DB).
+    Om scope-DB saknas eller failar: returnera tom payload, blanka
+    inte ut vyn.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_bank(0)
+
+    try:
+        with session_scope() as s:
+            today = _date.today()
+            month_start = _date(today.year, today.month, 1)
+
+            # 1. Konton + saldo
+            accounts_db = s.query(Account).order_by(Account.id).all()
+            fund_values: dict[int, Decimal] = {}
+            for acc_id, fund_total in (
+                s.query(
+                    FundHolding.account_id,
+                    _func.coalesce(_func.sum(FundHolding.market_value), 0),
+                )
+                .group_by(FundHolding.account_id)
+                .all()
+            ):
+                fund_values[acc_id] = Decimal(str(fund_total or 0))
+
+            accounts_out: list[BankAccount] = []
+            account_names: dict[int, str] = {}
+            total_balance = Decimal("0")
+            for acc in accounts_db:
+                ob = acc.opening_balance or Decimal("0")
+                start = acc.opening_balance_date
+                q = s.query(
+                    _func.coalesce(_func.sum(Transaction.amount), 0)
+                ).filter(
+                    Transaction.account_id == acc.id,
+                    Transaction.date <= today,
+                )
+                if start is not None:
+                    q = q.filter(Transaction.date > start)
+                movement = Decimal(str(q.scalar() or 0))
+                cur = ob + movement
+                fv = fund_values.get(acc.id, Decimal("0"))
+                tv = cur + fv
+                is_incog = bool(getattr(acc, "incognito", False))
+                if not is_incog:
+                    total_balance += tv if fv > 0 else cur
+                accounts_out.append(BankAccount(
+                    id=acc.id,
+                    name=acc.name,
+                    bank=acc.bank,
+                    type=acc.type,
+                    account_number=acc.account_number,
+                    current_balance=float(cur),
+                    fund_value=float(fv),
+                    total_value=float(tv),
+                    incognito=is_incog,
+                ))
+                account_names[acc.id] = acc.name
+
+            # 2. Senaste transaktioner
+            tx_rows = (
+                s.query(Transaction)
+                .order_by(Transaction.date.desc(), Transaction.id.desc())
+                .limit(max(1, min(limit_transactions, 200)))
+                .all()
+            )
+            recent_tx: list[BankTransaction] = [
+                BankTransaction(
+                    id=t.id,
+                    account_id=t.account_id,
+                    account_name=account_names.get(t.account_id, "—"),
+                    date=t.date,
+                    amount=float(t.amount),
+                    description=t.raw_description or "",
+                    merchant=t.normalized_merchant,
+                    category_id=t.category_id,
+                    is_transfer=bool(getattr(t, "is_transfer", False)),
+                )
+                for t in tx_rows
+            ]
+
+            # 3. Kommande fakturor (öppna = ej fullt matchade)
+            upcoming_rows = (
+                s.query(UpcomingTransaction)
+                .filter(UpcomingTransaction.expected_date >= today)
+                .order_by(UpcomingTransaction.expected_date.asc())
+                .all()
+            )
+            upcoming: list[BankUpcoming] = []
+            upcoming_open_total = Decimal("0")
+            upcoming_open_count = 0
+            for u in upcoming_rows:
+                # En upcoming räknas som "betald" när den är matchad mot
+                # en faktisk transaktion. Mer nyanserad delbetalnings-
+                # status finns i /upcoming-endpointen — för v2/bank
+                # räcker is_paid=True/False.
+                paid = u.matched_transaction_id is not None
+                if not paid:
+                    upcoming_open_total += u.amount
+                    upcoming_open_count += 1
+                upcoming.append(BankUpcoming(
+                    id=u.id,
+                    name=u.name,
+                    kind=u.kind if u.kind in ("bill", "income") else "bill",
+                    amount=float(u.amount),
+                    expected_date=u.expected_date,
+                    debit_account_id=u.debit_account_id,
+                    bankgiro=u.bankgiro,
+                    plusgiro=u.plusgiro,
+                    autogiro=bool(u.autogiro),
+                    is_paid=paid,
+                ))
+
+            # 4. Månads-summa
+            month_txs = (
+                s.query(Transaction)
+                .filter(Transaction.date >= month_start)
+                .filter(Transaction.date <= today)
+                .all()
+            )
+            income = sum(
+                float(t.amount) for t in month_txs if float(t.amount) > 0
+            )
+            expenses = sum(
+                -float(t.amount) for t in month_txs if float(t.amount) < 0
+            )
+
+            return BankResponse(
+                student_id=info.student_id,
+                year_month=_current_year_month(),
+                summary=BankSummary(
+                    total_balance=float(total_balance),
+                    accounts_count=len(accounts_out),
+                    upcoming_open_total=float(upcoming_open_total),
+                    upcoming_open_count=upcoming_open_count,
+                    income_this_month=round(income, 2),
+                    expenses_this_month=round(expenses, 2),
+                    transactions_count=len(month_txs),
+                ),
+                accounts=accounts_out,
+                recent_transactions=recent_tx,
+                upcoming_bills=upcoming,
+            )
+    except Exception:
+        return _empty_bank(info.student_id)
 
 
 # === Endpoints ===

@@ -73,6 +73,62 @@ export type HubData = {
   accounts_count: number;
 };
 
+export type BankAccount = {
+  id: number;
+  name: string;
+  bank: string;
+  type: string;
+  account_number: string | null;
+  current_balance: number;
+  fund_value: number;
+  total_value: number;
+  incognito: boolean;
+};
+
+export type BankTransaction = {
+  id: number;
+  account_id: number;
+  account_name: string;
+  date: string;
+  amount: number;
+  description: string;
+  merchant: string | null;
+  category_id: number | null;
+  is_transfer: boolean;
+};
+
+export type BankUpcoming = {
+  id: number;
+  name: string;
+  kind: "bill" | "income";
+  amount: number;
+  expected_date: string;
+  debit_account_id: number | null;
+  bankgiro: string | null;
+  plusgiro: string | null;
+  autogiro: boolean;
+  is_paid: boolean;
+};
+
+export type BankSummary = {
+  total_balance: number;
+  accounts_count: number;
+  upcoming_open_total: number;
+  upcoming_open_count: number;
+  income_this_month: number;
+  expenses_this_month: number;
+  transactions_count: number;
+};
+
+export type BankData = {
+  student_id: number;
+  year_month: string;
+  summary: BankSummary;
+  accounts: BankAccount[];
+  recent_transactions: BankTransaction[];
+  upcoming_bills: BankUpcoming[];
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -92,6 +148,8 @@ export type OnboardingEventType =
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   hub: () => api<HubData>("/v2/hub"),
+  bank: (limitTransactions: number = 30) =>
+    api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
   completeOnboarding: (body: {
     spend_profile: SpendProfile;
     fairness_choice: FairnessChoice | null;
