@@ -344,6 +344,30 @@ export type EmployerData = {
   open_question_id: number | null;
 };
 
+// === /v2/skatten ===
+
+export type V2TaxLineItem = {
+  category: "income" | "deduction" | "capital" | "tax" | "diff";
+  label: string;
+  name: string;
+  detail: string;
+  amount: number;
+  is_proposal: boolean;
+  proposal_id: string | null;
+};
+
+export type TaxData = {
+  student_id: number;
+  year: number;
+  deadline: string | null;
+  gross_income: number;
+  prelim_tax_paid: number;
+  final_tax: number;
+  diff: number;
+  pending_proposal_count: number;
+  items: V2TaxLineItem[];
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -395,6 +419,8 @@ export const v2Api = {
     ),
   goals: () => api<GoalsData>("/v2/mal"),
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
+  skatten: (year?: number) =>
+    api<TaxData>(`/v2/skatten${year ? `?year=${year}` : ""}`),
   postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>

@@ -2156,6 +2156,218 @@ def get_employer(
     )
 
 
+# === Skatten (/v2/skatten) ===
+
+class V2TaxLineItem(BaseModel):
+    """En rad i deklarationen — matchar prototypens .tx-row."""
+    category: Literal["income", "deduction", "capital", "tax", "diff"]
+    label: str  # vänster-kolumn, t.ex. "Inkomst", "Avdrag", "Kapital", "Skatt", "Diff"
+    name: str
+    detail: str
+    amount: float  # signed: + för inkomst/återbäring, − för avdrag/skatt
+    is_proposal: bool = False
+    proposal_id: Optional[str] = None
+
+
+class V2TaxResponse(BaseModel):
+    student_id: int
+    year: int
+    deadline: Optional[_date] = None
+    gross_income: float
+    prelim_tax_paid: float
+    final_tax: float
+    diff: float  # positiv = återbäring, negativ = kvarskatt
+    pending_proposal_count: int
+    items: list[V2TaxLineItem]
+
+
+def _empty_tax(student_id: int, year: int) -> V2TaxResponse:
+    return V2TaxResponse(
+        student_id=student_id,
+        year=year,
+        gross_income=0,
+        prelim_tax_paid=0,
+        final_tax=0,
+        diff=0,
+        pending_proposal_count=0,
+        items=[],
+    )
+
+
+@router.get("/skatten", response_model=V2TaxResponse)
+def get_skatten(
+    year: Optional[int] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2TaxResponse:
+    """Aggregat för deklarationssidan /v2/skatten.
+
+    Beräknar:
+    - Bruttoinkomst = projekterad årslön (gross_salary_monthly × 12)
+    - Förskottsinbetald skatt = summa skatt-rader på lönespec-
+      transactions OR uppskattning (gross × tax_rate_effective)
+    - Avdrag: reseavdrag (om has_car_loan, schabloniserat),
+      schablonskatt ISK (FundHolding.market_value × 0.89 %)
+    - Förslag att granska: ränteavdrag på CSN (om has_student_loan,
+      ~548 kr ränta × 30 % = 142 kr lägre skatt)
+    - Slutlig skatt + diff (åter/kvar)
+
+    Demo/teacher får tom payload.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_tax(0, year or _date.today().year)
+
+    target_year = year or _date.today().year
+    deadline = _date(target_year + 1, 5, 2)  # 2 maj året efter
+
+    with master_session() as mdb:
+        student = mdb.get(Student, info.student_id)
+        if not student:
+            return _empty_tax(info.student_id, target_year)
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if not profile:
+            return _empty_tax(info.student_id, target_year)
+
+        gross_monthly = float(profile.gross_salary_monthly or 0)
+        gross_annual = round(gross_monthly * 12, 0)
+        tax_rate = float(profile.tax_rate_effective or 0.30)
+        prelim_tax = round(gross_annual * tax_rate, 0)
+        net_annual = gross_annual - prelim_tax
+
+        has_student_loan = bool(getattr(profile, "has_student_loan", False))
+        has_car_loan = bool(getattr(profile, "has_car_loan", False))
+        employer = profile.employer or "Arbetsgivare"
+
+    # Hämta ISK-värde + lönespec-aktualer från scope-DB
+    isk_value = 0.0
+    actual_prelim_tax: Optional[float] = None
+    try:
+        with session_scope() as s:
+            from datetime import date as _d2
+            year_start = _d2(target_year, 1, 1)
+            year_end = _d2(target_year + 1, 1, 1)
+
+            # ISK-värde = summa fond-market_value
+            isk_q = s.query(
+                _func.coalesce(_func.sum(FundHolding.market_value), 0)
+            ).scalar()
+            isk_value = float(isk_q or 0)
+
+            # Faktisk preliminärskatt — om vi har lönespec-transaktioner
+            # där notes innehåller skatte-info. Förenklad: räkna inkomst-
+            # transaktioner och anta tax_rate på dem.
+            income_q = (
+                s.query(_func.coalesce(_func.sum(Transaction.amount), 0))
+                .filter(Transaction.amount > 0)
+                .filter(Transaction.date >= year_start)
+                .filter(Transaction.date < year_end)
+                .filter(_func.lower(Transaction.raw_description).like("%lön%"))
+                .scalar()
+            )
+            year_net_income = float(income_q or 0)
+            if year_net_income > 0:
+                # Bruttera upp via tax_rate, dra netto → preliminär skatt
+                year_gross = year_net_income / max(0.001, 1 - tax_rate)
+                actual_prelim_tax = round(year_gross - year_net_income, 0)
+    except Exception:
+        pass
+
+    if actual_prelim_tax is not None and actual_prelim_tax > 0:
+        prelim_tax = actual_prelim_tax
+
+    # Bygg deklarationsrader (matchar prototypens 6 rader)
+    items: list[V2TaxLineItem] = []
+    pending_proposals = 0
+
+    items.append(V2TaxLineItem(
+        category="income",
+        label="Inkomst",
+        name=f"Lön · {employer}",
+        detail="Kontrolluppgift KU10 · brutto helår",
+        amount=gross_annual,
+    ))
+
+    # Reseavdrag · schabloniserat (12 km × 220 dgr × 18.5 kr/mil = 4884 kr)
+    travel_deduction = 0.0
+    if has_car_loan:
+        # Anta att eleven pendlar med bil ~12 km enkel resa
+        travel_deduction = 4884.0
+        items.append(V2TaxLineItem(
+            category="deduction",
+            label="Avdrag",
+            name="Reseavdrag (12 km × 220 dgr)",
+            detail="Bil · max 18,5 kr/mil",
+            amount=-travel_deduction,
+        ))
+
+    # Schablonskatt ISK (0,89 % av underlaget — förenklad)
+    isk_tax = 0.0
+    if isk_value > 0:
+        isk_tax = round(isk_value * 0.0089, 0)
+        items.append(V2TaxLineItem(
+            category="capital",
+            label="Kapital",
+            name="Schablonskatt ISK",
+            detail=f"Underlag {int(isk_value):,} kr × 0,89 %".replace(",", " "),
+            amount=-isk_tax,
+        ))
+
+    # Förslag att granska: CSN-ränteavdrag
+    csn_interest_deduction = 0.0
+    if has_student_loan:
+        # Schabloniserad ränta ~548 kr/år × 30 % = 142 kr
+        csn_interest = 548.0
+        csn_interest_deduction = round(csn_interest * 0.30, 0)
+        pending_proposals += 1
+        items.append(V2TaxLineItem(
+            category="deduction",
+            label="Avdrag",
+            name="Ränta CSN-lån · förslag",
+            detail=f"Räntor {int(csn_interest)} kr · 30 % avdrag",
+            amount=-csn_interest_deduction,
+            is_proposal=True,
+            proposal_id="csn-interest",
+        ))
+
+    # Slutlig skatt = preliminär skatt − avdrag (skattereduktion på
+    # avdragen, schabloniserat 30 %) + ISK-schablonskatt
+    deductions_total = travel_deduction + csn_interest_deduction
+    deduction_tax_reduction = round(deductions_total * 0.30, 0) if deductions_total else 0
+    final_tax = round(prelim_tax - deduction_tax_reduction + isk_tax, 0)
+
+    items.append(V2TaxLineItem(
+        category="tax",
+        label="Skatt",
+        name="Slutlig skatt",
+        detail="Efter jobbskatteavdrag & ränteavdrag",
+        amount=-final_tax,
+    ))
+
+    diff = round(prelim_tax - final_tax, 0)
+    items.append(V2TaxLineItem(
+        category="diff",
+        label="Diff",
+        name="Återbäring" if diff >= 0 else "Kvarskatt",
+        detail=f"Insatt {int(prelim_tax):,} − slutlig {int(final_tax):,}".replace(",", " "),
+        amount=diff,
+    ))
+
+    return V2TaxResponse(
+        student_id=info.student_id,
+        year=target_year,
+        deadline=deadline,
+        gross_income=gross_annual,
+        prelim_tax_paid=prelim_tax,
+        final_tax=final_tax,
+        diff=diff,
+        pending_proposal_count=pending_proposals,
+        items=items,
+    )
+
+
 # === Endpoints ===
 
 @router.get("/status", response_model=V2StatusResponse)

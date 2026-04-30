@@ -1577,6 +1577,122 @@ def test_v2_arbetsgivaren_with_salary_transactions(fx) -> None:
     assert slips[0]["tax_amount"] == 8850
 
 
+# === /v2/skatten ===
+
+def test_v2_skatten_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/skatten")
+    assert r.status_code == 401
+
+
+def test_v2_skatten_for_teacher_returns_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/skatten",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["items"] == []
+    assert data["gross_income"] == 0
+
+
+def test_v2_skatten_without_profile_returns_empty(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/skatten",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["items"] == []
+
+
+def test_v2_skatten_with_profile_returns_basic_lines(fx) -> None:
+    """Elev med profil får inkomst-rad + skatt-rad + diff-rad minst."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=26041,  # ger 312500 årslön
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+            has_student_loan=False,
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/skatten",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    # 312500 årslön
+    assert data["gross_income"] == 312492 or data["gross_income"] == 312500
+    # Förskottsinbetald skatt = brutto × 28 %
+    assert data["prelim_tax_paid"] > 80000
+    # Items innehåller åtminstone 3 rader (inkomst + skatt + diff)
+    cats = [item["category"] for item in data["items"]]
+    assert "income" in cats
+    assert "tax" in cats
+    assert "diff" in cats
+    # deadline ~2 maj nästa år
+    assert data["deadline"] is not None
+    assert "-05-02" in data["deadline"]
+
+
+def test_v2_skatten_with_student_loan_has_csn_proposal(fx) -> None:
+    """has_student_loan=True → ett CSN-ränteavdrag-förslag dyker upp."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=26041,
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+            has_student_loan=True,
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/skatten",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["pending_proposal_count"] == 1
+    proposals = [i for i in data["items"] if i["is_proposal"]]
+    assert len(proposals) == 1
+    assert proposals[0]["proposal_id"] == "csn-interest"
+    # Avdraget gör skatten ~142 kr lägre (548 × 30 %)
+    assert proposals[0]["amount"] < 0
+    assert abs(proposals[0]["amount"]) > 100
+    assert abs(proposals[0]["amount"]) < 200
+
+
+def test_v2_skatten_year_query_param(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/skatten?year=2024",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["year"] == 2024
+
+
 def test_v2_bank_upcoming_bills(fx) -> None:
     """Öppna kommande fakturor speglas i payload + upcoming_open_total."""
     client, _tch, _sa, stu, _tid, _said, sid = fx
