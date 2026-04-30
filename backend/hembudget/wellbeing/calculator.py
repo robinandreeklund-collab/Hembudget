@@ -287,6 +287,53 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: payment_marks-factor misslyckades",
         )
 
+    # Deklaration inlämnad (TaxYearReturn) — pedagogiskt: att hantera
+    # skattekontot är ett tecken på ekonomisk mognad. Stora kvarskatter
+    # som inte är planerade slår mot ekonomin direkt.
+    try:
+        from ..db.models import TaxYearReturn as _TYR
+        from datetime import date as _date_t
+        current_year = _date_t.today().year
+        # Senaste året som lämnats in
+        latest_return = (
+            session.query(_TYR)
+            .order_by(_TYR.year.desc())
+            .first()
+        )
+        if latest_return is not None:
+            # Bonus: deklaration lämnad i tid (gäller fjolåret)
+            if latest_return.year == current_year - 1:
+                economy += 3
+                factors.append(WellbeingFactor(
+                    "economy", 3,
+                    f"Deklaration {latest_return.year} inlämnad — "
+                    "skattekontot reglerat i tid.",
+                ))
+            diff = float(latest_return.diff)
+            # Stor kvarskatt → economy-penalty (måste betalas in)
+            if diff < -5000:
+                penalty = min(15, int(abs(diff) // 1000))
+                economy -= penalty
+                factors.append(WellbeingFactor(
+                    "economy", -penalty,
+                    f"Kvarskatt {int(abs(diff)):,} kr — ".replace(",", " ")
+                    + "måste betalas in. Likviditeten pressad.",
+                ))
+            # Stor återbäring → safety-bonus (oväntat tillskott)
+            elif diff > 3000:
+                bonus = min(8, int(diff // 1000))
+                safety += bonus
+                factors.append(WellbeingFactor(
+                    "safety", bonus,
+                    f"Återbäring {int(diff):,} kr — ".replace(",", " ")
+                    + "oväntat tillskott till bufferten.",
+                ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: tax_year_return-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:

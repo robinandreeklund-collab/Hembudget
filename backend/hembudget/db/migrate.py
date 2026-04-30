@@ -109,6 +109,8 @@ def run_migrations(engine: Engine) -> list[str]:
         # V2 Lånegivaren — Fas 2A
         "loan_products", "payment_marks", "credit_checks",
         "kalp_calculations",
+        # V2 Skatteverket — Fas 2B
+        "tax_deductions", "tax_proposals", "tax_year_returns",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):

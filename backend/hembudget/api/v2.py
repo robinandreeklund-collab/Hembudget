@@ -26,12 +26,17 @@ from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
     MailItem, Loan, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
+    TaxDeduction, TaxProposal, TaxYearReturn,
 )
 from ..loans.credit import (
     compute_credit_check, latest_credit_check, latest_kalp,
 )
 from ..loans.matcher import LoanMatcher
 from ..loans.products_seed import seed_default_loan_products
+from ..tax.proposals import (
+    auto_generate_proposals, compute_tax_summary, approve_proposal,
+    reject_proposal, submit_tax_year, latest_tax_year_return,
+)
 from ..school.employer_models import (
     CollectiveAgreement,
     EmployerSatisfaction,
@@ -2193,6 +2198,43 @@ class V2TaxLineItem(BaseModel):
     proposal_id: Optional[str] = None
 
 
+class V2TaxDeductionRow(BaseModel):
+    id: int
+    year: int
+    kind: str
+    name: str
+    description: Optional[str] = None
+    amount: float
+    source: str
+    created_at: datetime
+
+
+class V2TaxProposalRow(BaseModel):
+    id: int
+    year: int
+    kind: str
+    name: str
+    description: Optional[str] = None
+    suggested_amount: float
+    status: Literal["pending", "approved", "rejected"]
+    decided_at: Optional[datetime] = None
+    deduction_id: Optional[int] = None
+    source: str
+    created_at: datetime
+
+
+class V2TaxYearReturnOut(BaseModel):
+    id: int
+    year: int
+    submitted_at: datetime
+    locked: bool
+    gross_income: float
+    prelim_tax_paid: float
+    deductions_total: float
+    final_tax: float
+    diff: float
+
+
 class V2TaxResponse(BaseModel):
     student_id: int
     year: int
@@ -2203,6 +2245,10 @@ class V2TaxResponse(BaseModel):
     diff: float  # positiv = återbäring, negativ = kvarskatt
     pending_proposal_count: int
     items: list[V2TaxLineItem]
+    deductions: list[V2TaxDeductionRow] = []
+    proposals: list[V2TaxProposalRow] = []
+    submitted: Optional[V2TaxYearReturnOut] = None
+    can_submit: bool = True
 
 
 def _empty_tax(student_id: int, year: int) -> V2TaxResponse:
@@ -2215,6 +2261,10 @@ def _empty_tax(student_id: int, year: int) -> V2TaxResponse:
         diff=0,
         pending_proposal_count=0,
         items=[],
+        deductions=[],
+        proposals=[],
+        submitted=None,
+        can_submit=False,
     )
 
 
@@ -2317,7 +2367,6 @@ def get_skatten(
     ))
 
     # Schablonskatt ISK (0,89 % av FAKTISKT underlag från FundHolding).
-    # Detta är riktig data — räknas alltid när eleven har fonder.
     isk_tax = 0.0
     if isk_value > 0:
         isk_tax = round(isk_value * 0.0089, 0)
@@ -2329,22 +2378,100 @@ def get_skatten(
             amount=-isk_tax,
         ))
 
-    # Reseavdrag, ränteavdrag (CSN/bolån) och andra avdrag kräver
-    # FAKTISK data per elev — de bygger på real räntor betalda och
-    # real reseregister. Fas 2 lägger till TaxDeduction-modellen som
-    # eleven själv eller läraren kan registrera. Tills dess visas inga
-    # schabloner, så talet eleven ser är ärligt.
-    pending_proposals = 0  # Tas in när TaxProposal-modellen finns
+    # Hämta riktiga TaxDeduction + TaxProposal från scope-DB
+    deductions_out: list[V2TaxDeductionRow] = []
+    proposals_out: list[V2TaxProposalRow] = []
+    submitted_out: Optional[V2TaxYearReturnOut] = None
+    deductions_total_amount = Decimal("0")
+    pending_proposals = 0
 
-    # Slutlig skatt = preliminär skatt + ISK-schablonskatt (inga
-    # avdrag att räkna in tills TaxDeduction-modellen finns)
-    final_tax = round(prelim_tax + isk_tax, 0)
+    try:
+        with session_scope() as s:
+            # Auto-generera förslag baserat på faktiska räntor i scope-DB
+            # (idempotent — skapar inte dubbletter)
+            auto_generate_proposals(s, target_year)
+
+            ded_rows = (
+                s.query(TaxDeduction)
+                .filter(TaxDeduction.year == target_year)
+                .order_by(TaxDeduction.created_at.asc())
+                .all()
+            )
+            for d in ded_rows:
+                deductions_out.append(V2TaxDeductionRow(
+                    id=d.id, year=d.year, kind=d.kind,
+                    name=d.name, description=d.description,
+                    amount=float(d.amount), source=d.source,
+                    created_at=d.created_at,
+                ))
+                deductions_total_amount += d.amount
+                items.append(V2TaxLineItem(
+                    category="deduction",
+                    label="Avdrag",
+                    name=d.name,
+                    detail=d.description or "",
+                    amount=-(float(d.amount) * 0.30),
+                ))
+
+            prop_rows = (
+                s.query(TaxProposal)
+                .filter(TaxProposal.year == target_year)
+                .order_by(TaxProposal.created_at.asc())
+                .all()
+            )
+            for p in prop_rows:
+                proposals_out.append(V2TaxProposalRow(
+                    id=p.id, year=p.year, kind=p.kind,
+                    name=p.name, description=p.description,
+                    suggested_amount=float(p.suggested_amount),
+                    status=p.status, decided_at=p.decided_at,
+                    deduction_id=p.deduction_id, source=p.source,
+                    created_at=p.created_at,
+                ))
+                if p.status == "pending":
+                    pending_proposals += 1
+                    # Pending-förslag visas också i items-listan med
+                    # is_proposal=True så frontend kan rendera dem som
+                    # "Granska"-rader
+                    items.append(V2TaxLineItem(
+                        category="deduction",
+                        label="Avdrag",
+                        name=f"{p.name} · förslag",
+                        detail=p.description or "",
+                        amount=-(float(p.suggested_amount) * 0.30),
+                        is_proposal=True,
+                        proposal_id=str(p.id),
+                    ))
+
+            submitted_row = latest_tax_year_return(s, target_year)
+            if submitted_row is not None:
+                submitted_out = V2TaxYearReturnOut(
+                    id=submitted_row.id,
+                    year=submitted_row.year,
+                    submitted_at=submitted_row.submitted_at,
+                    locked=submitted_row.locked,
+                    gross_income=float(submitted_row.gross_income),
+                    prelim_tax_paid=float(submitted_row.prelim_tax_paid),
+                    deductions_total=float(submitted_row.deductions_total),
+                    final_tax=float(submitted_row.final_tax),
+                    diff=float(submitted_row.diff),
+                )
+    except Exception:
+        pass
+
+    # Slutlig skatt = preliminär + ISK-schablon − avdrag-effekt (30 %)
+    deduction_effect = round(float(deductions_total_amount) * 0.30, 0)
+    final_tax = round(prelim_tax + isk_tax - deduction_effect, 0)
 
     items.append(V2TaxLineItem(
         category="tax",
         label="Skatt",
         name="Slutlig skatt",
-        detail="Efter jobbskatteavdrag & ränteavdrag",
+        detail=(
+            "Förskottsbetalt − avdragseffekt + ISK-schablon"
+            if deduction_effect or isk_tax else
+            "Förskottsbetalt"
+        ),
         amount=-final_tax,
     ))
 
@@ -2367,6 +2494,10 @@ def get_skatten(
         diff=diff,
         pending_proposal_count=pending_proposals,
         items=items,
+        deductions=deductions_out,
+        proposals=proposals_out,
+        submitted=submitted_out,
+        can_submit=(submitted_out is None or not submitted_out.locked),
     )
 
 
@@ -3194,6 +3325,417 @@ def teacher_credit_overview(
         kalp_history=kalp_history,
         loan_products_count=products_total,
         available_products_count=products_available,
+    )
+
+
+# === Skatten · elev + lärar-endpoints (Fas 2B) ===
+
+class V2TaxDeductionIn(BaseModel):
+    year: int = Field(..., ge=2020, le=2100)
+    kind: Literal[
+        "rese", "bolane-ranta", "csn-ranta", "dubbel-bosattning",
+        "rot", "rut", "fackavgift", "ovrig",
+    ]
+    name: str = Field(..., min_length=1, max_length=120)
+    description: Optional[str] = None
+    amount: float = Field(..., ge=0)
+
+
+class V2TaxProposalIn(BaseModel):
+    year: int = Field(..., ge=2020, le=2100)
+    kind: Literal[
+        "rese", "bolane-ranta", "csn-ranta", "dubbel-bosattning",
+        "rot", "rut", "fackavgift", "ovrig",
+    ]
+    name: str = Field(..., min_length=1, max_length=120)
+    description: Optional[str] = None
+    suggested_amount: float = Field(..., ge=0)
+
+
+class V2TaxSubmitResponse(BaseModel):
+    return_id: int
+    year: int
+    submitted_at: datetime
+    locked: bool
+    final_tax: float
+    diff: float
+
+
+@router.post("/skatten/deductions", response_model=V2TaxDeductionRow)
+def post_tax_deduction(
+    body: V2TaxDeductionIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2TaxDeductionRow:
+    """Eleven registrerar ett deklarations-avdrag (rese, fackavgift osv).
+
+    Avdraget är BRUTTO. Skatte-effekten räknas som amount × 0,30
+    vid GET /v2/skatten.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever kan registrera avdrag",
+        )
+
+    with session_scope() as s:
+        d = TaxDeduction(
+            year=body.year,
+            kind=body.kind,
+            name=body.name,
+            description=body.description,
+            amount=Decimal(str(body.amount)),
+            source="manual",
+        )
+        s.add(d)
+        s.flush()
+        return V2TaxDeductionRow(
+            id=d.id, year=d.year, kind=d.kind,
+            name=d.name, description=d.description,
+            amount=float(d.amount), source=d.source,
+            created_at=d.created_at,
+        )
+
+
+@router.delete("/skatten/deductions/{deduction_id}", status_code=204)
+def delete_tax_deduction(
+    deduction_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    """Eleven tar bort sitt egna avdrag."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever kan ta bort avdrag",
+        )
+    with session_scope() as s:
+        d = s.get(TaxDeduction, deduction_id)
+        if d is not None:
+            # Om den är kopplad till en TaxProposal: nolla deduction_id
+            prop = (
+                s.query(TaxProposal)
+                .filter(TaxProposal.deduction_id == deduction_id)
+                .first()
+            )
+            if prop is not None:
+                prop.deduction_id = None
+                # Återställ till pending så det dyker upp igen som förslag
+                prop.status = "pending"
+                prop.decided_at = None
+            s.delete(d)
+            s.flush()
+
+
+@router.post(
+    "/skatten/proposals/{proposal_id}/decision",
+    response_model=V2TaxProposalRow,
+)
+def post_tax_proposal_decision(
+    proposal_id: int,
+    body: dict,
+    info: TokenInfo = Depends(require_token),
+) -> V2TaxProposalRow:
+    """Eleven godkänner eller avvisar ett förslag.
+
+    body = {"decision": "approve" | "reject"}.
+    Approve → skapar matchande TaxDeduction.
+    Reject → markerar status=rejected, tar bort ev. tidigare deduction.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
+    decision = (body or {}).get("decision")
+    if decision not in ("approve", "reject"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "decision måste vara 'approve' eller 'reject'",
+        )
+
+    with session_scope() as s:
+        proposal = (
+            approve_proposal(s, proposal_id) if decision == "approve"
+            else reject_proposal(s, proposal_id)
+        )
+        if proposal is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Förslag hittades inte",
+            )
+        return V2TaxProposalRow(
+            id=proposal.id, year=proposal.year, kind=proposal.kind,
+            name=proposal.name, description=proposal.description,
+            suggested_amount=float(proposal.suggested_amount),
+            status=proposal.status, decided_at=proposal.decided_at,
+            deduction_id=proposal.deduction_id, source=proposal.source,
+            created_at=proposal.created_at,
+        )
+
+
+@router.post("/skatten/{year}/submit", response_model=V2TaxSubmitResponse)
+def post_submit_tax_year(
+    year: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TaxSubmitResponse:
+    """Eleven lämnar in deklarationen — låser året.
+
+    Sparar TaxYearReturn med snapshot av siffrorna. Wellbeing-
+    beräkningen plockar upp denna och ger +3 economy om i tid +
+    bonus/penalty på diff.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
+
+    with master_session() as mdb:
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if not profile:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev saknar profil",
+            )
+        gross_monthly = (
+            Decimal(profile.gross_salary_monthly)
+            if profile.gross_salary_monthly else None
+        )
+        tax_rate = (
+            Decimal(str(profile.tax_rate_effective))
+            if profile.tax_rate_effective else None
+        )
+
+    with session_scope() as s:
+        ret = submit_tax_year(s, year, gross_monthly, tax_rate)
+        return V2TaxSubmitResponse(
+            return_id=ret.id,
+            year=ret.year,
+            submitted_at=ret.submitted_at,
+            locked=ret.locked,
+            final_tax=float(ret.final_tax),
+            diff=float(ret.diff),
+        )
+
+
+# Lärar-endpoints
+@router.post(
+    "/teacher/students/{student_id}/tax-proposals",
+    response_model=V2TaxProposalRow,
+)
+def teacher_create_tax_proposal(
+    student_id: int,
+    body: V2TaxProposalIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2TaxProposalRow:
+    """Lärare skapar ett TaxProposal för en specifik elev."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            p = TaxProposal(
+                year=body.year,
+                kind=body.kind,
+                name=body.name,
+                description=body.description,
+                suggested_amount=Decimal(str(body.suggested_amount)),
+                status="pending",
+                source="manual",
+            )
+            s.add(p)
+            s.flush()
+            return V2TaxProposalRow(
+                id=p.id, year=p.year, kind=p.kind,
+                name=p.name, description=p.description,
+                suggested_amount=float(p.suggested_amount),
+                status=p.status, decided_at=p.decided_at,
+                deduction_id=p.deduction_id, source=p.source,
+                created_at=p.created_at,
+            )
+
+
+@router.post(
+    "/teacher/students/{student_id}/tax-proposals/auto-generate",
+    response_model=dict,
+)
+def teacher_auto_generate_tax_proposals(
+    student_id: int,
+    year: Optional[int] = None,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Lärare ber systemet auto-generera förslag baserat på riktig
+    data (Loan-räntor, ISK-schablon). Idempotent — befintliga förslag
+    skapas inte igen."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    target_year = year or _date.today().year
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            n = auto_generate_proposals(s, target_year)
+    return {"student_id": student_id, "year": target_year, "created": n}
+
+
+@router.delete(
+    "/teacher/students/{student_id}/tax-proposals/{proposal_id}",
+    status_code=204,
+)
+def teacher_delete_tax_proposal(
+    student_id: int,
+    proposal_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    """Lärare tar bort ett TaxProposal."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            p = s.get(TaxProposal, proposal_id)
+            if p is None:
+                return
+            # Om approved: ta även bort kopplad deduction
+            if p.deduction_id:
+                d = s.get(TaxDeduction, p.deduction_id)
+                if d:
+                    s.delete(d)
+            s.delete(p)
+            s.flush()
+
+
+class V2TeacherTaxOverview(BaseModel):
+    student_id: int
+    student_name: str
+    year: int
+    gross_income: float
+    prelim_tax_paid: float
+    deductions_total: float
+    final_tax: float
+    diff: float
+    deductions: list[V2TaxDeductionRow]
+    proposals: list[V2TaxProposalRow]
+    submitted: Optional[V2TaxYearReturnOut] = None
+
+
+@router.get(
+    "/teacher/students/{student_id}/tax-overview",
+    response_model=V2TeacherTaxOverview,
+)
+def teacher_tax_overview(
+    student_id: int,
+    year: Optional[int] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherTaxOverview:
+    """Lärar-vy · full insyn i elevens deklaration för året."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        gross_monthly = (
+            Decimal(profile.gross_salary_monthly)
+            if profile and profile.gross_salary_monthly else None
+        )
+        tax_rate = (
+            Decimal(str(profile.tax_rate_effective))
+            if profile and profile.tax_rate_effective else None
+        )
+
+    target_year = year or _date.today().year
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            # Auto-genera proposals så lärar-vyn alltid är aktuell
+            auto_generate_proposals(s, target_year)
+            summary = compute_tax_summary(
+                s, target_year, gross_monthly, tax_rate,
+            )
+            ded_rows = (
+                s.query(TaxDeduction)
+                .filter(TaxDeduction.year == target_year)
+                .order_by(TaxDeduction.created_at.asc())
+                .all()
+            )
+            prop_rows = (
+                s.query(TaxProposal)
+                .filter(TaxProposal.year == target_year)
+                .order_by(TaxProposal.created_at.asc())
+                .all()
+            )
+            ret = latest_tax_year_return(s, target_year)
+
+            ded_out = [
+                V2TaxDeductionRow(
+                    id=d.id, year=d.year, kind=d.kind,
+                    name=d.name, description=d.description,
+                    amount=float(d.amount), source=d.source,
+                    created_at=d.created_at,
+                )
+                for d in ded_rows
+            ]
+            prop_out = [
+                V2TaxProposalRow(
+                    id=p.id, year=p.year, kind=p.kind,
+                    name=p.name, description=p.description,
+                    suggested_amount=float(p.suggested_amount),
+                    status=p.status, decided_at=p.decided_at,
+                    deduction_id=p.deduction_id, source=p.source,
+                    created_at=p.created_at,
+                )
+                for p in prop_rows
+            ]
+            ret_out = (
+                V2TaxYearReturnOut(
+                    id=ret.id, year=ret.year,
+                    submitted_at=ret.submitted_at, locked=ret.locked,
+                    gross_income=float(ret.gross_income),
+                    prelim_tax_paid=float(ret.prelim_tax_paid),
+                    deductions_total=float(ret.deductions_total),
+                    final_tax=float(ret.final_tax),
+                    diff=float(ret.diff),
+                ) if ret else None
+            )
+
+    return V2TeacherTaxOverview(
+        student_id=student_id,
+        student_name=student_name,
+        year=target_year,
+        gross_income=summary["gross_income"],
+        prelim_tax_paid=summary["prelim_tax_paid"],
+        deductions_total=summary["deductions_total"],
+        final_tax=summary["final_tax"],
+        diff=summary["diff"],
+        deductions=ded_out,
+        proposals=prop_out,
+        submitted=ret_out,
     )
 
 

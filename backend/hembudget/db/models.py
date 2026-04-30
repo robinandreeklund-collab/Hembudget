@@ -302,6 +302,109 @@ class KALPCalculation(TenantMixin, Base):
     passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
 
+# === V2 Skatteverket (Fas 2B) ===
+
+class TaxDeduction(TenantMixin, Base):
+    """Avdragspost i elevens deklaration för ett givet år.
+
+    Eleven (eller läraren) registrerar faktiska avdrag — reseavdrag
+    från arbetsplatsen, ränta på bolån/CSN, dubbel bosättning,
+    ROT/RUT, fackföreningsavgift. Beloppet är BRUTTO (det avdragsgilla
+    underlaget). Skatte-effekten räknas i endpoint som amount × 0,30
+    (30 % skatteeffekt på avdrag i tjänst/kapital).
+    """
+    __tablename__ = "tax_deductions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # "rese" | "bolane-ranta" | "csn-ranta" | "dubbel-bosattning"
+    # | "rot" | "rut" | "fackavgift" | "ovrig"
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # Vad som genererade avdraget — "manual" / "auto-csn" / "auto-bolan"
+    # / "from-proposal:<id>" / "loan_id:<id>" osv.
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class TaxProposal(TenantMixin, Base):
+    """Skatteverkets förifyllda förslag att granska.
+
+    Lärare seedar dessa (eller systemet auto-genererar baserat på
+    faktiska räntor i scope-DB). Eleven godkänner eller avvisar.
+    När godkänt skapas motsvarande TaxDeduction.
+    """
+    __tablename__ = "tax_proposals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggested_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False,
+    )
+    # "pending" | "approved" | "rejected"
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Om godkänt: id på den TaxDeduction som skapades (1:1)
+    deduction_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("tax_deductions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # "auto" om systemet genererat baserat på riktig data
+    # (loan-räntor osv), "manual" om lärare lagt in
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class TaxYearReturn(TenantMixin, Base):
+    """Inlämnad deklaration för ett givet år.
+
+    När eleven trycker "Lämna in" kallas POST /v2/skatten/{year}/submit.
+    En rad skapas (max en per år) med snapshot av brutto, skatt
+    inbetald, slutlig skatt, diff, och tidpunkt. Året låses sedan
+    så fler ändringar kräver att eleven öppnar deklarationen igen
+    (TaxYearReturn.locked = False vid omöppning).
+    """
+    __tablename__ = "tax_year_returns"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "year", name="uq_tax_year_return_tenant_year",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    locked: Mapped[bool] = mapped_column(Boolean, default=True)
+    gross_income: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False
+    )
+    prelim_tax_paid: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False
+    )
+    deductions_total: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=Decimal("0"),
+    )
+    final_tax: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False,
+    )
+    diff: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False,
+    )  # positiv = återbäring, negativ = kvarskatt
+
+
 class Subscription(TenantMixin, Base):
     __tablename__ = "subscriptions"
 

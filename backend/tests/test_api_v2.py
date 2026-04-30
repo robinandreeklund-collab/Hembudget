@@ -1944,6 +1944,274 @@ def test_v2_lan_with_active_loan_in_scope(fx) -> None:
     assert 0.10 <= data["debt_ratio"] <= 0.15
 
 
+# === Fas 2B · Skatten · TaxDeduction + TaxProposal + Submit ===
+
+def _seed_tax_profile(sid: int, has_student_loan: bool = False) -> None:
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus",
+            gross_salary_monthly=26000,
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+            has_student_loan=has_student_loan,
+        ))
+        db.commit()
+
+
+def test_v2_skatten_with_manual_deduction(fx) -> None:
+    """Eleven registrerar manuellt avdrag → reducerar slutlig skatt."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid)
+
+    r = client.post(
+        "/v2/skatten/deductions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "year": 2026,
+            "kind": "fackavgift",
+            "name": "Vårdförbundet medlemsavgift",
+            "amount": 4800,
+        },
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["amount"] == 4800
+    assert d["kind"] == "fackavgift"
+    assert d["source"] == "manual"
+
+    # Bekräfta i /v2/skatten
+    r2 = client.get(
+        "/v2/skatten?year=2026",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r2.json()
+    assert len(data["deductions"]) == 1
+    # Avdragseffekt = 4800 × 30 % = 1440 kr lägre slutlig skatt
+    deduction_items = [
+        i for i in data["items"] if i["category"] == "deduction"
+    ]
+    assert len(deduction_items) >= 1
+    fack = next(
+        i for i in deduction_items if "Vårdförbundet" in i["name"]
+    )
+    assert fack["amount"] == -1440.0
+
+
+def test_v2_skatten_delete_deduction(fx) -> None:
+    """Eleven kan ta bort sitt avdrag."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid)
+
+    r = client.post(
+        "/v2/skatten/deductions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "year": 2026, "kind": "rese", "name": "Bil till jobbet",
+            "amount": 4884,
+        },
+    )
+    deduction_id = r.json()["id"]
+
+    r2 = client.delete(
+        f"/v2/skatten/deductions/{deduction_id}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.status_code == 204
+
+    r3 = client.get(
+        "/v2/skatten?year=2026",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r3.json()["deductions"] == []
+
+
+def test_v2_skatten_proposal_approve_creates_deduction(fx) -> None:
+    """Approve förslag → skapar TaxDeduction automatiskt."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid)
+
+    # Lärare skapar manuellt förslag (auto-generation kräver Loan-data)
+    r = client.post(
+        f"/v2/teacher/students/{sid}/tax-proposals",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "year": 2026,
+            "kind": "csn-ranta",
+            "name": "Ränteavdrag CSN",
+            "description": "548 kr ränta · 30 % avdrag",
+            "suggested_amount": 548,
+        },
+    )
+    assert r.status_code == 200, r.text
+    proposal_id = r.json()["id"]
+    assert r.json()["status"] == "pending"
+
+    # Eleven godkänner
+    r2 = client.post(
+        f"/v2/skatten/proposals/{proposal_id}/decision",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"decision": "approve"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["status"] == "approved"
+    assert r2.json()["deduction_id"] is not None
+
+    # Avdraget syns nu i /v2/skatten
+    r3 = client.get(
+        "/v2/skatten?year=2026",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r3.json()
+    assert len(data["deductions"]) == 1
+    assert data["deductions"][0]["name"] == "Ränteavdrag CSN"
+
+
+def test_v2_skatten_proposal_reject(fx) -> None:
+    """Reject förslag → status=rejected, ingen deduction skapas."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid)
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/tax-proposals",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "year": 2026, "kind": "rese",
+            "name": "Reseavdrag bil", "suggested_amount": 4884,
+        },
+    )
+    proposal_id = r.json()["id"]
+
+    r2 = client.post(
+        f"/v2/skatten/proposals/{proposal_id}/decision",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"decision": "reject"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "rejected"
+    assert r2.json()["deduction_id"] is None
+
+    r3 = client.get(
+        "/v2/skatten?year=2026",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r3.json()["deductions"] == []
+    # Förslaget syns med status=rejected
+    proposals = r3.json()["proposals"]
+    rejected = [p for p in proposals if p["status"] == "rejected"]
+    assert len(rejected) == 1
+
+
+def test_v2_skatten_submit_locks_year(fx) -> None:
+    """POST /v2/skatten/{year}/submit låser deklarationen."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid)
+
+    r = client.post(
+        "/v2/skatten/2026/submit",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["locked"] is True
+    assert r.json()["year"] == 2026
+
+    r2 = client.get(
+        "/v2/skatten?year=2026",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r2.json()
+    assert data["submitted"] is not None
+    assert data["submitted"]["locked"] is True
+    assert data["can_submit"] is False
+
+
+def test_v2_skatten_auto_generate_from_loans(fx) -> None:
+    """Lärare kör auto-generate-förslag → får ränteavdrag-förslag från Loan."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid, has_student_loan=True)
+
+    # Seedа ett CSN-lån i scope-DB
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Loan as _Loan
+
+    def seed(s) -> None:
+        s.add(_Loan(
+            name="CSN-lån (annuitet)",
+            lender="CSN",
+            loan_number="9342",
+            principal_amount=_D("38200"),
+            current_balance_at_creation=_D("38200"),
+            start_date=_d(2024, 9, 1),
+            interest_rate=0.017,  # 1,7 %
+            binding_type="annuity",
+            amortization_monthly=_D("312"),
+            active=True,
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/tax-proposals/auto-generate?year=2026",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 1
+
+    # Idempotent: andra anropet skapar inga nya
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/tax-proposals/auto-generate?year=2026",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["created"] == 0
+
+
+def test_v2_skatten_teacher_overview(fx) -> None:
+    """Lärar-vyn returnerar full insyn."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_tax_profile(sid)
+
+    # Eleven gör manuellt avdrag
+    client.post(
+        "/v2/skatten/deductions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "year": 2026, "kind": "fackavgift",
+            "name": "Akavia-avgift", "amount": 3600,
+        },
+    )
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/tax-overview?year=2026",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["year"] == 2026
+    assert data["gross_income"] == 312000  # 26000 * 12
+    assert len(data["deductions"]) == 1
+    assert data["deductions"][0]["name"] == "Akavia-avgift"
+    # Final tax = prelim − avdragseffekt = 26000*12*0.28 − 3600*0.30
+    # = 87360 − 1080 = 86280
+    assert data["final_tax"] == pytest.approx(86280, abs=1)
+
+
+def test_v2_skatten_endpoints_403_for_teacher_role(fx) -> None:
+    """Lärare kan inte använda elev-endpoints."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/skatten/deductions",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"year": 2026, "kind": "rese", "name": "X", "amount": 100},
+    )
+    assert r.status_code == 403
+
+
 # === /v2/skatten ===
 
 def test_v2_skatten_unauthenticated_401(fx) -> None:
