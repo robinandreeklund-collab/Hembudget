@@ -2596,7 +2596,7 @@ body[data-mode="business"] .ms-knob {
             <div class="onb-rule">
               <div class="onb-rule-eye">Aktörer</div>
               <div class="onb-rule-h">8 + meta</div>
-              <div class="onb-rule-prose">Banken, arbetsgivaren, Avanza, lånegivaren, Tibber/Folksam, Skatteverket, pension, hyresvärden, postlådan</div>
+              <div class="onb-rule-prose">Banken, arbetsgivaren, Avanza, lånegivaren, försäkringar, förbrukning, Skatteverket, pension, hyresvärden, postlådan</div>
             </div>
             <div class="onb-rule">
               <div class="onb-rule-eye">Verktyg</div>
@@ -2828,10 +2828,15 @@ body[data-mode="business"] .ms-knob {
             <div class="compass-node-name">Lånegivaren</div>
             <div class="compass-node-val">38 200 kr</div>
           </a>
-          <a class="compass-node" href="#">
+          <a class="compass-node" onclick="go('utility'); return false;" href="#">
             <div class="compass-node-eye">Aktör 06</div>
-            <div class="compass-node-name">Folksam · Tibber</div>
-            <div class="compass-node-val">El 812 kr</div>
+            <div class="compass-node-name">Försäkringar</div>
+            <div class="compass-node-val">320 kr · 4 aktiva</div>
+          </a>
+          <a class="compass-node" onclick="go('forbrukning'); return false;" href="#">
+            <div class="compass-node-eye">Aktör 07</div>
+            <div class="compass-node-name">Förbrukning</div>
+            <div class="compass-node-val">812 + 508 kr</div>
           </a>
           <a class="compass-node alert" onclick="go('skatt'); return false;" href="#">
             <div class="compass-node-eye">Aktör 03</div>
@@ -5256,31 +5261,52 @@ body[data-mode="business"] .ms-knob {
       <header class="actor-head">
         <div>
           <span class="pill warm">Aktör 04 · Lånegivaren</span>
-          <h1 class="actor-name" style="margin-top:14px;">CSN — <em>din studieskuld</em>.</h1>
-          <p class="actor-sub">Annuitetslån · 25 år · ränta 1,7 % · ingen amorteringsbefrielse aktiv</p>
+          <h1 class="actor-name" style="margin-top:14px;">Dina <em>lån</em>, din kreditprofil.</h1>
+          <p class="actor-sub">CSN · ev. bolån · privatlån · billån · kreditprövning av dig själv som låntagare</p>
         </div>
         <div class="actor-meta">
-          Skuld kvar: <strong>38 200 kr</strong><br>
-          Månadsbetalning: <strong>312 kr</strong><br>
-          Återstår: <strong>247 mån</strong>
+          Total skuld: <strong>38 200 kr</strong><br>
+          Skuldkvot: <strong>0,17×</strong> årsinkomst<br>
+          Kreditprofil: <strong>A</strong>
         </div>
       </header>
 
-      <div class="acct-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <a class="acct" href="#"><div><div class="acct-eye">Skuld</div><div class="acct-name">CSN-lån (annuitet)</div><div class="acct-num">Kontonr CSN 9342 19</div></div><div><div class="acct-bal"><em>38 200</em> kr</div><div class="acct-bal-meta">Per 29 apr 2026</div></div></a>
-        <a class="acct" href="#"><div><div class="acct-eye">Ränta 2026</div><div class="acct-name">1,7 %</div><div class="acct-num">Sätts årligen av riksdagen</div></div><div><div class="acct-bal">548 kr/år</div><div class="acct-bal-meta">Räntekostn · ränteavdrag −164 kr</div></div></a>
-        <a class="acct" href="#"><div><div class="acct-eye">Senaste betalning</div><div class="acct-name">312 kr · 28 mar</div><div class="acct-num">Autogiro · varje 28:e</div></div><div><div class="acct-bal">312 kr</div><div class="acct-bal-meta">Av detta 46 kr ränta</div></div></a>
+      <!-- 4 lånetyper · 1 aktiv + 3 möjliga -->
+      <div class="acct-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <a class="acct" style="border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.04);" href="#"><div><div class="acct-eye" style="color: var(--warm);">Aktivt</div><div class="acct-name">CSN-lån (annuitet)</div><div class="acct-num">9342 19 · ränta 1,7 %</div></div><div><div class="acct-bal"><em>38 200</em> kr</div><div class="acct-bal-meta">312 kr/mån · 247 mån</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Möjligt · 2 maj</div><div class="acct-name">Bolån (via modul)</div><div class="acct-num">2,4 Mkr · 3,8 % rörlig</div></div><div><div class="acct-bal" style="color: var(--text-mid);">— ej</div><div class="acct-bal-meta">i kreditprövning</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Avråds</div><div class="acct-name">Privatlån (blanco)</div><div class="acct-num">~ 14 % effektiv ränta</div></div><div><div class="acct-bal" style="color: var(--text-dim);">— ej</div><div class="acct-bal-meta">5 × dyrare än CSN</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Möjligt</div><div class="acct-name">Billån</div><div class="acct-num">5–8 % · max 80 % av bilvärdet</div></div><div><div class="acct-bal" style="color: var(--text-dim);">— ej</div><div class="acct-bal-meta">behöver inte bil i Sthlm</div></div></a>
       </div>
 
       <div class="act-grid" style="margin-top: 22px;">
         <div>
-          <div class="section-eye">Amorteringsplan · närmaste 6 månader</div>
+          <div class="section-eye">CSN · amorteringsplan</div>
           <div class="tx-list">
-            <div class="tx-row" style="grid-template-columns: 70px 1fr 80px 80px 80px;"><span class="tx-date">Apr 2026</span><div><div class="tx-name">Annuitet · 312 kr</div><div class="tx-name-sub">Snabbamortering möjlig</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">−312</span></div>
-            <div class="tx-row" style="grid-template-columns: 70px 1fr 80px 80px 80px;"><span class="tx-date">Mar 2026</span><div><div class="tx-name">Annuitet · 312 kr</div><div class="tx-name-sub">Autogiro klart</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px;">betald</span></div>
-            <div class="tx-row" style="grid-template-columns: 70px 1fr 80px 80px 80px;"><span class="tx-date">Feb 2026</span><div><div class="tx-name">Annuitet · 312 kr</div><div class="tx-name-sub">Autogiro klart</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px;">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 80px 80px 80px;"><span class="tx-date">Apr 2026</span><div><div class="tx-name">Annuitet · 312 kr</div><div class="tx-name-sub">Snabbamortering möjlig</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">−312</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 80px 80px 80px;"><span class="tx-date">Mar 2026</span><div><div class="tx-name">Annuitet · 312 kr</div><div class="tx-name-sub">Autogiro klart</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px;">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 80px 80px 80px;"><span class="tx-date">Feb 2026</span><div><div class="tx-name">Annuitet · 312 kr</div><div class="tx-name-sub">Autogiro klart</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px;">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 80px 80px 80px;"><span class="tx-date">Jan 2026</span><div><div class="tx-name">Annuitet · 312 kr</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">266 kap</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">46 ränta</span><span style="font-family: var(--mono); font-size: 10px;">betald</span></div>
           </div>
+
+          <div class="section-eye" style="margin-top: 24px;">Kreditprövning · av dig själv som låntagare</div>
+          <div class="biz-table">
+            <div class="biz-table-row head" style="grid-template-columns: 1.4fr 100px 1fr;"><span>Faktor</span><span>Ditt värde</span><span>Bedömning</span></div>
+            <a class="biz-table-row" style="grid-template-columns: 1.4fr 100px 1fr;" href="#"><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Inkomst (årlig brutto)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Sthlm Sjukhus AB · 80 % tjänst</div></div><span style="font-family: var(--serif); font-style: italic; color: var(--warm);">312 500</span><span style="font-size: 12.5px; color: #6ee7b7;">Stabil · kollektivavtal · ITP1</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 1.4fr 100px 1fr;" href="#"><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Skuldkvot</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Total skuld / årsinkomst</div></div><span style="font-family: var(--serif); font-style: italic; color: #6ee7b7;">0,17×</span><span style="font-size: 12.5px;">Långt under tak (4,5×)</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 1.4fr 100px 1fr;" href="#"><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">KALP · stresstest 7 %</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Konsumentverket-schablon</div></div><span style="font-family: var(--serif); font-style: italic; color: var(--warm);">räknas</span><span style="font-size: 12.5px;">Beror på bostadens kostnad</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 1.4fr 100px 1fr;" href="#"><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Betalningsanmärkningar</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Senaste 3 åren</div></div><span style="font-family: var(--serif); font-style: italic; color: #6ee7b7;">0</span><span style="font-size: 12.5px; color: #6ee7b7;">Ren historik</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 1.4fr 100px 1fr;" href="#"><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">UC-score</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Kreditupplysning · 1 påbörjad</div></div><span style="font-family: var(--serif); font-style: italic; color: var(--warm);">A (84/100)</span><span style="font-size: 12.5px;">Hög kreditvärdighet</span></a>
+          </div>
+
+          <article class="cta-card" style="margin-top: 22px;">
+            <div class="cta-eye">Aktivt uppdrag · Anders Lind</div>
+            <div class="cta-h">Kreditprövning för <em>2,4 Mkr bolån</em>.</div>
+            <p class="cta-prose">Bolån-modulen tar dig genom kreditprövningens 6 steg. Banken (Lånegivaren) räknar din KALP, stresstestar mot 7 % ränta, kollar belåningsgrad. Om allt går rätt vägs ditt UC-score in — A-klass innebär inga problem.</p>
+            <button class="cta-btn" onclick="go('modul')">Öppna bolån-modulen →</button>
+          </article>
         </div>
+
         <aside>
           <div class="side-card">
             <div class="side-card-eye">Ränteavdrag</div>
@@ -5298,27 +5324,34 @@ body[data-mode="business"] .ms-knob {
             <div class="side-card-h">Möjlig</div>
             <div class="side-card-meta">CSN ger amorteringsbefrielse vid arbetslöshet, sjukdom, föräldraledighet. Pausa istället för missa.</div>
           </div>
+          <div class="side-card" style="background: rgba(220,76,43,0.06); border-color: rgba(220,76,43,0.25);">
+            <div class="side-card-eye" style="color: var(--accent);">Varning · sms-lån</div>
+            <div class="side-card-h"><em>20–40 %</em> ränta</div>
+            <div class="side-card-meta">Många unga vuxna fastnar i sms-lån för impulsköp. Effektiv ränta + ev. UC-anmärkning ger livslång ekonomisk skuldfälla. Aldrig.</div>
+          </div>
         </aside>
       </div>
 
       <div class="peda">
         <div class="peda-eye">Pedagogik · vad du lär dig här</div>
-        <div class="peda-h">CSN-skuld är <em>billigare</em> än man tror.</div>
-        <p class="peda-prose">CSN-räntan på 1,7 % är cirka 1/4 av bolåneräntan och 1/10 av blanco-låneräntan. Att amortera CSN <em>i förtid</em> ger garanterad 1,7 %-"avkastning" — vilket är låg jämfört med ISK. Lär dig skilja på <code>billig skuld</code> (CSN, bolån) och <code>dyr skuld</code> (kreditkort, blanco, sms-lån).</p>
+        <div class="peda-h">Inte alla lån är <em>lika</em>.</div>
+        <p class="peda-prose">CSN-räntan på 1,7 % är cirka 1/4 av bolåneräntan och 1/10 av blanco-låneräntan. Bolån är dyrare men finansierar tillgång (bostad). Privatlån är dyrast och oftast onödigt. Sms-lån är finansiell rovdrift. Lär dig skilja på <code>billig skuld</code> (CSN, bolån mot bostad), <code>medel</code> (billån mot bil), och <code>dyr skuld</code> (kreditkort, blanco, sms-lån).</p>
         <ul class="peda-bullets">
           <li><strong>Annuitet</strong>Samma månadsbelopp hela tiden — ränta minskar, amortering ökar.</li>
           <li><strong>Rak amortering</strong>Samma kapital varje gång — månadskostnad sjunker.</li>
-          <li><strong>Ränteavdrag</strong>30 % skattesänkning på betald ränta upp till 100 000.</li>
-          <li><strong>Befrielse</strong>CSN unik — ger paus vid livshändelser.</li>
+          <li><strong>Effektiv ränta</strong>Inkluderar avgifter. Den enda räntan att jämföra med.</li>
+          <li><strong>UC-score</strong>Kreditupplysning. A–E. För många påbörjade ansökningar = sänker.</li>
         </ul>
         <div class="peda-concepts">
           <span class="peda-concept">Annuitet</span>
-          <span class="peda-concept">Amorteringsplan</span>
-          <span class="peda-concept">Ränteavdrag</span>
-          <span class="peda-concept">Konsumtionskredit</span>
+          <span class="peda-concept">Effektiv ränta</span>
           <span class="peda-concept">Skuldkvot</span>
+          <span class="peda-concept">Belåningsgrad</span>
+          <span class="peda-concept">UC-score</span>
+          <span class="peda-concept">Kronofogden</span>
+          <span class="peda-concept">Räntegolv</span>
         </div>
-        <div class="peda-tip">Lånekalkylatorn (verktyg 06) låter dig simulera "vad händer om jag amorterar 500 extra/mån i 5 år?" Spoiler: du sparar ~140 kr i ränta. Inte mycket. Investera istället.</div>
+        <div class="peda-tip">Lånekalkylatorn (verktyg 06) låter dig simulera "vad händer om jag amorterar 500 extra/mån i 5 år?" Spoiler: du sparar ~140 kr i ränta. Inte mycket. Investera istället. Men för bolån vid 4 % blir det 28 000 kr — då lönar det sig.</div>
       </div>
     </div>
   </section>
@@ -5327,64 +5360,71 @@ body[data-mode="business"] .ms-knob {
       <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
       <header class="actor-head">
         <div>
-          <span class="pill warm">Aktör 06 · Tibber &amp; Folksam</span>
-          <h1 class="actor-name" style="margin-top:14px;">El, värme &amp; <em>försäkring</em>.</h1>
-          <p class="actor-sub">Spotpris-el · 184 kWh april · hemförsäkring + olycksfall</p>
+          <span class="pill warm">Aktör 06 · Försäkringar</span>
+          <h1 class="actor-name" style="margin-top:14px;">Folksam &amp; <em>Trygg-Hansa</em>.</h1>
+          <p class="actor-sub">Hem · olycksfall · liv · boende · 4 aktiva försäkringar · 320 kr/mån</p>
         </div>
         <div class="actor-meta">
-          El april: <strong>812 kr</strong><br>
-          Försäkring/mån: <strong>320 kr</strong><br>
-          Sparat mot ankarpris: <strong>−84 kr</strong>
+          Premie/mån: <strong>320 kr</strong><br>
+          Total täckning: <strong>~ 800 000 kr</strong><br>
+          Självrisk: <strong>1 500 kr</strong>
         </div>
       </header>
 
       <div class="acct-grid" style="grid-template-columns: repeat(2, 1fr);">
-        <a class="acct" href="#"><div><div class="acct-eye">Tibber · spotpris</div><div class="acct-name">El april 2026</div><div class="acct-num">184 kWh × 0,82 kr/kWh + nät 320</div></div><div><div class="acct-bal">812 kr</div><div class="acct-bal-meta">Faktura 4 maj</div></div></a>
-        <a class="acct" href="#"><div><div class="acct-eye">Folksam</div><div class="acct-name">Hemförsäkring + olycksfall</div><div class="acct-num">Premie 320 kr/mån · självrisk 1 500</div></div><div><div class="acct-bal">320 kr</div><div class="acct-bal-meta">Autogiro 5 maj</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Folksam</div><div class="acct-name">Hemförsäkring</div><div class="acct-num">Hökarängen · lösegendom max 200 000 · 1 500 självrisk</div></div><div><div class="acct-bal">189 kr/mån</div><div class="acct-bal-meta">Autogiro 5:e</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Folksam</div><div class="acct-name">Olycksfall</div><div class="acct-num">Invaliditet 600 000 · vård 100 000</div></div><div><div class="acct-bal">131 kr/mån</div><div class="acct-bal-meta">Autogiro 5:e</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Trygg-Hansa</div><div class="acct-name">Liv (frivillig)</div><div class="acct-num">200 000 · för Linus om något</div></div><div><div class="acct-bal" style="color: var(--text-dim);">— ej</div><div class="acct-bal-meta">Övervägs</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Boende</div><div class="acct-name">Bostadsrättsförsäkring</div><div class="acct-num">Krävs vid bolån · ej aktuell hyresrätt</div></div><div><div class="acct-bal" style="color: var(--text-dim);">— ej</div><div class="acct-bal-meta">Hyresrätt</div></div></a>
       </div>
 
       <div class="act-grid" style="margin-top: 22px;">
         <div>
-          <div class="section-eye">El-historik · senaste 6 mån</div>
+          <div class="section-eye">Försäkringshändelser · senaste året</div>
           <div class="tx-list">
-            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Apr 2026</span><div><div class="tx-name">184 kWh · spotpris snitt 0,82</div><div class="tx-name-sub">+ nätavgift Vattenfall 320</div></div><span style="font-family: var(--mono); font-size: 11px;">812 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">prognos</span></div>
-            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Mar 2026</span><div><div class="tx-name">220 kWh · 1,12 kr</div><div class="tx-name-sub">Kallare månad</div></div><span style="font-family: var(--mono); font-size: 11px;">1 080 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
-            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Feb 2026</span><div><div class="tx-name">240 kWh · 1,28 kr</div><div class="tx-name-sub">Köldknäpp · vintertopp</div></div><span style="font-family: var(--mono); font-size: 11px;">1 235 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
-            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Jan 2026</span><div><div class="tx-name">218 kWh · 1,18 kr</div></div><span style="font-family: var(--mono); font-size: 11px;">1 100 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 90px 1fr 100px;"><span class="tx-date">Aug 2025</span><div><div class="tx-name">Cykel-stöld · ersattes</div><div class="tx-name-sub">3 200 kr efter självrisk · klar utan tjafs</div></div><span style="font-family: var(--mono); font-size: 11px; color: #6ee7b7;">+1 700 kr</span></div>
+            <div class="tx-row" style="grid-template-columns: 90px 1fr 100px;"><span class="tx-date">Mar 2025</span><div><div class="tx-name">Bostadsrättsbrand i grannfastigheten</div><div class="tx-name-sub">Hyresgäster fick ersättning via Folksam · vi flyttades inte</div></div><span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">info</span></div>
+            <div class="tx-row" style="grid-template-columns: 90px 1fr 100px;"><span class="tx-date">Jan 2025</span><div><div class="tx-name">Sa upp Trygg-Hansa hem · för Folksam</div><div class="tx-name-sub">Bättre täckning · 40 kr billigare/mån</div></div><span style="font-family: var(--mono); font-size: 11px; color: #6ee7b7;">−480/år</span></div>
           </div>
         </div>
         <aside>
           <div class="side-card">
-            <div class="side-card-eye">Folksam-skydd</div>
-            <div class="side-card-h">Hem · Olycksfall</div>
-            <div class="side-card-meta">Hemförsäkring max 200 000 lösegendom · olycksfall 600 000 vid invaliditet · självrisk 1 500.</div>
+            <div class="side-card-eye">Folksam-bundling</div>
+            <div class="side-card-h">−18 kr/mån</div>
+            <div class="side-card-meta">Hem + olycksfall hos samma bolag = rabatt. Räkna alltid på enskilda kostnader också.</div>
           </div>
           <div class="side-card">
-            <div class="side-card-eye">Spotpris-tips</div>
-            <div class="side-card-h">Kör tvätten <em>natten</em></div>
-            <div class="side-card-meta">Mellan 02–06 är spotpriset ~ 30 % lägre. Tibber-appen visar realtid.</div>
+            <div class="side-card-eye">Liv-försäkring</div>
+            <div class="side-card-h">~ 50 kr/mån</div>
+            <div class="side-card-meta">Värd det om sambo eller barn finns. Linus skulle få 200 000 om något.</div>
+          </div>
+          <div class="side-card" style="background: rgba(99,102,241,0.06); border-color: rgba(99,102,241,0.2);">
+            <div class="side-card-eye" style="color: #a5b4fc;">Echo</div>
+            <div class="side-card-h">"Behöver du <em>verkligen</em> liv?"</div>
+            <div class="side-card-meta">Du har inga barn. Linus är vuxen och tjänar mer än du. Vad händer om du dör? Tänk innan du köper.</div>
           </div>
         </aside>
       </div>
 
       <div class="peda">
         <div class="peda-eye">Pedagogik · vad du lär dig här</div>
-        <div class="peda-h">El är <em>variabel</em>, försäkring är <em>fast</em>.</div>
-        <p class="peda-prose">Två olika kostnadskaraktärer i samma räkning. <code>El</code> varierar med utomhustemperatur, dygn och spotpris — du kan påverka. <code>Försäkring</code> är fast premium men sparar dig miljoner vid skada. Lär dig <em>differentiera kostnader</em>: vad är fast, vad är rörlig, vad är försäkring mot risk.</p>
+        <div class="peda-h">Försäkring är <em>risköverföring</em>.</div>
+        <p class="peda-prose">Du betalar 320 kr/mån för att <em>någon annan</em> tar risken vid skada. Hemförsäkring är obligatorisk om du har bohag att skydda — utan blir 200 000 kr lösegendom din egen risk. Olycksfall = sjukvårdskostnader om du faller. Liv = ekonomisk trygghet för efterlevande. Bostadsrätt är en separat — bara för bostadsrättshavare.</p>
         <ul class="peda-bullets">
-          <li><strong>Spotpris</strong>Real-tids-elpris. Tibber låter dig läsa det per timme.</li>
-          <li><strong>Nätavgift</strong>Fast oavsett förbrukning · ~ 320 kr/mån.</li>
-          <li><strong>Självrisk</strong>Ditt belopp innan försäkring tar över.</li>
-          <li><strong>Försäkringspremie</strong>Det du betalar för risk-överföring.</li>
+          <li><strong>Premie</strong>Det du betalar varje månad för försäkringsskydd.</li>
+          <li><strong>Självrisk</strong>Ditt eget belopp innan försäkring tar över.</li>
+          <li><strong>Skadeanmälan</strong>Snabbt = bättre. Bilder hjälper.</li>
+          <li><strong>Allrisk</strong>Tillval · täcker även "saker du tappar". Värd det?</li>
         </ul>
         <div class="peda-concepts">
-          <span class="peda-concept">Spotpris</span>
-          <span class="peda-concept">Effektavgift</span>
+          <span class="peda-concept">Premie</span>
           <span class="peda-concept">Självrisk</span>
+          <span class="peda-concept">Aktsamhetskrav</span>
+          <span class="peda-concept">Skadeanmälan</span>
+          <span class="peda-concept">Allrisk</span>
           <span class="peda-concept">Risk-pool</span>
-          <span class="peda-concept">Premium</span>
         </div>
-        <div class="peda-tip">Folksam erbjuder rabatt om du har bil + hem hos dem. Bundling är inte alltid bra — räkna alltid på enskilda kostnader.</div>
+        <div class="peda-tip">Folksam-rabatt om du har bil + hem hos dem. Bundling är inte alltid bra — räkna alltid på enskilda kostnader. Och kolla aktsamhetskravet: cykeln måste stå låst för att täckas.</div>
       </div>
     </div>
   </section>
@@ -5612,7 +5652,8 @@ body[data-mode="business"] .ms-knob {
         <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Transport (SL)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Reskassa-autoladd</div></div><span style="font-family: var(--serif); color: #fff;">1 100</span><span style="font-family: var(--serif); color: #fff;">1 100</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">990</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
         <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Sparmål</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Buffert + körkort + interrail</div></div><span style="font-family: var(--serif); color: #fff;">1 800</span><span style="font-family: var(--serif); color: #fff;">1 800</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— eget</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">räkning till sig själv</span></a>
         <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Avanza ISK</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Månadssparat</div></div><span style="font-family: var(--serif); color: #fff;">600</span><span style="font-family: var(--serif); color: #fff;">600</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— eget</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">El &amp; försäkring</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Tibber + Folksam</div></div><span style="font-family: var(--serif); color: #fff;">1 200</span><span style="font-family: var(--serif); color: #fff;">1 132</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 100</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">−68</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Förbrukning</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">El (Tibber) + bredband + mobil</div></div><span style="font-family: var(--serif); color: #fff;">1 320</span><span style="font-family: var(--serif); color: #fff;">1 320</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 200</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 30px 1.4fr 90px 110px 110px 110px;" href="#"><span></span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Försäkringar</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Folksam hem + olycksfall</div></div><span style="font-family: var(--serif); color: #fff;">320</span><span style="font-family: var(--serif); color: #fff;">320</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">300</span><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">i fas</span></a>
       </div>
 
       <div class="peda">
@@ -6070,6 +6111,97 @@ body[data-mode="business"] .ms-knob {
     </div>
   </section>
 
+  <!-- ============ FÖRBRUKNING ============ -->
+  <section class="panel" id="p-forbrukning">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill warm">Aktör 07 · Förbrukning</span>
+          <h1 class="actor-name" style="margin-top:14px;">El, värme, vatten — <em>det löpande</em>.</h1>
+          <p class="actor-sub">Tibber spotpris · Stockholm Vatten · Ellevio nät · 4 räkningar/mån</p>
+        </div>
+        <div class="actor-meta">
+          April: <strong>1 320 kr</strong> totalt<br>
+          El: <strong>812 kr</strong><br>
+          Övrigt: <strong>508 kr</strong>
+        </div>
+      </header>
+
+      <div class="acct-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <a class="acct" style="border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.04);" href="#"><div><div class="acct-eye" style="color: var(--warm);">Tibber · spotpris</div><div class="acct-name">El april</div><div class="acct-num">184 kWh × 0,82 + nät</div></div><div><div class="acct-bal"><em>812</em> kr</div><div class="acct-bal-meta">faktura 4 maj</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Stockholmshem</div><div class="acct-name">Värme &amp; vatten</div><div class="acct-num">Ingår i hyran · ej separat</div></div><div><div class="acct-bal" style="color: var(--text-dim);">— ingår</div><div class="acct-bal-meta">i 7 240 hyra</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Telia</div><div class="acct-name">Bredband 250/250</div><div class="acct-num">Sthlms stadsnät</div></div><div><div class="acct-bal">389 kr/mån</div><div class="acct-bal-meta">faktura 12:e</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Telia mobil</div><div class="acct-name">Sara · 5 GB · SVA</div><div class="acct-num">Mobilnummer 0735–...</div></div><div><div class="acct-bal">119 kr/mån</div><div class="acct-bal-meta">faktura 27:e</div></div></a>
+      </div>
+
+      <div class="act-grid" style="margin-top: 22px;">
+        <div>
+          <div class="section-eye">El-historik · senaste 6 mån (Tibber spotpris)</div>
+          <div class="tx-list">
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Apr 2026</span><div><div class="tx-name">184 kWh · 0,82 kr/kWh</div><div class="tx-name-sub">+ nätavgift Ellevio 320 + skatt 56</div></div><span style="font-family: var(--mono); font-size: 11px;">812 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">prognos</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Mar 2026</span><div><div class="tx-name">220 kWh · 1,12 kr</div><div class="tx-name-sub">Kallare · vintertopp</div></div><span style="font-family: var(--mono); font-size: 11px;">1 080 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Feb 2026</span><div><div class="tx-name">240 kWh · 1,28 kr</div><div class="tx-name-sub">Köldknäpp −18° · högsta månaden</div></div><span style="font-family: var(--mono); font-size: 11px;">1 235 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Jan 2026</span><div><div class="tx-name">218 kWh · 1,18 kr</div></div><span style="font-family: var(--mono); font-size: 11px;">1 100 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Dec 2025</span><div><div class="tx-name">198 kWh · 1,02 kr</div></div><span style="font-family: var(--mono); font-size: 11px;">912 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
+            <div class="tx-row" style="grid-template-columns: 80px 1fr 100px 100px;"><span class="tx-date">Nov 2025</span><div><div class="tx-name">156 kWh · 0,68 kr</div><div class="tx-name-sub">Mild höst</div></div><span style="font-family: var(--mono); font-size: 11px;">645 kr</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">betald</span></div>
+          </div>
+
+          <div class="section-eye" style="margin-top: 24px;">Andra abonnemang &amp; löpande</div>
+          <div class="tx-list">
+            <div class="tx-row" style="grid-template-columns: 1fr 90px 90px;"><div><div class="tx-name">Telia bredband 250/250</div><div class="tx-name-sub">Sthlms stadsnät · 24 mån-bindning slut feb</div></div><span style="font-family: var(--mono); font-size: 11px;">389/mån</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">12:e</span></div>
+            <div class="tx-row" style="grid-template-columns: 1fr 90px 90px;"><div><div class="tx-name">Telia mobil · Sara · 5 GB SVA</div><div class="tx-name-sub">Tillgänglig på Sara-mobilen</div></div><span style="font-family: var(--mono); font-size: 11px;">119/mån</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">27:e</span></div>
+            <div class="tx-row" style="grid-template-columns: 1fr 90px 90px;"><div><div class="tx-name">Spotify Premium</div><div class="tx-name-sub">Privat · ingen familj-prenum</div></div><span style="font-family: var(--mono); font-size: 11px;">119/mån</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">29:e</span></div>
+            <div class="tx-row" style="grid-template-columns: 1fr 90px 90px;"><div><div class="tx-name">SL · reskassa autoladd</div><div class="tx-name-sub">320 kr när saldo &lt; 100</div></div><span style="font-family: var(--mono); font-size: 11px;">~ 320/mån</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">~ 30:e</span></div>
+          </div>
+        </div>
+        <aside>
+          <div class="side-card">
+            <div class="side-card-eye">Spotpris-tips</div>
+            <div class="side-card-h">Kör tvätten <em>natten</em></div>
+            <div class="side-card-meta">02–06 är spotpriset ~ 30 % lägre. Tibber-appen visar realtid · sätt timer på diskmaskin/tvätt.</div>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Säsong-mönster</div>
+            <div class="side-card-h">Feb är dyrast</div>
+            <div class="side-card-meta">Februari + januari = ~ 50 % av årets el-kostnad. Buffra under sommaren.</div>
+          </div>
+          <div class="side-card" style="background: rgba(220,76,43,0.06); border-color: rgba(220,76,43,0.25);">
+            <div class="side-card-eye" style="color: var(--accent);">Bindningstid</div>
+            <div class="side-card-h">Telia · 24 mån</div>
+            <div class="side-card-meta">Slut feb 2026 · sen kan du byta. Spara ~ 80 kr/mån genom omförhandling. Sätt påminnelse.</div>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Möjlig besparing</div>
+            <div class="side-card-h"><em>−260 kr/mån</em></div>
+            <div class="side-card-meta">Spotpris-styrning + omförhandling bredband + familj-Spotify = årlig 3 120 kr besparing utan att märka.</div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="peda">
+        <div class="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Förbrukning är <em>fast i form, rörlig i siffra</em>.</div>
+        <p class="peda-prose">Du <em>kommer</em> ha el, värme, vatten, mobil, bredband — det går inte runt. Men du kan påverka <em>hur mycket</em>. Spotpris-elen är 70 % lägre nattetid. Bredband kan omförhandlas vid bindning slut. Mobilen finns från 49 kr/mån (Comviq). Att aktivt managera dessa fyra abonnemang ger ~ 250 kr/mån = 3 000 kr/år = försäkring du inte behöver.</p>
+        <ul class="peda-bullets">
+          <li><strong>Spotpris</strong>Real-tids elpris · Tibber-app visar per timme.</li>
+          <li><strong>Nätavgift</strong>Fast oavsett förbrukning · Ellevio i Sthlm · ~ 320 kr/mån.</li>
+          <li><strong>Energiskatt</strong>~ 30 öre/kWh + moms · går till statskassan.</li>
+          <li><strong>Bindningstid</strong>Många abonnemang har 12–24 mån. Spara påminnelse vid slut.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">Spotpris</span>
+          <span class="peda-concept">Effektavgift</span>
+          <span class="peda-concept">Energiskatt</span>
+          <span class="peda-concept">Bindningstid</span>
+          <span class="peda-concept">Uppsägningstid</span>
+          <span class="peda-concept">Variabel kostnad</span>
+        </div>
+        <div class="peda-tip">Pedagogiskt centralt: skilj på <em>vad du måste betala</em> (el som finns) och <em>hur mycket du betalar</em> (vilket abonnemang, vilken tid). Det första är inte förhandlingsbart. Det andra är allt.</div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ AKTIEHANDEL ============ -->
   <section class="panel" id="p-aktier">
     <div class="shell">
@@ -6243,7 +6375,8 @@ const PANELS = {
   cc:     { label: "Kreditkortsfaktura",       crumb: ["HUBBEN", "POSTLÅDAN", "● SEB VISA"] },
   lonespec: { label: "Lönespec",               crumb: ["HUBBEN", "POSTLÅDAN", "● LÖNESPEC"] },
   lan:    { label: "Lånegivaren",              crumb: ["HUBBEN", "● LÅNEGIVAREN"] },
-  utility:{ label: "Tibber & Folksam",         crumb: ["HUBBEN", "● TIBBER & FOLKSAM"] },
+  utility:{ label: "Försäkringar",             crumb: ["HUBBEN", "● FÖRSÄKRINGAR"] },
+  forbrukning: { label: "Förbrukning",         crumb: ["HUBBEN", "● FÖRBRUKNING"] },
   pen:    { label: "Pensionsmyndigheten",      crumb: ["HUBBEN", "● PENSIONSMYNDIGHETEN"] },
   hyra:   { label: "Hyresvärden",              crumb: ["HUBBEN", "● HYRESVÄRDEN"] },
   bok:    { label: "Bokföring",                crumb: ["HUBBEN", "● BOKFÖRING"] },
