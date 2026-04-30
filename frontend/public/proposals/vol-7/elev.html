@@ -1873,6 +1873,96 @@ body[data-mode="business"] .ms-knob {
 }
 .onb-char-prose em { font-style: italic; color: var(--warm); }
 
+/* === SAMBO-FRÅGAN === */
+.onb-partner-card {
+  background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(15,21,37,0.5));
+  border: 1px solid rgba(99,102,241,0.30);
+  border-left: 3px solid #818cf8;
+  border-radius: 6px;
+  padding: 22px 26px;
+  margin-bottom: 22px;
+  position: relative;
+}
+.onb-partner-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: #c7d2fe; margin-bottom: 10px;
+}
+.onb-partner-eye::before { content: "● "; }
+.onb-partner-h {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff; line-height: 1.2;
+  margin-bottom: 10px;
+}
+.onb-partner-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.onb-partner-prose {
+  font-family: var(--serif); font-size: 15px; line-height: 1.5;
+  color: var(--text);
+}
+.onb-partner-prose em { font-style: italic; color: var(--warm); }
+.onb-partner-prose strong { color: var(--accent); font-weight: 700; }
+
+.onb-fairness {
+  display: grid; grid-template-columns: 1fr;
+  gap: 10px; margin-top: 14px;
+}
+.onb-fair-option {
+  background: rgba(255,255,255,0.04);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: all .25s var(--ease);
+  text-decoration: none; color: var(--text);
+  display: grid; grid-template-columns: 36px 1fr;
+  gap: 14px; align-items: start;
+}
+.onb-fair-option:hover {
+  border-color: #818cf8;
+  background: rgba(99,102,241,0.04);
+}
+.onb-fair-option.selected {
+  border-color: var(--warm);
+  background: rgba(251,191,36,0.06);
+}
+.onb-fair-radio {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  position: relative;
+  margin-top: 2px;
+  transition: border-color .25s var(--ease);
+}
+.onb-fair-option:hover .onb-fair-radio { border-color: #818cf8; }
+.onb-fair-option.selected .onb-fair-radio {
+  border-color: var(--warm);
+  background: var(--warm);
+}
+.onb-fair-option.selected .onb-fair-radio::after {
+  content: ""; position: absolute;
+  top: 4px; left: 4px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--bg-deep);
+}
+.onb-fair-name {
+  font-family: var(--serif); font-size: 17px; font-weight: 700;
+  letter-spacing: -0.3px; color: #fff;
+  margin-bottom: 4px;
+}
+.onb-fair-name em { font-style: italic; color: var(--warm); font-weight: 500; }
+.onb-fair-desc {
+  font-family: var(--serif); font-size: 14px; line-height: 1.45;
+  color: var(--text-mid);
+}
+.onb-fair-foot {
+  margin-top: 14px;
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.onb-fair-foot strong { color: var(--warm); }
+
 /* Profil-val cards */
 .onb-profiles {
   display: grid; grid-template-columns: repeat(3, 1fr);
@@ -2061,7 +2151,7 @@ body[data-mode="business"] .ms-knob {
     <div class="onb-shell">
       <div class="onb-stage">
 
-        <div class="onb-progress">
+        <div class="onb-progress" style="grid-template-columns: repeat(8, 1fr);">
           <span class="now" id="op-1"></span>
           <span id="op-2"></span>
           <span id="op-3"></span>
@@ -2069,6 +2159,7 @@ body[data-mode="business"] .ms-knob {
           <span id="op-5"></span>
           <span id="op-6"></span>
           <span id="op-7"></span>
+          <span id="op-8"></span>
         </div>
 
         <!-- STEG 1 — Välkommen -->
@@ -2335,9 +2426,69 @@ body[data-mode="business"] .ms-knob {
           </div>
         </div>
 
-        <!-- STEG 7 — Klar -->
+        <!-- STEG 7 — Sambo-fråga (värderingar innan vi avslöjar partnerns ekonomi) -->
         <div class="onb-step" id="ob-7">
-          <div class="onb-eye">Onboarding · steg 7 av 7 · klar</div>
+          <div class="onb-eye">Onboarding · steg 7 av 8 · värderingar</div>
+          <h1 class="onb-h">Innan vi avslöjar din <em>partners ekonomi</em> — en fråga.</h1>
+          <p class="onb-lead">
+            Du har en sambo i din profil. Innan vi visar vad din partner tjänar
+            vill vi att du svarar på en fråga om <em>dig själv</em>.
+          </p>
+
+          <div class="onb-partner-card">
+            <div class="onb-partner-eye">Värderingsfråga · sparas i din portfolio</div>
+            <h2 class="onb-partner-h">Hur tycker du att <em>gemensamma kostnader</em> ska fördelas i ett hushåll?</h2>
+            <p class="onb-partner-prose">
+              <strong>Hyra · el · mat hemma · försäkringar.</strong> Du vet inte än om du
+              eller din partner tjänar mer. Svara utifrån vad du <em>tycker är rätt</em>
+              — inte vad som gynnar dig själv. Det är en fråga om värderingar, inte
+              matematik.
+            </p>
+
+            <div class="onb-fairness">
+              <a class="onb-fair-option" id="fair-50" onclick="pickFair('50'); return false;" href="#">
+                <span class="onb-fair-radio"></span>
+                <div>
+                  <div class="onb-fair-name"><em>50/50</em> — vi delar lika</div>
+                  <div class="onb-fair-desc">Båda betalar exakt halva varje gemensam kostnad.</div>
+                </div>
+              </a>
+              <a class="onb-fair-option" id="fair-prop" onclick="pickFair('prop'); return false;" href="#">
+                <span class="onb-fair-radio"></span>
+                <div>
+                  <div class="onb-fair-name"><em>Proportionellt</em> — den som tjänar mer betalar mer</div>
+                  <div class="onb-fair-desc">Var och en betalar samma andel av sin egen lön — så ni har ungefär samma marginal kvar.</div>
+                </div>
+              </a>
+              <a class="onb-fair-option" id="fair-pool" onclick="pickFair('pool'); return false;" href="#">
+                <span class="onb-fair-radio"></span>
+                <div>
+                  <div class="onb-fair-name"><em>Allt delas</em> — gemensam ekonomi</div>
+                  <div class="onb-fair-desc">Båda löner går in på ett gemensamt konto. Inga "mina pengar" eller "dina pengar".</div>
+                </div>
+              </a>
+            </div>
+
+            <div class="onb-fair-foot">
+              Ditt svar låses till profilen. <strong>Din partner svarar samma fråga separat.</strong> Sen jämförs era svar och ni kan diskutera skillnader.
+            </div>
+          </div>
+
+          <div class="onb-rule" style="background: rgba(99,102,241,0.05); border-color: rgba(99,102,241,0.2);">
+            <div class="onb-rule-eye" style="color: #a5b4fc;">Pedagogik · varför fråga innan vi visar siffror</div>
+            <div class="onb-rule-prose">
+              Det finns inget rätt svar — men det finns ett <em style="color: var(--warm); font-style: italic;">rationaliserat</em> svar.
+              Om du redan vet att din partner tjänar 38 000 och du tjänar 22 000, kommer
+              du gärna säga <em style="color: var(--warm); font-style: italic;">proportionellt</em>. Men frågar du <em style="color: var(--warm); font-style: italic;">innan</em>, baseras
+              svaret på din värdering — vilket är pedagogiskt det viktiga. Att svara
+              före data är hela poängen.
+            </div>
+          </div>
+        </div>
+
+        <!-- STEG 8 — Klar -->
+        <div class="onb-step" id="ob-8">
+          <div class="onb-eye">Onboarding · steg 8 av 8 · klar</div>
           <h1 class="onb-h">Vol. 18 är <em>laddad</em>.</h1>
           <p class="onb-lead">
             Det är onsdag 29 april 2026. Sara har <em>14 282 kr</em> på lönekontot.
@@ -5072,7 +5223,16 @@ checkOnboardingMode();
 
 // === ONBOARDING NAV ===
 let onbStep = 1;
-const onbTotal = 7;
+const onbTotal = 8;
+// Sambo-värdering · sparas i state, syns i lärar-portfolio
+let fairnessChoice = null;
+function pickFair(v) {
+  fairnessChoice = v;
+  document.querySelectorAll(".onb-fair-option").forEach(o => o.classList.remove("selected"));
+  const el = document.getElementById("fair-" + v);
+  if (el) el.classList.add("selected");
+}
+window.pickFair = pickFair;
 function obGo(n) {
   if (n < 1 || n > onbTotal) return;
   onbStep = n;
@@ -5092,7 +5252,7 @@ function obGo(n) {
   back.disabled = (n === 1);
   back.style.opacity = (n === 1) ? "0.4" : "1";
   const nextBtn = document.getElementById("ob-next");
-  const labels = ["", "Möt din karaktär →", "Välj din spenderprofil →", "Visa pentagonen →", "Visa postlådan →", "Visa Echo →", "Sista regeln →", "Starta Vol. 18 ↗"];
+  const labels = ["", "Möt din karaktär →", "Välj din spenderprofil →", "Visa pentagonen →", "Visa postlådan →", "Visa Echo →", "En fråga om värderingar →", "Sista regeln →", "Starta Vol. 18 ↗"];
   nextBtn.textContent = labels[n] || "Nästa →";
 }
 document.getElementById("ob-next").addEventListener("click", () => {
