@@ -17,8 +17,13 @@
 set -euo pipefail
 
 # ----- Konfiguration (kan åsidosättas via env) -----
-SERVICE_NAME="${SERVICE_NAME:-hembudget-demo}"
-REGION="${REGION:-europe-north1}"
+# OBS: SERVICE_NAME=hembudget och REGION=europe-west1 — det är tjänsten
+# som ekonomilabbet.org pekar på (verifierat via `gcloud beta run
+# domain-mappings list --region=europe-west1`). Tidigare default
+# `hembudget-demo`/`north1` deployade till en parallell test-tjänst
+# som domänen INTE pekade på, vilket gjorde att ändringar aldrig syntes.
+SERVICE_NAME="${SERVICE_NAME:-hembudget}"
+REGION="${REGION:-europe-west1}"
 # Default-projekt — används automatiskt om ingen PROJECT_ID är satt och
 # gcloud config saknar projekt. Överstyrs via env: PROJECT_ID=xxx ./deploy.sh
 DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:-hembudget}"

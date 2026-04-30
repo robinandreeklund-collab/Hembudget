@@ -226,6 +226,17 @@ def _mount_frontend_static(app: FastAPI) -> None:
     if assets.exists():
         app.mount("/assets", StaticFiles(directory=str(assets)), name="assets")
 
+    # Cache-Control för SPA-shell — viktigt: HTML får ALDRIG cachas
+    # av webbläsaren, annars kan en gammal index.html peka på en
+    # raderad /assets/index-XXX.js efter deploy. Vite genererar
+    # hash-baserade asset-namn så /assets/* får långtids-cache, men
+    # själva index.html måste alltid revalideras.
+    _NO_CACHE_HEADERS = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+
     @app.get("/", include_in_schema=False)
     def _spa_root() -> FileResponse:
         # Public landing = demo-landing/index.html (editorial sida som
@@ -234,8 +245,8 @@ def _mount_frontend_static(app: FastAPI) -> None:
         # via _spa_fallback nedan.
         landing = dist / "demo-landing" / "index.html"
         if landing.is_file():
-            return FileResponse(str(landing))
-        return FileResponse(str(dist / "index.html"))
+            return FileResponse(str(landing), headers=_NO_CACHE_HEADERS)
+        return FileResponse(str(dist / "index.html"), headers=_NO_CACHE_HEADERS)
 
     # Snygga URLs för persona-sagorna — pekar på respektive saga-HTML
     # som ligger statiskt under demo-landing/. Linda kvar på pretty-URL
@@ -249,8 +260,10 @@ def _mount_frontend_static(app: FastAPI) -> None:
         def _make(p: Path):
             def _serve() -> FileResponse:
                 if p.is_file():
-                    return FileResponse(str(p))
-                return FileResponse(str(dist / "index.html"))
+                    return FileResponse(str(p), headers=_NO_CACHE_HEADERS)
+                return FileResponse(
+                    str(dist / "index.html"), headers=_NO_CACHE_HEADERS,
+                )
             return _serve
         app.add_api_route(
             "/" + _slug,
@@ -271,6 +284,12 @@ def _mount_frontend_static(app: FastAPI) -> None:
         # de finns.
         target = dist / full_path
         if target.is_file():
+            # Statiska assets (bilder, fonts, /assets/*) får cachas länge
+            # — Vite hashar filnamn så de invalideras automatiskt vid
+            # ny deploy. Men HTML-filer (t.ex. demo-landing-sagor) ska
+            # aldrig cachas.
+            if target.suffix.lower() in (".html", ".htm"):
+                return FileResponse(str(target), headers=_NO_CACHE_HEADERS)
             return FileResponse(str(target))
         # Directory? → serva dess egna index.html om den finns
         # (gör att /demo-landing/ pekar på frontend/dist/demo-landing/index.html
@@ -278,8 +297,10 @@ def _mount_frontend_static(app: FastAPI) -> None:
         if target.is_dir():
             dir_index = target / "index.html"
             if dir_index.is_file():
-                return FileResponse(str(dir_index))
-        return FileResponse(str(dist / "index.html"))
+                return FileResponse(
+                    str(dir_index), headers=_NO_CACHE_HEADERS,
+                )
+        return FileResponse(str(dist / "index.html"), headers=_NO_CACHE_HEADERS)
 
 
 app = build_app()
