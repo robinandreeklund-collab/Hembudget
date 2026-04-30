@@ -29,9 +29,49 @@
 .grid {
   display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 24px;
-  margin-bottom: 80px;
+  margin-bottom: 60px;
 }
 @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+.section-divider {
+  margin: 40px 0 32px;
+  text-align: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent);
+}
+.section-divider::before { content: "● "; }
+.dual-card {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 28px;
+  background: #fff;
+  display: flex; flex-direction: column; gap: 16px;
+  transition: transform .3s var(--ease), border-color .3s var(--ease), box-shadow .3s var(--ease);
+}
+.dual-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -20px rgba(15, 23, 42, 0.18);
+}
+.dual-links { display: flex; gap: 8px; margin-top: auto; }
+.dual-link {
+  flex: 1;
+  text-align: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 10px 12px; border-radius: 100px;
+  text-decoration: none;
+  transition: all .2s var(--ease);
+}
+.dual-link.elev {
+  background: var(--accent); color: #fff;
+}
+.dual-link.elev:hover { background: #c43a1c; }
+.dual-link.larare {
+  background: rgba(220,76,43,0.06); color: var(--accent);
+  border: 1px solid rgba(220,76,43,0.3);
+}
+.dual-link.larare:hover { background: rgba(220,76,43,0.12); border-color: var(--accent); }
 .foot {
   text-align: center;
   padding-top: 48px;
@@ -110,6 +150,78 @@
         <span class="concept-page-pill">Banken</span>
       </div>
     </a>
+
+  </div>
+
+  <div class="section-divider">Vol. 04–06 · Funktionella shells (admin-tunga)</div>
+
+  <div class="grid">
+
+    <div class="dual-card">
+      <span class="concept-eye">Förslag 04 · Korridor</span>
+      <h2 class="concept-title"><em>Korridor</em>-arkitektur.</h2>
+      <p class="concept-body">
+        Aktör/verktyg-uppdelningen som grafisk grammatik. Aktörer som rum längs en korridor, verktyg som skrivbord. Lärar-vyn = byggnaden med 28 elevkorridorer.
+      </p>
+      <div class="dual-links">
+        <a href="./vol-4/elev.html" class="dual-link elev">Elev →</a>
+        <a href="./vol-4/larare.html" class="dual-link larare">Lärare →</a>
+      </div>
+    </div>
+
+    <div class="dual-card">
+      <span class="concept-eye">Förslag 05 · Strömmar</span>
+      <h2 class="concept-title"><em>Sankey</em> över månaden.</h2>
+      <p class="concept-body">
+        Pengarnas väg in (lön, bidrag, utdelning) → ut (11 kategorier) som Sankey-flöde. Lärar-vyn = klassens aggregerade ström + 14 staplade band.
+      </p>
+      <div class="dual-links">
+        <a href="./vol-5/elev.html" class="dual-link elev">Elev →</a>
+        <a href="./vol-5/larare.html" class="dual-link larare">Lärare →</a>
+      </div>
+    </div>
+
+    <div class="dual-card">
+      <span class="concept-eye">Förslag 06 · App-shell</span>
+      <h2 class="concept-title">Komplett <em>navigation</em>.</h2>
+      <p class="concept-body">
+        Riktig app-skärm med vänster sidomeny (10 verktyg + 8 aktörer + 5 skol-routes), topbar, höger panel med moduler/uppdrag/Echo, drawer-chat. Vol-4 utbyggd.
+      </p>
+      <div class="dual-links">
+        <a href="./vol-4/elev.html" class="dual-link elev">Elev →</a>
+        <a href="./vol-4/larare.html" class="dual-link larare">Lärare →</a>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="section-divider">Vol. 07–08 · Cinematiska — som speglar startsidan</div>
+
+  <div class="grid">
+
+    <div class="dual-card" style="border-color: var(--accent); background: linear-gradient(180deg, #fff 0%, #fef3eb 100%);">
+      <span class="concept-eye">Förslag 07 · Pentagonen</span>
+      <h2 class="concept-title"><em>Konsekvensdriven</em> — pentagonen i hjärtat.</h2>
+      <p class="concept-body">
+        Mörk fotorealistisk SPA. Pentagonen lever och tippar när tandläkaren ringer. Klick → BankID-flöde, Maria-lönesamtal, Skatteverket, Avanza, modul. Allt navigerbart från hubben med breadcrumb. Lärar-vy: klassens aggregerade pentagon + 28 mini-pentagoner.
+      </p>
+      <div class="dual-links">
+        <a href="./vol-7/elev.html" class="dual-link elev">Elev (interaktiv) →</a>
+        <a href="./vol-7/larare.html" class="dual-link larare">Lärare →</a>
+      </div>
+    </div>
+
+    <div class="dual-card" style="border-color: var(--accent); background: linear-gradient(180deg, #fff 0%, #fef3eb 100%);">
+      <span class="concept-eye">Förslag 08 · Veckans val</span>
+      <h2 class="concept-title">Sex <em>kapitel</em> — eleven gör val.</h2>
+      <p class="concept-body">
+        Narrativ scen-spelare. Atmosfär byter per scen (morgon/telefon/kväll). Tandläkaren ringer → 3 val med konsekvens-kort → pentagon tippar live → bank → Maria → reflektion. Lärar-vy: bibliotek av 28 elev-böcker + skriv-ny-scen-verktyg.
+      </p>
+      <div class="dual-links">
+        <a href="./vol-8/elev.html" class="dual-link elev">Elev (spela) →</a>
+        <a href="./vol-8/larare.html" class="dual-link larare">Lärare →</a>
+      </div>
+    </div>
 
   </div>
 
