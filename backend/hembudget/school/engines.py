@@ -401,6 +401,26 @@ def _run_master_migrations(engine: Engine) -> None:
     if s_cols and "bank_pin_hash" not in s_cols:
         _add("students", "bank_pin_hash VARCHAR(120)")
 
+    # === V2-fält (parallell migration · ny dashboard) ===
+    # Lägger till nya kolumner för v2-onboarding utan att röra v1-data.
+    # Befintliga elever får default-värden (Nivå 1, Sparsam, solo).
+    if s_cols and "v2_onboarding_completed_at" not in s_cols:
+        _add("students", "v2_onboarding_completed_at DATETIME")
+    if s_cols and "v2_level" not in s_cols:
+        _add("students", "v2_level INTEGER NOT NULL DEFAULT 1")
+    if s_cols and "v2_spend_profile" not in s_cols:
+        _add(
+            "students",
+            "v2_spend_profile VARCHAR(20) NOT NULL DEFAULT 'sparsam'",
+        )
+    if s_cols and "v2_fairness_choice" not in s_cols:
+        _add("students", "v2_fairness_choice VARCHAR(20)")
+    if s_cols and "v2_partner_model" not in s_cols:
+        _add(
+            "students",
+            "v2_partner_model VARCHAR(20) NOT NULL DEFAULT 'solo'",
+        )
+
     # BatchArtifact.exported_to_my_batches (idé 3 i dev_v1.md):
     # bank-flödet kräver att bank-artefakter passerar /my-batches via
     # explicit export. Befintliga artefakter som redan är importerade

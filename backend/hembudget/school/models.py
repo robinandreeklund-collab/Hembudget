@@ -168,6 +168,33 @@ class Student(MasterBase):
     bank_pin_hash: Mapped[Optional[str]] = mapped_column(
         String(120), nullable=True,
     )
+    # === V2-fält (parallell migration · ny dashboard) ===
+    # Sätts under v2-onboardingen och styr nya UI:t. Saknas värde →
+    # eleven har inte gått v2-onboardingen och hänvisas till v1.
+    v2_onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Spelets svårighetsgrad. 1 = Sparsam (start), 2 = Balanserad
+    # (lärare aktiverar), 3 = Slösa (fortsättning). Ändras enbart av
+    # läraren via /v2/teacher/students/:id/level.
+    v2_level: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Spenderprofil: "sparsam" / "balanserad" / "slosa". Styr hur
+    # förra-månadens-data genereras (kreditkortsfakturor, postlådan).
+    # Default "sparsam" eftersom alla börjar på Nivå 1.
+    v2_spend_profile: Mapped[str] = mapped_column(
+        String(20), default="sparsam", nullable=False,
+    )
+    # Värderingsval om sambo-ekonomi (50/50, proportionellt, pool).
+    # Sparas innan AI-partnern avslöjas så svaret inte rationaliseras.
+    # NULL om inte besvarat eller om karaktären är solo.
+    v2_fairness_choice: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+    )
+    # Partner-modell: "solo" / "ai" / "klasskompis". Sätts vid karaktärs-
+    # generering. "klasskompis" kräver att läraren aktiverar paret.
+    v2_partner_model: Mapped[str] = mapped_column(
+        String(20), default="solo", nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

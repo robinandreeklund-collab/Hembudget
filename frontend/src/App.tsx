@@ -3,6 +3,10 @@ import { BackendSetup } from "./components/BackendSetup";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
 import { MobileTopBar, Sidebar } from "./components/Sidebar";
 import { useAuth } from "./hooks/useAuth";
+import { OnboardingV2 } from "./v2/OnboardingV2";
+import { HubV2 } from "./v2/HubV2";
+import { V2Bootstrap } from "./v2/V2Bootstrap";
+import { V2RootRedirect } from "./v2/V2RootRedirect";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budget from "./pages/Budget";
@@ -133,7 +137,10 @@ export default function App() {
         <MobileTopBar />
         {role === "teacher" && asStudent && <ImpersonationBanner />}
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {/* "/" går genom V2RootRedirect: super-admin auto-routas till
+              /v2/hub, studenter utan v2-onboarding till /v2/onboarding,
+              övriga till /dashboard (v1). */}
+          <Route path="/" element={<V2RootRedirect />} />
           <Route path="/teacher" element={<Teacher />} />
           <Route path="/teacher/students/:studentId" element={<StudentDetail />} />
           <Route path="/teacher/all-batches" element={<AllBatches />} />
@@ -168,6 +175,10 @@ export default function App() {
               oväntade utgifter, uppdrag, streak, mastery) ligger som
               StudentPedagogyCards-komponent högst upp i Dashboard.tsx
               så elev + lärar-vy aldrig divergerar. */}
+          {/* === V2 (parallell migration) === */}
+          <Route path="/v2" element={<V2Bootstrap />} />
+          <Route path="/v2/onboarding" element={<OnboardingV2 />} />
+          <Route path="/v2/hub" element={<HubV2 />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/import" element={<Import />} />

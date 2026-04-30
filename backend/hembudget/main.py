@@ -20,7 +20,7 @@ from .api import (
     modules, reports, scenarios, school, settings_kv, smtp_admin,
     stock_trading, stocks, tax, events, teacher_credit, teacher_employer,
     teacher_stocks, teacher_wellbeing, transactions, transfers, upcoming,
-    upload, utility, wellbeing,
+    upload, utility, v2, wellbeing,
 )
 from .config import settings
 
@@ -177,6 +177,10 @@ def build_app() -> FastAPI:
     app.include_router(employer.router)
     app.include_router(teacher_employer.router)
     app.include_router(bank.router)
+
+    # === V2 (parallell migration · ny dashboard) ===
+    # Kör bredvid v1. Ingen befintlig endpoint berörs.
+    app.include_router(v2.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
