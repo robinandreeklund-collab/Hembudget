@@ -2915,6 +2915,31 @@ body[data-mode="business"] .ms-knob {
         </article>
       </div>
 
+      <!-- RECAP-STRIPE · 4 nyckeltal april -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; margin-bottom: 28px;">
+        <a href="#" onclick="go('bok'); return false;" style="padding: 18px 22px; border-right: 1px solid var(--line); text-decoration: none; color: var(--text); transition: background .2s var(--ease); cursor: pointer; display: block;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">● Inkomst april</div>
+          <div style="font-family: var(--serif); font-weight: 700; font-size: 26px; color: #fff; letter-spacing: -0.7px; font-variant-numeric: tabular-nums;"><em style="font-style: italic; color: #6ee7b7; font-weight: 500;">+ 23 734</em> kr</div>
+          <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 3px; letter-spacing: 0.5px;">Lön 22 400 · CSN 1 250 · Avanza utd 84</div>
+        </a>
+        <a href="#" onclick="go('budget'); return false;" style="padding: 18px 22px; border-right: 1px solid var(--line); text-decoration: none; color: var(--text); cursor: pointer; display: block;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">● Utgifter april</div>
+          <div style="font-family: var(--serif); font-weight: 700; font-size: 26px; color: #fff; letter-spacing: -0.7px; font-variant-numeric: tabular-nums;">−20 372 kr</div>
+          <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 3px; letter-spacing: 0.5px;">12 kategorier · restaurang +75 % över</div>
+        </a>
+        <a href="#" onclick="go('mal'); return false;" style="padding: 18px 22px; border-right: 1px solid var(--line); text-decoration: none; color: var(--text); cursor: pointer; display: block;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">● Sparat april</div>
+          <div style="font-family: var(--serif); font-weight: 700; font-size: 26px; color: #fff; letter-spacing: -0.7px; font-variant-numeric: tabular-nums;"><em style="font-style: italic; color: var(--warm); font-weight: 500;">+ 3 362</em> kr</div>
+          <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 3px; letter-spacing: 0.5px;">Buffert + ISK + sparmål</div>
+        </a>
+        <a href="#" onclick="go('mal'); return false;" style="padding: 18px 22px; text-decoration: none; color: var(--text); cursor: pointer; display: block;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">● Sparkvot</div>
+          <div style="font-family: var(--serif); font-weight: 700; font-size: 26px; color: #fff; letter-spacing: -0.7px; font-variant-numeric: tabular-nums;">14,2 %</div>
+          <div style="margin-top: 6px; height: 4px; background: rgba(255,255,255,0.06); border-radius: 100px; overflow: hidden;"><div style="height: 100%; width: 14.2%; background: var(--warm); border-radius: 100px;"></div></div>
+          <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 3px; letter-spacing: 0.5px;">Mål 15 % · −0,8 procentenheter</div>
+        </a>
+      </div>
+
       <!-- PENTAGON -->
       <div class="pent-flip-stage" id="pentFlipStage">
         <div class="pent-flip-inner">
@@ -3322,6 +3347,16 @@ body[data-mode="business"] .ms-knob {
             <div class="compass-node-eye" style="color: var(--accent);">Skola</div>
             <div class="compass-node-name">Mina uppdrag</div>
             <div class="compass-node-val"><em>3</em> aktiva</div>
+          </a>
+          <a class="compass-node" onclick="go('meddelanden'); return false;" href="#">
+            <div class="compass-node-eye">Skola</div>
+            <div class="compass-node-name">Chat med Anders</div>
+            <div class="compass-node-val">Anders online · 1 nytt</div>
+          </a>
+          <a class="compass-node alert" onclick="go('feedback'); return false;" href="#">
+            <div class="compass-node-eye" style="color: var(--accent);">Skola</div>
+            <div class="compass-node-name">Lärar-feedback</div>
+            <div class="compass-node-val"><em>2</em> olästa</div>
           </a>
         </div>
       </div>
@@ -3896,6 +3931,78 @@ body[data-mode="business"] .ms-knob {
               <span class="tx-amt"><em>2,4 %</em></span>
             </div>
           </div>
+
+          <!-- ARBETSGIVAR-FRÅGOR · påverkar nöjdhet -->
+          <div class="section-eye" style="margin-top: 24px;">Frågor från arbetsgivaren · påverkar din nöjdhet</div>
+          <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; padding: 18px 22px; margin-bottom: 18px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+              <div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;">Din arbetsgivar-nöjdhet</div>
+                <div style="font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 26px; color: var(--warm); margin-top: 2px;">78 / 100</div>
+              </div>
+              <div style="text-align: right;">
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px;">Senaste 4 v</div>
+                <div style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">+ 6 pkt</div>
+              </div>
+            </div>
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; overflow: hidden;"><div style="height: 100%; width: 78%; background: linear-gradient(90deg, var(--warm), #6ee7b7); border-radius: 100px;"></div></div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 8px; letter-spacing: 0.5px;">Nöjdheten påverkar din position i lönesamtalet med Maria. Hög nöjdhet → bättre BATNA.</div>
+          </div>
+
+          <div class="biz-table">
+            <div class="biz-table-row head" style="grid-template-columns: 60px 1.6fr 80px 100px;"><span>Datum</span><span>Fråga</span><span>Svårighet</span><span>Status</span></div>
+
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 80px 100px; background: rgba(220,76,43,0.04); border-left: 3px solid var(--accent); cursor: pointer;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">29 apr · NY</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">"Vill du jobba helgen 4–5 maj som extra?"</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 3px;">Lönen: 1 280 kr OB-tillägg · krockar med dina mål? · ditt val påverkar nöjdhet</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(110,231,183,0.18); color: #6ee7b7; letter-spacing: 1px; text-align: center; font-weight: 700;">▰▱▱ LÄTT</span>
+              <span class="biz-status open">Svara nu</span>
+            </a>
+
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 80px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">22 apr</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">"Vad tycker du om en utbildningsdag i höst?"</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 3px;">Du svarade: <em style="color: #6ee7b7;">"Ja, gärna — kan jag använda i Maria-samtalet?"</em></div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(251,191,36,0.18); color: var(--warm); letter-spacing: 1px; text-align: center; font-weight: 700;">▰▰▱ MEDEL</span>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; letter-spacing: 1px; text-align: center; font-weight: 700;">+3 nöjd</span>
+            </a>
+
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 80px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">15 apr</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">"Kan du täcka för Lisa nästa fredag — sjukvikariat?"</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 3px;">Du svarade: <em style="color: #6ee7b7;">"Ja"</em> · jobbade extra · OB-tillägg 480 kr</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(110,231,183,0.18); color: #6ee7b7; letter-spacing: 1px; text-align: center; font-weight: 700;">▰▱▱ LÄTT</span>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; letter-spacing: 1px; text-align: center; font-weight: 700;">+2 nöjd</span>
+            </a>
+
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 80px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">2 apr</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">"Vill du gå med i nya patient-rondsystemet (extra ansvar, ingen löneökning än)?"</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 3px;">Du svarade: <em style="color: #fda594;">"Bara om jag får motsvarande lönerevision"</em> · principfråga</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(220,76,43,0.18); color: #fda594; letter-spacing: 1px; text-align: center; font-weight: 700;">▰▰▰ SVÅR</span>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; letter-spacing: 1px; text-align: center; font-weight: 700;">+5 nöjd</span>
+            </a>
+
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 80px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">28 mar</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">"Behöver vi byta bara om vi tar in fler nya?"</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 3px;">Du svarade: <em style="color: #fda594;">"Hellre höjt OB än fler kollegor"</em> · värderar lugn</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(251,191,36,0.18); color: var(--warm); letter-spacing: 1px; text-align: center; font-weight: 700;">▰▰▱ MEDEL</span>
+              <span style="font-family: var(--mono); font-size: 9px; padding: 4px 9px; border-radius: 100px; background: rgba(220,76,43,0.16); color: #fda594; letter-spacing: 1px; text-align: center; font-weight: 700;">−1 nöjd</span>
+            </a>
+          </div>
+          <div style="margin-top: 14px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px;">+ 8 frågor till denna termin · arkivet visar hur du formade din relation till arbetsgivaren över tid</div>
 
           <!-- PEDAGOGIK · ARBETSGIVAREN -->
           <div class="peda">
@@ -7020,6 +7127,202 @@ body[data-mode="business"] .ms-knob {
     </div>
   </section>
 
+  <!-- ============ MEDDELANDEN · CHATT MED LÄRAREN ============ -->
+  <section class="panel" id="p-meddelanden">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Skola · Meddelanden</span>
+          <h1 class="actor-name" style="margin-top:14px;">Chatt med <em>Anders Lind</em>.</h1>
+          <p class="actor-sub">Direktmeddelande mellan dig och din lärare · sparas i din portfolio</p>
+        </div>
+        <div class="actor-meta">
+          Aktiv: <strong>Anders nu online</strong><br>
+          Senaste sett: <strong>14:08 idag</strong><br>
+          Mejl-fallback: anders.lind@nordstjarnan.se
+        </div>
+      </header>
+
+      <article class="chat-card">
+        <div class="chat-head">
+          <div class="chat-avatar" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6);">AL</div>
+          <div>
+            <div class="chat-name">Anders <em>Lind</em></div>
+            <div class="chat-role">Lärare · 9C · Nordstjärnan gymnasium</div>
+          </div>
+        </div>
+
+        <div class="chat-body" style="max-height: 620px;">
+
+          <div style="text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1.2px; margin: 6px 0;">— TIS 22 APR —</div>
+
+          <div class="chat-msg maria" style="background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.25);">
+            <div class="speaker">Anders · 09:14</div>
+            "Hej Sara — jag såg din reflektion om CSN-räntan. Bra tänk där om att 1,7 % är ovanligt låg. Har du lagt märke till hur räntan jämförs med Avanza-avkastning?"
+          </div>
+
+          <div class="chat-msg you">
+            <div class="speaker">Sara · 11:42</div>
+            "Tack! Ja jag insåg att det är typ 4 ggr lägre än vad ISK ger. Så att amortera CSN extra känns konstigt nu."
+          </div>
+
+          <div class="chat-msg maria" style="background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.25);">
+            <div class="speaker">Anders · 11:51</div>
+            "Precis. Det är vad ekonomerna kallar <em>opportunitetskostnad</em>. Lägg det i din reflektion när du hinner — kompetensen Lån &amp; ränta höjs nog till GRUND av det."
+          </div>
+
+          <div style="text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1.2px; margin: 14px 0 6px;">— FRE 25 APR —</div>
+
+          <div class="chat-msg maria" style="background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.25);">
+            <div class="speaker">Anders · 13:18</div>
+            "Sara, jag har bestämt: KALP-uppdraget för 2,4 Mkr-bolånet är inte bara individuellt. Vi gör det som klassgenomgång på torsdag. Räcker tiden?"
+          </div>
+
+          <div class="chat-msg you">
+            <div class="speaker">Sara · 13:42</div>
+            "Hinner — jag håller på med steg 4 i bolån-modulen redan. Bra timing. Får man förbereda en fråga?"
+          </div>
+
+          <div class="chat-msg maria" style="background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.25);">
+            <div class="speaker">Anders · 13:54</div>
+            "Ja, en fråga per elev. Skicka senast onsdag kväll så jag kan strukturera klassrummet."
+          </div>
+
+          <div style="text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1.2px; margin: 14px 0 6px;">— ONS 29 APR · IDAG —</div>
+
+          <div class="chat-msg maria" style="background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.25);">
+            <div class="speaker">Anders · 14:08</div>
+            "Saw att tandläkaren ringde — du valde att betala direkt. Bra reflex. Men buffert-varningen syns nu i klass-översikten åt mig. Vill du diskutera buffert-strategi i klass eller separat?"
+          </div>
+
+          <div class="chat-msg you" style="opacity: 0.45; font-style: italic;">
+            <div class="speaker">Sara skriver…</div>
+            <em>Ditt svar dyker upp här...</em>
+          </div>
+
+        </div>
+
+        <div class="chat-foot">
+          <textarea placeholder="Skriv till Anders..."></textarea>
+          <button>Skicka</button>
+        </div>
+      </article>
+
+      <div class="peda" style="margin-top: 22px;">
+        <div class="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Lärar-relation är <em>tillgänglig</em>, inte transaktionell.</div>
+        <p class="peda-prose">Anders ser allt du gör i appen — bokföring, val, reflektioner — men han är <em>inte</em> en datainsamlare. Chatten är till för att du kan ställa frågor, signalera att du behöver stöd, eller bara berätta hur det går. Allt sparas i din portfolio och kan läsas av Anders, dina vårdnadshavare och dig själv om 5 år.</p>
+        <ul class="peda-bullets">
+          <li><strong>Sokratiskt stöd</strong>Anders ger inte direkta svar — frågar om mönster och låter dig reflektera.</li>
+          <li><strong>Privacy</strong>Bara du, Anders och vårdnadshavare ser. Klassen ser inte din chat.</li>
+          <li><strong>Svarstid</strong>Anders svarar inom 24 h på vardagar · helger ej.</li>
+          <li><strong>Eskalering</strong>Vid akuta saker (mående, ekonomisk kris) skickar du "URGENT" först i meddelandet.</li>
+        </ul>
+        <div class="peda-tip">Du kan också länka in en specifik vy: t.ex. "Anders, kan du titta på Bokföring-vyn när du har tid?" så ser han direkt vad du syftar på.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LÄRAR-FEEDBACK ============ -->
+  <section class="panel" id="p-feedback">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Skola · Feedback från Anders</span>
+          <h1 class="actor-name" style="margin-top:14px;">Allt <em>Anders sagt</em>.</h1>
+          <p class="actor-sub">Kommentarer, kompetenshöjningar, beröm och förslag · sparas i portfolio</p>
+        </div>
+        <div class="actor-meta">
+          Olästa: <strong>2</strong><br>
+          Totalt: <strong>14 i april</strong><br>
+          Senaste: <strong>idag 14:08</strong>
+        </div>
+      </header>
+
+      <div class="cc-summary" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="cc-stat"><div class="cc-stat-eye">Komp-höjningar</div><div class="cc-stat-num warm"><em>3</em></div><div class="cc-stat-sub">i april</div></div>
+        <div class="cc-stat"><div class="cc-stat-eye">Reflekt-svar</div><div class="cc-stat-num">5</div><div class="cc-stat-sub">av 8 lästa</div></div>
+        <div class="cc-stat"><div class="cc-stat-eye">Uppdrags-godkända</div><div class="cc-stat-num"><em>4</em></div><div class="cc-stat-sub">april</div></div>
+        <div class="cc-stat"><div class="cc-stat-eye">Beröm</div><div class="cc-stat-num">2</div><div class="cc-stat-sub">spontana</div></div>
+      </div>
+
+      <div class="section-eye">Senaste · sorterat efter datum</div>
+
+      <article class="s-card" style="background: rgba(59,130,246,0.06); border-left: 3px solid #3b82f6; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #93c5fd;">● 29 apr 14:08 · NY · CHAT</div>
+          <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Anders Lind</div>
+        </div>
+        <div style="font-family: var(--serif); font-size: 16px; color: #fff; margin-bottom: 6px;">Buffert-strategi efter tandläkaren</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; font-style: italic;">"Saw att tandläkaren ringde — du valde att betala direkt. Bra reflex. Men buffert-varningen syns nu i klass-översikten åt mig. Vill du diskutera buffert-strategi i klass eller separat?"</p>
+        <a href="#" onclick="go('meddelanden'); return false;" style="display: inline-block; margin-top: 10px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #93c5fd; text-decoration: none; padding: 6px 12px; border: 1px solid rgba(59,130,246,0.4); border-radius: 100px;">Svara i chat ↗</a>
+      </article>
+
+      <article class="s-card" style="background: rgba(110,231,183,0.05); border-left: 3px solid #6ee7b7; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #6ee7b7;">● 22 apr 17:32 · NY · KOMP-HÖJNING</div>
+          <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Anders Lind</div>
+        </div>
+        <div style="font-family: var(--serif); font-size: 16px; color: #fff; margin-bottom: 6px;">Reflektion höjd till <em style="color: #6ee7b7; font-style: italic;">FÖRDJUPNING</em></div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; font-style: italic;">"Sara — dina senaste 8 reflektioner visar djup som går utöver att svara på prompten. När du skrev om CSN-opportunitetskostnaden använde du ett begrepp jag inte ens tagit upp. Det är fördjupning. Höjer."</p>
+        <a href="#" onclick="go('komp'); return false;" style="display: inline-block; margin-top: 10px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1px; color: #6ee7b7; text-decoration: none; padding: 6px 12px; border: 1px solid rgba(110,231,183,0.4); border-radius: 100px;">Se kompetens ↗</a>
+      </article>
+
+      <article class="s-card" style="border-left: 3px solid var(--warm); margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--warm);">● 17 apr 11:24 · BERÖM</div>
+          <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Anders Lind</div>
+        </div>
+        <div style="font-family: var(--serif); font-size: 16px; color: #fff; margin-bottom: 6px;">"Bra svar i Maria-runda 1"</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; font-style: italic;">"Snyggt anchored med marknadsdata istället för känslor. 27 500 är högt men inte galet — du har spaningen. Vänta in Maria på R2."</p>
+      </article>
+
+      <article class="s-card" style="border-left: 3px solid #6ee7b7; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #6ee7b7;">● 14 apr 09:48 · KOMP-HÖJNING</div>
+          <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Anders Lind</div>
+        </div>
+        <div style="font-family: var(--serif); font-size: 16px; color: #fff; margin-bottom: 6px;">Bokföring höjd till <em style="color: #6ee7b7; font-style: italic;">GRUND</em></div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; font-style: italic;">"Du har gått från att tröttna på regelmotor-förslagen till att aktivt klassa själv. 47 manuella i v14, ingen AI-hjälp. Det är där bokföring blir förståelse, inte bara avbockning."</p>
+      </article>
+
+      <article class="s-card" style="border-left: 3px solid var(--warm); margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--warm);">● 8 apr 13:02 · UPPDRAG GODKÄNT</div>
+          <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Anders Lind</div>
+        </div>
+        <div style="font-family: var(--serif); font-size: 16px; color: #fff; margin-bottom: 6px;">"Klassa 12 ovettade tx" · klart</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; font-style: italic;">"Klart 17 apr som planerat. Du klassade alla 12 manuellt. Bokföring-mönstret är tydligt nu."</p>
+      </article>
+
+      <article class="s-card" style="border-left: 3px solid #fbbf24; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+          <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--warm);">● 5 apr 15:10 · REFLEKTION-SVAR</div>
+          <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Anders Lind</div>
+        </div>
+        <div style="font-family: var(--serif); font-size: 16px; color: #fff; margin-bottom: 6px;">På din reflektion: "Restaurang igen — varför är det så lätt?"</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; font-style: italic;">"Det är inte slappt — det är beslutsfattande under trötthet. Klassisk forskning från Daniel Kahneman: sen kvällsbeslut är aldrig dina <em>bästa</em>. Frågan är om du kan flytta beslutet till tidigare på dagen — t.ex. meal-prep söndag morgon. Värt en separat reflektion?"</p>
+      </article>
+
+      <div style="text-align: center; padding: 18px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">+ 8 äldre feedback-poster i april — visa alla →</div>
+
+      <div class="peda">
+        <div class="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Feedback är <em>spårbar</em>, inte flyktig.</div>
+        <p class="peda-prose">All feedback Anders ger sparas — du kan gå tillbaka och läsa om hur du tänkte i mars, vad Anders sa, och hur det förändrade ditt arbete. Det är så formativ bedömning faktiskt fungerar i den bästa pedagogiken: <em>kontinuerlig dialog över tid</em>, inte slut-betyg. Dina vårdnadshavare ser också detta — så om föräldrasamtalet kommer har ni gemensam läsning.</p>
+        <ul class="peda-bullets">
+          <li><strong>Komp-höjningar</strong>Spårbara med motivering · går alltid att gå tillbaka till.</li>
+          <li><strong>Reflektion-svar</strong>Anders kommenterar dina inlägg — du svarar tillbaka.</li>
+          <li><strong>Uppdrags-status</strong>Klar / korrigeras / godkänd · alla med kommentar.</li>
+          <li><strong>Beröm</strong>Spontant — inte krav. Markeras tydligt i flödet.</li>
+        </ul>
+        <div class="peda-tip">När du läst en feedback markeras den som "läst" automatiskt. Olästa har en orange punkt — så du vet vad som är nytt.</div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ AKTIEHANDEL ============ -->
   <section class="panel" id="p-aktier">
     <div class="shell">
@@ -7210,6 +7513,8 @@ const PANELS = {
   "modul-pension": { label: "Modul · Pension", crumb: ["HUBBEN", "MODULER", "● PENSION"] },
   "modul-isk":     { label: "Modul · ISK",     crumb: ["HUBBEN", "MODULER", "● ISK-PORTFÖLJ"] },
   tx:     { label: "Transaktion-detalj",       crumb: ["HUBBEN", "BOKFÖRING", "● TX"] },
+  meddelanden: { label: "Meddelanden · Anders Lind", crumb: ["HUBBEN", "● MEDDELANDEN"] },
+  feedback: { label: "Lärar-feedback",         crumb: ["HUBBEN", "● FEEDBACK"] },
 };
 
 function go(view) {
