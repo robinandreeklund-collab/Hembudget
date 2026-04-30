@@ -1533,12 +1533,12 @@ body[data-mode="business"]::before {
     linear-gradient(180deg, #0a0e1a 0%, #0d1226 60%, #0a0e1a 100%);
 }
 
-/* Mode-switch knapp i topbar */
+/* Mode-switch knapp i topbar — riktiga DOM-element istället för pseudo */
 .mode-switch {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 9.5px; font-weight: 700;
   letter-spacing: 1.4px; text-transform: uppercase;
-  padding: 6px 12px; border-radius: 100px;
+  padding: 6px 14px; border-radius: 100px;
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--line-strong);
   color: var(--text); text-decoration: none; cursor: pointer;
@@ -1549,27 +1549,33 @@ body[data-mode="business"]::before {
   border-color: rgba(99,102,241,0.45);
   color: #c7d2fe;
 }
-.mode-switch::before {
-  content: ""; display: inline-block;
-  width: 28px; height: 14px; border-radius: 100px;
-  background: rgba(255,255,255,0.1);
+.ms-track {
   position: relative;
+  display: inline-block;
+  width: 30px; height: 16px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 100px;
   transition: background .25s var(--ease);
 }
-.mode-switch::after {
-  content: ""; position: absolute;
-  width: 10px; height: 10px; border-radius: 50%;
+.ms-knob {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
   background: var(--text);
-  transform: translateX(-16px);
   transition: transform .25s var(--ease), background .25s var(--ease);
-  margin-top: 2px;
 }
-body[data-mode="business"] .mode-switch::before { background: rgba(99,102,241,0.4); }
-body[data-mode="business"] .mode-switch::after { transform: translateX(-2px); background: #c7d2fe; }
 body[data-mode="business"] .mode-switch {
   background: rgba(99,102,241,0.10);
   border-color: rgba(99,102,241,0.35);
   color: #c7d2fe;
+}
+body[data-mode="business"] .ms-track {
+  background: rgba(99,102,241,0.45);
+}
+body[data-mode="business"] .ms-knob {
+  transform: translateX(14px);
+  background: #c7d2fe;
 }
 
 .biz-badge, .priv-badge {
@@ -2035,7 +2041,8 @@ body[data-mode="business"] .mode-switch {
   <span class="biz-badge">Sara A. AB · enskild firma</span>
   <div class="tb-crumbs" id="crumbs"></div>
   <div class="tb-spacer"></div>
-  <a href="#" class="mode-switch" id="modeSwitch" title="Byt till företag (eller privat)">
+  <a href="#" class="mode-switch" id="modeSwitch" title="Byt mellan privat och företag">
+    <span class="ms-track"><span class="ms-knob"></span></span>
     <span id="modeLabel">Byt till företag</span>
   </a>
   <div class="tb-meter" title="AI-tokens">
