@@ -424,7 +424,119 @@ body::after {
 
     </div>
   </section>
-  <section class="panel" id="p-elev"></section>
+  <!-- ELEVDETALJ -->
+  <section class="panel" id="p-elev">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Elev · 14 av 28</span>
+          <h1 class="head-h1">Sara A. — <em>balans 72</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Solo-elev · klassningsgrad april 81 % · pågående 3 moduler</p>
+        </div>
+        <div class="head-meta">
+          Senast inloggad <strong>nu</strong><br>
+          Lönesamtal med Maria · <strong>runda 2/5</strong><br>
+          14 reflektioner · 4 ej kommenterade
+        </div>
+      </header>
+
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px;">
+        <a href="../vol-7/elev.html" class="tb-imp" style="background: var(--accent); color: #fff; border-color: var(--accent);">Impersonera Sara →</a>
+        <a href="#" class="tb-imp">Skicka uppdrag →</a>
+        <a href="#" class="tb-imp" onclick="go('refl'); return false;">Läs reflektioner →</a>
+        <a href="#" class="tb-imp">Höj kompetens →</a>
+      </div>
+
+      <div class="class-stage">
+        <article class="class-pent">
+          <div class="class-pent-eye">Saras pentagon · v18 vs v17</div>
+          <h2 class="class-pent-h">Tippad <em>−5 i hälsa</em> efter tandläkaren.</h2>
+          <svg class="pent-svg" viewBox="0 0 600 600">
+            <g transform="translate(300,300)">
+              <polygon points="0,-260 247,-80 153,210 -153,210 -247,-80" class="p-axis-line"/>
+              <polygon points="0,-195 185,-60 115,158 -115,158 -185,-60" class="p-axis-line"/>
+              <polygon points="0,-130 124,-40 76,105 -76,105 -124,-40" class="p-axis-line"/>
+              <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="0" y2="-260" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="247" y2="-80" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-247" y2="-80" class="p-axis-line"/>
+              <polygon points="0,-180 175,-55 95,150 -110,140 -195,-65" class="p-class-prev"/>
+              <polygon points="0,-150 220,-72 130,180 -100,160 -210,-72" class="p-class"/>
+              <text x="0" y="6" text-anchor="middle" font-family="Source Serif 4" font-style="italic" font-weight="700" font-size="64" fill="#fbbf24">72</text>
+            </g>
+          </svg>
+          <div class="axis-tags">
+            <span>Ekonomi<strong>70</strong></span>
+            <span>Karriär<strong>78</strong></span>
+            <span>Hälsa<strong>60</strong></span>
+            <span>Relation<strong>75</strong></span>
+            <span>Fritid<strong>65</strong></span>
+          </div>
+        </article>
+
+        <aside class="side-stack">
+          <div class="s-card">
+            <div class="s-card-eye">Pågående moduler</div>
+            <div class="s-card-h">3 i <em>arbete</em></div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Ditt första bolån</div><div class="attn-why">steg 4 av 12 · KALP · 14 min kvar</div></div>
+                <a class="attn-go" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Lönesamtalet</div><div class="attn-why">runda 2 av 5 · pågår · Maria nära smärtgräns</div></div>
+                <a class="attn-go" onclick="go('maria'); return false;" href="#">se →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Skatten i april</div><div class="attn-why">steg 7 av 9 · ränteavdrag granskning</div></div>
+                <a class="attn-go" href="#">öppna →</a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Senaste händelser i Saras vy</div>
+            <div class="s-card-h">14:22 idag</div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Tandläkaren ringde</div><div class="attn-why">4 200 kr · 30 dgr · pent tippade</div></div>
+              </li>
+              <li>
+                <div><div class="attn-name">Echo öppnad</div><div class="attn-why">320 tokens · diskuterar konsekvens</div></div>
+              </li>
+              <li>
+                <div><div class="attn-name">23 fakturor signerade</div><div class="attn-why">via BankID 14:18</div></div>
+              </li>
+              <li>
+                <div><div class="attn-name">Lönesamtal R2 motbud</div><div class="attn-why">27 100 kr · väntar Maria</div></div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Kompetenser · 12</div>
+            <div class="s-card-h">Nivå <em>grund</em> i 7 av 12</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px;">
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Bokföring · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Budget · <span style="color: #6ee7b7;">fördj</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Sparande · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Skatt · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lön · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lån · <span style="color: var(--text-dim);">basis</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Investering · <span style="color: var(--text-dim);">basis</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Pension · <span style="color: var(--text-dim);">basis</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
   <section class="panel" id="p-maria"></section>
   <section class="panel" id="p-refl"></section>
 </main>
