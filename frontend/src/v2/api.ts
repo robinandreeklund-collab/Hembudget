@@ -129,6 +129,40 @@ export type BankData = {
   upcoming_bills: BankUpcoming[];
 };
 
+export type V2BudgetCategoryRow = {
+  category_id: number;
+  category_name: string;
+  group_name: string | null;
+  icon: string;
+  planned: number;
+  actual: number;
+  consumer_reference: number | null;
+  progress_pct: number;
+  status: "under" | "near" | "over" | "fixed" | "savings" | "income";
+  is_fixed: boolean;
+  is_income: boolean;
+};
+
+export type V2BudgetSummary = {
+  income_total: number;
+  expenses_total: number;
+  planned_expenses_total: number;
+  saved: number;
+  save_rate_pct: number;
+  days_into_month: number;
+  days_in_month: number;
+  progress_pct: number;
+  over_budget_total: number;
+  categories_count: number;
+};
+
+export type BudgetData = {
+  student_id: number;
+  month: string;
+  summary: V2BudgetSummary;
+  categories: V2BudgetCategoryRow[];
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -150,6 +184,8 @@ export const v2Api = {
   hub: () => api<HubData>("/v2/hub"),
   bank: (limitTransactions: number = 30) =>
     api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
+  budget: (month?: string) =>
+    api<BudgetData>(`/v2/budget${month ? `?month=${month}` : ""}`),
   completeOnboarding: (body: {
     spend_profile: SpendProfile;
     fairness_choice: FairnessChoice | null;

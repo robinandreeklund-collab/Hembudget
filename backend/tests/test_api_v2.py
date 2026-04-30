@@ -671,6 +671,199 @@ def test_v2_bank_limit_transactions_param(fx) -> None:
     assert len(r.json()["recent_transactions"]) == 3
 
 
+# === /v2/budget ===
+
+def test_v2_budget_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/budget")
+    assert r.status_code == 401
+
+
+def test_v2_budget_for_student_returns_structure(fx) -> None:
+    """Eleven utan budget får tom payload med rätt struktur."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert "month" in data
+    s = data["summary"]
+    for f in (
+        "income_total",
+        "expenses_total",
+        "planned_expenses_total",
+        "saved",
+        "save_rate_pct",
+        "days_into_month",
+        "days_in_month",
+        "progress_pct",
+        "over_budget_total",
+        "categories_count",
+    ):
+        assert f in s, f"saknar fält {f}"
+    assert isinstance(data["categories"], list)
+
+
+def test_v2_budget_for_teacher_returns_empty(fx) -> None:
+    """Lärare har ingen scope-DB — får tom payload utan crash."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["categories"] == []
+
+
+def test_v2_budget_with_categories_and_actuals(fx) -> None:
+    """När scope-DB har budget + transaktioner ska de speglas."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc, Budget as _Bd, Category as _Cat,
+        Transaction as _Tx,
+    )
+
+    today = _d.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    def seed(s) -> None:
+        # Använd unika namn så de inte kolliderar med ev. seed-data
+        cat_mat = _Cat(name="Mat-test-v2budget")
+        cat_rest = _Cat(name="Restaurang-test-v2budget")
+        cat_lon = _Cat(name="Lön-test-v2budget")
+        s.add_all([cat_mat, cat_rest, cat_lon])
+        s.flush()
+
+        acc = _Acc(name="Lönekonto", bank="SEB", type="checking", currency="SEK")
+        s.add(acc)
+        s.flush()
+
+        # Budget för månaden
+        s.add_all([
+            _Bd(month=ym, category_id=cat_mat.id, planned_amount=_D("-4000")),
+            _Bd(month=ym, category_id=cat_rest.id, planned_amount=_D("-1200")),
+            _Bd(month=ym, category_id=cat_lon.id, planned_amount=_D("22000")),
+        ])
+
+        # Transaktioner — utfall
+        s.add(_Tx(
+            account_id=acc.id, date=today,
+            amount=_D("-3880"), currency="SEK",
+            raw_description="ICA Maxi", category_id=cat_mat.id,
+            hash="bud-mat-1",
+        ))
+        s.add(_Tx(
+            account_id=acc.id, date=today,
+            amount=_D("-2100"), currency="SEK",
+            raw_description="Max Hökarängen", category_id=cat_rest.id,
+            hash="bud-rest-1",
+        ))
+        s.add(_Tx(
+            account_id=acc.id, date=today,
+            amount=_D("22000"), currency="SEK",
+            raw_description="Lön", category_id=cat_lon.id,
+            hash="bud-lon-1",
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    cats = {c["category_name"]: c for c in data["categories"]}
+    assert "Mat-test-v2budget" in cats
+    assert "Restaurang-test-v2budget" in cats
+    assert "Lön-test-v2budget" in cats
+
+    # Mat: planned 4000, actual 3880 → under (97 % < 105 %)
+    mat = cats["Mat-test-v2budget"]
+    assert mat["planned"] == 4000
+    assert mat["actual"] == 3880
+    assert mat["status"] == "under"
+    # Konsumentverket-referens hittas på "mat" i namnet
+    assert mat["consumer_reference"] is not None
+
+    # Restaurang: planned 1200, actual 2100 → over (175 %)
+    rest = cats["Restaurang-test-v2budget"]
+    assert rest["status"] == "over"
+    assert rest["progress_pct"] > 100
+
+    # Lön: kind income → status "income"
+    lon = cats["Lön-test-v2budget"]
+    assert lon["is_income"] is True
+    assert lon["status"] == "income"
+
+    # Summary
+    s = data["summary"]
+    assert s["income_total"] == 22000
+    assert s["expenses_total"] == 5980  # 3880 + 2100
+    assert s["saved"] == 16020
+    # Over-budget total: rest överskred med 900
+    assert s["over_budget_total"] == 900
+
+
+def test_v2_budget_month_query_param(fx) -> None:
+    """?month=YYYY-MM använder den specifika månaden."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/budget?month=2026-04",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["month"] == "2026-04"
+
+
+def test_v2_budget_fixed_category_status(fx) -> None:
+    """Hyra/autogiro → status=fixed oavsett actual/planned."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc, Budget as _Bd, Category as _Cat,
+        Transaction as _Tx,
+    )
+
+    today = _d.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    def seed(s) -> None:
+        # Unikt namn för att undvika kollision med ev. seed-data,
+        # men innehåller "hyra" för att trigga _is_fixed + ikon-mappning.
+        cat_hyra = _Cat(name="Hyra-test-fixed")
+        s.add(cat_hyra); s.flush()
+        acc = _Acc(name="K", bank="B", type="checking", currency="SEK")
+        s.add(acc); s.flush()
+        s.add(_Bd(month=ym, category_id=cat_hyra.id, planned_amount=_D("-7240")))
+        s.add(_Tx(
+            account_id=acc.id, date=today,
+            amount=_D("-7240"), currency="SEK",
+            raw_description="Stockholmshem", category_id=cat_hyra.id,
+            hash="bud-hyra-1",
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/budget",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    cats = {c["category_name"]: c for c in r.json()["categories"]}
+    assert cats["Hyra-test-fixed"]["status"] == "fixed"
+    assert cats["Hyra-test-fixed"]["is_fixed"] is True
+    assert cats["Hyra-test-fixed"]["icon"] == "▥"
+
+
 def test_v2_bank_upcoming_bills(fx) -> None:
     """Öppna kommande fakturor speglas i payload + upcoming_open_total."""
     client, _tch, _sa, stu, _tid, _said, sid = fx

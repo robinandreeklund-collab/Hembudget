@@ -541,6 +541,284 @@ def get_bank(
         return _empty_bank(info.student_id)
 
 
+# === Budget-aggregat (plan vs utfall + Konsumentverket) ===
+
+class V2BudgetCategoryRow(BaseModel):
+    category_id: int
+    category_name: str
+    group_name: Optional[str] = None
+    icon: str = "·"
+    planned: float
+    actual: float
+    consumer_reference: Optional[float] = None
+    progress_pct: float
+    status: Literal["under", "near", "over", "fixed", "savings", "income"]
+    is_fixed: bool = False
+    is_income: bool = False
+
+
+class V2BudgetSummary(BaseModel):
+    income_total: float
+    expenses_total: float
+    planned_expenses_total: float
+    saved: float
+    save_rate_pct: float
+    days_into_month: int
+    days_in_month: int
+    progress_pct: float
+    over_budget_total: float
+    categories_count: int
+
+
+class V2BudgetResponse(BaseModel):
+    student_id: int
+    month: str
+    summary: V2BudgetSummary
+    categories: list[V2BudgetCategoryRow]
+
+
+# Fasta kategorier (autogiro/återkommande) — match på ord i kategori-namn
+_FIXED_KEYWORDS = (
+    "hyra", "boende", "stockholmshem", "lan", "lån", "ranta", "ränta",
+    "amortering", "abonnemang", "telia", "spotify", "tibber", "el",
+    "bredband", "vatten", "csn", "försäkring", "forsakring", "folksam",
+    "trygg-hansa", "autogiro",
+)
+
+_SAVINGS_KEYWORDS = (
+    "sparmål", "sparmal", "buffert", "isk", "avanza", "spara", "körkort",
+    "korkort", "interrail", "sparande",
+)
+
+# Kategori-emoji (matchar prototypens visuella språk)
+_CATEGORY_ICONS: dict[str, str] = {
+    "hyra": "▥",
+    "boende": "▥",
+    "mat": "🍴",
+    "livsmedel": "🍴",
+    "ica": "🍴",
+    "restaurang": "🍽",
+    "nöje": "🍽",
+    "transport": "🚇",
+    "sl": "🚇",
+    "resor": "🚇",
+    "sparande": "◎",
+    "sparmål": "◎",
+    "buffert": "◎",
+    "körkort": "◎",
+    "interrail": "◎",
+    "isk": "↗",
+    "avanza": "↗",
+    "investering": "↗",
+    "el": "⚡",
+    "förbrukning": "⚡",
+    "elektricitet": "⚡",
+    "tibber": "⚡",
+    "bredband": "⚡",
+    "internet": "⚡",
+    "spotify": "♪",
+    "abonnemang": "♪",
+    "försäkring": "⛨",
+    "forsakring": "⛨",
+    "folksam": "⛨",
+    "kläder": "👕",
+    "hygien": "🧴",
+    "fritid": "★",
+    "hälsa": "✚",
+    "vård": "✚",
+    "tandvård": "✚",
+    "lön": "💰",
+    "csn": "🎓",
+    "studie": "🎓",
+}
+
+
+def _icon_for(category: str) -> str:
+    lower = category.lower()
+    for key, icon in _CATEGORY_ICONS.items():
+        if key in lower:
+            return icon
+    return "·"
+
+
+def _is_fixed(category: str) -> bool:
+    lower = category.lower()
+    return any(k in lower for k in _FIXED_KEYWORDS)
+
+
+def _is_savings(category: str) -> bool:
+    lower = category.lower()
+    return any(k in lower for k in _SAVINGS_KEYWORDS)
+
+
+def _empty_budget(student_id: int, month: str) -> V2BudgetResponse:
+    today = _date.today()
+    import calendar as _cal
+    days_in_month = _cal.monthrange(today.year, today.month)[1]
+    return V2BudgetResponse(
+        student_id=student_id,
+        month=month,
+        summary=V2BudgetSummary(
+            income_total=0,
+            expenses_total=0,
+            planned_expenses_total=0,
+            saved=0,
+            save_rate_pct=0,
+            days_into_month=today.day,
+            days_in_month=days_in_month,
+            progress_pct=0,
+            over_budget_total=0,
+            categories_count=0,
+        ),
+        categories=[],
+    )
+
+
+@router.get("/budget", response_model=V2BudgetResponse)
+def get_budget(
+    month: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2BudgetResponse:
+    """Aggregat-endpoint för budget-vyn.
+
+    Returnerar:
+    - month_summary (in/ut/sparat/sparkvot/progress)
+    - kategorier med planned + actual + Konsumentverket-referens
+    - status per rad (under/near/over/fixed/savings/income)
+
+    Använder MonthlyBudgetService.summary() som datakälla — samma
+    siffror som v1 /budget visar. Lägger på Konsumentverket-mappning
+    från wellbeing.minimums.
+
+    Demo/teacher får tom payload utan crash.
+    """
+    ym = month or _current_year_month()
+    if info.role != "student" or info.student_id is None:
+        return _empty_budget(0, ym)
+
+    try:
+        from ..budget.monthly import MonthlyBudgetService
+        from ..wellbeing.minimums import (
+            lookup_minimum, CATEGORY_MINIMUMS_SEK_MONTH,
+        )
+        import calendar as _cal
+
+        def _fuzzy_minimum(category: str) -> Optional[int]:
+            """Hitta Konsumentverket-referens även om kategorinamnet
+            inte matchar exakt. Letar efter nyckelord i namnet,
+            t.ex. 'Mat & livsmedel' → 'Mat' → 2840 kr."""
+            if not category:
+                return None
+            exact = lookup_minimum(category)
+            if exact is not None:
+                return exact
+            lower = category.lower()
+            for key, val in CATEGORY_MINIMUMS_SEK_MONTH.items():
+                if key.lower() in lower:
+                    return val
+            return None
+
+        with session_scope() as s:
+            svc = MonthlyBudgetService(s)
+            summ = svc.summary(ym)
+
+            categories: list[V2BudgetCategoryRow] = []
+            over_budget_total = Decimal("0")
+            for line in summ.lines:
+                planned_abs = abs(Decimal(line.planned or 0))
+                actual_abs = abs(Decimal(line.actual or 0))
+                is_inc = line.kind == "income"
+                ref = _fuzzy_minimum(line.category)
+
+                # Status-logik:
+                # - income → "income" (inga gränser)
+                # - planned == 0 → använd actual som vägledning
+                # - savings-kategori → "savings"
+                # - fast kostnad → "fixed"
+                # - actual > planned * 1.05 → "over"
+                # - actual > planned * 0.95 → "near"
+                # - else → "under"
+                if is_inc:
+                    status: str = "income"
+                elif _is_savings(line.category):
+                    status = "savings"
+                elif _is_fixed(line.category):
+                    status = "fixed"
+                elif planned_abs == 0:
+                    status = "near"
+                else:
+                    # Status-trösklar (matchar prototypen):
+                    # - actual > planned * 1.05 → "over" (röd, "+ N över")
+                    # - actual >= planned * 1.0 → "near" (gul, "klart")
+                    # - actual < planned * 1.0 → "under" (grön, "under budget")
+                    ratio = actual_abs / planned_abs
+                    if ratio > Decimal("1.05"):
+                        status = "over"
+                        over_budget_total += actual_abs - planned_abs
+                    elif ratio >= Decimal("1.0"):
+                        status = "near"
+                    else:
+                        status = "under"
+
+                progress = (
+                    float(actual_abs / planned_abs * 100)
+                    if planned_abs > 0
+                    else 0.0
+                )
+                categories.append(V2BudgetCategoryRow(
+                    category_id=line.category_id,
+                    category_name=line.category,
+                    group_name=line.group,
+                    icon=_icon_for(line.category),
+                    planned=float(planned_abs if not is_inc else line.planned or 0),
+                    actual=float(actual_abs if not is_inc else line.actual or 0),
+                    consumer_reference=float(ref) if ref else None,
+                    progress_pct=round(progress, 1),
+                    status=status,  # type: ignore[arg-type]
+                    is_fixed=_is_fixed(line.category),
+                    is_income=is_inc,
+                ))
+
+            today = _date.today()
+            year, mon = map(int, ym.split("-"))
+            days_in_month = _cal.monthrange(year, mon)[1]
+            days_into = today.day if (today.year, today.month) == (year, mon) else days_in_month
+
+            income_total = float(summ.income or 0)
+            expenses_total = float(summ.expenses or 0)
+            saved = income_total - expenses_total
+            save_rate = (saved / income_total * 100) if income_total > 0 else 0.0
+            planned_total = float(sum(
+                Decimal(c.planned)
+                for c in categories
+                if not c.is_income
+            ))
+            progress_pct = (
+                expenses_total / planned_total * 100
+                if planned_total > 0 else 0.0
+            )
+
+            return V2BudgetResponse(
+                student_id=info.student_id,
+                month=ym,
+                summary=V2BudgetSummary(
+                    income_total=round(income_total, 2),
+                    expenses_total=round(expenses_total, 2),
+                    planned_expenses_total=round(planned_total, 2),
+                    saved=round(saved, 2),
+                    save_rate_pct=round(save_rate, 1),
+                    days_into_month=days_into,
+                    days_in_month=days_in_month,
+                    progress_pct=round(progress_pct, 1),
+                    over_budget_total=float(over_budget_total),
+                    categories_count=len(categories),
+                ),
+                categories=categories,
+            )
+    except Exception:
+        return _empty_budget(info.student_id, ym)
+
+
 # === Endpoints ===
 
 @router.get("/status", response_model=V2StatusResponse)
