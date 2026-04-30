@@ -4612,9 +4612,269 @@ body[data-mode="business"] .mode-switch {
       </div>
     </div>
   </section>
-  <section class="panel biz-only" id="p-biz-leverantor"></section>
-  <section class="panel biz-only" id="p-biz-bokforing"></section>
-  <section class="panel biz-only" id="p-biz-skatt"></section>
+  <section class="panel biz-only" id="p-biz-leverantor">
+    <div class="shell">
+      <a class="actor-back" onclick="window.go('biz-hub'); return false;" href="#">Tillbaka till biz-hubben</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Aktör · biz · Leverantörer</span>
+          <h1 class="actor-name" style="margin-top:14px;">Inkommande <em>fakturor</em>.</h1>
+          <p class="actor-sub">2 oöppnade · 3 bokförda · 1 ny från läraren (Anders Lind)</p>
+        </div>
+        <div class="actor-meta">
+          Att betala denna v: <strong>3 240 kr</strong><br>
+          Avdragsgill moms: <strong>648 kr</strong><br>
+          Ohanterade: <strong>2</strong>
+        </div>
+      </header>
+
+      <div class="section-eye" style="color: #c7d2fe;">Leverantörsfakturor</div>
+      <div class="biz-table">
+        <div class="biz-table-row head" style="grid-template-columns: 36px 50px 1.6fr 1fr 100px 100px;">
+          <span></span><span>#</span><span>Leverantör / vad</span><span>Bokföringsförslag</span><span>Belopp</span><span>Status</span>
+        </div>
+
+        <a class="biz-table-row" style="grid-template-columns: 36px 50px 1.6fr 1fr 100px 100px;" href="#">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">L042</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Anders Lind <em style="color: var(--warm); font-size: 10px;">(LÄRARE)</em></div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Pedagogisk simulerad faktura · Bolagsverket-avgift</div>
+          </div>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">6991 Övriga avgifter</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 700;">850 kr</span>
+          <span class="biz-status overdue">Ohanterad</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 36px 50px 1.6fr 1fr 100px 100px;" href="#">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">L041</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Loopia AB</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Webbhotell · Klang Café-domain · 12 mån</div>
+          </div>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">5610 Datakostn / 2641 Moms in</span>
+          <span style="font-family: var(--serif); font-style: italic; color: #fff; font-weight: 700;">1 188 kr</span>
+          <span class="biz-status overdue">Ohanterad</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 36px 50px 1.6fr 1fr 100px 100px;" href="#">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: transparent;"></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">L040</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Adobe Creative Cloud</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Photoshop + InDesign · 250 kr/mån</div>
+          </div>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">5610 / 2641 (auto-bokad)</span>
+          <span style="font-family: var(--serif); color: #fff;">312 kr</span>
+          <span class="biz-status paid">Bokförd</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 36px 50px 1.6fr 1fr 100px 100px;" href="#">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: transparent;"></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">L039</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Mac-möbler Söder</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Skrivbord till hemmakontoret</div>
+          </div>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1220 Inventarier (avskrivs 5 år)</span>
+          <span style="font-family: var(--serif); color: #fff;">2 240 kr</span>
+          <span class="biz-status paid">Bokförd</span>
+        </a>
+
+        <a class="biz-table-row" style="grid-template-columns: 36px 50px 1.6fr 1fr 100px 100px;" href="#">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: transparent;"></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">L038</span>
+          <div>
+            <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Bokio</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Bokföringsprogram · 99 kr/mån</div>
+          </div>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">5610 / 2641 (auto)</span>
+          <span style="font-family: var(--serif); color: #fff;">124 kr</span>
+          <span class="biz-status paid">Bokförd</span>
+        </a>
+      </div>
+
+      <div class="peda" style="margin-top: 22px; border-color: rgba(99,102,241,0.3); border-left-color: #818cf8;">
+        <div class="peda-eye" style="color: #c7d2fe;">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Avdragsgill <em>moms</em> är realpengar.</div>
+        <p class="peda-prose">
+          Varje leverantörsfaktura har 25 % moms — den får du tillbaka från
+          Skatteverket nästa redovisningsperiod (eller dras från utgående moms).
+          1 188 kr Loopia = 950 ex moms + 238 in. Du redovisar 238 som
+          <em>ingående moms</em>. Att inte hantera fakturor → missar avdrag → dyrare företag.
+        </p>
+        <ul class="peda-bullets">
+          <li><strong>Ingående moms</strong>Det du betalat. Får tillbaka.</li>
+          <li><strong>Utgående moms</strong>Det du tagit på dina fakturor. Betalar in.</li>
+          <li><strong>Bokföringsförslag</strong>AI föreslår konto. Du kan säga emot.</li>
+          <li><strong>Avskrivning</strong>Inventarier &gt; 5 000 kr fördelas på 5 år, inte direkt-bokat.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">Avdragsgill moms</span>
+          <span class="peda-concept">BAS-kontoplan</span>
+          <span class="peda-concept">Avskrivning</span>
+          <span class="peda-concept">Periodisering</span>
+        </div>
+        <div class="peda-tip">Anders Lind har skickat en pedagogisk simulerad faktura — det är samma flöde som leverantörs-faktura-utskick i lärar-vyn. Lärare → biz-postlåda → eleven hanterar.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel biz-only" id="p-biz-bokforing">
+    <div class="shell">
+      <a class="actor-back" onclick="window.go('biz-hub'); return false;" href="#">Tillbaka till biz-hubben</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Verktyg · biz · Bokföring</span>
+          <h1 class="actor-name" style="margin-top:14px;">Verifikat <em>v 8–12</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Dubbel bokföring · BAS 2024 förenklad (~30 konton) · 14 verifikat oförda</p>
+        </div>
+        <div class="actor-meta">
+          Verifikat totalt: <strong>47</strong><br>
+          Oförda: <strong>14</strong><br>
+          Senaste: <strong>v 12 · F1235</strong>
+        </div>
+      </header>
+
+      <div class="cc-summary">
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Intäkter v8–12</div>
+          <div class="cc-stat-num"><em style="color: #6ee7b7;">23 400</em> kr</div>
+          <div class="cc-stat-sub">3000 Försäljning ex moms</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Kostnader v8–12</div>
+          <div class="cc-stat-num">−15 444 kr</div>
+          <div class="cc-stat-sub">5610 · 1220 · 6991 · …</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Resultat v8–12</div>
+          <div class="cc-stat-num warm"><em>+ 7 956</em> kr</div>
+          <div class="cc-stat-sub">marginal 34 % · prognos kvartal 23 868</div>
+        </div>
+      </div>
+
+      <div class="section-eye" style="color: #c7d2fe;">Senaste 8 verifikat (T-konton)</div>
+      <div class="biz-table">
+        <div class="biz-table-row head" style="grid-template-columns: 60px 80px 1.4fr 1fr 80px 80px;">
+          <span>Ver</span><span>Datum</span><span>Berör</span><span>Konton (D / K)</span><span>Belopp</span><span>Status</span>
+        </div>
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.4fr 1fr 80px 80px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">A47</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">22 apr</span><span style="font-size: 13px;">Hökarängens HP · faktura</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1510 D / 3000 + 2611 K</span><span style="font-family: var(--serif); font-style: italic; color: #fff;">7 200</span><span class="biz-status paid">Klar</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.4fr 1fr 80px 80px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">A46</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">22 apr</span><span style="font-size: 13px;">Tatueringsstudion 14 · betald</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1930 D / 1510 K</span><span style="font-family: var(--serif); font-style: italic; color: #fff;">10 500</span><span class="biz-status paid">Klar</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.4fr 1fr 80px 80px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">A45</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">19 apr</span><span style="font-size: 13px;">Mac-möbler · skrivbord (avskr 5 år)</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1220 D + 2641 D / 1930 K</span><span style="font-family: var(--serif); font-style: italic; color: #fff;">2 240</span><span class="biz-status paid">Klar</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 60px 80px 1.4fr 1fr 80px 80px; background: rgba(220,76,43,0.06);" href="#"><span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">—</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">29 apr</span><span style="font-size: 13px;">Loopia · webbhotell (förslag)</span><span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">5610 D + 2641 D / 1930 K</span><span style="font-family: var(--serif); font-style: italic; color: var(--accent);">1 188</span><span class="biz-status overdue">Granska</span></a>
+      </div>
+
+      <div class="peda" style="margin-top: 22px; border-color: rgba(99,102,241,0.3); border-left-color: #818cf8;">
+        <div class="peda-eye" style="color: #c7d2fe;">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Bokföring är <em>språk</em>, inte aritmetik.</div>
+        <p class="peda-prose">
+          Varje affärshändelse skrivs i två konton (debet + kredit) som balanserar.
+          Faktura skickad: <code>1510 Kundfordran D · 3000 Försäljning K · 2611 Moms ut K</code>.
+          Pengarna kommer in: <code>1930 Bank D · 1510 Kundfordran K</code>. Du <em>ser</em> alla
+          händelser samlade — det är där du faktiskt förstår var pengarna går.
+        </p>
+        <ul class="peda-bullets">
+          <li><strong>Debet / kredit</strong>Inte +/−. Konto-typ avgör. Tillgång ↑ = D. Skuld ↑ = K.</li>
+          <li><strong>BAS-kontoplan</strong>Standard i Sverige · ~ 30 konton räcker för en ung firma.</li>
+          <li><strong>T-konto</strong>Ett konto har två sidor. Saldo = D − K (eller K − D).</li>
+          <li><strong>Resultat</strong>Intäkter − kostnader. Visas i resultaträkning.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">Debet</span>
+          <span class="peda-concept">Kredit</span>
+          <span class="peda-concept">T-konto</span>
+          <span class="peda-concept">Verifikat</span>
+          <span class="peda-concept">Balansräkning</span>
+          <span class="peda-concept">Resultaträkning</span>
+        </div>
+        <div class="peda-tip">Klicka "Granska" på Loopia-förslaget — du ser AI:n föreslå 5610 + 2641 / 1930. Du kan acceptera eller säga emot. Lärare bedömer din portfolio inte för enskilda kontoval — utan helheten.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel biz-only" id="p-biz-skatt">
+    <div class="shell">
+      <a class="actor-back" onclick="window.go('biz-hub'); return false;" href="#">Tillbaka till biz-hubben</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Aktör · biz · Skatteverket</span>
+          <h1 class="actor-name" style="margin-top:14px;">Moms <em>1 maj</em> · F-skatt löpande.</h1>
+          <p class="actor-sub">Moms-period januari–april · F-skatt månadsvis baserat på prognos</p>
+        </div>
+        <div class="actor-meta">
+          Moms ut: <strong>5 850 kr</strong><br>
+          Moms in: <strong>−2 970 kr</strong><br>
+          Att betala 1 maj: <strong>2 880 kr</strong>
+        </div>
+      </header>
+
+      <div class="cc-summary">
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Utgående moms (4 mån)</div>
+          <div class="cc-stat-num"><em>5 850</em> kr</div>
+          <div class="cc-stat-sub">25 % på 23 400 omsättning</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Ingående moms (4 mån)</div>
+          <div class="cc-stat-num">−2 970 kr</div>
+          <div class="cc-stat-sub">25 % på leverantörsfakturor</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Att betala 1 maj</div>
+          <div class="cc-stat-num warm"><em>2 880</em> kr</div>
+          <div class="cc-stat-sub">utgående minus ingående</div>
+        </div>
+      </div>
+
+      <div class="section-eye" style="color: var(--warm);">F-skatt-prognos 2026</div>
+      <div class="biz-table">
+        <div class="biz-table-row head" style="grid-template-columns: 100px 1.5fr 100px 100px;">
+          <span>Period</span><span>Underlag</span><span>F-skatt</span><span>Status</span>
+        </div>
+        <a class="biz-table-row" style="grid-template-columns: 100px 1.5fr 100px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px;">Q1 2026</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Resultat 5 940 kr</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">prognos baserad på v 1–13</div></div>
+          <span style="font-family: var(--serif); font-style: italic; color: #fff;">1 800 kr</span>
+          <span class="biz-status paid">Betald</span>
+        </a>
+        <a class="biz-table-row" style="grid-template-columns: 100px 1.5fr 100px 100px;" href="#">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">Q2 2026</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Prognos resultat 8 400</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">v 14–26 · att fakturera 30 jun</div></div>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm);">2 540 kr</span>
+          <span class="biz-status open">Beräknas</span>
+        </a>
+      </div>
+
+      <div class="peda" style="margin-top: 22px; border-color: rgba(99,102,241,0.3); border-left-color: #818cf8;">
+        <div class="peda-eye" style="color: #c7d2fe;">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Företag betalar skatt <em>i förskott</em>.</div>
+        <p class="peda-prose">
+          Som privatperson dras skatten av arbetsgivaren <em>innan</em> lönen
+          kommer. Som företagare måste du själv beräkna och betala in <em>F-skatt</em>
+          månadsvis baserat på din egen prognos. Är prognosen för låg → kvarskatt
+          + kostnadsränta. För hög → överbetald, får tillbaka. Lärar-frågan: <em>hur
+          räknar du på något som inte hänt än?</em>
+        </p>
+        <ul class="peda-bullets">
+          <li><strong>F-skatt</strong>Förenklad förskotts-skatt på prognos. Justeras vid årsbokslut.</li>
+          <li><strong>Moms-redovisning</strong>Månads / kvartal / år beroende på omsättning.</li>
+          <li><strong>Egenavgifter</strong>Sociala avgifter du själv betalar (~28,97 % på överskott).</li>
+          <li><strong>Bokslut</strong>Sista april följande år. Resultat överförs till privat-deklaration.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">F-skatt</span>
+          <span class="peda-concept">A-skatt</span>
+          <span class="peda-concept">Moms-period</span>
+          <span class="peda-concept">Egenavgifter</span>
+          <span class="peda-concept">Bokslut</span>
+          <span class="peda-concept">Periodisering</span>
+        </div>
+        <div class="peda-tip">När du klickar "Byt till privat" — kvar i ditt privata Skatteverket finns rad: "Inkomst av näringsverksamhet". Företagets resultat överförs hit varje år och beskattas som privat inkomst (efter egenavgifter). Det är så enskild firma fungerar.</div>
+      </div>
+    </div>
+  </section>
 
   <section class="panel" id="p-modul">
     <div class="shell">
