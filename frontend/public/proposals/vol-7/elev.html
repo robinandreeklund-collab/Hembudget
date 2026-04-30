@@ -1323,6 +1323,7 @@ body::after {
           </p>
 
           <div class="char-pills">
+            <a class="char-pill alert" onclick="go('mail'); return false;" href="#">Postlådan · 4 ohanterade</a>
             <a class="char-pill alert" onclick="go('skatt'); return false;" href="#">Deklaration</a>
             <a class="char-pill" onclick="go('bank'); return false;" href="#">Banken</a>
             <a class="char-pill" onclick="go('arbg'); return false;" href="#">Arbetsgivaren</a>
@@ -1396,23 +1397,28 @@ body::after {
         <div class="event-eye">Händelse · 14:22 idag · pågår</div>
         <h2 class="event-headline">Tandläkaren <em>ringde</em>. Cariesfyllning, <em>4 200 kr</em>.</h2>
         <p class="event-prose">
-          Akut undersökning krävs — betalas inom 30 dagar. Du har
-          <strong>14 282 kr</strong> tillgängligt på lönekontot, hyran dras på
-          <strong>1 maj</strong> (7 240 kr), och bufferten ligger på 1 800 kr.
-          Vad gör du?
+          Akut undersökning krävs — fakturan ligger redan <strong>i postlådan</strong>,
+          ohanterad. Förfaller om 30 dagar. Du har <strong>14 282 kr</strong>
+          tillgängligt på lönekontot, hyran dras på <strong>1 maj</strong>
+          (7 240 kr), och bufferten ligger på 1 800 kr. Vad gör du?
         </p>
         <div class="event-actions">
-          <a class="event-btn solid" onclick="go('bank'); return false;" href="#">Betala från lönekontot →</a>
+          <a class="event-btn solid" onclick="go('mail'); return false;" href="#">Öppna postlådan →</a>
+          <a class="event-btn" onclick="go('bank'); return false;" href="#">Betala från lönekontot</a>
           <a class="event-btn" href="#">Delbetalning · 6 mån</a>
-          <a class="event-btn" href="#">Skjut upp till efter lönen</a>
           <a class="event-btn" onclick="document.getElementById('echoBtn').click(); return false;" href="#">Fråga Echo först</a>
         </div>
       </article>
 
       <!-- KOMPASS — alla 8 aktörer + 5 verktyg -->
       <div class="compass">
-        <div class="compass-eye">Aktörerna · åtta rum att gå in i</div>
+        <div class="compass-eye">Aktörerna · åtta rum + postlådan</div>
         <div class="compass-grid" style="margin-bottom: 18px;">
+          <a class="compass-node alert" onclick="go('mail'); return false;" href="#" style="background: rgba(220,76,43,0.08); border-color: rgba(220,76,43,0.4);">
+            <div class="compass-node-eye" style="color: var(--warm);">Meta</div>
+            <div class="compass-node-name">Postlådan</div>
+            <div class="compass-node-val"><em>4</em> ohanterade · 14 totalt</div>
+          </a>
           <a class="compass-node alert" onclick="go('bank'); return false;" href="#">
             <div class="compass-node-eye">Aktör 01</div>
             <div class="compass-node-name">Banken</div>
