@@ -11,6 +11,7 @@ import { ArbetsgivarenV2 } from "./v2/ArbetsgivarenV2";
 import { SkattenV2 } from "./v2/SkattenV2";
 import { LanV2 } from "./v2/LanV2";
 import { TeacherCreditOverviewPage } from "./v2/TeacherCreditOverviewPage";
+import { TeacherTaxOverviewPage } from "./v2/TeacherTaxOverviewPage";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -250,6 +251,10 @@ export default function App() {
           <Route
             path="/teacher/v2/credit/:studentId"
             element={<TeacherCreditOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/tax/:studentId"
+            element={<TeacherTaxOverviewPage />}
           />
           <Route path="/v2/mal" element={<MalV2 />} />
           <Route path="/v2/postladan" element={<PostladanV2 />} />

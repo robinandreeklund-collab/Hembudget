@@ -188,6 +188,25 @@ export function V2RosterPage() {
                 >
                   Kreditprofil →
                 </Link>
+                <Link
+                  to={`/teacher/v2/tax/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(99,102,241,0.12)",
+                    border: "1px solid rgba(99,102,241,0.4)",
+                    color: "#a5b4fc",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Deklaration →
+                </Link>
               </div>
             ))}
           </div>

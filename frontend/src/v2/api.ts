@@ -452,6 +452,43 @@ export type V2TaxLineItem = {
   proposal_id: string | null;
 };
 
+export type V2TaxDeductionRow = {
+  id: number;
+  year: number;
+  kind: string;
+  name: string;
+  description: string | null;
+  amount: number;
+  source: string;
+  created_at: string;
+};
+
+export type V2TaxProposalRow = {
+  id: number;
+  year: number;
+  kind: string;
+  name: string;
+  description: string | null;
+  suggested_amount: number;
+  status: "pending" | "approved" | "rejected";
+  decided_at: string | null;
+  deduction_id: number | null;
+  source: string;
+  created_at: string;
+};
+
+export type V2TaxYearReturnOut = {
+  id: number;
+  year: number;
+  submitted_at: string;
+  locked: boolean;
+  gross_income: number;
+  prelim_tax_paid: number;
+  deductions_total: number;
+  final_tax: number;
+  diff: number;
+};
+
 export type TaxData = {
   student_id: number;
   year: number;
@@ -462,7 +499,35 @@ export type TaxData = {
   diff: number;
   pending_proposal_count: number;
   items: V2TaxLineItem[];
+  deductions: V2TaxDeductionRow[];
+  proposals: V2TaxProposalRow[];
+  submitted: V2TaxYearReturnOut | null;
+  can_submit: boolean;
 };
+
+export type V2TeacherTaxOverview = {
+  student_id: number;
+  student_name: string;
+  year: number;
+  gross_income: number;
+  prelim_tax_paid: number;
+  deductions_total: number;
+  final_tax: number;
+  diff: number;
+  deductions: V2TaxDeductionRow[];
+  proposals: V2TaxProposalRow[];
+  submitted: V2TaxYearReturnOut | null;
+};
+
+export type TaxDeductionKind =
+  | "rese"
+  | "bolane-ranta"
+  | "csn-ranta"
+  | "dubbel-bosattning"
+  | "rot"
+  | "rut"
+  | "fackavgift"
+  | "ovrig";
 
 export type V2RosterRow = {
   student_id: number;
@@ -517,6 +582,78 @@ export const v2Api = {
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
   skatten: (year?: number) =>
     api<TaxData>(`/v2/skatten${year ? `?year=${year}` : ""}`),
+  /** Eleven registrerar manuellt avdrag. */
+  taxAddDeduction: (body: {
+    year: number;
+    kind: TaxDeductionKind;
+    name: string;
+    description?: string;
+    amount: number;
+  }) =>
+    api<V2TaxDeductionRow>("/v2/skatten/deductions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Eleven tar bort sitt avdrag. */
+  taxDeleteDeduction: (deductionId: number) =>
+    api<void>(`/v2/skatten/deductions/${deductionId}`, {
+      method: "DELETE",
+    }),
+  /** Eleven godkänner/avvisar förslag. */
+  taxProposalDecision: (
+    proposalId: number,
+    decision: "approve" | "reject",
+  ) =>
+    api<V2TaxProposalRow>(
+      `/v2/skatten/proposals/${proposalId}/decision`,
+      { method: "POST", body: JSON.stringify({ decision }) },
+    ),
+  /** Eleven lämnar in deklarationen. */
+  taxSubmitYear: (year: number) =>
+    api<{
+      return_id: number;
+      year: number;
+      submitted_at: string;
+      locked: boolean;
+      final_tax: number;
+      diff: number;
+    }>(`/v2/skatten/${year}/submit`, { method: "POST", body: "{}" }),
+  /** Lärar-API · skapa förslag manuellt. */
+  teacherCreateTaxProposal: (
+    studentId: number,
+    body: {
+      year: number;
+      kind: TaxDeductionKind;
+      name: string;
+      description?: string;
+      suggested_amount: number;
+    },
+  ) =>
+    api<V2TaxProposalRow>(
+      `/v2/teacher/students/${studentId}/tax-proposals`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  /** Lärar-API · auto-generera förslag från Loan-räntor. */
+  teacherAutoGenerateTaxProposals: (studentId: number, year?: number) =>
+    api<{ student_id: number; year: number; created: number }>(
+      `/v2/teacher/students/${studentId}/tax-proposals/auto-generate${
+        year ? `?year=${year}` : ""
+      }`,
+      { method: "POST", body: "{}" },
+    ),
+  /** Lärar-API · ta bort förslag. */
+  teacherDeleteTaxProposal: (studentId: number, proposalId: number) =>
+    api<void>(
+      `/v2/teacher/students/${studentId}/tax-proposals/${proposalId}`,
+      { method: "DELETE" },
+    ),
+  /** Lärar-API · full insyn i deklarationen. */
+  teacherTaxOverview: (studentId: number, year?: number) =>
+    api<V2TeacherTaxOverview>(
+      `/v2/teacher/students/${studentId}/tax-overview${
+        year ? `?year=${year}` : ""
+      }`,
+    ),
   lan: () => api<LoanData>("/v2/lan"),
   /** Räkna KALP för ett tänkt lånebelopp (sparas i scope-DB). */
   kalp: (loanAmount: number, loanTermMonths: number = 300) =>
