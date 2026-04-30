@@ -169,6 +169,25 @@ export function V2RosterPage() {
                 >
                   {r.v2_enabled ? "✓ V2 PÅ · stäng av" : "○ V1 · aktivera v2"}
                 </button>
+                <Link
+                  to={`/teacher/v2/credit/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(220,76,43,0.12)",
+                    border: "1px solid rgba(220,76,43,0.4)",
+                    color: "#fbbf24",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Kreditprofil →
+                </Link>
               </div>
             ))}
           </div>

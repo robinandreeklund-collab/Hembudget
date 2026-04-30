@@ -386,6 +386,60 @@ export type LoanData = {
   credit_factors: V2CreditFactor[];
 };
 
+// === Fas 2A · Lånegivaren ===
+
+export type V2KALPResponse = {
+  id: number;
+  computed_at: string;
+  monthly_income_net: number;
+  monthly_housing: number;
+  monthly_consumer_schablon: number;
+  monthly_existing_debt_payments: number;
+  stress_test_rate: number;
+  loan_amount: number;
+  loan_term_months: number;
+  monthly_loan_payment_at_stress: number;
+  monthly_left_after_all: number;
+  passed: boolean;
+};
+
+export type V2PaymentMark = {
+  id: number;
+  occurred_on: string;
+  creditor: string;
+  amount: number;
+  kind: "obetald-faktura" | "kronofogden" | "betalningsforelaggande";
+  notes: string | null;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type V2CreditCheckOut = {
+  id: number;
+  computed_at: string;
+  annual_income: number;
+  total_debt: number;
+  debt_ratio: number;
+  payment_marks_count: number;
+  running_applications: number;
+  uc_score_class: string;
+  uc_score_value: number;
+};
+
+export type V2TeacherCreditOverview = {
+  student_id: number;
+  student_name: string;
+  annual_income: number;
+  total_debt: number;
+  debt_ratio: number;
+  active_loans_count: number;
+  payment_marks: V2PaymentMark[];
+  latest_credit_check: V2CreditCheckOut | null;
+  kalp_history: V2KALPResponse[];
+  loan_products_count: number;
+  available_products_count: number;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -464,6 +518,73 @@ export const v2Api = {
   skatten: (year?: number) =>
     api<TaxData>(`/v2/skatten${year ? `?year=${year}` : ""}`),
   lan: () => api<LoanData>("/v2/lan"),
+  /** Räkna KALP för ett tänkt lånebelopp (sparas i scope-DB). */
+  kalp: (loanAmount: number, loanTermMonths: number = 300) =>
+    api<V2KALPResponse>("/v2/lan/kalp", {
+      method: "POST",
+      body: JSON.stringify({
+        loan_amount: loanAmount,
+        loan_term_months: loanTermMonths,
+      }),
+    }),
+  /** Lärar-API · seedа default-katalog (5 produkter). */
+  teacherSeedDefaultLoanProducts: (studentId: number) =>
+    api<{ student_id: number; products_created: number }>(
+      `/v2/teacher/students/${studentId}/loan-products/seed-default`,
+      { method: "POST", body: "{}" },
+    ),
+  /** Lärar-API · skapa enskild låneprodukt. */
+  teacherCreateLoanProduct: (
+    studentId: number,
+    body: {
+      lender: string;
+      name: string;
+      kind: "csn" | "bolan" | "privatlan" | "billan" | "smslan";
+      interest_rate_min: number;
+      interest_rate_max: number;
+      max_amount?: number;
+      binding_required?: boolean;
+      description?: string;
+      risk_class?: "billig" | "medel" | "dyr";
+      available?: boolean;
+    },
+  ) =>
+    api<{
+      id: number;
+      lender: string;
+      name: string;
+      kind: string;
+    }>(`/v2/teacher/students/${studentId}/loan-products`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Lärar-API · lägg till betalningsanmärkning. */
+  teacherCreatePaymentMark: (
+    studentId: number,
+    body: {
+      occurred_on: string;
+      creditor: string;
+      amount: number;
+      kind: "obetald-faktura" | "kronofogden" | "betalningsforelaggande";
+      notes?: string;
+      expires_at?: string;
+    },
+  ) =>
+    api<V2PaymentMark>(
+      `/v2/teacher/students/${studentId}/payment-marks`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  /** Lärar-API · ta bort anmärkning. */
+  teacherDeletePaymentMark: (studentId: number, markId: number) =>
+    api<void>(
+      `/v2/teacher/students/${studentId}/payment-marks/${markId}`,
+      { method: "DELETE" },
+    ),
+  /** Lärar-API · full insyn i elevens kreditprofil. */
+  teacherCreditOverview: (studentId: number) =>
+    api<V2TeacherCreditOverview>(
+      `/v2/teacher/students/${studentId}/credit-overview`,
+    ),
   postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>

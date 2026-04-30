@@ -30,6 +30,41 @@ export function LanV2() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // KALP-räknare state
+  const [kalpAmount, setKalpAmount] = useState<string>("2400000");
+  const [kalpTerm, setKalpTerm] = useState<string>("300");
+  const [kalpResult, setKalpResult] = useState<
+    import("./api").V2KALPResponse | null
+  >(null);
+  const [kalpRunning, setKalpRunning] = useState(false);
+  const [kalpError, setKalpError] = useState<string | null>(null);
+
+  async function runKalp() {
+    const amt = parseFloat(kalpAmount.replace(/\s/g, "").replace(",", "."));
+    const term = parseInt(kalpTerm, 10);
+    if (isNaN(amt) || amt <= 0) {
+      setKalpError("Ange giltigt lånebelopp (kr)");
+      return;
+    }
+    if (isNaN(term) || term < 12) {
+      setKalpError("Ange löptid i månader (minst 12)");
+      return;
+    }
+    setKalpError(null);
+    setKalpRunning(true);
+    try {
+      const res = await v2Api.kalp(amt, term);
+      setKalpResult(res);
+      // Refetcha /v2/lan så KALP-raden i credit_factors uppdateras
+      const fresh = await v2Api.lan();
+      setData(fresh);
+    } catch (e) {
+      setKalpError(String((e as Error)?.message || e));
+    } finally {
+      setKalpRunning(false);
+    }
+  }
+
   useEffect(() => {
     v2Api
       .lan()
@@ -254,8 +289,194 @@ export function LanV2() {
               </>
             )}
 
-            {/* CTA · "Aktivt uppdrag" tas in i Fas 2 när Assignment-
-                modellen kopplas till Lånegivaren. Tills dess inget. */}
+            {/* KALP-RÄKNARE · eleven simulerar lånebelopp */}
+            <div className="section-eye" style={{ marginTop: 24 }}>
+              KALP-räknare · stresstest 7 %
+            </div>
+            <div
+              style={{
+                background: "rgba(15, 21, 37, 0.7)",
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                padding: "20px 24px",
+                marginBottom: 16,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "var(--serif)",
+                  fontSize: 14,
+                  color: "var(--text-mid)",
+                  marginBottom: 14,
+                }}
+              >
+                Räkna om du klarar månadskostnaden vid 7 % stresstest
+                (Finansinspektionens riktvärde) givet din inkomst, hyra
+                och Konsumentverkets levnadsschablon.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "end",
+                  marginBottom: 14,
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    flex: "1 1 180px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 9.5,
+                      color: "var(--text-mid)",
+                      letterSpacing: "1.2px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Lånebelopp (kr)
+                  </span>
+                  <input
+                    type="number"
+                    value={kalpAmount}
+                    onChange={(e) => setKalpAmount(e.target.value)}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.04)",
+                      border: "1px solid var(--line-strong)",
+                      color: "#fff",
+                      padding: "8px 12px",
+                      borderRadius: 4,
+                      fontFamily: "var(--mono)",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+                <label
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    flex: "0 0 140px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 9.5,
+                      color: "var(--text-mid)",
+                      letterSpacing: "1.2px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Löptid (mån)
+                  </span>
+                  <input
+                    type="number"
+                    value={kalpTerm}
+                    onChange={(e) => setKalpTerm(e.target.value)}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.04)",
+                      border: "1px solid var(--line-strong)",
+                      color: "#fff",
+                      padding: "8px 12px",
+                      borderRadius: 4,
+                      fontFamily: "var(--mono)",
+                      fontSize: 14,
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="cta-btn"
+                  disabled={kalpRunning}
+                  onClick={runKalp}
+                  style={{ marginTop: 0 }}
+                >
+                  {kalpRunning ? "Räknar…" : "Räkna KALP"}
+                </button>
+              </div>
+              {kalpError && (
+                <div
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 11,
+                    color: "#fca5a5",
+                    marginBottom: 8,
+                  }}
+                >
+                  {kalpError}
+                </div>
+              )}
+              {kalpResult && (
+                <div
+                  style={{
+                    background: kalpResult.passed
+                      ? "rgba(110, 231, 183, 0.06)"
+                      : "rgba(220, 76, 43, 0.06)",
+                    border: `1px solid ${
+                      kalpResult.passed
+                        ? "rgba(110, 231, 183, 0.3)"
+                        : "rgba(220, 76, 43, 0.3)"
+                    }`,
+                    borderRadius: 6,
+                    padding: 14,
+                    fontFamily: "var(--serif)",
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 10,
+                      letterSpacing: "1.2px",
+                      textTransform: "uppercase",
+                      color: kalpResult.passed ? "#6ee7b7" : "#fda594",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {kalpResult.passed
+                      ? "● Passerad — du klarar stresstestet"
+                      : "● Underkänd — månadskostnaden är för hög"}
+                  </div>
+                  <div>
+                    Inkomst <strong>{SEK(kalpResult.monthly_income_net)} kr</strong> ·
+                    hyra <strong>{SEK(kalpResult.monthly_housing)}</strong> ·
+                    levnadsschablon{" "}
+                    <strong>
+                      {SEK(kalpResult.monthly_consumer_schablon)}
+                    </strong>{" "}
+                    · befintlig skuld{" "}
+                    <strong>
+                      {SEK(kalpResult.monthly_existing_debt_payments)}
+                    </strong>
+                    .
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    Lånekostnad vid stress 7 %:{" "}
+                    <strong>
+                      {SEK(kalpResult.monthly_loan_payment_at_stress)} kr/mån
+                    </strong>
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    Kvar att leva på:{" "}
+                    <strong
+                      style={{
+                        color: kalpResult.passed ? "#6ee7b7" : "#fda594",
+                      }}
+                    >
+                      {SEK(kalpResult.monthly_left_after_all)} kr/mån
+                    </strong>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* PEDAGOGIK */}
             <div className="peda">
