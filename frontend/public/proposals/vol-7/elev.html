@@ -864,6 +864,198 @@ body::after {
 }
 .bankid-cta button.solid:hover { background: #c43a1c; }
 .bankid-cta button:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
+
+/* === MARIA · LÖNESAMTAL === */
+.maria-stage {
+  display: grid; grid-template-columns: 1fr 320px;
+  gap: 28px; align-items: start;
+}
+@media (max-width: 1000px) { .maria-stage { grid-template-columns: 1fr; } }
+
+.chat-card {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chat-head {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 14px;
+}
+.chat-avatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 700; font-size: 18px;
+  color: #fff;
+  position: relative;
+}
+.chat-avatar::after {
+  content: ""; position: absolute; bottom: -2px; right: -2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #6ee7b7; border: 2px solid var(--bg-mid);
+}
+.chat-name {
+  font-family: var(--serif); font-size: 18px; font-weight: 700;
+  color: #fff;
+}
+.chat-name em { font-style: italic; color: var(--warm); font-weight: 500; }
+.chat-role {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 2px;
+}
+.chat-body {
+  padding: 22px 24px; max-height: 540px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.chat-msg {
+  font-family: "Inter", sans-serif; font-size: 14px; line-height: 1.5;
+  padding: 12px 16px; border-radius: 8px;
+  max-width: 80%;
+}
+.chat-msg.maria {
+  background: rgba(99,102,241,0.10);
+  border: 1px solid rgba(99,102,241,0.25);
+  color: var(--text);
+  align-self: flex-start;
+  border-bottom-left-radius: 2px;
+}
+.chat-msg.you {
+  background: rgba(220,76,43,0.12);
+  border: 1px solid rgba(220,76,43,0.3);
+  color: #fff;
+  align-self: flex-end;
+  border-bottom-right-radius: 2px;
+}
+.chat-msg em { font-family: var(--serif); font-style: italic; color: var(--warm); }
+.chat-msg .speaker {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  margin-bottom: 6px; opacity: 0.7;
+}
+.chat-foot {
+  padding: 16px 22px; border-top: 1px solid var(--line);
+  display: flex; gap: 10px;
+}
+.chat-foot textarea {
+  flex: 1; background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line-strong);
+  color: #fff; padding: 11px 16px; border-radius: 8px;
+  font-family: "Inter", sans-serif; font-size: 13px;
+  resize: none; min-height: 44px; max-height: 100px;
+}
+.chat-foot textarea::placeholder { color: var(--text-dim); }
+.chat-foot button {
+  background: var(--accent); color: #fff;
+  border: 0; padding: 12px 18px; border-radius: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer; align-self: stretch;
+}
+
+/* Side-panel runda + smärtgräns */
+.round-card {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 22px 24px;
+  margin-bottom: 14px;
+}
+.round-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 8px;
+}
+.round-eye::before { content: "● "; }
+.round-h {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff;
+}
+.round-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.round-meta {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-mid); margin-top: 6px; letter-spacing: 0.5px;
+}
+
+.round-track {
+  display: flex; gap: 6px; margin-top: 16px;
+}
+.round-step {
+  flex: 1; height: 6px; border-radius: 100px;
+  background: rgba(255,255,255,0.08);
+}
+.round-step.done { background: var(--warm); }
+.round-step.now {
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(220,76,43,0.5);
+}
+
+.bid-history {
+  margin-top: 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.bid-history-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 10px;
+}
+.bid-history table { width: 100%; border-collapse: collapse; }
+.bid-history td {
+  padding: 6px 0;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text);
+  border-bottom: 1px dashed var(--line);
+}
+.bid-history tr:last-child td { border-bottom: 0; }
+.bid-history td:nth-child(1) { color: var(--text-dim); width: 60px; }
+.bid-history td:nth-child(2) { text-align: right; }
+.bid-history td:nth-child(2) em { font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700; }
+.bid-history .you-bid td:nth-child(2) { color: var(--accent); }
+
+/* Pain meter */
+.pain-meter {
+  height: 8px; background: rgba(255,255,255,0.06);
+  border-radius: 100px; overflow: hidden;
+  position: relative; margin: 10px 0 6px;
+}
+.pain-meter::after {
+  content: ""; position: absolute; top: -2px; bottom: -2px;
+  width: 2px; background: var(--accent);
+  left: 78%;
+  box-shadow: 0 0 8px rgba(220,76,43,0.6);
+}
+.pain-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6ee7b7, var(--warm), var(--accent));
+  border-radius: 100px;
+  width: 65%;
+}
+.pain-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-mid); letter-spacing: 0.5px;
+  display: flex; justify-content: space-between;
+}
+.pain-meta em { font-style: italic; color: var(--accent); }
+
+/* Suggestion buttons under chat */
+.sug-list {
+  margin-top: 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sug-btn {
+  background: transparent; border: 1px dashed var(--line-strong);
+  color: var(--text); text-align: left;
+  padding: 10px 14px; border-radius: 6px;
+  font-family: var(--serif); font-size: 13.5px; font-style: italic;
+  cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.sug-btn:hover { border-color: var(--warm); border-style: solid; background: rgba(251,191,36,0.04); }
 </style>
 </head>
 <body>
@@ -1505,7 +1697,131 @@ body::after {
       </div>
     </div>
   </section>
-  <section class="panel" id="p-maria"></section>
+  <!-- ============ MARIA · LÖNESAMTAL ============ -->
+  <section class="panel" id="p-maria">
+    <div class="shell">
+      <a class="actor-back" onclick="go('arbg'); return false;" href="#">Tillbaka till arbetsgivaren</a>
+
+      <header class="actor-head">
+        <div>
+          <span class="pill">Lönesamtal · runda 2 / 5</span>
+          <h1 class="actor-name" style="margin-top:14px;">Du sitter mitt emot <em>Maria</em>.</h1>
+          <p class="actor-sub">HR-chef Sthlm Sjukhus AB · AI-driven motpart · spelar realistiskt</p>
+        </div>
+        <div class="actor-meta">
+          Modell: <strong>Sonnet 4.6</strong> · 320 tokens<br>
+          Smärtgräns: <strong>dold</strong><br>
+          Sparas i din portfolio
+        </div>
+      </header>
+
+      <div class="maria-stage">
+        <article class="chat-card">
+          <div class="chat-head">
+            <div class="chat-avatar">M</div>
+            <div>
+              <div class="chat-name">Maria <em>Andersson</em></div>
+              <div class="chat-role">HR-chef · Sthlm Sjukhus AB · simulerad</div>
+            </div>
+          </div>
+
+          <div class="chat-body">
+
+            <div class="chat-msg maria">
+              <div class="speaker">Maria · runda 1</div>
+              "Hej Sara, kul att vi kunde sitta ner igen. Jag har sett dina argument
+              från första rundan och du har en stark grund. Vi har ramen <em>2,4 %
+              minst</em> enligt centralavtalet — det betyder 31 250 → 32 000 kr brutto
+              som utgångsläge. Säg vad du tänkt."
+            </div>
+
+            <div class="chat-msg you">
+              <div class="speaker">Sara · runda 1</div>
+              "Jag har varit här åtta månader, tagit fler pass än överenskommet, och
+              utbildat två nya kollegor. Marknadssnittet i Stockholm för 80 %-tjänst
+              ligger på 26,8–28,1 tkr netto. Jag yrkar 27 500 — det är en respektfull
+              höjning, ingen grandios."
+            </div>
+
+            <div class="chat-msg maria">
+              <div class="speaker">Maria · runda 2</div>
+              "Bra argumenterat, Sara. Marknadsdatan stämmer, men jag måste också
+              tänka på vår budget — vi tog in fyra nya undersköterskor i januari och
+              det binder mycket. Jag kan erbjuda <em>26 200 kr netto</em>, det är
+              <em>+ 3,1 %</em> — över avtalsminimum och i nedre delen av marknaden.
+              Det här är ett <em>seriöst bud</em>."
+            </div>
+
+            <div class="chat-msg you">
+              <div class="speaker">Sara · runda 2 · pågående</div>
+              "26 200 är högre än minimum men det fångar inte ansvarsökningen
+              under de här åtta månaderna. Om jag inte hade tagit dom extra passen
+              hade ni behövt anlita timvikarier — det kostar er <em>betydligt mer</em>.
+              Mitt motbud: <em>27 100 kr netto</em>, eller 26 800 plus en extra
+              utbildningsdag i höst."
+            </div>
+
+            <div class="chat-msg maria" style="opacity: 0.6;">
+              <div class="speaker">Maria skriver…</div>
+              <em>(svar dyker upp om några sekunder)</em>
+            </div>
+
+          </div>
+
+          <div class="chat-foot">
+            <textarea placeholder="Ditt motbud eller fråga…"></textarea>
+            <button>Skicka</button>
+          </div>
+        </article>
+
+        <aside>
+          <div class="round-card">
+            <div class="round-eye">Runda 2 av 5</div>
+            <div class="round-h">Pågår — du svarade <em>14:32</em></div>
+            <div class="round-meta">Maria läser ditt motbud</div>
+            <div class="round-track">
+              <div class="round-step done"></div>
+              <div class="round-step now"></div>
+              <div class="round-step"></div>
+              <div class="round-step"></div>
+              <div class="round-step"></div>
+            </div>
+
+            <div class="bid-history">
+              <div class="bid-history-eye">Bud-historik</div>
+              <table>
+                <tr class="you-bid"><td>R1 · du</td><td>27 500 kr</td></tr>
+                <tr><td>R1 · Maria</td><td>26 200 kr</td></tr>
+                <tr class="you-bid"><td>R2 · du</td><td><em>27 100 kr</em></td></tr>
+                <tr><td>R2 · Maria</td><td>—</td></tr>
+              </table>
+            </div>
+          </div>
+
+          <div class="round-card">
+            <div class="round-eye">Marias smärtgräns · approximerad</div>
+            <div class="round-h"><em>Inte avslöjad</em></div>
+            <div class="round-meta">Modellen visar bara <em>indikator</em>, inte siffran</div>
+            <div class="pain-meter"><div class="pain-fill"></div></div>
+            <div class="pain-meta">
+              <span>nytt bud</span>
+              <span><em>nära smärtgräns</em></span>
+            </div>
+          </div>
+
+          <div class="round-card">
+            <div class="round-eye">Echo · taktiskt råd</div>
+            <div class="round-h">Du är <em>nära mål</em> — sänk inte mer.</div>
+            <div class="sug-list">
+              <button class="sug-btn">"Be om svar innan vi avslutar dagens runda"</button>
+              <button class="sug-btn">"Föreslå att hänvisa till friskvårdsbidrag"</button>
+              <button class="sug-btn">"Stå kvar — vänta på Marias respons"</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
   <section class="panel" id="p-avanza"></section>
   <section class="panel" id="p-skatt"></section>
   <section class="panel" id="p-modul"></section>
