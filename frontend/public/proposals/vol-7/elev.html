@@ -4270,7 +4270,182 @@ body[data-mode="business"] .mode-switch {
 
     </div>
   </section>
-  <section class="panel biz-only" id="p-biz-kunder"></section>
+  <section class="panel biz-only" id="p-biz-kunder">
+    <div class="shell">
+      <a class="actor-back" onclick="window.go('biz-hub'); return false;" href="#">Tillbaka till biz-hubben</a>
+
+      <header class="actor-head">
+        <div>
+          <span class="pill">Aktör · biz · Kunder &amp; offerter</span>
+          <h1 class="actor-name" style="margin-top:14px;">Tre <em>kunder</em>, två förfrågningar.</h1>
+          <p class="actor-sub">Pipelinen som driver omsättningen · ryktet 72 ger fler offertförfrågningar</p>
+        </div>
+        <div class="actor-meta">
+          Aktiva uppdrag: <strong>2</strong><br>
+          Förfrågningar i kö: <strong>2</strong><br>
+          Vunnen-andel: <strong>67 %</strong>
+        </div>
+      </header>
+
+      <!-- Två-kolumn: aktiva kunder + nya offertförfrågningar -->
+      <div class="act-grid">
+
+        <div>
+          <div class="section-eye" style="color: #c7d2fe;">Aktiva kunder &amp; pågående jobb</div>
+          <div class="biz-table">
+            <div class="biz-table-row head" style="grid-template-columns: 50px 1.6fr 1fr 100px 110px 100px;">
+              <span>#</span>
+              <span>Kund / Jobb</span>
+              <span>Bransch</span>
+              <span>Pris</span>
+              <span>Deadline</span>
+              <span>Status</span>
+            </div>
+
+            <a class="biz-table-row" style="grid-template-columns: 50px 1.6fr 1fr 100px 110px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">01</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: #fff;">Klang Café</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">Logo + visitkort · Maja Klang</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Kreativ tjänst</span>
+              <span style="font-family: var(--serif); font-style: italic; color: #c7d2fe; font-weight: 700;">3 600 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">5 maj · 6 dgr</span>
+              <span class="biz-status sent">Pågår</span>
+            </a>
+
+            <a class="biz-table-row" style="grid-template-columns: 50px 1.6fr 1fr 100px 110px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">02</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: #fff;">Hökarängens Hundpassning</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">Webbplats + bokningssystem · Ola Berg</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">IT-tjänster</span>
+              <span style="font-family: var(--serif); font-style: italic; color: #c7d2fe; font-weight: 700;">7 200 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">29 apr · idag</span>
+              <span class="biz-status overdue">Levereras</span>
+            </a>
+
+            <a class="biz-table-row" style="grid-template-columns: 50px 1.6fr 1fr 100px 110px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">03</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: #fff;">Selma Konsult AB</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">Excel-mall + utbildning · Selma A.</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Konsult</span>
+              <span style="font-family: var(--serif); font-style: italic; color: #c7d2fe; font-weight: 700;">2 400 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">12 maj · 13 dgr</span>
+              <span class="biz-status sent">Pågår</span>
+            </a>
+          </div>
+
+          <div class="section-eye" style="color: var(--warm); margin-top: 26px;">2 nya offertförfrågningar · väntar på din offert</div>
+          <div class="biz-table" style="border-color: rgba(251,191,36,0.3);">
+            <a class="biz-table-row" style="grid-template-columns: 50px 1.6fr 1fr 110px 110px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">NY</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: #fff;">Nordic Workshop AB</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">WordPress-flytt + säkerhet · ref. Anders Lind</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">IT-tjänster</span>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">3 200–4 800 kr</span>
+              <span class="biz-status open">Skapa offert</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 50px 1.6fr 1fr 110px 110px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">NY</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14.5px; font-weight: 700; color: #fff;">Bilverkstad Söderort</div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">Bokningskalender · Magnus K.</div>
+              </div>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">IT-tjänster</span>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">5 800–7 600 kr</span>
+              <span class="biz-status open">Skapa offert</span>
+            </a>
+          </div>
+
+          <div class="section-eye" style="margin-top: 26px;">Levererat senaste 4 v</div>
+          <div class="biz-table">
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 100px 110px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">v 11</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Tatueringsstudion 14</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">Bokningssystem · Maja Wennerlund · 4,8/5</div>
+              </div>
+              <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7;">8 400 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">levererat 18 apr</span>
+              <span class="biz-status paid">Betald</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 60px 1.6fr 100px 110px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">v 9</span>
+              <div>
+                <div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Linnéa Frisör</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;">Sociala-medier-paket · Linnéa B. · 5/5</div>
+              </div>
+              <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7;">4 200 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">levererat 4 apr</span>
+              <span class="biz-status paid">Betald</span>
+            </a>
+          </div>
+        </div>
+
+        <aside>
+          <div class="side-card" style="border-color: rgba(99,102,241,0.25);">
+            <div class="side-card-eye" style="color: #c7d2fe;">Ryktet driver pipelinen</div>
+            <div class="side-card-h">72 <em style="color: #c7d2fe;">av 100</em></div>
+            <div class="side-card-meta">+ 4 sedan v8 (efter Tatueringsstudion 4,8/5). Ryktet ↑ → fler förfrågningar.</div>
+            <div style="margin-top: 14px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; overflow: hidden;">
+              <div style="height: 100%; background: linear-gradient(90deg, #818cf8, #c7d2fe); width: 72%; border-radius: 100px;"></div>
+            </div>
+          </div>
+
+          <div class="side-card">
+            <div class="side-card-eye">Vunnen-andel</div>
+            <div class="side-card-h">67 % <em>(8 av 12)</em></div>
+            <div class="side-card-meta">Branschen IT-tjänster har snitt 35 %. Du ligger högt — kan höja priset något.</div>
+          </div>
+
+          <div class="side-card" style="background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.25);">
+            <div class="side-card-eye" style="color: var(--warm);">Echo · taktiskt</div>
+            <div class="side-card-h">"<em>3 700</em> är <em>under</em> riktpris."</div>
+            <div class="side-card-meta">Nordic Workshop-snittet är 3 200–4 800. Med 67 % vunnen-andel kan du gå mot mitten — 4 200 är realistiskt.</div>
+            <a class="side-card-link" onclick="document.getElementById('echoBtn').click(); return false;">Diskutera med Echo ↗</a>
+          </div>
+
+          <div class="side-card">
+            <div class="side-card-eye">AI-avgör för pipelinen</div>
+            <div class="side-card-h">Fler IT-jobb dyker upp</div>
+            <div class="side-card-meta">När du levererar IT-tjänst med 4+ stjärnor → branschmix-vikt höjs. Pipeline-modellen genererar fler liknande förfrågningar nästa vecka.</div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Pedagogik -->
+      <div class="peda" style="margin-top: 26px; border-color: rgba(99,102,241,0.3); border-left-color: #818cf8;">
+        <div class="peda-eye" style="color: #c7d2fe;">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Pris är <em>förhandling</em>, inte gissning.</div>
+        <p class="peda-prose">
+          Riktpris från <code>Konsumentverkets schablon</code>. Du anpassar efter
+          <em>kvalitet</em> (din historik), <em>komplexitet</em> (timmar du tror)
+          och <em>marknad</em> (branschens vunnen-andel). Acceptansmodellen i appen
+          räknar deterministiskt — eleven kan alltid få förklarat varför kunden tackat ja eller nej.
+        </p>
+        <ul class="peda-bullets">
+          <li><strong>Riktpris</strong>Konsumentverkets schablon per bransch + ort.</li>
+          <li><strong>Pitch-faktor</strong>AI bedömer din offert-text som matchningsfaktor (0–1).</li>
+          <li><strong>Rykte</strong>Kvalitet av tidigare leveranser. Driver pipeline.</li>
+          <li><strong>Pipeline-vikt</strong>Branschmix bygger på din historik. Levererar du IT → fler IT-jobb.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">Riktpris</span>
+          <span class="peda-concept">Vunnen-andel</span>
+          <span class="peda-concept">Konvertering</span>
+          <span class="peda-concept">Kundlivstidsvärde</span>
+          <span class="peda-concept">Pipeline-mix</span>
+        </div>
+        <div class="peda-tip">Klicka "Skapa offert" på Nordic Workshop AB. Du får skriva en pitch (AI bedömer 0–1) + sätta pris. Sen avgör programmets acceptansmodell — inte LLM. Det är pedagogiskt avgörande: läraren kan alltid förklara <em>varför</em>.</div>
+      </div>
+    </div>
+  </section>
   <section class="panel biz-only" id="p-biz-faktura"></section>
   <section class="panel biz-only" id="p-biz-leverantor"></section>
   <section class="panel biz-only" id="p-biz-bokforing"></section>
