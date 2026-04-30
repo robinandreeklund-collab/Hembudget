@@ -6,18 +6,65 @@
  *
  * Flöde:
  *   1. Välkommen + 3 principer
- *   2. Möt karaktären (Sara A.)
+ *   2. Möt karaktären (DYNAMISKT — namn/ålder/yrke/lön/boende från
+ *      StudentProfile, inte hårdkodade "Sara")
  *   3. Nivå & spenderprofil (3 nivåer som progression)
  *   4. Pentagonen är hjärtat
  *   5. Postlådan är källan
  *   6. Echo är spegeln
  *   7. Sambo-frågan (3 partner-modeller + 3 värderingsval)
- *   8. Klar — Vol. 18 är laddad
+ *   8. Klar — Vol. 18 är laddad (dynamisk slut-text)
  */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { v2Api, type FairnessChoice, type OnboardingEventType } from "./api";
+import {
+  v2Api,
+  type FairnessChoice,
+  type HubCharacter,
+  type OnboardingEventType,
+} from "./api";
 import "./onboarding.css";
+
+const SEK = (n: number | null | undefined) =>
+  n == null
+    ? "—"
+    : new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
+
+/** Hjälpare: gör första bokstaven stor (för fritext-yrke etc). */
+function cap(s: string | null | undefined): string {
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Översätt family_status från enum till svensk text. */
+function familyLabel(s: string | null | undefined): string {
+  switch (s) {
+    case "ensam":
+      return "solo";
+    case "sambo":
+      return "sambo";
+    case "familj_med_barn":
+      return "familj med barn";
+    default:
+      return s || "—";
+  }
+}
+
+/** "2 r o k Hökarängen · första-handskontrakt · X kr/mån inkl. el". */
+function housingDescription(c: HubCharacter | null): string {
+  if (!c) return "—";
+  const type = c.housing_type;
+  const typeLabel =
+    type === "hyresratt"
+      ? "hyresrätt"
+      : type === "bostadsratt"
+      ? "bostadsrätt"
+      : type === "villa"
+      ? "villa"
+      : type || "boende";
+  const m = c.housing_monthly ? `${SEK(c.housing_monthly)} kr/mån` : "";
+  return `${typeLabel} i ${c.city || "—"}${m ? ` · ${m}` : ""}`;
+}
 
 /** Skicka event utan att blockera UI:t. Fail-soft: ett tappat event
  *  ska aldrig hindra användaren från att gå vidare. */
@@ -51,7 +98,29 @@ export function OnboardingV2() {
   const [fairness, setFairness] = useState<FairnessChoice | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [character, setCharacter] = useState<HubCharacter | null>(null);
   const nav = useNavigate();
+
+  // Hämta karaktären (genererad deterministiskt från student_id) så
+  // hela onboardingen pratar OM den karaktär eleven faktiskt fått —
+  // inte hårdkodade "Sara".
+  useEffect(() => {
+    v2Api
+      .hub()
+      .then((h) => setCharacter(h.character))
+      .catch(() => undefined);
+  }, []);
+
+  // Hjälpare för att referera till karaktären
+  const charName = character?.first_name || "din karaktär";
+  const charFull =
+    character?.first_name && character?.last_name
+      ? `${character.first_name} ${character.last_name}`
+      : character?.display_name || "Din karaktär";
+  const charInitials =
+    character?.first_name && character?.last_name
+      ? `${character.first_name[0]}${character.last_name[0]}`
+      : (character?.display_name || "??").slice(0, 2).toUpperCase();
 
   // Tid på nuvarande steg — sätts varje gång step byts
   const stepEnteredAt = useRef<number>(Date.now());
@@ -142,15 +211,26 @@ export function OnboardingV2() {
           </div>
 
           {step === 1 && <Step1 />}
-          {step === 2 && <Step2 />}
-          {step === 3 && <Step3 />}
-          {step === 4 && <Step4 />}
-          {step === 5 && <Step5 />}
-          {step === 6 && <Step6 />}
-          {step === 7 && (
-            <Step7 fairness={fairness} setFairness={setFairness} />
+          {step === 2 && (
+            <Step2
+              character={character}
+              charName={charName}
+              charFull={charFull}
+              charInitials={charInitials}
+            />
           )}
-          {step === 8 && <Step8 />}
+          {step === 3 && <Step3 charName={charName} />}
+          {step === 4 && <Step4 charName={charName} />}
+          {step === 5 && <Step5 charName={charName} />}
+          {step === 6 && <Step6 charName={charName} />}
+          {step === 7 && (
+            <Step7
+              fairness={fairness}
+              setFairness={setFairness}
+              charName={charName}
+            />
+          )}
+          {step === 8 && <Step8 charName={charName} character={character} />}
 
           <div className="onb-foot">
             <span className="onb-step-num">
@@ -268,35 +348,106 @@ function Step1() {
   );
 }
 
-/* === STEG 2 — Möt karaktären === */
-function Step2() {
+/* === STEG 2 — Möt karaktären (dynamiskt baserat på elevens karaktär) === */
+function Step2({
+  character,
+  charName,
+  charFull,
+  charInitials,
+}: {
+  character: HubCharacter | null;
+  charName: string;
+  charFull: string;
+  charInitials: string;
+}) {
+  // Härled meta-rad från karaktären
+  const metaParts: string[] = [];
+  if (character?.age) metaParts.push(`${character.age} år`);
+  if (character?.profession) metaParts.push(character.profession.toLowerCase());
+  if (character?.city) metaParts.push(character.city.toLowerCase());
+  metaParts.push(familyLabel(character?.family_status));
+
+  // Härled prose-text från karaktären
+  const proseParts: string[] = [];
+  if (character?.net_salary_monthly) {
+    proseParts.push(
+      `Tjänar ${SEK(character.net_salary_monthly)} kr/mån netto efter skatt`,
+    );
+  }
+  if (character?.housing_monthly) {
+    proseParts.push(`Hyran är ${SEK(character.housing_monthly)} kr`);
+  }
+  const housing =
+    character?.housing_type === "hyresratt"
+      ? "hyresrätt"
+      : character?.housing_type === "bostadsratt"
+      ? "bostadsrätt"
+      : character?.housing_type === "villa"
+      ? "villa"
+      : null;
+  const familyText =
+    character?.family_status === "ensam"
+      ? "bor ensam"
+      : character?.family_status === "sambo"
+      ? "bor med sin sambo"
+      : character?.family_status === "familj_med_barn"
+      ? "har familj med barn"
+      : null;
+
   return (
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 2 av 8 · karaktär</div>
       <h1 className="onb-h">
-        Möt <em>Sara A.</em>
+        Möt <em>{charName}</em>.
       </h1>
       <p className="onb-lead">
-        Du spelar inte dig själv — du spelar <em>Sara</em>. Hon är 16, går
-        gymnasium, jobbar 80 % som undersköterskelev på Sthlm Sjukhus AB, bor
-        i en 2 r o k i Hökarängen. Hennes karaktär är genererad av din lärare
-        med specifika förutsättningar du kommer behöva förstå innan du fattar
-        beslut åt henne.
+        Du spelar inte dig själv — du spelar <em>{charName}</em>.
+        {character?.age && (
+          <>
+            {" "}
+            {character.age < 25 ? "Hen" : "Hen"} är {character.age},
+          </>
+        )}
+        {character?.profession && (
+          <>
+            {" "}
+            jobbar som <em>{character.profession.toLowerCase()}</em>
+            {character.employer && <> på {character.employer}</>}
+          </>
+        )}
+        {(housing || character?.city) && (
+          <>
+            , {housing ? `bor i ${housing}` : "bor"}
+            {character?.city ? ` i ${character.city}` : ""}
+          </>
+        )}
+        . Hens karaktär är genererad av plattformen med specifika
+        förutsättningar du kommer behöva förstå innan du fattar beslut åt
+        hen.
       </p>
 
       <div className="onb-char">
-        <div className="onb-char-avatar">SA</div>
+        <div className="onb-char-avatar">{charInitials}</div>
         <div>
-          <div className="onb-char-name">Sara Andersson</div>
+          <div className="onb-char-name">{charFull}</div>
           <div className="onb-char-meta">
-            16 år · gymnasium åk 1 · stockholm · solo · klass 9C
+            {metaParts.length > 0 ? metaParts.join(" · ") : "—"}
           </div>
           <div className="onb-char-prose">
-            Tjänar <em>22 400 kr/mån</em> netto efter skatt + studiebidrag
-            1 250. Hyran är 7 240 kr. Har <em>38 200 kr</em> i CSN-skuld,
-            8 460 kr på Avanza-ISK, 1 800 kr i buffert. Tar <em>laxsim</em>{" "}
-            två kvällar/v och får ofta för sig att äta på Max efteråt — ett
-            vanligt budgetdilemma.
+            {proseParts.length > 0 ? (
+              <>
+                <em>{proseParts[0]}</em>
+                {proseParts.slice(1).join(". ") &&
+                  `. ${proseParts.slice(1).join(". ")}`}
+                .{" "}
+              </>
+            ) : null}
+            {familyText && <>{cap(familyText)}. </>}
+            {character?.personality && (
+              <>
+                Spenderprofil: <strong>{character.personality}</strong>.
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -304,26 +455,41 @@ function Step2() {
       <div className="onb-rules">
         <div className="onb-rule">
           <div className="onb-rule-eye">Karaktär · arbete</div>
-          <div className="onb-rule-h">Sthlm Sjukhus AB</div>
+          <div className="onb-rule-h">
+            {character?.employer || "Arbetsgivaren"}
+          </div>
           <div className="onb-rule-prose">
-            80 % tjänst · kollektivavtal Akavia/Vårdförbundet · ITP1-pension ·
-            friskvårdsbidrag 5 000/år
+            {character?.profession || "Yrke ej satt"} ·{" "}
+            {character?.gross_salary_monthly
+              ? `${SEK(character.gross_salary_monthly)} kr brutto/mån`
+              : "lön ej satt"}
+            {" · kollektivavtal med pension + förmåner"}
           </div>
         </div>
         <div className="onb-rule">
           <div className="onb-rule-eye">Karaktär · boende</div>
-          <div className="onb-rule-h">Stockholmshem</div>
+          <div className="onb-rule-h">
+            {housing ? cap(housing) : "Boende"}
+          </div>
           <div className="onb-rule-prose">
-            2 r o k Hökarängen · första-handskontrakt · 7 240 kr/mån inkl. el
-            via Tibber
+            {housingDescription(character)}
+            {character?.housing_type === "bostadsratt" ||
+            character?.housing_type === "villa"
+              ? " · ev. bolån + amortering"
+              : " · första-handskontrakt + el"}
           </div>
         </div>
         <div className="onb-rule">
-          <div className="onb-rule-eye">Karaktär · skuld &amp; spar</div>
-          <div className="onb-rule-h">Måttligt skuldsatt</div>
+          <div className="onb-rule-eye">Karaktär · familj</div>
+          <div className="onb-rule-h">{cap(familyLabel(character?.family_status))}</div>
           <div className="onb-rule-prose">
-            CSN 38 200 (1,7 % ränta) · Sparar 600 kr/mån i ISK · Bufferten på
-            1 800 är under riktvärdet 0,5 mån
+            {character?.family_status === "ensam"
+              ? "Singel · betalar allt själv · maximal flexibilitet men ingen att dela utgifter med"
+              : character?.family_status === "sambo"
+              ? "Sambo · 2 vuxna inkomster · måste förhandla värdering om gemensam ekonomi"
+              : character?.family_status === "familj_med_barn"
+              ? "Familj med barn · barnomkostnader påverkar Konsumentverkets schablon · barnbidrag inkluderat"
+              : "Familjesituation styr ekonomiska tradeoffs"}
           </div>
         </div>
       </div>
@@ -336,14 +502,13 @@ function Step2() {
         }}
       >
         <div className="onb-rule-eye" style={{ color: "#a5b4fc" }}>
-          Pedagogik · varför just Sara
+          Pedagogik · varför just {charName}
         </div>
         <div className="onb-rule-prose">
-          Sara är medvetet vald som{" "}
-          <em style={{ color: "var(--warm)" }}>representativ ung vuxen</em> —
-          inte rik, inte fattig, har anställning men inte trygghet, sparar
-          lite men inte för pension, har en buffert under riktvärdet. Det
-          skapar{" "}
+          {charName} är genererad som{" "}
+          <em style={{ color: "var(--warm)" }}>representativ vuxen</em> — med
+          riktiga svenska siffror för {character?.profession || "yrket"}
+          {character?.city && `i ${character.city}`}. Det skapar{" "}
           <em style={{ color: "var(--warm)" }}>realistiska dilemman</em> där
           alla val har tradeoffs. Inget rätt svar.
         </div>
@@ -353,7 +518,7 @@ function Step2() {
 }
 
 /* === STEG 3 — Nivå & spenderprofil (3 nivåer som progression) === */
-function Step3() {
+function Step3({ charName }: { charName: string }) {
   return (
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 3 av 8 · nivå &amp; profil</div>
@@ -363,8 +528,8 @@ function Step3() {
       <p className="onb-lead">
         Plattformen har <em>tre nivåer</em>. Du börjar på Nivå 1 och din
         spenderprofil är <strong>låst till Sparsam</strong> som start. När du
-        klarat Nivå 1 öppnar <strong>Anders Lind</strong> Nivå 2 åt dig — då
-        blir samma karaktär (Sara) balanserad och utmaningen ökar.
+        klarat Nivå 1 öppnar <strong>din lärare</strong> Nivå 2 åt dig — då
+        blir samma karaktär ({charName}) balanserad och utmaningen ökar.
       </p>
 
       <div className="onb-profiles">
@@ -393,7 +558,8 @@ function Step3() {
             </em>
           </div>
           <div className="onb-profile-desc">
-            Lättare att hålla ordning. Sara lagar mat hemma, få överraskningar.{" "}
+            Lättare att hålla ordning. {charName} lagar mat hemma, få
+            överraskningar.{" "}
             <em style={{ color: "var(--warm)" }}>Men friktion finns</em> —
             tandläkaren ringer ändå.
           </div>
@@ -472,7 +638,7 @@ function Step3() {
           Pedagogik · varför nivåer
         </div>
         <div className="onb-rule-prose">
-          Samma karaktär (Sara A.) genom alla tre nivåer — bara den{" "}
+          Samma karaktär ({charName}) genom alla tre nivåer — bara den{" "}
           <em style={{ color: "var(--warm)" }}>ekonomiska komplexiteten</em>{" "}
           ökar. På Nivå 1 lär du dig grunden i en relativt vänlig miljö. På
           Nivå 2 möter du fler oväntade brev, fler impulsköp, restaurang som
@@ -487,7 +653,8 @@ function Step3() {
 }
 
 /* === STEG 4 — Pentagonen är hjärtat === */
-function Step4() {
+function Step4({ charName }: { charName: string }) {
+  void charName;
   return (
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 4 av 8 · pentagonen</div>
@@ -603,7 +770,8 @@ function Step4() {
   );
 }
 /* === STEG 5 — Postlådan är källan === */
-function Step5() {
+function Step5({ charName }: { charName: string }) {
+  void charName;
   return (
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 5 av 8 · postlådan</div>
@@ -622,16 +790,16 @@ function Step5() {
       <div className="onb-mail-mock">
         <div className="onb-mail-mock-row">
           <span>●</span>
-          <span>SEB Visa</span>
-          <span>April-spend · 47 köp att granska</span>
-          <span>4 822 kr</span>
+          <span>Kreditkort</span>
+          <span>Månadsfaktura · köp att granska</span>
+          <span>X kr</span>
           <span>Ohanterad</span>
         </div>
         <div className="onb-mail-mock-row">
           <span>●</span>
           <span>Skatteverket</span>
-          <span>Deklaration 2025 · 1 förslag</span>
-          <span>+ 1 240 kr</span>
+          <span>Deklaration · förslag att granska</span>
+          <span>+ N kr</span>
           <span>Ohanterad</span>
         </div>
         <div className="onb-mail-mock-row">
@@ -643,9 +811,9 @@ function Step5() {
         </div>
         <div className="onb-mail-mock-row">
           <span>●</span>
-          <span>Stockholmshem</span>
-          <span>Hyra maj · vana · auto-exporterad</span>
-          <span>7 240 kr</span>
+          <span>Hyresvärden</span>
+          <span>Hyra · vana · auto-exporterad</span>
+          <span>din hyra/mån</span>
           <span
             style={{
               background: "rgba(99,102,241,0.16)",
@@ -709,7 +877,8 @@ function Step5() {
 }
 
 /* === STEG 6 — Echo är spegeln === */
-function Step6() {
+function Step6({ charName }: { charName: string }) {
+  void charName;
   return (
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 6 av 8 · Echo</div>
@@ -795,9 +964,11 @@ function Step6() {
 function Step7({
   fairness,
   setFairness,
+  charName,
 }: {
   fairness: FairnessChoice | null;
   setFairness: (v: FairnessChoice) => void;
+  charName: string;
 }) {
   const fairOpts: { v: FairnessChoice; nameJsx: React.ReactNode; desc: string }[] = [
     {
@@ -840,7 +1011,7 @@ function Step7({
         Innan vi avslöjar din <em>partners ekonomi</em> — en fråga.
       </h1>
       <p className="onb-lead">
-        Sara har fått en <em>AI-genererad sambo</em> — Linus B. Inte alla
+        {charName} har fått en <em>AI-genererad sambo</em>. Inte alla
         elever får det; vissa karaktärer är solo, en del par. Innan vi visar
         vad Linus tjänar svarar du på en fråga om <em>dig själv</em>.
       </p>
@@ -939,7 +1110,7 @@ function Step7({
               marginBottom: 3,
             }}
           >
-            Linus B. (auto-genererad)
+            Din partner (auto-genererad)
           </div>
           <div
             style={{
@@ -1074,7 +1245,18 @@ function Step7({
 }
 
 /* === STEG 8 — Klar / Vol. 18 är laddad === */
-function Step8() {
+function Step8({
+  charName,
+  character,
+}: {
+  charName: string;
+  character: HubCharacter | null;
+}) {
+  // Bygg en dynamisk situations-text baserad på karaktärens data
+  const grossSal = character?.gross_salary_monthly;
+  const netSal = character?.net_salary_monthly;
+  const housing = character?.housing_monthly;
+
   return (
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 8 av 8 · klar</div>
@@ -1082,11 +1264,24 @@ function Step8() {
         Vol. 18 är <em>laddad</em>.
       </h1>
       <p className="onb-lead">
-        Det är onsdag 29 april 2026. Sara har <em>14 282 kr</em> på
-        lönekontot. Hyran kommer på fredag (7 240). Lönen den 25:e (22 880
-        brutto, 22 400 netto). Tandläkaren ringer <em>klockan 14:22</em>.
-        Postlådan har <strong>4 ohanterade</strong>. Anders Lind (din lärare)
-        har skickat ett uppdrag: <em>räkna KALP för en 2:a på 2,4 Mkr</em>.
+        Det är dag 1 i {charName}s ekonomiska liv. Lönekontot börjar fyllas
+        med transaktioner.
+        {housing && (
+          <>
+            {" "}
+            Hyran på <em>{SEK(housing)} kr</em> dras varje månad.
+          </>
+        )}
+        {grossSal && netSal && (
+          <>
+            {" "}
+            Lönen den 25:e — <em>{SEK(grossSal)} brutto</em>,{" "}
+            {SEK(netSal)} netto.
+          </>
+        )}{" "}
+        Postlådan kommer fyllas med fakturor, lönespecar och myndighetspost.
+        Din lärare kan när som helst skicka uppdrag som påverkar pentagonen
+        — räkna KALP, simulera bolån, förhandla lön.
       </p>
 
       <div className="onb-rules">
