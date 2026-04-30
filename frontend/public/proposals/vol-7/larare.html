@@ -414,6 +414,17 @@ body::after {
             <div class="s-card-h">14 <em>nya</em> sedan 22 april</div>
             <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('refl'); return false;" href="#">öppna alla 14 reflektioner →</a>
           </div>
+
+          <div class="s-card" style="border-color: rgba(220,76,43,0.35); background: rgba(220,76,43,0.05);">
+            <div class="s-card-eye" style="color: var(--accent);">Postlådor · 9C</div>
+            <div class="s-card-h">62 <em>ohanterade</em> brev</div>
+            <ul class="attn-list">
+              <li><div><div class="attn-name">Filip Ö.</div><div class="attn-why">9 ohanterade · äldsta 18 dgr · risk för inkasso</div></div><a class="attn-go" href="#">→</a></li>
+              <li><div><div class="attn-name">Noah J.</div><div class="attn-why">11 ohanterade · 1 påminnelse · CSN brev oöppnat</div></div><a class="attn-go" href="#">→</a></li>
+              <li><div><div class="attn-name">Jamil A.</div><div class="attn-why">7 ohanterade · skattedeklaration ej granskad</div></div><a class="attn-go" href="#">→</a></li>
+            </ul>
+            <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('mail'); return false;" href="#">Se alla 28 postlådor →</a>
+          </div>
         </aside>
 
       </div>
@@ -799,6 +810,9 @@ body::after {
       </div>
     </div>
   </section>
+
+  <!-- POSTLÅDOR -->
+  <section class="panel" id="p-mail"></section>
 </main>
 
 <script>
@@ -807,6 +821,7 @@ const PANELS = {
   elev:  { crumb: ["KLASSEN 9C", "● SARA A."] },
   maria: { crumb: ["KLASSEN 9C", "● MARIA · 3 LÖNESAMTAL"] },
   refl:  { crumb: ["KLASSEN 9C", "● REFLEKTIONER"] },
+  mail:  { crumb: ["KLASSEN 9C", "● POSTLÅDOR"] },
 };
 function go(view) {
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
