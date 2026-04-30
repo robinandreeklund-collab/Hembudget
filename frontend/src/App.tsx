@@ -131,12 +131,18 @@ export default function App() {
     );
   }
 
+  // Visa laddningsindikator tills v2-status är klar — annars riskerar
+  // vi att v1-onboarding flashar för v2-elever (race condition).
+  if (role === "student" && !v2Loaded) {
+    return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
+  }
+
   // Elev som inte är klar med onboarding → tvingas dit
   // UNDANTAG: om eleven har v2_enabled, skip v1-onboarding och låt
   // DashboardV2Guard routa till /v2/onboarding istället.
   if (
     role === "student" && studentMeta && !studentMeta.onboarding_completed
-    && (!v2Loaded || !v2Status?.v2_eligible)
+    && !v2Status?.v2_eligible
   ) {
     return (
       <>
@@ -144,6 +150,15 @@ export default function App() {
         <Onboarding />
       </>
     );
+  }
+
+  // V2-elev som inte gjort v2-onboarding → tvinga dit
+  // (redundant med DashboardV2Guard men säkrare)
+  if (
+    role === "student" && v2Status?.v2_eligible
+    && !v2Status.v2_onboarding_completed
+  ) {
+    // Låt routes köra · V2RootRedirect → /v2/onboarding
   }
 
   // Lärar-vyn använder nu samma sidebar som resten av plattformen
