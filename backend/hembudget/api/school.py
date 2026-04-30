@@ -295,6 +295,13 @@ def _create_profile_for_student(session, student: Student) -> StudentProfile:
         profile_kwargs["partner_profession"] = gen.partner_profession
     if master_has_column("student_profiles", "partner_gross_salary"):
         profile_kwargs["partner_gross_salary"] = gen.partner_gross_salary
+    # Karaktärsnamn (V2) — sätts om migrationen hunnit lägga till
+    # kolumnerna i prod-Postgres. Annars NULL → fallback till
+    # student.display_name i frontend.
+    if master_has_column("student_profiles", "character_first_name"):
+        profile_kwargs["character_first_name"] = gen.character_first_name
+    if master_has_column("student_profiles", "character_last_name"):
+        profile_kwargs["character_last_name"] = gen.character_last_name
 
     try:
         profile = StudentProfile(**profile_kwargs)

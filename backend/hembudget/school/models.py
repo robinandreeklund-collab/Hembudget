@@ -229,6 +229,18 @@ class StudentProfile(MasterBase):
         primary_key=True,
     )
 
+    # Karaktärsnamn — den persona eleven får. Skiljer sig från
+    # student.display_name som är inloggningsnamnet/elevkontot.
+    # Används i v2-vyer ("Sara", "Hennes vardag", etc.). deferred()
+    # så lazy-load inte kraschar innan migrationen hunnit lägga till
+    # kolumnerna i prod-Postgres.
+    character_first_name: Mapped[Optional[str]] = deferred(mapped_column(
+        String(60), nullable=True,
+    ))
+    character_last_name: Mapped[Optional[str]] = deferred(mapped_column(
+        String(60), nullable=True,
+    ))
+
     # Karriär
     profession: Mapped[str] = mapped_column(String(80), nullable=False)
     employer: Mapped[str] = mapped_column(String(120), nullable=False)

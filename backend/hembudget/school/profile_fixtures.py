@@ -124,6 +124,51 @@ PERSONALITIES = ["sparsam", "blandad", "blandad", "slosaktig"]
 # blandad x2 → 50% chans, sparsam/slösaktig vardera 25%
 
 
+# Svenska för- och efternamn — för karaktärsnamn-generering.
+# Slumpas deterministiskt på student_id så samma elev alltid får
+# samma karaktär. Listor som speglar SCB:s vanliga namn 2020-2025.
+FIRST_NAMES_F = [
+    "Sara", "Emma", "Alice", "Maja", "Ella", "Wilma", "Ebba", "Lilly",
+    "Olivia", "Astrid", "Saga", "Alma", "Selma", "Vera", "Klara",
+    "Linnea", "Stella", "Ines", "Nellie", "Iris", "Tuva", "Hedda",
+    "Märta", "Ester", "Ronja", "Sigrid", "Alva", "Tilde", "Freja",
+    "Liv",
+]
+FIRST_NAMES_M = [
+    "Lucas", "William", "Liam", "Noah", "Oliver", "Hugo", "Elias",
+    "Adam", "Vincent", "Walter", "Leon", "Theo", "Axel", "Charlie",
+    "Anton", "Ivar", "Edvin", "Frans", "Albin", "Olle", "Viggo",
+    "Sigge", "Otto", "Algot", "Loke", "Folke", "Melker", "Vidar",
+    "Arvid", "Kasper",
+]
+LAST_NAMES = [
+    "Andersson", "Johansson", "Karlsson", "Nilsson", "Eriksson",
+    "Larsson", "Olsson", "Persson", "Svensson", "Gustafsson",
+    "Pettersson", "Jonsson", "Jansson", "Hansson", "Bengtsson",
+    "Jönsson", "Lindberg", "Jakobsson", "Magnusson", "Olofsson",
+    "Lindström", "Lindqvist", "Lindgren", "Berg", "Axelsson",
+    "Bergström", "Lundberg", "Lundgren", "Lundqvist", "Mattsson",
+    "Berglund", "Fredriksson", "Sandberg", "Henriksson", "Forsberg",
+    "Sjöberg", "Wallin", "Engström", "Eklund", "Danielsson",
+    "Håkansson", "Lundin", "Björk", "Bergman", "Gunnarsson", "Holm",
+    "Wikström", "Samuelsson", "Isaksson", "Fransson",
+]
+
+
+def _generate_character_name(rng: random.Random) -> tuple[str, str]:
+    """Slumpa ett svenskt karaktärsnamn (förnamn + efternamn).
+
+    Könet på förnamnet slumpas 50/50 — eleven kan få vilket som helst.
+    Efternamnet är könsneutralt (svensk konvention).
+    """
+    if rng.random() < 0.5:
+        first = rng.choice(FIRST_NAMES_F)
+    else:
+        first = rng.choice(FIRST_NAMES_M)
+    last = rng.choice(LAST_NAMES)
+    return first, last
+
+
 @dataclass
 class GeneratedProfile:
     profession: str
@@ -148,10 +193,18 @@ class GeneratedProfile:
     # poängen i 'veil of ignorance'-onboardingen.
     partner_profession: str | None
     partner_gross_salary: int | None
+    # Karaktärsnamn — separat från elevens login-namn. Sätts vid
+    # profilgenerering, deterministiskt på student_id.
+    character_first_name: str = ""
+    character_last_name: str = ""
 
 
 def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
     rng = random.Random(_seed_for_student(student_id))
+
+    # Generera karaktärsnamn FÖRST så samma seed alltid → samma namn
+    # även när andra fält ändras nedanför.
+    first_name, last_name = _generate_character_name(rng)
 
     prof = rng.choice(PROFESSIONS)
     employer = rng.choice(prof.employers)
@@ -266,6 +319,8 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
         partner_age=partner_age,
         partner_profession=partner_profession,
         partner_gross_salary=partner_gross_salary,
+        character_first_name=first_name,
+        character_last_name=last_name,
     )
 
 

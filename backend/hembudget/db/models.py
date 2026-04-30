@@ -1072,6 +1072,13 @@ class MailItem(TenantMixin, Base):
     sender_kind: Mapped[str] = mapped_column(
         String(20), nullable=False, default="other",
     )  # bank|cred|skv|ins|land|util|work|pen|other
+    # Detaljrad UNDER avsändarnamnet (mail-from-meta i prototypen).
+    # Exempel: "kreditkortsfaktura · ··· 4218", "myndighetspost · brev
+    # 2026-04-26", "hyresavi · 2 r o k Hökarängen". Skiljer sig från
+    # body_meta som visas under subject (innehållssammanfattning).
+    sender_meta: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True,
+    )
 
     # Brevet
     mail_type: Mapped[str] = mapped_column(

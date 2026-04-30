@@ -467,6 +467,12 @@ def _run_master_migrations(engine: Engine) -> None:
             _add("student_profiles", "pending_salary_monthly INTEGER")
         if "pending_effective_from" not in sp_cols:
             _add("student_profiles", "pending_effective_from DATE")
+        # V2 karaktärsnamn — separat från student.display_name
+        # (inloggningsnamn). Används i v2-vyer ("Sara, hennes vardag").
+        if "character_first_name" not in sp_cols:
+            _add("student_profiles", "character_first_name VARCHAR(60)")
+        if "character_last_name" not in sp_cols:
+            _add("student_profiles", "character_last_name VARCHAR(60)")
 
     # ALTER COLUMN TYPE: konvertera INTEGER → BIGINT på seed-kolumner
     # som lagrar uint32-värden (kan vara > 2^31-1). create_all ändrar

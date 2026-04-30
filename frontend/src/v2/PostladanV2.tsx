@@ -43,16 +43,44 @@ const STATUS_LABEL: Record<V2MailStatus, string> = {
   expired: "Utgången",
 };
 
-type TabKey = "all" | "unhandled" | "invoice" | "salary_slip" | "authority" | "info";
+type TabKey =
+  | "all"
+  | "unhandled"
+  | "invoice"
+  | "salary_slip"
+  | "authority"
+  | "other";
 
-const TAB_TO_FILTER: Record<TabKey, V2MailType | "unhandled" | undefined> = {
+const TAB_TO_FILTER: Record<
+  TabKey,
+  V2MailType | "unhandled" | "other" | undefined
+> = {
   all: undefined,
   unhandled: "unhandled",
   invoice: "invoice",
   salary_slip: "salary_slip",
   authority: "authority",
-  info: "info",
+  other: "other",
 };
+
+const MAIL_TYPE_LABEL: Record<V2MailType, string> = {
+  invoice: "faktura",
+  salary_slip: "lönespec",
+  authority: "myndighetspost",
+  reminder: "påminnelse",
+  info: "info-brev",
+};
+
+function deriveSenderMeta(m: V2MailItem): string {
+  // Använd explicit sender_meta om läraren har satt det.
+  if (m.sender_meta) return m.sender_meta;
+  // Annars härled från typ + ev. nummer.
+  const parts: string[] = [MAIL_TYPE_LABEL[m.mail_type]];
+  if (m.bankgiro) parts.push(`BG ${m.bankgiro}`);
+  else if (m.ocr_reference) parts.push(`OCR ${m.ocr_reference}`);
+  if (m.is_recurring) parts.push("återkommande");
+  return parts.join(" · ");
+}
 
 export function PostladanV2() {
   const [data, setData] = useState<MailData | null>(null);
@@ -108,15 +136,32 @@ export function PostladanV2() {
   }
 
   const { summary, items } = data;
+  // "Övrigt" = allt utöver invoice/salary_slip/authority/info (typiskt
+  // reminder). Räknat på backend som other_count + info-tabben är
+  // separat: prototypens "Övrigt" mappar till info_count + reminder.
+  const ovrigtCount = summary.info_count + summary.other_count;
 
-  // "Övrigt" är allt som inte är invoice/salary_slip/authority/info
-  // → reminder. Ej använt som tab än, men förbered count.
-  const otherCount =
-    summary.total_count -
-    summary.invoice_count -
-    summary.salary_slip_count -
-    summary.authority_count -
-    summary.info_count;
+  function fmtDateTime(iso: string | null): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleString("sv-SE", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  function fmtDate(iso: string | null): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  }
+  const spendLabel =
+    summary.spend_profile === "sparsam"
+      ? "sparsam"
+      : summary.spend_profile === "slosa"
+      ? "slösaktig"
+      : "balanserad";
 
   return (
     <div className="v2-postladan-root">
@@ -148,15 +193,16 @@ export function PostladanV2() {
             </p>
           </div>
           <div className="actor-meta">
-            Ohanterade: <strong>{summary.unhandled_count}</strong>
+            Spenderprofil <strong>{spendLabel}</strong>
             <br />
-            Att betala: <strong>{SEK(summary.to_pay_amount)} kr</strong>
+            Senaste utskick{" "}
+            <strong>{fmtDateTime(summary.last_received_at)}</strong>
             <br />
-            Inkommande: <strong>+ {SEK(summary.incoming_amount)} kr</strong>
+            Nästa väntat {fmtDate(summary.next_due_date)}
           </div>
         </header>
 
-        {/* STAT-ROW */}
+        {/* STAT-ROW · matchar prototypen */}
         <div className="mail-stat-row">
           <div className="mail-stat">
             <div className="mail-stat-eye">Ohanterade</div>
@@ -166,7 +212,7 @@ export function PostladanV2() {
             <div className="mail-stat-sub">kräver åtgärd</div>
           </div>
           <div className="mail-stat">
-            <div className="mail-stat-eye">Att betala</div>
+            <div className="mail-stat-eye">Att betala denna v</div>
             <div className="mail-stat-num warm">
               <em>{SEK(summary.to_pay_amount)}</em> kr
             </div>
@@ -175,7 +221,7 @@ export function PostladanV2() {
             </div>
           </div>
           <div className="mail-stat">
-            <div className="mail-stat-eye">Inkommande</div>
+            <div className="mail-stat-eye">Inkommande denna v</div>
             <div className="mail-stat-num green">
               <em>+ {SEK(summary.incoming_amount)}</em> kr
             </div>
@@ -184,10 +230,10 @@ export function PostladanV2() {
             </div>
           </div>
           <div className="mail-stat">
-            <div className="mail-stat-eye">Försenade</div>
+            <div className="mail-stat-eye">Påminnelse-risk</div>
             <div className="mail-stat-num">{summary.overdue_count}</div>
             <div className="mail-stat-sub">
-              {summary.overdue_count === 0 ? "inga" : "kräver åtgärd"}
+              {summary.overdue_count === 0 ? "inga försenade" : "försenade"}
             </div>
           </div>
         </div>
@@ -247,21 +293,16 @@ export function PostladanV2() {
             Myndighet{" "}
             <span className="count">{summary.authority_count}</span>
           </a>
-          {(otherCount > 0 || summary.info_count > 0) && (
-            <a
-              className={`mail-tab${tab === "info" ? " active" : ""}`}
-              onClick={(e) => {
-                e.preventDefault();
-                setTab("info");
-              }}
-              href="#"
-            >
-              Info{" "}
-              <span className="count">
-                {summary.info_count + Math.max(0, otherCount)}
-              </span>
-            </a>
-          )}
+          <a
+            className={`mail-tab${tab === "other" ? " active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setTab("other");
+            }}
+            href="#"
+          >
+            Övrigt <span className="count">{ovrigtCount}</span>
+          </a>
         </div>
 
         {/* LIST */}
@@ -339,16 +380,7 @@ export function PostladanV2() {
                   <div>
                     <div className="mail-from">{m.sender}</div>
                     <div className="mail-from-meta">
-                      {m.mail_type === "invoice"
-                        ? "faktura"
-                        : m.mail_type === "salary_slip"
-                        ? "lönespec"
-                        : m.mail_type === "authority"
-                        ? "myndighetspost"
-                        : m.mail_type === "reminder"
-                        ? "påminnelse"
-                        : "info-brev"}
-                      {m.is_recurring ? " · återkommande" : ""}
+                      {deriveSenderMeta(m)}
                     </div>
                   </div>
                   <div>

@@ -466,6 +466,41 @@ def test_v2_hub_includes_profile_when_set(fx) -> None:
     assert char["personality"] == "blandad"
 
 
+def test_v2_hub_uses_character_name_when_set(fx) -> None:
+    """När StudentProfile har character_first_name + character_last_name
+    ska de användas som display_name (inte student.display_name som är
+    elevens login-namn)."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            character_first_name="Sara",
+            character_last_name="Andersson",
+            profession="Undersköterska",
+            employer="Region Stockholm",
+            gross_salary_monthly=30000,
+            net_salary_monthly=24000,
+            tax_rate_effective=0.2,
+            age=22,
+            city="Stockholm",
+            family_status="ensam",
+            housing_type="hyresratt",
+            housing_monthly=8000,
+            personality="blandad",
+        ))
+
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    char = r.json()["character"]
+    # display_name = karaktärsnamn, inte elevens login-namn "Eva"
+    assert char["display_name"] == "Sara Andersson"
+    assert char["first_name"] == "Sara"
+    assert char["last_name"] == "Andersson"
+
+
 def test_v2_hub_reflects_v2_fields_after_onboarding(fx) -> None:
     """Onboarding-svaren ska speglas direkt i /v2/hub."""
     client, _tch, _sa, stu, _tid, _said, sid = fx

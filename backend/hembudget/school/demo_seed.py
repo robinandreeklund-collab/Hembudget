@@ -145,6 +145,11 @@ def build_demo() -> dict:
                 profile_kwargs["partner_profession"] = gen.partner_profession
             if master_has_column("student_profiles", "partner_gross_salary"):
                 profile_kwargs["partner_gross_salary"] = gen.partner_gross_salary
+            # Karaktärsnamn (V2)
+            if master_has_column("student_profiles", "character_first_name"):
+                profile_kwargs["character_first_name"] = gen.character_first_name
+            if master_has_column("student_profiles", "character_last_name"):
+                profile_kwargs["character_last_name"] = gen.character_last_name
             s.add(StudentProfile(**profile_kwargs))
             # Skapa scope-DB så kategorier seedas
             get_scope_engine(scope_for_student(stu))

@@ -93,7 +93,8 @@ export function HubV2() {
           <div>
             <span className="hub-pill">Privatekonomi som händer</span>
             <h1 className="hub-h1">
-              {character.display_name.split(" ")[0]}, hennes <em>vardag</em>.
+              {character.first_name || character.display_name.split(" ")[0]},{" "}
+              hennes <em>vardag</em>.
             </h1>
             <p className="hub-lead">
               Du driver din ekonomi i <em>realtid</em>. Pentagonen tippar när

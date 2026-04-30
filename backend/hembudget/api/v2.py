@@ -92,7 +92,12 @@ class OnboardingCompleteResponse(BaseModel):
 # === Hub aggregate-data (riktig data från DB) ===
 
 class HubCharacter(BaseModel):
+    # display_name = karaktärsnamn (Sara Andersson) om
+    # StudentProfile.character_first_name + character_last_name finns,
+    # annars fallback till student.display_name (login-namnet).
     display_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     profession: Optional[str] = None
     employer: Optional[str] = None
     age: Optional[int] = None
@@ -190,8 +195,28 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             .filter(StudentProfile.student_id == info.student_id)
             .one_or_none()
         )
+        # Karaktärsnamn — använd StudentProfile.character_first/last_name
+        # om de finns. Fallback till student.display_name så v1-elever
+        # eller demo-konton inte får tomt namn. Använder _safe_profile_attr
+        # för att inte krascha om migrationen inte hunnit lägga till
+        # kolumnerna i prod-Postgres.
+        from .school import _safe_profile_attr  # type: ignore[attr-defined]
+        first_name: Optional[str] = None
+        last_name: Optional[str] = None
+        if profile is not None:
+            first_name = _safe_profile_attr(profile, "character_first_name")
+            last_name = _safe_profile_attr(profile, "character_last_name")
+        if first_name and last_name:
+            display = f"{first_name} {last_name}"
+        elif first_name:
+            display = first_name
+        else:
+            display = student.display_name
+
         char = HubCharacter(
-            display_name=student.display_name,
+            display_name=display,
+            first_name=first_name,
+            last_name=last_name,
             profession=profile.profession if profile else None,
             employer=profile.employer if profile else None,
             age=profile.age if profile else None,
@@ -1037,6 +1062,7 @@ class V2MailItemRow(BaseModel):
     sender: str
     sender_short: Optional[str] = None
     sender_kind: MailSenderKind
+    sender_meta: Optional[str] = None
     mail_type: MailType
     subject: str
     body_meta: Optional[str] = None
@@ -1058,9 +1084,13 @@ class V2MailSummary(BaseModel):
     salary_slip_count: int
     authority_count: int
     info_count: int
+    other_count: int  # reminder + ev. övrigt
     to_pay_amount: float
     incoming_amount: float
     overdue_count: int
+    spend_profile: str
+    last_received_at: Optional[datetime] = None
+    next_due_date: Optional[_date] = None
 
 
 class V2MailResponse(BaseModel):
@@ -1079,9 +1109,11 @@ def _empty_mail(student_id: int) -> V2MailResponse:
             salary_slip_count=0,
             authority_count=0,
             info_count=0,
+            other_count=0,
             to_pay_amount=0,
             incoming_amount=0,
             overdue_count=0,
+            spend_profile="balanserad",
         ),
         items=[],
     )
@@ -1102,6 +1134,15 @@ def get_mail(
     if info.role != "student" or info.student_id is None:
         return _empty_mail(0)
 
+    # Hämta spend_profile från student-tabellen för header-meta
+    spend_profile = "balanserad"
+    with master_session() as mdb:
+        st = mdb.get(Student, info.student_id)
+        if st:
+            spend_profile = (
+                getattr(st, "v2_spend_profile", None) or "balanserad"
+            )
+
     try:
         with session_scope() as s:
             q = s.query(MailItem).order_by(
@@ -1117,6 +1158,8 @@ def get_mail(
                 q = q.filter(MailItem.mail_type == "authority")
             elif filter == "info":
                 q = q.filter(MailItem.mail_type == "info")
+            elif filter == "other":
+                q = q.filter(MailItem.mail_type.in_(("reminder",)))
 
             mails = q.all()
             items: list[V2MailItemRow] = []
@@ -1136,9 +1179,12 @@ def get_mail(
             salary_slip_count = 0
             authority_count = 0
             info_count = 0
+            other_count = 0
             to_pay = Decimal("0")
             incoming = Decimal("0")
             overdue = 0
+            last_received: Optional[datetime] = None
+            next_due: Optional[_date] = None
 
             for m in all_mails:
                 if m.status == "unhandled":
@@ -1151,6 +1197,8 @@ def get_mail(
                     authority_count += 1
                 elif m.mail_type == "info":
                     info_count += 1
+                else:
+                    other_count += 1  # reminder + ev. okända typer
                 if (
                     m.amount is not None
                     and m.amount < 0
@@ -1169,6 +1217,15 @@ def get_mail(
                     and m.status not in ("paid", "exported")
                 ):
                     overdue += 1
+                if last_received is None or m.received_at > last_received:
+                    last_received = m.received_at
+                if (
+                    m.due_date is not None
+                    and m.due_date >= today
+                    and m.status not in ("paid",)
+                    and (next_due is None or m.due_date < next_due)
+                ):
+                    next_due = m.due_date
 
             for m in mails:
                 items.append(V2MailItemRow(
@@ -1176,6 +1233,7 @@ def get_mail(
                     sender=m.sender,
                     sender_short=m.sender_short,
                     sender_kind=m.sender_kind,  # type: ignore[arg-type]
+                    sender_meta=m.sender_meta,
                     mail_type=m.mail_type,  # type: ignore[arg-type]
                     subject=m.subject,
                     body_meta=m.body_meta,
@@ -1199,9 +1257,13 @@ def get_mail(
                     salary_slip_count=salary_slip_count,
                     authority_count=authority_count,
                     info_count=info_count,
+                    other_count=other_count,
                     to_pay_amount=float(to_pay),
                     incoming_amount=float(incoming),
                     overdue_count=overdue,
+                    spend_profile=spend_profile,
+                    last_received_at=last_received,
+                    next_due_date=next_due,
                 ),
                 items=items,
             )
@@ -1243,6 +1305,7 @@ def update_mail_status(
             sender=m.sender,
             sender_short=m.sender_short,
             sender_kind=m.sender_kind,  # type: ignore[arg-type]
+            sender_meta=m.sender_meta,
             mail_type=m.mail_type,  # type: ignore[arg-type]
             subject=m.subject,
             body_meta=m.body_meta,
@@ -1264,6 +1327,7 @@ class V2MailSeedItem(BaseModel):
     sender: str
     sender_short: Optional[str] = None
     sender_kind: MailSenderKind = "other"
+    sender_meta: Optional[str] = None
     mail_type: MailType
     subject: str
     body_meta: Optional[str] = None
@@ -1338,6 +1402,7 @@ def seed_mail_for_student(
                     sender=item.sender,
                     sender_short=item.sender_short,
                     sender_kind=item.sender_kind,
+                    sender_meta=item.sender_meta,
                     mail_type=item.mail_type,
                     subject=item.subject,
                     body_meta=item.body_meta,

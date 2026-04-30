@@ -29,7 +29,11 @@ export type OnboardingComplete = {
 };
 
 export type HubCharacter = {
+  /** Karaktärens fulla namn (förnamn + efternamn) eller fallback till
+   * student.display_name om karaktärsnamnet saknas i DB:n. */
   display_name: string;
+  first_name: string | null;
+  last_name: string | null;
   profession: string | null;
   employer: string | null;
   age: number | null;
@@ -214,6 +218,7 @@ export type V2MailItem = {
   sender: string;
   sender_short: string | null;
   sender_kind: V2MailSenderKind;
+  sender_meta: string | null;
   mail_type: V2MailType;
   subject: string;
   body_meta: string | null;
@@ -235,9 +240,13 @@ export type V2MailSummary = {
   salary_slip_count: number;
   authority_count: number;
   info_count: number;
+  other_count: number;
   to_pay_amount: number;
   incoming_amount: number;
   overdue_count: number;
+  spend_profile: string;
+  last_received_at: string | null;
+  next_due_date: string | null;
 };
 
 export type MailData = {
@@ -250,6 +259,7 @@ export type V2MailSeedItem = {
   sender: string;
   sender_short?: string;
   sender_kind?: V2MailSenderKind;
+  sender_meta?: string;
   mail_type: V2MailType;
   subject: string;
   body_meta?: string;
@@ -285,7 +295,7 @@ export const v2Api = {
   budget: (month?: string) =>
     api<BudgetData>(`/v2/budget${month ? `?month=${month}` : ""}`),
   goals: () => api<GoalsData>("/v2/mal"),
-  postladan: (filter?: V2MailType | "unhandled") =>
+  postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>
     api<V2MailItem>(`/v2/postladan/${mailId}/status`, {
