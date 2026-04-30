@@ -3044,7 +3044,120 @@ body[data-mode="business"] .ms-knob {
               <span class="tx-amt">−425 kr</span>
             </div>
           </div>
-          <div style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 12px; letter-spacing: 0.6px; text-transform: uppercase;">+ 114 transaktioner i april · 12 ovettade</div>
+          <div style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 12px; letter-spacing: 0.6px; text-transform: uppercase;">+ 114 transaktioner i april · 12 ovettade · <a onclick="go('bok'); return false;" href="#" style="color: var(--warm); text-decoration: underline; cursor: pointer;">öppna bokföringen för att klassa</a></div>
+
+          <!-- KOMMANDE FAKTUROR med datum-väljare -->
+          <div class="section-eye" style="margin-top: 32px;">Kommande dragningar &amp; betalningar · välj datum</div>
+          <div class="biz-table">
+            <div class="biz-table-row head" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;">
+              <span></span><span>Mottagare</span><span>OCR / referens</span><span>Belopp</span><span>Föreslaget datum</span><span>Status</span>
+            </div>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Stockholmshem · hyra maj</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Autogiro · obligatorisk</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">21 41 552 88</span>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700; text-align: right;">7 240 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">1 maj · låst</span>
+              <span class="biz-status sent">Schemalagd</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Tibber · el april</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">e-faktura · godkänd</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">TB-742 1182 4</span>
+              <span style="font-family: var(--serif); color: #fff; text-align: right;">812 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">4 maj</span>
+              <span class="biz-status sent">Schemalagd</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Folksam · hem + olycksfall</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Autogiro</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">FS-22 4156</span>
+              <span style="font-family: var(--serif); color: #fff; text-align: right;">320 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">5 maj</span>
+              <span class="biz-status sent">Schemalagd</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px; background: rgba(220,76,43,0.06); border-left: 3px solid var(--accent);" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Folktandvården <em style="color: var(--warm); font-size: 10px;">(NY · välj datum)</em></div><div style="font-family: var(--mono); font-size: 9px; color: var(--accent); margin-top: 2px;">Cariesfyllning · 4 200 · 30 dgr förfall</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">FT-8842 19</span>
+              <span style="font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 700; text-align: right;">4 200 kr</span>
+              <span style="position: relative;"><select style="background: rgba(255,255,255,0.04); border: 1px solid var(--accent); color: #fff; padding: 6px 8px; border-radius: 6px; font-family: var(--mono); font-size: 10px; width: 100%;"><option>Idag (29 apr)</option><option selected>26 maj (efter lön)</option><option>30 maj (sista dag)</option><option>Delbetala 6 mån</option></select></span>
+              <span class="biz-status open">Bestäm</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Apoteket · receptmedicin</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Faktura · högkostnadsskydd</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">AP-441 23</span>
+              <span style="font-family: var(--serif); color: #fff; text-align: right;">142 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">8 maj</span>
+              <span class="biz-status sent">Schemalagd</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">Telia · mobil + bredband</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">e-faktura · samlad</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">TEL-9982 11</span>
+              <span style="font-family: var(--serif); color: #fff; text-align: right;">508 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">12 maj</span>
+              <span class="biz-status sent">Schemalagd</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">SEB Visa · CC-faktura april</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">47 transaktioner · välj betalsätt</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">421 80 9314 7</span>
+              <span style="font-family: var(--serif); color: #fff; text-align: right;">4 822 kr</span>
+              <span style="position: relative;"><select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 6px 8px; border-radius: 6px; font-family: var(--mono); font-size: 10px; width: 100%;"><option>28 maj (helt)</option><option>28 maj (min 200)</option><option>Delbetala 12 mån</option></select></span>
+              <span class="biz-status open">Välj</span>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 32px 1.8fr 1fr 100px 110px 110px;" href="#">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+              <div><div style="font-family: var(--serif); font-size: 14px; color: #fff; font-weight: 700;">CSN · annuitet maj</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">Autogiro · varje 28:e</div></div>
+              <span style="font-family: var(--mono); font-size: 11px; color: var(--text-mid);">9342 19</span>
+              <span style="font-family: var(--serif); color: #fff; text-align: right;">312 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">28 maj</span>
+              <span class="biz-status sent">Schemalagd</span>
+            </a>
+          </div>
+          <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px;">Total maj: <strong style="color: #fff;">18 356 kr</strong> · efter lön 25 maj: <strong style="color: #6ee7b7;">+ 4 044 kr kvar</strong></div>
+            <button class="cta-btn" onclick="go('bankid')">Signera alla schemalagda →</button>
+          </div>
+
+          <!-- SCHEMALAGDA ÖVERFÖRINGAR -->
+          <div class="section-eye" style="margin-top: 32px;">Schemalagda överföringar · pay yourself first</div>
+          <div class="biz-table">
+            <div class="biz-table-row head" style="grid-template-columns: 80px 1.6fr 100px 100px 100px;">
+              <span>Datum</span><span>Från / till</span><span>Belopp</span><span>Frekvens</span><span></span>
+            </div>
+            <a class="biz-table-row" style="grid-template-columns: 80px 1.6fr 100px 100px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px;">25:e (lönedag)</span>
+              <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lönekonto → Buffert (sparkonto)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Sparmål 1 · 22 000 kr</div></div>
+              <span style="font-family: var(--serif); color: var(--warm);">600 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">månad</span>
+              <a style="font-family: var(--mono); font-size: 9px; color: var(--warm); cursor: pointer;">redigera</a>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 80px 1.6fr 100px 100px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px;">25:e (lönedag)</span>
+              <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lönekonto → Avanza ISK</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Globalfond · indexsparande</div></div>
+              <span style="font-family: var(--serif); color: var(--warm);">600 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">månad</span>
+              <a style="font-family: var(--mono); font-size: 9px; color: var(--warm); cursor: pointer;">redigera</a>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 80px 1.6fr 100px 100px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px;">26:e</span>
+              <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lönekonto → Körkort-mål</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Sparmål 2 · 15 000 kr · klar mar 2028</div></div>
+              <span style="font-family: var(--serif); color: var(--warm);">600 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">månad</span>
+              <a style="font-family: var(--mono); font-size: 9px; color: var(--warm); cursor: pointer;">redigera</a>
+            </a>
+            <a class="biz-table-row" style="grid-template-columns: 80px 1.6fr 100px 100px 100px;" href="#">
+              <span style="font-family: var(--mono); font-size: 10px;">26:e</span>
+              <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lönekonto → Interrail-mål</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Sparmål 3 · 8 000 kr · klar jul 2027</div></div>
+              <span style="font-family: var(--serif); color: var(--warm);">600 kr</span>
+              <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">månad</span>
+              <a style="font-family: var(--mono); font-size: 9px; color: var(--warm); cursor: pointer;">redigera</a>
+            </a>
+          </div>
+          <div style="margin-top: 12px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px;">Total sparmål: <strong style="color: #6ee7b7;">2 400 kr/mån</strong> · 10,7 % av nettolön · över riktvärde 10 %</div>
 
           <!-- PEDAGOGIK · BANKEN -->
           <div class="peda">
@@ -5589,21 +5702,43 @@ body[data-mode="business"] .ms-knob {
         <div class="cc-stat"><div class="cc-stat-eye">Sparat april</div><div class="cc-stat-num warm"><em>+ 3 362</em> kr</div><div class="cc-stat-sub">14 % av inkomst</div></div>
       </div>
 
-      <div class="section-eye">12 ovettade transaktioner · klassa själv</div>
-      <div class="cc-tx-list" style="margin-bottom: 22px;">
-        <div class="cc-tx unset"><span class="cc-tx-date">28 apr</span><div><div class="cc-tx-name">Coop Konsum Hökarängen</div><div class="cc-tx-meta">Kort 4218 · 18:42</div></div><span class="cc-tx-cat unset">Klassa</span><span class="cc-tx-amt">−312 kr</span><a class="cc-tx-act">→</a></div>
-        <div class="cc-tx unset"><span class="cc-tx-date">28 apr</span><div><div class="cc-tx-name">Max Hökarängen</div><div class="cc-tx-meta">Kort 4218 · 17:08</div></div><span class="cc-tx-cat unset">Klassa</span><span class="cc-tx-amt">−168 kr</span><a class="cc-tx-act">→</a></div>
-        <div class="cc-tx unset"><span class="cc-tx-date">26 apr</span><div><div class="cc-tx-name">Bio Rio Hornstull</div><div class="cc-tx-meta">Kort 4218 · 19:42 · bio + popcorn</div></div><span class="cc-tx-cat unset">Klassa</span><span class="cc-tx-amt">−195 kr</span><a class="cc-tx-act">→</a></div>
-        <div class="cc-tx unset"><span class="cc-tx-date">24 apr</span><div><div class="cc-tx-name">H&amp;M Globen</div><div class="cc-tx-meta">2 plagg · efter skolan</div></div><span class="cc-tx-cat unset">Klassa</span><span class="cc-tx-amt">−498 kr</span><a class="cc-tx-act">→</a></div>
-        <div class="cc-tx unset"><span class="cc-tx-date">17 apr</span><div><div class="cc-tx-name">Hemköp Globen</div><div class="cc-tx-meta">Kort 4218 · 19:14</div></div><span class="cc-tx-cat unset">Klassa</span><span class="cc-tx-amt">−425 kr</span><a class="cc-tx-act">→</a></div>
-        <div class="cc-tx unset"><span class="cc-tx-date">17 apr</span><div><div class="cc-tx-name">Foodora</div><div class="cc-tx-meta">Pizza + leverans</div></div><span class="cc-tx-cat unset">Klassa</span><span class="cc-tx-amt">−187 kr</span><a class="cc-tx-act">→</a></div>
+      <!-- FILTER-BAR -->
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; padding: 14px 18px; background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px;">
+        <span style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-mid);">Filter:</span>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 11px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12.5px;">
+          <option>Alla konton</option><option>Lönekonto</option><option>SEB Visa (kort)</option><option>Sparkonto</option><option>Kontant</option>
+        </select>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 11px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12.5px;">
+          <option>Alla statusar</option><option>Ovettade (12)</option><option>Auto-klassade</option><option>Manuella</option><option>AI-förslag</option>
+        </select>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 11px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12.5px;">
+          <option>April 2026</option><option>Mars 2026</option><option>Senaste 3 mån</option><option>Hela 2026</option>
+        </select>
+        <input type="text" placeholder="Sök transaktion..." style="flex: 1; min-width: 180px; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12.5px;">
+        <button style="background: var(--warm); color: #422006; border: 0; padding: 8px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Klassa alla 12 (AI)</button>
       </div>
 
-      <div class="section-eye">Auto-klassade · regelmotor</div>
-      <div class="cc-tx-list">
-        <div class="cc-tx"><span class="cc-tx-date">25 apr</span><div><div class="cc-tx-name">Lön · Sthlm Sjukhus AB</div><div class="cc-tx-meta">OCR 18 5840 21</div></div><span class="cc-tx-cat">Lön</span><span class="cc-tx-amt" style="color: #6ee7b7;">+ 22 400</span><a class="cc-tx-act">se</a></div>
-        <div class="cc-tx"><span class="cc-tx-date">22 apr</span><div><div class="cc-tx-name">CSN · Studiebidrag</div><div class="cc-tx-meta">OCR 9342 19</div></div><span class="cc-tx-cat">Bidrag</span><span class="cc-tx-amt" style="color: #6ee7b7;">+ 1 250</span><a class="cc-tx-act">se</a></div>
-        <div class="cc-tx"><span class="cc-tx-date">28 mar</span><div><div class="cc-tx-name">CSN · Amortering</div><div class="cc-tx-meta">Autogiro</div></div><span class="cc-tx-cat">Skuld</span><span class="cc-tx-amt">−312</span><a class="cc-tx-act">se</a></div>
+      <div class="section-eye">12 ovettade · klassa per rad eller bulk</div>
+      <div class="biz-table" style="margin-bottom: 22px;">
+        <div class="biz-table-row head" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px;"><span>Datum</span><span>Beskrivning</span><span>Kategori / konto</span><span>Belopp</span><span>Detalj</span></div>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px; cursor: pointer;" onclick="go('tx'); return false;" href="#"><span style="font-family: var(--mono); font-size: 10px;">28 apr 18:42</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Coop Konsum Hökarängen</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Kort 4218 · AI: <em style="color: var(--warm); font-style: italic;">Mat (84 %)</em></div></div><select onclick="event.stopPropagation()" style="background: rgba(220,76,43,0.08); border: 1px dashed var(--accent); color: #fff; padding: 6px 8px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Välj kategori...</option><option>Mat &amp; livsmedel</option><option>Restaurang</option><option>Hushåll</option><option>Annat</option></select><span style="font-family: var(--serif); color: #fff; text-align: right;">−312 kr</span><a class="cc-tx-act" onclick="event.stopPropagation()" style="font-family: var(--mono); font-size: 9px; color: var(--warm);">öppna detalj</a></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px; cursor: pointer;" onclick="go('tx'); return false;" href="#"><span style="font-family: var(--mono); font-size: 10px;">28 apr 17:08</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Max Hökarängen</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Kort 4218 · AI: <em style="color: var(--warm); font-style: italic;">Restaurang (92 %)</em></div></div><select onclick="event.stopPropagation()" style="background: rgba(220,76,43,0.08); border: 1px dashed var(--accent); color: #fff; padding: 6px 8px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Välj kategori...</option><option>Mat &amp; livsmedel</option><option selected>Restaurang</option><option>Nöje</option><option>Annat</option></select><span style="font-family: var(--serif); color: #fff; text-align: right;">−168 kr</span><a class="cc-tx-act" onclick="event.stopPropagation()" style="font-family: var(--mono); font-size: 9px; color: var(--warm);">öppna detalj</a></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px; cursor: pointer;" onclick="go('tx'); return false;" href="#"><span style="font-family: var(--mono); font-size: 10px;">26 apr 19:42</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Bio Rio Hornstull</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Kort 4218 · bio + popcorn · AI: <em style="color: var(--warm); font-style: italic;">Nöje (88 %)</em></div></div><select onclick="event.stopPropagation()" style="background: rgba(220,76,43,0.08); border: 1px dashed var(--accent); color: #fff; padding: 6px 8px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Välj kategori...</option><option selected>Nöje &amp; kultur</option><option>Restaurang</option><option>Annat</option></select><span style="font-family: var(--serif); color: #fff; text-align: right;">−195 kr</span><a class="cc-tx-act" onclick="event.stopPropagation()" style="font-family: var(--mono); font-size: 9px; color: var(--warm);">öppna detalj</a></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px; cursor: pointer;" onclick="go('tx'); return false;" href="#"><span style="font-family: var(--mono); font-size: 10px;">24 apr 14:32</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">H&amp;M Globen</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">2 plagg · AI: <em style="color: var(--warm); font-style: italic;">Kläder (76 %)</em></div></div><select onclick="event.stopPropagation()" style="background: rgba(220,76,43,0.08); border: 1px dashed var(--accent); color: #fff; padding: 6px 8px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Välj kategori...</option><option selected>Kläder &amp; skor</option><option>Annat</option></select><span style="font-family: var(--serif); color: #fff; text-align: right;">−498 kr</span><a class="cc-tx-act" onclick="event.stopPropagation()" style="font-family: var(--mono); font-size: 9px; color: var(--warm);">öppna detalj</a></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px; cursor: pointer;" onclick="go('tx'); return false;" href="#"><span style="font-family: var(--mono); font-size: 10px;">17 apr 19:14</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Hemköp Globen</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Kort 4218 · AI: <em style="color: var(--warm); font-style: italic;">Mat (91 %)</em></div></div><select onclick="event.stopPropagation()" style="background: rgba(220,76,43,0.08); border: 1px dashed var(--accent); color: #fff; padding: 6px 8px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Välj kategori...</option><option selected>Mat &amp; livsmedel</option><option>Restaurang</option></select><span style="font-family: var(--serif); color: #fff; text-align: right;">−425 kr</span><a class="cc-tx-act" onclick="event.stopPropagation()" style="font-family: var(--mono); font-size: 9px; color: var(--warm);">öppna detalj</a></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1.2fr 90px 110px; cursor: pointer;" onclick="go('tx'); return false;" href="#"><span style="font-family: var(--mono); font-size: 10px;">17 apr 19:48</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Foodora · pizza + lev</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">efter laxsim · AI: <em style="color: var(--warm); font-style: italic;">Restaurang (94 %)</em></div></div><select onclick="event.stopPropagation()" style="background: rgba(220,76,43,0.08); border: 1px dashed var(--accent); color: #fff; padding: 6px 8px; border-radius: 4px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Välj kategori...</option><option selected>Restaurang</option><option>Mat &amp; livsmedel</option></select><span style="font-family: var(--serif); color: #fff; text-align: right;">−187 kr</span><a class="cc-tx-act" onclick="event.stopPropagation()" style="font-family: var(--mono); font-size: 9px; color: var(--warm);">öppna detalj</a></a>
+        <div style="text-align: center; padding: 14px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 1px;">+ 6 ovettade till — visa alla 12 →</div>
+      </div>
+
+      <div class="section-eye">Auto-klassade · regelmotor (95 visade)</div>
+      <div class="biz-table">
+        <div class="biz-table-row head" style="grid-template-columns: 80px 1.4fr 1fr 100px 90px;"><span>Datum</span><span>Beskrivning</span><span>Kategori</span><span>Konto</span><span>Belopp</span></div>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1fr 100px 90px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">25 apr</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lön · Sthlm Sjukhus AB</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">OCR 18 5840 21 · regelmotor</div></div><span class="biz-status paid">Lön</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lönekonto</span><span style="font-family: var(--serif); color: #6ee7b7; text-align: right;">+ 22 400</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1fr 100px 90px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">22 apr</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">CSN · Studiebidrag</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">OCR 9342 19 · regelmotor</div></div><span class="biz-status paid">Bidrag</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lönekonto</span><span style="font-family: var(--serif); color: #6ee7b7; text-align: right;">+ 1 250</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1fr 100px 90px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">28 mar</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">CSN · Amortering</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Autogiro · regelmotor</div></div><span class="biz-status sent">Skuld</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lönekonto</span><span style="font-family: var(--serif); color: #fff; text-align: right;">−312</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1fr 100px 90px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">25 mar</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">SL · Reskassa autoladd</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">320 kr · vana</div></div><span class="biz-status sent">Transport</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lönekonto</span><span style="font-family: var(--serif); color: #fff; text-align: right;">−320</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 80px 1.4fr 1fr 100px 90px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">24 mar</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Spotify Premium</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Återkommande · regelmotor</div></div><span class="biz-status sent">Förbrukning</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">SEB Visa</span><span style="font-family: var(--serif); color: #fff; text-align: right;">−119</span></a>
+        <div style="text-align: center; padding: 12px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 1px;">+ 90 transaktioner till — paginering →</div>
       </div>
 
       <div class="peda">
@@ -5820,32 +5955,35 @@ body[data-mode="business"] .ms-knob {
       </header>
 
       <div class="cc-summary" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 22px;">
-        <div class="cc-stat" style="border-left: 3px solid var(--warm); padding-left: 16px;">
-          <div class="cc-stat-eye warm" style="color: var(--warm);">PÅGÅR · steg 4/12</div>
+        <a onclick="go('modul'); return false;" href="#" style="text-decoration: none;" class="cc-stat" style="border-left: 3px solid var(--warm); padding-left: 16px; cursor: pointer; transition: background .2s var(--ease);">
+          <div class="cc-stat-eye warm" style="color: var(--warm);">PÅGÅR · steg 4/12 · klicka →</div>
           <div class="cc-stat-num"><em>Bolån</em></div>
-          <div class="cc-stat-sub">Ditt första bolån · KALP just nu · 14 min kvar i steget</div>
+          <div class="cc-stat-sub" style="color: var(--text-mid);">Ditt första bolån · KALP just nu · 14 min kvar i steget</div>
           <div style="margin-top: 12px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px;"><div style="height: 100%; width: 33%; background: var(--warm); border-radius: 100px;"></div></div>
-        </div>
-        <div class="cc-stat" style="border-left: 3px solid var(--warm); padding-left: 16px;">
-          <div class="cc-stat-eye" style="color: var(--warm);">PÅGÅR · runda 2/5</div>
+        </a>
+        <a onclick="go('maria'); return false;" href="#" style="text-decoration: none;" class="cc-stat" style="border-left: 3px solid var(--warm); padding-left: 16px; cursor: pointer;">
+          <div class="cc-stat-eye" style="color: var(--warm);">PÅGÅR · runda 2/5 · klicka →</div>
           <div class="cc-stat-num"><em>Lönesamtalet</em></div>
-          <div class="cc-stat-sub">Maria-AI · väntar på Marias R2-svar</div>
+          <div class="cc-stat-sub" style="color: var(--text-mid);">Maria-AI · väntar på Marias R2-svar</div>
           <div style="margin-top: 12px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px;"><div style="height: 100%; width: 40%; background: var(--warm); border-radius: 100px;"></div></div>
-        </div>
-        <div class="cc-stat" style="border-left: 3px solid var(--warm); padding-left: 16px;">
-          <div class="cc-stat-eye" style="color: var(--warm);">PÅGÅR · steg 7/9</div>
+        </a>
+        <a onclick="go('skatt'); return false;" href="#" style="text-decoration: none;" class="cc-stat" style="border-left: 3px solid var(--warm); padding-left: 16px; cursor: pointer;">
+          <div class="cc-stat-eye" style="color: var(--warm);">PÅGÅR · steg 7/9 · klicka →</div>
           <div class="cc-stat-num"><em>Skatten</em></div>
-          <div class="cc-stat-sub">Skatten i april · ränteavdrag-granskning kvar</div>
+          <div class="cc-stat-sub" style="color: var(--text-mid);">Skatten i april · ränteavdrag-granskning kvar</div>
           <div style="margin-top: 12px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px;"><div style="height: 100%; width: 78%; background: var(--warm); border-radius: 100px;"></div></div>
-        </div>
+        </a>
       </div>
 
       <div class="section-eye">Möjliga moduler · klicka för att starta</div>
       <div class="acct-grid" style="grid-template-columns: repeat(3, 1fr);">
         <a class="acct" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">Din första månad</div><div class="acct-num">8 steg · ~ 45 min · klar 12 mar</div></div><div><div class="acct-bal" style="color: #6ee7b7;">Klar</div><div class="acct-bal-meta">5/5 stjärnor</div></div></a>
-        <a class="acct" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">Pension om 40 år</div><div class="acct-num">5 steg · ~ 25 min · ej startad</div></div><div><div class="acct-bal" style="color: var(--text-mid);">Starta</div><div class="acct-bal-meta">Anders rek.</div></div></a>
-        <a class="acct" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">ISK-portföljen</div><div class="acct-num">6 steg · ~ 30 min · klar 28 feb</div></div><div><div class="acct-bal" style="color: #6ee7b7;">Klar</div><div class="acct-bal-meta">4/5 stjärnor</div></div></a>
+        <a class="acct" onclick="go('modul-pension'); return false;" href="#" style="border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.04);"><div><div class="acct-eye" style="color: #c7d2fe;">SYSTEMMODUL · NY</div><div class="acct-name">Pension om 40 år</div><div class="acct-num">5 steg · ~ 25 min · rekommenderad av Anders</div></div><div><div class="acct-bal" style="color: #c7d2fe;">Starta →</div><div class="acct-bal-meta">klicka</div></div></a>
+        <a class="acct" onclick="go('modul-isk'); return false;" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">ISK-portföljen</div><div class="acct-num">6 steg · ~ 30 min · klar 28 feb · gör om?</div></div><div><div class="acct-bal" style="color: #6ee7b7;">Klar (4/5)</div><div class="acct-bal-meta">visa →</div></div></a>
         <a class="acct" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">Försäkring i livet</div><div class="acct-num">4 steg · ~ 20 min · ej startad</div></div><div><div class="acct-bal" style="color: var(--text-mid);">Starta</div><div class="acct-bal-meta">— frivillig</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">Anomali-jakten</div><div class="acct-num">3 steg · ~ 15 min · ej startad</div></div><div><div class="acct-bal" style="color: var(--text-mid);">Starta</div><div class="acct-bal-meta">för F-nivå Bokföring</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">SYSTEMMODUL</div><div class="acct-name">Bostad — köpa eller hyra?</div><div class="acct-num">7 steg · ~ 40 min · ej startad</div></div><div><div class="acct-bal" style="color: var(--text-mid);">Starta</div><div class="acct-bal-meta">— jämförelse</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">EGEN MODUL · ANDERS</div><div class="acct-name">Krisbudget i 30 dagar</div><div class="acct-num">5 steg · skapad av Anders Lind · ej startad</div></div><div><div class="acct-bal" style="color: var(--text-mid);">Starta</div><div class="acct-bal-meta">9C-specifik</div></div></a>
       </div>
 
       <div class="peda">
@@ -5888,16 +6026,16 @@ body[data-mode="business"] .ms-knob {
       <div class="section-eye">14 systemkompetenser · sorterat efter nivå</div>
       <div class="biz-table">
         <div class="biz-table-row head" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;"><span></span><span>Kompetens</span><span>Nivå</span><span>Senaste händelse</span><span>Nästa nivå</span></div>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">F</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Budget</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Klassningsgrad 89 % i 3 mån</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; font-weight: 700;">FÖRDJUPNING</span><span style="font-size: 12.5px;">Anders höjde 12 apr · "stadigt över 80 %"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">— max</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">F</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Reflektion</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">8 reflektioner skickade</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; font-weight: 700;">FÖRDJUPNING</span><span style="font-size: 12.5px;">Anders höjde 22 apr · "djupare över tid"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">— max</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">F</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Konsumenträtt</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Modul "Garanti & ångerrätt" klar</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; font-weight: 700;">FÖRDJUPNING</span><span style="font-size: 12.5px;">Anders höjde 28 mar · "applicerad i Sample"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">— max</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Bokföring</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Klassar &gt; 80 % av tx själv</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Anders höjde 14 apr · "från regelmotor till manuell"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · 3 mån</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Sparande</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Aktivt sparmål med deadline</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Auto-höjt 2 mar · "buffert + interrail"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · uppfyll mål</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Skatte-grund</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Modul "Skatten" 7/9</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Anders höjde 18 apr · "förstår jobbskatteavdrag"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · klar modul</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Lön</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Lönesamtalet pågår med Maria</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Anders höjde 8 apr · "gick från brutto till netto"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · efter Maria-modul</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">B</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Lån &amp; ränta</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Bolån-modul pågår 4/12</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); font-weight: 700;">BASIS</span><span style="font-size: 12.5px;">Auto-tilldelad vid signup · ej höjd än</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ G · slutför KALP</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">B</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Investering</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">ISK aktiv · sparat sedan jan</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); font-weight: 700;">BASIS</span><span style="font-size: 12.5px;">Auto-tilldelad · ej höjd</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ G · efter ISK-modul</span></a>
-        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">B</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Pensionsförst.</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Inte öppnat orange kuvertet</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); font-weight: 700;">BASIS</span><span style="font-size: 12.5px;">— Anders har inte bedömt än</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ G · öppna kuvert</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">F</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Budget</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Klassningsgrad 89 % i 3 mån</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; font-weight: 700;">FÖRDJUPNING</span><span style="font-size: 12.5px;">Anders höjde 12 apr · "stadigt över 80 %"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">— max</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">F</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Reflektion</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">8 reflektioner skickade</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; font-weight: 700;">FÖRDJUPNING</span><span style="font-size: 12.5px;">Anders höjde 22 apr · "djupare över tid"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">— max</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7;">F</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Konsumenträtt</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Modul "Garanti & ångerrätt" klar</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; font-weight: 700;">FÖRDJUPNING</span><span style="font-size: 12.5px;">Anders höjde 28 mar · "applicerad i Sample"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">— max</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Bokföring</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Klassar &gt; 80 % av tx själv</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Anders höjde 14 apr · "från regelmotor till manuell"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · 3 mån</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Sparande</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Aktivt sparmål med deadline</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Auto-höjt 2 mar · "buffert + interrail"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · uppfyll mål</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Skatte-grund</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Modul "Skatten" 7/9</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Anders höjde 18 apr · "förstår jobbskatteavdrag"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · klar modul</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--accent);">G</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Lön</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Lönesamtalet pågår med Maria</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); font-weight: 700;">GRUND</span><span style="font-size: 12.5px;">Anders höjde 8 apr · "gick från brutto till netto"</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ F · efter Maria-modul</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">B</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Lån &amp; ränta</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Bolån-modul pågår 4/12</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); font-weight: 700;">BASIS</span><span style="font-size: 12.5px;">Auto-tilldelad vid signup · ej höjd än</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ G · slutför KALP</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">B</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Investering</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">ISK aktiv · sparat sedan jan</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); font-weight: 700;">BASIS</span><span style="font-size: 12.5px;">Auto-tilldelad · ej höjd</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ G · efter ISK-modul</span></a>
+        <a class="biz-table-row" style="grid-template-columns: 36px 1.4fr 100px 1fr 100px; cursor: pointer;" onclick="go('komp'); return false;" href="#"><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">B</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Pensionsförst.</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Inte öppnat orange kuvertet</div></div><span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); font-weight: 700;">BASIS</span><span style="font-size: 12.5px;">— Anders har inte bedömt än</span><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">→ G · öppna kuvert</span></a>
       </div>
 
       <div class="peda">
@@ -6202,6 +6340,265 @@ body[data-mode="business"] .ms-knob {
     </div>
   </section>
 
+  <!-- ============ KOMPETENS-DETALJ ============ -->
+  <section class="panel" id="p-komp">
+    <div class="shell">
+      <a class="actor-back" onclick="go('portfolio'); return false;" href="#">Tillbaka till portfolio</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Kompetens · Bokföring</span>
+          <h1 class="actor-name" style="margin-top:14px;">Bokföring — nivå <em>Grund</em>.</h1>
+          <p class="actor-sub">Klassningsgrad &gt; 80 % i 3 mån · auto-höjt 14 apr av Anders Lind</p>
+        </div>
+        <div class="actor-meta">
+          Nuvarande: <strong>GRUND</strong><br>
+          Nästa: <strong>FÖRDJUPNING</strong><br>
+          Krav: <strong>3 mån &gt; 90 %</strong>
+        </div>
+      </header>
+
+      <div class="cc-summary" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="cc-stat" style="background: rgba(99,102,241,0.06); border-left: 3px solid #818cf8;">
+          <div class="cc-stat-eye" style="color: #c7d2fe;">Resa hittills</div>
+          <div class="cc-stat-num"><em>BASIS → GRUND</em></div>
+          <div class="cc-stat-sub">Auto-tilldelad jan 2026 → höjd 14 apr 2026 · 14 v</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Senaste klassning</div>
+          <div class="cc-stat-num">89 %</div>
+          <div class="cc-stat-sub">april 2026</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">3-mån-snitt</div>
+          <div class="cc-stat-num">86 %</div>
+          <div class="cc-stat-sub">feb-mar-apr</div>
+        </div>
+        <div class="cc-stat">
+          <div class="cc-stat-eye">Mål till F</div>
+          <div class="cc-stat-num warm"><em>4</em>%-enheter</div>
+          <div class="cc-stat-sub">behöver 90 % i 3 mån</div>
+        </div>
+      </div>
+
+      <div class="act-grid" style="margin-top: 22px;">
+        <div>
+          <div class="section-eye">Vad du har <em>gjort</em> · timeline</div>
+          <div class="biz-table">
+            <div class="biz-table-row" style="grid-template-columns: 90px 1fr 120px;"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14 apr 2026</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Anders Lind höjde till <em style="color: #6ee7b7;">GRUND</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">Motivering: "från regelmotor till manuell klassning"</div></div><span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; font-weight: 700; letter-spacing: 1px;">B → G</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 90px 1fr 120px;"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">8 apr 2026</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Klassade 47 transaktioner i veckans batch</div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">utan auto-förslag · 100 % manuellt</div></div><span style="font-family: var(--mono); font-size: 9px; color: var(--warm);">+ aktivitet</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 90px 1fr 120px;"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">1 apr 2026</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Modul "Bokföring grunder" klar (5/5)</div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">5/5 stjärnor · 4,8/5 i quiz</div></div><span style="font-family: var(--mono); font-size: 9px; color: var(--warm);">+ modul</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 90px 1fr 120px;"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">17 mar 2026</span><div><div class="" style="font-family: var(--serif); font-size: 14px; color: #fff;">Reflektion: "Vad är skillnaden mellan tillgång och skuld?"</div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">241 ord · Anders kommenterade "djupt"</div></div><span style="font-family: var(--mono); font-size: 9px; color: var(--warm);">+ refl</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 90px 1fr 120px;"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">8 feb 2026</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Klassningsgrad nådde 70 % första gången</div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">v 6 · regelmotor + manuell efterhand</div></div><span style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">+ progress</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 90px 1fr 120px;"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">15 jan 2026</span><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Auto-tilldelad <em style="color: var(--text-dim);">BASIS</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">Vid signup · alla nya elever startar här</div></div><span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); font-weight: 700; letter-spacing: 1px;">→ B</span></div>
+          </div>
+
+          <div class="section-eye" style="margin-top: 24px;">Vad krävs för <em>FÖRDJUPNING</em></div>
+          <div class="biz-table">
+            <div class="biz-table-row" style="grid-template-columns: 32px 1fr 90px;"><span style="font-family: var(--mono); font-size: 12px; color: #6ee7b7;">✓</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Klassningsgrad &gt; 90 % i 3 mån</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Du ligger på 89 i april — nästan där</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">96 %</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 32px 1fr 90px;"><span style="font-family: var(--mono); font-size: 12px; color: var(--text-dim);">○</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Klassa &gt; 90 % manuellt (utan AI)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Stäng av regelmotor i 1 mån — testa själv</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— ej</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 32px 1fr 90px;"><span style="font-family: var(--mono); font-size: 12px; color: var(--text-dim);">○</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Hitta &amp; flagga 1 anomali per månad</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Visa att du ser mönstret · inte bara klassar</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— ej</span></div>
+            <div class="biz-table-row" style="grid-template-columns: 32px 1fr 90px;"><span style="font-family: var(--mono); font-size: 12px; color: var(--text-dim);">○</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Reflektion 300+ ord om eget mönster</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Skicka till Anders för bedömning</div></div><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">— ej</span></div>
+          </div>
+        </div>
+
+        <aside>
+          <div class="side-card">
+            <div class="side-card-eye">Lärar-bedömning · senast</div>
+            <div class="side-card-h">Anders Lind</div>
+            <div class="side-card-meta" style="margin-top: 10px; font-style: italic;">"Sara har gått från att tröttna på regelmotor-förslagen till att aktivt klassa själv. Det är där bokföring blir <em>förståelse</em>, inte bara avbockning. Höjer till GRUND."</div>
+            <div class="side-card-meta" style="margin-top: 8px; color: var(--text-dim);">14 april 2026 · efter v 14 batch</div>
+          </div>
+
+          <div class="side-card">
+            <div class="side-card-eye">Anslutna moduler</div>
+            <div class="side-card-h">2 av 4 klara</div>
+            <ul style="list-style: none; padding: 0; margin: 8px 0 0; font-family: 'Inter', sans-serif; font-size: 12.5px;">
+              <li style="display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line);"><span style="color: #6ee7b7;">✓</span><span>Din första månad</span></li>
+              <li style="display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line);"><span style="color: #6ee7b7;">✓</span><span>Bokföring grunder</span></li>
+              <li style="display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line);"><span style="color: var(--text-dim);">○</span><span>Anomali-jakten</span></li>
+              <li style="display: flex; gap: 8px; padding: 5px 0;"><span style="color: var(--text-dim);">○</span><span>Bokslut för enskild firma</span></li>
+            </ul>
+          </div>
+
+          <div class="side-card" style="background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.25);">
+            <div class="side-card-eye" style="color: var(--warm);">Echo · sokratiskt</div>
+            <div class="side-card-h">"Är 89 % bra?"</div>
+            <div class="side-card-meta">Det betyder att 11 av 100 transaktioner får fel kategori. Räcker det? Eller är det bättre att klassa lite färre — med högre kvalitet?</div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="peda">
+        <div class="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Kompetens är <em>spårbar</em>, inte hemlig.</div>
+        <p class="peda-prose">Du ser exakt vad du gjort som lett dig hit, vad Anders sagt vid varje höjning, och vad nästa nivå kräver. Ingen black box. Detta är skolans uppdaterade syn på bedömning: <em>transparens</em>, formativ feedback, och eleven äger sin egen läranderesa. Du kan visa det här för en arbetsgivare om 5 år.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODUL · PENSION (start) ============ -->
+  <section class="panel" id="p-modul-pension">
+    <div class="shell">
+      <a class="actor-back" onclick="go('modules'); return false;" href="#">Tillbaka till mina moduler</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Modul · NY · ej startad</span>
+          <h1 class="actor-name" style="margin-top:14px;">Pension om <em>40 år</em>.</h1>
+          <p class="actor-sub">5 steg · ~25 min · höjer kompetensen Pensionsförståelse från BASIS → GRUND</p>
+        </div>
+        <div class="actor-meta">
+          Rekommenderad: <strong>Anders Lind</strong><br>
+          Kompetens: <strong>Pension B → G</strong><br>
+          Beräknad tid: <strong>25 min</strong>
+        </div>
+      </header>
+
+      <article class="cta-card">
+        <div class="cta-eye">Innan du startar</div>
+        <div class="cta-h">Det här blir en <em>chock</em>.</div>
+        <p class="cta-prose">Anders har rekommenderat den här modulen specifikt åt dig — du har inte öppnat orange kuvertet än. Modulen tar dig genom Pensionsmyndighetens prognos, jämför med Konsumentverket-schablon, och visar vad <em>tioårsfönstret 16–25</em> är värt över ditt liv. Förbered dig på att bli förvånad.</p>
+        <button class="cta-btn" onclick="go('pen')">Starta modul · steg 1 av 5 →</button>
+      </article>
+
+      <div class="section-eye" style="margin-top: 24px;">5 steg · vad du gör</div>
+      <ol style="list-style: none; padding: 0; margin: 0;">
+        <li style="display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220,76,43,0.15); border: 1px solid var(--accent); display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: #fff;">1</div><div><div style="font-family: var(--serif); font-size: 15px; color: #fff;">Vad är pension? <em style="color: var(--text-mid); font-size: 11px;">(läs · 4 min)</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">Inkomstpension · premiepension · tjänstepension · privat. Tre pelare.</div></div></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong); display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text-mid);">2</div><div><div style="font-family: var(--serif); font-size: 15px; color: #fff;">Öppna orange kuvertet <em style="color: var(--text-mid); font-size: 11px;">(uppgift · 5 min)</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">Gå till Pensionsmyndigheten i appen · läs din prognos · skriv 50 ord</div></div></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong); display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text-mid);">3</div><div><div style="font-family: var(--serif); font-size: 15px; color: #fff;">Räkna · räcker det? <em style="color: var(--text-mid); font-size: 11px;">(uppgift · 6 min)</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">Konsumentverket schablon för 67-åring · jämför med din prognos</div></div></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong); display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text-mid);">4</div><div><div style="font-family: var(--serif); font-size: 15px; color: #fff;">Investeringssimulator <em style="color: var(--text-mid); font-size: 11px;">(uppgift · 6 min)</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">Vad om 600 kr/mån i 40 år? Se ränta-på-ränta i praktiken</div></div></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 14px 0;"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong); display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text-mid);">5</div><div><div style="font-family: var(--serif); font-size: 15px; color: #fff;">Reflektion <em style="color: var(--text-mid); font-size: 11px;">(reflektion · 4 min)</em></div><div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px;">200 ord till Anders · "Vad ändrar du efter den här modulen?"</div></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ MODUL · ISK ============ -->
+  <section class="panel" id="p-modul-isk">
+    <div class="shell">
+      <a class="actor-back" onclick="go('modules'); return false;" href="#">Tillbaka till mina moduler</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Modul · klar 28 feb · 4/5</span>
+          <h1 class="actor-name" style="margin-top:14px;">ISK-<em>portföljen</em>.</h1>
+          <p class="actor-sub">6 steg · klarade alla · gjorde quiz 8/10 · höjde Investering till GRUND</p>
+        </div>
+        <div class="actor-meta">
+          Klar: <strong>28 feb 2026</strong><br>
+          Stjärnor: <strong>4/5</strong><br>
+          Tid: <strong>32 min totalt</strong>
+        </div>
+      </header>
+
+      <article class="cta-card" style="background: rgba(110,231,183,0.06); border-color: rgba(110,231,183,0.35);">
+        <div class="cta-eye" style="color: #6ee7b7;">Klar — vill du repetera?</div>
+        <div class="cta-h">Du har redan <em>klarat</em> denna.</div>
+        <p class="cta-prose">Modulen är slutförd. Du kan gå tillbaka och repetera enskilda steg, läsa din egen reflektion från 28 feb, eller gå vidare till nästa nivå (Anomali-jakten).</p>
+        <button class="cta-btn" style="background: #6ee7b7; color: #064e3b;">Repetera modul</button>
+        <button class="cta-btn" style="background: transparent; border: 1px solid var(--line-strong); margin-left: 8px;">Läs min reflektion</button>
+      </article>
+
+      <div class="section-eye" style="margin-top: 24px;">6 steg · klar</div>
+      <ol style="list-style: none; padding: 0; margin: 0;">
+        <li style="display: grid; grid-template-columns: 36px 1fr 80px; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(110,231,183,0.18); border: 1px solid #6ee7b7; display: grid; place-items: center; color: #6ee7b7;">✓</div><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Vad är ISK?</div></div><span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">5/5</span></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr 80px; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(110,231,183,0.18); border: 1px solid #6ee7b7; display: grid; place-items: center; color: #6ee7b7;">✓</div><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Schablonskatt vs depå</div></div><span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">5/5</span></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr 80px; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(110,231,183,0.18); border: 1px solid #6ee7b7; display: grid; place-items: center; color: #6ee7b7;">✓</div><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Välj 4 fonder · diversifiering</div></div><span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">4/5</span></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr 80px; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(110,231,183,0.18); border: 1px solid #6ee7b7; display: grid; place-items: center; color: #6ee7b7;">✓</div><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Quiz · 10 frågor om ISK &amp; fonder</div></div><span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">8/10</span></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr 80px; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line);"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(110,231,183,0.18); border: 1px solid #6ee7b7; display: grid; place-items: center; color: #6ee7b7;">✓</div><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Sätt upp månadssparande 600 kr</div></div><span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">klar</span></li>
+        <li style="display: grid; grid-template-columns: 36px 1fr 80px; gap: 14px; padding: 12px 0;"><div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(110,231,183,0.18); border: 1px solid #6ee7b7; display: grid; place-items: center; color: #6ee7b7;">✓</div><div><div style="font-family: var(--serif); font-size: 14px; color: #fff;">Reflektion · 217 ord</div></div><span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">godkänd</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ TRANSAKTION-DETALJ ============ -->
+  <section class="panel" id="p-tx">
+    <div class="shell">
+      <a class="actor-back" onclick="go('bok'); return false;" href="#">Tillbaka till bokföring</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Transaktion · Foodora 17 apr</span>
+          <h1 class="actor-name" style="margin-top:14px;">Foodora <em>− 187 kr</em>.</h1>
+          <p class="actor-sub">17 april 19:48 · Kort SEB Visa ··· 4218 · pizza + leverans efter laxsim</p>
+        </div>
+        <div class="actor-meta">
+          AI-förslag: <strong>Restaurang (94 %)</strong><br>
+          Eget val: <strong>Restaurang</strong><br>
+          Återkommande: <strong>4 ggr / april</strong>
+        </div>
+      </header>
+
+      <div class="cc-summary" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="cc-stat"><div class="cc-stat-eye">Belopp</div><div class="cc-stat-num">−187 kr</div><div class="cc-stat-sub">Inkl. lev-avgift 39 + dricks 12</div></div>
+        <div class="cc-stat"><div class="cc-stat-eye">Konto</div><div class="cc-stat-num">SEB Visa</div><div class="cc-stat-sub">Kort 4218 · ingår i CC-faktura april</div></div>
+        <div class="cc-stat"><div class="cc-stat-eye">Klassad</div><div class="cc-stat-num warm"><em>Restaurang</em></div><div class="cc-stat-sub">manuellt 17 apr · stämmer med AI</div></div>
+      </div>
+
+      <div class="act-grid" style="margin-top: 22px;">
+        <div>
+          <div class="section-eye">Välj kategori &amp; konto</div>
+          <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; padding: 18px 22px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+              <div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Kategori</div>
+                <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;"><option>Mat &amp; livsmedel</option><option selected>Restaurang</option><option>Snabbmat</option><option>Take-away</option><option>Nöje &amp; kultur</option><option>Annat</option></select>
+              </div>
+              <div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Underkategori</div>
+                <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;"><option selected>Pizza</option><option>Asiatiskt</option><option>Burger</option><option>Annat</option></select>
+              </div>
+              <div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Konto</div>
+                <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;"><option selected>SEB Visa (kort 4218)</option><option>Lönekonto</option><option>Sparkonto</option><option>Kontant</option></select>
+              </div>
+              <div>
+                <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Sammanhang</div>
+                <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;"><option selected>Efter träning</option><option>Vardagslunch</option><option>Helgmiddag</option><option>Med vänner</option></select>
+              </div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px;">Egen anteckning (frivillig)</div>
+            <textarea placeholder="t.ex. 'efter laxsim med Hassan, fyra st gick'" style="width: 100%; min-height: 60px; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 10px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px; resize: vertical;">Efter laxsim. Fyra som gick. Hassan tog burger.</textarea>
+            <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
+              <button style="background: var(--accent); color: #fff; border: 0; padding: 10px 16px; border-radius: 100px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Spara klassning</button>
+              <button style="background: transparent; border: 1px solid var(--line-strong); color: #fff; padding: 10px 16px; border-radius: 100px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Skapa regel: "Foodora → Restaurang"</button>
+              <button style="background: transparent; border: 1px solid var(--line-strong); color: var(--text-mid); padding: 10px 16px; border-radius: 100px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Bestrida (felaktig)</button>
+            </div>
+          </div>
+
+          <div class="section-eye" style="margin-top: 24px;">Andra Foodora-köp · återkommande mönster</div>
+          <div class="biz-table">
+            <a class="biz-table-row" style="grid-template-columns: 90px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 10px;">17 apr 19:48</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Pizza + leverans <em style="color: var(--warm);">(denna)</em></div></div><span style="font-family: var(--serif); color: var(--warm);">−187 kr</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 90px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">10 apr 20:14</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Burger King · söndag kväll</div></div><span style="font-family: var(--serif); color: #fff;">−156 kr</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 90px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 apr 21:02</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Sushi · efter prov</div></div><span style="font-family: var(--serif); color: #fff;">−212 kr</span></a>
+            <a class="biz-table-row" style="grid-template-columns: 90px 1fr 100px;" href="#"><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">28 mar 19:34</span><div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Pizza · fredag</div></div><span style="font-family: var(--serif); color: #fff;">−192 kr</span></a>
+          </div>
+          <div style="margin-top: 10px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px;">Snitt: <strong style="color: var(--warm);">187 kr/gång · 4 ggr/mån</strong> = 748 kr/mån. Restaurangbudget: 1 200 kr.</div>
+        </div>
+        <aside>
+          <div class="side-card" style="background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.3);">
+            <div class="side-card-eye" style="color: var(--warm);">Echo · efter klassning</div>
+            <div class="side-card-h">"Fyra <em>foodora</em> i april."</div>
+            <div class="side-card-meta">Tre var efter laxsim. Är det <em>tröttheten</em> som beställer? Vad om du planerar middag innan träning?</div>
+            <a class="side-card-link" onclick="document.getElementById('echoBtn').click(); return false;">Diskutera ↗</a>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Skapa regel?</div>
+            <div class="side-card-h">"Foodora → Restaurang"</div>
+            <div class="side-card-meta">Om du skapar regeln klassas alla framtida Foodora-köp automatiskt. Du kan alltid ändra enskilda.</div>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Bokföringspost</div>
+            <div class="side-card-h">5810 / 1930</div>
+            <div class="side-card-meta">5810 Restaurang D · 1930 SEB Visa K · 187 kr · ver A187</div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="peda">
+        <div class="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">En transaktion är en <em>berättelse</em>.</div>
+        <p class="peda-prose">Datum, plats, belopp — det är ytan. Sammanhanget är allt. När du klassar Foodora "efter laxsim" och ser att det hände 3 av 4 gånger i april, ser du ett mönster du själv kan göra något åt: maten innan träning, fryst middag hemma, eller acceptera att laxsim-kvällar = take-away.</p>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ AKTIEHANDEL ============ -->
   <section class="panel" id="p-aktier">
     <div class="shell">
@@ -6388,6 +6785,10 @@ const PANELS = {
   uppdrag:{ label: "Mina uppdrag",             crumb: ["HUBBEN", "● MINA UPPDRAG"] },
   partner:{ label: "Sambo · Linus",            crumb: ["HUBBEN", "● SAMBO · LINUS"] },
   aktier: { label: "Aktiemarknaden",           crumb: ["HUBBEN", "AVANZA", "● AKTIER"] },
+  komp:   { label: "Kompetens-detalj",         crumb: ["HUBBEN", "PORTFOLIO", "● KOMPETENS"] },
+  "modul-pension": { label: "Modul · Pension", crumb: ["HUBBEN", "MODULER", "● PENSION"] },
+  "modul-isk":     { label: "Modul · ISK",     crumb: ["HUBBEN", "MODULER", "● ISK-PORTFÖLJ"] },
+  tx:     { label: "Transaktion-detalj",       crumb: ["HUBBEN", "BOKFÖRING", "● TX"] },
 };
 
 function go(view) {
