@@ -1439,6 +1439,144 @@ def test_v2_postladan_seed_replace_existing(fx) -> None:
     assert items[0]["sender"] == "C"
 
 
+# === /v2/arbetsgivaren ===
+
+def test_v2_arbetsgivaren_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/arbetsgivaren")
+    assert r.status_code == 401
+
+
+def test_v2_arbetsgivaren_for_teacher_returns_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/arbetsgivaren",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["profession"] == "—"
+    assert data["salary_slips"] == []
+    assert data["questions"] == []
+
+
+def test_v2_arbetsgivaren_without_profile_returns_empty(fx) -> None:
+    """Elev utan StudentProfile får tom payload (inte crash)."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/arbetsgivaren",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["profession"] == "—"
+
+
+def test_v2_arbetsgivaren_with_profile_returns_basics(fx) -> None:
+    """Elev med profil får riktiga lönedata + agreement-defaults."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            character_first_name="Sara",
+            character_last_name="Andersson",
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=31250,
+            net_salary_monthly=22400,
+            tax_rate_effective=0.28,
+            age=22,
+            city="Stockholm",
+            family_status="ensam",
+            housing_type="hyresratt",
+            housing_monthly=8000,
+            personality="blandad",
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/arbetsgivaren",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["profession"] == "Undersköterska"
+    assert data["employer"] == "Sthlm Sjukhus AB"
+    assert data["gross_salary_monthly"] == 31250
+    assert data["net_salary_monthly"] == 22400
+    # Marknadsspann auto-räknat ±5-8 % runt brutto
+    assert data["market_low"] is not None
+    assert data["market_high"] is not None
+    assert data["market_low"] < data["gross_salary_monthly"]
+    assert data["market_high"] > data["gross_salary_monthly"]
+    # Default-förmåner finns alltid (även utan agreement)
+    assert len(data["agreement_benefits"]) >= 3
+    benefit_names = [b["name"] for b in data["agreement_benefits"]]
+    assert "Friskvårdsbidrag" in benefit_names
+    assert "OB-tillägg" in benefit_names
+    assert "Lönerevision" in benefit_names
+    # Satisfaction default 70
+    assert data["satisfaction"]["score"] == 70
+    assert data["satisfaction"]["delta_4w"] == 0
+
+
+def test_v2_arbetsgivaren_with_salary_transactions(fx) -> None:
+    """Lönespecar härleds från transaktioner med 'lön' i description."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    # Profil först
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=31250,
+            net_salary_monthly=22400,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+        db.commit()
+
+    today = _d.today()
+
+    def seed(s) -> None:
+        acc = _Acc(name="Lönekonto", bank="SEB", type="checking", currency="SEK")
+        s.add(acc); s.flush()
+        # 3 lönespecar i månader bakåt
+        for i in range(3):
+            d = today - _td(days=30 * (i + 1))
+            s.add(_Tx(
+                account_id=acc.id, date=d,
+                amount=_D("22400"), currency="SEK",
+                raw_description="Lön Sthlm Sjukhus AB",
+                hash=f"lon-test-{i}",
+            ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/arbetsgivaren",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    slips = data["salary_slips"]
+    assert len(slips) == 3
+    # Senast först
+    assert slips[0]["net_amount"] == 22400
+    assert slips[0]["gross_amount"] == 31250
+    # Skatt = brutto − netto = 8850
+    assert slips[0]["tax_amount"] == 8850
+
+
 def test_v2_bank_upcoming_bills(fx) -> None:
     """Öppna kommande fakturor speglas i payload + upcoming_open_total."""
     client, _tch, _sa, stu, _tid, _said, sid = fx

@@ -271,6 +271,79 @@ export type V2MailSeedItem = {
   bankgiro?: string;
 };
 
+// === /v2/arbetsgivaren ===
+
+export type V2EmployerSalarySlip = {
+  id: number;
+  month: string;
+  date: string;
+  net_amount: number;
+  gross_amount: number | null;
+  tax_amount: number | null;
+  pension_amount: number | null;
+  description: string;
+};
+
+export type V2EmployerAgreementBenefit = {
+  name: string;
+  detail: string;
+  value: string;
+};
+
+export type V2EmployerNegotiation = {
+  id: number;
+  status: "active" | "completed" | "abandoned";
+  round_no: number;
+  max_rounds: number;
+  starting_salary: number;
+  requested_salary: number | null;
+  proposed_pct: number | null;
+  avtal_norm_pct: number | null;
+  final_salary: number | null;
+  final_pct: number | null;
+  started_at: string;
+  completed_at: string | null;
+};
+
+export type V2EmployerQuestionRow = {
+  id: number;
+  question_id: number;
+  question_text: string;
+  difficulty: "easy" | "medium" | "hard";
+  answered_at: string | null;
+  student_answer: string | null;
+  delta: number | null;
+  is_open: boolean;
+};
+
+export type V2EmployerSatisfaction = {
+  score: number;
+  trend: "rising" | "falling" | "stable";
+  delta_4w: number;
+};
+
+export type EmployerData = {
+  student_id: number;
+  profession: string;
+  employer: string;
+  agreement_name: string | null;
+  agreement_union: string | null;
+  gross_salary_monthly: number;
+  net_salary_monthly: number;
+  pension_pct: number | null;
+  pension_monthly: number | null;
+  employed_since: string | null;
+  next_revision_date: string | null;
+  market_low: number | null;
+  market_high: number | null;
+  satisfaction: V2EmployerSatisfaction;
+  negotiation: V2EmployerNegotiation | null;
+  salary_slips: V2EmployerSalarySlip[];
+  agreement_benefits: V2EmployerAgreementBenefit[];
+  questions: V2EmployerQuestionRow[];
+  open_question_id: number | null;
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -321,6 +394,7 @@ export const v2Api = {
       { method: "DELETE" },
     ),
   goals: () => api<GoalsData>("/v2/mal"),
+  arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
   postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>

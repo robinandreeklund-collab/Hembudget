@@ -27,6 +27,16 @@ from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
     MailItem,
 )
+from ..school.employer_models import (
+    CollectiveAgreement,
+    EmployerSatisfaction,
+    EmployerSatisfactionEvent,
+    NegotiationRound,
+    ProfessionAgreement,
+    SalaryNegotiation,
+    WorkplaceQuestion,
+    WorkplaceQuestionAnswer,
+)
 from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
 from ..wellbeing.calculator import calculate_wellbeing
@@ -1694,6 +1704,455 @@ def seed_mail_for_student(
         student_id=student_id,
         created=created,
         deleted=deleted,
+    )
+
+
+# === Arbetsgivaren (/v2/arbetsgivaren) ===
+
+class V2EmployerSalarySlip(BaseModel):
+    """En lönespec — härledd från transactions där category='Lön' och
+    amount > 0. För framtid: separat SalarySlip-tabell med brutto/skatt
+    explicit. För nu räknar vi netto från transaktionen och uppskattar
+    brutto via _safe_profile_attr(gross_salary_monthly)."""
+    id: int
+    month: str
+    date: _date
+    net_amount: float
+    gross_amount: Optional[float] = None
+    tax_amount: Optional[float] = None
+    pension_amount: Optional[float] = None
+    description: str
+
+
+class V2EmployerAgreementBenefit(BaseModel):
+    """En rad i kollektivavtals-tabellen ("Kollektivavtalet · vad det säger").
+
+    Kan komma från CollectiveAgreement.meta JSON eller från en
+    default-mappning baserad på agreement.code."""
+    name: str
+    detail: str
+    value: str
+
+
+class V2EmployerNegotiation(BaseModel):
+    id: int
+    status: str  # active | completed | abandoned
+    round_no: int  # senaste rond
+    max_rounds: int
+    starting_salary: float
+    requested_salary: Optional[float] = None  # från senaste rond
+    proposed_pct: Optional[float] = None  # AI:ns senaste bud
+    avtal_norm_pct: Optional[float] = None
+    final_salary: Optional[float] = None
+    final_pct: Optional[float] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class V2EmployerQuestionRow(BaseModel):
+    id: int  # answer-id (eller 0 om obesvarad)
+    question_id: int
+    question_text: str
+    difficulty: str  # "easy" | "medium" | "hard"
+    answered_at: Optional[datetime] = None
+    student_answer: Optional[str] = None
+    delta: Optional[int] = None  # ±N nöjdhet-poäng
+    is_open: bool  # True om obesvarad → "Svara nu"
+
+
+class V2EmployerSatisfaction(BaseModel):
+    score: int
+    trend: str  # rising | falling | stable
+    delta_4w: int  # förändring senaste 4 veckor
+
+
+class V2EmployerResponse(BaseModel):
+    student_id: int
+    profession: str
+    employer: str
+    agreement_name: Optional[str] = None
+    agreement_union: Optional[str] = None
+    gross_salary_monthly: float
+    net_salary_monthly: float
+    pension_pct: Optional[float] = None
+    pension_monthly: Optional[float] = None
+    employed_since: Optional[_date] = None
+    next_revision_date: Optional[_date] = None
+    market_low: Optional[float] = None
+    market_high: Optional[float] = None
+    satisfaction: V2EmployerSatisfaction
+    negotiation: Optional[V2EmployerNegotiation] = None
+    salary_slips: list[V2EmployerSalarySlip]
+    agreement_benefits: list[V2EmployerAgreementBenefit]
+    questions: list[V2EmployerQuestionRow]
+    open_question_id: Optional[int] = None
+
+
+def _empty_employer(student_id: int) -> V2EmployerResponse:
+    return V2EmployerResponse(
+        student_id=student_id,
+        profession="—",
+        employer="—",
+        gross_salary_monthly=0,
+        net_salary_monthly=0,
+        satisfaction=V2EmployerSatisfaction(
+            score=70, trend="stable", delta_4w=0,
+        ),
+        salary_slips=[],
+        agreement_benefits=[],
+        questions=[],
+    )
+
+
+def _default_agreement_benefits(
+    pension_pct: Optional[float],
+    avtal_norm_pct: Optional[float],
+) -> list[V2EmployerAgreementBenefit]:
+    """Default-rader när agreement.meta saknar struktur."""
+    out: list[V2EmployerAgreementBenefit] = []
+    if pension_pct is not None and pension_pct > 0:
+        out.append(V2EmployerAgreementBenefit(
+            name="Tjänstepension",
+            detail=(
+                f"{pension_pct:.1f} % av brutto · arbetsgivaren betalar"
+            ),
+            value=f"{pension_pct:.1f} %",
+        ))
+    out.append(V2EmployerAgreementBenefit(
+        name="Friskvårdsbidrag",
+        detail="Skattefritt · gym/träning · vanligt 3000-5000 kr/år",
+        value="upp till 5 000/år",
+    ))
+    out.append(V2EmployerAgreementBenefit(
+        name="OB-tillägg",
+        detail="Kväll +30 % · helg +50 % · röd dag +100 %",
+        value="påslag på timlön",
+    ))
+    if avtal_norm_pct is not None and avtal_norm_pct > 0:
+        out.append(V2EmployerAgreementBenefit(
+            name="Lönerevision",
+            detail="Centralt avtal · årlig norm",
+            value=f"{avtal_norm_pct:.1f} %",
+        ))
+    else:
+        out.append(V2EmployerAgreementBenefit(
+            name="Lönerevision",
+            detail="Årligen · enligt centralt avtal",
+            value="2,4 %",
+        ))
+    return out
+
+
+def _difficulty_label(diff: object) -> str:
+    """Mappar WorkplaceQuestion.difficulty (INT 1-5) till
+    visuell etikett. 1-2 = easy, 3 = medium, 4-5 = hard."""
+    if diff is None:
+        return "medium"
+    try:
+        n = int(diff)
+        if n <= 2:
+            return "easy"
+        if n >= 4:
+            return "hard"
+        return "medium"
+    except (TypeError, ValueError):
+        return "medium"
+
+
+def _short_question_text(scenario_md: str, max_len: int = 120) -> str:
+    """Plocka första meningen ur scenario_md som rubrik. Tar bort
+    markdown-tecken och citationstecken så det blir läsbart i en
+    tabell-rad."""
+    if not scenario_md:
+        return ""
+    # Första meningen (innan första punkt eller radbrytning)
+    first = scenario_md.split("\n", 1)[0].split(". ", 1)[0]
+    first = first.replace("**", "").replace("*", "").strip()
+    if len(first) > max_len:
+        first = first[: max_len - 1].rstrip() + "…"
+    return first
+
+
+@router.get("/arbetsgivaren", response_model=V2EmployerResponse)
+def get_employer(
+    info: TokenInfo = Depends(require_token),
+) -> V2EmployerResponse:
+    """Aggregat-endpoint för arbetsgivar-vyn (/v2/arbetsgivaren).
+
+    Sammanställer i ett anrop:
+    - Profil (yrke, arbetsgivare, lön) från StudentProfile
+    - Kollektivavtal (ITP1, friskvård, OB, lönerevision) från
+      ProfessionAgreement + CollectiveAgreement
+    - Lönespecar (senaste 4 mån) från Transaction där amount > 0 och
+      raw_description innehåller "lön"
+    - Aktiv eller senaste lönesamtal från SalaryNegotiation
+    - Frågor från arbetsgivaren från WorkplaceQuestionAnswer (5 senaste)
+      + WorkplaceQuestion (nästa öppna)
+    - Nöjdhet (score, trend, delta_4w) från EmployerSatisfaction +
+      EmployerSatisfactionEvent
+
+    Demo/teacher får tom payload.
+    Try/except runt scope-anrop → tom payload utan crash.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_employer(0)
+
+    with master_session() as mdb:
+        student = mdb.get(Student, info.student_id)
+        if not student:
+            return _empty_employer(0)
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if not profile:
+            return _empty_employer(info.student_id)
+
+        # Hitta avtal via profession (ProfessionAgreement-mapping)
+        prof_agr = (
+            mdb.query(ProfessionAgreement)
+            .filter(ProfessionAgreement.profession == profile.profession)
+            .first()
+        )
+        agreement = None
+        if prof_agr:
+            agreement = mdb.get(CollectiveAgreement, prof_agr.agreement_id)
+
+        agreement_name = agreement.name if agreement else None
+        agreement_union = agreement.union if agreement else None
+        pension_pct = (
+            float(prof_agr.pension_rate_pct)
+            if prof_agr and prof_agr.pension_rate_pct is not None
+            else None
+        )
+
+        # Avtal-norm för lönerevisions-procent (i meta JSON)
+        avtal_norm_pct: Optional[float] = None
+        if agreement and agreement.meta:
+            try:
+                avtal_norm_pct = float(agreement.meta.get("norm_pct") or 0) or None
+            except Exception:
+                avtal_norm_pct = None
+
+        gross = float(profile.gross_salary_monthly or 0)
+        net = float(profile.net_salary_monthly or 0)
+        pension_monthly = (
+            round(gross * (pension_pct / 100), 2)
+            if pension_pct else None
+        )
+
+        # Marknadsspann — uppskattat från avtalsdata (om finns) eller
+        # ±5 % runt gross
+        market_low: Optional[float] = round(gross * 0.92, 0)
+        market_high: Optional[float] = round(gross * 1.08, 0)
+
+        # Anställd sedan / lönerevision — hämta från CollectiveAgreement.meta
+        # om strukturerat. Annars lämna None.
+        employed_since: Optional[_date] = None
+        next_revision: Optional[_date] = None
+        if agreement and agreement.meta:
+            try:
+                if agreement.meta.get("review_month"):
+                    today = _date.today()
+                    rm = int(agreement.meta["review_month"])
+                    yr = today.year if rm >= today.month else today.year + 1
+                    next_revision = _date(yr, rm, 1)
+            except Exception:
+                pass
+
+        # Nöjdhet
+        sat_row = (
+            mdb.query(EmployerSatisfaction)
+            .filter(EmployerSatisfaction.student_id == info.student_id)
+            .first()
+        )
+        if sat_row:
+            sat_score = sat_row.score
+            sat_trend = sat_row.trend
+        else:
+            sat_score = 70
+            sat_trend = "stable"
+
+        # Delta senaste 4 veckor (summa av alla event-deltas senaste 28 d)
+        from datetime import timedelta as _td
+        cutoff = datetime.utcnow() - _td(days=28)
+        delta_4w_q = (
+            mdb.query(_func.coalesce(_func.sum(EmployerSatisfactionEvent.delta_score), 0))
+            .filter(EmployerSatisfactionEvent.student_id == info.student_id)
+            .filter(EmployerSatisfactionEvent.ts >= cutoff)
+            .scalar()
+        )
+        delta_4w = int(delta_4w_q or 0)
+
+        # Aktiv eller senaste lönesamtal
+        neg_row = (
+            mdb.query(SalaryNegotiation)
+            .filter(SalaryNegotiation.student_id == info.student_id)
+            .order_by(SalaryNegotiation.started_at.desc())
+            .first()
+        )
+        negotiation_out: Optional[V2EmployerNegotiation] = None
+        if neg_row:
+            last_round = (
+                mdb.query(NegotiationRound)
+                .filter(NegotiationRound.negotiation_id == neg_row.id)
+                .order_by(NegotiationRound.round_no.desc())
+                .first()
+            )
+            negotiation_out = V2EmployerNegotiation(
+                id=neg_row.id,
+                status=neg_row.status,
+                round_no=last_round.round_no if last_round else 0,
+                max_rounds=5,
+                starting_salary=float(neg_row.starting_salary),
+                requested_salary=None,  # eleven kan ha skrivit i texten
+                proposed_pct=(
+                    float(last_round.proposed_pct)
+                    if last_round and last_round.proposed_pct is not None
+                    else None
+                ),
+                avtal_norm_pct=neg_row.avtal_norm_pct,
+                final_salary=(
+                    float(neg_row.final_salary)
+                    if neg_row.final_salary is not None else None
+                ),
+                final_pct=neg_row.final_pct,
+                started_at=neg_row.started_at,
+                completed_at=neg_row.completed_at,
+            )
+
+        # Frågor från arbetsgivaren — 5 senaste svar + 1 obesvarad
+        answered_q = (
+            mdb.query(WorkplaceQuestionAnswer, WorkplaceQuestion)
+            .join(
+                WorkplaceQuestion,
+                WorkplaceQuestion.id == WorkplaceQuestionAnswer.question_id,
+            )
+            .filter(WorkplaceQuestionAnswer.student_id == info.student_id)
+            .order_by(WorkplaceQuestionAnswer.answered_at.desc())
+            .limit(5)
+            .all()
+        )
+        question_rows: list[V2EmployerQuestionRow] = []
+        for ans, q in answered_q:
+            # Plocka elevens valda alternativ-text från options-listan
+            chosen_text: Optional[str] = None
+            try:
+                if isinstance(q.options, list) and 0 <= ans.chosen_index < len(q.options):
+                    opt = q.options[ans.chosen_index]
+                    if isinstance(opt, dict):
+                        chosen_text = opt.get("text")
+            except Exception:
+                chosen_text = None
+
+            question_rows.append(V2EmployerQuestionRow(
+                id=ans.id,
+                question_id=q.id,
+                question_text=_short_question_text(q.scenario_md or ""),
+                difficulty=_difficulty_label(q.difficulty),
+                answered_at=ans.answered_at,
+                student_answer=chosen_text,
+                delta=ans.delta_applied,
+                is_open=False,
+            ))
+
+        # Hitta en obesvarad fråga som öppen "Svara nu"-rad
+        answered_ids = {a.question_id for a, _ in answered_q}
+        open_q_query = mdb.query(WorkplaceQuestion)
+        if answered_ids:
+            open_q_query = open_q_query.filter(
+                ~WorkplaceQuestion.id.in_(answered_ids)
+            )
+        open_q = open_q_query.order_by(_func.random()).first()
+        open_question_id: Optional[int] = None
+        if open_q:
+            open_question_id = open_q.id
+            question_rows.insert(0, V2EmployerQuestionRow(
+                id=0,
+                question_id=open_q.id,
+                question_text=_short_question_text(open_q.scenario_md or ""),
+                difficulty=_difficulty_label(open_q.difficulty),
+                answered_at=None,
+                student_answer=None,
+                delta=None,
+                is_open=True,
+            ))
+
+        # Avtals-förmåner (från meta eller default)
+        benefits = _default_agreement_benefits(pension_pct, avtal_norm_pct)
+
+    # Lönespecar — från scope-DB:s transactions där amount > 0 och
+    # description innehåller "lön" eller liknande, senaste 4 mån.
+    salary_slips: list[V2EmployerSalarySlip] = []
+    try:
+        with session_scope() as s:
+            today = _date.today()
+            from datetime import timedelta as _td
+            cutoff_d = today - _td(days=120)
+            tx_rows = (
+                s.query(Transaction)
+                .filter(Transaction.amount > 0)
+                .filter(Transaction.date >= cutoff_d)
+                .filter(_func.lower(Transaction.raw_description).like("%lön%"))
+                .order_by(Transaction.date.desc())
+                .limit(4)
+                .all()
+            )
+            for t in tx_rows:
+                month_str = f"{t.date.year:04d}-{t.date.month:02d}"
+                # Härled brutto från net via skattesats om vi har den
+                net_amt = float(t.amount)
+                gross_amt = (
+                    float(profile.gross_salary_monthly)
+                    if profile.gross_salary_monthly else None
+                )
+                tax_amt = (
+                    round(gross_amt - net_amt, 2)
+                    if gross_amt and gross_amt > net_amt else None
+                )
+                pension_amt = (
+                    round(gross_amt * (pension_pct / 100), 2)
+                    if gross_amt and pension_pct else None
+                )
+                salary_slips.append(V2EmployerSalarySlip(
+                    id=t.id,
+                    month=month_str,
+                    date=t.date,
+                    net_amount=net_amt,
+                    gross_amount=gross_amt,
+                    tax_amount=tax_amt,
+                    pension_amount=pension_amt,
+                    description=t.raw_description or "Lön",
+                ))
+    except Exception:
+        # Scope-DB saknas eller fel — låt salary_slips vara tomma
+        pass
+
+    return V2EmployerResponse(
+        student_id=info.student_id,
+        profession=profile.profession,
+        employer=profile.employer,
+        agreement_name=agreement_name,
+        agreement_union=agreement_union,
+        gross_salary_monthly=gross,
+        net_salary_monthly=net,
+        pension_pct=pension_pct,
+        pension_monthly=pension_monthly,
+        employed_since=employed_since,
+        next_revision_date=next_revision,
+        market_low=market_low,
+        market_high=market_high,
+        satisfaction=V2EmployerSatisfaction(
+            score=sat_score,
+            trend=sat_trend,
+            delta_4w=delta_4w,
+        ),
+        negotiation=negotiation_out,
+        salary_slips=salary_slips,
+        agreement_benefits=benefits,
+        questions=question_rows,
+        open_question_id=open_question_id,
     )
 
 

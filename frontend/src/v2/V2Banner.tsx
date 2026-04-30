@@ -84,6 +84,12 @@ export function V2Banner({ status }: { status: { role: string; is_super_admin: b
         <Link to="/v2/budget" style={{ color: "#0f172a", textDecoration: "none" }}>
           v2/budget
         </Link>
+        <Link
+          to="/v2/arbetsgivaren"
+          style={{ color: "#0f172a", textDecoration: "none" }}
+        >
+          v2/arbetsgivaren
+        </Link>
         <Link to="/v2/mal" style={{ color: "#0f172a", textDecoration: "none" }}>
           v2/mål
         </Link>

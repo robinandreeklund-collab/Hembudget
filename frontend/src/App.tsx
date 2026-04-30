@@ -7,6 +7,7 @@ import { OnboardingV2 } from "./v2/OnboardingV2";
 import { HubV2 } from "./v2/HubV2";
 import { BankV2 } from "./v2/BankV2";
 import { BudgetV2 } from "./v2/BudgetV2";
+import { ArbetsgivarenV2 } from "./v2/ArbetsgivarenV2";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -240,6 +241,7 @@ export default function App() {
           <Route path="/v2/hub" element={<HubV2 />} />
           <Route path="/v2/banken" element={<BankV2 />} />
           <Route path="/v2/budget" element={<BudgetV2 />} />
+          <Route path="/v2/arbetsgivaren" element={<ArbetsgivarenV2 />} />
           <Route path="/v2/mal" element={<MalV2 />} />
           <Route path="/v2/postladan" element={<PostladanV2 />} />
           <Route path="/teacher/v2" element={<V2RosterPage />} />
