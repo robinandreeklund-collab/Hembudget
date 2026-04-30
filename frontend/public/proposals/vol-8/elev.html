@@ -377,7 +377,74 @@ body::after {
 </header>
 
 <main class="app">
-  <section class="scene active" id="s-1"></section>
+  <!-- SCEN 1 — Onsdag morgon -->
+  <section class="scene active" id="s-1">
+    <div class="shell">
+
+      <article class="char-card">
+        <div class="char-eye">Onsdag · 07:42 · Vol. 18 · Kap. 01</div>
+        <div class="char-line">
+          <strong>Sara A.</strong>, 16, gymnasium Stockholm. Klockan ringer. Hyran kommer
+          om <em>två dagar</em>. Lönen <em>om 22</em>. Det är en helt vanlig morgon.
+          Hon häller upp kaffe och öppnar appen.
+        </div>
+        <div class="char-meta">Inloggad 07:42 · Pentagon 76 / 100 · läge stabilt</div>
+      </article>
+
+      <div class="scene-eyebrow">
+        Veckans val · 6 kapitel <span class="sep">·</span> du läser kap. 1
+      </div>
+
+      <h1 class="scene-h1">En vecka <em>full av val</em>.</h1>
+
+      <p class="scene-lead">
+        Det här är inte en dashboard. Det är <em>din vecka</em> — sex kapitel,
+        ett val per kapitel, varje val rör pentagonen. Ekonomi tippar ner när
+        du betalar. Hälsa tippar upp när du tar hand om dig. Karriär tippar när
+        Maria föreslår. Eleven <strong>fattar besluten</strong> — appen visar
+        konsekvenserna.
+      </p>
+
+      <div class="scene-panel" style="display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center;">
+        <div>
+          <div class="scene-eyebrow" style="margin-bottom: 10px;">Pentagonen idag · 76 / 100</div>
+          <p style="font-family: var(--serif); font-size: 16px; line-height: 1.5; color: var(--text);">
+            Veckan startar bra. <em>Avanza +2,1 %</em> i april, lönen i fas, sparmål
+            håller. Inget dramatiskt har hänt — än.
+          </p>
+        </div>
+        <svg viewBox="0 0 200 200" style="width: 180px; height: 180px;">
+          <g transform="translate(100,100)">
+            <polygon points="0,-86 82,-27 51,69 -51,69 -82,-27" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-43 41,-13 25,35 -25,35 -41,-13" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-65 70,-22 42,55 -45,53 -68,-23" fill="rgba(220,76,43,0.22)" stroke="#dc4c2b" stroke-width="2" filter="drop-shadow(0 0 12px rgba(220,76,43,0.4))"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="echo-cue">
+        <div>
+          <div class="echo-cue-label">Echo · väntar i kanten</div>
+          <div class="echo-cue-text">
+            "Vill du att jag följer med genom veckan? Jag stör bara när det är
+            <em>läge att tänka</em>."
+          </div>
+        </div>
+        <a href="#" class="echo-cue-btn" id="echoCue1">Aktivera</a>
+      </div>
+
+      <div class="scene-next">
+        <button class="scene-btn solid" onclick="goScene(2)">Fortsätt till kap. 2 →</button>
+        <a href="#" class="scene-btn" id="hubBtn1">Eller hoppa till hubben</a>
+      </div>
+
+      <div class="scene-foot">
+        <span>Vol. 08 · Veckans val · Sara A. · 9C</span>
+        <a id="modulesLink1">Mina moduler · 3 pågår</a>
+      </div>
+    </div>
+  </section>
   <section class="scene" id="s-2"></section>
   <section class="scene" id="s-3"></section>
   <section class="scene" id="s-4"></section>
