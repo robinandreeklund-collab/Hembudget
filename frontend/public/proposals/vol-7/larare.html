@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pentagonen · Lärare · Vol. 07</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+:root {
+  --bg-deep: #0a0e1a; --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --line: rgba(255,255,255,0.1); --line-strong: rgba(255,255,255,0.18);
+  --text: rgba(255,255,255,0.92); --text-mid: rgba(255,255,255,0.6); --text-dim: rgba(255,255,255,0.4);
+}
+body { background: var(--bg-deep); color: var(--text); position: relative; min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse 70% 50% at 25% 35%, rgba(220,76,43,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(251,191,36,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 60%, var(--bg-deep) 100%);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.022) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.022) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.5;
+}
+
+/* TOPBAR */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 80;
+  background: rgba(10,14,26,0.88); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 22px; gap: 22px;
+}
+.tb-brand { font-family: var(--serif); font-weight: 700; font-size: 16px; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 9px; }
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-dim); margin-left: 4px; }
+.tb-role {
+  background: var(--warm); color: #422006;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 3px 9px; border-radius: 100px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+}
+.tb-crumbs {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px;
+  color: var(--text-dim); text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px;
+}
+.tb-crumbs a { color: var(--text-dim); text-decoration: none; cursor: pointer; }
+.tb-crumbs a:hover { color: var(--warm); }
+.tb-crumbs strong { color: #fff; }
+.tb-crumbs .sep { color: rgba(255,255,255,0.25); }
+.tb-spacer { flex: 1; }
+.tb-imp {
+  background: rgba(220,76,43,0.12); color: var(--accent);
+  border: 1px solid rgba(220,76,43,0.35);
+  padding: 7px 12px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer; text-decoration: none;
+}
+.tb-imp:hover { background: rgba(220,76,43,0.22); }
+.tb-user {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #1e293b, #475569);
+  color: #fff; font-family: var(--serif); font-weight: 700; font-size: 13px;
+  display: grid; place-items: center; text-decoration: none;
+}
+
+/* SHELL */
+.app { padding-top: 56px; position: relative; z-index: 5; }
+.panel { display: none; }
+.panel.active { display: block; animation: fadein .35s var(--ease); }
+@keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.shell { max-width: 1380px; margin: 0 auto; padding: 32px clamp(20px, 5vw, 60px) 80px; }
+
+/* PILL */
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 100px;
+  background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.pill::before { content: "●"; color: var(--accent); font-size: 10px; }
+.pill.warm::before { color: var(--warm); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+  <span class="tb-role">Lärare</span>
+  <div class="tb-crumbs" id="crumbs"></div>
+  <div class="tb-spacer"></div>
+  <a href="#" class="tb-imp" onclick="alert('Senaste impersonation: Sara A. — klicka för att återgå till hennes vy.'); return false;">Senast: Sara A. ↩</a>
+  <a href="#" class="tb-user">AL</a>
+</header>
+
+<main class="app">
+  <section class="panel active" id="p-hub"></section>
+  <section class="panel" id="p-elev"></section>
+  <section class="panel" id="p-maria"></section>
+  <section class="panel" id="p-refl"></section>
+</main>
+
+<script>
+const PANELS = {
+  hub:   { crumb: ["● KLASSEN 9C"] },
+  elev:  { crumb: ["KLASSEN 9C", "● SARA A."] },
+  maria: { crumb: ["KLASSEN 9C", "● MARIA · 3 LÖNESAMTAL"] },
+  refl:  { crumb: ["KLASSEN 9C", "● REFLEKTIONER"] },
+};
+function go(view) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  const p = document.getElementById("p-" + view);
+  if (p) p.classList.add("active");
+  renderCrumbs(view);
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+function renderCrumbs(view) {
+  const meta = PANELS[view]; if (!meta) return;
+  const box = document.getElementById("crumbs");
+  const parts = meta.crumb.map((c, i, arr) => {
+    if (i === arr.length - 1) return `<strong>${c}</strong>`;
+    return `<a onclick="go('hub'); return false;" href="#">${c}</a>`;
+  });
+  box.innerHTML = parts.join('<span class="sep">›</span>');
+}
+renderCrumbs("hub");
+window.go = go;
+</script>
+</body>
+</html>
