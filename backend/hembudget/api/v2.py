@@ -266,6 +266,11 @@ def toggle_v2_for_student(
                 "Du kan bara hantera dina egna elever.",
             )
         student.v2_enabled = body.enabled
+        # När v2 aktiveras: markera v1-onboarding som "klar" så App.tsx
+        # inte visar v1-onboardingen för en v2-elev. v2-onboardingen
+        # ligger på /v2/onboarding och triggas av DashboardV2Guard.
+        if body.enabled and not student.onboarding_completed:
+            student.onboarding_completed = True
         db.commit()
         return V2ToggleResponse(
             student_id=student.id,
@@ -293,6 +298,10 @@ def bulk_toggle_v2(
         students = q.all()
         for s in students:
             s.v2_enabled = body.enabled
+            # När v2 aktiveras: markera v1-onboarding som "klar" så
+            # App.tsx-blocket för v1-onboarding skippas.
+            if body.enabled and not s.onboarding_completed:
+                s.onboarding_completed = True
         db.commit()
         return V2BulkResponse(affected=len(students), enabled=body.enabled)
 

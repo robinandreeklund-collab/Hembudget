@@ -71,12 +71,30 @@ import TeacherTimeOnTask from "./pages/TeacherTimeOnTask";
 import PeerReview from "./pages/PeerReview";
 import AdminAI from "./pages/AdminAI";
 import { DemoBanner } from "./components/DemoBanner";
+import { useEffect, useState } from "react";
+import { v2Api, type V2Status } from "./v2/api";
 
 export default function App() {
   const {
     isAuthenticated, loading, initialized, backendError,
     role, asStudent, studentMeta,
   } = useAuth();
+
+  // V2-status hämtas parallellt med studentMeta. Om eleven har v2_enabled
+  // ska vi inte visa v1-onboardingen utan låta routes ta över → /dashboard
+  // → DashboardV2Guard → /v2/onboarding (eller /v2/hub om klar).
+  const [v2Status, setV2Status] = useState<V2Status | null>(null);
+  const [v2Loaded, setV2Loaded] = useState(false);
+  useEffect(() => {
+    if (isAuthenticated && role === "student") {
+      v2Api.status()
+        .then(setV2Status)
+        .catch(() => undefined)
+        .finally(() => setV2Loaded(true));
+    } else {
+      setV2Loaded(true);
+    }
+  }, [isAuthenticated, role]);
   if (loading) return <div className="h-full grid place-items-center text-slate-700">Laddar…</div>;
   if (initialized === null) return <BackendSetup error={backendError ?? undefined} />;
   if (!isAuthenticated) {
@@ -114,8 +132,11 @@ export default function App() {
   }
 
   // Elev som inte är klar med onboarding → tvingas dit
+  // UNDANTAG: om eleven har v2_enabled, skip v1-onboarding och låt
+  // DashboardV2Guard routa till /v2/onboarding istället.
   if (
     role === "student" && studentMeta && !studentMeta.onboarding_completed
+    && (!v2Loaded || !v2Status?.v2_eligible)
   ) {
     return (
       <>

@@ -129,6 +129,34 @@ def test_v2_toggle_per_student(fx) -> None:
     assert post["v2_eligible"] is True
 
 
+def test_v2_toggle_marks_v1_onboarding_complete(fx) -> None:
+    """När v2 aktiveras ska v1-onboarding-flaggan sättas så App.tsx
+    inte tvingar v1-onboardingen för v2-elever."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+
+    # Verifiera att eleven INTE är onboarding-klar i v1 från start
+    from hembudget.school.engines import master_session
+    from hembudget.school.models import Student
+    with master_session() as db:
+        s = db.get(Student, sid)
+        assert s is not None
+        assert s.onboarding_completed is False
+
+    # Aktivera v2 → v1-onboarding ska auto-markeras klar
+    r = client.post(
+        f"/v2/teacher/students/{sid}/v2-toggle",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"enabled": True},
+    )
+    assert r.status_code == 200, r.text
+
+    with master_session() as db:
+        s = db.get(Student, sid)
+        assert s is not None
+        assert s.v2_enabled is True
+        assert s.onboarding_completed is True  # ← bypass v1-onboarding
+
+
 def test_v2_toggle_only_own_students(fx) -> None:
     """Lärare kan inte toggla en annan lärares elev."""
     client, _tch, sa, _stu, _tid, _said, sid = fx
