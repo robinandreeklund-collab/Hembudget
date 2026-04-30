@@ -1262,6 +1262,104 @@ body::after {
 .spec-table tr.tot td:last-child { color: var(--warm); font-style: italic; }
 .spec-table tr.tot td:first-child { font-weight: 700; color: #fff; }
 
+/* === MODE-SWITCH (PRIVAT ↔ FÖRETAG) === */
+/* Hela app:en flips i 3D när man byter mode. Animation-sequence:
+   1. flip-out (rotateY 0 → 90, opacity 1 → 0)
+   2. byt data-mode på body, byt aktiv panel
+   3. flip-in (rotateY -90 → 0, opacity 0 → 1) */
+.app {
+  perspective: 2400px;
+  transform-style: preserve-3d;
+}
+.app.flip-out { animation: flipOut 0.5s cubic-bezier(.7, 0, .8, .3) forwards; }
+.app.flip-in  { animation: flipIn  0.5s cubic-bezier(.2, .8, .3, 1) forwards; }
+@keyframes flipOut {
+  from { transform: rotateY(0deg) scale(1); opacity: 1; }
+  to   { transform: rotateY(85deg) scale(0.96); opacity: 0; }
+}
+@keyframes flipIn {
+  from { transform: rotateY(-85deg) scale(0.96); opacity: 0; }
+  to   { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+
+/* När body är i business-mode: byt accent + lägg till business-class på topbar */
+body[data-mode="business"] {
+  --accent-mode: #6366f1;  /* Saras AB-accent indigo */
+}
+body[data-mode="business"] .topbar {
+  border-bottom-color: rgba(99,102,241,0.35);
+  background: rgba(11,11,28,0.92);
+}
+body[data-mode="business"] .tb-brand::before { color: #6366f1; }
+body[data-mode="business"] .biz-badge { display: inline-flex !important; }
+body[data-mode="business"] .priv-badge { display: none !important; }
+body[data-mode="business"] .priv-only { display: none !important; }
+body:not([data-mode="business"]) .biz-only { display: none !important; }
+
+/* Business-mode: gradient-glow byts från orange till indigo */
+body[data-mode="business"]::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99,102,241,0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168,85,247,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, rgba(14,165,233,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #0a0e1a 0%, #0d1226 60%, #0a0e1a 100%);
+}
+
+/* Mode-switch knapp i topbar */
+.mode-switch {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 6px 12px; border-radius: 100px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line-strong);
+  color: var(--text); text-decoration: none; cursor: pointer;
+  transition: all .25s var(--ease);
+}
+.mode-switch:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.45);
+  color: #c7d2fe;
+}
+.mode-switch::before {
+  content: ""; display: inline-block;
+  width: 28px; height: 14px; border-radius: 100px;
+  background: rgba(255,255,255,0.1);
+  position: relative;
+  transition: background .25s var(--ease);
+}
+.mode-switch::after {
+  content: ""; position: absolute;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--text);
+  transform: translateX(-16px);
+  transition: transform .25s var(--ease), background .25s var(--ease);
+  margin-top: 2px;
+}
+body[data-mode="business"] .mode-switch::before { background: rgba(99,102,241,0.4); }
+body[data-mode="business"] .mode-switch::after { transform: translateX(-2px); background: #c7d2fe; }
+body[data-mode="business"] .mode-switch {
+  background: rgba(99,102,241,0.10);
+  border-color: rgba(99,102,241,0.35);
+  color: #c7d2fe;
+}
+
+.biz-badge, .priv-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 3px 9px; border-radius: 100px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+}
+.priv-badge {
+  background: rgba(220,76,43,0.15); color: var(--accent);
+  border: 1px solid rgba(220,76,43,0.3);
+}
+.biz-badge {
+  display: none;
+  background: rgba(99,102,241,0.18); color: #c7d2fe;
+  border: 1px solid rgba(99,102,241,0.4);
+}
+
 /* === INTERAKTIV GUIDE / SPOTLIGHT === */
 .guide-scrim {
   position: fixed; inset: 0; z-index: 200;
@@ -1701,12 +1799,17 @@ body::after {
 .sug-btn:hover { border-color: var(--warm); border-style: solid; background: rgba(251,191,36,0.04); }
 </style>
 </head>
-<body>
+<body data-mode="private">
 
 <header class="topbar">
   <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+  <span class="priv-badge">Privatekonomi</span>
+  <span class="biz-badge">Sara A. AB · enskild firma</span>
   <div class="tb-crumbs" id="crumbs"></div>
   <div class="tb-spacer"></div>
+  <a href="#" class="mode-switch" id="modeSwitch" title="Byt till företag (eller privat)">
+    <span id="modeLabel">Byt till företag</span>
+  </a>
   <div class="tb-meter" title="AI-tokens">
     <span>AI</span>
     <div class="tb-meter-bar"><div class="tb-meter-fill" style="width:38%;"></div></div>
@@ -3756,6 +3859,14 @@ body::after {
 
     </div>
   </section>
+  <!-- ============ BUSINESS-MODE PANELS ============ -->
+  <section class="panel biz-only" id="p-biz-hub"></section>
+  <section class="panel biz-only" id="p-biz-kunder"></section>
+  <section class="panel biz-only" id="p-biz-faktura"></section>
+  <section class="panel biz-only" id="p-biz-leverantor"></section>
+  <section class="panel biz-only" id="p-biz-bokforing"></section>
+  <section class="panel biz-only" id="p-biz-skatt"></section>
+
   <section class="panel" id="p-modul">
     <div class="shell">
       <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
@@ -4154,8 +4265,73 @@ document.getElementById("guidePrev").addEventListener("click", () => showGuideSt
 document.getElementById("guideSkip").addEventListener("click", endGuide);
 guideScrim.addEventListener("click", endGuide);
 
+// === MODE-SWITCH (PRIVAT ↔ FÖRETAG) ===
+function switchMode() {
+  const body = document.body;
+  const app = document.querySelector(".app");
+  const cur = body.getAttribute("data-mode") || "private";
+  const next = cur === "private" ? "business" : "private";
+
+  // Steg 1: flip-out animation
+  app.classList.add("flip-out");
+
+  setTimeout(() => {
+    // Steg 2: byt mode-state + byt aktiv panel
+    body.setAttribute("data-mode", next);
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    if (next === "business") {
+      document.getElementById("p-biz-hub").classList.add("active");
+      document.getElementById("modeLabel").textContent = "Byt till privat";
+      document.getElementById("crumbs").innerHTML = '<a onclick="window.go(\'biz-hub\'); return false;" href="#">SARA A. AB</a><span class="sep">›</span><strong>● HUBBEN</strong>';
+    } else {
+      document.getElementById("p-hub").classList.add("active");
+      document.getElementById("modeLabel").textContent = "Byt till företag";
+      renderCrumbs("hub");
+    }
+
+    // Steg 3: flip-in animation
+    app.classList.remove("flip-out");
+    app.classList.add("flip-in");
+    setTimeout(() => app.classList.remove("flip-in"), 550);
+  }, 460);
+}
+document.getElementById("modeSwitch").addEventListener("click", (e) => {
+  e.preventDefault();
+  switchMode();
+});
+
+// Utöka go() att hantera business-paneler
+const _go2 = window.go;
+window.go = function(view) {
+  // Business-panel keys börjar med "biz-"
+  if (view.startsWith("biz-")) {
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    const p = document.getElementById("p-" + view);
+    if (p) p.classList.add("active");
+    // Update breadcrumb
+    const labels = {
+      "biz-hub": "● HUBBEN",
+      "biz-kunder": "KUNDER",
+      "biz-faktura": "● SKAPA FAKTURA",
+      "biz-leverantor": "● LEVERANTÖRSFAKTUROR",
+      "biz-bokforing": "● BOKFÖRING",
+      "biz-skatt": "● MOMS &amp; F-SKATT",
+    };
+    const cur = labels[view] || "● —";
+    let breadcrumb;
+    if (view === "biz-hub") {
+      breadcrumb = '<strong>SARA A. AB</strong><span class="sep">›</span>' + cur;
+    } else {
+      breadcrumb = '<a onclick="window.go(\'biz-hub\'); return false;" href="#">SARA A. AB</a><span class="sep">›</span>' + cur;
+    }
+    document.getElementById("crumbs").innerHTML = breadcrumb;
+    window.scrollTo({ top: 0, behavior: "instant" });
+    return;
+  }
+  _go2(view);
+};
+
 // Globala helpers
-window.go = go;
 window.startGuide = startGuide;
 </script>
 </body>
