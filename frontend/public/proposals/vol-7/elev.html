@@ -1262,6 +1262,84 @@ body::after {
 .spec-table tr.tot td:last-child { color: var(--warm); font-style: italic; }
 .spec-table tr.tot td:first-child { font-weight: 700; color: #fff; }
 
+/* === INTERAKTIV GUIDE / SPOTLIGHT === */
+.guide-scrim {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(10,14,26,0.78);
+  backdrop-filter: blur(2px);
+  display: none;
+  pointer-events: auto;
+}
+.guide-scrim.on { display: block; animation: fadein .35s var(--ease); }
+
+/* Spotlight ring som highlightar element */
+.guide-spotlight {
+  position: fixed; z-index: 201;
+  border-radius: 8px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 4px rgba(251,191,36,0.6),
+    0 0 0 8px rgba(251,191,36,0.25),
+    0 0 0 9999px rgba(10,14,26,0.78);
+  transition: all .4s var(--ease);
+}
+
+/* Tooltip-kort */
+.guide-tip {
+  position: fixed; z-index: 202;
+  max-width: 380px;
+  background: rgba(15,21,37,0.96);
+  border: 1px solid var(--warm);
+  border-radius: 8px;
+  padding: 22px 24px;
+  box-shadow: 0 20px 60px -10px rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+}
+.guide-tip-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 8px;
+}
+.guide-tip-eye::before { content: "✦ "; }
+.guide-tip-h {
+  font-family: var(--serif); font-size: 19px; font-weight: 700;
+  letter-spacing: -0.4px; color: #fff;
+  margin-bottom: 10px;
+  line-height: 1.2;
+}
+.guide-tip-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.guide-tip-prose {
+  font-family: var(--serif); font-size: 14px; line-height: 1.5;
+  color: var(--text);
+}
+.guide-tip-prose em { font-style: italic; color: var(--warm); }
+.guide-tip-prose strong { color: var(--accent); font-weight: 700; }
+
+.guide-tip-foot {
+  margin-top: 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 10px;
+}
+.guide-tip-prog {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1px; color: var(--text-mid); text-transform: uppercase;
+}
+.guide-tip-prog strong { color: #fff; }
+.guide-tip-actions { display: flex; gap: 8px; }
+.guide-btn {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 8px 14px; border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: #fff; background: rgba(255,255,255,0.04);
+  cursor: pointer;
+}
+.guide-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
+.guide-btn.solid { background: var(--warm); color: #422006; border-color: var(--warm); }
+.guide-btn.solid:hover { background: #f59e0b; }
+.guide-btn.skip { color: var(--text-mid); border-color: transparent; }
+.guide-btn.skip:hover { color: var(--warm); }
+
 /* === PEDAGOGIK-BOXAR === */
 .peda {
   background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(15,21,37,0.5));
@@ -1634,6 +1712,7 @@ body::after {
     <div class="tb-meter-bar"><div class="tb-meter-fill" style="width:38%;"></div></div>
     <span>62 % kvar</span>
   </div>
+  <a href="#" class="tb-echo" id="guideBtn" style="background: rgba(255,255,255,0.06); color: #fff; border: 1px solid var(--line-strong);" onclick="startGuide(); return false;">Guide ✦</a>
   <button class="tb-echo" id="echoBtn">Echo</button>
   <a href="#" class="tb-user">SA</a>
 </header>
@@ -3774,6 +3853,23 @@ body::after {
   </section>
 </main>
 
+<!-- INTERAKTIV GUIDE -->
+<div class="guide-scrim" id="guideScrim"></div>
+<div class="guide-spotlight" id="guideSpotlight" style="display: none;"></div>
+<aside class="guide-tip" id="guideTip" style="display: none;">
+  <div class="guide-tip-eye" id="guideTipEye">Guide · steg 1 av 8</div>
+  <h3 class="guide-tip-h" id="guideTipH">Detta är pentagonen.</h3>
+  <p class="guide-tip-prose" id="guideTipProse">Pentagonen visar din balans i fem axlar. Klicka på en axel för att gå till relaterade aktörer.</p>
+  <div class="guide-tip-foot">
+    <span class="guide-tip-prog">Steg <strong id="guideTipProg">1</strong> / 8</span>
+    <div class="guide-tip-actions">
+      <button class="guide-btn skip" id="guideSkip">Avsluta</button>
+      <button class="guide-btn" id="guidePrev">← Bakåt</button>
+      <button class="guide-btn solid" id="guideNext">Nästa →</button>
+    </div>
+  </div>
+</aside>
+
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer">
   <div class="drawer-head">
@@ -3880,6 +3976,8 @@ document.getElementById("ob-next").addEventListener("click", () => {
     renderCrumbs("hub");
     checkOnboardingMode();
     window.scrollTo({ top: 0 });
+    // Starta interaktiv guide efter en kort paus
+    setTimeout(() => { if (window.startGuide) window.startGuide(); }, 500);
   }
 });
 document.getElementById("ob-back").addEventListener("click", () => {
@@ -3905,8 +4003,160 @@ document.getElementById("echoBtn").addEventListener("click", () => {
 document.getElementById("scrim").addEventListener("click", closeDrawer);
 document.getElementById("drawerClose").addEventListener("click", closeDrawer);
 
+// === INTERAKTIV GUIDE ===
+const GUIDE_STEPS = [
+  {
+    selector: ".tb-crumbs", view: "hub",
+    eye: "Guide · 1 / 8",
+    h: "Här är du <em>just nu</em>.",
+    prose: "Breadcrumb visar var i systemet du är. Du kan alltid gå tillbaka till hubben här. Just nu står du på <strong>HUBBEN</strong> — pentagonens centrum.",
+    placement: "bottom"
+  },
+  {
+    selector: ".pentagon-stage", view: "hub",
+    eye: "Guide · 2 / 8 · pentagon",
+    h: "Pentagonen är ditt <em>hjärta</em>.",
+    prose: "Fem axlar (ekonomi, karriär, hälsa, relation, fritid). När något händer — som tandläkaren ringer — tippar pentagonen <em>direkt</em>. Inget val är gratis. Klicka på en axel för att gå till relaterade aktörer.",
+    placement: "right"
+  },
+  {
+    selector: ".event-card", view: "hub",
+    eye: "Guide · 3 / 8 · händelser",
+    h: "Händelsekort visar <em>nu</em>.",
+    prose: "Det viktigaste som händer just nu poppar upp som en händelse. Här har <strong>tandläkaren ringt</strong>. Du har 3 val. Konsekvensen syns i pentagon innan du valt.",
+    placement: "top"
+  },
+  {
+    selector: ".compass", view: "hub",
+    eye: "Guide · 4 / 8 · kompassen",
+    h: "Här är dina <em>aktörer</em>.",
+    prose: "8 aktörer (banken, arbetsgivaren m.fl.) plus postlådan som meta-aktör. <em>Aktörer ser ut som världen</em>. Klicka på Postlådan eller Banken för att gå dit.",
+    placement: "top"
+  },
+  {
+    selector: "#echoBtn", view: "hub",
+    eye: "Guide · 5 / 8 · Echo",
+    h: "Echo är alltid <em>tillgänglig</em>.",
+    prose: "Echo-knappen i topbar öppnar en chatt-drawer. Echo vet vad du tittar på och ställer <em>frågor</em> — inte råd. Du fattar besluten själv.",
+    placement: "bottom"
+  },
+  {
+    selector: ".char-card", view: "hub",
+    eye: "Guide · 6 / 8 · veckans kort",
+    h: "Saras <em>vecka</em> i prosa.",
+    prose: "Karaktärs-kortet sammanfattar Saras situation och föreslår genvägar via pillarna. Klicka <em>Postlådan · 4 ohanterade</em> direkt här för att hoppa till postlådan.",
+    placement: "bottom"
+  },
+  {
+    selector: ".tb-meter", view: "hub",
+    eye: "Guide · 7 / 8 · AI-budget",
+    h: "Echo + Maria + Anna har <em>tak</em>.",
+    prose: "AI är en knapp resurs. Din lärare har en månadsbudget i tokens — du räknas mot den. När den är slut blir AI tyst (men ingen krasch). 62 % kvar denna månad.",
+    placement: "bottom"
+  },
+  {
+    selector: ".tb-user", view: "hub",
+    eye: "Guide · 8 / 8 · klar",
+    h: "Du är <em>laddad</em>.",
+    prose: "Dags att börja Vol. 18 — Saras vecka. Tandläkaren väntar på ditt svar. Postlådan har 4 ohanterade. Anders Lind har skickat ett uppdrag. Lycka till.",
+    placement: "bottom-left"
+  }
+];
+
+let guideStep = 0;
+const guideScrim = document.getElementById("guideScrim");
+const guideSpot = document.getElementById("guideSpotlight");
+const guideTip = document.getElementById("guideTip");
+
+function startGuide() {
+  guideStep = 0;
+  // Säkerställ att hub är aktiv
+  if (!document.getElementById("p-hub").classList.contains("active")) {
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("p-hub").classList.add("active");
+    renderCrumbs("hub");
+    checkOnboardingMode();
+  }
+  guideScrim.classList.add("on");
+  guideSpot.style.display = "block";
+  guideTip.style.display = "block";
+  showGuideStep(0);
+}
+function endGuide() {
+  guideScrim.classList.remove("on");
+  guideSpot.style.display = "none";
+  guideTip.style.display = "none";
+}
+function showGuideStep(i) {
+  if (i < 0 || i >= GUIDE_STEPS.length) return endGuide();
+  guideStep = i;
+  const step = GUIDE_STEPS[i];
+
+  // Uppdatera tip-text
+  document.getElementById("guideTipEye").textContent = step.eye;
+  document.getElementById("guideTipH").innerHTML = step.h;
+  document.getElementById("guideTipProse").innerHTML = step.prose;
+  document.getElementById("guideTipProg").textContent = (i + 1);
+
+  // Position spotlight på elementet
+  const el = document.querySelector(step.selector);
+  if (!el) {
+    // Om elementet inte hittas, gå vidare
+    return showGuideStep(i + 1);
+  }
+  // Scroll till elementet
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  setTimeout(() => {
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    guideSpot.style.left = (r.left - pad) + "px";
+    guideSpot.style.top = (r.top - pad) + "px";
+    guideSpot.style.width = (r.width + pad*2) + "px";
+    guideSpot.style.height = (r.height + pad*2) + "px";
+
+    // Position tip — försök placera så den är synlig
+    const tipW = 380, tipH = 220;
+    let left, top;
+    const placement = step.placement || "bottom";
+    if (placement === "bottom") {
+      left = Math.max(20, Math.min(window.innerWidth - tipW - 20, r.left + r.width/2 - tipW/2));
+      top = r.bottom + 16;
+      if (top + tipH > window.innerHeight - 20) top = r.top - tipH - 16;
+    } else if (placement === "top") {
+      left = Math.max(20, Math.min(window.innerWidth - tipW - 20, r.left + r.width/2 - tipW/2));
+      top = r.top - tipH - 16;
+      if (top < 70) top = r.bottom + 16;
+    } else if (placement === "right") {
+      left = r.right + 16;
+      top = r.top + r.height/2 - tipH/2;
+      if (left + tipW > window.innerWidth - 20) left = r.left - tipW - 16;
+      if (top < 70) top = 70;
+      if (top + tipH > window.innerHeight - 20) top = window.innerHeight - tipH - 20;
+    } else if (placement === "bottom-left") {
+      left = Math.max(20, r.right - tipW);
+      top = r.bottom + 16;
+    }
+    guideTip.style.left = left + "px";
+    guideTip.style.top = top + "px";
+
+    // Update prev/next button states
+    document.getElementById("guidePrev").disabled = (i === 0);
+    document.getElementById("guidePrev").style.opacity = (i === 0) ? "0.4" : "1";
+    document.getElementById("guideNext").textContent = (i === GUIDE_STEPS.length - 1) ? "Klar — börja!" : "Nästa →";
+  }, 350);
+}
+
+document.getElementById("guideNext").addEventListener("click", () => {
+  if (guideStep === GUIDE_STEPS.length - 1) endGuide();
+  else showGuideStep(guideStep + 1);
+});
+document.getElementById("guidePrev").addEventListener("click", () => showGuideStep(guideStep - 1));
+document.getElementById("guideSkip").addEventListener("click", endGuide);
+guideScrim.addEventListener("click", endGuide);
+
 // Globala helpers
 window.go = go;
+window.startGuide = startGuide;
 </script>
 </body>
 </html>
