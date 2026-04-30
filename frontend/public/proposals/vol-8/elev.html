@@ -445,7 +445,127 @@ body::after {
       </div>
     </div>
   </section>
-  <section class="scene" id="s-2"></section>
+  <!-- SCEN 2 — Tandläkaren ringer · 3 val -->
+  <section class="scene" id="s-2">
+    <div class="shell">
+
+      <div class="scene-eyebrow">
+        Kapitel 2 · 14:22 onsdag <span class="sep">·</span> händelse · pågår
+      </div>
+
+      <h1 class="scene-h1">Tandläkaren <em>ringer</em>.</h1>
+
+      <div class="phone-illust">
+        <div class="phone-icon">
+          <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </div>
+        <div class="phone-text">
+          <strong>Folktandvården Hökarängen</strong> ringer. Du har en cariesfyllning
+          som måste göras inom 30 dagar. <strong>4 200 kr</strong>, faktura kommer
+          imorgon med 30 dagars förfall.
+        </div>
+      </div>
+
+      <p class="scene-lead">
+        Du har <em>14 282 kr</em> på lönekontot. Hyran på <em>7 240</em> dras
+        på fredag (1 maj). Bufferten ligger på <em>1 800</em>. Lönen kommer den
+        25:e — <em>26 dagar bort</em>. Vad gör du?
+      </p>
+
+      <div class="choices">
+
+        <a class="choice" onclick="goScene(3); return false;" href="#" data-pick="now">
+          <div class="choice-eye">Val A · betala nu</div>
+          <h3 class="choice-h">Betala från <em>lönekontot</em>.</h3>
+          <p class="choice-prose">
+            Klart, bekymmer borta. Men: efter hyra och tandvård har du
+            <strong>2 842 kr</strong> kvar för 26 dagar. Det är cirka <strong>110 kr/dag</strong>.
+            Mat, transport, allt.
+          </p>
+          <div class="consequence">
+            <div class="consequence-line down"><span>Ekonomi</span><strong>− 8 pkt</strong></div>
+            <div class="consequence-line up"><span>Hälsa</span><strong>+ 4 pkt</strong></div>
+            <div class="consequence-line down"><span>Fritid</span><strong>− 3 pkt</strong></div>
+          </div>
+          <svg class="mini-pent-svg" viewBox="-50 -50 100 100">
+            <polygon points="0,-40 38,-13 24,33 -24,33 -38,-13" class="axes"/>
+            <line x1="0" y1="0" x2="0" y2="-40" class="axes"/>
+            <line x1="0" y1="0" x2="38" y2="-13" class="axes"/>
+            <line x1="0" y1="0" x2="24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-38" y2="-13" class="axes"/>
+            <polygon points="0,-25 36,-13 16,28 -22,30 -32,-13" class="now"/>
+          </svg>
+        </a>
+
+        <a class="choice" onclick="goScene(3); return false;" href="#" data-pick="split">
+          <div class="choice-eye">Val B · delbetala</div>
+          <h3 class="choice-h">Delbetalning <em>6 mån</em>.</h3>
+          <p class="choice-prose">
+            <strong>720 kr/mån</strong> — bekvämt nu, dyrare totalt (ränta 14 %
+            ger <strong>+ 380 kr</strong>). Hyran och bufferten orörd. Men en
+            ny månadskostnad i sex månader.
+          </p>
+          <div class="consequence">
+            <div class="consequence-line flat"><span>Ekonomi</span><strong>− 1 pkt</strong></div>
+            <div class="consequence-line up"><span>Hälsa</span><strong>+ 4 pkt</strong></div>
+            <div class="consequence-line down"><span>Karriär</span><strong>− 1 pkt</strong></div>
+          </div>
+          <svg class="mini-pent-svg" viewBox="-50 -50 100 100">
+            <polygon points="0,-40 38,-13 24,33 -24,33 -38,-13" class="axes"/>
+            <line x1="0" y1="0" x2="0" y2="-40" class="axes"/>
+            <line x1="0" y1="0" x2="38" y2="-13" class="axes"/>
+            <line x1="0" y1="0" x2="24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-38" y2="-13" class="axes"/>
+            <polygon points="0,-32 36,-13 22,30 -22,30 -36,-13" class="now flat"/>
+          </svg>
+        </a>
+
+        <a class="choice" onclick="goScene(3); return false;" href="#" data-pick="wait">
+          <div class="choice-eye">Val C · skjut upp</div>
+          <h3 class="choice-h">Vänta tills <em>efter lönen</em>.</h3>
+          <p class="choice-prose">
+            30 dagars förfall räcker — du betalar runt 5 maj efter lönen. Men:
+            tandvärken kan förvärras. Och du <strong>missar tidsfönstret</strong>
+            för förebyggande om du skjuter mer.
+          </p>
+          <div class="consequence">
+            <div class="consequence-line up"><span>Ekonomi</span><strong>± 0 pkt</strong></div>
+            <div class="consequence-line down"><span>Hälsa</span><strong>− 8 pkt</strong></div>
+            <div class="consequence-line flat"><span>Fritid</span><strong>± 0 pkt</strong></div>
+          </div>
+          <svg class="mini-pent-svg" viewBox="-50 -50 100 100">
+            <polygon points="0,-40 38,-13 24,33 -24,33 -38,-13" class="axes"/>
+            <line x1="0" y1="0" x2="0" y2="-40" class="axes"/>
+            <line x1="0" y1="0" x2="38" y2="-13" class="axes"/>
+            <line x1="0" y1="0" x2="24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-38" y2="-13" class="axes"/>
+            <polygon points="0,-30 28,-9 22,30 -22,30 -36,-13" class="now"/>
+          </svg>
+        </a>
+
+      </div>
+
+      <div class="echo-cue">
+        <div>
+          <div class="echo-cue-label">Echo · innan du väljer</div>
+          <div class="echo-cue-text">
+            "Du har varit här förut — i mars sköt du upp en räkning. Hur kändes
+            det <em>när det var dags att betala</em>? Och vad <em>kostade</em> det
+            i tankar däremellan?"
+          </div>
+        </div>
+        <a href="#" class="echo-cue-btn" onclick="document.getElementById('echoBtn').click(); return false;">Öppna chatten</a>
+      </div>
+
+      <div class="scene-foot">
+        <a onclick="goScene(1); return false;" href="#">← Tillbaka till kap. 1</a>
+        <span>Pentagon påverkas på <strong>nästa scen</strong></span>
+      </div>
+    </div>
+  </section>
   <section class="scene" id="s-3"></section>
   <section class="scene" id="s-4"></section>
   <section class="scene" id="s-5"></section>
