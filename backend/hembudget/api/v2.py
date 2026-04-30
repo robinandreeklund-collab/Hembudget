@@ -23,7 +23,9 @@ from datetime import date as _date
 from decimal import Decimal
 
 from ..db.base import session_scope
-from ..db.models import Account, Transaction, FundHolding, UpcomingTransaction
+from ..db.models import (
+    Account, Transaction, FundHolding, UpcomingTransaction, Goal,
+)
 from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
 from ..wellbeing.calculator import calculate_wellbeing
@@ -817,6 +819,207 @@ def get_budget(
             )
     except Exception:
         return _empty_budget(info.student_id, ym)
+
+
+# === Sparmål (Goal-tabellen) ===
+
+class V2GoalRow(BaseModel):
+    id: int
+    name: str
+    icon: str
+    target_amount: float
+    current_amount: float
+    target_date: Optional[_date] = None
+    progress_pct: float
+    months_remaining: Optional[int] = None
+    monthly_pace_target: Optional[float] = None
+    expected_progress_pct: Optional[float] = None
+    account_name: Optional[str] = None
+    status: Literal["new", "ahead", "on_track", "behind", "complete"]
+    color: str  # CSS-färg som matchar prototypen
+
+
+class V2GoalsSummary(BaseModel):
+    total_saved: float
+    total_target: float
+    overall_progress_pct: float
+    monthly_pace_total: float
+    goals_count: int
+    on_track_count: int
+    behind_count: int
+
+
+class V2GoalsResponse(BaseModel):
+    student_id: int
+    summary: V2GoalsSummary
+    goals: list[V2GoalRow]
+
+
+# Mappning mål-namn → emoji + färg (matchar prototypens mål-kort).
+# Prototypens 4 mål: Buffert (orange/accent), Körkort (gul/warm),
+# Interrail (grön), Kontantinsats (grå/dim).
+_GOAL_KEYWORDS_TO_COLOR: list[tuple[tuple[str, ...], str, str]] = [
+    (("buffert", "akut"), "var(--accent)", "🛡"),  # accent (orange) — bufferten
+    (("körkort", "korkort", "körkortet"), "var(--warm)", "🚗"),  # warm (gul)
+    (("interrail", "resa", "europa"), "#6ee7b7", "🌍"),  # grön
+    (("kontant", "bostad", "lägenhet", "lagenhet", "hus"), "var(--text-dim)", "🏠"),
+    (("pension",), "#a5b4fc", "🪴"),
+    (("dator", "laptop", "skola"), "#c7d2fe", "💻"),
+    (("semester",), "#f59e0b", "🏖"),
+]
+
+
+def _goal_color_icon(name: str) -> tuple[str, str]:
+    lower = (name or "").lower()
+    for keys, color, icon in _GOAL_KEYWORDS_TO_COLOR:
+        if any(k in lower for k in keys):
+            return color, icon
+    return "var(--warm)", "◎"
+
+
+def _empty_goals(student_id: int) -> V2GoalsResponse:
+    return V2GoalsResponse(
+        student_id=student_id,
+        summary=V2GoalsSummary(
+            total_saved=0,
+            total_target=0,
+            overall_progress_pct=0,
+            monthly_pace_total=0,
+            goals_count=0,
+            on_track_count=0,
+            behind_count=0,
+        ),
+        goals=[],
+    )
+
+
+@router.get("/mal", response_model=V2GoalsResponse)
+def get_goals(info: TokenInfo = Depends(require_token)) -> V2GoalsResponse:
+    """Aggregat-endpoint för sparmål-vyn (/v2/mal).
+
+    Returnerar:
+    - Alla Goal-rader med beräknat progress, månadsbidrag-mål, status
+    - Summary med totalt sparat, totalt mål, snittprogress
+
+    Status per mål (pedagogisk):
+    - complete    · current >= target
+    - new         · progress < 5 % (precis startat)
+    - ahead       · progress överstiger förväntad + 10 %-enheter
+    - on_track    · progress nära förväntad (±10 %-enheter)
+    - behind      · progress under förväntad - 10 %-enheter
+
+    Förväntad progress = elapsed_days / total_days mellan
+    skapande och target_date. Om target_date saknas → status=on_track
+    eller new beroende på actual progress.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_goals(0)
+
+    try:
+        with session_scope() as s:
+            today = _date.today()
+            goals_db = s.query(Goal).order_by(Goal.id).all()
+            accounts = {a.id: a.name for a in s.query(Account).all()}
+
+            total_saved = Decimal("0")
+            total_target = Decimal("0")
+            monthly_pace_total = Decimal("0")
+            on_track_count = 0
+            behind_count = 0
+            rows: list[V2GoalRow] = []
+
+            for g in goals_db:
+                target = g.target_amount or Decimal("0")
+                current = g.current_amount or Decimal("0")
+                pct = float(current / target * 100) if target > 0 else 0.0
+
+                # Beräkna months_remaining + monthly_pace_target
+                months_remaining: Optional[int] = None
+                monthly_pace: Optional[Decimal] = None
+                expected_pct: Optional[float] = None
+
+                if g.target_date is not None:
+                    days_remaining = (g.target_date - today).days
+                    months_remaining = max(0, days_remaining // 30)
+                    if days_remaining > 0 and current < target:
+                        # Vad som krävs/mån för att hinna
+                        if months_remaining > 0:
+                            monthly_pace = (target - current) / Decimal(
+                                months_remaining
+                            )
+                            monthly_pace_total += monthly_pace
+                        else:
+                            # Mindre än en månad kvar — rapportera diffen
+                            monthly_pace = target - current
+
+                # Status
+                if current >= target and target > 0:
+                    status: str = "complete"
+                elif pct < 5:
+                    status = "new"
+                elif expected_pct is not None:
+                    diff = pct - expected_pct
+                    if diff > 10:
+                        status = "ahead"
+                    elif diff < -10:
+                        status = "behind"
+                        behind_count += 1
+                    else:
+                        status = "on_track"
+                        on_track_count += 1
+                else:
+                    # Ingen deadline — kategorisera enbart på progress
+                    if pct > 50:
+                        status = "on_track"
+                        on_track_count += 1
+                    else:
+                        status = "new"
+
+                color, icon = _goal_color_icon(g.name)
+
+                rows.append(V2GoalRow(
+                    id=g.id,
+                    name=g.name,
+                    icon=icon,
+                    target_amount=float(target),
+                    current_amount=float(current),
+                    target_date=g.target_date,
+                    progress_pct=round(pct, 1),
+                    months_remaining=months_remaining,
+                    monthly_pace_target=(
+                        float(monthly_pace) if monthly_pace else None
+                    ),
+                    expected_progress_pct=(
+                        round(expected_pct, 1) if expected_pct is not None else None
+                    ),
+                    account_name=accounts.get(g.account_id) if g.account_id else None,
+                    status=status,  # type: ignore[arg-type]
+                    color=color,
+                ))
+
+                total_saved += current
+                total_target += target
+
+            overall_pct = (
+                float(total_saved / total_target * 100)
+                if total_target > 0 else 0.0
+            )
+
+            return V2GoalsResponse(
+                student_id=info.student_id,
+                summary=V2GoalsSummary(
+                    total_saved=float(total_saved),
+                    total_target=float(total_target),
+                    overall_progress_pct=round(overall_pct, 1),
+                    monthly_pace_total=float(monthly_pace_total),
+                    goals_count=len(rows),
+                    on_track_count=on_track_count,
+                    behind_count=behind_count,
+                ),
+                goals=rows,
+            )
+    except Exception:
+        return _empty_goals(info.student_id)
 
 
 # === Endpoints ===

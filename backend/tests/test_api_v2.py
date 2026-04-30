@@ -864,6 +864,149 @@ def test_v2_budget_fixed_category_status(fx) -> None:
     assert cats["Hyra-test-fixed"]["icon"] == "▥"
 
 
+# === /v2/mal (sparmål) ===
+
+def test_v2_mal_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/mal")
+    assert r.status_code == 401
+
+
+def test_v2_mal_for_student_returns_structure(fx) -> None:
+    """Eleven utan mål får tom payload med rätt struktur."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/mal",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    s = data["summary"]
+    for f in (
+        "total_saved",
+        "total_target",
+        "overall_progress_pct",
+        "monthly_pace_total",
+        "goals_count",
+        "on_track_count",
+        "behind_count",
+    ):
+        assert f in s
+    assert isinstance(data["goals"], list)
+
+
+def test_v2_mal_for_teacher_returns_empty(fx) -> None:
+    """Lärare har ingen scope-DB — får tom payload."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/mal",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["goals"] == []
+
+
+def test_v2_mal_with_goals(fx) -> None:
+    """Mål + saldo i scope-DB ska speglas korrekt."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import Goal as _Goal
+
+    today = _d.today()
+
+    def seed(s) -> None:
+        # Mål 1: Buffert · 1800/22000 (8 %, 600/mån, klart dec 2028)
+        s.add(_Goal(
+            name="Buffert (akut)",
+            target_amount=_D("22000"),
+            current_amount=_D("1800"),
+            target_date=today + _td(days=365 * 2),
+        ))
+        # Mål 2: Körkort · 4200/15000 (28 %)
+        s.add(_Goal(
+            name="Körkort B",
+            target_amount=_D("15000"),
+            current_amount=_D("4200"),
+            target_date=today + _td(days=365),
+        ))
+        # Mål 3: Komplett — 8000/8000
+        s.add(_Goal(
+            name="Interrail-resa",
+            target_amount=_D("8000"),
+            current_amount=_D("8000"),
+            target_date=today + _td(days=180),
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/mal",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["goals_count"] == 3
+    assert data["summary"]["total_saved"] == 14000  # 1800 + 4200 + 8000
+    assert data["summary"]["total_target"] == 45000  # 22000 + 15000 + 8000
+
+    by_name = {g["name"]: g for g in data["goals"]}
+
+    # Buffert: 1800/22000 = 8 % → "new" (< low threshold typically)
+    # men progress > 5 så det blir on_track eller behind beroende på
+    # expected progress. Kollar bara att color/icon är rätt för nu.
+    buf = by_name["Buffert (akut)"]
+    assert buf["target_amount"] == 22000
+    assert buf["current_amount"] == 1800
+    assert buf["progress_pct"] > 5
+    assert buf["color"] == "var(--accent)"
+    assert buf["icon"] == "🛡"
+
+    # Körkort: 28 % progress, har deadline → bör räkna pace
+    kor = by_name["Körkort B"]
+    assert kor["color"] == "var(--warm)"
+    assert kor["icon"] == "🚗"
+    assert kor["months_remaining"] is not None and kor["months_remaining"] > 0
+    # (15000 - 4200) / months_remaining > 0
+    assert kor["monthly_pace_target"] is not None
+    assert kor["monthly_pace_target"] > 0
+
+    # Interrail komplett: status=complete, ingen pace behövs
+    ir = by_name["Interrail-resa"]
+    assert ir["status"] == "complete"
+    assert ir["color"] == "#6ee7b7"
+    assert ir["icon"] == "🌍"
+
+
+def test_v2_mal_progress_overall(fx) -> None:
+    """overall_progress_pct = totalt sparat / totalt mål * 100."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from decimal import Decimal as _D
+    from hembudget.db.models import Goal as _Goal
+
+    def seed(s) -> None:
+        s.add(_Goal(
+            name="A", target_amount=_D("10000"), current_amount=_D("2500"),
+        ))
+        s.add(_Goal(
+            name="B", target_amount=_D("5000"), current_amount=_D("2500"),
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/mal",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    s = r.json()["summary"]
+    # 5000/15000 = 33.3 %
+    assert abs(s["overall_progress_pct"] - 33.3) < 0.5
+
+
 def test_v2_bank_upcoming_bills(fx) -> None:
     """Öppna kommande fakturor speglas i payload + upcoming_open_total."""
     client, _tch, _sa, stu, _tid, _said, sid = fx

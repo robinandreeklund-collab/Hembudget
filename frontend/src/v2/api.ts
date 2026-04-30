@@ -163,6 +163,38 @@ export type BudgetData = {
   categories: V2BudgetCategoryRow[];
 };
 
+export type V2GoalRow = {
+  id: number;
+  name: string;
+  icon: string;
+  target_amount: number;
+  current_amount: number;
+  target_date: string | null;
+  progress_pct: number;
+  months_remaining: number | null;
+  monthly_pace_target: number | null;
+  expected_progress_pct: number | null;
+  account_name: string | null;
+  status: "new" | "ahead" | "on_track" | "behind" | "complete";
+  color: string;
+};
+
+export type V2GoalsSummary = {
+  total_saved: number;
+  total_target: number;
+  overall_progress_pct: number;
+  monthly_pace_total: number;
+  goals_count: number;
+  on_track_count: number;
+  behind_count: number;
+};
+
+export type GoalsData = {
+  student_id: number;
+  summary: V2GoalsSummary;
+  goals: V2GoalRow[];
+};
+
 export type V2RosterRow = {
   student_id: number;
   display_name: string;
@@ -186,6 +218,7 @@ export const v2Api = {
     api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
   budget: (month?: string) =>
     api<BudgetData>(`/v2/budget${month ? `?month=${month}` : ""}`),
+  goals: () => api<GoalsData>("/v2/mal"),
   completeOnboarding: (body: {
     spend_profile: SpendProfile;
     fairness_choice: FairnessChoice | null;
