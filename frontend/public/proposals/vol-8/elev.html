@@ -106,6 +106,262 @@ body::after {
 }
 .pill::before { content: "●"; color: var(--accent); font-size: 10px; }
 .pill.warm::before { color: var(--warm); }
+
+/* === SCEN-LAYOUT === */
+.scene-eyebrow {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.scene-eyebrow::before { content: "●"; }
+.scene-eyebrow .sep { color: var(--text-dim); }
+
+.scene-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(40px, 6vw, 80px);
+  letter-spacing: -2px; line-height: 1;
+  color: #fff; margin-bottom: 22px;
+}
+.scene-h1 em { font-style: italic; color: var(--warm); font-weight: 500; }
+.scene-h1 strong { color: var(--accent); font-weight: 700; }
+
+.scene-lead {
+  font-family: var(--serif); font-size: clamp(17px, 2vw, 22px);
+  line-height: 1.45; color: var(--text);
+  max-width: 760px; margin-bottom: 28px;
+}
+.scene-lead em { font-style: italic; color: var(--warm); }
+.scene-lead strong { color: var(--accent); font-weight: 700; }
+
+/* Karaktärs-kort i topp av scen */
+.char-card {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--warm);
+  border-radius: 6px;
+  padding: 18px 22px;
+  max-width: 460px;
+  margin-bottom: 32px;
+  backdrop-filter: blur(8px);
+}
+.char-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 6px;
+}
+.char-eye::before { content: "● "; }
+.char-line {
+  font-family: var(--serif); font-size: 16px; line-height: 1.5;
+  color: var(--text);
+}
+.char-line em { font-style: italic; color: var(--warm); }
+.char-line strong { color: var(--accent); font-weight: 700; }
+.char-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 10px;
+}
+
+/* Konsekvens-kort (val) */
+.choices {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; margin-top: 24px;
+}
+@media (max-width: 900px) { .choices { grid-template-columns: 1fr; } }
+
+.choice {
+  background: rgba(15,21,37,0.8);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: 22px 24px;
+  text-decoration: none; color: var(--text);
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: all .3s var(--ease);
+  position: relative; overflow: hidden;
+  min-height: 240px;
+}
+.choice:hover {
+  border-color: var(--warm);
+  background: rgba(15,21,37,1);
+  transform: translateY(-4px);
+}
+.choice::after {
+  content: ""; position: absolute; right: -50px; top: -50px;
+  width: 140px; height: 140px;
+  background: radial-gradient(circle, rgba(251,191,36,0.10), transparent 70%);
+  opacity: 0; transition: opacity .3s var(--ease);
+}
+.choice:hover::after { opacity: 1; }
+.choice-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm);
+}
+.choice-eye::before { content: "● "; }
+.choice-h {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff; line-height: 1.15;
+}
+.choice-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.choice-prose {
+  font-family: var(--serif); font-size: 14.5px; line-height: 1.5;
+  color: var(--text-mid); flex: 1;
+}
+.choice-prose strong { color: var(--text); font-weight: 700; }
+
+.consequence {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.consequence-line {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 0.6px; color: var(--text-mid);
+}
+.consequence-line strong { font-family: var(--serif); font-style: italic; }
+.consequence-line.up strong { color: #6ee7b7; }
+.consequence-line.down strong { color: #fca5a5; }
+.consequence-line.flat strong { color: var(--text-mid); }
+
+/* Mini pentagon i kortet */
+.mini-pent-svg {
+  width: 60px; height: 60px;
+  position: absolute; bottom: 16px; right: 16px;
+  opacity: 0.7;
+}
+.mini-pent-svg .axes { fill: none; stroke: rgba(255,255,255,0.18); stroke-width: 0.6; }
+.mini-pent-svg .now { fill: rgba(220,76,43,0.25); stroke: var(--accent); stroke-width: 1.4; }
+.mini-pent-svg .now.up { fill: rgba(110,231,183,0.20); stroke: #6ee7b7; }
+.mini-pent-svg .now.flat { fill: rgba(251,191,36,0.20); stroke: var(--warm); }
+
+/* Cinema panel — scen-lager med fotorealistisk bild-suggestion */
+.scene-panel {
+  background: rgba(15,21,37,0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 32px 36px;
+  margin-bottom: 22px;
+  position: relative;
+}
+
+/* Echo-cue under scen */
+.echo-cue {
+  margin-top: 28px;
+  padding: 18px 22px;
+  background: linear-gradient(135deg, rgba(251,191,36,0.08), rgba(15,21,37,0.5));
+  border-left: 3px solid var(--warm);
+  border-radius: 4px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 16px; align-items: center;
+}
+.echo-cue-label {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 4px;
+}
+.echo-cue-text {
+  font-family: var(--serif); font-style: italic; font-size: 15px;
+  line-height: 1.4; color: var(--text);
+}
+.echo-cue-btn {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 9px 14px; border-radius: 100px;
+  background: var(--warm); color: #422006;
+  border: 0; text-decoration: none; cursor: pointer;
+}
+
+/* Pinned info */
+.scene-foot {
+  margin-top: auto;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.scene-foot a { color: var(--text-mid); text-decoration: none; cursor: pointer; }
+.scene-foot a:hover { color: var(--warm); }
+
+/* Special: tandläkar-call illustration */
+.phone-illust {
+  display: flex; align-items: center; gap: 22px;
+  padding: 22px 26px;
+  background: rgba(220,76,43,0.10);
+  border: 1px solid rgba(220,76,43,0.3);
+  border-radius: 6px;
+  margin-bottom: 26px;
+}
+.phone-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(220,76,43,0.2);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.phone-icon::before {
+  content: ""; position: absolute; inset: -4px;
+  border-radius: 50%; border: 2px solid var(--accent);
+  animation: ring 1.6s ease-out infinite;
+  opacity: 0;
+}
+@keyframes ring {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.phone-icon svg { width: 24px; height: 24px; fill: var(--accent); }
+.phone-text {
+  font-family: var(--serif); font-size: 17px; line-height: 1.4;
+  color: var(--text);
+}
+.phone-text strong { color: var(--accent); font-weight: 700; }
+
+/* Pentagon-mini i hörnet visar nuläge */
+.pent-corner {
+  position: absolute; top: 22px; right: 30px;
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px;
+  backdrop-filter: blur(8px);
+}
+.pent-corner svg { width: 50px; height: 50px; }
+.pent-corner-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 22px; color: var(--warm);
+  line-height: 1;
+}
+.pent-corner-meta {
+  font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 2px;
+}
+
+/* Nästa-knapp */
+.scene-next {
+  margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap;
+}
+.scene-btn {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 12px 22px; border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: #fff; background: rgba(255,255,255,0.04);
+  cursor: pointer; text-decoration: none;
+  transition: all .25s var(--ease);
+}
+.scene-btn.solid {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.scene-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
+.scene-btn.solid:hover { background: #c43a1c; }
 </style>
 </head>
 <body data-scene="kitchen-morning">
