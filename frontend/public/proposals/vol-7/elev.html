@@ -1873,6 +1873,100 @@ body[data-mode="business"] .ms-knob {
 }
 .onb-char-prose em { font-style: italic; color: var(--warm); }
 
+/* === AKTIEMARKNADEN === */
+.stock-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 16px; padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.stock-tab {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 8px 12px; border-radius: 100px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong);
+  color: var(--text-mid); text-decoration: none; cursor: pointer;
+}
+.stock-tab.active {
+  background: var(--warm); color: #422006; border-color: var(--warm);
+}
+.stock-tab:hover { color: #fff; }
+.stock-tab .count {
+  background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 100px;
+  font-size: 9px; margin-left: 5px;
+}
+.stock-bar {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 18px;
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.6px; color: var(--text-mid);
+}
+.stock-bar .up { color: #6ee7b7; }
+.stock-bar .down { color: #fca5a5; }
+.stock-bar input {
+  flex: 1; max-width: 280px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line-strong);
+  color: #fff; padding: 8px 12px; border-radius: 100px;
+  font-family: "Inter", sans-serif; font-size: 12.5px;
+}
+
+.stock-section {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 14px; overflow: hidden;
+}
+.stock-section-head {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm);
+}
+.stock-row {
+  display: grid;
+  grid-template-columns: 1.4fr 80px 100px 80px;
+  gap: 14px; padding: 11px 18px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.stock-row:last-child { border-bottom: 0; }
+.stock-row:hover { background: rgba(255,255,255,0.02); }
+.stock-name {
+  font-family: "Inter", sans-serif; font-size: 13.5px; font-weight: 600;
+  color: #fff;
+  display: flex; align-items: center; gap: 8px;
+}
+.stock-currency {
+  font-family: var(--mono); font-size: 9px; padding: 2px 6px;
+  border-radius: 3px; background: rgba(251,191,36,0.18);
+  color: var(--warm); font-weight: 700; letter-spacing: 0.5px;
+}
+.stock-ticker {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;
+}
+.stock-ticker-cell { font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.4px; }
+.stock-price {
+  font-family: var(--serif); font-weight: 700; font-size: 14.5px;
+  text-align: right; color: #fff; font-variant-numeric: tabular-nums;
+}
+.stock-change {
+  font-family: var(--mono); font-size: 10.5px;
+  text-align: right; font-weight: 700;
+}
+.stock-change.up { color: #6ee7b7; }
+.stock-change.down { color: #fca5a5; }
+.stock-buy {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 7px 12px; border-radius: 100px;
+  background: var(--accent); color: #fff;
+  border: 0; text-decoration: none; cursor: pointer;
+  text-align: center; display: inline-block;
+}
+.stock-buy:hover { background: #c43a1c; }
+
 /* === SAMBO-FRÅGAN === */
 .onb-partner-card {
   background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(15,21,37,0.5));
@@ -2726,8 +2820,8 @@ body[data-mode="business"] .ms-knob {
           </a>
           <a class="compass-node" onclick="go('avanza'); return false;" href="#">
             <div class="compass-node-eye">Aktör 05</div>
-            <div class="compass-node-name">Avanza</div>
-            <div class="compass-node-val"><em>+ 2,1 %</em></div>
+            <div class="compass-node-name">Avanza · ISK + Aktier</div>
+            <div class="compass-node-val"><em>+ 2,1 %</em> · 60 aktier</div>
           </a>
           <a class="compass-node" href="#">
             <div class="compass-node-eye">Aktör 04</div>
@@ -3490,7 +3584,16 @@ body[data-mode="business"] .ms-knob {
         <a class="acct" href="#"><div><div class="acct-eye">Fond 03</div><div class="acct-name">Tillväxt</div><div class="acct-num">USA tillväxt · 0,5 % avg</div></div><div><div class="acct-bal">1 920 kr</div><div class="acct-bal-meta">+ 3,1 %</div></div></a>
         <a class="acct" href="#"><div><div class="acct-eye">Fond 04</div><div class="acct-name">Räntefond</div><div class="acct-num">Korträntor · 0,1 % avg</div></div><div><div class="acct-bal">1 120 kr</div><div class="acct-bal-meta">+ 0,4 %</div></div></a>
       </div>
-      <div class="act-grid" style="margin-top: 20px;">
+
+      <!-- CTA till aktiehandel -->
+      <article class="cta-card" style="margin-top: 22px;">
+        <div class="cta-eye">Aktiehandel · 60 large-caps</div>
+        <div class="cta-h">Vill du <em>handla</em> aktier själv?</div>
+        <p class="cta-prose">Förutom fonderna kan du köpa enskilda aktier — OMXS30 + 30 USA-large-caps. Mini-courtage 1 kr min · 0,25 % över 400 kr. Pedagogiskt: <em>fonder är bredd, aktier är fokus</em>. Lär dig diversifiering genom att handla själv.</p>
+        <button class="cta-btn" onclick="go('aktier')">Öppna aktiemarknaden →</button>
+      </article>
+
+      <div class="act-grid" style="margin-top: 22px;">
         <div>
           <div class="section-eye">Värdeutveckling · 12 mån</div>
           <div class="tx-list">
@@ -3500,7 +3603,26 @@ body[data-mode="business"] .ms-knob {
             <div class="tx-row"><span class="tx-date">Jan 2026</span><div><div class="tx-name">Startade ISK · första insättning 1 200 kr</div></div><span class="tx-cat">Start</span><span class="tx-amt in">+ 1 200 kr</span></div>
           </div>
         </div>
-        </div>
+        <aside>
+          <div class="side-card">
+            <div class="side-card-eye">Schablonskatt 2026</div>
+            <div class="side-card-h">~ 75 kr/år</div>
+            <div class="side-card-meta">0,89 % på kapitalunderlaget · betalas i deklarationen</div>
+            <a class="side-card-link" onclick="go('skatt')">Se skatt-rummet ↗</a>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Investeringssimulator</div>
+            <div class="side-card-h">Vad om <em>2 000</em>/mån i 30 år?</div>
+            <div class="side-card-meta">~ 2,4 Mkr vid 7 % real avkastning · vs 1,8 Mkr i depå</div>
+            <a class="side-card-link" onclick="go('simul')">Öppna simulatorn ↗</a>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Aktiemarknaden</div>
+            <div class="side-card-h">60 aktier <em>idag</em></div>
+            <div class="side-card-meta">31 upp · 29 ner · börsen öppen · ~15 min fördröjning</div>
+            <a class="side-card-link" onclick="go('aktier')">Se marknaden ↗</a>
+          </div>
+        </aside>
       </div>
 
       <!-- PEDAGOGIK · AVANZA -->
@@ -3529,24 +3651,6 @@ body[data-mode="business"] .ms-knob {
           <span class="peda-concept">Total expense ratio</span>
         </div>
         <div class="peda-tip">Investeringssimulatorn (verktyg 05) låter dig jämföra: vad om 600 kr/mån i 30 år vs 1 200 kr/mån i 15 år? Total insats lika, totalavkastning olika. Tiden är inte linjär.</div>
-      </div>
-
-      <div class="act-grid" style="margin-top: 0;">
-        <div></div>
-        <aside>
-          <div class="side-card">
-            <div class="side-card-eye">Schablonskatt 2026</div>
-            <div class="side-card-h">~ 75 kr/år</div>
-            <div class="side-card-meta">0,89 % på kapitalunderlaget · betalas i deklarationen</div>
-            <a class="side-card-link" onclick="go('skatt')">Se skatt-rummet ↗</a>
-          </div>
-          <div class="side-card">
-            <div class="side-card-eye">Investeringssimulator</div>
-            <div class="side-card-h">Vad om <em>2 000</em>/mån i 30 år?</div>
-            <div class="side-card-meta">~ 2,4 Mkr vid 7 % real avkastning · vs 1,8 Mkr i depå</div>
-            <a class="side-card-link">Öppna simulatorn ↗</a>
-          </div>
-        </aside>
       </div>
     </div>
   </section>
@@ -5965,6 +6069,122 @@ body[data-mode="business"] .ms-knob {
       </div>
     </div>
   </section>
+
+  <!-- ============ AKTIEHANDEL ============ -->
+  <section class="panel" id="p-aktier">
+    <div class="shell">
+      <a class="actor-back" onclick="go('avanza'); return false;" href="#">Tillbaka till Avanza</a>
+
+      <header class="actor-head">
+        <div>
+          <span class="pill warm">Avanza · Aktiemarknaden</span>
+          <h1 class="actor-name" style="margin-top:14px;">Aktier — <em>30 svenska + 30 USA</em>.</h1>
+          <p class="actor-sub">OMXS30 + S&amp;P-large-caps · Avanza Mini-courtage 1 kr min · 0,25 % över 400 kr</p>
+        </div>
+        <div class="actor-meta">
+          Börsen: <strong>öppen</strong><br>
+          Kurser: <strong>~ 15 min fördröjning</strong><br>
+          Pedagogisk simulator
+        </div>
+      </header>
+
+      <div class="stock-bar">
+        <span><strong style="color: #fff;">▲ 31 upp</strong></span>
+        <span><strong style="color: #fff;">▼ 29 ner</strong></span>
+        <span>(60 aktier totalt · börsen öppen)</span>
+        <input type="text" placeholder="Sök aktie eller ticker...">
+      </div>
+
+      <div class="stock-tabs">
+        <a class="stock-tab active" href="#">Alla sektorer <span class="count">60</span></a>
+        <a class="stock-tab" href="#">Bank <span class="count">5</span></a>
+        <a class="stock-tab" href="#">Bank-USA <span class="count">5</span></a>
+        <a class="stock-tab" href="#">Energi-USA <span class="count">5</span></a>
+        <a class="stock-tab" href="#">Fastighet <span class="count">3</span></a>
+        <a class="stock-tab" href="#">Hälsa <span class="count">3</span></a>
+        <a class="stock-tab" href="#">Hälsa-USA <span class="count">5</span></a>
+        <a class="stock-tab" href="#">IT <span class="count">3</span></a>
+        <a class="stock-tab" href="#">IT-USA <span class="count">10</span></a>
+        <a class="stock-tab" href="#">Industri <span class="count">7</span></a>
+        <a class="stock-tab" href="#">Industri-USA <span class="count">5</span></a>
+        <a class="stock-tab" href="#">Konsument <span class="count">3</span></a>
+        <a class="stock-tab" href="#">Konsument-USA <span class="count">5</span></a>
+        <a class="stock-tab" href="#">Råvaror <span class="count">2</span></a>
+        <a class="stock-tab" href="#">Telecom <span class="count">2</span></a>
+      </div>
+
+      <!-- Industri (7) -->
+      <div class="stock-section">
+        <div class="stock-section-head">Industri (7)</div>
+        <div class="stock-row"><div><div class="stock-name">ABB</div><div class="stock-ticker">ABB.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">337 kr</div><div class="stock-change up">+ 0,34 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Alfa Laval</div><div class="stock-ticker">ALFA.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">513 kr</div><div class="stock-change up">+ 0,41 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Atlas Copco A</div><div class="stock-ticker">ATCO-A.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">441 kr</div><div class="stock-change down">− 0,99 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Atlas Copco B</div><div class="stock-ticker">ATCO-B.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">229 kr</div><div class="stock-change up">+ 1,08 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Sandvik</div><div class="stock-ticker">SAND.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">244 kr</div><div class="stock-change down">− 0,48 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">SKF B</div><div class="stock-ticker">SKF-B.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">165 kr</div><div class="stock-change up">+ 1,74 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Volvo B</div><div class="stock-ticker">VOLV-B.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">530 kr</div><div class="stock-change down">− 0,38 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+      </div>
+
+      <!-- IT-USA (10) -->
+      <div class="stock-section">
+        <div class="stock-section-head">IT-USA (10)</div>
+        <div class="stock-row"><div><div class="stock-name">Alphabet A <span class="stock-currency">USD</span></div><div class="stock-ticker">GOOGL</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 344,40</div><div class="stock-change up">+ 1,63 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Amazon <span class="stock-currency">USD</span></div><div class="stock-ticker">AMZN</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 263,99</div><div class="stock-change up">+ 3,49 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Apple <span class="stock-currency">USD</span></div><div class="stock-ticker">AAPL</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 271,06</div><div class="stock-change down">− 0,87 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Intel <span class="stock-currency">USD</span></div><div class="stock-ticker">INTC</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 82,54</div><div class="stock-change up">+ 23,60 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Meta Platforms <span class="stock-currency">USD</span></div><div class="stock-ticker">META</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 675,03</div><div class="stock-change up">+ 2,41 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Microsoft <span class="stock-currency">USD</span></div><div class="stock-ticker">MSFT</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 424,62</div><div class="stock-change up">+ 2,13 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Netflix <span class="stock-currency">USD</span></div><div class="stock-ticker">NFLX</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 92,44</div><div class="stock-change down">− 0,41 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Nvidia <span class="stock-currency">USD</span></div><div class="stock-ticker">NVDA</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 208,27</div><div class="stock-change up">+ 4,32 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">PayPal <span class="stock-currency">USD</span></div><div class="stock-ticker">PYPL</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 50,48</div><div class="stock-change up">+ 1,47 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Tesla <span class="stock-currency">USD</span></div><div class="stock-ticker">TSLA</div></div><span class="stock-ticker-cell">NASDAQ</span><div><div class="stock-price">$ 376,30</div><div class="stock-change up">+ 0,69 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+      </div>
+
+      <!-- Hälsa (3) -->
+      <div class="stock-section">
+        <div class="stock-section-head">Hälsa (3)</div>
+        <div class="stock-row"><div><div class="stock-name">AstraZeneca</div><div class="stock-ticker">AZN.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">469 kr</div><div class="stock-change up">+ 1,04 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Getinge B</div><div class="stock-ticker">GETI-B.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">141 kr</div><div class="stock-change up">+ 0,68 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Swedish Orphan Biovitrum</div><div class="stock-ticker">SOBI.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">459 kr</div><div class="stock-change down">− 0,32 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+      </div>
+
+      <!-- Bank (5) -->
+      <div class="stock-section">
+        <div class="stock-section-head">Bank (5)</div>
+        <div class="stock-row"><div><div class="stock-name">Handelsbanken A</div><div class="stock-ticker">SHB-A.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">132 kr</div><div class="stock-change up">+ 0,84 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Nordea</div><div class="stock-ticker">NDA-SE.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">118 kr</div><div class="stock-change up">+ 0,42 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">SEB A</div><div class="stock-ticker">SEB-A.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">158 kr</div><div class="stock-change down">− 0,18 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Swedbank</div><div class="stock-ticker">SWED-A.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">241 kr</div><div class="stock-change up">+ 1,12 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+        <div class="stock-row"><div><div class="stock-name">Avanza Bank</div><div class="stock-ticker">AVANZA.ST</div></div><span class="stock-ticker-cell">OMX</span><div><div class="stock-price">312 kr</div><div class="stock-change up">+ 0,64 %</div></div><a class="stock-buy" href="#">Köp</a></div>
+      </div>
+
+      <div style="text-align: center; padding: 20px; font-family: var(--mono); font-size: 10.5px; color: var(--text-dim); letter-spacing: 1px;">
+        + 35 aktier till i 11 sektorer · sektor-tabbar ovan filtrerar
+      </div>
+
+      <!-- PEDAGOGIK -->
+      <div class="peda">
+        <div class="peda-eye">Pedagogik · vad du lär dig här</div>
+        <div class="peda-h">Aktier är <em>fokus</em>, fonder är bredd.</div>
+        <p class="peda-prose">Att äga 60 enskilda aktier ger dig direkt exponering — Volvo går upp 5 % en dag, du tjänar på det. Men: du får ingen <em>diversifiering</em>. En globalfond äger 1 500+ bolag åt dig för 0,4 % avgift. Lär dig <code>courtage</code>, <code>spread</code>, <code>likviditet</code> — och varför 90 % av små investerare förlorar mot index över 10 år.</p>
+        <ul class="peda-bullets">
+          <li><strong>Courtage</strong>Avgift per affär. Avanza Mini: 1 kr min · 0,25 % över 400.</li>
+          <li><strong>Spread</strong>Skillnad mellan köp- och sälj-pris. Smal = likvid aktie.</li>
+          <li><strong>Likviditet</strong>Hur lätt du kan sälja. Volvo = lätt · liten bolag = svår.</li>
+          <li><strong>Stop-loss</strong>Säljorder vid förlust-gräns. Risk-hantering.</li>
+        </ul>
+        <div class="peda-concepts">
+          <span class="peda-concept">Courtage</span>
+          <span class="peda-concept">Spread</span>
+          <span class="peda-concept">Likviditet</span>
+          <span class="peda-concept">P/E-tal</span>
+          <span class="peda-concept">Volatilitet</span>
+          <span class="peda-concept">Beta</span>
+        </div>
+        <div class="peda-tip">Att köpa Tesla idag är <em>inte</em> investering — det är spekulation. Investering är att äga världens 1 500 bästa bolag i 30 år. Vet skillnaden innan du klickar Köp.</div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <!-- INTERAKTIV GUIDE -->
@@ -6034,6 +6254,7 @@ const PANELS = {
   portfolio:{ label: "Min portfolio",          crumb: ["HUBBEN", "● MIN PORTFOLIO"] },
   uppdrag:{ label: "Mina uppdrag",             crumb: ["HUBBEN", "● MINA UPPDRAG"] },
   partner:{ label: "Sambo · Linus",            crumb: ["HUBBEN", "● SAMBO · LINUS"] },
+  aktier: { label: "Aktiemarknaden",           crumb: ["HUBBEN", "AVANZA", "● AKTIER"] },
 };
 
 function go(view) {
