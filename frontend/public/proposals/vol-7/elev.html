@@ -214,9 +214,326 @@ body::after {
 
 /* shared layout */
 .shell {
-  max-width: 1280px; margin: 0 auto;
+  max-width: 1320px; margin: 0 auto;
   padding: 32px clamp(20px, 5vw, 60px) 80px;
 }
+
+/* === HUB === */
+.hub-head {
+  display: grid; grid-template-columns: 1.4fr 1fr;
+  gap: 28px; margin-bottom: 22px;
+  align-items: end;
+}
+@media (max-width: 1000px) { .hub-head { grid-template-columns: 1fr; } }
+.hub-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(36px, 5vw, 60px);
+  letter-spacing: -1.8px; line-height: 1;
+  color: #fff; margin-top: 14px;
+}
+.hub-h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.hub-lead {
+  font-family: var(--serif); font-size: 17px; line-height: 1.5;
+  color: var(--text-mid); margin-top: 14px; max-width: 480px;
+}
+.hub-lead em { color: var(--warm); font-style: italic; }
+
+/* Karaktärs-kort */
+.char-card {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--warm);
+  border-radius: 6px;
+  padding: 22px 24px;
+  backdrop-filter: blur(8px);
+}
+.char-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--warm);
+  margin-bottom: 10px;
+}
+.char-eye::before { content: "● "; }
+.char-name {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 36px; letter-spacing: -1px; color: #fff;
+}
+.char-meta {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 4px;
+}
+.char-divider {
+  display: inline-block; color: var(--accent); margin: 0 6px;
+}
+.char-section {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.3px; text-transform: uppercase;
+  color: var(--text-mid);
+  margin-top: 18px; margin-bottom: 8px;
+}
+.char-section::before { content: "● "; color: var(--text-dim); }
+.char-prose {
+  font-family: var(--serif); font-size: 15px; line-height: 1.55;
+  color: var(--text);
+}
+.char-prose em { font-style: italic; color: var(--warm); }
+.char-prose strong { color: var(--accent); font-weight: 700; }
+.char-pills {
+  margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;
+}
+.char-pill {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  padding: 6px 12px; border-radius: 100px;
+  background: rgba(251,191,36,0.06);
+  border: 1px solid rgba(251,191,36,0.25);
+  color: var(--warm); letter-spacing: 0.6px;
+  text-decoration: none;
+  transition: all .2s var(--ease); cursor: pointer;
+}
+.char-pill:hover {
+  background: rgba(251,191,36,0.15);
+  border-color: var(--warm);
+}
+.char-pill.alert {
+  background: rgba(220,76,43,0.08);
+  border-color: rgba(220,76,43,0.4);
+  color: var(--accent);
+}
+
+/* === PENTAGON STAGE === */
+.pentagon-stage {
+  position: relative;
+  width: 100%; max-width: 1100px;
+  aspect-ratio: 1.15;
+  margin: 0 auto;
+  display: grid; place-items: center;
+}
+.pentagon-svg { width: 100%; height: 100%; display: block; }
+.p-axis-line {
+  fill: rgba(255,255,255,0.06);
+  stroke: rgba(255,255,255,0.18);
+  stroke-width: 1; stroke-dasharray: 2 3;
+}
+.p-now {
+  fill: rgba(220,76,43,0.22);
+  stroke: var(--accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 18px rgba(220,76,43,0.45));
+  transform-origin: center;
+  animation: pent-breathe 5s ease-in-out infinite;
+}
+@keyframes pent-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(0.985); }
+}
+.p-prev {
+  fill: none;
+  stroke: rgba(255,255,255,0.4);
+  stroke-width: 1.2; stroke-dasharray: 4 4;
+}
+
+/* Axel-etiketter — 5 hörn */
+.axis-label {
+  position: absolute;
+  background: rgba(15,21,37,0.92);
+  backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 13px 18px;
+  text-decoration: none; color: #fff;
+  width: 200px;
+  transition: all .35s var(--ease);
+  cursor: pointer;
+}
+.axis-label:hover {
+  background: rgba(15,21,37,1);
+  border-color: var(--warm);
+  transform: scale(1.04);
+}
+.axis-label-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 4px;
+}
+.axis-label-name {
+  font-family: var(--serif); font-size: 20px; font-weight: 700;
+  letter-spacing: -0.4px;
+}
+.axis-label-name em {
+  font-style: italic; color: var(--warm); font-weight: 500;
+}
+.axis-label-meta {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-mid); margin-top: 4px;
+  letter-spacing: 0.8px;
+}
+.axis-label-trend {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  margin-top: 6px;
+}
+.axis-label-trend.up   { color: #34d399; }
+.axis-label-trend.down { color: #fca5a5; }
+.axis-label-trend.flat { color: var(--text-mid); }
+
+/* 5 hörn (top, top-right, bottom-right, bottom-left, top-left) */
+.ax-eko { top: 1%;  left: 50%; transform: translateX(-50%); }
+.ax-rel { top: 36%; right: -2%; }
+.ax-har { bottom: 6%; right: 13%; }
+.ax-fri { bottom: 6%; left: 13%; }
+.ax-kar { top: 36%; left: -2%; }
+
+@media (max-width: 1100px) {
+  .pentagon-stage { aspect-ratio: auto; }
+  .axis-label { position: static; transform: none !important; width: 100%; margin-bottom: 8px; }
+  .ax-eko, .ax-rel, .ax-har, .ax-fri, .ax-kar {
+    top: auto; left: auto; right: auto; bottom: auto;
+  }
+}
+
+/* Center number */
+.center-card {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none;
+}
+.center-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--text-mid); margin-bottom: 6px;
+}
+.center-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: clamp(56px, 7vw, 88px);
+  line-height: 1; letter-spacing: -2.4px;
+  color: var(--warm);
+  text-shadow: 0 4px 30px rgba(251,191,36,0.5);
+}
+.center-meta {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 6px;
+}
+@media (max-width: 1100px) {
+  .center-card { position: static; transform: none; margin: 24px auto; }
+}
+
+/* === EVENT CARD === */
+.event-card {
+  background: rgba(15,21,37,0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 22px 26px;
+  margin-top: 18px;
+  position: relative; overflow: hidden;
+}
+.event-card::before {
+  content: ""; position: absolute; right: -40px; top: -40px;
+  width: 160px; height: 160px;
+  background: radial-gradient(circle, rgba(220,76,43,0.14), transparent 70%);
+}
+.event-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 10px;
+}
+.event-eye::before { content: "● "; }
+.event-headline {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.7px; line-height: 1.1;
+}
+.event-headline em { font-style: italic; color: var(--warm); }
+.event-prose {
+  font-family: var(--serif); font-size: 15px; line-height: 1.5;
+  color: var(--text-mid); margin-top: 10px;
+}
+.event-prose strong { color: var(--accent); font-weight: 700; }
+.event-actions {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px;
+}
+.event-btn {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 11px 18px; border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: #fff; background: rgba(255,255,255,0.04);
+  cursor: pointer; text-decoration: none;
+  transition: all .25s var(--ease);
+}
+.event-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
+.event-btn.solid {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.event-btn.solid:hover { background: #c43a1c; }
+
+/* === KOMPASS-RING === */
+.compass {
+  margin-top: 36px;
+  border-top: 1px solid var(--line);
+  padding-top: 28px;
+}
+.compass-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--text-mid); margin-bottom: 16px;
+  text-align: center;
+}
+.compass-eye::before { content: "● "; color: var(--warm); }
+
+.compass-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+@media (max-width: 1100px) { .compass-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 700px)  { .compass-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.compass-node {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 12px;
+  text-align: center; cursor: pointer;
+  text-decoration: none; color: #fff;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: all .2s var(--ease);
+  position: relative;
+}
+.compass-node:hover {
+  background: rgba(15,21,37,1);
+  border-color: var(--warm);
+  transform: translateY(-2px);
+}
+.compass-node.alert::after {
+  content: ""; position: absolute; top: 8px; right: 8px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.7); }
+  50%      { opacity: 1; transform: scale(1.2); }
+}
+.compass-node-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.compass-node-name {
+  font-family: var(--serif); font-size: 13px; font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
+.compass-node-val {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-mid); letter-spacing: 0.4px;
+  margin-top: 2px;
+}
+.compass-node-val em { color: var(--warm); font-family: var(--serif); font-style: italic; }
 </style>
 </head>
 <body>
@@ -235,8 +552,204 @@ body::after {
 </header>
 
 <main class="app">
-  <!-- Panels populeras i kommande commits -->
-  <section class="panel active" id="p-hub"></section>
+  <!-- ============ HUB ============ -->
+  <section class="panel active" id="p-hub">
+    <div class="shell">
+
+      <div class="hub-head">
+        <div>
+          <span class="pill">Privatekonomi som händer</span>
+          <h1 class="hub-h1">Sara, hennes <em>onsdag</em>.</h1>
+          <p class="hub-lead">
+            Hyran dras om <em>2 dagar</em>. Tandläkaren ringde. Lönen kommer
+            <em>om 26 dagar</em>. Pentagonen tippar — hälsa upp, ekonomi på spänn.
+            Det här är vad du kan göra åt det.
+          </p>
+        </div>
+
+        <article class="char-card">
+          <div class="char-eye">Onsdag · April · Vol. 18</div>
+          <div class="char-name">Sara A.</div>
+          <div class="char-meta">16<span class="char-divider">·</span>gymnasium<span class="char-divider">·</span>Stockholm</div>
+
+          <div class="char-section">Hennes vecka</div>
+          <p class="char-prose">
+            Veckan började bra — <em>+ 2,1 %</em> på Avanza, lönen klart i fas.
+            Sen ringde <em>tandläkaren</em>: <strong>4 200 kr</strong> akut,
+            betalas inom 30 dagar. Hyran kommer <em>på fredag</em>. Allt gott
+            men något måste flytta.
+          </p>
+
+          <div class="char-pills">
+            <a class="char-pill alert" onclick="go('skatt'); return false;" href="#">Deklaration</a>
+            <a class="char-pill" onclick="go('bank'); return false;" href="#">Banken</a>
+            <a class="char-pill" onclick="go('arbg'); return false;" href="#">Arbetsgivaren</a>
+            <a class="char-pill" onclick="go('avanza'); return false;" href="#">Avanza</a>
+            <a class="char-pill" onclick="go('modul'); return false;" href="#">Bolån-modul</a>
+          </div>
+        </article>
+      </div>
+
+      <!-- PENTAGON -->
+      <div class="pentagon-stage">
+        <svg class="pentagon-svg" viewBox="0 0 600 600" aria-label="Wellbeing-pentagon">
+          <!-- 5-axel-rutnät -->
+          <g transform="translate(300,300)">
+            <polygon points="0,-260 247,-80 153,210 -153,210 -247,-80" class="p-axis-line" />
+            <polygon points="0,-195 185,-60 115,158 -115,158 -185,-60" class="p-axis-line" />
+            <polygon points="0,-130 124,-40 76,105 -76,105 -124,-40" class="p-axis-line" />
+            <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" class="p-axis-line" />
+            <line x1="0" y1="0" x2="0" y2="-260" class="p-axis-line" />
+            <line x1="0" y1="0" x2="247" y2="-80" class="p-axis-line" />
+            <line x1="0" y1="0" x2="153" y2="210" class="p-axis-line" />
+            <line x1="0" y1="0" x2="-153" y2="210" class="p-axis-line" />
+            <line x1="0" y1="0" x2="-247" y2="-80" class="p-axis-line" />
+            <!-- Föregående vecka -->
+            <polygon points="0,-180 175,-55 95,150 -110,140 -195,-65" class="p-prev" />
+            <!-- Aktuell vecka — efter tandläkaren tippade ner hälsa -->
+            <polygon points="0,-150 220,-72 130,180 -100,160 -210,-72" class="p-now" />
+          </g>
+        </svg>
+
+        <a class="axis-label ax-eko" onclick="go('bank'); return false;" href="#">
+          <div class="axis-label-eye">Axel 01</div>
+          <div class="axis-label-name">Ekonomi</div>
+          <div class="axis-label-meta">14 282 kr · ISK 8 460</div>
+          <div class="axis-label-trend down">↓ −4 % efter tandläkaren</div>
+        </a>
+        <a class="axis-label ax-rel" href="#">
+          <div class="axis-label-eye">Axel 02</div>
+          <div class="axis-label-name">Relation</div>
+          <div class="axis-label-meta">Klass 9C · 2 chattar</div>
+          <div class="axis-label-trend flat">— stabil</div>
+        </a>
+        <a class="axis-label ax-har" href="#">
+          <div class="axis-label-eye">Axel 03</div>
+          <div class="axis-label-name">Hälsa</div>
+          <div class="axis-label-meta">Tandläkare 4 200 kr</div>
+          <div class="axis-label-trend down">↓ akut idag</div>
+        </a>
+        <a class="axis-label ax-fri" href="#">
+          <div class="axis-label-eye">Axel 04</div>
+          <div class="axis-label-name">Fritid</div>
+          <div class="axis-label-meta">Restaurang +75 % · budget</div>
+          <div class="axis-label-trend up">↑ +630 kr april</div>
+        </a>
+        <a class="axis-label ax-kar" onclick="go('arbg'); return false;" href="#">
+          <div class="axis-label-eye">Axel 05</div>
+          <div class="axis-label-name">Karriär</div>
+          <div class="axis-label-meta">Lönesamtal med <em>Maria</em> · runda 2/5</div>
+          <div class="axis-label-trend up">↑ +1 295 kr/mån i sikte</div>
+        </a>
+
+        <div class="center-card">
+          <div class="center-eye">Pentagon</div>
+          <div class="center-num">72</div>
+          <div class="center-meta">av 100 · v18</div>
+        </div>
+      </div>
+
+      <!-- HÄNDELSE — det som tippade pentagonen -->
+      <article class="event-card">
+        <div class="event-eye">Händelse · 14:22 idag · pågår</div>
+        <h2 class="event-headline">Tandläkaren <em>ringde</em>. Cariesfyllning, <em>4 200 kr</em>.</h2>
+        <p class="event-prose">
+          Akut undersökning krävs — betalas inom 30 dagar. Du har
+          <strong>14 282 kr</strong> tillgängligt på lönekontot, hyran dras på
+          <strong>1 maj</strong> (7 240 kr), och bufferten ligger på 1 800 kr.
+          Vad gör du?
+        </p>
+        <div class="event-actions">
+          <a class="event-btn solid" onclick="go('bank'); return false;" href="#">Betala från lönekontot →</a>
+          <a class="event-btn" href="#">Delbetalning · 6 mån</a>
+          <a class="event-btn" href="#">Skjut upp till efter lönen</a>
+          <a class="event-btn" onclick="document.getElementById('echoBtn').click(); return false;" href="#">Fråga Echo först</a>
+        </div>
+      </article>
+
+      <!-- KOMPASS — alla 8 aktörer + 5 verktyg -->
+      <div class="compass">
+        <div class="compass-eye">Aktörerna · åtta rum att gå in i</div>
+        <div class="compass-grid" style="margin-bottom: 18px;">
+          <a class="compass-node alert" onclick="go('bank'); return false;" href="#">
+            <div class="compass-node-eye">Aktör 01</div>
+            <div class="compass-node-name">Banken</div>
+            <div class="compass-node-val"><em>14 282</em> kr</div>
+          </a>
+          <a class="compass-node" onclick="go('arbg'); return false;" href="#">
+            <div class="compass-node-eye">Aktör 02</div>
+            <div class="compass-node-name">Arbetsgivaren</div>
+            <div class="compass-node-val">Lön 25 maj</div>
+          </a>
+          <a class="compass-node" onclick="go('avanza'); return false;" href="#">
+            <div class="compass-node-eye">Aktör 05</div>
+            <div class="compass-node-name">Avanza</div>
+            <div class="compass-node-val"><em>+ 2,1 %</em></div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Aktör 04</div>
+            <div class="compass-node-name">Lånegivaren</div>
+            <div class="compass-node-val">38 200 kr</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Aktör 06</div>
+            <div class="compass-node-name">Folksam · Tibber</div>
+            <div class="compass-node-val">El 812 kr</div>
+          </a>
+          <a class="compass-node alert" onclick="go('skatt'); return false;" href="#">
+            <div class="compass-node-eye">Aktör 03</div>
+            <div class="compass-node-name">Skatteverket</div>
+            <div class="compass-node-val">Deadline 2 maj</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Aktör 09</div>
+            <div class="compass-node-name">Pension</div>
+            <div class="compass-node-val">12 800/mån</div>
+          </a>
+        </div>
+
+        <div class="compass-eye" style="margin-top: 18px;">Verktygen · där du tänker</div>
+        <div class="compass-grid">
+          <a class="compass-node alert" href="#">
+            <div class="compass-node-eye">Verktyg 02</div>
+            <div class="compass-node-name">Bokföring</div>
+            <div class="compass-node-val"><em>12</em> okatt</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Verktyg 03</div>
+            <div class="compass-node-name">Budget</div>
+            <div class="compass-node-val">78 % förbrukad</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Verktyg 04</div>
+            <div class="compass-node-name">Mål</div>
+            <div class="compass-node-val">4 aktiva</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Verktyg 05</div>
+            <div class="compass-node-name">Investeringssim</div>
+            <div class="compass-node-val">2k/30år</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Verktyg 06</div>
+            <div class="compass-node-name">Lånekalkylator</div>
+            <div class="compass-node-val">KALP räknat</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Verktyg 09</div>
+            <div class="compass-node-name">Moduler</div>
+            <div class="compass-node-val"><em>3</em> pågår</div>
+          </a>
+          <a class="compass-node" href="#">
+            <div class="compass-node-eye">Verktyg 10</div>
+            <div class="compass-node-name">Reflektioner</div>
+            <div class="compass-node-val">1 prompt</div>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </section>
   <section class="panel" id="p-bank"></section>
   <section class="panel" id="p-bankid"></section>
   <section class="panel" id="p-arbg"></section>
