@@ -812,7 +812,183 @@ body::after {
   </section>
 
   <!-- POSTLÅDOR -->
-  <section class="panel" id="p-mail"></section>
+  <section class="panel" id="p-mail">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Postlådor · 9C · meta-aktör</span>
+          <h1 class="head-h1">28 postlådor — <em>62 ohanterade</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Var och en har sin egen inkorg. Här ser du klassens hanteringsmönster — vem är ifatt, vem släpar, vem håller på att få sina första påminnelser.</p>
+        </div>
+        <div class="head-meta">
+          Snitt-ohanterade · <strong>2,2 brev</strong><br>
+          Spridning · <strong>0 till 11</strong><br>
+          Påminnelser denna v · 1
+        </div>
+      </header>
+
+      <!-- Statistik-rad -->
+      <div class="stats">
+        <div class="stat"><div class="stat-eye">Genererade brev april</div><div class="stat-num"><em>392</em></div><div class="stat-sub">14 per elev i snitt</div></div>
+        <div class="stat"><div class="stat-eye">Hanterade i tid</div><div class="stat-num">82 %</div><div class="stat-sub">320 av 392</div></div>
+        <div class="stat"><div class="stat-eye">Försenade</div><div class="stat-num">10</div><div class="stat-sub">öppnade men ej åtgärdade</div></div>
+        <div class="stat"><div class="stat-eye">Påminnelser ute</div><div class="stat-num"><em>1</em></div><div class="stat-sub">Filip Ö. · CSN</div></div>
+        <div class="stat"><div class="stat-eye">Spenderprofiler</div><div class="stat-num">3</div><div class="stat-sub">12 sparsam · 11 bal · 5 slösa</div></div>
+      </div>
+
+      <!-- Skicka brev-verktyg -->
+      <div class="write-scene" style="margin-bottom: 22px;">
+        <div class="write-scene-eye">Skicka brev till postlådorna</div>
+        <h2 class="write-scene-h">Spräng in en <em>oväntad faktura</em>.</h2>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; margin-bottom: 14px;">
+          Det här är lärar-leverantörsfaktura-flödet. Du fyller i en räkning,
+          väljer mottagare, sätter förfallodatum — brevet dyker upp i elevernas
+          postlådor som "ohanterad". Effekten ackumuleras i deras pentagon
+          beroende på vad de gör med den.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Avsändare</div>
+            <select style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Folktandvården (försenad bokning)</option>
+              <option>Skatteverket (kvarskatt)</option>
+              <option>Stockholm parkering (p-böter)</option>
+              <option>Rådhus tingsrätten (delgivning)</option>
+              <option>Klarna (faktura)</option>
+              <option>+ Egen avsändare…</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Belopp</div>
+            <input type="text" value="850 kr" style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 13px;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Förfallodatum</div>
+            <input type="text" value="14 maj" style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Brevtyp</div>
+            <select style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Faktura (kräver export till banken)</option>
+              <option>Påminnelse (försenad räkning)</option>
+              <option>Myndighetsbrev (info)</option>
+              <option>Marknadsföring (kan ignoreras)</option>
+            </select>
+          </div>
+        </div>
+        <textarea placeholder="Fritext-meddelande i brevet..." style="margin-bottom: 12px;">Du har en obetald karies-bokning från 14 mars som inte avbokats. Avgift 850 kr enligt avtalsvillkor. Förfaller 14 maj.</textarea>
+        <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px;">Skicka till:</div>
+        <div class="write-scene-targets">
+          <span class="write-scene-target on">Hela 9C (28)</span>
+          <span class="write-scene-target">5 i fördjupning</span>
+          <span class="write-scene-target">Slumpa 4 elever</span>
+          <span class="write-scene-target">Bara Sara A.</span>
+          <span class="write-scene-target">+ välj manuellt</span>
+        </div>
+        <button class="write-scene-btn">Skicka till 28 postlådor →</button>
+      </div>
+
+      <!-- Tabell över alla 28 postlådor -->
+      <div class="section-eye">28 postlådor · status</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); align-items: center;">
+          <span>#</span><span>Elev</span><span>Profil</span><span>Brev</span><span>Ohanterade</span><span>Äldsta</span><span>Påminn.</span><span>Status</span>
+        </div>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">01</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Adam B.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Balanserad</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">2</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; text-align: center; letter-spacing: 1px; font-weight: 700;">I FAS</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">02</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Alma K.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Sparsam</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">0</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; text-align: center; letter-spacing: 1px; font-weight: 700;">KLAR</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; background: rgba(220,76,43,0.05);">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">05</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Filip Ö.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Slösa</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 700;">9</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">18 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">1 (CSN)</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(220,76,43,0.18); color: #fda594; text-align: center; letter-spacing: 1px; font-weight: 700;">RISK</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">06</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Hanna L.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Sparsam</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">0</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; text-align: center; letter-spacing: 1px; font-weight: 700;">KLAR</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">10</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Jamil A.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Slösa</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">7</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">12 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(251,191,36,0.18); color: var(--warm); text-align: center; letter-spacing: 1px; font-weight: 700;">SLÄPER</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; background: rgba(220,76,43,0.05);">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">13</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Noah J.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Slösa</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 700;">11</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">21 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(220,76,43,0.18); color: #fda594; text-align: center; letter-spacing: 1px; font-weight: 700;">RISK</span>
+        </a>
+        <a href="#" onclick="go('elev'); return false;" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">14</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Sara A. <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 1px; padding: 2px 6px; background: rgba(220,76,43,0.1); border-radius: 3px; margin-left: 5px;">VISAS</span></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Balanserad</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">4</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(251,191,36,0.18); color: var(--warm); text-align: center; letter-spacing: 1px; font-weight: 700;">SLÄPER</span>
+        </a>
+        <div style="text-align: center; padding: 16px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 1px;">+ 21 elever till — visa alla 28 →</div>
+      </div>
+
+      <!-- Slösar-info -->
+      <div class="s-card" style="margin-top: 22px; background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(15,21,37,0.5)); border-color: rgba(99,102,241,0.2);">
+        <div class="s-card-eye" style="color: #a5b4fc;">Hur breven genereras</div>
+        <div class="s-card-h">Spenderprofiler styr <em>brev-volym</em>.</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; line-height: 1.55; color: var(--text);">
+          Konsumentverkets schabloner × elevens spenderprofil ger antalet brev,
+          beloppen och frekvensen. Sparsam-elever får ~10 brev/månad,
+          balanserad ~14, slösa ~18 (fler kreditkort, fler aviseringar). Alla brev
+          har <strong style="color: var(--warm);">slumpade datum</strong> inom månaden — ingen får alla 14 brev på samma dag.
+          Ohanterade brev → påminnelse efter <em style="color: var(--warm);">14 dagar</em> →
+          inkassovarning efter <em style="color: var(--warm);">30</em>. Det är samma loop som i verkligheten.
+        </p>
+      </div>
+
+    </div>
+  </section>
 </main>
 
 <script>
