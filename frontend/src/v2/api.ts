@@ -344,6 +344,48 @@ export type EmployerData = {
   open_question_id: number | null;
 };
 
+// === /v2/lan ===
+
+export type V2LoanCard = {
+  id: number | null;
+  eyebrow: string;
+  name: string;
+  detail: string;
+  balance: number | null;
+  monthly_text: string | null;
+  is_active: boolean;
+  is_warning: boolean;
+};
+
+export type V2LoanScheduleRow = {
+  month: string;
+  label: string;
+  description: string;
+  monthly_amount: number;
+  capital_part: number | null;
+  interest_part: number | null;
+  status: string;
+};
+
+export type V2CreditFactor = {
+  factor: string;
+  detail: string;
+  value: string;
+  assessment: string;
+  severity: "good" | "warn" | "bad" | "neutral";
+};
+
+export type LoanData = {
+  student_id: number;
+  total_debt: number;
+  debt_ratio: number;
+  annual_income: number;
+  credit_class: string;
+  cards: V2LoanCard[];
+  schedule: V2LoanScheduleRow[];
+  credit_factors: V2CreditFactor[];
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -421,6 +463,7 @@ export const v2Api = {
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
   skatten: (year?: number) =>
     api<TaxData>(`/v2/skatten${year ? `?year=${year}` : ""}`),
+  lan: () => api<LoanData>("/v2/lan"),
   postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>

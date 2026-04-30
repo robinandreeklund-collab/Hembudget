@@ -1577,6 +1577,130 @@ def test_v2_arbetsgivaren_with_salary_transactions(fx) -> None:
     assert slips[0]["tax_amount"] == 8850
 
 
+# === /v2/lan ===
+
+def test_v2_lan_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/lan")
+    assert r.status_code == 401
+
+
+def test_v2_lan_for_teacher_returns_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/lan",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == 0
+    assert data["cards"] == []
+
+
+def test_v2_lan_with_profile_has_credit_factors_and_cards(fx) -> None:
+    """Elev med profil får alltid credit_factors + möjliga lån-kort."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=26000,
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+            has_student_loan=False,
+            has_car_loan=False,
+            has_mortgage=False,
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/lan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Annual gross = 26000 * 12 = 312000
+    assert data["annual_income"] == 312000
+    # Inga aktiva lån → debt_ratio = 0, credit_class = A
+    assert data["total_debt"] == 0
+    assert data["debt_ratio"] == 0
+    assert data["credit_class"] == "A"
+    # Möjliga produkter: bolån + privatlån + billån (3 kort utan aktiva)
+    cards = data["cards"]
+    assert len(cards) == 3
+    eyes = [c["eyebrow"] for c in cards]
+    assert "Möjligt" in eyes
+    assert "Avråds" in eyes
+    # Alla 5 kreditprövnings-faktorer
+    factors = data["credit_factors"]
+    assert len(factors) == 5
+    factor_names = [f["factor"] for f in factors]
+    assert "Inkomst (årlig brutto)" in factor_names
+    assert "Skuldkvot" in factor_names
+    assert "KALP · stresstest 7 %" in factor_names
+    assert "Betalningsanmärkningar" in factor_names
+    assert "UC-score" in factor_names
+
+
+def test_v2_lan_with_active_loan_in_scope(fx) -> None:
+    """Aktivt lån i scope-DB ska räknas in i total_debt + cards."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Loan as _Loan
+
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=26000,
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+            has_student_loan=True,
+        ))
+        db.commit()
+
+    def seed(s) -> None:
+        s.add(_Loan(
+            name="CSN-lån",
+            lender="CSN",
+            loan_number="9342 19",
+            principal_amount=_D("38200"),
+            current_balance_at_creation=_D("38200"),
+            start_date=_d(2024, 9, 1),
+            interest_rate=0.017,
+            binding_type="annuity",
+            amortization_monthly=_D("312"),
+            active=True,
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/lan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Aktiva lån ska visas
+    active_cards = [c for c in data["cards"] if c["is_active"]]
+    assert len(active_cards) == 1
+    assert active_cards[0]["name"] == "CSN-lån"
+    # outstanding_balance från LoanMatcher (utan transaktioner = principal)
+    assert active_cards[0]["balance"] == 38200
+    assert data["total_debt"] == 38200
+    # Skuldkvot = 38200 / 312000 ≈ 0.12
+    assert 0.10 <= data["debt_ratio"] <= 0.15
+
+
 # === /v2/skatten ===
 
 def test_v2_skatten_unauthenticated_401(fx) -> None:

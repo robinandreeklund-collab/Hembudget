@@ -25,8 +25,9 @@ from decimal import Decimal
 from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
-    MailItem,
+    MailItem, Loan,
 )
+from ..loans.matcher import LoanMatcher
 from ..school.employer_models import (
     CollectiveAgreement,
     EmployerSatisfaction,
@@ -2365,6 +2366,269 @@ def get_skatten(
         diff=diff,
         pending_proposal_count=pending_proposals,
         items=items,
+    )
+
+
+# === Lånegivaren (/v2/lan) ===
+
+class V2LoanCard(BaseModel):
+    """Ett lån eller låneprodukt (aktivt eller möjligt) för aktör 04."""
+    id: Optional[int] = None  # None om det är en möjlig produkt (CTA)
+    eyebrow: str  # "Aktivt" / "Möjligt" / "Avråds"
+    name: str
+    detail: str
+    balance: Optional[float] = None
+    monthly_text: Optional[str] = None
+    is_active: bool = False
+    is_warning: bool = False  # gör badge röd för "avråds"
+
+
+class V2LoanScheduleRow(BaseModel):
+    """En rad i amorteringsplanen."""
+    month: str  # YYYY-MM
+    label: str  # t.ex. "Apr 2026"
+    description: str
+    monthly_amount: float
+    capital_part: Optional[float] = None
+    interest_part: Optional[float] = None
+    status: str  # "betald" / "kommande" / "−312" osv
+
+
+class V2CreditFactor(BaseModel):
+    """Rad i kreditprövnings-tabellen."""
+    factor: str
+    detail: str
+    value: str
+    assessment: str
+    severity: Literal["good", "warn", "bad", "neutral"]
+
+
+class V2LoanResponse(BaseModel):
+    student_id: int
+    total_debt: float
+    debt_ratio: float  # total_debt / annual_income
+    annual_income: float
+    credit_class: str  # "A" / "B" / "C" / "D" / "E"
+    cards: list[V2LoanCard]
+    schedule: list[V2LoanScheduleRow]
+    credit_factors: list[V2CreditFactor]
+
+
+def _empty_loans(student_id: int) -> V2LoanResponse:
+    return V2LoanResponse(
+        student_id=student_id,
+        total_debt=0,
+        debt_ratio=0,
+        annual_income=0,
+        credit_class="A",
+        cards=[],
+        schedule=[],
+        credit_factors=[],
+    )
+
+
+@router.get("/lan", response_model=V2LoanResponse)
+def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
+    """Aggregat för Lånegivaren (/v2/lan).
+
+    Bygger:
+    - cards: aktiva Loan-rader + 3 möjliga låneprodukter (bolån, privatlån,
+      billån) som visning. Visar "snabbt vilka skulder du har".
+    - schedule: senaste 4 månadernas amorterings-betalningar (från
+      LoanScheduleEntry eller Transaction matchad mot CSN-lånet)
+    - credit_factors: 5-radig kreditprövning (inkomst, skuldkvot, KALP,
+      betalningsanmärkningar, UC-score)
+    - debt_ratio = total_debt / annual_income
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_loans(0)
+
+    # Profil för bedömningar
+    with master_session() as mdb:
+        student = mdb.get(Student, info.student_id)
+        if not student:
+            return _empty_loans(0)
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        annual_gross = (
+            float(profile.gross_salary_monthly * 12)
+            if profile and profile.gross_salary_monthly else 0.0
+        )
+        has_student_loan = bool(profile and getattr(profile, "has_student_loan", False))
+        has_car_loan = bool(profile and getattr(profile, "has_car_loan", False))
+        has_mortgage = bool(profile and getattr(profile, "has_mortgage", False))
+        city = profile.city if profile else "Stockholm"
+
+    cards: list[V2LoanCard] = []
+    schedule: list[V2LoanScheduleRow] = []
+    total_debt = Decimal("0")
+
+    try:
+        with session_scope() as s:
+            # Alla aktiva lån
+            loans = s.query(Loan).filter(Loan.active.is_(True)).all()
+            matcher = LoanMatcher(s)
+
+            for loan in loans:
+                outstanding = matcher.outstanding_balance(loan)
+                total_debt += outstanding
+
+                rate_pct = float(loan.interest_rate or 0) * 100 if (
+                    loan.interest_rate is not None and loan.interest_rate < 1
+                ) else float(loan.interest_rate or 0)
+                amort_text = ""
+                if loan.amortization_monthly:
+                    amort_text = (
+                        f"{int(loan.amortization_monthly)} kr/mån"
+                    )
+                detail_parts = []
+                if loan.loan_number:
+                    detail_parts.append(loan.loan_number)
+                if loan.interest_rate is not None:
+                    detail_parts.append(f"ränta {rate_pct:.1f} %")
+                cards.append(V2LoanCard(
+                    id=loan.id,
+                    eyebrow="Aktivt",
+                    name=loan.name,
+                    detail=" · ".join(detail_parts) or loan.lender,
+                    balance=float(outstanding),
+                    monthly_text=amort_text or None,
+                    is_active=True,
+                ))
+
+                # Senaste 4 betalningar för detta lån
+                tx_q = (
+                    s.query(Transaction)
+                    .filter(Transaction.loan_id == loan.id)
+                    .order_by(Transaction.date.desc())
+                    .limit(4)
+                    .all()
+                )
+                for t in tx_q:
+                    month_str = f"{t.date.year:04d}-{t.date.month:02d}"
+                    schedule.append(V2LoanScheduleRow(
+                        month=month_str,
+                        label=t.date.strftime("%b %Y"),
+                        description=loan.name,
+                        monthly_amount=float(abs(t.amount)),
+                        capital_part=None,
+                        interest_part=None,
+                        status="betald",
+                    ))
+    except Exception:
+        # Scope-DB saknas — fortsätt med tom lista, vi visar ändå
+        # möjliga låneprodukter + kreditprövning från profil
+        pass
+
+    # Lägg till möjliga låneprodukter (illustrativa, inte aktiva)
+    if not has_mortgage:
+        cards.append(V2LoanCard(
+            eyebrow="Möjligt",
+            name="Bolån (via modul)",
+            detail="2,4 Mkr · 3,8 % rörlig",
+            balance=None,
+            monthly_text="i kreditprövning",
+            is_active=False,
+        ))
+    cards.append(V2LoanCard(
+        eyebrow="Avråds",
+        name="Privatlån (blanco)",
+        detail="~ 14 % effektiv ränta",
+        balance=None,
+        monthly_text="5–10 × dyrare än CSN",
+        is_active=False,
+        is_warning=True,
+    ))
+    if not has_car_loan:
+        no_car_hint = (
+            "behöver inte bil" if city.lower() in ("stockholm", "göteborg", "malmö")
+            else "5–8 % · max 80 % av bilvärdet"
+        )
+        cards.append(V2LoanCard(
+            eyebrow="Möjligt",
+            name="Billån",
+            detail="5–8 % · max 80 % av bilvärdet",
+            balance=None,
+            monthly_text=no_car_hint,
+            is_active=False,
+        ))
+
+    # Skuldkvot
+    debt_ratio = (
+        float(total_debt) / annual_gross if annual_gross > 0 else 0.0
+    )
+
+    # Kreditklass — enkel heuristik från skuldkvot + profil
+    if debt_ratio < 0.5 and not has_car_loan:
+        credit_class = "A"
+    elif debt_ratio < 1.5:
+        credit_class = "B"
+    elif debt_ratio < 3.0:
+        credit_class = "C"
+    elif debt_ratio < 4.5:
+        credit_class = "D"
+    else:
+        credit_class = "E"
+
+    # Kreditprövnings-rader
+    credit_factors: list[V2CreditFactor] = [
+        V2CreditFactor(
+            factor="Inkomst (årlig brutto)",
+            detail=(
+                f"{(profile.employer if profile else 'Arbetsgivare')} · "
+                f"{(profile.profession if profile else 'yrke')}"
+            ),
+            value=f"{int(annual_gross):,}".replace(",", " ") if annual_gross else "—",
+            assessment="Stabil · kollektivavtal" if annual_gross > 200000 else "Begränsad",
+            severity="good" if annual_gross > 200000 else "warn",
+        ),
+        V2CreditFactor(
+            factor="Skuldkvot",
+            detail="Total skuld / årsinkomst",
+            value=f"{debt_ratio:.2f}×",
+            assessment=(
+                "Långt under tak (4,5×)" if debt_ratio < 1.5
+                else "Måttlig — under tak" if debt_ratio < 3
+                else "Hög — närmar sig tak" if debt_ratio < 4.5
+                else "Över tak — ingen mer skuld"
+            ),
+            severity="good" if debt_ratio < 1.5 else "warn" if debt_ratio < 4.5 else "bad",
+        ),
+        V2CreditFactor(
+            factor="KALP · stresstest 7 %",
+            detail="Konsumentverket-schablon",
+            value="räknas",
+            assessment="Beror på bostadens kostnad",
+            severity="warn",
+        ),
+        V2CreditFactor(
+            factor="Betalningsanmärkningar",
+            detail="Senaste 3 åren",
+            value="0",
+            assessment="Ren historik",
+            severity="good",
+        ),
+        V2CreditFactor(
+            factor="UC-score",
+            detail="Kreditupplysning · simulerad",
+            value=f"{credit_class} ({90 - (ord(credit_class)-65)*15}/100)",
+            assessment="Hög kreditvärdighet" if credit_class in ("A", "B") else "Medel",
+            severity="good" if credit_class in ("A", "B") else "warn",
+        ),
+    ]
+
+    return V2LoanResponse(
+        student_id=info.student_id,
+        total_debt=float(total_debt),
+        debt_ratio=round(debt_ratio, 2),
+        annual_income=annual_gross,
+        credit_class=credit_class,
+        cards=cards,
+        schedule=schedule,
+        credit_factors=credit_factors,
     )
 
 

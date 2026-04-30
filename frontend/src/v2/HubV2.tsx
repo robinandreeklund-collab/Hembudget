@@ -335,11 +335,11 @@ export function HubV2() {
               <div className="compass-node-name">Skatteverket</div>
               <div className="compass-node-val">deklaration</div>
             </Link>
-            <span className="compass-node disabled">
+            <Link to="/v2/lan" className="compass-node">
               <div className="compass-node-eye">Aktör 04</div>
               <div className="compass-node-name">Lånegivaren</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">CSN + lån</div>
+            </Link>
             <span className="compass-node disabled">
               <div className="compass-node-eye">Aktör 05</div>
               <div className="compass-node-name">Avanza · ISK</div>
