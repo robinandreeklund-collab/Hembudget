@@ -169,6 +169,12 @@ class Student(MasterBase):
         String(120), nullable=True,
     )
     # === V2-fält (parallell migration · ny dashboard) ===
+    # Per-elev-toggle: läraren bestämmer vilka elever som ska se v2.
+    # Default False — eleven får v1 tills läraren aktiverar v2.
+    # Super-admin är alltid v2-eligible oavsett denna flagga.
+    v2_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     # Sätts under v2-onboardingen och styr nya UI:t. Saknas värde →
     # eleven har inte gått v2-onboardingen och hänvisas till v1.
     v2_onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(

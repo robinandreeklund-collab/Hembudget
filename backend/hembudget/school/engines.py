@@ -403,7 +403,9 @@ def _run_master_migrations(engine: Engine) -> None:
 
     # === V2-fält (parallell migration · ny dashboard) ===
     # Lägger till nya kolumner för v2-onboarding utan att röra v1-data.
-    # Befintliga elever får default-värden (Nivå 1, Sparsam, solo).
+    # Befintliga elever får default-värden (v2 av, Nivå 1, Sparsam, solo).
+    if s_cols and "v2_enabled" not in s_cols:
+        _add("students", "v2_enabled BOOLEAN NOT NULL DEFAULT 0")
     if s_cols and "v2_onboarding_completed_at" not in s_cols:
         _add("students", "v2_onboarding_completed_at DATETIME")
     if s_cols and "v2_level" not in s_cols:

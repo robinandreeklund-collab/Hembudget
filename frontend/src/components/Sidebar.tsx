@@ -34,6 +34,7 @@ import {
   Upload,
   Users,
   Receipt,
+  Sparkles,
   CalculatorIcon,
   PiggyBank,
   TrendingUp,
@@ -78,6 +79,7 @@ const TEACHER_ITEMS: NavItem[] = [
   { to: "/teacher/negotiations", label: "Lönesamtal", icon: Briefcase },
   { to: "/teacher/all-batches", label: "Alla PDF:er", icon: Files },
   { to: "/messages", label: "Meddelanden", icon: MessageCircle },
+  { to: "/teacher/v2", label: "V2 · per elev", icon: Sparkles },
 ];
 
 // Elev-vyn döljer importera/inställningar och lägger till Dina dokument

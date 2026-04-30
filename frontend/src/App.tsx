@@ -7,6 +7,8 @@ import { OnboardingV2 } from "./v2/OnboardingV2";
 import { HubV2 } from "./v2/HubV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
 import { V2RootRedirect } from "./v2/V2RootRedirect";
+import { DashboardV2Guard } from "./v2/DashboardV2Guard";
+import { V2RosterPage } from "./v2/V2RosterPage";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budget from "./pages/Budget";
@@ -179,7 +181,10 @@ export default function App() {
           <Route path="/v2" element={<V2Bootstrap />} />
           <Route path="/v2/onboarding" element={<OnboardingV2 />} />
           <Route path="/v2/hub" element={<HubV2 />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/teacher/v2" element={<V2RosterPage />} />
+          {/* /dashboard har en V2-guard: super-admin och elever med
+              v2_enabled redirectas till /v2/hub. Övriga får v1. */}
+          <Route path="/dashboard" element={<DashboardV2Guard><Dashboard /></DashboardV2Guard>} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/import" element={<Import />} />
           <Route path="/budget" element={<Budget />} />

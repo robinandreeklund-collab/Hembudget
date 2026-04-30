@@ -28,6 +28,15 @@ export type OnboardingComplete = {
   redirect_to: string;
 };
 
+export type V2RosterRow = {
+  student_id: number;
+  display_name: string;
+  class_label: string | null;
+  v2_enabled: boolean;
+  v2_onboarding_completed: boolean;
+  v2_level: number;
+};
+
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   completeOnboarding: (body: {
@@ -39,4 +48,23 @@ export const v2Api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  // Lärar-API:er för att toggla v2 per elev
+  toggleStudent: (studentId: number, enabled: boolean) =>
+    api<{ student_id: number; v2_enabled: boolean; display_name: string }>(
+      `/v2/teacher/students/${studentId}/v2-toggle`,
+      { method: "POST", body: JSON.stringify({ enabled }) },
+    ),
+  bulkToggle: (enabled: boolean, studentIds?: number[]) =>
+    api<{ affected: number; enabled: boolean }>(
+      "/v2/teacher/students/v2-bulk",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          enabled,
+          student_ids: studentIds ?? null,
+        }),
+      },
+    ),
+  roster: () =>
+    api<V2RosterRow[]>("/v2/teacher/students/v2-roster"),
 };

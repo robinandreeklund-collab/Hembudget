@@ -94,12 +94,80 @@ def test_v2_status_for_student_default_values(fx) -> None:
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["role"] == "student"
-    assert data["v2_eligible"] is True
+    # Default: v2 ej aktiverat av lärare → eligible=False
+    assert data["v2_eligible"] is False
     assert data["v2_onboarding_completed"] is False
     assert data["v2_level"] == 1
     assert data["v2_spend_profile"] == "sparsam"
     assert data["v2_partner_model"] == "solo"
     assert data["is_super_admin"] is False
+
+
+def test_v2_toggle_per_student(fx) -> None:
+    """Lärare kan aktivera v2 för en specifik elev."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+
+    # Före: ej eligible
+    pre = client.get(
+        "/v2/status", headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    assert pre["v2_eligible"] is False
+
+    # Lärare aktiverar
+    r = client.post(
+        f"/v2/teacher/students/{sid}/v2-toggle",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"enabled": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["v2_enabled"] is True
+
+    # Efter: eligible=True
+    post = client.get(
+        "/v2/status", headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    assert post["v2_eligible"] is True
+
+
+def test_v2_toggle_only_own_students(fx) -> None:
+    """Lärare kan inte toggla en annan lärares elev."""
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    # super-admin är annan teacher_id; ska få 403 på *andra* lärares elever
+    r = client.post(
+        f"/v2/teacher/students/{sid}/v2-toggle",
+        headers={"Authorization": f"Bearer {sa}"},
+        json={"enabled": True},
+    )
+    assert r.status_code == 403, r.text
+
+
+def test_v2_bulk_toggle_all(fx) -> None:
+    """Bulk: aktivera v2 för alla lärarens elever."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/teacher/students/v2-bulk",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"enabled": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["affected"] >= 1
+    assert r.json()["enabled"] is True
+
+
+def test_v2_roster_lists_students(fx) -> None:
+    """Lärar-roster visar alla elever + v2-status."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/teacher/students/v2-roster",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    rows = r.json()
+    assert len(rows) >= 1
+    eva = next((row for row in rows if row["student_id"] == sid), None)
+    assert eva is not None
+    assert eva["display_name"] == "Eva"
+    assert eva["v2_enabled"] is False  # default
 
 
 def test_v2_status_for_teacher_marks_super_admin(fx) -> None:
