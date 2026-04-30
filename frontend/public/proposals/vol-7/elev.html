@@ -4088,7 +4088,188 @@ body[data-mode="business"] .mode-switch {
     </div>
   </section>
   <!-- ============ BUSINESS-MODE PANELS ============ -->
-  <section class="panel biz-only" id="p-biz-hub"></section>
+  <section class="panel biz-only" id="p-biz-hub">
+    <div class="shell">
+
+      <div class="hub-head">
+        <div>
+          <span class="pill">Företaget · Vol. 18 · v 12 i drift</span>
+          <h1 class="hub-h1">Sara A. AB — <em>vecka 12</em>.</h1>
+          <p class="hub-lead">
+            <em>2 nya offertförfrågningar</em> i kö. <em>1 kundfaktura</em>
+            förfaller idag. Senaste levererade jobb fick 4,8/5 — vilket pumpar
+            ryktet och drar fler liknande jobb. Kassaflödet är positivt.
+          </p>
+        </div>
+
+        <article class="biz-char-card">
+          <div class="biz-char-eye">Företag · enskild firma · v12 i drift</div>
+          <div class="biz-char-name">Sara A. <em style="font-style: italic; color: #c7d2fe;">AB</em></div>
+          <div class="biz-char-meta">enskild firma<span class="biz-char-divider">·</span>IT-konsult<span class="biz-char-divider">·</span>Stockholm</div>
+
+          <div class="biz-char-section">Status v12</div>
+          <p class="biz-char-prose">
+            Omsättning <em>23 400 kr</em> rullande 4 v · vinstmarginal <strong>34 %</strong> ·
+            kundbas <em>3 aktiva</em>. Ryktet (<em>72</em>/100) gör att fler
+            offertförfrågningar trillar in. Du har <strong>2 oöppnade</strong>
+            i postlådan just nu.
+          </p>
+
+          <div class="biz-char-pills">
+            <a class="biz-char-pill alert" onclick="window.go('biz-faktura'); return false;" href="#">Faktura förfaller idag</a>
+            <a class="biz-char-pill" onclick="window.go('biz-kunder'); return false;" href="#">Kunder · 3 aktiva</a>
+            <a class="biz-char-pill" onclick="window.go('biz-bokforing'); return false;" href="#">Bokföring</a>
+            <a class="biz-char-pill" onclick="window.go('biz-skatt'); return false;" href="#">Moms 1 maj</a>
+          </div>
+        </article>
+      </div>
+
+      <!-- BIZ-PENTAGON — företagets fem axlar -->
+      <div class="pentagon-stage">
+        <svg class="pentagon-svg" viewBox="0 0 600 600" aria-label="Företagets pentagon">
+          <g transform="translate(300,300)">
+            <polygon points="0,-260 247,-80 153,210 -153,210 -247,-80" class="p-axis-line"/>
+            <polygon points="0,-195 185,-60 115,158 -115,158 -185,-60" class="p-axis-line"/>
+            <polygon points="0,-130 124,-40 76,105 -76,105 -124,-40" class="p-axis-line"/>
+            <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" class="p-axis-line"/>
+            <line x1="0" y1="0" x2="0" y2="-260" class="p-axis-line"/>
+            <line x1="0" y1="0" x2="247" y2="-80" class="p-axis-line"/>
+            <line x1="0" y1="0" x2="153" y2="210" class="p-axis-line"/>
+            <line x1="0" y1="0" x2="-153" y2="210" class="p-axis-line"/>
+            <line x1="0" y1="0" x2="-247" y2="-80" class="p-axis-line"/>
+            <polygon points="0,-180 175,-55 95,140 -110,140 -195,-65" class="biz-pent-prev"/>
+            <polygon points="0,-200 220,-72 130,180 -100,160 -180,-65" class="biz-pent-now"/>
+          </g>
+        </svg>
+
+        <a class="biz-axis-label ax-eko" onclick="window.go('biz-bokforing'); return false;" href="#">
+          <div class="biz-axis-label-eye">Axel 01</div>
+          <div class="biz-axis-label-name">Omsättning</div>
+          <div class="biz-axis-label-meta">23 400 kr/4v · prognos 6 100/v</div>
+          <div class="biz-axis-label-meta" style="color: #6ee7b7;">↑ +12 % mot v8</div>
+        </a>
+        <a class="biz-axis-label ax-rel" onclick="window.go('biz-kunder'); return false;" href="#">
+          <div class="biz-axis-label-eye">Axel 02</div>
+          <div class="biz-axis-label-name">Kundbas</div>
+          <div class="biz-axis-label-meta">3 aktiva · 2 nya offertförfrågningar</div>
+          <div class="biz-axis-label-meta" style="color: #6ee7b7;">↑ rykte 72</div>
+        </a>
+        <a class="biz-axis-label ax-har" href="#">
+          <div class="biz-axis-label-eye">Axel 03</div>
+          <div class="biz-axis-label-name">Likviditet</div>
+          <div class="biz-axis-label-meta">8 240 kr på företagskontot</div>
+          <div class="biz-axis-label-meta" style="color: var(--warm);">⚠ moms 1 maj 2 880</div>
+        </a>
+        <a class="biz-axis-label ax-fri" href="#">
+          <div class="biz-axis-label-eye">Axel 04</div>
+          <div class="biz-axis-label-name">Tidsåtgång</div>
+          <div class="biz-axis-label-meta">14 h/v debiterbart · 6 h adm</div>
+          <div class="biz-axis-label-meta" style="color: var(--text-mid);">— stabil</div>
+        </a>
+        <a class="biz-axis-label ax-kar" onclick="window.go('biz-bokforing'); return false;" href="#">
+          <div class="biz-axis-label-eye">Axel 05</div>
+          <div class="biz-axis-label-name">Vinst</div>
+          <div class="biz-axis-label-meta">7 956 kr/4v · marginal 34 %</div>
+          <div class="biz-axis-label-meta" style="color: #6ee7b7;">↑ +8 % mot v8</div>
+        </a>
+
+        <div class="center-card">
+          <div class="center-eye">Företag</div>
+          <div class="center-num" style="color: #c7d2fe; text-shadow: 0 4px 30px rgba(99,102,241,0.5);">68</div>
+          <div class="center-meta">av 100 · v12</div>
+        </div>
+      </div>
+
+      <!-- HÄNDELSE: ny offertförfrågan -->
+      <article class="biz-event-card">
+        <div class="biz-event-eye">Händelse · 13:42 idag · ny förfrågan</div>
+        <h2 class="biz-event-headline">Nordic Workshop AB — <em>offertförfrågan</em>.</h2>
+        <p class="biz-event-prose">
+          "Hej Sara! Vi behöver hjälp med <strong>WordPress-flytt + säkerhetsuppdatering</strong>
+          av vår sajt. Tidigare leverantör har slutat. Riktpris från Konsumentverkets
+          schablon för IT-konsult: <strong>3 200–4 800 kr</strong>. Deadline 15 maj. Vi
+          har fått referenser från Anders Lind." — <em>2 timmar sedan</em>
+        </p>
+        <div class="biz-event-actions">
+          <a class="biz-btn solid" href="#">Skapa offert →</a>
+          <a class="biz-btn" href="#">Tacka nej</a>
+          <a class="biz-btn" href="#">Be om mer info</a>
+        </div>
+      </article>
+
+      <!-- KOMPASS · 7 företags-aktörer + verktyg -->
+      <div class="compass">
+        <div class="compass-eye" style="color: #c7d2fe;">Företagets aktörer · sju rum att gå in i</div>
+        <div class="compass-grid" style="margin-bottom: 18px;">
+          <a class="biz-compass-node" onclick="window.go('biz-kunder'); return false;" href="#">
+            <div class="biz-compass-node-eye">Aktör · biz</div>
+            <div class="biz-compass-node-name">Kunder &amp; offerter</div>
+            <div class="biz-compass-node-val"><em>3</em> aktiva · 2 nya</div>
+          </a>
+          <a class="biz-compass-node" onclick="window.go('biz-faktura'); return false;" href="#" style="border-color: rgba(220,76,43,0.4);">
+            <div class="biz-compass-node-eye" style="color: var(--accent);">Aktör · biz</div>
+            <div class="biz-compass-node-name">Kundfakturor</div>
+            <div class="biz-compass-node-val"><em>1</em> förfaller idag</div>
+          </a>
+          <a class="biz-compass-node" onclick="window.go('biz-leverantor'); return false;" href="#">
+            <div class="biz-compass-node-eye">Aktör · biz</div>
+            <div class="biz-compass-node-name">Leverantörer</div>
+            <div class="biz-compass-node-val">2 oöppnade</div>
+          </a>
+          <a class="biz-compass-node" onclick="window.go('biz-bokforing'); return false;" href="#">
+            <div class="biz-compass-node-eye">Verktyg · biz</div>
+            <div class="biz-compass-node-name">Bokföring</div>
+            <div class="biz-compass-node-val">14 verifikat oförda</div>
+          </a>
+          <a class="biz-compass-node" onclick="window.go('biz-skatt'); return false;" href="#" style="border-color: rgba(251,191,36,0.4);">
+            <div class="biz-compass-node-eye" style="color: var(--warm);">Aktör · biz</div>
+            <div class="biz-compass-node-name">Skatteverket biz</div>
+            <div class="biz-compass-node-val">Moms <em>1 maj</em></div>
+          </a>
+          <a class="biz-compass-node" href="#">
+            <div class="biz-compass-node-eye">Aktör · biz</div>
+            <div class="biz-compass-node-name">Banken (företag)</div>
+            <div class="biz-compass-node-val">8 240 kr</div>
+          </a>
+          <a class="biz-compass-node" href="#">
+            <div class="biz-compass-node-eye">Verktyg · biz</div>
+            <div class="biz-compass-node-name">Beslut</div>
+            <div class="biz-compass-node-val">2 i kö (anställa, försäkring)</div>
+          </a>
+        </div>
+
+        <!-- INFO-BOX: Hur biz hänger ihop med privat -->
+        <div class="peda" style="border-color: rgba(99,102,241,0.3); border-left-color: #818cf8; background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(15,21,37,0.5));">
+          <div class="peda-eye" style="color: #c7d2fe;">Hur biz &amp; privat hänger ihop</div>
+          <div class="peda-h">Allt är <em>Sara</em>. Två konton, ett liv.</div>
+          <p class="peda-prose">
+            Privat och företag är <strong>separata bokföringsenheter</strong> men samma
+            person. När du tar ut <em>egen lön</em> från företagskontot till
+            ditt privatkonto är det en överföring som syns i båda bokföringarna.
+            Tjänar företaget bra → <em>privatkontot</em> får mer. Pentagon i
+            privatläge påverkas av företagets resultat — det är samma person, samma
+            stress, samma framgång.
+          </p>
+          <ul class="peda-bullets">
+            <li><strong>Egen lön</strong>Du tar ut det du behöver, betalar privatskatt — inte arbetsgivaravgift.</li>
+            <li><strong>Egen insättning</strong>Att skjuta in privata pengar i företaget. Räknas som lån/eget kapital.</li>
+            <li><strong>Skatt</strong>Privatskatt på överskott + moms 25 % på fakturor (utgående).</li>
+            <li><strong>F-skatt</strong>Du betalar in själv månadsvis baserat på prognos.</li>
+          </ul>
+          <div class="peda-concepts">
+            <span class="peda-concept">Egen lön</span>
+            <span class="peda-concept">Eget kapital</span>
+            <span class="peda-concept">F-skatt</span>
+            <span class="peda-concept">Moms in &amp; ut</span>
+            <span class="peda-concept">Resultatöverföring</span>
+            <span class="peda-concept">Periodisering</span>
+          </div>
+          <div class="peda-tip">När du klickar "Byt till privat" upptill — flippar appen tillbaka. Allt du gör i biz påverkar ditt privata över tid: bättre vinst → mer egen lön → bättre privat-pentagon.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
   <section class="panel biz-only" id="p-biz-kunder"></section>
   <section class="panel biz-only" id="p-biz-faktura"></section>
   <section class="panel biz-only" id="p-biz-leverantor"></section>
