@@ -297,6 +297,84 @@ def test_v2_onboarding_idempotent(fx) -> None:
     assert post["v2_partner_model"] == "solo"
 
 
+def test_v2_onboarding_event_logs_viewed(fx) -> None:
+    """Eleven postar 'viewed' när hen visar ett steg → sparas i DB."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.post(
+        "/v2/onboarding/event",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"step": 1, "event_type": "viewed"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["event_id"] > 0
+
+
+def test_v2_onboarding_event_with_duration_and_payload(fx) -> None:
+    """Frontend skickar duration + payload (t.ex. fairness-svar)."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/onboarding/event",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "step": 7,
+            "event_type": "next",
+            "duration_ms": 42000,
+            "payload": "fairness=proportionellt",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_v2_onboarding_events_for_teacher(fx) -> None:
+    """Lärare kan hämta full event-historik för sin elev."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    # Eleven loggar tre events
+    for ev in [
+        {"step": 1, "event_type": "viewed"},
+        {"step": 1, "event_type": "next", "duration_ms": 5000},
+        {"step": 2, "event_type": "viewed"},
+    ]:
+        client.post(
+            "/v2/onboarding/event",
+            headers={"Authorization": f"Bearer {stu}"},
+            json=ev,
+        )
+    # Lärare hämtar
+    r = client.get(
+        f"/v2/teacher/students/{sid}/onboarding-events",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    rows = r.json()
+    assert len(rows) == 3
+    # Sorterat kronologiskt
+    assert rows[0]["step"] == 1 and rows[0]["event_type"] == "viewed"
+    assert rows[1]["event_type"] == "next"
+    assert rows[1]["duration_ms"] == 5000
+    assert rows[2]["step"] == 2
+
+
+def test_v2_onboarding_events_blocks_other_teachers(fx) -> None:
+    """En lärare får inte se andra lärares elever."""
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/onboarding-events",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_onboarding_event_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.post(
+        "/v2/onboarding/event",
+        json={"step": 1, "event_type": "viewed"},
+    )
+    assert r.status_code == 401
+
+
 def test_v2_onboarding_for_teacher_returns_200_without_writing(fx) -> None:
     """Teacher-tokens får 200 men inget sparas (de har ingen elev-profil)."""
     client, tch, _sa, _stu, _tid, _said, _sid = fx

@@ -14,10 +14,24 @@
  *   7. Sambo-frågan (3 partner-modeller + 3 värderingsval)
  *   8. Klar — Vol. 18 är laddad
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { v2Api, type FairnessChoice } from "./api";
+import { v2Api, type FairnessChoice, type OnboardingEventType } from "./api";
 import "./onboarding.css";
+
+/** Skicka event utan att blockera UI:t. Fail-soft: ett tappat event
+ *  ska aldrig hindra användaren från att gå vidare. */
+function track(
+  step: number,
+  type: OnboardingEventType,
+  duration_ms?: number,
+  payload?: string,
+) {
+  // Bästa-tillgängliga: använd sendBeacon på unload, annars fetch.
+  v2Api
+    .logOnboardingEvent({ step, event_type: type, duration_ms, payload })
+    .catch(() => undefined);
+}
 
 const TOTAL = 8;
 const NEXT_LABELS = [
@@ -39,9 +53,46 @@ export function OnboardingV2() {
   const [error, setError] = useState<string | null>(null);
   const nav = useNavigate();
 
+  // Tid på nuvarande steg — sätts varje gång step byts
+  const stepEnteredAt = useRef<number>(Date.now());
+
+  // Logga "viewed" vid varje stegbyte (inkl första mount)
+  useEffect(() => {
+    stepEnteredAt.current = Date.now();
+    track(step, "viewed");
+  }, [step]);
+
+  // Logga "abandoned" om användaren stänger fönstret mitt i
+  useEffect(() => {
+    const onUnload = () => {
+      const dur = Date.now() - stepEnteredAt.current;
+      // sendBeacon ger best chance att event når servern under unload
+      try {
+        const url = "/v2/onboarding/event";
+        const body = JSON.stringify({
+          step,
+          event_type: "abandoned",
+          duration_ms: dur,
+        });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(
+            url,
+            new Blob([body], { type: "application/json" }),
+          );
+        }
+      } catch {
+        // ignore — best-effort
+      }
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [step]);
+
   async function complete() {
     setSaving(true);
     setError(null);
+    const dur = Date.now() - stepEnteredAt.current;
+    track(step, "completed", dur, fairness ? `fairness=${fairness}` : undefined);
     try {
       const result = await v2Api.completeOnboarding({
         spend_profile: "sparsam",
@@ -56,11 +107,23 @@ export function OnboardingV2() {
   }
 
   function next() {
-    if (step < TOTAL) setStep(step + 1);
-    else complete();
+    const dur = Date.now() - stepEnteredAt.current;
+    if (step < TOTAL) {
+      track(
+        step,
+        "next",
+        dur,
+        step === 7 && fairness ? `fairness=${fairness}` : undefined,
+      );
+      setStep(step + 1);
+    } else complete();
   }
   function back() {
-    if (step > 1) setStep(step - 1);
+    if (step > 1) {
+      const dur = Date.now() - stepEnteredAt.current;
+      track(step, "back", dur);
+      setStep(step - 1);
+    }
   }
 
   return (

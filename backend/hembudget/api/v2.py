@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..school.engines import master_session
-from ..school.models import Student, Teacher
+from ..school.models import Student, Teacher, V2OnboardingEvent
 from .deps import TokenInfo, require_token
 
 
@@ -199,6 +199,125 @@ def complete_v2_onboarding(
             v2_level=student.v2_level,
             redirect_to="/v2/hub",
         )
+
+
+# === Onboarding-event-tracking (per-stegs-loggning) ===
+
+class OnboardingEventRequest(BaseModel):
+    step: int = Field(ge=1, le=8, description="Vilket onboarding-steg (1-8)")
+    event_type: Literal["viewed", "back", "next", "completed", "abandoned"]
+    duration_ms: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Hur länge eleven var på det föregående steget (ms)",
+    )
+    payload: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Fri-text/JSON, t.ex. fairness-val i steg 7",
+    )
+
+
+class OnboardingEventResponse(BaseModel):
+    event_id: int
+    student_id: int
+
+
+@router.post(
+    "/onboarding/event",
+    response_model=OnboardingEventResponse,
+)
+def log_onboarding_event(
+    body: OnboardingEventRequest,
+    info: TokenInfo = Depends(require_token),
+) -> OnboardingEventResponse:
+    """Logga en händelse i elevens onboarding-flöde.
+
+    Frontend pingar denna vid varje stegväxling, plus vid completed/
+    abandoned. Endast eleven själv får logga events för sig.
+    Demo/teacher får 200 utan att skriva.
+    """
+    if info.role in ("demo", "teacher"):
+        return OnboardingEventResponse(event_id=0, student_id=0)
+
+    if info.student_id is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Student token utan student_id",
+        )
+
+    with master_session() as db:
+        ev = V2OnboardingEvent(
+            student_id=info.student_id,
+            step=body.step,
+            event_type=body.event_type,
+            duration_ms=body.duration_ms,
+            payload=body.payload,
+        )
+        db.add(ev)
+        db.flush()
+        return OnboardingEventResponse(
+            event_id=ev.id,
+            student_id=info.student_id,
+        )
+
+
+class OnboardingEventRow(BaseModel):
+    event_id: int
+    step: int
+    event_type: str
+    duration_ms: Optional[int]
+    payload: Optional[str]
+    created_at: datetime
+
+
+@router.get(
+    "/teacher/students/{student_id}/onboarding-events",
+    response_model=list[OnboardingEventRow],
+)
+def get_onboarding_events(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> list[OnboardingEventRow]:
+    """Lärar-vy: komplett event-historik för en elevs onboarding.
+
+    Returneras kronologiskt (äldsta först). Lärare kan bara se sina
+    egna elever.
+    """
+    if info.role != "teacher" or info.teacher_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast lärare kan se onboarding-historik.",
+        )
+
+    with master_session() as db:
+        student = db.get(Student, student_id)
+        if not student:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Student hittades inte",
+            )
+        if student.teacher_id != info.teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Du kan bara se dina egna elever.",
+            )
+
+        events = (
+            db.query(V2OnboardingEvent)
+            .filter(V2OnboardingEvent.student_id == student_id)
+            .order_by(V2OnboardingEvent.created_at.asc())
+            .all()
+        )
+        return [
+            OnboardingEventRow(
+                event_id=e.id,
+                step=e.step,
+                event_type=e.event_type,
+                duration_ms=e.duration_ms,
+                payload=e.payload,
+                created_at=e.created_at,
+            )
+            for e in events
+        ]
 
 
 # === Lärar-endpoints för att hantera v2-aktivering per elev ===

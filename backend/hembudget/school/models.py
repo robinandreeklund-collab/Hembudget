@@ -311,6 +311,40 @@ class StudentProfile(MasterBase):
     student: Mapped[Student] = relationship(back_populates="profile")
 
 
+class V2OnboardingEvent(MasterBase):
+    """Per-stegs-loggning för v2-onboardingen.
+
+    Läraren behöver komplett insyn i elevens onboarding-resa: vilka
+    steg eleven sett, hur länge hen var på varje, eventuella backsteg
+    och avhopp. Frontend loggar event vid varje stegväxling.
+
+    Event-typer:
+      "viewed"     — eleven visade ett steg (skickas vid mount/byte)
+      "back"       — klickade ← Tillbaka
+      "next"       — klickade Nästa →
+      "completed"  — hela onboardingen klar (sista stegets next)
+      "abandoned"  — eleven stängde fönstret (skickas via beacon vid unload)
+
+    `payload` är frivillig JSON (t.ex. fairness-svar i steg 7).
+    """
+
+    __tablename__ = "v2_onboarding_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id"), nullable=False, index=True,
+    )
+    step: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    duration_ms: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    payload: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class StudentDataGenerationRun(MasterBase):
     """Logg av genererad månadsdata per elev. Används för idempotens
     (hoppa över om redan kört) och för att visa i lärar-UI vilka månader

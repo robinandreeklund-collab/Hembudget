@@ -37,6 +37,13 @@ export type V2RosterRow = {
   v2_level: number;
 };
 
+export type OnboardingEventType =
+  | "viewed"
+  | "back"
+  | "next"
+  | "completed"
+  | "abandoned";
+
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   completeOnboarding: (body: {
@@ -48,6 +55,16 @@ export const v2Api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  logOnboardingEvent: (body: {
+    step: number;
+    event_type: OnboardingEventType;
+    duration_ms?: number;
+    payload?: string;
+  }) =>
+    api<{ event_id: number; student_id: number }>(
+      "/v2/onboarding/event",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   // Lärar-API:er för att toggla v2 per elev
   toggleStudent: (studentId: number, enabled: boolean) =>
     api<{ student_id: number; v2_enabled: boolean; display_name: string }>(
