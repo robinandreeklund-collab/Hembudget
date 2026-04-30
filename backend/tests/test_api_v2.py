@@ -1574,6 +1574,248 @@ def test_v2_arbetsgivaren_with_salary_transactions(fx) -> None:
     assert slips[0]["tax_amount"] == 8850
 
 
+# === Fas 2A: lärar-endpoints + KALP + CreditCheck ===
+
+def test_v2_teacher_seed_default_loan_products(fx) -> None:
+    """Lärar-endpoint seedar default-katalogen (5 produkter)."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/loan-products/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["products_created"] == 5
+
+    # Idempotent: andra anropet skapar inga nya
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/loan-products/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["products_created"] == 0
+
+
+def test_v2_teacher_seed_blocks_other_teachers_student(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/loan-products/seed-default",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_create_payment_mark_triggers_credit_check(fx) -> None:
+    """Lägg till anmärkning → skapar PaymentMark + ny CreditCheck-rad."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    # Profil krävs för CreditCheck
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus",
+            gross_salary_monthly=26000,
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+        db.commit()
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/payment-marks",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "occurred_on": "2025-08-15",
+            "creditor": "Telia",
+            "amount": 489,
+            "kind": "obetald-faktura",
+        },
+    )
+    assert r.status_code == 200, r.text
+    mark = r.json()
+    assert mark["creditor"] == "Telia"
+    assert mark["amount"] == 489
+    assert mark["kind"] == "obetald-faktura"
+    # Default expires 3 år senare
+    assert mark["expires_at"] == "2028-08-14"
+
+    # Anmärkningen ska nu sänka UC-score i /v2/lan
+    r2 = client.get(
+        "/v2/lan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.status_code == 200
+    factors = r2.json()["credit_factors"]
+    marks_factor = next(
+        (f for f in factors if f["factor"] == "Betalningsanmärkningar"), None,
+    )
+    assert marks_factor is not None
+    assert "1 aktiv" in marks_factor["value"]
+    assert marks_factor["severity"] == "bad"
+
+
+def test_v2_kalp_endpoint(fx) -> None:
+    """POST /v2/lan/kalp räknar KALP och sparar resultatet."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus",
+            gross_salary_monthly=26000,
+            net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+        db.commit()
+
+    r = client.post(
+        "/v2/lan/kalp",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"loan_amount": 2400000, "loan_term_months": 300},
+    )
+    assert r.status_code == 200, r.text
+    k = r.json()
+    assert k["loan_amount"] == 2400000
+    assert k["loan_term_months"] == 300
+    # Stresstest 7 %
+    assert abs(k["stress_test_rate"] - 0.07) < 0.001
+    # Konsumentverket-schablon ensam = 8500
+    assert k["monthly_consumer_schablon"] == 8500.0
+    # Månadskostnad vid 7 % stresstest
+    assert k["monthly_loan_payment_at_stress"] > 16000  # 2.4 Mkr / 25 år
+    assert k["monthly_loan_payment_at_stress"] < 18000
+    # Kvar = 18750 - 8000 (housing) - 8500 (consumer) - 0 (debt) - ~17000 → underkänd
+    assert k["passed"] is False
+
+
+def test_v2_lan_with_seeded_products_shows_them_as_cards(fx) -> None:
+    """Efter seedning visas möjliga produkter som cards."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska", employer="Sthlm Sjukhus",
+            gross_salary_monthly=26000, net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm", family_status="ensam",
+            housing_type="hyresratt", housing_monthly=8000,
+            personality="blandad",
+        ))
+        db.commit()
+
+    # Seed
+    client.post(
+        f"/v2/teacher/students/{sid}/loan-products/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    r = client.get(
+        "/v2/lan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    cards = r.json()["cards"]
+    # 5 produkter seedade → 5 cards (alla möjliga eftersom inga aktiva)
+    assert len(cards) == 5
+    names = [c["name"] for c in cards]
+    assert "Studielån (annuitet)" in names
+    assert "Bolån (rörlig)" in names
+    assert "Sms-lån (avråds)" in names
+    # Risk-class färgar dem
+    sms = next(c for c in cards if "Sms-lån" in c["name"])
+    assert sms["is_warning"] is True
+    assert sms["eyebrow"] == "Avråds"
+
+
+def test_v2_teacher_credit_overview(fx) -> None:
+    """GET /v2/teacher/students/{id}/credit-overview returnerar full insyn."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska", employer="Sthlm Sjukhus",
+            gross_salary_monthly=26000, net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm", family_status="ensam",
+            housing_type="hyresratt", housing_monthly=8000,
+            personality="blandad",
+        ))
+        db.commit()
+
+    # Seed default + lägg till en anmärkning
+    client.post(
+        f"/v2/teacher/students/{sid}/loan-products/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    client.post(
+        f"/v2/teacher/students/{sid}/payment-marks",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "occurred_on": "2025-06-01",
+            "creditor": "Hyresvärden",
+            "amount": 7240,
+            "kind": "obetald-faktura",
+        },
+    )
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/credit-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["annual_income"] == 312000
+    assert data["loan_products_count"] == 5
+    assert data["available_products_count"] == 5
+    assert len(data["payment_marks"]) == 1
+    assert data["payment_marks"][0]["creditor"] == "Hyresvärden"
+    assert data["latest_credit_check"] is not None
+    assert data["latest_credit_check"]["payment_marks_count"] == 1
+
+
+def test_v2_lan_credit_class_drops_with_payment_marks(fx) -> None:
+    """Många anmärkningar → klass D/E."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska", employer="Sthlm Sjukhus",
+            gross_salary_monthly=26000, net_salary_monthly=18750,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm", family_status="ensam",
+            housing_type="hyresratt", housing_monthly=8000,
+            personality="blandad",
+        ))
+        db.commit()
+
+    # 4 anmärkningar = -60 score → klass D eller E
+    for i in range(4):
+        client.post(
+            f"/v2/teacher/students/{sid}/payment-marks",
+            headers={"Authorization": f"Bearer {tch}"},
+            json={
+                "occurred_on": "2025-06-01",
+                "creditor": f"Långivare {i}",
+                "amount": 1000,
+                "kind": "obetald-faktura",
+            },
+        )
+
+    r = client.get(
+        "/v2/lan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 4 marks = -60 score = 40 = klass C eller lägre
+    assert data["credit_class"] in ("C", "D", "E")
+
+
 # === /v2/lan ===
 
 def test_v2_lan_unauthenticated_401(fx) -> None:
@@ -1625,23 +1867,26 @@ def test_v2_lan_with_profile_has_credit_factors_and_cards(fx) -> None:
     # Inga aktiva lån → debt_ratio = 0
     assert data["total_debt"] == 0
     assert data["debt_ratio"] == 0
-    # credit_class är "" tills CreditCheck-modellen finns (Fas 2)
-    assert data["credit_class"] == ""
-    # Inga möjliga-låneprodukter visas tills LoanProduct-modell finns (Fas 2)
+    # /v2/lan räknar nu en riktig CreditCheck (Fas 2A) → klass A
+    # eftersom inga skulder, inga anmärkningar, full inkomst
+    assert data["credit_class"] == "A"
+    # Inga möjliga-låneprodukter tills lärare seedat dem
     cards = data["cards"]
     assert cards == []
-    # Endast riktiga kreditprövnings-faktorer visas:
+    # Riktiga kreditprövnings-faktorer från CreditCheck:
     # - Inkomst (alltid om profile har gross_salary_monthly)
-    # - Skuldkvot (BARA om eleven har aktiva lån — här är total_debt=0)
+    # - Betalningsanmärkningar (alltid med, även 0)
+    # - UC-score (alltid med när CreditCheck finns)
+    # Skuldkvot/KALP visas BARA när det finns data
     factors = data["credit_factors"]
     factor_names = [f["factor"] for f in factors]
     assert "Inkomst (årlig brutto)" in factor_names
-    # Skuldkvot ska INTE visas när total_debt=0
+    assert "Betalningsanmärkningar" in factor_names
+    assert "UC-score" in factor_names
+    # Inga lån → ingen skuldkvot-rad
     assert "Skuldkvot" not in factor_names
-    # KALP, betalningsanmärkningar, UC-score kräver Fas 2-modeller
+    # Ingen KALP-beräkning gjord → ingen KALP-rad
     assert "KALP · stresstest 7 %" not in factor_names
-    assert "Betalningsanmärkningar" not in factor_names
-    assert "UC-score" not in factor_names
 
 
 def test_v2_lan_with_active_loan_in_scope(fx) -> None:

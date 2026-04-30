@@ -166,6 +166,142 @@ class Goal(TenantMixin, Base):
     account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
 
 
+class LoanProduct(TenantMixin, Base):
+    """Låneprodukt som "Lånegivaren" (banker, CSN, billångivare)
+    erbjuder. Lärare seedar dessa per scope eller använder default-
+    katalogen via /v2/teacher/seed-default-loan-products. Pedagogik
+    runt billig-/medel-/dyr-skuld bygger på risk_class.
+    """
+    __tablename__ = "loan_products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lender: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # "csn" | "bolan" | "privatlan" | "billan" | "smslan"
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    interest_rate_min: Mapped[Decimal] = mapped_column(
+        Numeric(6, 4), nullable=False
+    )  # 0.017 = 1.7 %
+    interest_rate_max: Mapped[Decimal] = mapped_column(
+        Numeric(6, 4), nullable=False
+    )
+    max_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
+    binding_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # "billig" (CSN, bolån mot bostad) | "medel" (billån) | "dyr"
+    # (privatlån, sms-lån). Driver risk-färg i UI.
+    risk_class: Mapped[str] = mapped_column(String(20), default="medel")
+    # Lärare kan stänga av specifik produkt utan att radera den
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class PaymentMark(TenantMixin, Base):
+    """Betalningsanmärkning på elevens kreditprofil.
+
+    Lärare seedar för att simulera olika kreditscenarier (eleven har
+    obetald faktura, kronofogde-ärende eller betalningsföreläggande).
+    Anmärkningar sänker UC-score och kan blockera ny kredit.
+
+    Kvar i registret 3 år normalt (SKV-regel) — `expires_at` används
+    av kreditprövningen för att filtrera bort gamla.
+    """
+    __tablename__ = "payment_marks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+    creditor: Mapped[str] = mapped_column(String(120), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # "obetald-faktura" | "kronofogden" | "betalningsforelaggande"
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # När anmärkningen försvinner ur registret (default: 3 år senare)
+    expires_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+
+class CreditCheck(TenantMixin, Base):
+    """Senaste kreditprövningen för eleven.
+
+    Ny rad sparas varje gång prövningen körs (vid manuell begäran
+    eller ansökan). Frontend läser senaste raden via .order_by(
+    computed_at.desc()).first(). Historik bevaras för pedagogisk
+    spårbarhet ("se hur din score utvecklats").
+    """
+    __tablename__ = "credit_checks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    annual_income: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False
+    )
+    total_debt: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False
+    )
+    debt_ratio: Mapped[Decimal] = mapped_column(
+        Numeric(6, 3), nullable=False
+    )  # total_debt / annual_income
+    payment_marks_count: Mapped[int] = mapped_column(Integer, default=0)
+    running_applications: Mapped[int] = mapped_column(Integer, default=0)
+    # UC-score-klassificering
+    uc_score_class: Mapped[str] = mapped_column(String(2), nullable=False)
+    uc_score_value: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class KALPCalculation(TenantMixin, Base):
+    """KALP-beräkning (Kvar Att Leva På) enligt Finansinspektionens
+    schablon. Beräknar om eleven klarar lånekostnaden vid 7 %
+    stresstest givet faktisk månadsinkomst, boendekostnad och
+    Konsumentverkets levnadsschablon.
+
+    Ny rad per beräkning så vi har historik. Används som steg i
+    bolånemodulen.
+    """
+    __tablename__ = "kalp_calculations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+    # Ingångsdata
+    monthly_income_net: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    monthly_housing: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    monthly_consumer_schablon: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    monthly_existing_debt_payments: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    # Stresstest-parameter (FI:s riktvärde 7 %)
+    stress_test_rate: Mapped[Decimal] = mapped_column(
+        Numeric(6, 4), default=Decimal("0.07")
+    )
+    loan_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False
+    )
+    loan_term_months: Mapped[int] = mapped_column(Integer, default=300)
+    # Beräknat
+    monthly_loan_payment_at_stress: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    monthly_left_after_all: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False
+    )
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
 class Subscription(TenantMixin, Base):
     __tablename__ = "subscriptions"
 

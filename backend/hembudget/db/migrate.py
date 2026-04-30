@@ -106,6 +106,9 @@ def run_migrations(engine: Engine) -> list[str]:
         "scheduled_payments", "payment_reminders",
         # V2 Postlådan
         "mail_items",
+        # V2 Lånegivaren — Fas 2A
+        "loan_products", "payment_marks", "credit_checks",
+        "kalp_calculations",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):

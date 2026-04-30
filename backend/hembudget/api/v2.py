@@ -25,9 +25,13 @@ from decimal import Decimal
 from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
-    MailItem, Loan,
+    MailItem, Loan, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
+)
+from ..loans.credit import (
+    compute_credit_check, latest_credit_check, latest_kalp,
 )
 from ..loans.matcher import LoanMatcher
+from ..loans.products_seed import seed_default_loan_products
 from ..school.employer_models import (
     CollectiveAgreement,
     EmployerSatisfaction,
@@ -2426,16 +2430,17 @@ def _empty_loans(student_id: int) -> V2LoanResponse:
 
 @router.get("/lan", response_model=V2LoanResponse)
 def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
-    """Aggregat för Lånegivaren (/v2/lan).
+    """Aggregat för Lånegivaren (/v2/lan) — riktig data från:
 
-    Bygger:
-    - cards: aktiva Loan-rader + 3 möjliga låneprodukter (bolån, privatlån,
-      billån) som visning. Visar "snabbt vilka skulder du har".
-    - schedule: senaste 4 månadernas amorterings-betalningar (från
-      LoanScheduleEntry eller Transaction matchad mot CSN-lånet)
-    - credit_factors: 5-radig kreditprövning (inkomst, skuldkvot, KALP,
-      betalningsanmärkningar, UC-score)
-    - debt_ratio = total_debt / annual_income
+    - StudentProfile (inkomst)
+    - Loan-tabellen (aktiva lån + saldo via LoanMatcher)
+    - LoanProduct-tabellen (möjliga produkter, lärar-seedade)
+    - PaymentMark-tabellen (anmärkningar för UC-score)
+    - CreditCheck-tabellen (senaste kreditprövning)
+    - Transaction-tabellen (amorteringsbetalningar)
+
+    Inga schabloner: om eleven inte har lärar-seedade låneprodukter
+    visas listan tom. Om CreditCheck saknas räknas ny direkt.
     """
     if info.role != "student" or info.student_id is None:
         return _empty_loans(0)
@@ -2450,22 +2455,21 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
             .filter(StudentProfile.student_id == info.student_id)
             .first()
         )
-        annual_gross = (
-            float(profile.gross_salary_monthly * 12)
-            if profile and profile.gross_salary_monthly else 0.0
+        annual_gross_dec = (
+            Decimal(profile.gross_salary_monthly) * 12
+            if profile and profile.gross_salary_monthly else Decimal("0")
         )
-        has_student_loan = bool(profile and getattr(profile, "has_student_loan", False))
-        has_car_loan = bool(profile and getattr(profile, "has_car_loan", False))
-        has_mortgage = bool(profile and getattr(profile, "has_mortgage", False))
-        city = profile.city if profile else "Stockholm"
+        annual_gross = float(annual_gross_dec)
 
     cards: list[V2LoanCard] = []
     schedule: list[V2LoanScheduleRow] = []
     total_debt = Decimal("0")
+    credit_class = ""
+    credit_factors: list[V2CreditFactor] = []
 
     try:
         with session_scope() as s:
-            # Alla aktiva lån
+            # 1. Aktiva lån
             loans = s.query(Loan).filter(Loan.active.is_(True)).all()
             matcher = LoanMatcher(s)
 
@@ -2496,7 +2500,6 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
                     is_active=True,
                 ))
 
-                # Senaste 4 betalningar för detta lån
                 tx_q = (
                     s.query(Transaction)
                     .filter(Transaction.loan_id == loan.id)
@@ -2515,55 +2518,682 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
                         interest_part=None,
                         status="betald",
                     ))
+
+            # 2. Möjliga låneprodukter (lärar-seedade)
+            products = (
+                s.query(LoanProduct)
+                .filter(LoanProduct.available.is_(True))
+                .order_by(LoanProduct.risk_class, LoanProduct.id)
+                .all()
+            )
+            for p in products:
+                # Hoppa över produkter som matchar aktiva lån (CSN
+                # finns redan på "Aktivt"-kortet om eleven har det)
+                if any(c.is_active and p.kind in (c.name.lower())
+                       for c in cards):
+                    continue
+                rate_min = float(p.interest_rate_min) * 100
+                rate_max = float(p.interest_rate_max) * 100
+                rate_text = (
+                    f"{rate_min:.1f} %"
+                    if abs(rate_min - rate_max) < 0.001
+                    else f"{rate_min:.1f}–{rate_max:.1f} %"
+                )
+                detail = f"{p.lender} · {rate_text}"
+                if p.max_amount:
+                    detail += f" · max {int(p.max_amount):,} kr".replace(
+                        ",", " ",
+                    )
+                eyebrow = (
+                    "Möjligt" if p.risk_class == "billig"
+                    else "Möjligt" if p.risk_class == "medel"
+                    else "Avråds"
+                )
+                cards.append(V2LoanCard(
+                    id=None,
+                    eyebrow=eyebrow,
+                    name=p.name,
+                    detail=detail,
+                    balance=None,
+                    monthly_text=p.description,
+                    is_active=False,
+                    is_warning=p.risk_class == "dyr",
+                ))
+
+            # 3. Kreditprövning — säkerställ att vi har en aktuell
+            # CreditCheck. Räkna ny om det inte finns någon, eller om
+            # senaste är äldre än 7 dagar (motsvarar UC-uppdaterings-
+            # frekvens).
+            from datetime import timedelta as _td
+            check = latest_credit_check(s)
+            stale = (
+                check is None
+                or (datetime.utcnow() - check.computed_at) > _td(days=7)
+            )
+            if stale and annual_gross_dec > 0:
+                check = compute_credit_check(s, annual_gross_dec)
+
+            if check is not None:
+                credit_class = check.uc_score_class
+                # Bygg credit-factors-rader från riktig data
+                if annual_gross > 0 and profile is not None:
+                    credit_factors.append(V2CreditFactor(
+                        factor="Inkomst (årlig brutto)",
+                        detail=f"{profile.employer} · {profile.profession}",
+                        value=f"{int(annual_gross):,}".replace(",", " "),
+                        assessment="Stabil · kollektivavtal",
+                        severity="good",
+                    ))
+                if check.total_debt > 0:
+                    debt_ratio = float(check.debt_ratio)
+                    credit_factors.append(V2CreditFactor(
+                        factor="Skuldkvot",
+                        detail="Total skuld / årsinkomst",
+                        value=f"{debt_ratio:.2f}×",
+                        assessment=(
+                            "Långt under tak (4,5×)" if debt_ratio < 1.5
+                            else "Måttlig" if debt_ratio < 3
+                            else "Hög — närmar sig tak" if debt_ratio < 4.5
+                            else "Över tak — ingen mer skuld"
+                        ),
+                        severity=(
+                            "good" if debt_ratio < 1.5
+                            else "warn" if debt_ratio < 4.5
+                            else "bad"
+                        ),
+                    ))
+                # KALP-rad: senaste KALP-beräkning om den finns
+                kalp = latest_kalp(s)
+                if kalp is not None:
+                    credit_factors.append(V2CreditFactor(
+                        factor="KALP · stresstest 7 %",
+                        detail=(
+                            f"Lånebelopp {int(kalp.loan_amount):,} kr · "
+                            f"kvar/mån {int(kalp.monthly_left_after_all):,}"
+                        ).replace(",", " "),
+                        value="passerad" if kalp.passed else "underkänd",
+                        assessment=(
+                            "Klarar månadskostnaden vid stress 7 %"
+                            if kalp.passed
+                            else "Klarar inte månadskostnaden — sök lägre belopp"
+                        ),
+                        severity="good" if kalp.passed else "bad",
+                    ))
+                # Betalningsanmärkningar — ALLTID med, även 0
+                marks_text = (
+                    f"{check.payment_marks_count} aktiv"
+                    f"{'a' if check.payment_marks_count != 1 else ''}"
+                    if check.payment_marks_count > 0 else "0"
+                )
+                credit_factors.append(V2CreditFactor(
+                    factor="Betalningsanmärkningar",
+                    detail="Aktiva i registret (ej utgångna)",
+                    value=marks_text,
+                    assessment=(
+                        "Ren historik" if check.payment_marks_count == 0
+                        else "Sänker UC-score · 3 år i registret"
+                    ),
+                    severity=(
+                        "good" if check.payment_marks_count == 0 else "bad"
+                    ),
+                ))
+                credit_factors.append(V2CreditFactor(
+                    factor="UC-score",
+                    detail="Senast räknad: " + check.computed_at.strftime("%Y-%m-%d"),
+                    value=f"{check.uc_score_class} ({check.uc_score_value}/100)",
+                    assessment=(
+                        "Hög kreditvärdighet" if check.uc_score_class in ("A", "B")
+                        else "Medel" if check.uc_score_class == "C"
+                        else "Låg — dyra eller blockerade lån"
+                    ),
+                    severity=(
+                        "good" if check.uc_score_class in ("A", "B")
+                        else "warn" if check.uc_score_class == "C"
+                        else "bad"
+                    ),
+                ))
     except Exception:
-        # Scope-DB saknas — vi returnerar ändå riktig data där den finns
-        # (annual_income från profil) men inga aktiva lån eller schedule.
+        # Scope-DB saknas eller fel — visa ändå profil-data
         pass
 
-    # Skuldkvot räknas på riktiga aktiva lån
-    debt_ratio = (
+    debt_ratio_v = (
         float(total_debt) / annual_gross if annual_gross > 0 else 0.0
     )
 
-    # Kreditprövnings-rader: bara fält där vi har FAKTISK data.
-    # KALP, betalningsanmärkningar, UC-score och låneprodukter kräver
-    # nya backend-modeller (LoanProduct, KALPCalculation, CreditCheck,
-    # PaymentMark) som lärare seedar — Fas 2.
-    credit_factors: list[V2CreditFactor] = []
-    if annual_gross > 0:
-        credit_factors.append(V2CreditFactor(
-            factor="Inkomst (årlig brutto)",
-            detail=(
-                f"{profile.employer} · {profile.profession}"
-                if profile else "från StudentProfile"
-            ),
-            value=f"{int(annual_gross):,}".replace(",", " "),
-            assessment="Stabil · kollektivavtal",
-            severity="good",
-        ))
-    if total_debt > 0:
-        credit_factors.append(V2CreditFactor(
-            factor="Skuldkvot",
-            detail="Total skuld / årsinkomst",
-            value=f"{debt_ratio:.2f}×",
-            assessment=(
-                "Långt under tak (4,5×)" if debt_ratio < 1.5
-                else "Måttlig" if debt_ratio < 3
-                else "Hög — närmar sig tak"
-            ),
-            severity="good" if debt_ratio < 1.5 else "warn",
-        ))
-
-    # Kreditklass: returnera tom string tills CreditCheck-modell finns.
     return V2LoanResponse(
         student_id=info.student_id,
         total_debt=float(total_debt),
-        debt_ratio=round(debt_ratio, 2),
+        debt_ratio=round(debt_ratio_v, 2),
         annual_income=annual_gross,
-        credit_class="",  # Fas 2: hämtas från CreditCheck-tabellen
+        credit_class=credit_class,
         cards=cards,
         schedule=schedule,
         credit_factors=credit_factors,
+    )
+
+
+# === KALP-beräkning (elev kan begära) ===
+
+class V2KALPRequest(BaseModel):
+    loan_amount: float = Field(..., gt=0)
+    loan_term_months: int = Field(default=300, ge=12, le=600)
+
+
+class V2KALPResponse(BaseModel):
+    id: int
+    computed_at: datetime
+    monthly_income_net: float
+    monthly_housing: float
+    monthly_consumer_schablon: float
+    monthly_existing_debt_payments: float
+    stress_test_rate: float
+    loan_amount: float
+    loan_term_months: int
+    monthly_loan_payment_at_stress: float
+    monthly_left_after_all: float
+    passed: bool
+
+
+@router.post("/lan/kalp", response_model=V2KALPResponse)
+def post_kalp(
+    body: V2KALPRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2KALPResponse:
+    """Räkna KALP för ett tänkt lånebelopp och spara resultatet.
+
+    Använder Finansinspektionens stresstest 7 % + Konsumentverkets
+    levnadsschablon. Frontend pinger denna när eleven trycker "Räkna
+    KALP" i kreditprövnings-panelen.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan räkna KALP för sin egen profil",
+        )
+
+    # Profilens fasta input
+    with master_session() as mdb:
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if not profile:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "Elev saknar profil — kör onboardingen först",
+            )
+        net_monthly = Decimal(profile.net_salary_monthly or 0)
+        housing = Decimal(profile.housing_monthly or 0)
+        family = profile.family_status or "ensam"
+
+    from ..loans.credit import compute_kalp as _compute_kalp
+
+    with session_scope() as s:
+        kalp = _compute_kalp(
+            s,
+            monthly_income_net=net_monthly,
+            family_status=family,
+            monthly_housing=housing,
+            loan_amount=Decimal(str(body.loan_amount)),
+            loan_term_months=body.loan_term_months,
+        )
+        return V2KALPResponse(
+            id=kalp.id,
+            computed_at=kalp.computed_at,
+            monthly_income_net=float(kalp.monthly_income_net),
+            monthly_housing=float(kalp.monthly_housing),
+            monthly_consumer_schablon=float(kalp.monthly_consumer_schablon),
+            monthly_existing_debt_payments=float(
+                kalp.monthly_existing_debt_payments,
+            ),
+            stress_test_rate=float(kalp.stress_test_rate),
+            loan_amount=float(kalp.loan_amount),
+            loan_term_months=kalp.loan_term_months,
+            monthly_loan_payment_at_stress=float(
+                kalp.monthly_loan_payment_at_stress,
+            ),
+            monthly_left_after_all=float(kalp.monthly_left_after_all),
+            passed=kalp.passed,
+        )
+
+
+# === Lärar-endpoints för Lånegivaren (insyn + seed) ===
+
+class V2LoanProductIn(BaseModel):
+    lender: str
+    name: str
+    kind: Literal["csn", "bolan", "privatlan", "billan", "smslan"]
+    interest_rate_min: float = Field(..., ge=0, le=1)
+    interest_rate_max: float = Field(..., ge=0, le=1)
+    max_amount: Optional[float] = None
+    binding_required: bool = False
+    description: Optional[str] = None
+    risk_class: Literal["billig", "medel", "dyr"] = "medel"
+    available: bool = True
+
+
+class V2LoanProductOut(BaseModel):
+    id: int
+    lender: str
+    name: str
+    kind: str
+    interest_rate_min: float
+    interest_rate_max: float
+    max_amount: Optional[float] = None
+    binding_required: bool
+    description: Optional[str] = None
+    risk_class: str
+    available: bool
+
+
+class V2PaymentMarkIn(BaseModel):
+    occurred_on: _date
+    creditor: str
+    amount: float = Field(..., ge=0)
+    kind: Literal[
+        "obetald-faktura", "kronofogden", "betalningsforelaggande",
+    ]
+    notes: Optional[str] = None
+    expires_at: Optional[_date] = None
+
+
+class V2PaymentMarkOut(BaseModel):
+    id: int
+    occurred_on: _date
+    creditor: str
+    amount: float
+    kind: str
+    notes: Optional[str] = None
+    expires_at: Optional[_date] = None
+    created_at: datetime
+
+
+class V2TeacherCreditOverview(BaseModel):
+    """Lärar-vyns sammanfattning av en elevs kreditprofil."""
+    student_id: int
+    student_name: str
+    annual_income: float
+    total_debt: float
+    debt_ratio: float
+    active_loans_count: int
+    payment_marks: list[V2PaymentMarkOut]
+    latest_credit_check: Optional[V2EmployerSatisfaction] = None  # placeholder, byts nedan
+    loan_products_count: int
+    available_products_count: int
+
+
+class V2CreditCheckOut(BaseModel):
+    id: int
+    computed_at: datetime
+    annual_income: float
+    total_debt: float
+    debt_ratio: float
+    payment_marks_count: int
+    running_applications: int
+    uc_score_class: str
+    uc_score_value: int
+
+
+class V2TeacherCreditOverviewClean(BaseModel):
+    student_id: int
+    student_name: str
+    annual_income: float
+    total_debt: float
+    debt_ratio: float
+    active_loans_count: int
+    payment_marks: list[V2PaymentMarkOut]
+    latest_credit_check: Optional[V2CreditCheckOut] = None
+    kalp_history: list[V2KALPResponse]
+    loan_products_count: int
+    available_products_count: int
+
+
+def _scope_for_student(student_id: int):
+    """Ladda scope-context för en specifik elev (via student-id i master)."""
+    from ..school.engines import master_session as _ms, scope_context, scope_for_student
+    with _ms() as m:
+        st = m.get(Student, student_id)
+        if not st:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev hittades inte",
+            )
+        return scope_context(scope_for_student(st)), st
+
+
+@router.post(
+    "/teacher/students/{student_id}/loan-products/seed-default",
+    response_model=dict,
+)
+def teacher_seed_default_products(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Seedа default-katalogen (5 produkter) i en elevs scope-DB.
+
+    Idempotent: redan seedade produkter hoppas över.
+    """
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev hittades inte",
+            )
+        if st.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Du kan bara hantera dina egna elever",
+            )
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            created = seed_default_loan_products(s)
+    return {"student_id": student_id, "products_created": created}
+
+
+@router.post(
+    "/teacher/students/{student_id}/loan-products",
+    response_model=V2LoanProductOut,
+)
+def teacher_create_loan_product(
+    student_id: int,
+    body: V2LoanProductIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2LoanProductOut:
+    """Skapa en låneprodukt i en specifik elevs scope-DB."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev hittades inte",
+            )
+        if st.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            p = LoanProduct(
+                lender=body.lender,
+                name=body.name,
+                kind=body.kind,
+                interest_rate_min=Decimal(str(body.interest_rate_min)),
+                interest_rate_max=Decimal(str(body.interest_rate_max)),
+                max_amount=(
+                    Decimal(str(body.max_amount)) if body.max_amount else None
+                ),
+                binding_required=body.binding_required,
+                description=body.description,
+                risk_class=body.risk_class,
+                available=body.available,
+            )
+            s.add(p)
+            s.flush()
+            return V2LoanProductOut(
+                id=p.id,
+                lender=p.lender,
+                name=p.name,
+                kind=p.kind,
+                interest_rate_min=float(p.interest_rate_min),
+                interest_rate_max=float(p.interest_rate_max),
+                max_amount=float(p.max_amount) if p.max_amount else None,
+                binding_required=p.binding_required,
+                description=p.description,
+                risk_class=p.risk_class,
+                available=p.available,
+            )
+
+
+@router.post(
+    "/teacher/students/{student_id}/payment-marks",
+    response_model=V2PaymentMarkOut,
+)
+def teacher_create_payment_mark(
+    student_id: int,
+    body: V2PaymentMarkIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2PaymentMarkOut:
+    """Lägg till en betalningsanmärkning på elevens kreditprofil.
+
+    Triggar omberäkning av wellbeing nästa gång calculate_wellbeing
+    körs (sker automatiskt via /v2/hub).
+    """
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from datetime import timedelta as _td2
+    expires_at = body.expires_at
+    if expires_at is None:
+        # Default: 3 år (Skatteverkets/UC-regel)
+        expires_at = body.occurred_on + _td2(days=365 * 3)
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            mark = PaymentMark(
+                occurred_on=body.occurred_on,
+                creditor=body.creditor,
+                amount=Decimal(str(body.amount)),
+                kind=body.kind,
+                notes=body.notes,
+                expires_at=expires_at,
+            )
+            s.add(mark)
+            s.flush()
+            # Räkna ny CreditCheck så frontend ser ändringen direkt
+            with master_session() as mdb2:
+                profile = (
+                    mdb2.query(StudentProfile)
+                    .filter(StudentProfile.student_id == student_id)
+                    .first()
+                )
+                annual_gross = (
+                    Decimal(profile.gross_salary_monthly) * 12
+                    if profile and profile.gross_salary_monthly
+                    else Decimal("0")
+                )
+            if annual_gross > 0:
+                compute_credit_check(s, annual_gross)
+
+            return V2PaymentMarkOut(
+                id=mark.id,
+                occurred_on=mark.occurred_on,
+                creditor=mark.creditor,
+                amount=float(mark.amount),
+                kind=mark.kind,
+                notes=mark.notes,
+                expires_at=mark.expires_at,
+                created_at=mark.created_at,
+            )
+
+
+@router.delete(
+    "/teacher/students/{student_id}/payment-marks/{mark_id}",
+    status_code=204,
+)
+def teacher_delete_payment_mark(
+    student_id: int,
+    mark_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    """Ta bort en betalningsanmärkning (lärare kan justera scenarier)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            mark = s.get(PaymentMark, mark_id)
+            if mark is not None:
+                s.delete(mark)
+                s.flush()
+
+
+@router.get(
+    "/teacher/students/{student_id}/credit-overview",
+    response_model=V2TeacherCreditOverviewClean,
+)
+def teacher_credit_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherCreditOverviewClean:
+    """Lärar-vy: full insyn i elevens kreditprofil.
+
+    Returnerar:
+    - Inkomst + total skuld + skuldkvot
+    - Aktiva betalningsanmärkningar
+    - Senaste CreditCheck
+    - KALP-historik (alla beräkningar eleven gjort)
+    - Antal låneprodukter (totalt + tillgängliga)
+    """
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        annual_gross = (
+            float(profile.gross_salary_monthly) * 12
+            if profile and profile.gross_salary_monthly else 0.0
+        )
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            matcher = LoanMatcher(s)
+            active_loans = s.query(Loan).filter(Loan.active.is_(True)).all()
+            total_debt = float(sum(
+                (matcher.outstanding_balance(loan) for loan in active_loans),
+                Decimal("0"),
+            ))
+            debt_ratio = total_debt / annual_gross if annual_gross > 0 else 0.0
+
+            from datetime import date as _d_today
+            today = _d_today.today()
+            marks = (
+                s.query(PaymentMark)
+                .filter(
+                    (PaymentMark.expires_at.is_(None)) |
+                    (PaymentMark.expires_at >= today)
+                )
+                .order_by(PaymentMark.occurred_on.desc())
+                .all()
+            )
+            marks_out = [
+                V2PaymentMarkOut(
+                    id=m_.id,
+                    occurred_on=m_.occurred_on,
+                    creditor=m_.creditor,
+                    amount=float(m_.amount),
+                    kind=m_.kind,
+                    notes=m_.notes,
+                    expires_at=m_.expires_at,
+                    created_at=m_.created_at,
+                )
+                for m_ in marks
+            ]
+
+            check = latest_credit_check(s)
+            check_out: Optional[V2CreditCheckOut] = None
+            if check is not None:
+                check_out = V2CreditCheckOut(
+                    id=check.id,
+                    computed_at=check.computed_at,
+                    annual_income=float(check.annual_income),
+                    total_debt=float(check.total_debt),
+                    debt_ratio=float(check.debt_ratio),
+                    payment_marks_count=check.payment_marks_count,
+                    running_applications=check.running_applications,
+                    uc_score_class=check.uc_score_class,
+                    uc_score_value=check.uc_score_value,
+                )
+
+            kalp_rows = (
+                s.query(KALPCalculation)
+                .order_by(KALPCalculation.computed_at.desc())
+                .limit(20)
+                .all()
+            )
+            kalp_history = [
+                V2KALPResponse(
+                    id=k.id,
+                    computed_at=k.computed_at,
+                    monthly_income_net=float(k.monthly_income_net),
+                    monthly_housing=float(k.monthly_housing),
+                    monthly_consumer_schablon=float(k.monthly_consumer_schablon),
+                    monthly_existing_debt_payments=float(
+                        k.monthly_existing_debt_payments,
+                    ),
+                    stress_test_rate=float(k.stress_test_rate),
+                    loan_amount=float(k.loan_amount),
+                    loan_term_months=k.loan_term_months,
+                    monthly_loan_payment_at_stress=float(
+                        k.monthly_loan_payment_at_stress,
+                    ),
+                    monthly_left_after_all=float(k.monthly_left_after_all),
+                    passed=k.passed,
+                )
+                for k in kalp_rows
+            ]
+
+            products_total = s.query(LoanProduct).count()
+            products_available = (
+                s.query(LoanProduct)
+                .filter(LoanProduct.available.is_(True))
+                .count()
+            )
+
+    return V2TeacherCreditOverviewClean(
+        student_id=student_id,
+        student_name=student_name,
+        annual_income=annual_gross,
+        total_debt=total_debt,
+        debt_ratio=round(debt_ratio, 3),
+        active_loans_count=len(active_loans),
+        payment_marks=marks_out,
+        latest_credit_check=check_out,
+        kalp_history=kalp_history,
+        loan_products_count=products_total,
+        available_products_count=products_available,
     )
 
 

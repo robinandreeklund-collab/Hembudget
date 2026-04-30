@@ -249,6 +249,81 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                 f"Skuld {int(debt):,} kr utan motsvarande buffert — sårbar position.".replace(",", " "),
             ))
 
+    # Betalningsanmärkningar (PaymentMark) — drar trygghet & ekonomi.
+    # Pedagogiskt: anmärkningar är synliga i 3 år och stänger ut eleven
+    # från låg-räntelån. Mycket konkret konsekvens.
+    try:
+        from ..db.models import PaymentMark as _PaymentMark
+        from datetime import date as _d
+        today_d = _d.today()
+        active_marks = (
+            session.query(_PaymentMark)
+            .filter(
+                (_PaymentMark.expires_at.is_(None)) |
+                (_PaymentMark.expires_at >= today_d)
+            )
+            .count()
+        )
+        if active_marks > 0:
+            delta = min(15, 5 * active_marks)
+            safety -= delta
+            factors.append(WellbeingFactor(
+                "safety", -delta,
+                f"{active_marks} betalningsanmärkning"
+                f"{'ar' if active_marks > 1 else ''} aktiv"
+                f"{'a' if active_marks > 1 else ''} — kreditstämpel "
+                "som stänger ute från låg-räntelån i 3 år.",
+            ))
+            economy_delta = min(10, 3 * active_marks)
+            economy -= economy_delta
+            factors.append(WellbeingFactor(
+                "economy", -economy_delta,
+                "Anmärkning gör att framtida lån blir dyrare eller "
+                "blockeras helt — direkt ekonomisk kostnad.",
+            ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: payment_marks-factor misslyckades",
+        )
+
+    # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
+    # trygghet eftersom eleven inte kan låna sig ur en kris.
+    try:
+        from ..db.models import CreditCheck as _CreditCheck
+        latest = (
+            session.query(_CreditCheck)
+            .order_by(_CreditCheck.computed_at.desc())
+            .first()
+        )
+        if latest is not None:
+            cls = latest.uc_score_class
+            if cls == "E":
+                safety -= 10
+                factors.append(WellbeingFactor(
+                    "safety", -10,
+                    f"Kreditklass E — ingen vill låna ut. "
+                    f"Måste klara dig själv ur alla kriser.",
+                ))
+            elif cls == "D":
+                safety -= 5
+                factors.append(WellbeingFactor(
+                    "safety", -5,
+                    f"Kreditklass D — endast dyra lån är möjliga.",
+                ))
+            elif cls == "A":
+                safety += 3
+                factors.append(WellbeingFactor(
+                    "safety", 3,
+                    f"Kreditklass A — full tillgång till billig kredit "
+                    "om något oförutsett skulle hända.",
+                ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: credit_check-factor misslyckades",
+        )
+
     # Aktieportfölj-rörelse — pedagogisk kärnpunkt: eleven ska känna
     # loss aversion på riktigt. Påverkar Trygghet i realtid.
     try:
