@@ -90,6 +90,21 @@ export default function App() {
   // → DashboardV2Guard → /v2/onboarding (eller /v2/hub om klar).
   const [v2Status, setV2Status] = useState<V2Status | null>(null);
   const [v2Loaded, setV2Loaded] = useState(false);
+
+  // Rensa lärar-dev-flaggan v2_force_v1 så fort en elev loggar in.
+  // Annars läcker flaggan från en lärare som klickade "Tvinga v1" i
+  // samma webbläsare → eleven hamnar i v1 trots att v2_enabled är på.
+  // Lärar-flaggan är ett dev-verktyg och ska aldrig påverka elev-routing.
+  useEffect(() => {
+    if (isAuthenticated && role === "student") {
+      try {
+        window.localStorage.removeItem("v2_force_v1");
+      } catch {
+        // localStorage kan vara avstängt i privat-läge — ignorera
+      }
+    }
+  }, [isAuthenticated, role]);
+
   useEffect(() => {
     if (isAuthenticated && role === "student") {
       v2Api.status()

@@ -21,22 +21,36 @@ export function V2RootRedirect() {
   const [destination, setDestination] = useState<string | null>(null);
 
   useEffect(() => {
-    // Dev-override: om användaren explicit valt v1-läge, respektera det
-    if (
-      typeof window !== "undefined" &&
-      window.localStorage.getItem("v2_force_v1") === "1"
-    ) {
-      setDestination("/dashboard");
-      return;
-    }
+    // OBS: v2_force_v1-flaggan är ett LÄRAR-dev-verktyg och får ALDRIG
+    // påverka elev-routing. Vi kollar status FÖRST, sen lägger på
+    // dev-overriden bara om role är teacher.
     v2Api
       .status()
       .then((s: V2Status) => {
-        if (s.role === "teacher") setDestination("/teacher");
-        else if (s.role === "student" && !s.v2_onboarding_completed)
-          setDestination("/v2/onboarding");
-        else if (s.role === "student") setDestination("/v2/hub");
-        else setDestination("/dashboard");
+        const forceV1 =
+          typeof window !== "undefined" &&
+          window.localStorage.getItem("v2_force_v1") === "1";
+
+        if (s.role === "teacher") {
+          // Teacher: respektera force_v1-flaggan om satt
+          setDestination("/teacher");
+        } else if (s.role === "student") {
+          // Student: ignorera force_v1 helt — det är lärar-flagga.
+          // Rensa den om den råkar ligga kvar i samma browser.
+          if (forceV1) {
+            try {
+              window.localStorage.removeItem("v2_force_v1");
+            } catch {
+              /* ignore */
+            }
+          }
+          if (!s.v2_onboarding_completed)
+            setDestination("/v2/onboarding");
+          else setDestination("/v2/hub");
+        } else {
+          // Demo eller okänt
+          setDestination("/dashboard");
+        }
       })
       .catch(() => setDestination("/dashboard"));
   }, []);
