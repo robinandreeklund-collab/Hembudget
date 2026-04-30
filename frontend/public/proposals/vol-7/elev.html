@@ -1550,8 +1550,81 @@ body::after {
 </header>
 
 <main class="app">
+  <!-- ============ ONBOARDING ============ -->
+  <section class="panel active" id="p-onboarding">
+    <div class="onb-shell">
+      <div class="onb-stage">
+
+        <div class="onb-progress">
+          <span class="now" id="op-1"></span>
+          <span id="op-2"></span>
+          <span id="op-3"></span>
+          <span id="op-4"></span>
+          <span id="op-5"></span>
+          <span id="op-6"></span>
+          <span id="op-7"></span>
+        </div>
+
+        <!-- STEG 1 — Välkommen -->
+        <div class="onb-step active" id="ob-1">
+          <div class="onb-eye">Onboarding · steg 1 av 7</div>
+          <h1 class="onb-h">Välkommen till <em>Ekonomilabbet</em>.</h1>
+          <p class="onb-lead">
+            Det här är inte ett spel. Det är en <em>simulator av det vuxna
+            ekonomiska livet</em> — där du får möta riktiga aktörer (banken,
+            arbetsgivaren, Skatteverket), riktiga flöden (BankID-signering,
+            lönesamtal, kreditprövning) och fatta riktiga beslut.
+          </p>
+          <p class="onb-lead">
+            Du driver din ekonomi i <em>realtid</em> mellan inloggningar.
+            Räkningar kommer i postlådan. Lönen ramlar in den 25:e. Beslut du
+            fattar nu får konsekvenser nästa månad. Hela poängen är att
+            <strong>känna</strong> det innan det händer på riktigt.
+          </p>
+
+          <div class="onb-rules">
+            <div class="onb-rule">
+              <div class="onb-rule-eye">Princip 01</div>
+              <div class="onb-rule-h">Inga <em>genvägar</em></div>
+              <div class="onb-rule-prose">BankID-signering tar 6 steg som i verkligheten. Lönesamtal har 5 rundor. Friktionen är meningen.</div>
+            </div>
+            <div class="onb-rule">
+              <div class="onb-rule-eye">Princip 02</div>
+              <div class="onb-rule-h">Inget <em>betyg</em></div>
+              <div class="onb-rule-prose">Det finns inga "rätta svar". Echo ställer frågor — du fattar besluten. Läraren bedömer din portfolio, inte enskilda val.</div>
+            </div>
+            <div class="onb-rule">
+              <div class="onb-rule-eye">Princip 03</div>
+              <div class="onb-rule-h">AI är <em>spegel</em></div>
+              <div class="onb-rule-prose">Echo, Maria och Anna är inte orakel. De ställer frågor, jämför med data — du tänker själv.</div>
+            </div>
+          </div>
+
+          <div class="onb-rules">
+            <div class="onb-rule" style="grid-column: 1 / -1; background: rgba(99,102,241,0.05); border-color: rgba(99,102,241,0.2);">
+              <div class="onb-rule-eye" style="color: #a5b4fc;">Pedagogik</div>
+              <div class="onb-rule-h">Vad du <em>lär dig</em> i Vol. 18</div>
+              <div class="onb-rule-prose">14 systemkompetenser: bokföring, budget, sparande, lån, ränta, skatt, lön, kollektivavtal, pension, försäkring, kreditförståelse, investering, konsumenträtt, ekonomisk reflektion. Du växer från <em>basis</em> till <em>grund</em> till <em>fördjupning</em> i takt med vad du gör.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Steg 2-7 fylls in i kommande commits -->
+
+        <div class="onb-foot">
+          <span class="onb-step-num">Steg <strong id="ob-num">1</strong> av 7</span>
+          <div class="onb-actions">
+            <button class="onb-btn" id="ob-back" disabled style="opacity: 0.4;">← Tillbaka</button>
+            <button class="onb-btn solid" id="ob-next">Möt din karaktär →</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   <!-- ============ HUB ============ -->
-  <section class="panel active" id="p-hub">
+  <section class="panel" id="p-hub">
     <div class="shell">
 
       <div class="hub-head">
@@ -3042,6 +3115,7 @@ body::after {
 <script>
 // === Navigation core ===
 const PANELS = {
+  onboarding: { label: "Onboarding",          crumb: ["● ONBOARDING · DAG 1"] },
   hub:    { label: "Pentagonen",            crumb: ["● HUBBEN"] },
   bank:   { label: "Banken",                crumb: ["HUBBEN", "● BANKEN"] },
   bankid: { label: "BankID-signering",      crumb: ["HUBBEN", "BANKEN", "● BANKID"] },
@@ -3072,7 +3146,67 @@ function renderCrumbs(view) {
   });
   box.innerHTML = parts.join('<span class="sep">›</span>');
 }
-renderCrumbs("hub");
+renderCrumbs("onboarding");
+
+// Hide topbar during onboarding
+const TOPBAR_EL = document.querySelector(".topbar");
+function checkOnboardingMode() {
+  const isOnb = document.getElementById("p-onboarding").classList.contains("active");
+  if (isOnb) {
+    TOPBAR_EL.style.opacity = "0.4";
+    TOPBAR_EL.style.pointerEvents = "none";
+  } else {
+    TOPBAR_EL.style.opacity = "1";
+    TOPBAR_EL.style.pointerEvents = "auto";
+  }
+}
+checkOnboardingMode();
+
+// === ONBOARDING NAV ===
+let onbStep = 1;
+const onbTotal = 7;
+function obGo(n) {
+  if (n < 1 || n > onbTotal) return;
+  onbStep = n;
+  document.querySelectorAll(".onb-step").forEach(s => s.classList.remove("active"));
+  const el = document.getElementById("ob-" + n);
+  if (el) el.classList.add("active");
+  for (let i = 1; i <= onbTotal; i++) {
+    const dot = document.getElementById("op-" + i);
+    if (!dot) continue;
+    dot.classList.remove("done", "now");
+    if (i < n) dot.classList.add("done");
+    if (i === n) dot.classList.add("now");
+  }
+  const numEl = document.getElementById("ob-num");
+  if (numEl) numEl.textContent = n;
+  const back = document.getElementById("ob-back");
+  back.disabled = (n === 1);
+  back.style.opacity = (n === 1) ? "0.4" : "1";
+  const nextBtn = document.getElementById("ob-next");
+  const labels = ["", "Möt din karaktär →", "Välj din spenderprofil →", "Visa pentagonen →", "Visa postlådan →", "Visa Echo →", "Sista regeln →", "Starta Vol. 18 ↗"];
+  nextBtn.textContent = labels[n] || "Nästa →";
+}
+document.getElementById("ob-next").addEventListener("click", () => {
+  if (onbStep < onbTotal) obGo(onbStep + 1);
+  else {
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("p-hub").classList.add("active");
+    renderCrumbs("hub");
+    checkOnboardingMode();
+    window.scrollTo({ top: 0 });
+  }
+});
+document.getElementById("ob-back").addEventListener("click", () => {
+  if (onbStep > 1) obGo(onbStep - 1);
+});
+
+// Wrap go() to update topbar visibility
+const _go = window.go || go;
+window.go = function(view) {
+  _go(view);
+  checkOnboardingMode();
+};
 
 // Echo drawer
 function closeDrawer() {
