@@ -2128,6 +2128,313 @@ body::after {
   </section>
 
   <!-- ============ MODUL · BOLÅN ============ -->
+  <!-- ============ POSTLÅDAN ============ -->
+  <section class="panel" id="p-mail">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+
+      <header class="mail-head">
+        <div>
+          <span class="pill">Meta-aktör · Postlådan · 14 brev</span>
+          <h1 class="actor-name" style="margin-top:14px;">Postlådan — <em>där allt landar</em>.</h1>
+          <p class="actor-sub">Brev, fakturor, lönespecar, myndighetspost · pendling med banken &amp; bokföringen</p>
+        </div>
+        <div class="actor-meta">
+          Spenderprofil <strong>balanserad</strong><br>
+          Senaste utskick <strong>29 apr 14:42</strong><br>
+          Nästa väntat 1 maj
+        </div>
+      </header>
+
+      <div class="mail-stat-row">
+        <div class="mail-stat">
+          <div class="mail-stat-eye">Ohanterade</div>
+          <div class="mail-stat-num"><em>4</em>/14</div>
+          <div class="mail-stat-sub">kräver åtgärd</div>
+        </div>
+        <div class="mail-stat">
+          <div class="mail-stat-eye">Att betala denna v</div>
+          <div class="mail-stat-num warm"><em>11 658</em> kr</div>
+          <div class="mail-stat-sub">7 fakturor till 5 maj</div>
+        </div>
+        <div class="mail-stat">
+          <div class="mail-stat-eye">Inkommande denna v</div>
+          <div class="mail-stat-num green"><em>+ 22 400</em> kr</div>
+          <div class="mail-stat-sub">lön 25 maj</div>
+        </div>
+        <div class="mail-stat">
+          <div class="mail-stat-eye">Påminnelse-risk</div>
+          <div class="mail-stat-num">0</div>
+          <div class="mail-stat-sub">inga försenade</div>
+        </div>
+      </div>
+
+      <div class="mail-tabs">
+        <a class="mail-tab active" href="#">Allt <span class="count">14</span></a>
+        <a class="mail-tab" href="#">Ohanterade <span class="count">4</span></a>
+        <a class="mail-tab" href="#">Fakturor <span class="count">7</span></a>
+        <a class="mail-tab" href="#">Lönespecar <span class="count">2</span></a>
+        <a class="mail-tab" href="#">Myndighet <span class="count">1</span></a>
+        <a class="mail-tab" href="#">Övrigt <span class="count">4</span></a>
+      </div>
+
+      <div class="mail-list">
+
+        <!-- 1. KREDITKORTSFAKTURA — ohanterad, ny -->
+        <a class="mail-item unread" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon cred">CC</div>
+          <div>
+            <div class="mail-from">SEB Visa</div>
+            <div class="mail-from-meta">kreditkortsfaktura · ··· 4218</div>
+          </div>
+          <div>
+            <div class="mail-subject"><em>April-spend</em>: 47 transaktioner att granska</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">Mat 2 240 · Restaurang 1 470 · Foodora 690 · …</div>
+          </div>
+          <div class="mail-amount"><em>4 822</em> kr</div>
+          <div class="mail-due urgent">förfaller <strong>28 maj</strong></div>
+          <span class="mail-status unhandled">Ohanterad</span>
+        </a>
+
+        <!-- 2. SKATTEVERKET — ohanterad -->
+        <a class="mail-item unread" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon skv">SKV</div>
+          <div>
+            <div class="mail-from">Skatteverket</div>
+            <div class="mail-from-meta">myndighetspost · brev 2026-04-26</div>
+          </div>
+          <div>
+            <div class="mail-subject">Inkomstdeklaration <em>2025</em> — granska och godkänn</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">1 förslag på ränteavdrag · prognos +1 240 kr tillbaka</div>
+          </div>
+          <div class="mail-amount in">+ 1 240 kr</div>
+          <div class="mail-due urgent">deadline <strong>2 maj</strong></div>
+          <span class="mail-status unhandled">Ohanterad</span>
+        </a>
+
+        <!-- 3. FOLKTANDVÅRDEN — ohanterad, ny idag -->
+        <a class="mail-item unread" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon ins">FT</div>
+          <div>
+            <div class="mail-from">Folktandvården</div>
+            <div class="mail-from-meta">faktura · skickad 29 apr 14:42</div>
+          </div>
+          <div>
+            <div class="mail-subject"><em>Cariesfyllning</em> · akutbesök idag — exportera till banken?</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">OCR 8842 19 · efter konsultation Carolin Berg</div>
+          </div>
+          <div class="mail-amount">4 200 kr</div>
+          <div class="mail-due">förfaller <strong>30 maj</strong></div>
+          <span class="mail-status unhandled">Ohanterad</span>
+        </a>
+
+        <!-- 4. APOTEKET — ohanterad -->
+        <a class="mail-item unread" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon ins">AP</div>
+          <div>
+            <div class="mail-from">Apoteket</div>
+            <div class="mail-from-meta">faktura · receptmedicin</div>
+          </div>
+          <div>
+            <div class="mail-subject">Receptmedicin · högkostnadsskydd 1 240/2 850</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">Apoteket Globen · 26 april</div>
+          </div>
+          <div class="mail-amount">142 kr</div>
+          <div class="mail-due">förfaller <strong>8 maj</strong></div>
+          <span class="mail-status unhandled">Ohanterad</span>
+        </a>
+
+        <!-- 5. STOCKHOLMSHEM — granskad, exporterad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon land">SH</div>
+          <div>
+            <div class="mail-from">Stockholmshem</div>
+            <div class="mail-from-meta">hyresavi · 2 r o k Hökarängen</div>
+          </div>
+          <div>
+            <div class="mail-subject">Hyresavi maj 2026 · OCR 21 41 552 88</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">vana · autoexport till banken klar</div>
+          </div>
+          <div class="mail-amount">7 240 kr</div>
+          <div class="mail-due">betalas <strong>1 maj</strong></div>
+          <span class="mail-status exported">Exporterad</span>
+        </a>
+
+        <!-- 6. TIBBER — exporterad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon util">TB</div>
+          <div>
+            <div class="mail-from">Tibber</div>
+            <div class="mail-from-meta">elfaktura · spotpris april</div>
+          </div>
+          <div>
+            <div class="mail-subject">El april · 184 kWh × 0,82 kr + nät</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">vana · autoexport till banken klar</div>
+          </div>
+          <div class="mail-amount">812 kr</div>
+          <div class="mail-due">betalas <strong>4 maj</strong></div>
+          <span class="mail-status exported">Exporterad</span>
+        </a>
+
+        <!-- 7. STHLM SJUKHUS — Lönespec, granskad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon work">LÖN</div>
+          <div>
+            <div class="mail-from">Sthlm Sjukhus AB</div>
+            <div class="mail-from-meta">lönespec · 25 mars (klar)</div>
+          </div>
+          <div>
+            <div class="mail-subject">Lönespec mars 2026 — brutto 31 250 · netto 22 400</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">ITP1 1 875 · skatt 6 850 · OCR 18 5840 21</div>
+          </div>
+          <div class="mail-amount in">+ 22 400 kr</div>
+          <div class="mail-due">betald <strong>25 mar</strong></div>
+          <span class="mail-status paid">Betald</span>
+        </a>
+
+        <!-- 8. STHLM SJUKHUS — Lönespec kommande -->
+        <a class="mail-item unread" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon work">LÖN</div>
+          <div>
+            <div class="mail-from">Sthlm Sjukhus AB</div>
+            <div class="mail-from-meta">lönespec · 25 april (kommande)</div>
+          </div>
+          <div>
+            <div class="mail-subject">Lönespec april 2026 — <em>preliminär</em>, OB-tillägg justeras</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">brutto 31 250 + OB 480 · prognos netto 22 880</div>
+          </div>
+          <div class="mail-amount in">+ 22 880 kr</div>
+          <div class="mail-due">utbet <strong>25 maj</strong></div>
+          <span class="mail-status viewed">Förhandsvisad</span>
+        </a>
+
+        <!-- 9. TELIA — granskad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon util">TEL</div>
+          <div>
+            <div class="mail-from">Telia</div>
+            <div class="mail-from-meta">mobilfaktura · ··· 0271</div>
+          </div>
+          <div>
+            <div class="mail-subject">Mobilabonnemang april · 5 GB · SVA-tillägg</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">vana · autoexport till banken klar</div>
+          </div>
+          <div class="mail-amount">249 kr</div>
+          <div class="mail-due">betalas <strong>27 apr</strong></div>
+          <span class="mail-status paid">Betald</span>
+        </a>
+
+        <!-- 10. FOLKSAM — granskad, exporterad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon ins">FS</div>
+          <div>
+            <div class="mail-from">Folksam</div>
+            <div class="mail-from-meta">försäkringsfaktura · hem &amp; olycksfall</div>
+          </div>
+          <div>
+            <div class="mail-subject">Hemförsäkring &amp; olycksfall · maj 2026</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">vana · autoexport till banken klar</div>
+          </div>
+          <div class="mail-amount">320 kr</div>
+          <div class="mail-due">betalas <strong>5 maj</strong></div>
+          <span class="mail-status exported">Exporterad</span>
+        </a>
+
+        <!-- 11. PENSIONSMYNDIGHETEN — granskad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon pen">PM</div>
+          <div>
+            <div class="mail-from">Pensionsmyndigheten</div>
+            <div class="mail-from-meta">orange kuvertet · prognos 2026</div>
+          </div>
+          <div>
+            <div class="mail-subject">Pensionsprognos 2026 · 12 800 kr/mån vid 67</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">Inkomstpension 8 200 · Premiepension 4 600 · ITP 0</div>
+          </div>
+          <div class="mail-amount">—</div>
+          <div class="mail-due muted">info-brev</div>
+          <span class="mail-status viewed">Granskad</span>
+        </a>
+
+        <!-- 12. SL — exporterad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon util">SL</div>
+          <div>
+            <div class="mail-from">SL</div>
+            <div class="mail-from-meta">reskassa · autoladd</div>
+          </div>
+          <div>
+            <div class="mail-subject">Reskassa-laddning · april 2026</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">vana · 320 kr</div>
+          </div>
+          <div class="mail-amount">320 kr</div>
+          <div class="mail-due">betalas <strong>30 apr</strong></div>
+          <span class="mail-status exported">Exporterad</span>
+        </a>
+
+        <!-- 13. AVANZA — info -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon bank">AVZ</div>
+          <div>
+            <div class="mail-from">Avanza</div>
+            <div class="mail-from-meta">portfoliorapport · april</div>
+          </div>
+          <div>
+            <div class="mail-subject">Månadsbrev: din portfölj +2,1 % i april</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">Globalfond +2,4 · Sverige +1,8 · Tillväxt +3,1 · Korträntor +0,4</div>
+          </div>
+          <div class="mail-amount in">+ 174 kr</div>
+          <div class="mail-due muted">info-brev</div>
+          <span class="mail-status viewed">Granskad</span>
+        </a>
+
+        <!-- 14. FOODORA — gammal expirerad -->
+        <a class="mail-item" href="#">
+          <span class="mail-dot"></span>
+          <div class="mail-icon util">FD</div>
+          <div>
+            <div class="mail-from">Foodora</div>
+            <div class="mail-from-meta">kvitto · 17 apr 18:42</div>
+          </div>
+          <div>
+            <div class="mail-subject">Kvittokopia · pizza Max + leverans</div>
+            <div class="mail-from-meta" style="margin-top: 3px;">redan dragen från kort 4218</div>
+          </div>
+          <div class="mail-amount">187 kr</div>
+          <div class="mail-due muted">17 apr</div>
+          <span class="mail-status expired">Arkiv</span>
+        </a>
+
+      </div>
+
+      <!-- INFO-RUTA längst ned -->
+      <div class="cta-card" style="margin-top: 28px;">
+        <div class="cta-eye">Hur det funkar</div>
+        <div class="cta-h">Postlådan är <em>källan</em> för all bokföring.</div>
+        <p class="cta-prose">
+          Ingen faktura blir bokförd förrän <strong>du har granskat den</strong> och
+          klassat den eller exporterat den till banken. Vana brev (hyra, el,
+          mobil) auto-exporteras med din bekräftelse. Nya brev — tandläkare,
+          akutapotek, kreditkortsfaktura — kräver din blick. Det är samma
+          friktion som i verkligheten: du måste <strong>se</strong> räkningen för att hantera den.
+        </p>
+      </div>
+
+    </div>
+  </section>
   <section class="panel" id="p-modul">
     <div class="shell">
       <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
@@ -2230,6 +2537,7 @@ const PANELS = {
   avanza: { label: "Avanza",                crumb: ["HUBBEN", "● AVANZA"] },
   skatt:  { label: "Skatteverket",          crumb: ["HUBBEN", "● SKATTEVERKET"] },
   modul:  { label: "Modul: Ditt första bolån", crumb: ["HUBBEN", "● MODUL · BOLÅN"] },
+  mail:   { label: "Postlådan",                crumb: ["HUBBEN", "● POSTLÅDAN"] },
 };
 
 function go(view) {
