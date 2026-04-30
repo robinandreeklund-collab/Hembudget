@@ -730,6 +730,140 @@ body::after {
   border-bottom: 1px solid rgba(251,191,36,0.4);
 }
 .side-card-link:hover { border-bottom-color: var(--warm); }
+
+/* === BANKID FLOW === */
+.bankid-stage {
+  max-width: 760px; margin: 0 auto;
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 36px 44px;
+  position: relative;
+}
+.bankid-head {
+  text-align: center; margin-bottom: 24px;
+  padding-bottom: 20px; border-bottom: 1px solid var(--line);
+}
+.bankid-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px;
+}
+.bankid-eye::before { content: "● "; }
+.bankid-h {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 28px; letter-spacing: -0.8px; color: #fff;
+}
+.bankid-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.bankid-sub {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 6px;
+}
+
+.bankid-grid {
+  display: grid; grid-template-columns: 220px 1fr;
+  gap: 36px; align-items: center;
+}
+@media (max-width: 700px) { .bankid-grid { grid-template-columns: 1fr; } }
+
+/* QR-mock */
+.qr-mock {
+  background: #fff;
+  width: 220px; height: 220px;
+  border-radius: 8px;
+  padding: 14px;
+  position: relative;
+  display: grid; place-items: center;
+}
+.qr-mock svg { width: 100%; height: 100%; display: block; }
+.qr-mock::after {
+  content: ""; position: absolute; inset: 14px;
+  border: 2px solid rgba(220,76,43,0.3);
+  border-radius: 4px;
+  animation: qr-scan 2.4s ease-in-out infinite;
+}
+@keyframes qr-scan {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,76,43,0.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(220,76,43,0); }
+}
+
+/* Phone steps */
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li {
+  display: grid; grid-template-columns: 32px 1fr;
+  gap: 14px; padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.steps li:last-child { border-bottom: 0; }
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line-strong);
+  color: var(--text-mid);
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.step-num.done { background: rgba(110,231,183,0.18); border-color: #6ee7b7; color: #6ee7b7; }
+.step-num.now {
+  background: rgba(220,76,43,0.22); border-color: var(--accent); color: #fff;
+  animation: pulse-step 1.4s ease-in-out infinite;
+}
+@keyframes pulse-step {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220,76,43,0.5); }
+  50%      { box-shadow: 0 0 0 8px rgba(220,76,43,0); }
+}
+.step-text { font-family: var(--serif); font-size: 14.5px; color: var(--text); }
+.step-text em { color: var(--warm); font-style: italic; }
+.step-text small {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-dim); display: block; margin-top: 3px;
+  letter-spacing: 0.4px;
+}
+
+/* Doc list */
+.doc-list {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 18px;
+  margin-top: 22px;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text-mid);
+}
+.doc-list-head {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 8px;
+}
+.doc-list ul { list-style: none; padding: 0; margin: 0; }
+.doc-list li {
+  display: flex; justify-content: space-between;
+  padding: 4px 0; color: var(--text);
+}
+.doc-list li em { font-family: var(--serif); font-style: italic; color: var(--warm); }
+
+/* Bankid CTA */
+.bankid-cta {
+  margin-top: 26px;
+  display: flex; gap: 12px; flex-wrap: wrap;
+  justify-content: center;
+}
+.bankid-cta button, .bankid-cta a {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 12px 22px; border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: #fff; background: rgba(255,255,255,0.04);
+  cursor: pointer; text-decoration: none;
+  transition: all .2s var(--ease);
+}
+.bankid-cta button.solid {
+  background: var(--accent); border-color: var(--accent);
+}
+.bankid-cta button.solid:hover { background: #c43a1c; }
+.bankid-cta button:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
 </style>
 </head>
 <body>
@@ -1108,7 +1242,141 @@ body::after {
       </div>
     </div>
   </section>
-  <section class="panel" id="p-bankid"></section>
+  <!-- ============ BANKID ============ -->
+  <section class="panel" id="p-bankid">
+    <div class="shell">
+      <a class="actor-back" onclick="go('bank'); return false;" href="#">Tillbaka till banken</a>
+
+      <div class="bankid-stage">
+        <div class="bankid-head">
+          <div class="bankid-eye">BankID-simulator · Sthlm Sjukhus AB</div>
+          <h1 class="bankid-h">Signering — <em>23 fakturor</em>, en handling.</h1>
+          <div class="bankid-sub">Ekonomilabbet-ID · sandbox · känns som riktigt</div>
+        </div>
+
+        <div class="bankid-grid">
+          <!-- QR-mock -->
+          <div>
+            <div class="qr-mock">
+              <svg viewBox="0 0 100 100" fill="#0a0e1a">
+                <rect x="0"  y="0"  width="20" height="20" />
+                <rect x="80" y="0"  width="20" height="20" />
+                <rect x="0"  y="80" width="20" height="20" />
+                <rect x="32" y="0"  width="6"  height="6" />
+                <rect x="44" y="0"  width="6"  height="6" />
+                <rect x="56" y="0"  width="6"  height="6" />
+                <rect x="32" y="12" width="6"  height="6" />
+                <rect x="56" y="12" width="6"  height="6" />
+                <rect x="68" y="12" width="6"  height="6" />
+                <rect x="0"  y="32" width="6"  height="6" />
+                <rect x="12" y="32" width="6"  height="6" />
+                <rect x="32" y="32" width="6"  height="6" />
+                <rect x="44" y="32" width="12" height="6" />
+                <rect x="62" y="32" width="6"  height="6" />
+                <rect x="80" y="32" width="6"  height="6" />
+                <rect x="92" y="32" width="6"  height="6" />
+                <rect x="0"  y="44" width="6"  height="6" />
+                <rect x="20" y="44" width="6"  height="12" />
+                <rect x="32" y="44" width="6"  height="6" />
+                <rect x="50" y="44" width="6"  height="6" />
+                <rect x="68" y="44" width="6"  height="12" />
+                <rect x="80" y="44" width="6"  height="6" />
+                <rect x="92" y="44" width="6"  height="6" />
+                <rect x="32" y="56" width="6"  height="12" />
+                <rect x="44" y="56" width="6"  height="6" />
+                <rect x="56" y="56" width="6"  height="6" />
+                <rect x="80" y="56" width="6"  height="6" />
+                <rect x="44" y="68" width="6"  height="6" />
+                <rect x="56" y="68" width="6"  height="6" />
+                <rect x="68" y="68" width="6"  height="6" />
+                <rect x="92" y="68" width="6"  height="6" />
+                <rect x="32" y="80" width="6"  height="6" />
+                <rect x="56" y="80" width="6"  height="6" />
+                <rect x="68" y="80" width="6"  height="6" />
+                <rect x="80" y="80" width="6"  height="6" />
+                <rect x="92" y="80" width="6"  height="6" />
+                <rect x="32" y="92" width="6"  height="6" />
+                <rect x="44" y="92" width="6"  height="6" />
+                <rect x="68" y="92" width="6"  height="6" />
+                <rect x="80" y="92" width="6"  height="6" />
+              </svg>
+            </div>
+            <div style="text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 10px; letter-spacing: 1.2px; text-transform: uppercase;">QR · skanna med Ekonomilabbet-ID</div>
+          </div>
+
+          <!-- Steg-flöde -->
+          <div>
+            <ol class="steps">
+              <li>
+                <div class="step-num done">✓</div>
+                <div class="step-text">
+                  Banken har tagit emot 23 fakturor från Bankgirot.
+                  <small>Senast uppdaterat 14:18 idag</small>
+                </div>
+              </li>
+              <li>
+                <div class="step-num done">✓</div>
+                <div class="step-text">
+                  18 fakturor matchade <em>befintliga vanor</em> — autoklassade.
+                  <small>Hyra · El · SL-kort · Spotify · Klarna m.fl.</small>
+                </div>
+              </li>
+              <li>
+                <div class="step-num done">✓</div>
+                <div class="step-text">
+                  5 oregelbundna fakturor klassade <em>manuellt</em> av Sara.
+                  <small>Folktandvården · Apoteket · IKEA · Friskis · Foodora</small>
+                </div>
+              </li>
+              <li>
+                <div class="step-num now">4</div>
+                <div class="step-text">
+                  <em>Skanna QR-koden</em> med Ekonomilabbet-ID.
+                  <small>Eller skriv in personnumret för länk till mobilen</small>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">5</div>
+                <div class="step-text">
+                  Öppna appen, läs sammandraget, ange din 6-siffriga PIN.
+                  <small>Total summa att signera: <em>4 822 kr</em></small>
+                </div>
+              </li>
+              <li>
+                <div class="step-num">6</div>
+                <div class="step-text">
+                  Banken bekräftar — fakturorna betalas <em>automatiskt</em> på förfallodatum.
+                  <small>Ingen mer åtgärd krävs</small>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="doc-list">
+          <div class="doc-list-head">23 fakturor · att signera</div>
+          <ul>
+            <li><span>Stockholmshem (hyra · 1 maj)</span><em>7 240 kr</em></li>
+            <li><span>Tibber (el · 4 maj)</span><em>812 kr</em></li>
+            <li><span>Telia (mobil · 27 apr)</span><em>249 kr</em></li>
+            <li><span>Spotify Premium (29 apr)</span><em>119 kr</em></li>
+            <li><span>SL · Reskassa (autoladd)</span><em>320 kr</em></li>
+            <li style="color: var(--accent);"><span>Folktandvården (cariesfyllning, NY)</span><em>4 200 kr</em></li>
+            <li><span>+ 17 fakturor till</span><em>3 042 kr</em></li>
+          </ul>
+        </div>
+
+        <div class="bankid-cta">
+          <button onclick="alert('Demo: i riktiga appen öppnas Ekonomilabbet-ID-appen och du blir tillfrågad om att signera.'); go('bank');">Signera alla i appen</button>
+          <a onclick="go('bank'); return false;" href="#">Avbryt &amp; gå tillbaka</a>
+        </div>
+
+        <div style="text-align: center; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 24px; letter-spacing: 1px; text-transform: uppercase;">
+          Detta är en simulator. Inga riktiga BankID-anrop görs. Pedagogisk friktion bevarad.
+        </div>
+      </div>
+    </div>
+  </section>
   <section class="panel" id="p-arbg"></section>
   <section class="panel" id="p-maria"></section>
   <section class="panel" id="p-avanza"></section>
