@@ -1822,9 +1822,158 @@ body::after {
       </div>
     </div>
   </section>
-  <section class="panel" id="p-avanza"></section>
-  <section class="panel" id="p-skatt"></section>
-  <section class="panel" id="p-modul"></section>
+  <!-- ============ AVANZA ============ -->
+  <section class="panel" id="p-avanza">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill warm">Aktör 05 · Avanza</span>
+          <h1 class="actor-name" style="margin-top:14px;">Avanza — <em>din ISK</em>.</h1>
+          <p class="actor-sub">Investeringssparkonto · 4 fonder · sparar 600 kr/mån sedan jan 2026</p>
+        </div>
+        <div class="actor-meta">
+          Värde idag: <strong>8 460 kr</strong><br>
+          Avkastning april: <strong>+ 2,1 %</strong><br>
+          Schablonskatt 2026: 0,89 %
+        </div>
+      </header>
+      <div class="acct-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <a class="acct" href="#"><div><div class="acct-eye">Fond 01</div><div class="acct-name">Globalfond</div><div class="acct-num">SEB Hållbarhet · 0,4 % avg</div></div><div><div class="acct-bal">3 240 kr</div><div class="acct-bal-meta">+ 2,4 %</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Fond 02</div><div class="acct-name">Sverige</div><div class="acct-num">Robur Sverige · 0,3 % avg</div></div><div><div class="acct-bal">2 180 kr</div><div class="acct-bal-meta">+ 1,8 %</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Fond 03</div><div class="acct-name">Tillväxt</div><div class="acct-num">USA tillväxt · 0,5 % avg</div></div><div><div class="acct-bal">1 920 kr</div><div class="acct-bal-meta">+ 3,1 %</div></div></a>
+        <a class="acct" href="#"><div><div class="acct-eye">Fond 04</div><div class="acct-name">Räntefond</div><div class="acct-num">Korträntor · 0,1 % avg</div></div><div><div class="acct-bal">1 120 kr</div><div class="acct-bal-meta">+ 0,4 %</div></div></a>
+      </div>
+      <div class="act-grid" style="margin-top: 20px;">
+        <div>
+          <div class="section-eye">Värdeutveckling · 12 mån</div>
+          <div class="tx-list">
+            <div class="tx-row"><span class="tx-date">Apr 2026</span><div><div class="tx-name">Månadssparat 600 kr · marknad +2,1 %</div></div><span class="tx-cat">Köp</span><span class="tx-amt"><em>+ 776</em> kr</span></div>
+            <div class="tx-row"><span class="tx-date">Mar 2026</span><div><div class="tx-name">Månadssparat 600 kr · marknad +0,8 %</div></div><span class="tx-cat">Köp</span><span class="tx-amt">+ 658 kr</span></div>
+            <div class="tx-row"><span class="tx-date">Feb 2026</span><div><div class="tx-name">Månadssparat 600 kr · marknad −1,2 %</div></div><span class="tx-cat">Köp</span><span class="tx-amt" style="color: #fca5a5;">+ 510 kr</span></div>
+            <div class="tx-row"><span class="tx-date">Jan 2026</span><div><div class="tx-name">Startade ISK · första insättning 1 200 kr</div></div><span class="tx-cat">Start</span><span class="tx-amt in">+ 1 200 kr</span></div>
+          </div>
+        </div>
+        <aside>
+          <div class="side-card">
+            <div class="side-card-eye">Schablonskatt 2026</div>
+            <div class="side-card-h">~ 75 kr/år</div>
+            <div class="side-card-meta">0,89 % på kapitalunderlaget · betalas i deklarationen</div>
+            <a class="side-card-link" onclick="go('skatt')">Se skatt-rummet ↗</a>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Investeringssimulator</div>
+            <div class="side-card-h">Vad om <em>2 000</em>/mån i 30 år?</div>
+            <div class="side-card-meta">~ 2,4 Mkr vid 7 % real avkastning · vs 1,8 Mkr i depå</div>
+            <a class="side-card-link">Öppna simulatorn ↗</a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SKATTEVERKET ============ -->
+  <section class="panel" id="p-skatt">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill">Aktör 03 · Skatteverket · deadline 2 maj</span>
+          <h1 class="actor-name" style="margin-top:14px;">Skatteverket — <em>förifyllt</em>.</h1>
+          <p class="actor-sub">Inkomstdeklaration 2025 · automatik · 1 förslag att granska</p>
+        </div>
+        <div class="actor-meta">
+          Bruttoinkomst <strong>312 500 kr</strong><br>
+          Förskottsinbetald skatt <strong>68 720 kr</strong><br>
+          Prognos: <strong>+ 1 240 kr</strong> tillbaka
+        </div>
+      </header>
+      <article class="cta-card">
+        <div class="cta-eye">Förslag att granska</div>
+        <div class="cta-h">Ränteavdrag på CSN — <em>+ 142 kr</em> i återbäring.</div>
+        <p class="cta-prose">Skatteverket föreslår att lägga till räntan du betalat på studielånet (548 kr) som avdrag. 30 % avdrag på räntan = 142 kr lägre skatt. Godkänn eller avvisa.</p>
+        <button class="cta-btn">Godkänn förslaget</button>
+        <button class="cta-btn" style="background: transparent; border: 1px solid var(--line-strong); margin-left: 8px;">Avvisa</button>
+      </article>
+      <div class="section-eye">Förifyllt underlag</div>
+      <div class="tx-list">
+        <div class="tx-row"><span class="tx-date">Inkomst</span><div><div class="tx-name">Lön · Sthlm Sjukhus AB</div><div class="tx-name-sub">Kontrolluppgift KU10 · brutto helår</div></div><span class="tx-cat">Tjänst</span><span class="tx-amt in">312 500 kr</span></div>
+        <div class="tx-row"><span class="tx-date">Avdrag</span><div><div class="tx-name">Reseavdrag (12 km × 220 dgr)</div><div class="tx-name-sub">Bil · max 18,5 kr/mil</div></div><span class="tx-cat">Tjänst</span><span class="tx-amt">−4 884 kr</span></div>
+        <div class="tx-row"><span class="tx-date">Kapital</span><div><div class="tx-name">Schablonskatt ISK · Avanza</div><div class="tx-name-sub">Underlag 8 460 kr × 0,89 %</div></div><span class="tx-cat">Kapital</span><span class="tx-amt">−75 kr</span></div>
+        <div class="tx-row"><span class="tx-date">Avdrag</span><div><div class="tx-name">Ränta CSN-lån · <em>förslag</em></div><div class="tx-name-sub">Räntor 548 kr · 30 % avdrag</div></div><span class="tx-cat unset">Granska</span><span class="tx-amt"><em>−142 kr</em></span></div>
+        <div class="tx-row"><span class="tx-date">Skatt</span><div><div class="tx-name">Slutlig skatt</div><div class="tx-name-sub">Efter jobbskatteavdrag &amp; ränteavdrag</div></div><span class="tx-cat">Skatt</span><span class="tx-amt">67 480 kr</span></div>
+        <div class="tx-row"><span class="tx-date">Diff</span><div><div class="tx-name">Återbäring</div><div class="tx-name-sub">Insatt 68 720 − slutlig 67 480</div></div><span class="tx-cat">Tillbaka</span><span class="tx-amt in"><em>+ 1 240</em> kr</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODUL · BOLÅN ============ -->
+  <section class="panel" id="p-modul">
+    <div class="shell">
+      <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
+      <header class="actor-head">
+        <div>
+          <span class="pill warm">Verktyg 09 · Modul · Steg 4 av 12</span>
+          <h1 class="actor-name" style="margin-top:14px;">Ditt första <em>bolån</em>.</h1>
+          <p class="actor-sub">Pågående · skapad av Anders Lind · klass 9C · ~ 14 min kvar</p>
+        </div>
+        <div class="actor-meta">
+          Kompetenser i sikte: <strong>Lån &amp; räntor</strong> · <strong>Kreditförståelse</strong><br>
+          Senast aktivt: <strong>27 april</strong>
+        </div>
+      </header>
+      <div class="round-track" style="margin-bottom: 22px; max-width: 720px;">
+        <div class="round-step done"></div><div class="round-step done"></div>
+        <div class="round-step done"></div><div class="round-step now"></div>
+        <div class="round-step"></div><div class="round-step"></div>
+        <div class="round-step"></div><div class="round-step"></div>
+        <div class="round-step"></div><div class="round-step"></div>
+        <div class="round-step"></div><div class="round-step"></div>
+      </div>
+      <div class="act-grid">
+        <div>
+          <article class="cta-card">
+            <div class="cta-eye">Steg 4 · Pågår</div>
+            <div class="cta-h">KALP — <em>Kvar att leva på</em>.</div>
+            <p class="cta-prose">
+              Banken kommer räkna din KALP innan de godkänner ett bolån. Det är
+              vad du har <strong>kvar i månaden</strong> efter ränta, amortering,
+              hyra/avgift, drift och Konsumentverkets schablon för mat &amp;
+              transport. Är KALP negativ → banken säger nej.
+            </p>
+            <p class="cta-prose">Räkna din KALP för en lägenhet på 2,4 Mkr (3,8 % ränta, 2 % amortering, 4 200 kr/mån avgift):</p>
+            <button class="cta-btn">Öppna lånekalkylatorn →</button>
+            <button class="cta-btn" style="background: transparent; border: 1px solid var(--line-strong); margin-left: 8px;" onclick="go('bank')">Hämta saldot från banken</button>
+          </article>
+
+          <div class="section-eye" style="margin-top: 24px;">Stegen i modulen</div>
+          <ol style="list-style: none; padding: 0; margin: 0;">
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line);"><div class="step-num done">✓</div><div><div class="step-text">Vad är ett bolån?</div><small style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.4px;">Läs · 4 min · klart 23 apr</small></div></li>
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line);"><div class="step-num done">✓</div><div><div class="step-text">Räntetyper · rörlig vs bunden</div><small style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.4px;">Quiz · 8/10 rätt · 24 apr</small></div></li>
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line);"><div class="step-num done">✓</div><div><div class="step-text">Amorteringskravet (FI)</div><small style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.4px;">Läs + reflektion · 26 apr</small></div></li>
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line);"><div class="step-num now">4</div><div><div class="step-text">KALP — kvar att leva på</div><small style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.4px;">Räkna · pågår</small></div></li>
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line);"><div class="step-num">5</div><div><div class="step-text">Kreditprövning hos lånegivaren</div><small style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.4px;">Skicka in ansökan</small></div></li>
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line);"><div class="step-num">6</div><div><div class="step-text">Vänta på beslut</div><small style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.4px;">Tar 24–48 h i sim</small></div></li>
+            <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 11px 0;"><div class="step-num">+</div><div><div class="step-text">6 steg till — kontantinsats, avtal, BankID-signering, första räntefakturan, reflektion</div></div></li>
+          </ol>
+        </div>
+        <aside>
+          <div class="side-card">
+            <div class="side-card-eye">Uppdrag · från läraren</div>
+            <div class="side-card-h">Anders Lind</div>
+            <div class="side-card-meta">"Räkna ut KALP för en 2:a på 2,4 Mkr i Hökarängen — kan du ha råd?"</div>
+            <div class="side-card-meta">Förfaller 5 maj · individuellt</div>
+          </div>
+          <div class="side-card">
+            <div class="side-card-eye">Echo · sokratiskt</div>
+            <div class="side-card-h">"Är 2,4 Mkr <em>din</em> nivå?"</div>
+            <div class="side-card-meta">Echo har förslag på reflektion innan du går vidare</div>
+            <a class="side-card-link" onclick="document.getElementById('echoBtn').click(); return false;">Öppna chatten ↗</a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
 </main>
 
 <div class="scrim" id="scrim"></div>
