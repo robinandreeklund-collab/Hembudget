@@ -2986,9 +2986,29 @@ body[data-mode="business"] .ms-knob {
           <div class="onb-eye">Onboarding · steg 7 av 8 · värderingar</div>
           <h1 class="onb-h">Innan vi avslöjar din <em>partners ekonomi</em> — en fråga.</h1>
           <p class="onb-lead">
-            Du har en sambo i din profil. Innan vi visar vad din partner tjänar
-            vill vi att du svarar på en fråga om <em>dig själv</em>.
+            Sara har fått en <em>AI-genererad sambo</em> — Linus B. Inte alla
+            elever får det; vissa karaktärer är solo, en del par. Innan vi visar
+            vad Linus tjänar svarar du på en fråga om <em>dig själv</em>.
           </p>
+
+          <!-- Partner-modeller: 3 varianter -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px;">
+            <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px;">
+              <div style="font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-mid); margin-bottom: 4px;">Modell A · Solo</div>
+              <div style="font-family: var(--serif); font-size: 13px; color: #fff; font-weight: 700; margin-bottom: 3px;">Ingen partner</div>
+              <div style="font-family: var(--serif); font-size: 12px; color: var(--text-mid); line-height: 1.4;">~ 60 % av karaktärer. Eget hushåll, egen ekonomi. Sambo-frågor hoppar.</div>
+            </div>
+            <div style="background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.30); border-radius: 6px; padding: 12px 14px;">
+              <div style="font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #c7d2fe; margin-bottom: 4px;">Modell B · AI-partner <em style="color: var(--warm); font-size: 10px; vertical-align: middle; font-family: var(--mono); margin-left: 4px;">DU ÄR HÄR</em></div>
+              <div style="font-family: var(--serif); font-size: 13px; color: #fff; font-weight: 700; margin-bottom: 3px;">Linus B. (auto-genererad)</div>
+              <div style="font-family: var(--serif); font-size: 12px; color: var(--text-mid); line-height: 1.4;">~ 35 %. Plattformen skapar partnern med egen lön, värdering och bakgrund. Realistiska sambo-konflikter.</div>
+            </div>
+            <div style="background: rgba(110,231,183,0.05); border: 1px solid rgba(110,231,183,0.25); border-radius: 6px; padding: 12px 14px;">
+              <div style="font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #6ee7b7; margin-bottom: 4px;">Modell C · Klasskompis</div>
+              <div style="font-family: var(--serif); font-size: 13px; color: #fff; font-weight: 700; margin-bottom: 3px;">Annan elev (riktig person)</div>
+              <div style="font-family: var(--serif); font-size: 12px; color: var(--text-mid); line-height: 1.4;">~ 5 %. <em style="color: var(--warm);">Aktiveras endast av läraren.</em> Två elever pairas och delar gemensam ekonomi-modell.</div>
+            </div>
+          </div>
 
           <div class="onb-partner-card">
             <div class="onb-partner-eye">Värderingsfråga · sparas i din portfolio</div>
@@ -3025,7 +3045,7 @@ body[data-mode="business"] .ms-knob {
             </div>
 
             <div class="onb-fair-foot">
-              Ditt svar låses till profilen. <strong>Din partner svarar samma fråga separat.</strong> Sen jämförs era svar och ni kan diskutera skillnader.
+              Ditt svar låses till profilen. <strong>Linus svarar samma fråga separat (deterministiskt baserat på hans karaktär).</strong> Sen jämförs era svar och du kan se skillnaderna i partner-vyn.
             </div>
           </div>
 
@@ -3573,9 +3593,9 @@ body[data-mode="business"] .ms-knob {
             <div class="compass-node-val">7 240 · 1 maj</div>
           </a>
           <a class="compass-node" onclick="go('partner'); return false;" href="#" style="border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.04);">
-            <div class="compass-node-eye" style="color: #c7d2fe;">Sambo</div>
+            <div class="compass-node-eye" style="color: #c7d2fe;">Sambo · AI-partner</div>
             <div class="compass-node-name">Linus B.</div>
-            <div class="compass-node-val"><em>27 800</em>/mån · jämför</div>
+            <div class="compass-node-val"><em>27 800</em>/mån · auto-gen</div>
           </a>
         </div>
 
@@ -7032,9 +7052,9 @@ body[data-mode="business"] .ms-knob {
       <a class="actor-back" onclick="go('hub'); return false;" href="#">Tillbaka till pentagonen</a>
       <header class="actor-head">
         <div>
-          <span class="pill">Sambo · Linus B.</span>
-          <h1 class="actor-name" style="margin-top:14px;">Linus — <em>din partner</em>.</h1>
-          <p class="actor-sub">Sambo sedan jan 2026 · läraren tilldelade · ekonomi-rumset delas</p>
+          <span class="pill">Sambo · AI-genererad partner <em style="color: var(--warm); font-size: 9px; font-family: var(--mono); margin-left: 6px;">MODELL B</em></span>
+          <h1 class="actor-name" style="margin-top:14px;">Linus B. — <em>auto-genererad</em>.</h1>
+          <p class="actor-sub">Skapad av plattformen · IT-konsult · 26 år · sambo med Sara sedan jan 2026 · deterministisk personlighet</p>
         </div>
         <div class="actor-meta">
           Linus tjänar: <strong>27 800 kr/mån</strong> netto<br>
@@ -7043,14 +7063,31 @@ body[data-mode="business"] .ms-knob {
         </div>
       </header>
 
+      <!-- Förklarings-banner överst -->
+      <article class="s-card" style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.25); border-left: 3px solid #818cf8; margin-bottom: 22px; padding: 16px 22px;">
+        <div style="display: flex; gap: 16px; align-items: start;">
+          <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: grid; place-items: center; font-family: var(--serif); font-weight: 700; color: #fff; font-size: 16px; flex-shrink: 0;">AI</div>
+          <div style="flex: 1;">
+            <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #c7d2fe; margin-bottom: 4px;">● Hur Linus genererades</div>
+            <p style="font-family: var(--serif); font-size: 14px; line-height: 1.5; color: var(--text);">Plattformen skapade Linus när Sara onboardades — <em>random urval</em> ur en pool på 200 förgenererade partner-profiler. Linus är <em>inte</em> en riktig elev. Hans lön (27 800), karaktär, värdering och bakgrundshistoria är fastställda och förändras inte. Det är som ett rollspel där andra parten är AI med dold script.</p>
+            <p style="font-family: var(--serif); font-size: 13.5px; line-height: 1.45; color: var(--text-mid); margin-top: 8px; font-style: italic;">"Vill du istället paras med en <em>klasskompis</em>? Det måste din lärare aktivera — Modell C."</p>
+          </div>
+        </div>
+      </article>
+
       <!-- AVSLÖJANDE -->
       <article class="cta-card" style="background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(15,21,37,0.5)); border-color: rgba(99,102,241,0.45); margin-bottom: 24px;">
         <div class="cta-eye" style="color: #c7d2fe;">Avslöjat efter ditt värderingssvar</div>
         <div class="cta-h">Du svarade <em>"proportionellt"</em>.</div>
         <p class="cta-prose">
-          Linus svarade <em>"50/50"</em>. Ni har <em>olika åsikter</em> — och nu vet ni
-          om varandras lön. Det här är där den verkliga diskussionen börjar.
+          Linus karaktär är inställd på <em>"50/50"</em> som värdering — han värderar
+          formell rättvisa mer än lika marginal. Ni har <em>olika åsikter</em> — och nu
+          vet du om hans lön. Det här är där den verkliga diskussionen börjar.
           Räkna nedan.
+        </p>
+        <p class="cta-prose" style="font-size: 13px; color: var(--text-mid); font-style: italic; margin-top: 8px;">
+          Linus värdering är deterministisk — ändras inte oavsett din respons.
+          Echo coachar dig genom hur du argumenterar.
         </p>
       </article>
 
@@ -8306,7 +8343,7 @@ const NOTIFS = [
   { type: "echo", icon: "✦", time: "11:42 idag", title: "Echo har en fråga", body: "<em>Du har 12 ovettade transaktioner</em>. Vill du gå igenom dem nu?", unread: true, view: "bok" },
   { type: "modul", icon: "M", time: "09:14 idag", title: "Anders Lind tilldelade modul", body: "<em>Pension om 40 år</em> · 5 steg · ~25 min · rekommenderad", unread: true, view: "modul-pension" },
   { type: "bank", icon: "B", time: "i går 18:42", title: "Folktandvården-faktura", body: "Ny faktura i postlådan: <em>4 200 kr</em>, förfaller 30 maj.", unread: false, view: "mail" },
-  { type: "social", icon: "✉", time: "i går 16:08", title: "Linus B. · sambo", body: "Svarade på sambo-frågan: <em>50/50</em>. Diskutera?", unread: false, view: "partner" },
+  { type: "social", icon: "✉", time: "i går 16:08", title: "Linus B. · AI-sambo", body: "Linus värdering är inställd på <em>50/50</em>. Skiljer från din. Diskutera?", unread: false, view: "partner" },
   { type: "system", icon: "i", time: "27 apr 09:00", title: "Vecko-summary v17", body: "Pentagon 76 → 72 (−4) efter veckan. Ekonomi tippade. Karriär +3.", unread: false, view: "hub" },
 ];
 

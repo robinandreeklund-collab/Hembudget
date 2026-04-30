@@ -332,6 +332,10 @@ body::after {
         <div>
           <span class="pill">9C · 28 elever · onsdag 29 april</span>
           <h1 class="head-h1">Klassens <em>pentagon</em> i rörelse.</h1>
+          <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="#" class="tb-imp" onclick="go('skapa'); return false;" style="background: var(--accent); color: #fff; border-color: var(--accent);">+ Skapa elev / generera kod</a>
+            <a href="#" class="tb-imp" onclick="go('peda'); return false;">Pedagogik-paket ✦</a>
+          </div>
         </div>
         <div class="head-meta">
           Anders Lind · Nordstjärnan gymnasium<br>
@@ -521,6 +525,7 @@ body::after {
 
       <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px;">
         <a href="../vol-7/elev.html" class="tb-imp" style="background: var(--accent); color: #fff; border-color: var(--accent);">Impersonera Sara →</a>
+        <a href="#" class="tb-imp" onclick="go('historik'); return false;" style="background: rgba(99,102,241,0.18); color: #c7d2fe; border-color: rgba(99,102,241,0.45);">📊 Komplett aktivitets-historik (312 events) →</a>
         <a href="#" class="tb-imp" style="background: rgba(251,191,36,0.18); color: var(--warm); border-color: rgba(251,191,36,0.45);">▰▰▱ Aktivera Nivå 2 →</a>
         <a href="#" class="tb-imp">Skicka uppdrag →</a>
         <a href="#" class="tb-imp" onclick="go('refl'); return false;">Läs reflektioner →</a>
@@ -1221,6 +1226,353 @@ body::after {
 
     </div>
   </section>
+
+  <!-- ============ SKAPA ELEV / KODER ============ -->
+  <section class="panel" id="p-skapa">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Lärar-admin · Skapa elever</span>
+          <h1 class="head-h1">Lägg till <em>nya elever</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Karaktärsgenerering · 6-teckens-kod · partner-modell · Nivå 1 default · vårdnadshavar-mejl</p>
+        </div>
+        <div class="head-meta">
+          Klassen 9C · 28 / 30 platser<br>
+          Lediga: <strong>2</strong><br>
+          Aktiva koder oanvända: <strong>3</strong>
+        </div>
+      </header>
+
+      <!-- Snabb-skapa formulär -->
+      <article class="s-card" style="margin-bottom: 22px;">
+        <div class="s-card-eye">Snabb-skapa · en elev</div>
+        <div class="s-card-h">Auto-genererad <em>karaktär</em> + 6-teckens-kod.</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 14px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Förnamn</div>
+            <input type="text" placeholder="ex: Ida" style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Efternamn-initial</div>
+            <input type="text" placeholder="ex: P." maxlength="2" style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Karaktärs-arketyp</div>
+            <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Slumpa karaktär</option>
+              <option>Vård-undersköterska (som Sara)</option>
+              <option>IT-konsult junior</option>
+              <option>Butiksbiträde</option>
+              <option>Kassörska</option>
+              <option>Lärar-vikarie</option>
+              <option>Anställd i kommun</option>
+              <option>Studerande gymnasium</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Partner-modell</div>
+            <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Slumpa (60% solo · 35% AI · 5% par)</option>
+              <option>Solo (ingen partner)</option>
+              <option>AI-genererad partner</option>
+              <option>Par med klasskompis (välj sen)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Vårdnadshavar-mejl (för kod-utskick)</div>
+            <input type="email" placeholder="förälder@exempel.se" style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Startnivå</div>
+            <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>▰▱▱ Nivå 1 · Sparsam (default · alla börjar här)</option>
+              <option>▰▰▱ Nivå 2 · Balanserad (om elev erfaren)</option>
+              <option>▰▰▰ Nivå 3 · Slösa (specialfall)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+          <button class="level-activate-btn" style="background: var(--accent); color: #fff;">Skapa elev + skicka kod</button>
+          <button style="background: transparent; border: 1px solid var(--line-strong); color: #fff; padding: 8px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Spara utkast</button>
+          <a href="#" class="attn-go" style="margin-left: auto; align-self: center;">eller massimport CSV ↗</a>
+        </div>
+      </article>
+
+      <!-- Skapade elever (ej aktiverade) -->
+      <div class="section-eye" style="margin-top: 26px;">3 koder skapade · ej aktiverade än</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 22px;">
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 11px 16px; background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim);">
+          <span>Kod</span><span>Karaktär</span><span>Modell</span><span>Vårdnadshavare</span><span>Skickad</span><span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--warm); letter-spacing: 2px;">7K3M9P</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Maja F. (kassör)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">21 år · solo · Sthlm</div></div>
+          <span class="level-badge l1">Nivå 1</span>
+          <span style="font-family: var(--mono); font-size: 10.5px; color: var(--text-mid);">erik.fredriksson@gmail.com</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">22 apr · ✓</span>
+          <a href="#" class="attn-go">skicka igen</a>
+        </div>
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--warm); letter-spacing: 2px;">B2X8H4</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Robin Z. (IT-konsult)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">19 år · AI-partner Petra · Sthlm</div></div>
+          <span class="level-badge l1">Nivå 1</span>
+          <span style="font-family: var(--mono); font-size: 10.5px; color: var(--text-mid);">anna.zandberg@hotmail.se</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">28 apr · ✓</span>
+          <a href="#" class="attn-go">skicka igen</a>
+        </div>
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 12px 16px; align-items: center;">
+          <span style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--warm); letter-spacing: 2px;">N9F3C1</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Otto L. (lager)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">22 år · solo · Sthlm</div></div>
+          <span class="level-badge l1">Nivå 1</span>
+          <span style="font-family: var(--mono); font-size: 10.5px; color: var(--text-mid);">karin.lindgren@gmail.com</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">28 apr · väntar</span>
+          <a href="#" class="attn-go">skicka igen</a>
+        </div>
+      </div>
+
+      <!-- Par-aktivering · Modell C -->
+      <article class="s-card" style="background: rgba(110,231,183,0.05); border-color: rgba(110,231,183,0.25); margin-bottom: 22px;">
+        <div class="s-card-eye" style="color: #6ee7b7;">Par med klasskompis · Modell C</div>
+        <div class="s-card-h">Aktivera <em>klasskompis-paring</em> för 2 elever.</div>
+        <p style="font-family: var(--serif); font-size: 14px; line-height: 1.5; color: var(--text-mid); margin-bottom: 14px;">Två elever pairas och delar ekonomi-modell. Användbart för diskussionsövningar och fördelningsfrågor. Båda elever måste bekräfta innan paret aktiveras.</p>
+        <div style="display: grid; grid-template-columns: 1fr 32px 1fr 120px; gap: 12px; align-items: center;">
+          <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+            <option>Välj elev 1...</option>
+            <option>Sara A. (för närvarande AI-partner Linus)</option>
+            <option>Hassan O. (solo)</option>
+            <option>Adam B. (solo)</option>
+          </select>
+          <div style="text-align: center; font-family: var(--mono); color: var(--warm); font-size: 18px;">↔</div>
+          <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+            <option>Välj elev 2...</option>
+            <option>Hanna L. (solo)</option>
+            <option>Mira S. (solo)</option>
+            <option>Lisa N. (solo)</option>
+          </select>
+          <button style="background: #6ee7b7; color: #064e3b; border: 0; padding: 10px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Föreslå par</button>
+        </div>
+        <div style="margin-top: 12px; font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); letter-spacing: 0.5px;">När du föreslår får båda elever en notis. När båda accepterat aktiveras paret. AI-partner ersätts. Kan när som helst avaktiveras.</div>
+      </article>
+
+      <!-- Aktiva par -->
+      <div class="section-eye">Aktiva par i klassen · 1 av 14 möjliga</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 110px 110px 110px; gap: 12px; padding: 12px 16px; align-items: center;">
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Hanna L.</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Restaurang-anställd</div></div>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Adam B.</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">IT-konsult</div></div>
+          <span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; letter-spacing: 1px;">SEDAN 12 mar</span>
+          <span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid);">Konflikter: 2</span>
+          <a href="#" class="attn-go">se →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AKTIVITETS-HISTORIK · SARA ============ -->
+  <section class="panel" id="p-historik">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('elev'); return false;" href="#">← Tillbaka till Sara A.</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Sara A. · Aktivitets-historik · komplett insyn</span>
+          <h1 class="head-h1">Allt Sara <em>gjort</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Onboarding · 142 transaktioner · 8 reflektioner · 3 modul-steg · 14 lönesamtal-rundor · varje val sparat</p>
+        </div>
+        <div class="head-meta">
+          Sedan signup: <strong>14 jan 2026</strong><br>
+          15 v aktiv · <strong>312 events</strong><br>
+          Lägst aktivitet: 8-12 feb (ferier)
+        </div>
+      </header>
+
+      <!-- Filter -->
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; padding: 14px 18px; background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px;">
+        <span style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; color: var(--text-mid); text-transform: uppercase; align-self: center;">Filter:</span>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Alla typer</option><option>Onboarding</option><option>Bokföring</option><option>Banken</option><option>Maria-rundor</option><option>Modul-steg</option><option>Reflektioner</option><option>Aktiehandel</option><option>Skatt</option><option>Lån</option></select>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Senaste veckan</option><option>Senaste månaden</option><option>Hela 2026</option><option>Sedan signup</option></select>
+        <input type="text" placeholder="Sök händelse..." style="flex: 1; min-width: 180px; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12px;">
+        <button style="background: var(--warm); color: #422006; border: 0; padding: 7px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Exportera CSV</button>
+      </div>
+
+      <!-- Stat-rad -->
+      <div class="stats" style="margin-bottom: 24px;">
+        <div class="stat"><div class="stat-eye">Onboarding</div><div class="stat-num">8/8</div><div class="stat-sub">klar 14 jan 09:42</div></div>
+        <div class="stat"><div class="stat-eye">Transaktioner</div><div class="stat-num"><em>142</em></div><div class="stat-sub">89 % klassade</div></div>
+        <div class="stat"><div class="stat-eye">Modul-steg</div><div class="stat-num">14</div><div class="stat-sub">av 26 möjliga</div></div>
+        <div class="stat"><div class="stat-eye">Reflektioner</div><div class="stat-num"><em>8</em></div><div class="stat-sub">snitt 217 ord</div></div>
+        <div class="stat"><div class="stat-eye">Aktivitet i app</div><div class="stat-num">82 h</div><div class="stat-sub">15 v aktiv</div></div>
+      </div>
+
+      <!-- KOMPLETT TIDSLINJE -->
+      <div class="section-eye">Komplett tidslinje · sorterat efter senaste</div>
+
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+
+        <!-- Senaste 24h -->
+        <div style="padding: 10px 18px; background: rgba(220,76,43,0.08); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--line);">● ONSDAG 29 APRIL · IDAG</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:32</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Maria-lönesamtal · runda 2 · motbud 27 100 kr</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Karriär +2 · BATNA stark</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.8px;">MARIA-RUNDA</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:24</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Tandläkar-faktura betald · 4 200 kr</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Val: betala nu · Hälsa +4 · Ekonomi −8</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.8px;">VAL · BANKEN</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:22</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c084fc;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Tandläkare ringde · faktura mottagen</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">System-event · trigger</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c084fc; letter-spacing: 0.8px;">EVENT-TRIGGER</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:18</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">BankID-signering · 23 fakturor</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Total: 4 822 kr · alla 6 steg</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">BANKID</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">11:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #93c5fd;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Chat: "26 200 högre än min · 27 100 motbud" · till Anders</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Diskussion · CSN-räntor</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #93c5fd; letter-spacing: 0.8px;">CHAT</span>
+        </div>
+
+        <!-- 28 april -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● TIS 28 APRIL</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">18:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Coop Konsum 312 kr · klassad "Mat"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">AI-förslag accepterad · konfidens 84 %</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.8px;">BOKFÖRING</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">17:08</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Max 168 kr · klassad "Restaurang"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Manuellt val · efter regelmotor</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.8px;">BOKFÖRING</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">10:32</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Bolån-modul · steg 4 öppnad (KALP)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Time-on-task: 14 min hittills</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--warm); letter-spacing: 0.8px;">MODUL-STEG</span>
+        </div>
+
+        <!-- 25 april -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● FRE 25 APRIL · LÖNEDAG</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">07:00</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lön 22 400 kr inbetald · auto-överföringar</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">→ buffert 600 · ISK 600 · körkort 600 · interrail 600</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">SYSTEM</span>
+        </div>
+
+        <!-- 22 april -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● TIS 22 APRIL</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">17:32</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Reflektion höjd till FÖRDJUPNING (av Anders)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Motivering: "djup som går utöver prompten"</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">KOMP-HÖJN</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:18</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c084fc;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Sambo-fråga besvarad: "proportionellt"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Linus AI-partner inställd på "50/50"</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c084fc; letter-spacing: 0.8px;">VÄRDERING</span>
+        </div>
+
+        <!-- 8-14 april sammanfogad -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● V14 · 4–10 APRIL · 18 events</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">9 apr 14:48</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Bokföring höjd till GRUND (av Anders)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">"från regelmotor till manuell klassning"</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">KOMP-HÖJN</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">8 apr 13:02</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Uppdrag "Klassa 12 ovettade tx" · klart</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Godkänt av Anders 17 apr</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.8px;">UPPDRAG</span>
+        </div>
+
+        <!-- Februari · ferier -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● 8–12 FEB · ÖVERSPRING (lov · ferier)</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">28 feb 16:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">ISK-modul klar · 4/5 stjärnor</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">6 steg · 32 min · höjt Investering till GRUND</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--warm); letter-spacing: 0.8px;">MODUL-KLAR</span>
+        </div>
+
+        <!-- Onboarding -->
+        <div style="padding: 10px 18px; background: rgba(99,102,241,0.06); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #c7d2fe; border-bottom: 1px solid var(--line);">● 14 JAN 2026 · ONBOARDING</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">09:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c7d2fe;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Onboarding klar · 8 steg · 11 min</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Profil: Nivå 1 Sparsam · Värdering: proportionellt · AI-partner: Linus B.</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c7d2fe; letter-spacing: 0.8px;">ONBOARDING</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">09:35</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c7d2fe;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Onboarding · steg 7 · sambo-fråga · "proportionellt"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Innan Linus avslöjades · värderingsval låst</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c7d2fe; letter-spacing: 0.8px;">VÄRDERING-LÅS</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">09:31</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c7d2fe;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Karaktär genererad · AI-partner Linus B. tilldelad</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Modell B (35 % sannolikhet) · IT-konsult 26 år · 27 800/mån</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c7d2fe; letter-spacing: 0.8px;">SYSTEM-GEN</span>
+        </div>
+
+      </div>
+      <div style="text-align: center; padding: 18px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">+ 287 events till sedan signup · scrolla eller exportera CSV</div>
+
+      <!-- Vad lärar-vyn också ger access till -->
+      <div class="s-card" style="margin-top: 24px; background: rgba(255,255,255,0.03);">
+        <div class="s-card-eye">Lärar-insyn · vad du har access till</div>
+        <div class="s-card-h">Allt sparas · <em>inga undantag</em></div>
+        <ul style="list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family: var(--serif); font-size: 13.5px; color: var(--text-mid);">
+          <li>● 142 transaktioner med klassningar</li>
+          <li>● 8 reflektioner · ord, AI-rubriker, dina svar</li>
+          <li>● 14 Maria-rundor · alla bud, alla pauser</li>
+          <li>● 23 BankID-signeringar · vad signerades</li>
+          <li>● 312 system-events (inloggningar, klick, scroll)</li>
+          <li>● 9 modul-steg · time-on-task, quiz-resultat</li>
+          <li>● 18 Echo-konversationer · alla tokens räknade</li>
+          <li>● Pentagon-värden vecka för vecka (15 v)</li>
+          <li>● Onboarding-svar (värdering, profil, partner-modell)</li>
+          <li>● Aktiehandel · varje köp/sälj · varje klick</li>
+          <li>● Lån-historik · CSN-amorteringar, ev. nya lån</li>
+          <li>● Skattedeklaration · alla godkännanden/avvisningar</li>
+        </ul>
+        <p style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 14px; letter-spacing: 0.5px;">GDPR-medvetenhet: eleven (och vårdnadshavare) har rätt att se exakt samma data. Du behöver inte be om lov — det är ett pedagogiskt verktyg, inte övervakning.</p>
+      </div>
+
+    </div>
+  </section>
 </main>
 
 <script>
@@ -1231,6 +1583,8 @@ const PANELS = {
   refl:  { crumb: ["KLASSEN 9C", "● REFLEKTIONER"] },
   mail:  { crumb: ["KLASSEN 9C", "● POSTLÅDOR"] },
   peda:  { crumb: ["KLASSEN 9C", "● PEDAGOGIK"] },
+  skapa: { crumb: ["KLASSEN 9C", "● SKAPA ELEV"] },
+  historik: { crumb: ["KLASSEN 9C", "SARA A.", "● AKTIVITETS-HISTORIK"] },
 };
 function go(view) {
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
