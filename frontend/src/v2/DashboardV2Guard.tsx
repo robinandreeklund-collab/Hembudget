@@ -1,13 +1,16 @@
 /**
- * V2-guard på /dashboard — auto-routar super-admin till /v2/hub.
+ * V2-guard på /dashboard — auto-routar elever med v2_enabled till v2.
  *
  * Anledning: efter login körs window.location.reload() vilket landar
  * på /dashboard direkt (inte /). V2RootRedirect aktiveras bara på /.
- * Den här guarden ser till att super-admin alltid hamnar på v2 även
- * om de råkar gå direkt till /dashboard.
+ * Den här guarden hanterar fallet då en v2-elev hamnar på /dashboard
+ * direkt efter login eller via gamla länkar.
  *
- * För vanliga lärare: rendera v1-dashboard som vanligt.
- * För elever: om eleven har v2_enabled, redirecta till /v2/hub.
+ * Lärare (även super-admin) renderas v1-dashboard — de behöver
+ * tillgång till lärar-funktioner som inte finns i v2-elev-vyn.
+ *
+ * Dev-override: localStorage.v2_force_v1 = "1" stoppar all v2-redirect
+ * (för att lärare/utvecklare ska kunna se v1 även för v2-elever).
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
@@ -24,17 +27,20 @@ export function DashboardV2Guard({ children }: { children: ReactNode }) {
       .finally(() => setDone(true));
   }, []);
 
+  // Dev-override: tvinga v1
+  if (
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("v2_force_v1") === "1"
+  ) {
+    return <>{children}</>;
+  }
+
   if (!done) {
     // Visa v1-dashboard direkt medan vi väntar — bättre UX än spinner
     return <>{children}</>;
   }
 
-  // Super-admin auto-routas till v2/hub
-  if (status?.is_super_admin) {
-    return <Navigate to="/v2/hub" replace />;
-  }
-
-  // Elev som har v2 aktiverat → /v2/hub
+  // Elev som har v2 aktiverat → /v2/hub eller /v2/onboarding
   if (status?.role === "student" && status.v2_eligible) {
     if (!status.v2_onboarding_completed) {
       return <Navigate to="/v2/onboarding" replace />;
@@ -42,6 +48,6 @@ export function DashboardV2Guard({ children }: { children: ReactNode }) {
     return <Navigate to="/v2/hub" replace />;
   }
 
-  // Övriga (lärare utan super-admin, demo, elev utan v2) → v1-dashboard
+  // Övriga (alla lärare inkl. super-admin, demo, elev utan v2) → v1-dashboard
   return <>{children}</>;
 }

@@ -8,6 +8,7 @@ import { HubV2 } from "./v2/HubV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
 import { V2RootRedirect } from "./v2/V2RootRedirect";
 import { DashboardV2Guard } from "./v2/DashboardV2Guard";
+import { V2DevSwitcher } from "./v2/V2DevSwitcher";
 import { V2RosterPage } from "./v2/V2RosterPage";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
@@ -169,6 +170,7 @@ export default function App() {
   return (
     <div className="h-full flex flex-col">
       <DemoBanner />
+      <V2DevSwitcher />
       <div className="flex-1 flex flex-col md:flex-row min-h-0">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">

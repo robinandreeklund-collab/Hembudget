@@ -2,10 +2,13 @@
  * V2 root-redirect · väljer rätt destination för "/".
  *
  * Logik:
- * - super-admin → /v2/hub direkt (de följer migrations-fronten)
+ * - localStorage `v2_force_v1` = "1" → /dashboard alltid (dev-toggle)
  * - student utan v2-onboarding → /v2/onboarding (default ny flow)
  * - student med v2-onboarding klar → /v2/hub
- * - alla andra (lärare, demo) → /dashboard (v1, befintligt)
+ * - lärare (inkl. super-admin) → /teacher (lärar-dashboard, inte
+ *   v2/hub som är elev-vy). Super-admin kan manuellt navigera till
+ *   /v2/hub via V2-toggle-bannern för att förhandsgranska elev-vyn.
+ * - demo → /dashboard
  *
  * Om /v2/status fail:ar så fallback:ar vi till /dashboard så v1
  * inte påverkas av v2-bugg.
@@ -18,10 +21,18 @@ export function V2RootRedirect() {
   const [destination, setDestination] = useState<string | null>(null);
 
   useEffect(() => {
+    // Dev-override: om användaren explicit valt v1-läge, respektera det
+    if (
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("v2_force_v1") === "1"
+    ) {
+      setDestination("/dashboard");
+      return;
+    }
     v2Api
       .status()
       .then((s: V2Status) => {
-        if (s.is_super_admin) setDestination("/v2/hub");
+        if (s.role === "teacher") setDestination("/teacher");
         else if (s.role === "student" && !s.v2_onboarding_completed)
           setDestination("/v2/onboarding");
         else if (s.role === "student") setDestination("/v2/hub");
