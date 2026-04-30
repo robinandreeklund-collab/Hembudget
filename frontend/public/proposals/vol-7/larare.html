@@ -92,6 +92,29 @@ body::after {
 .pill::before { content: "●"; color: var(--accent); font-size: 10px; }
 .pill.warm::before { color: var(--warm); }
 
+/* Nivå-badge */
+.level-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 4px 10px; border-radius: 100px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.level-badge.l1 { background: rgba(110,231,183,0.18); border: 1px solid rgba(110,231,183,0.35); color: #6ee7b7; }
+.level-badge.l1::before { content: "▰▱▱"; font-size: 7px; }
+.level-badge.l2 { background: rgba(251,191,36,0.18); border: 1px solid rgba(251,191,36,0.35); color: var(--warm); }
+.level-badge.l2::before { content: "▰▰▱"; font-size: 7px; }
+.level-badge.l3 { background: rgba(220,76,43,0.18); border: 1px solid rgba(220,76,43,0.35); color: #fda594; }
+.level-badge.l3::before { content: "▰▰▰"; font-size: 7px; }
+
+.level-activate-btn {
+  background: var(--warm); color: #422006; border: 0;
+  padding: 8px 14px; border-radius: 100px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer;
+}
+.level-activate-btn:hover { background: #f59e0b; }
+
 /* === LÄRAR-HUB === */
 .head {
   display: grid; grid-template-columns: 1fr auto;
@@ -415,6 +438,40 @@ body::after {
             <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('refl'); return false;" href="#">öppna alla 14 reflektioner →</a>
           </div>
 
+          <div class="s-card" style="background: rgba(110,231,183,0.04); border-color: rgba(110,231,183,0.25);">
+            <div class="s-card-eye" style="color: #6ee7b7;">Klassens nivå-progression</div>
+            <div class="s-card-h">28 elever · <em>3 nivåer</em></div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; text-align: center;">
+              <div style="background: rgba(110,231,183,0.10); padding: 10px; border-radius: 6px; border: 1px solid rgba(110,231,183,0.25);">
+                <div style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700; font-size: 22px;">22</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 1px;">▰▱▱ NIVÅ 1</div>
+              </div>
+              <div style="background: rgba(251,191,36,0.10); padding: 10px; border-radius: 6px; border: 1px solid rgba(251,191,36,0.25);">
+                <div style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700; font-size: 22px;">5</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--warm); letter-spacing: 1px;">▰▰▱ NIVÅ 2</div>
+              </div>
+              <div style="background: rgba(220,76,43,0.08); padding: 10px; border-radius: 6px; border: 1px solid rgba(220,76,43,0.25);">
+                <div style="font-family: var(--serif); font-style: italic; color: #fda594; font-weight: 700; font-size: 22px;">1</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: #fda594; letter-spacing: 1px;">▰▰▰ NIVÅ 3</div>
+              </div>
+            </div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Sara A. · klar för Nivå 2</div><div class="attn-why">12 v på Nivå 1 · 65 % progression · 8 mål uppnådda</div></div>
+                <button class="level-activate-btn">Aktivera N2</button>
+              </li>
+              <li>
+                <div><div class="attn-name">Hassan O. · klar för Nivå 2</div><div class="attn-why">10 v · 72 % · 7 av 8 mål</div></div>
+                <button class="level-activate-btn">Aktivera N2</button>
+              </li>
+              <li>
+                <div><div class="attn-name">Adam B. · nästan klar</div><div class="attn-why">8 v · 48 % · saknar 3 mål</div></div>
+                <a href="#" class="attn-go">se →</a>
+              </li>
+            </ul>
+            <div style="margin-top: 10px; font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.5px;">Aktivering kräver: 50 %+ progression, 1+ kompetens på G, 1+ avslutad modul.</div>
+          </div>
+
           <div class="s-card" style="background: rgba(99,102,241,0.05); border-color: rgba(99,102,241,0.2);">
             <div class="s-card-eye" style="color: #a5b4fc;">Pedagogik-paket ✦</div>
             <div class="s-card-h">62 begrepp · <em>14</em> kompetenser</div>
@@ -451,9 +508,9 @@ body::after {
 
       <header class="head">
         <div>
-          <span class="pill">Elev · 14 av 28</span>
+          <span class="pill">Elev · 14 av 28</span> <span class="level-badge l1" style="margin-left: 6px;">Nivå 1 · Sparsam</span>
           <h1 class="head-h1">Sara A. — <em>balans 72</em>.</h1>
-          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Solo-elev · klassningsgrad april 81 % · pågående 3 moduler</p>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Solo-elev · klassningsgrad april 81 % · pågående 3 moduler · <em style="color: #6ee7b7;">redo för Nivå 2</em></p>
         </div>
         <div class="head-meta">
           Senast inloggad <strong>nu</strong><br>
@@ -464,10 +521,25 @@ body::after {
 
       <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px;">
         <a href="../vol-7/elev.html" class="tb-imp" style="background: var(--accent); color: #fff; border-color: var(--accent);">Impersonera Sara →</a>
+        <a href="#" class="tb-imp" style="background: rgba(251,191,36,0.18); color: var(--warm); border-color: rgba(251,191,36,0.45);">▰▰▱ Aktivera Nivå 2 →</a>
         <a href="#" class="tb-imp">Skicka uppdrag →</a>
         <a href="#" class="tb-imp" onclick="go('refl'); return false;">Läs reflektioner →</a>
         <a href="#" class="tb-imp">Höj kompetens →</a>
       </div>
+
+      <!-- Nivå-progression-status -->
+      <article class="s-card" style="background: linear-gradient(135deg, rgba(110,231,183,0.06), rgba(15,21,37,0.5)); border-color: rgba(110,231,183,0.25); margin-bottom: 24px;">
+        <div class="s-card-eye" style="color: #6ee7b7;">Nivå-progression</div>
+        <div class="s-card-h">Sara är <em style="color: #6ee7b7;">redo för Nivå 2</em>.</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text-mid); line-height: 1.5; margin-bottom: 12px;">12 veckor på Nivå 1 (Sparsam). Klassningsgrad stabil &gt; 80 %. 3 kompetenser till GRUND. Bolån-modulen aktiv. Pentagon-balans 72.</p>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">12 v</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">på Nivå 1</div></div>
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">3 G</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">kompetenser</div></div>
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">2 / 3</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">moduler klara</div></div>
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">81 %</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">klassningsgrad</div></div>
+        </div>
+        <p style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; margin-bottom: 0;">Vid aktivering: <strong style="color: #fff;">Sara behåller karaktären</strong> men får svårare ekonomi. Spenderprofilen byts till <em style="color: var(--warm); font-style: italic;">Balanserad</em> · fler oväntade brev · restaurang-budget överskrids oftare · sambo-utgifter delas annorlunda.</p>
+      </article>
 
       <div class="class-stage">
         <article class="class-pent">

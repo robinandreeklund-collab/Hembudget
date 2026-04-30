@@ -1262,6 +1262,192 @@ body::after {
 .spec-table tr.tot td:last-child { color: var(--warm); font-style: italic; }
 .spec-table tr.tot td:first-child { font-weight: 700; color: #fff; }
 
+/* === PENTAGON AXEL-FLIP === */
+.pent-flip-stage { perspective: 2400px; position: relative; width: 100%; }
+.pent-flip-inner {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-areas: "stack";
+  transform-style: preserve-3d;
+  transform: translateZ(0);
+  transition: transform .85s cubic-bezier(.4, 0, .2, 1);
+}
+.pent-flip-stage.is-flipped .pent-flip-inner {
+  transform: rotateY(180deg) translateZ(0);
+}
+.pent-front, .pent-back {
+  grid-area: stack;
+  width: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.pent-front { z-index: 2; }
+.pent-flip-stage.is-flipped .pent-front { z-index: 1; }
+.pent-back {
+  transform: rotateY(180deg);
+  z-index: 1;
+  display: none;
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--warm);
+  border-radius: 8px;
+  padding: 28px 32px;
+  min-height: 540px;
+  position: relative;
+}
+.pent-back.show { display: block; }
+.pent-flip-stage.is-flipped .pent-back { z-index: 2; }
+.pent-back-close {
+  position: absolute; top: 18px; right: 22px;
+  background: transparent; border: 1px solid var(--line-strong);
+  color: var(--text); cursor: pointer;
+  padding: 7px 14px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.pent-back-close:hover { border-color: var(--warm); color: var(--warm); }
+.pent-back-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 12px;
+}
+.pent-back-eye::before { content: "● "; }
+.pent-back-h {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(28px, 3.5vw, 40px);
+  letter-spacing: -1px; line-height: 1.05;
+  color: #fff; margin-bottom: 8px;
+}
+.pent-back-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.pent-back-score {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 64px; color: var(--warm); line-height: 1;
+  margin-bottom: 4px;
+  text-shadow: 0 4px 24px rgba(251,191,36,0.4);
+}
+.pent-back-score-meta {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.3px; text-transform: uppercase;
+  color: var(--text-mid); margin-bottom: 24px;
+}
+.pent-back-score-meta strong { color: #fff; }
+.pent-back-grid {
+  display: grid; grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 800px) { .pent-back-grid { grid-template-columns: 1fr; } }
+.pent-history {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 6px; overflow: hidden;
+}
+.pent-history-head {
+  padding: 10px 16px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+  background: rgba(0,0,0,0.15);
+}
+.pent-event {
+  display: grid;
+  grid-template-columns: 80px 1fr 70px;
+  gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+}
+.pent-event:last-child { border-bottom: 0; }
+.pent-event-date {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-dim); letter-spacing: 0.5px;
+}
+.pent-event-name {
+  font-family: var(--serif); font-size: 13.5px; color: #fff;
+}
+.pent-event-meta {
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px;
+}
+.pent-event-delta {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 14px; text-align: right;
+}
+.pent-event-delta.up { color: #6ee7b7; }
+.pent-event-delta.down { color: #fca5a5; }
+.pent-event-delta.flat { color: var(--text-mid); }
+
+.pent-side-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 6px; padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.pent-side-card-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 6px;
+}
+.pent-side-card-eye::before { content: "● "; }
+.pent-side-card-h {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  letter-spacing: -0.3px; color: #fff;
+}
+.pent-side-card-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.pent-side-card-meta {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--text-mid); margin-top: 4px; letter-spacing: 0.4px;
+}
+.pent-side-card-meta strong { color: #fff; }
+
+/* Sparkline-mock */
+.pent-spark {
+  width: 100%; height: 60px;
+  margin-top: 8px;
+}
+.pent-spark .line {
+  fill: none;
+  stroke: var(--warm);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(251,191,36,0.5));
+}
+.pent-spark .area { fill: rgba(251,191,36,0.15); }
+.pent-spark .now-dot {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 6px rgba(220,76,43,0.8));
+}
+
+/* Klickbar axis-label */
+.axis-label { cursor: pointer; }
+
+/* === NIVÅ-BADGE === */
+.level-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 4px 10px; border-radius: 100px;
+  background: rgba(110,231,183,0.18);
+  border: 1px solid rgba(110,231,183,0.35);
+  color: #6ee7b7;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.level-badge.l1 { background: rgba(110,231,183,0.18); border-color: rgba(110,231,183,0.35); color: #6ee7b7; }
+.level-badge.l2 { background: rgba(251,191,36,0.18); border-color: rgba(251,191,36,0.35); color: var(--warm); }
+.level-badge.l3 { background: rgba(220,76,43,0.18); border-color: rgba(220,76,43,0.35); color: #fda594; }
+.level-badge::before { content: "▰"; font-size: 7px; }
+.level-badge.l1::before { content: "▰▱▱"; }
+.level-badge.l2::before { content: "▰▰▱"; }
+.level-badge.l3::before { content: "▰▰▰"; }
+
+.level-progress {
+  display: flex; gap: 4px; margin-top: 6px;
+}
+.level-progress-step {
+  flex: 1; height: 5px; border-radius: 100px;
+  background: rgba(255,255,255,0.08);
+}
+.level-progress-step.done { background: #6ee7b7; }
+.level-progress-step.now { background: var(--warm); box-shadow: 0 0 8px rgba(251,191,36,0.4); }
+
 /* === BUSINESS-MODE STYLES === */
 /* Pill-färg byts till indigo i business */
 body[data-mode="business"] .pill {
@@ -2223,6 +2409,7 @@ body[data-mode="business"] .ms-knob {
   <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
   <span class="priv-badge">Privatekonomi</span>
   <span class="biz-badge">Sara A. AB · enskild firma</span>
+  <span class="level-badge l1 priv-only" title="Nivå 1 av 3 · Sparsam-profil">Nivå 1 · Sparsam</span>
   <div class="tb-crumbs" id="crumbs"></div>
   <div class="tb-spacer"></div>
   <a href="#" class="mode-switch" id="modeSwitch" title="Byt mellan privat och företag">
@@ -2355,47 +2542,48 @@ body[data-mode="business"] .ms-knob {
           </div>
         </div>
 
-        <!-- STEG 3 — Spenderprofil -->
+        <!-- STEG 3 — Spenderprofil + nivå-system -->
         <div class="onb-step" id="ob-3">
-          <div class="onb-eye">Onboarding · steg 3 av 7 · spenderprofil</div>
-          <h1 class="onb-h">Hur <em>spenderar</em> Sara?</h1>
+          <div class="onb-eye">Onboarding · steg 3 av 8 · nivå &amp; profil</div>
+          <h1 class="onb-h">Du börjar på <em>Nivå 1 · Sparsam</em>.</h1>
           <p class="onb-lead">
-            Spenderprofilen styr hur Saras <em>förra månaders</em> kreditkortsfaktura
-            ser ut, hur många brev som dyker upp i postlådan, och vilka beslut
-            hon ofta hamnar i. Profilen genereras automatiskt baserat på
-            <strong>Konsumentverkets riktlinjer</strong> men med ditt val
-            som personlighetsmodifierare. Välj en — du kan inte byta sen.
+            Plattformen har <em>tre nivåer</em>. Du börjar på Nivå 1 och din spenderprofil
+            är <strong>låst till Sparsam</strong> som start. När du klarat Nivå 1 öppnar
+            <strong>Anders Lind</strong> Nivå 2 åt dig — då blir samma karaktär (Sara)
+            balanserad och utmaningen ökar.
           </p>
 
+          <!-- Tre nivåer som progression -->
           <div class="onb-profiles">
-            <div class="onb-profile">
-              <div class="onb-profile-icon">⊝</div>
-              <div class="onb-profile-name">Sparsam</div>
-              <div class="onb-profile-desc">Lagar mat hemma, ingen onödig prenumeration, sparkvot 18 %. Få överraskningar i postlådan.</div>
-              <div class="onb-profile-stat">~ <strong>10</strong> brev/mån · CC-faktura <strong>2 800 kr</strong></div>
+            <div class="onb-profile selected" style="border-color: #6ee7b7; background: rgba(110,231,183,0.06);">
+              <div class="onb-profile-icon" style="color: #6ee7b7;">▰▱▱</div>
+              <div class="onb-profile-name">Nivå 1 · Sparsam <em style="color: #6ee7b7; font-size: 9px; vertical-align: middle; font-family: var(--mono); margin-left: 6px;">DU ÄR HÄR</em></div>
+              <div class="onb-profile-desc">Lättare att hålla ordning. Sara lagar mat hemma, få överraskningar. <em style="color: var(--warm);">Men friktion finns</em> — tandläkaren ringer ändå.</div>
+              <div class="onb-profile-stat">~ <strong>10</strong> brev/mån · CC-faktura ~ <strong>2 800 kr</strong> · sparkvot 18 %</div>
             </div>
-            <div class="onb-profile selected">
-              <div class="onb-profile-icon">≈</div>
-              <div class="onb-profile-name">Balanserad <em style="color: var(--warm); font-size: 9px; vertical-align: middle; font-family: var(--mono); margin-left: 6px;">VALD</em></div>
-              <div class="onb-profile-desc">Konsumentverkets schablon. Lite restaurang, lite Foodora, sparkvot 14 %. Realistisk vardag.</div>
-              <div class="onb-profile-stat">~ <strong>14</strong> brev/mån · CC-faktura <strong>4 800 kr</strong></div>
+            <div class="onb-profile" style="opacity: 0.55;">
+              <div class="onb-profile-icon" style="color: var(--warm);">▰▰▱</div>
+              <div class="onb-profile-name">Nivå 2 · Balanserad <em style="color: var(--text-dim); font-size: 9px; vertical-align: middle; font-family: var(--mono); margin-left: 6px;">LÅST · LÄRAREN AKTIVERAR</em></div>
+              <div class="onb-profile-desc">Konsumentverkets schablon. Lite restaurang, Foodora, fler impulser. Mer att jonglera med.</div>
+              <div class="onb-profile-stat">~ <strong>14</strong> brev/mån · CC-faktura ~ <strong>4 800 kr</strong> · sparkvot 14 %</div>
             </div>
-            <div class="onb-profile">
-              <div class="onb-profile-icon">⊕</div>
-              <div class="onb-profile-name">Slösa</div>
-              <div class="onb-profile-desc">Många abonnemang, ofta restaurang, impulsköp. Sparkvot 4 %. Många påminnelser.</div>
-              <div class="onb-profile-stat">~ <strong>18</strong> brev/mån · CC-faktura <strong>7 200 kr</strong></div>
+            <div class="onb-profile" style="opacity: 0.4;">
+              <div class="onb-profile-icon" style="color: var(--accent);">▰▰▰</div>
+              <div class="onb-profile-name">Nivå 3 · Slösa <em style="color: var(--text-dim); font-size: 9px; vertical-align: middle; font-family: var(--mono); margin-left: 6px;">LÅST · EFTER NIVÅ 2</em></div>
+              <div class="onb-profile-desc">Många abonnemang, impulsköp, push-betalningar. Påminnelser kommer. Skuldfälla möjlig.</div>
+              <div class="onb-profile-stat">~ <strong>18</strong> brev/mån · CC-faktura ~ <strong>7 200 kr</strong> · sparkvot 4 %</div>
             </div>
           </div>
 
           <div class="onb-rule" style="background: rgba(99,102,241,0.05); border-color: rgba(99,102,241,0.2);">
-            <div class="onb-rule-eye" style="color: #a5b4fc;">Pedagogik · spenderar-genetik</div>
+            <div class="onb-rule-eye" style="color: #a5b4fc;">Pedagogik · varför nivåer</div>
             <div class="onb-rule-prose">
-              Profilen är <em style="color: var(--warm); font-style: italic;">inte din identitet</em> — det är <em style="color: var(--warm); font-style: italic;">utgångsläget</em>.
-              Under spelet fattar du beslut som kan dra åt andra hållet. Sparsam-Sara kan
-              råka köpa H&amp;M-skor på impuls och slösa-Sara kan börja meal-prepa. Beteendet
-              <strong style="color: var(--accent);">förskjuts</strong> men personligheten ger
-              <em style="color: var(--warm); font-style: italic;">rörelseekvationen</em>.
+              Samma karaktär (Sara A.) genom alla tre nivåer — bara den <em style="color: var(--warm); font-style: italic;">ekonomiska
+              komplexiteten</em> ökar. På Nivå 1 lär du dig grunden i en relativt vänlig
+              miljö. På Nivå 2 möter du fler oväntade brev, fler impulsköp, restaurang
+              som börjar gå över budget. På Nivå 3 är skuldfälla, sms-lån och
+              betalningsanmärkningar reella risker. Du <strong style="color: var(--accent);">jobbar dig</strong> uppåt — Anders öppnar
+              nästa nivå när hen ser att du klarar den.
             </div>
           </div>
         </div>
@@ -2699,9 +2887,14 @@ body[data-mode="business"] .ms-knob {
         </div>
 
         <article class="char-card">
-          <div class="char-eye">Onsdag · April · Vol. 18</div>
+          <div class="char-eye">Onsdag · April · Vol. 18 · <span class="level-badge l1" style="margin-left: 6px;">Nivå 1 · Sparsam</span></div>
           <div class="char-name">Sara A.</div>
           <div class="char-meta">16<span class="char-divider">·</span>gymnasium<span class="char-divider">·</span>Stockholm</div>
+          <div class="level-progress" style="margin-top: 8px;">
+            <div class="level-progress-step now" title="Nivå 1: pågår 12 v · 65 % klart"></div>
+            <div class="level-progress-step" title="Nivå 2: aktiveras av Anders"></div>
+            <div class="level-progress-step" title="Nivå 3: efter Nivå 2"></div>
+          </div>
 
           <div class="char-section">Hennes vecka</div>
           <p class="char-prose">
@@ -2723,7 +2916,11 @@ body[data-mode="business"] .ms-knob {
       </div>
 
       <!-- PENTAGON -->
-      <div class="pentagon-stage">
+      <div class="pent-flip-stage" id="pentFlipStage">
+        <div class="pent-flip-inner">
+
+        <div class="pent-front">
+        <div class="pentagon-stage">
         <svg class="pentagon-svg" viewBox="0 0 600 600" aria-label="Wellbeing-pentagon">
           <!-- 5-axel-rutnät -->
           <g transform="translate(300,300)">
@@ -2743,31 +2940,31 @@ body[data-mode="business"] .ms-knob {
           </g>
         </svg>
 
-        <a class="axis-label ax-eko" onclick="go('bank'); return false;" href="#">
+        <a class="axis-label ax-eko" onclick="flipPentagon('eko'); return false;" href="#">
           <div class="axis-label-eye">Axel 01</div>
           <div class="axis-label-name">Ekonomi</div>
           <div class="axis-label-meta">14 282 kr · ISK 8 460</div>
           <div class="axis-label-trend down">↓ −4 % efter tandläkaren</div>
         </a>
-        <a class="axis-label ax-rel" href="#">
+        <a class="axis-label ax-rel" onclick="flipPentagon('rel'); return false;" href="#">
           <div class="axis-label-eye">Axel 02</div>
           <div class="axis-label-name">Relation</div>
           <div class="axis-label-meta">Klass 9C · 2 chattar</div>
           <div class="axis-label-trend flat">— stabil</div>
         </a>
-        <a class="axis-label ax-har" href="#">
+        <a class="axis-label ax-har" onclick="flipPentagon('har'); return false;" href="#">
           <div class="axis-label-eye">Axel 03</div>
           <div class="axis-label-name">Hälsa</div>
           <div class="axis-label-meta">Tandläkare 4 200 kr</div>
           <div class="axis-label-trend down">↓ akut idag</div>
         </a>
-        <a class="axis-label ax-fri" href="#">
+        <a class="axis-label ax-fri" onclick="flipPentagon('fri'); return false;" href="#">
           <div class="axis-label-eye">Axel 04</div>
           <div class="axis-label-name">Fritid</div>
           <div class="axis-label-meta">Restaurang +75 % · budget</div>
           <div class="axis-label-trend up">↑ +630 kr april</div>
         </a>
-        <a class="axis-label ax-kar" onclick="go('arbg'); return false;" href="#">
+        <a class="axis-label ax-kar" onclick="flipPentagon('kar'); return false;" href="#">
           <div class="axis-label-eye">Axel 05</div>
           <div class="axis-label-name">Karriär</div>
           <div class="axis-label-meta">Lönesamtal med <em>Maria</em> · runda 2/5</div>
@@ -2779,7 +2976,231 @@ body[data-mode="business"] .ms-knob {
           <div class="center-num">72</div>
           <div class="center-meta">av 100 · v18</div>
         </div>
-      </div>
+        </div><!-- /.pentagon-stage -->
+        </div><!-- /.pent-front -->
+
+        <!-- 5 BAKSIDOR · en per axel -->
+        <div class="pent-back" id="pent-back-eko">
+          <button class="pent-back-close" onclick="unflipPentagon()">← Pentagonen</button>
+          <div class="pent-back-eye">Axel 01 · Ekonomi · v18</div>
+          <h2 class="pent-back-h">Ekonomi tippade <em>−4 pkt</em>.</h2>
+          <div class="pent-back-score">68<span style="font-size: 28px; color: var(--text-mid);">/100</span></div>
+          <div class="pent-back-score-meta">Föregående v17: <strong>72</strong> · 3 mån-snitt: <strong>74</strong></div>
+
+          <div class="pent-back-grid">
+            <div>
+              <svg class="pent-spark" viewBox="0 0 400 60">
+                <path class="area" d="M 0 30 L 50 25 L 100 22 L 150 28 L 200 24 L 250 20 L 300 18 L 350 22 L 400 32 Z"/>
+                <path class="line" d="M 0 30 L 50 25 L 100 22 L 150 28 L 200 24 L 250 20 L 300 18 L 350 22 L 400 32"/>
+                <circle class="now-dot" cx="400" cy="32" r="4"/>
+              </svg>
+              <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.6px; margin-bottom: 18px;">9 veckor · högsta 80 (mars) · lägsta 68 (denna v)</div>
+
+              <div class="pent-history">
+                <div class="pent-history-head">Beslut &amp; händelser som påverkat</div>
+                <div class="pent-event"><span class="pent-event-date">29 apr</span><div><div class="pent-event-name">Tandläkar-faktura 4 200 (val: betala nu)</div><div class="pent-event-meta">14 282 → 10 082 på lönekontot</div></div><span class="pent-event-delta down">−8</span></div>
+                <div class="pent-event"><span class="pent-event-date">25 apr</span><div><div class="pent-event-name">Lön Sthlm Sjukhus 22 400 in</div><div class="pent-event-meta">Återkommande · auto</div></div><span class="pent-event-delta up">+5</span></div>
+                <div class="pent-event"><span class="pent-event-date">22 apr</span><div><div class="pent-event-name">Studiebidrag CSN 1 250</div><div class="pent-event-meta">Återkommande · auto</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">17 apr</span><div><div class="pent-event-name">Foodora 187 (efter laxsim)</div><div class="pent-event-meta">Restaurang över budget</div></div><span class="pent-event-delta down">−1</span></div>
+                <div class="pent-event"><span class="pent-event-date">8 apr</span><div><div class="pent-event-name">Avanza ISK avsatt 600</div><div class="pent-event-meta">Sparmål-överföring</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">3 apr</span><div><div class="pent-event-name">Coop månadshandel 2 800</div><div class="pent-event-meta">Stor handla · prisokänslighet</div></div><span class="pent-event-delta flat">±0</span></div>
+              </div>
+            </div>
+            <aside>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Vad mäts?</div>
+                <div class="pent-side-card-h">Saldon · skuld · sparkvot · buffert</div>
+                <div class="pent-side-card-meta">Beräknas dagligen från banken (alla konton), CSN-skuld, sparmål-progression och Avanza-värde. Utgifter mot inkomst på månadsbasis.</div>
+              </div>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Risk-faktor just nu</div>
+                <div class="pent-side-card-h">Buffert <em>0,17 mån</em></div>
+                <div class="pent-side-card-meta">Riktvärde: 0,5–3 månadshyror. Du är under. Tandläkar-fakturan tog en tredjedel av bufferten.</div>
+              </div>
+              <div class="pent-side-card" style="background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.25);">
+                <div class="pent-side-card-eye" style="color: var(--warm);">Echo · sokratiskt</div>
+                <div class="pent-side-card-h">"Vad höjer <em>denna axel</em>?"</div>
+                <div class="pent-side-card-meta">Lön (auto), sparmål-spar, ränteavdrag, ISK-avkastning. Vad sänker: stora oväntade utgifter, restaurang-överskridande, sms-lån.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="pent-back" id="pent-back-kar">
+          <button class="pent-back-close" onclick="unflipPentagon()">← Pentagonen</button>
+          <div class="pent-back-eye">Axel 05 · Karriär · v18</div>
+          <h2 class="pent-back-h">Karriär <em>+3 pkt</em>.</h2>
+          <div class="pent-back-score">78<span style="font-size: 28px; color: var(--text-mid);">/100</span></div>
+          <div class="pent-back-score-meta">Föregående v17: <strong>75</strong> · Maria-samtal pågår · lönerevision i sikte</div>
+
+          <div class="pent-back-grid">
+            <div>
+              <svg class="pent-spark" viewBox="0 0 400 60">
+                <path class="area" d="M 0 35 L 50 33 L 100 30 L 150 27 L 200 25 L 250 22 L 300 20 L 350 19 L 400 16 Z"/>
+                <path class="line" d="M 0 35 L 50 33 L 100 30 L 150 27 L 200 25 L 250 22 L 300 20 L 350 19 L 400 16"/>
+                <circle class="now-dot" cx="400" cy="16" r="4"/>
+              </svg>
+              <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.6px; margin-bottom: 18px;">9 veckor · stadigt uppåt · Maria-samtal driver</div>
+
+              <div class="pent-history">
+                <div class="pent-history-head">Beslut &amp; händelser som påverkat</div>
+                <div class="pent-event"><span class="pent-event-date">28 apr</span><div><div class="pent-event-name">Lönesamtal R2 · Sara motbud 27 100</div><div class="pent-event-meta">+ 1 295 kr/mån i sikte om accept</div></div><span class="pent-event-delta up">+2</span></div>
+                <div class="pent-event"><span class="pent-event-date">22 apr</span><div><div class="pent-event-name">Lönesamtal R1 · öppnade på 27 500</div><div class="pent-event-meta">Stark anchoring · marknadsbaserat</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">14 apr</span><div><div class="pent-event-name">Bokföring höjd till GRUND av Anders</div><div class="pent-event-meta">Kompetens-progression</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">8 apr</span><div><div class="pent-event-name">Klassade 47 tx i veckans batch (manuellt)</div><div class="pent-event-meta">100 % manuellt · ingen AI</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">1 apr</span><div><div class="pent-event-name">Modul "Bokföring grunder" 5/5</div><div class="pent-event-meta">Quiz 4,8/5</div></div><span class="pent-event-delta up">+1</span></div>
+              </div>
+            </div>
+            <aside>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Vad mäts?</div>
+                <div class="pent-side-card-h">Lön · kompetenser · moduler</div>
+                <div class="pent-side-card-meta">Lönenivå mot marknad, kompetenser klara av 14, pågående moduler, Maria-runda-progress, OB-tillägg.</div>
+              </div>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Aktivt just nu</div>
+                <div class="pent-side-card-h">Maria · runda 2/5</div>
+                <div class="pent-side-card-meta">Yrkat 27 500 · Maria 26 200 → 27 200. Du på 27 100. <strong>Nära mål.</strong></div>
+                <a href="#" onclick="go('maria'); return false;" style="font-family: var(--mono); font-size: 9.5px; color: var(--warm); text-decoration: none; letter-spacing: 1px; margin-top: 6px; display: inline-block;">öppna Maria ↗</a>
+              </div>
+              <div class="pent-side-card" style="background: rgba(110,231,183,0.06); border-color: rgba(110,231,183,0.25);">
+                <div class="pent-side-card-eye" style="color: #6ee7b7;">Stark sida</div>
+                <div class="pent-side-card-h">Karriär <em>+8 sedan jan</em></div>
+                <div class="pent-side-card-meta">3 kompetenser höjda till GRUND, 2 moduler klara, Maria-samtal pågår. Stadig uppåt.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="pent-back" id="pent-back-har">
+          <button class="pent-back-close" onclick="unflipPentagon()">← Pentagonen</button>
+          <div class="pent-back-eye">Axel 03 · Hälsa · v18</div>
+          <h2 class="pent-back-h">Hälsa <em>−5 pkt</em>.</h2>
+          <div class="pent-back-score">60<span style="font-size: 28px; color: var(--text-mid);">/100</span></div>
+          <div class="pent-back-score-meta">Föregående v17: <strong>65</strong> · tandläkar-händelse drev ner · försäkring täcker</div>
+
+          <div class="pent-back-grid">
+            <div>
+              <svg class="pent-spark" viewBox="0 0 400 60">
+                <path class="area" d="M 0 25 L 50 28 L 100 30 L 150 27 L 200 25 L 250 22 L 300 20 L 350 24 L 400 36 Z"/>
+                <path class="line" d="M 0 25 L 50 28 L 100 30 L 150 27 L 200 25 L 250 22 L 300 20 L 350 24 L 400 36"/>
+                <circle class="now-dot" cx="400" cy="36" r="4"/>
+              </svg>
+              <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.6px; margin-bottom: 18px;">9 veckor · droppade denna vecka · tandläkare</div>
+
+              <div class="pent-history">
+                <div class="pent-history-head">Beslut &amp; händelser som påverkat</div>
+                <div class="pent-event"><span class="pent-event-date">29 apr</span><div><div class="pent-event-name">Tandläkare ringde · cariesfyllning</div><div class="pent-event-meta">Akut · valde betala nu (hälsa upp)</div></div><span class="pent-event-delta up">+4</span></div>
+                <div class="pent-event"><span class="pent-event-date">26 apr</span><div><div class="pent-event-name">Apoteket · receptmedicin 142</div><div class="pent-event-meta">Högkostnadsskydd 1 240/2 850</div></div><span class="pent-event-delta flat">±0</span></div>
+                <div class="pent-event"><span class="pent-event-date">15 apr</span><div><div class="pent-event-name">Folksam-skydd förnyat</div><div class="pent-event-meta">Olycksfall + hem</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">2 apr</span><div><div class="pent-event-name">Reflektion: "sömn vs energi"</div><div class="pent-event-meta">Echo-prompt · 180 ord</div></div><span class="pent-event-delta up">+1</span></div>
+              </div>
+            </div>
+            <aside>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Vad mäts?</div>
+                <div class="pent-side-card-h">Försäkring · läkare · sömn</div>
+                <div class="pent-side-card-meta">Försäkringsskydd nivå, läkare/tandläkar-besök, friskvårds-användning, sömn-reflektioner (frivilliga).</div>
+              </div>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Försäkringsskydd</div>
+                <div class="pent-side-card-h">Hem + olycksfall</div>
+                <div class="pent-side-card-meta">800 000 i max-täckning · självrisk 1 500 · Folksam.</div>
+              </div>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Friskvårdsbidrag</div>
+                <div class="pent-side-card-h">5 000/år</div>
+                <div class="pent-side-card-meta">Använt i april: 295 (Friskis &amp; Svettis). Kvar: 4 705 kr.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="pent-back" id="pent-back-rel">
+          <button class="pent-back-close" onclick="unflipPentagon()">← Pentagonen</button>
+          <div class="pent-back-eye">Axel 02 · Relation · v18</div>
+          <h2 class="pent-back-h">Relation <em>± 0 pkt</em>.</h2>
+          <div class="pent-back-score">75<span style="font-size: 28px; color: var(--text-mid);">/100</span></div>
+          <div class="pent-back-score-meta">Föregående v17: <strong>75</strong> · stabil · sambo + klass</div>
+
+          <div class="pent-back-grid">
+            <div>
+              <svg class="pent-spark" viewBox="0 0 400 60">
+                <path class="area" d="M 0 30 L 50 28 L 100 27 L 150 26 L 200 25 L 250 24 L 300 24 L 350 24 L 400 25 Z"/>
+                <path class="line" d="M 0 30 L 50 28 L 100 27 L 150 26 L 200 25 L 250 24 L 300 24 L 350 24 L 400 25"/>
+                <circle class="now-dot" cx="400" cy="25" r="4"/>
+              </svg>
+              <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.6px; margin-bottom: 18px;">9 veckor · platt · stabil sambo + klass</div>
+
+              <div class="pent-history">
+                <div class="pent-history-head">Beslut &amp; händelser som påverkat</div>
+                <div class="pent-event"><span class="pent-event-date">22 apr</span><div><div class="pent-event-name">Sambo-fråga besvarad · proportionellt</div><div class="pent-event-meta">Linus svarade 50/50 · diskussion startad</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">14 apr</span><div><div class="pent-event-name">Peer-review klar · Hassan O.</div><div class="pent-event-meta">Klass-aktivitet</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">3 apr</span><div><div class="pent-event-name">Familj-batch öppnad i hemma</div><div class="pent-event-meta">Mamma · CSN-fråga</div></div><span class="pent-event-delta flat">±0</span></div>
+              </div>
+            </div>
+            <aside>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Vad mäts?</div>
+                <div class="pent-side-card-h">Sambo · klass · familj</div>
+                <div class="pent-side-card-meta">Sambo-stabilitet (gemensam ekonomi-snack), klass-aktivitet, peer-review, familj-batches.</div>
+              </div>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Sambo-status</div>
+                <div class="pent-side-card-h">Linus · stabil</div>
+                <div class="pent-side-card-meta">Olika fördelnings-värdering (du proportionellt, han 50/50). Värt att prata om.</div>
+                <a href="#" onclick="go('partner'); return false;" style="font-family: var(--mono); font-size: 9.5px; color: var(--warm); text-decoration: none; letter-spacing: 1px; margin-top: 6px; display: inline-block;">öppna sambo ↗</a>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="pent-back" id="pent-back-fri">
+          <button class="pent-back-close" onclick="unflipPentagon()">← Pentagonen</button>
+          <div class="pent-back-eye">Axel 04 · Fritid · v18</div>
+          <h2 class="pent-back-h">Fritid <em>−2 pkt</em>.</h2>
+          <div class="pent-back-score">63<span style="font-size: 28px; color: var(--text-mid);">/100</span></div>
+          <div class="pent-back-score-meta">Föregående v17: <strong>65</strong> · restaurang-budget överskriden · tandläkare tar marginalen</div>
+
+          <div class="pent-back-grid">
+            <div>
+              <svg class="pent-spark" viewBox="0 0 400 60">
+                <path class="area" d="M 0 28 L 50 26 L 100 24 L 150 25 L 200 26 L 250 28 L 300 30 L 350 32 L 400 34 Z"/>
+                <path class="line" d="M 0 28 L 50 26 L 100 24 L 150 25 L 200 26 L 250 28 L 300 30 L 350 32 L 400 34"/>
+                <circle class="now-dot" cx="400" cy="34" r="4"/>
+              </svg>
+              <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.6px; margin-bottom: 18px;">9 veckor · stadigt nedåt · restaurang äter marginalen</div>
+
+              <div class="pent-history">
+                <div class="pent-history-head">Beslut &amp; händelser som påverkat</div>
+                <div class="pent-event"><span class="pent-event-date">29 apr</span><div><div class="pent-event-name">Tandläkar-betalning · marginal krymper</div><div class="pent-event-meta">10 082 kvar för 26 dgr · 388 kr/dag</div></div><span class="pent-event-delta down">−3</span></div>
+                <div class="pent-event"><span class="pent-event-date">26 apr</span><div><div class="pent-event-name">Bio Rio · 195 kr</div><div class="pent-event-meta">+ Foodora 187 efter laxsim</div></div><span class="pent-event-delta up">+1</span></div>
+                <div class="pent-event"><span class="pent-event-date">17 apr</span><div><div class="pent-event-name">Restaurang månadssumma 2 100 · 75 % över budget</div><div class="pent-event-meta">Andra månaden i rad</div></div><span class="pent-event-delta down">−1</span></div>
+                <div class="pent-event"><span class="pent-event-date">8 apr</span><div><div class="pent-event-name">H&amp;M 498 · 2 plagg</div><div class="pent-event-meta">Impulsköp efter skola</div></div><span class="pent-event-delta down">−1</span></div>
+              </div>
+            </div>
+            <aside>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Vad mäts?</div>
+                <div class="pent-side-card-h">Restaurang · nöje · fritid</div>
+                <div class="pent-side-card-meta">Restaurang-budget mot utfall, nöjes-spending, prenumerationer, semester-mål.</div>
+              </div>
+              <div class="pent-side-card" style="background: rgba(220,76,43,0.06); border-color: rgba(220,76,43,0.25);">
+                <div class="pent-side-card-eye" style="color: var(--accent);">Varning</div>
+                <div class="pent-side-card-h">Restaurang <em>+ 75 %</em></div>
+                <div class="pent-side-card-meta">Andra månaden över budget. Mönster: Foodora efter laxsim. Echo har frågat: "kan du planera middag innan träning?"</div>
+              </div>
+              <div class="pent-side-card">
+                <div class="pent-side-card-eye">Sparmål</div>
+                <div class="pent-side-card-h">Interrail · 46 %</div>
+                <div class="pent-side-card-meta">3 660 / 8 000 kr · klar jul 2027 · går enligt plan trots impulsköp.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        </div><!-- /.pent-flip-inner -->
+      </div><!-- /.pent-flip-stage -->
 
       <!-- HÄNDELSE — det som tippade pentagonen -->
       <article class="event-card">
@@ -7110,6 +7531,23 @@ window.go = function(view) {
   }
   _go2(view);
 };
+
+// === PENTAGON AXEL-FLIP ===
+function flipPentagon(axis) {
+  const stage = document.getElementById("pentFlipStage");
+  if (!stage) return;
+  document.querySelectorAll(".pent-back").forEach(b => b.classList.remove("show"));
+  const back = document.getElementById("pent-back-" + axis);
+  if (back) back.classList.add("show");
+  stage.classList.add("is-flipped");
+}
+function unflipPentagon() {
+  const stage = document.getElementById("pentFlipStage");
+  if (!stage) return;
+  stage.classList.remove("is-flipped");
+}
+window.flipPentagon = flipPentagon;
+window.unflipPentagon = unflipPentagon;
 
 // Globala helpers
 window.startGuide = startGuide;
