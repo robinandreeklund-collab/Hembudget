@@ -1977,7 +1977,27 @@ body::after {
 </main>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer"></aside>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div>
+      <div class="drawer-eye">Echo · sokratiskt stöd</div>
+      <div class="drawer-meta">Claude Haiku 4.5 · 1 240 tokens denna chatt · vet vad du tittar på</div>
+    </div>
+    <button class="drawer-close" id="drawerClose" aria-label="Stäng">×</button>
+  </div>
+  <div class="drawer-body">
+    <div class="msg echo">"Hej Sara. Jag ser att tandläkaren ringde — och att din pentagon tippade. Hälsa fick prioritet, ekonomi spände sig. <em>Vad känner du om det?</em>"</div>
+    <div class="msg user">Jag är ärligt talat lite stressad. 4 200 är mycket.</div>
+    <div class="msg echo">"Det är förståeligt. Låt oss titta på siffrorna ihop. Du har 14 282 på lönekontot. Hyran på 7 240 dras 1 maj. Då har du <em>7 042 kvar</em> till lönen kommer den 25:e. Tandläkar-fakturan har 30 dagars förfall — så du <em>behöver inte</em> betala idag."</div>
+    <div class="msg user">Så jag kan vänta tills lönen kommer?</div>
+    <div class="msg echo">"Ja, men då återstår frågan: vad ska du göra med <em>nästa</em> månads pengar? Lönen 22 400 minus hyra 7 240 minus tandläkare 4 200 = 10 960 kvar. Och du brukar handla mat för 3 800. Det är fortfarande <em>marginal</em>. Frågan är: vill du ta det från sparmål eller äta lite billigare?"</div>
+    <div class="msg user" style="opacity: 0.45; font-style: italic;">Sara skriver…</div>
+  </div>
+  <div class="drawer-foot">
+    <input type="text" placeholder="Skriv till Echo…" />
+    <button>Skicka</button>
+  </div>
+</aside>
 
 <script>
 // === Navigation core ===
@@ -2012,14 +2032,16 @@ function renderCrumbs(view) {
 renderCrumbs("hub");
 
 // Echo drawer
+function closeDrawer() {
+  document.getElementById("drawer").classList.remove("open");
+  document.getElementById("scrim").classList.remove("on");
+}
 document.getElementById("echoBtn").addEventListener("click", () => {
   document.getElementById("drawer").classList.add("open");
   document.getElementById("scrim").classList.add("on");
 });
-document.getElementById("scrim").addEventListener("click", () => {
-  document.getElementById("drawer").classList.remove("open");
-  document.getElementById("scrim").classList.remove("on");
-});
+document.getElementById("scrim").addEventListener("click", closeDrawer);
+document.getElementById("drawerClose").addEventListener("click", closeDrawer);
 
 // Globala helpers
 window.go = go;
