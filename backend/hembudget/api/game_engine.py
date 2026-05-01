@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -30,6 +30,7 @@ from ..game_engine.event_engine import (
     list_active_templates,
 )
 from ..game_engine.monthly_engine import tick_month
+from ..game_engine.pentagon import pentagon_history_for_student
 from ..game_engine.profile_generator import (
     GeneratedProfile,
     generate_profile,
@@ -43,6 +44,7 @@ from ..school.engines import (
 from ..school.game_engine_models import (
     ClassCalendar,
     WeekTickRun,
+    WellbeingEvent,
     compute_current_sim_year_month,
     shift_year_month,
 )
@@ -541,3 +543,258 @@ def inject_event(
         mail_id=occ.mail_id,
         claim_id=occ.claim_id,
     )
+
+
+# === Endpoints: Snabbspola (M6) + Pentagon-historik (P2) ===
+
+
+class AdvanceMultipleIn(BaseModel):
+    """Snabbspola flera spelmånader i sekvens för en elev."""
+    start_year_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    n_months: int = Field(ge=1, le=12, description="1-12 månader åt gången")
+    seed: int
+    archetype: str = "random"
+    starting_level: int = Field(default=1, ge=1, le=3)
+    spend_profile: str = Field(default="balanserad")
+    partner_model: str = "solo"
+
+
+class AdvanceMultipleOut(BaseModel):
+    student_id: int
+    months_processed: int
+    months_skipped: int
+    last_year_month: str
+    summaries: list[dict]
+
+
+class AdvanceClassIn(BaseModel):
+    """Snabbspola en hel klass en spelmånad framåt."""
+    seed_strategy: Literal["per_student", "fixed"] = Field(
+        default="per_student",
+        description=(
+            "per_student: använd hash(student_id) som seed för deterministisk "
+            "men individuell profil. fixed: alla får samma seed (för "
+            "komparativ studie)."
+        ),
+    )
+    fixed_seed: Optional[int] = None
+    archetype: str = "random"
+    starting_level: int = Field(default=1, ge=1, le=3)
+    spend_profile: str = "balanserad"
+    partner_model: str = "solo"
+
+
+class AdvanceClassOut(BaseModel):
+    calendar_id: int
+    sim_year_month_after: str
+    students_advanced: int
+    students_skipped: int
+    students_failed: int
+    failures: list[dict]
+
+
+class WellbeingEventOut(BaseModel):
+    id: int
+    occurred_at: datetime
+    axis: str
+    requested_delta: int
+    applied_delta: int
+    new_value: int
+    reason_kind: str
+    explanation: Optional[str]
+    year_month: Optional[str]
+
+
+@router.post(
+    "/students/{student_id}/advance-months",
+    response_model=AdvanceMultipleOut,
+)
+def advance_multiple_months(
+    student_id: int,
+    body: AdvanceMultipleIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Snabbspola flera spelmånader i sekvens. Idempotent — månader som
+    redan tickats hoppas över."""
+    with master_session() as s:
+        student = _load_student_or_404(s, info.teacher_id, student_id)
+        student_obj = student
+        s.expunge(student)
+
+    profile = generate_profile(
+        seed=body.seed,
+        archetype=body.archetype,
+        starting_level=body.starting_level,
+        name=student_obj.display_name or "Elev",
+        partner_model=body.partner_model,
+    )
+
+    summaries: list[dict] = []
+    processed = 0
+    skipped = 0
+    last_ym = body.start_year_month
+
+    current_ym = body.start_year_month
+    for _ in range(body.n_months):
+        result = tick_month(
+            student_obj,
+            profile,
+            current_ym,
+            spend_profile=body.spend_profile,
+            starting_level=body.starting_level,
+        )
+        summaries.append({
+            "year_month": result.year_month,
+            "skipped": result.skipped,
+            "summary": result.summary,
+        })
+        if result.skipped:
+            skipped += 1
+        else:
+            processed += 1
+        last_ym = current_ym
+        current_ym = shift_year_month(current_ym, 1)
+
+    return AdvanceMultipleOut(
+        student_id=student_id,
+        months_processed=processed,
+        months_skipped=skipped,
+        last_year_month=last_ym,
+        summaries=summaries,
+    )
+
+
+def _hash_seed(student_id: int, base: int = 0) -> int:
+    """Stabil seed per elev så reroll inte ändrar deras karaktär."""
+    return (student_id * 2654435761 + base) & 0x7FFFFFFF
+
+
+@router.post(
+    "/calendars/{cal_id}/advance",
+    response_model=AdvanceClassOut,
+)
+def advance_class(
+    cal_id: int,
+    body: AdvanceClassIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Tick:a alla elever i en klass-kalender en spelmånad framåt.
+
+    Använder kalendrens `last_tick_year_month` + 1 som mål-månad. Efter
+    ticken uppdateras `last_tick_year_month` och `last_tick_at`.
+    """
+    with master_session() as s:
+        cal = s.get(ClassCalendar, cal_id)
+        if cal is None or cal.teacher_id != info.teacher_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Kalender saknas.")
+        # Pausad kalender → 400
+        if cal.paused_until and cal.paused_until > datetime.utcnow():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Kalendern är pausad. Avsluta paus först.",
+            )
+
+        target_ym = shift_year_month(cal.last_tick_year_month, 1)
+
+        # Hitta alla elever som tillhör denna kalender
+        students_q = s.query(Student).filter(
+            Student.teacher_id == info.teacher_id,
+        )
+        if cal.class_label is not None:
+            students_q = students_q.filter(
+                Student.class_label == cal.class_label,
+            )
+        students = students_q.all()
+
+        # Detacha för att kunna använda utanför sessionen
+        student_objs = []
+        for stu in students:
+            s.expunge(stu)
+            student_objs.append(stu)
+
+    advanced = 0
+    skipped = 0
+    failed = 0
+    failures: list[dict] = []
+
+    for stu in student_objs:
+        try:
+            seed = (
+                body.fixed_seed
+                if (body.seed_strategy == "fixed" and body.fixed_seed is not None)
+                else _hash_seed(stu.id)
+            )
+            profile = generate_profile(
+                seed=seed,
+                archetype=body.archetype,
+                starting_level=body.starting_level,
+                name=stu.display_name or "Elev",
+                partner_model=body.partner_model,
+            )
+            result = tick_month(
+                stu, profile, target_ym,
+                spend_profile=body.spend_profile,
+                starting_level=body.starting_level,
+            )
+            if result.skipped:
+                skipped += 1
+            else:
+                advanced += 1
+        except Exception as exc:
+            failed += 1
+            failures.append({
+                "student_id": stu.id,
+                "display_name": stu.display_name,
+                "error": str(exc),
+            })
+
+    # Uppdatera kalender efter ticken
+    with master_session() as s:
+        cal = s.get(ClassCalendar, cal_id)
+        if cal is not None:
+            cal.last_tick_year_month = target_ym
+            cal.last_tick_at = datetime.utcnow()
+            s.commit()
+
+    return AdvanceClassOut(
+        calendar_id=cal_id,
+        sim_year_month_after=target_ym,
+        students_advanced=advanced,
+        students_skipped=skipped,
+        students_failed=failed,
+        failures=failures,
+    )
+
+
+@router.get(
+    "/students/{student_id}/pentagon-history",
+    response_model=list[WellbeingEventOut],
+)
+def list_pentagon_history(
+    student_id: int,
+    days: int = 30,
+    axis: Optional[str] = None,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Lista WellbeingEvent-rader för en elev senaste `days` dagarna.
+
+    Visar varje pentagon-delta med requested vs applied (= tröghets-effekt
+    synlig), reason_kind (drift/event/decision) och förklaring."""
+    with master_session() as s:
+        _load_student_or_404(s, info.teacher_id, student_id)
+
+    rows = pentagon_history_for_student(student_id, days=days, axis=axis)
+    return [
+        WellbeingEventOut(
+            id=r.id,
+            occurred_at=r.occurred_at,
+            axis=r.axis,
+            requested_delta=r.requested_delta,
+            applied_delta=r.applied_delta,
+            new_value=r.new_value,
+            reason_kind=r.reason_kind,
+            explanation=r.explanation,
+            year_month=r.year_month,
+        )
+        for r in rows
+    ]

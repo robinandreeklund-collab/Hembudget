@@ -30,6 +30,10 @@ from ...school.engines import (
 from ...school.game_engine_models import WeekTickRun
 from ...school.models import Student
 from ..event_engine import roll_monthly_events
+from ..pentagon import (
+    apply_pentagon_delta,
+    compute_monthly_drift,
+)
 from ..profile_generator.schema import GeneratedProfile
 from .fixed_expenses import generate_fixed_expenses
 from .salary_phase import generate_salary_phase
@@ -97,6 +101,72 @@ def _run_legacy_event_tick(
             "events_created": 0,
             "error": str(exc),
         }
+
+
+def _apply_pentagon_phase(
+    scope_session,
+    *,
+    student_id: int,
+    year_month: str,
+    event_pentagon_delta: dict[str, int],
+) -> dict:
+    """Beräkna drift + applicera tröghet + skriv WellbeingEvent-rader.
+
+    Två källor till delta i denna fas:
+      1. Oväntade händelser (Fas E) — `event_pentagon_delta`-summa
+      2. Månadsdrift (Fas G) — beräknad från beteende
+
+    Båda går genom `apply_pentagon_delta` som klampar med tröghet och
+    loggar i master::wellbeing_events.
+    """
+    drift = compute_monthly_drift(scope_session, year_month=year_month)
+
+    new_values: dict[str, int] = {}
+    applied_per_axis: dict[str, dict[str, int]] = {}
+
+    for axis in ("economy", "safety", "health", "social", "leisure"):
+        # Event-delta (från Fas E, oväntade händelser)
+        ev_delta = int(event_pentagon_delta.get(axis, 0))
+        applied_event_delta = 0
+        new_value = None
+        if ev_delta != 0:
+            applied_event_delta, new_value = apply_pentagon_delta(
+                student_id,
+                axis=axis,
+                requested_delta=ev_delta,
+                reason_kind="event",
+                year_month=year_month,
+                explanation="aggregerade händelser denna månad",
+            )
+
+        # Drift-delta (från beteende denna månad)
+        drift_delta = int(drift.deltas.get(axis, 0))
+        applied_drift_delta = 0
+        if drift_delta != 0:
+            applied_drift_delta, new_value = apply_pentagon_delta(
+                student_id,
+                axis=axis,
+                requested_delta=drift_delta,
+                reason_kind="drift",
+                year_month=year_month,
+                explanation="; ".join(drift.explanations.get(axis, [])) or None,
+            )
+
+        applied_per_axis[axis] = {
+            "event_requested": ev_delta,
+            "event_applied": applied_event_delta,
+            "drift_requested": drift_delta,
+            "drift_applied": applied_drift_delta,
+            "drift_reasons": drift.explanations.get(axis, []),
+            "new_value": new_value,
+        }
+        if new_value is not None:
+            new_values[axis] = new_value
+
+    return {
+        "by_axis": applied_per_axis,
+        "new_values": new_values,
+    }
 
 
 def _check_and_create_run(
@@ -269,6 +339,18 @@ def tick_month(
                 # accepted+declined per spelmånad och summerar impact_*.
                 summary["social_proposals"] = _run_legacy_event_tick(
                     s, profile=profile, year_month=year_month,
+                )
+
+                # Fas G · drift + WellbeingEvent-logg (Sprint 4 · M4+P1+P2)
+                # Räkna månadsdrift baserat på beteende den månaden +
+                # applicera tröghet (max ±5/event, ±12/30d). Pentagon-
+                # delta från Fas E (oväntade händelser) och drift loggas
+                # i master::wellbeing_events.
+                summary["pentagon"] = _apply_pentagon_phase(
+                    s,
+                    student_id=student.id,
+                    year_month=year_month,
+                    event_pentagon_delta=pentagon_total,
                 )
 
                 s.commit()

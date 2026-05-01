@@ -150,6 +150,57 @@ class WeekTickRun(MasterBase):
     student: Mapped[Student] = relationship()
 
 
+class WellbeingEvent(MasterBase):
+    """En pentagon-axel-förändring (delta) loggad för audit + Echo-coaching.
+
+    Spec: dev/game-motor/07-pentagon-mekanik.md (Wellbeing-event-loggen)
+
+    Varje gång Monthly Engine, Event Engine eller en lärar-handling
+    ändrar pentagonen skrivs en rad här. Echo-modulen läser senaste 30
+    dagarna för att förstå vad eleven varit med om.
+
+    `reason_kind`:
+      "drift"          — automatisk månadsdrift (M4)
+      "event"          — oväntad händelse (Sprint 3)
+      "decision"       — eleven accepterade/nekade ett social-förslag
+      "goal_achieved"  — mål uppnått
+      "init"           — initial pentagon-variation vid karaktärsskapelse
+
+    `applied_delta` är vad som faktiskt skrevs efter momentum-klamp;
+    `requested_delta` är vad reason_kind försökte sätta innan klampen.
+    Diff:en (clamped) är pedagogiskt intressant: läraren kan se "Eva
+    försökte få +20 economy men trögheten klampade till +12".
+    """
+
+    __tablename__ = "wellbeing_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False, index=True,
+    )
+    axis: Mapped[str] = mapped_column(String(20), nullable=False)
+    requested_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    applied_delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_value: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reason_table: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    explanation: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    year_month: Mapped[Optional[str]] = mapped_column(
+        String(7), nullable=True, index=True,
+    )
+
+    student: Mapped[Student] = relationship()
+
+
 def shift_year_month(ym: str, months: int) -> str:
     """Lägg till `months` på en 'YYYY-MM'-sträng. Hanterar negativa tal.
 
