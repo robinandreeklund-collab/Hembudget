@@ -863,6 +863,70 @@ export type V2TeacherAvanzaOverview = {
   avanza: V2AvanzaData;
 };
 
+// === /v2/bokforing (Fas 2H — Verktyg 02) ===
+
+export type V2BookkeepingTxRow = {
+  id: number;
+  date: string;
+  account_id: number;
+  account_name: string;
+  amount: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  ai_confidence: number | null;
+  user_verified: boolean;
+  is_transfer: boolean;
+  notes: string | null;
+};
+
+export type V2BookkeepingCategoryRef = {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  color: string | null;
+};
+
+export type V2BookkeepingSummary = {
+  period_label: string;
+  period_start: string;
+  period_end: string;
+  total_transactions: number;
+  auto_classified: number;
+  manual_classified: number;
+  unclassified: number;
+  classification_rate_pct: number;
+  income_total: number;
+  expense_total: number;
+  saved_total: number;
+  saved_pct: number;
+  last_classified_at: string | null;
+};
+
+export type V2BookkeepingData = {
+  student_id: number;
+  summary: V2BookkeepingSummary;
+  unclassified: V2BookkeepingTxRow[];
+  classified: V2BookkeepingTxRow[];
+  categories: V2BookkeepingCategoryRef[];
+};
+
+export type V2BulkClassifyResult = {
+  processed: number;
+  classified: number;
+  via_rule: number;
+  via_history: number;
+  via_llm: number;
+  still_unclassified: number;
+};
+
+export type V2TeacherBookkeepingOverview = {
+  student_id: number;
+  student_name: string;
+  bokforing: V2BookkeepingData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1268,6 +1332,31 @@ export const v2Api = {
   teacherAvanzaOverview: (studentId: number) =>
     api<V2TeacherAvanzaOverview>(
       `/v2/teacher/students/${studentId}/avanza-overview`,
+    ),
+  // === /v2/bokforing (Fas 2H — Verktyg 02) ===
+  bokforing: (period?: string) =>
+    api<V2BookkeepingData>(
+      `/v2/bokforing${period ? `?period=${encodeURIComponent(period)}` : ""}`,
+    ),
+  bookkeepingClassify: (txId: number, body: {
+    category_id?: number;
+    notes?: string;
+  }) =>
+    api<V2BookkeepingTxRow>(`/v2/bokforing/transactions/${txId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  bookkeepingBulkClassify: (body: {
+    transaction_ids?: number[];
+    period?: string;
+  }) =>
+    api<V2BulkClassifyResult>("/v2/bokforing/classify-bulk", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  teacherBookkeepingOverview: (studentId: number, period?: string) =>
+    api<V2TeacherBookkeepingOverview>(
+      `/v2/teacher/students/${studentId}/bokforing-overview${period ? `?period=${encodeURIComponent(period)}` : ""}`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

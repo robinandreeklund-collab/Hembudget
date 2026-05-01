@@ -321,6 +321,25 @@ export function V2RosterPage() {
                 >
                   Avanza →
                 </Link>
+                <Link
+                  to={`/teacher/v2/bokforing/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    color: "rgba(255,255,255,0.8)",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Bokföring →
+                </Link>
               </div>
             ))}
           </div>
