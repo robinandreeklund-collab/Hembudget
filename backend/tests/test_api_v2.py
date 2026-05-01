@@ -8085,3 +8085,49 @@ def test_v2_klass_pentagon_axis_includes_students(fx) -> None:
     assert data["student_count"] == 4  # original Eva + 3
     assert len(data["top_contributors"]) >= 1
     assert len(data["bottom_contributors"]) >= 1
+
+
+# === Lärar-impersonation av v2/hub (Fas 2AI) ===
+
+
+def test_v2_hub_supports_teacher_impersonation(fx) -> None:
+    """Lärare med x-as-student kan se elevens v2/hub-data."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/hub",
+        headers={
+            "Authorization": f"Bearer {tch}",
+            "x-as-student": str(sid),
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Får elevens student_id (Eva), inte 0
+    assert data["student_id"] == sid
+
+
+def test_v2_hub_teacher_without_impersonation_empty(fx) -> None:
+    """Lärare utan x-as-student → tom payload (orörd från innan)."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200
+    assert r.json()["student_id"] == 0
+
+
+def test_v2_hub_cross_teacher_impersonation_blocked(fx) -> None:
+    """Annan lärare kan inte impersonera första lärarens elev."""
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/hub",
+        headers={
+            "Authorization": f"Bearer {sa}",
+            "x-as-student": str(sid),
+        },
+    )
+    # Middleware filtrerar bort student-id som inte tillhör läraren →
+    # actor sätts inte → tom payload
+    assert r.status_code == 200
+    assert r.json()["student_id"] == 0

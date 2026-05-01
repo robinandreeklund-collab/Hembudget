@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import { PentagonFlipCard } from "./PentagonFlipCard";
+import { useAuth } from "../hooks/useAuth";
 import "./larare.css";
 
 const SHORT_DATE = (iso: string | null): string => {
@@ -270,6 +271,14 @@ function ActionBar({
   const [showPromote, setShowPromote] = useState(false);
   const [showOverride, setShowOverride] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const { impersonate } = useAuth();
+
+  function startImpersonation() {
+    impersonate(data.student_id);
+    // Navigera till v2-elev-hubben i ny flik så läraren behåller
+    // sin lärar-session i original-fliken.
+    window.open("/v2/hub", "_blank", "noopener");
+  }
   return (
     <div
       style={{
@@ -287,6 +296,18 @@ function ActionBar({
         style={{ background: "var(--accent, #dc4c2b)", color: "#fff" }}
       >
         + Skicka uppdrag
+      </button>
+      <button
+        type="button"
+        className="larare-tb-btn"
+        onClick={startImpersonation}
+        style={{
+          background: "rgba(99,102,241,0.18)",
+          border: "1px solid rgba(99,102,241,0.45)",
+          color: "#c7d2fe",
+        }}
+      >
+        👤 Impersonera elev →
       </button>
       {data.level_progression.target_level && (
         <button

@@ -223,11 +223,18 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
     - scope-DB: transactions, accounts (månads-summa, saldon)
     - wellbeing-modulen (5 axlar)
 
-    Demo/teacher får en minimal placeholder utan scope-data.
+    Demo får tom payload. Lärare med x-as-student-impersonation ser
+    elevens vy (för förhandsvisning från v2-elev-detaljen).
     """
-    if info.role != "student" or info.student_id is None:
-        # Teacher eller demo ser inte sin egen hub-data — de ska
-        # se elevernas via /teacher/students/* istället.
+    # Resolva target-student-id · stöd både egen-elev och lärar-impersonation
+    target_sid: Optional[int] = None
+    if info.role == "student" and info.student_id is not None:
+        target_sid = info.student_id
+    elif info.role == "teacher" and info.teacher_id is not None:
+        from ..school.engines import get_current_actor_student
+        target_sid = get_current_actor_student()
+
+    if target_sid is None:
         return HubResponse(
             student_id=0,
             character=HubCharacter(display_name="—"),
@@ -244,14 +251,14 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
 
     # 1. Karaktär från master-DB
     with master_session() as mdb:
-        student = mdb.get(Student, info.student_id)
+        student = mdb.get(Student, target_sid)
         if not student:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, "Student hittades inte",
             )
         profile = (
             mdb.query(StudentProfile)
-            .filter(StudentProfile.student_id == info.student_id)
+            .filter(StudentProfile.student_id == target_sid)
             .one_or_none()
         )
         # Karaktärsnamn — använd StudentProfile.character_first/last_name
@@ -378,7 +385,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         pass
 
     return HubResponse(
-        student_id=info.student_id,
+        student_id=target_sid,
         character=char,
         v2_level=v2_level,
         v2_spend_profile=v2_spend,
