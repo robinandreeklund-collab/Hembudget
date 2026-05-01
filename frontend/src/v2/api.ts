@@ -582,6 +582,78 @@ export type V2TeacherInsuranceOverview = {
   claims: V2InsuranceClaimOut[];
 };
 
+// === /v2/forbrukning (Fas 2E) ===
+
+export type V2UtilityCategory =
+  | "electricity"
+  | "broadband"
+  | "mobile"
+  | "streaming"
+  | "transport"
+  | "water"
+  | "heating"
+  | "ovrig";
+
+export type V2UtilitySubStatus = "active" | "cancelled" | "considered";
+
+export type V2UtilitySubscriptionOut = {
+  id: number;
+  supplier: string;
+  name: string;
+  category: V2UtilityCategory;
+  monthly_cost: number;
+  grid_fee_monthly: number | null;
+  spot_pricing: boolean;
+  binding_end: string | null;
+  notice_days: number;
+  invoice_day: number | null;
+  status: V2UtilitySubStatus;
+  included_in_rent: boolean;
+  started_on: string | null;
+  ended_on: string | null;
+  notes: string | null;
+};
+
+export type V2UtilityReadingOut = {
+  id: number;
+  supplier: string;
+  meter_type: string;
+  meter_role: string;
+  period_start: string;
+  period_end: string;
+  consumption: number | null;
+  consumption_unit: string | null;
+  cost_kr: number;
+  source: string;
+  notes: string | null;
+};
+
+export type V2UtilitySummary = {
+  active_count: number;
+  total_monthly_cost: number;
+  total_grid_fee: number;
+  has_spot_pricing: boolean;
+  binding_expiring_soon: number;
+  last_month_cost: number;
+  last_month_kwh: number;
+  suggested_savings_monthly: number;
+};
+
+export type V2UtilityData = {
+  student_id: number;
+  summary: V2UtilitySummary;
+  subscriptions: V2UtilitySubscriptionOut[];
+  readings: V2UtilityReadingOut[];
+};
+
+export type V2TeacherUtilityOverview = {
+  student_id: number;
+  student_name: string;
+  summary: V2UtilitySummary;
+  subscriptions: V2UtilitySubscriptionOut[];
+  readings: V2UtilityReadingOut[];
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -785,6 +857,83 @@ export const v2Api = {
   teacherInsuranceOverview: (studentId: number) =>
     api<V2TeacherInsuranceOverview>(
       `/v2/teacher/students/${studentId}/insurance-overview`,
+    ),
+  // === /v2/forbrukning (Fas 2E) ===
+  forbrukning: () => api<V2UtilityData>("/v2/forbrukning"),
+  utilityCreateSubscription: (body: {
+    supplier: string;
+    name: string;
+    category: V2UtilityCategory;
+    monthly_cost: number;
+    grid_fee_monthly?: number;
+    spot_pricing?: boolean;
+    binding_end?: string;
+    notice_days?: number;
+    invoice_day?: number;
+    status?: V2UtilitySubStatus;
+    included_in_rent?: boolean;
+    started_on?: string;
+    notes?: string;
+  }) =>
+    api<V2UtilitySubscriptionOut>("/v2/forbrukning/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  utilityPatchSubscription: (
+    subId: number,
+    body: {
+      monthly_cost?: number;
+      status?: V2UtilitySubStatus;
+      binding_end?: string;
+      notes?: string;
+    },
+  ) =>
+    api<V2UtilitySubscriptionOut>(
+      `/v2/forbrukning/subscriptions/${subId}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  utilityDeleteSubscription: (subId: number) =>
+    api<void>(`/v2/forbrukning/subscriptions/${subId}`, {
+      method: "DELETE",
+    }),
+  /** Lärar-API · seedа default-katalog (6 svenska abonnemang). */
+  teacherSeedDefaultUtility: (studentId: number) =>
+    api<{ student_id: number; subscriptions_created: number }>(
+      `/v2/teacher/students/${studentId}/utility/seed-default`,
+      { method: "POST", body: "{}" },
+    ),
+  /** Lärar-API · skapa månadsfaktura (UtilityReading). */
+  teacherCreateUtilityReading: (
+    studentId: number,
+    body: {
+      supplier: string;
+      meter_type:
+        | "electricity"
+        | "broadband"
+        | "water"
+        | "heating"
+        | "district_heating";
+      meter_role?: "grid" | "energy" | "total";
+      period_start: string;
+      period_end: string;
+      consumption?: number;
+      consumption_unit?: string;
+      cost_kr: number;
+      notes?: string;
+    },
+  ) =>
+    api<V2UtilityReadingOut>(
+      `/v2/teacher/students/${studentId}/utility/readings`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  teacherDeleteUtilityReading: (studentId: number, readingId: number) =>
+    api<void>(
+      `/v2/teacher/students/${studentId}/utility/readings/${readingId}`,
+      { method: "DELETE" },
+    ),
+  teacherUtilityOverview: (studentId: number) =>
+    api<V2TeacherUtilityOverview>(
+      `/v2/teacher/students/${studentId}/utility-overview`,
     ),
   /** Lärar-API · lista alla CollectiveAgreement. */
   teacherListAgreements: () =>
