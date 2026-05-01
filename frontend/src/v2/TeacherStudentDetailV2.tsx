@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import { PentagonFlipCard } from "./PentagonFlipCard";
+import { TeacherStudentSpelmotorPanel } from "./TeacherStudentSpelmotorPanel";
 import { useAuth } from "../hooks/useAuth";
 import "./larare.css";
 
@@ -164,6 +165,10 @@ export function TeacherStudentDetailV2() {
         {data.recent_events.length > 0 && (
           <RecentEvents events={data.recent_events} />
         )}
+
+        {/* Sprint 1-6 spelmotor-panel: tick-historik + pentagon-händelser
+            + snabbspola + sjuk/VAB/event-summary. */}
+        <TeacherStudentSpelmotorPanel studentId={data.student_id} />
       </div>
     </div>
   );
