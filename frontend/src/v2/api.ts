@@ -1629,6 +1629,54 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/teacher/mailboxes (Fas 2U · p-mail) ===
+
+export type V2MailboxStatus = "klar" | "i_fas" | "släper" | "risk";
+
+export type V2MailboxRow = {
+  student_id: number;
+  student_name: string;
+  spend_profile: string | null;
+  total_count_period: number;
+  unhandled_count: number;
+  oldest_days: number | null;
+  reminders_count: number;
+  has_authority_unhandled: boolean;
+  status: V2MailboxStatus;
+};
+
+export type V2MailboxClassSummary = {
+  total_students: number;
+  total_generated_period: number;
+  handled_in_time: number;
+  handled_pct: number;
+  overdue_count: number;
+  reminders_total: number;
+  profile_distribution: Record<string, number>;
+};
+
+export type V2MailboxResponse = {
+  summary: V2MailboxClassSummary;
+  rows: V2MailboxRow[];
+};
+
+export type V2MailboxBulkInjectIn = {
+  sender: string;
+  sender_kind?: string;
+  sender_short?: string;
+  mail_type: "invoice" | "salary_slip" | "authority" | "reminder" | "info";
+  subject: string;
+  body?: string;
+  amount?: number;
+  due_date?: string; // YYYY-MM-DD
+  target_student_ids?: number[] | null;
+};
+
+export type V2MailboxBulkInjectResult = {
+  students_targeted: number;
+  mails_created: number;
+};
+
 // === /v2/teacher/reflections (Fas 2T · p-refl) ===
 
 export type V2ReflectionFilter = "all" | "unread" | "flagged";
@@ -2333,6 +2381,14 @@ export const v2Api = {
     api<V2ReflectionItem>(
       `/v2/teacher/reflections/${progressId}/feedback`,
       { method: "POST", body: JSON.stringify({ body }) },
+    ),
+  // === /v2/teacher/mailboxes (Fas 2U) ===
+  teacherMailboxes: () =>
+    api<V2MailboxResponse>("/v2/teacher/mailboxes"),
+  teacherMailboxBulkInject: (body: V2MailboxBulkInjectIn) =>
+    api<V2MailboxBulkInjectResult>(
+      "/v2/teacher/mailboxes/bulk-inject",
+      { method: "POST", body: JSON.stringify(body) },
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

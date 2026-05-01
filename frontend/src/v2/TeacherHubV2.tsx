@@ -451,6 +451,13 @@ function SideStack({
               </li>
             ))}
           </ul>
+          <Link
+            className="attn-go"
+            to="/teacher/v2/postlador"
+            style={{ display: "block", paddingTop: 8 }}
+          >
+            Se alla {data.total_students} postlådor →
+          </Link>
         </div>
       )}
     </aside>
