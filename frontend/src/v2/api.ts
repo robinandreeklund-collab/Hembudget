@@ -271,6 +271,58 @@ export type V2MailSeedItem = {
   bankgiro?: string;
 };
 
+// === Fas 2C · Arbetsgivaren · master-modeller ===
+
+export type V2CollectiveAgreementOut = {
+  id: number;
+  code: string;
+  name: string;
+  union: string;
+  employer_org: string;
+};
+
+export type V2AgreementBenefitOut = {
+  id: number;
+  agreement_id: number;
+  kind: string;
+  name: string;
+  detail: string | null;
+  value: string;
+  sort_order: number;
+};
+
+export type V2MarketSalaryRangeOut = {
+  id: number;
+  profession: string;
+  city: string;
+  year: number;
+  experience_band: string;
+  low: number;
+  high: number;
+  median: number | null;
+  source: string | null;
+};
+
+export type V2TeacherEmployerOverview = {
+  student_id: number;
+  student_name: string;
+  profession: string;
+  employer: string;
+  agreement_name: string | null;
+  agreement_id: number | null;
+  pension_pct: number | null;
+  gross_salary_monthly: number;
+  market_low: number | null;
+  market_high: number | null;
+  benefits: V2EmployerAgreementBenefit[];
+  satisfaction_score: number;
+  satisfaction_trend: string;
+  satisfaction_delta_4w: number;
+  salary_negotiations: V2EmployerNegotiation[];
+  questions_answered_count: number;
+  questions_pending_count: number;
+};
+
 // === /v2/arbetsgivaren ===
 
 export type V2EmployerSalarySlip = {
@@ -580,6 +632,77 @@ export const v2Api = {
     ),
   goals: () => api<GoalsData>("/v2/mal"),
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
+  /** Lärar-API · lista alla CollectiveAgreement. */
+  teacherListAgreements: () =>
+    api<V2CollectiveAgreementOut[]>("/v2/teacher/agreements"),
+  /** Lärar-API · lista benefits för ett avtal. */
+  teacherListAgreementBenefits: (agreementId: number) =>
+    api<V2AgreementBenefitOut[]>(
+      `/v2/teacher/agreements/${agreementId}/benefits`,
+    ),
+  /** Lärar-API · skapa benefit. */
+  teacherCreateAgreementBenefit: (body: {
+    agreement_id: number;
+    kind: string;
+    name: string;
+    detail?: string;
+    value: string;
+    sort_order?: number;
+  }) =>
+    api<V2AgreementBenefitOut>("/v2/teacher/agreement-benefits", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Lärar-API · ta bort benefit. */
+  teacherDeleteAgreementBenefit: (benefitId: number) =>
+    api<void>(`/v2/teacher/agreement-benefits/${benefitId}`, {
+      method: "DELETE",
+    }),
+  /** Lärar-API · seedа default-katalog för avtal. */
+  teacherSeedDefaultAgreementBenefits: () =>
+    api<{ created: number }>(
+      "/v2/teacher/agreement-benefits/seed-default",
+      { method: "POST", body: "{}" },
+    ),
+  /** Lärar-API · lista marknadsspann (filtrera på yrke). */
+  teacherListMarketRanges: (profession?: string) =>
+    api<V2MarketSalaryRangeOut[]>(
+      `/v2/teacher/market-salary-ranges${
+        profession ? `?profession=${encodeURIComponent(profession)}` : ""
+      }`,
+    ),
+  /** Lärar-API · skapa/uppdatera marknadsspann. */
+  teacherCreateMarketRange: (body: {
+    profession: string;
+    city: string;
+    year: number;
+    experience_band?: string;
+    low: number;
+    high: number;
+    median?: number;
+    source?: string;
+    notes?: string;
+  }) =>
+    api<V2MarketSalaryRangeOut>("/v2/teacher/market-salary-ranges", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** Lärar-API · ta bort marknadsspann. */
+  teacherDeleteMarketRange: (rangeId: number) =>
+    api<void>(`/v2/teacher/market-salary-ranges/${rangeId}`, {
+      method: "DELETE",
+    }),
+  /** Lärar-API · seedа SCB-katalog (svenska 2026). */
+  teacherSeedDefaultMarketRanges: () =>
+    api<{ created: number }>(
+      "/v2/teacher/market-salary-ranges/seed-default",
+      { method: "POST", body: "{}" },
+    ),
+  /** Lärar-API · full insyn i elevens arbetsgivar-aktör. */
+  teacherEmployerOverview: (studentId: number) =>
+    api<V2TeacherEmployerOverview>(
+      `/v2/teacher/students/${studentId}/employer-overview`,
+    ),
   skatten: (year?: number) =>
     api<TaxData>(`/v2/skatten${year ? `?year=${year}` : ""}`),
   /** Eleven registrerar manuellt avdrag. */
