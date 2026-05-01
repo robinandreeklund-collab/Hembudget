@@ -891,6 +891,45 @@ class ModuleStepCompetency(MasterBase):
     weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
 
 
+class StudentCompetencyOverride(MasterBase):
+    """Lärarens manuella nivå-höjning/sänkning av en kompetens för en elev.
+
+    När den finns vinner den över mastery-beräkning. Pedagogiskt vill
+    läraren kunna säga "Sara har visat fördjupning genom klassrum-
+    diskussion även om mastery-talet inte hunnit klättra dit än".
+    """
+    __tablename__ = "student_competency_overrides"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "competency_id",
+            name="uq_student_competency_override",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    competency_id: Mapped[int] = mapped_column(
+        ForeignKey("competencies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # "B" | "G" | "F"
+    level: Mapped[str] = mapped_column(String(1), nullable=False)
+    motivation: Mapped[str] = mapped_column(Text, nullable=False)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AskAiThread(MasterBase):
     """En AskAI-chattråd mellan en elev/lärare och Claude. Varje tråd
     har flera meddelanden — möjliggör multi-turn där modellen "minns"

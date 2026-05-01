@@ -8935,6 +8935,45 @@ def _mastery_to_level(m: float) -> tuple[str, str]:
     return ("B", "BASIS")
 
 
+_LEVEL_LABEL_MAP: dict[str, str] = {
+    "B": "BASIS", "G": "GRUND", "F": "FÖRDJUPNING",
+}
+
+
+def _competency_overrides_for(student_id: int) -> dict[int, str]:
+    """Returnerar {competency_id: level_short} för elevens overrides."""
+    from ..school.models import StudentCompetencyOverride as _SCO
+    out: dict[int, str] = {}
+    try:
+        with master_session() as s:
+            rows = (
+                s.query(_SCO)
+                .filter(_SCO.student_id == student_id)
+                .all()
+            )
+            for r in rows:
+                out[r.competency_id] = r.level
+    except Exception:
+        pass
+    return out
+
+
+def _apply_override(
+    cid: int,
+    mastery_level: str,
+    overrides: dict[int, str],
+) -> tuple[str, str, bool]:
+    """Returnerar (level_short, level_label, is_override)."""
+    if cid in overrides:
+        lvl = overrides[cid]
+        return (lvl, _LEVEL_LABEL_MAP.get(lvl, lvl), True)
+    return (
+        mastery_level,
+        _LEVEL_LABEL_MAP.get(mastery_level, mastery_level),
+        False,
+    )
+
+
 @router.get("/portfolio", response_model=V2PortfolioResponse)
 def get_portfolio(
     info: TokenInfo = Depends(require_token),
@@ -8955,6 +8994,7 @@ def get_portfolio(
     # Återanvänd existerande mastery-beräkning från api/modules
     from .modules import _compute_mastery_for_student
 
+    overrides = _competency_overrides_for(sid)
     with master_session() as s:
         mastery_by_cid = _compute_mastery_for_student(s, sid)
         comps = s.query(_SchoolCompetency).all()
@@ -8965,7 +9005,10 @@ def get_portfolio(
         for c in comps:
             m_tuple = mastery_by_cid.get(c.id, (0.0, 0, None))
             mastery, count, last = m_tuple
-            level_short, level_label = _mastery_to_level(mastery)
+            mastery_short, _ = _mastery_to_level(mastery)
+            level_short, level_label, _is_over = _apply_override(
+                c.id, mastery_short, overrides,
+            )
             if level_short == "B":
                 b += 1
             elif level_short == "G":
@@ -10366,12 +10409,16 @@ def _build_kompetens_detail(
                 status.HTTP_404_NOT_FOUND, "Kompetensen finns ej",
             )
 
-        # Mastery för aktuell elev
+        # Mastery för aktuell elev (override vinner vid manual höjning)
         mastery_by_cid = _compute_mastery_for_student(s, student_id)
         mastery, count, last = mastery_by_cid.get(
             competency_id, (0.0, 0, None),
         )
-        level_short, level_label = _mastery_to_level(mastery)
+        overrides = _competency_overrides_for(student_id)
+        mastery_short, _ = _mastery_to_level(mastery)
+        level_short, level_label, _is_over = _apply_override(
+            competency_id, mastery_short, overrides,
+        )
         next_short, next_label, next_threshold = _next_level_for(
             level_short,  # type: ignore[arg-type]
         )
@@ -11409,6 +11456,7 @@ def _build_competencies_for_student(
 ) -> list[V2StudentDetailCompetency]:
     from .modules import _compute_mastery_for_student
 
+    overrides = _competency_overrides_for(student_id)
     out: list[V2StudentDetailCompetency] = []
     with master_session() as s:
         mastery_by_cid = _compute_mastery_for_student(s, student_id)
@@ -11421,7 +11469,10 @@ def _build_competencies_for_student(
             mastery, _count, _last = mastery_by_cid.get(
                 c.id, (0.0, 0, None),
             )
-            level_short, level_label = _mastery_to_level(mastery)
+            mastery_short, _ = _mastery_to_level(mastery)
+            level_short, level_label, _is_over = _apply_override(
+                c.id, mastery_short, overrides,
+            )
             out.append(V2StudentDetailCompetency(
                 competency_id=c.id,
                 key=c.key,
@@ -14348,3 +14399,222 @@ def teacher_create_assignment_v2(
         due_date=body.due_date,
         created_at=created_at,
     )
+
+
+# === Nivå-promotion + kompetens-override (Fas 2AG) ===
+#
+# Lärar-actions som direkt påverkar elevens v2-läge:
+# - Aktivera Nivå 2/3 → bumpar v2_level + spend_profile + skapar
+#   StudentActivity-event för spårbarhet
+# - Höj/sänk kompetens manuellt → skapar StudentCompetencyOverride
+#   som vinner över mastery-beräkning
+
+
+class V2LevelPromoteIn(BaseModel):
+    target_level: int = Field(ge=2, le=3)
+    new_spend_profile: Optional[SpendProfile] = None
+    motivation: Optional[str] = Field(default=None, max_length=2000)
+
+
+class V2LevelPromoteResult(BaseModel):
+    student_id: int
+    student_name: str
+    previous_level: int
+    new_level: int
+    new_spend_profile: Optional[str]
+
+
+@router.post(
+    "/teacher/students/{student_id}/level-promote",
+    response_model=V2LevelPromoteResult,
+)
+def teacher_promote_student_level(
+    student_id: int,
+    body: V2LevelPromoteIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2LevelPromoteResult:
+    """Bumpa elevens v2_level (max 3). Default ny spend_profile speglar
+    nivån (1=sparsam, 2=balanserad, 3=slosa) — kan överridas av lärare.
+    Skapar StudentActivity-event så promotionen syns i historik."""
+    from ..school.models import StudentActivity as _SA
+
+    teacher_id = _require_teacher(info)
+    with master_session() as ms:
+        student = ms.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        prev_level = getattr(student, "v2_level", None) or 1
+        if body.target_level <= prev_level:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Eleven är redan på Nivå {prev_level}",
+            )
+        student.v2_level = body.target_level
+        spend = body.new_spend_profile or _resolve_spend_profile(
+            None, body.target_level,
+        )
+        student.v2_spend_profile = spend
+        # Logga som aktivitet
+        summary = (
+            f"Lärare aktiverade Nivå {body.target_level} "
+            f"({_level_label(body.target_level)})"
+        )
+        if body.motivation:
+            summary += f" · motivering: {body.motivation[:120]}"
+        ms.add(_SA(
+            student_id=student_id,
+            kind="level.promoted",
+            summary=summary,
+            payload={
+                "from_level": prev_level,
+                "to_level": body.target_level,
+                "new_spend_profile": spend,
+                "motivation": body.motivation,
+                "teacher_id": teacher_id,
+            },
+        ))
+        ms.commit()
+        ms.refresh(student)
+        sname = student.display_name
+
+    return V2LevelPromoteResult(
+        student_id=student_id,
+        student_name=sname,
+        previous_level=prev_level,
+        new_level=body.target_level,
+        new_spend_profile=spend,
+    )
+
+
+class V2CompetencyOverrideIn(BaseModel):
+    level: Literal["B", "G", "F"]
+    motivation: str = Field(min_length=2, max_length=2000)
+
+
+class V2CompetencyOverrideRow(BaseModel):
+    competency_id: int
+    competency_key: str
+    competency_name: str
+    level: Literal["B", "G", "F"]
+    motivation: str
+    updated_at: datetime
+    teacher_id: int
+
+
+@router.post(
+    "/teacher/students/{student_id}/kompetens/{competency_id}/override",
+    response_model=V2CompetencyOverrideRow,
+)
+def teacher_override_competency(
+    student_id: int,
+    competency_id: int,
+    body: V2CompetencyOverrideIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2CompetencyOverrideRow:
+    """Skapa eller uppdatera lärar-overriden för en kompetens på en elev.
+
+    Vinner över mastery-beräknad nivå. Frontend visar overriden i
+    portfolio + kompetens-detalj med "(höjd manuellt av lärare)"-tag.
+    """
+    from ..school.models import (
+        StudentCompetencyOverride as _SCO,
+        StudentActivity as _SA,
+    )
+
+    teacher_id = _require_teacher(info)
+    with master_session() as ms:
+        student = ms.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        comp = ms.get(_SchoolCompetency, competency_id)
+        if comp is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Kompetensen finns ej",
+            )
+        existing = (
+            ms.query(_SCO)
+            .filter(
+                _SCO.student_id == student_id,
+                _SCO.competency_id == competency_id,
+            )
+            .first()
+        )
+        if existing is None:
+            row = _SCO(
+                student_id=student_id,
+                competency_id=competency_id,
+                level=body.level,
+                motivation=body.motivation.strip(),
+                teacher_id=teacher_id,
+            )
+            ms.add(row)
+        else:
+            row = existing
+            row.level = body.level
+            row.motivation = body.motivation.strip()
+            row.teacher_id = teacher_id
+            row.updated_at = datetime.utcnow()
+        ms.flush()
+        ms.add(_SA(
+            student_id=student_id,
+            kind="competency.override",
+            summary=(
+                f"Lärare satte {comp.name} → {body.level} manuellt"
+            ),
+            payload={
+                "competency_id": competency_id,
+                "competency_key": comp.key,
+                "level": body.level,
+                "motivation": body.motivation,
+                "teacher_id": teacher_id,
+            },
+        ))
+        ms.commit()
+        ms.refresh(row)
+
+    return V2CompetencyOverrideRow(
+        competency_id=competency_id,
+        competency_key=comp.key,
+        competency_name=comp.name,
+        level=body.level,
+        motivation=body.motivation,
+        updated_at=row.updated_at,
+        teacher_id=teacher_id,
+    )
+
+
+@router.delete(
+    "/teacher/students/{student_id}/kompetens/{competency_id}/override",
+)
+def teacher_delete_competency_override(
+    student_id: int,
+    competency_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Ta bort overrid · mastery-beräkning återupptas."""
+    from ..school.models import StudentCompetencyOverride as _SCO
+
+    teacher_id = _require_teacher(info)
+    with master_session() as ms:
+        student = ms.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        existing = (
+            ms.query(_SCO)
+            .filter(
+                _SCO.student_id == student_id,
+                _SCO.competency_id == competency_id,
+            )
+            .first()
+        )
+        if existing is None:
+            return {"deleted": False}
+        ms.delete(existing)
+        ms.commit()
+    return {"deleted": True}

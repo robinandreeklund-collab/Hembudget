@@ -267,6 +267,8 @@ function ActionBar({
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const [showCreateAssignment, setShowCreateAssignment] = useState(false);
+  const [showPromote, setShowPromote] = useState(false);
+  const [showOverride, setShowOverride] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   return (
     <div
@@ -285,6 +287,32 @@ function ActionBar({
         style={{ background: "var(--accent, #dc4c2b)", color: "#fff" }}
       >
         + Skicka uppdrag
+      </button>
+      {data.level_progression.target_level && (
+        <button
+          type="button"
+          className="larare-tb-btn"
+          onClick={() => setShowPromote(true)}
+          style={{
+            background: "rgba(110,231,183,0.10)",
+            border: "1px solid rgba(110,231,183,0.45)",
+            color: "#6ee7b7",
+          }}
+        >
+          ▰▰▱ Aktivera Nivå {data.level_progression.target_level}
+        </button>
+      )}
+      <button
+        type="button"
+        className="larare-tb-btn"
+        onClick={() => setShowOverride(true)}
+        style={{
+          background: "rgba(251,191,36,0.10)",
+          border: "1px solid rgba(251,191,36,0.45)",
+          color: "var(--warm, #fbbf24)",
+        }}
+      >
+        ★ Höj kompetens manuellt
       </button>
       <Link
         className="larare-tb-btn"
@@ -374,6 +402,467 @@ function ActionBar({
           }}
         />
       )}
+      {showPromote && data.level_progression.target_level && (
+        <PromoteLevelModal
+          studentId={data.student_id}
+          studentName={data.student_name}
+          currentLevel={data.v2_level}
+          targetLevel={data.level_progression.target_level}
+          onClose={() => setShowPromote(false)}
+          onPromoted={(newLevel) => {
+            setCreateMessage(
+              `${data.student_name.split(" ")[0]} är nu på Nivå ${newLevel}`,
+            );
+            setShowPromote(false);
+            window.setTimeout(() => setCreateMessage(null), 6000);
+            window.setTimeout(() => navigate(0), 600);
+          }}
+        />
+      )}
+      {showOverride && (
+        <OverrideCompetencyModal
+          studentId={data.student_id}
+          studentName={data.student_name}
+          competencies={data.competencies}
+          onClose={() => setShowOverride(false)}
+          onOverridden={(name, level) => {
+            setCreateMessage(
+              `${name} satt till ${level} för ${data.student_name.split(" ")[0]}`,
+            );
+            setShowOverride(false);
+            window.setTimeout(() => setCreateMessage(null), 6000);
+            window.setTimeout(() => navigate(0), 600);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OverrideCompetencyModal({
+  studentId,
+  studentName,
+  competencies,
+  onClose,
+  onOverridden,
+}: {
+  studentId: number;
+  studentName: string;
+  competencies: V2StudentDetailCompetency[];
+  onClose: () => void;
+  onOverridden: (name: string, level: string) => void;
+}) {
+  const [selectedCid, setSelectedCid] = useState<number>(
+    competencies[0]?.competency_id || 0,
+  );
+  const [level, setLevel] = useState<"B" | "G" | "F">("G");
+  const [motivation, setMotivation] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit() {
+    if (
+      submitting
+      || !selectedCid
+      || motivation.trim().length < 2
+    ) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const out = await v2Api.teacherOverrideCompetency(
+        studentId, selectedCid,
+        { level, motivation: motivation.trim() },
+      );
+      onOverridden(out.competency_name, out.level);
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(0,0,0,0.55)",
+        display: "grid", placeItems: "center",
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 540,
+          background: "rgba(15,21,37,0.98)",
+          border: "1px solid var(--line-strong, rgba(255,255,255,0.18))",
+          borderTop: "3px solid var(--warm, #fbbf24)",
+          borderRadius: 8,
+          padding: "24px 28px",
+          maxHeight: "calc(100vh - 80px)",
+          overflowY: "auto",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+            textTransform: "uppercase", color: "var(--warm, #fbbf24)",
+            marginBottom: 6,
+          }}
+        >
+          ★ Höj kompetens manuellt
+        </div>
+        <h2
+          style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 22, fontWeight: 700, color: "#fff",
+            margin: "0 0 6px", letterSpacing: -0.5,
+          }}
+        >
+          Override för{" "}
+          <em style={{ color: "var(--warm)", fontStyle: "italic", fontWeight: 500 }}>
+            {studentName}
+          </em>
+        </h2>
+        <p
+          style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 13, color: "rgba(255,255,255,0.55)",
+            marginTop: 0, marginBottom: 16, lineHeight: 1.5,
+          }}
+        >
+          Din höjning vinner över mastery-beräkningen. Använd när
+          eleven visat fördjupad förståelse genom samtal/klassrum
+          som inte fångats av modul-stegen.
+        </p>
+
+        <FormRow label="Kompetens">
+          <select
+            value={selectedCid}
+            onChange={(e) => setSelectedCid(Number(e.target.value))}
+            style={modalInputStyle()}
+          >
+            {competencies.map((c) => (
+              <option key={c.competency_id} value={c.competency_id}>
+                {c.name} (mastery: {Math.round(c.mastery * 100)} % · {c.level})
+              </option>
+            ))}
+          </select>
+        </FormRow>
+
+        <FormRow label="Ny nivå">
+          <div style={{ display: "flex", gap: 8 }}>
+            {(["B", "G", "F"] as const).map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => setLevel(lvl)}
+                style={{
+                  flex: 1,
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  background: level === lvl
+                    ? lvl === "F"
+                      ? "rgba(110,231,183,0.18)"
+                      : lvl === "G"
+                      ? "rgba(220,76,43,0.18)"
+                      : "rgba(255,255,255,0.08)"
+                    : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${
+                    level === lvl
+                      ? lvl === "F"
+                        ? "#6ee7b7"
+                        : lvl === "G"
+                        ? "var(--accent, #dc4c2b)"
+                        : "rgba(255,255,255,0.4)"
+                      : "var(--line-strong, rgba(255,255,255,0.18))"
+                  }`,
+                  color: level === lvl
+                    ? lvl === "F"
+                      ? "#6ee7b7"
+                      : lvl === "G"
+                      ? "var(--accent, #dc4c2b)"
+                      : "#fff"
+                    : "rgba(255,255,255,0.7)",
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1.2,
+                  cursor: "pointer",
+                }}
+              >
+                {lvl} ·{" "}
+                {lvl === "F" ? "FÖRDJUPNING" : lvl === "G" ? "GRUND" : "BASIS"}
+              </button>
+            ))}
+          </div>
+        </FormRow>
+
+        <FormRow label="Motivering (visas i elevens historik)">
+          <textarea
+            value={motivation}
+            onChange={(e) => setMotivation(e.target.value)}
+            placeholder="t.ex. Visade djup förståelse i klassrum-diskussion 14 apr"
+            rows={3}
+            style={{
+              ...modalInputStyle(),
+              fontFamily: "Source Serif 4, Georgia, serif",
+              resize: "vertical",
+            }}
+          />
+        </FormRow>
+
+        {error && (
+          <div
+            style={{
+              color: "#fca5a5", fontSize: 11, marginTop: 8,
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex", gap: 10, marginTop: 18,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="larare-tb-btn"
+          >
+            Avbryt
+          </button>
+          <button
+            type="button"
+            disabled={
+              submitting
+              || !selectedCid
+              || motivation.trim().length < 2
+            }
+            onClick={submit}
+            className="larare-tb-btn solid"
+            style={{
+              cursor: submitting ? "wait" : "pointer",
+              background: "var(--warm, #fbbf24)",
+              color: "#422006",
+              borderColor: "var(--warm, #fbbf24)",
+              opacity: motivation.trim().length < 2 ? 0.5 : 1,
+            }}
+          >
+            {submitting ? "Sparar…" : `Sätt → ${level}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromoteLevelModal({
+  studentId,
+  studentName,
+  currentLevel,
+  targetLevel,
+  onClose,
+  onPromoted,
+}: {
+  studentId: number;
+  studentName: string;
+  currentLevel: number;
+  targetLevel: number;
+  onClose: () => void;
+  onPromoted: (newLevel: number) => void;
+}) {
+  const [motivation, setMotivation] = useState("");
+  const [spendProfile, setSpendProfile] = useState<
+    "auto" | "sparsam" | "balanserad" | "slosa"
+  >("auto");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: {
+        target_level: number;
+        new_spend_profile?: "sparsam" | "balanserad" | "slosa";
+        motivation?: string;
+      } = { target_level: targetLevel };
+      if (spendProfile !== "auto") body.new_spend_profile = spendProfile;
+      if (motivation.trim().length > 0) body.motivation = motivation.trim();
+      await v2Api.teacherPromoteStudentLevel(studentId, body);
+      onPromoted(targetLevel);
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const levelLabel = ["", "Sparsam", "Balanserad", "Slösa"][targetLevel] || "?";
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed", inset: 0, zIndex: 200,
+        background: "rgba(0,0,0,0.55)",
+        display: "grid", placeItems: "center",
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 540,
+          background: "rgba(15,21,37,0.98)",
+          border: "1px solid var(--line-strong, rgba(255,255,255,0.18))",
+          borderTop: "3px solid #6ee7b7",
+          borderRadius: 8,
+          padding: "24px 28px",
+          maxHeight: "calc(100vh - 80px)",
+          overflowY: "auto",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10, fontWeight: 700, letterSpacing: 1.4,
+            textTransform: "uppercase", color: "#6ee7b7",
+            marginBottom: 6,
+          }}
+        >
+          ● Aktivera nivå
+        </div>
+        <h2
+          style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 24, fontWeight: 700, color: "#fff",
+            margin: "0 0 6px", letterSpacing: -0.6,
+          }}
+        >
+          Bumpa{" "}
+          <em style={{ color: "var(--warm)", fontStyle: "italic", fontWeight: 500 }}>
+            {studentName}
+          </em>{" "}
+          → Nivå {targetLevel}
+        </h2>
+        <p
+          style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 13, color: "rgba(255,255,255,0.55)",
+            marginTop: 0, marginBottom: 16, lineHeight: 1.5,
+          }}
+        >
+          Eleven hoppar från Nivå {currentLevel} →{" "}
+          <strong style={{ color: "#6ee7b7" }}>
+            Nivå {targetLevel} · {levelLabel}
+          </strong>
+          . Karaktären behålls men ekonomin blir svårare:
+          fler oväntade brev, svårare att budgetera, mer komplexa
+          val. Spendprofilen byts (kan överridas nedan).
+        </p>
+
+        <FormRow label="Ny spendprofil">
+          <select
+            value={spendProfile}
+            onChange={(e) =>
+              setSpendProfile(e.target.value as typeof spendProfile)
+            }
+            style={modalInputStyle()}
+          >
+            <option value="auto">
+              Auto från nivån (
+              {targetLevel === 2 ? "balanserad" : "slösa"})
+            </option>
+            <option value="sparsam">Sparsam</option>
+            <option value="balanserad">Balanserad</option>
+            <option value="slosa">Slösa</option>
+          </select>
+        </FormRow>
+        <FormRow label="Motivering (visas i historik)">
+          <textarea
+            value={motivation}
+            onChange={(e) => setMotivation(e.target.value)}
+            placeholder="t.ex. 12 v på Nivå 1, 3 G-kompetenser, 2 av 3 moduler klara"
+            rows={3}
+            style={{
+              ...modalInputStyle(),
+              fontFamily: "Source Serif 4, Georgia, serif",
+              resize: "vertical",
+            }}
+          />
+        </FormRow>
+
+        {error && (
+          <div
+            style={{
+              color: "#fca5a5", fontSize: 11, marginTop: 8,
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex", gap: 10, marginTop: 18,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="larare-tb-btn"
+          >
+            Avbryt
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={submit}
+            className="larare-tb-btn solid"
+            style={{
+              cursor: submitting ? "wait" : "pointer",
+              background: "#6ee7b7",
+              color: "#064e3b",
+              borderColor: "#6ee7b7",
+            }}
+          >
+            {submitting
+              ? "Aktiverar…"
+              : `Aktivera Nivå ${targetLevel} →`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

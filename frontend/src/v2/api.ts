@@ -2689,6 +2689,47 @@ export const v2Api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  // === Fas 2AG · nivå-promotion + kompetens-override ===
+  teacherPromoteStudentLevel: (
+    studentId: number,
+    body: {
+      target_level: number;
+      new_spend_profile?: "sparsam" | "balanserad" | "slosa";
+      motivation?: string;
+    },
+  ) =>
+    api<{
+      student_id: number;
+      student_name: string;
+      previous_level: number;
+      new_level: number;
+      new_spend_profile: string | null;
+    }>(`/v2/teacher/students/${studentId}/level-promote`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  teacherOverrideCompetency: (
+    studentId: number,
+    competencyId: number,
+    body: { level: "B" | "G" | "F"; motivation: string },
+  ) =>
+    api<{
+      competency_id: number;
+      competency_key: string;
+      competency_name: string;
+      level: "B" | "G" | "F";
+      motivation: string;
+      updated_at: string;
+      teacher_id: number;
+    }>(
+      `/v2/teacher/students/${studentId}/kompetens/${competencyId}/override`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  teacherDeleteCompetencyOverride: (studentId: number, competencyId: number) =>
+    api<{ deleted: boolean }>(
+      `/v2/teacher/students/${studentId}/kompetens/${competencyId}/override`,
+      { method: "DELETE" },
+    ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

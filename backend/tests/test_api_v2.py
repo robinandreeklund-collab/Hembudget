@@ -7876,3 +7876,161 @@ def test_v2_teacher_create_assignment_with_due_date(fx) -> None:
     )
     assert r.status_code == 200, r.text
     assert "2026-05-14" in r.json()["due_date"]
+
+
+# === Nivå-promotion + kompetens-override (Fas 2AG) ===
+
+
+def test_v2_teacher_promote_level_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/level-promote",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"target_level": 2},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_promote_level_basic(fx) -> None:
+    from hembudget.school.models import Student as _S
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/level-promote",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"target_level": 2, "motivation": "Klar för balanserad."},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["previous_level"] == 1
+    assert data["new_level"] == 2
+    assert data["new_spend_profile"] == "balanserad"
+
+    with master_session() as db:
+        st = db.get(_S, sid)
+        assert st.v2_level == 2
+        assert st.v2_spend_profile == "balanserad"
+
+
+def test_v2_teacher_promote_level_already_400(fx) -> None:
+    """Försök bumpa till nivå som redan är aktiv → 400."""
+    from hembudget.school.models import Student as _S
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        st = db.get(_S, sid)
+        st.v2_level = 2
+        db.commit()
+    r = client.post(
+        f"/v2/teacher/students/{sid}/level-promote",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"target_level": 2},
+    )
+    assert r.status_code == 400
+
+
+def test_v2_teacher_competency_override_basic(fx) -> None:
+    from hembudget.school.models import Competency as _Comp
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(
+            key="bokforing", name="Bokföring",
+            level="grund", is_system=True,
+        )
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}/override",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "level": "F",
+            "motivation": "Klassrum-diskussion visade fördjupning.",
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["level"] == "F"
+    assert "diskussion" in data["motivation"]
+
+    # Portfolio respekterar override (mastery=0 men nivå=F)
+    r2 = client.get(
+        "/v2/portfolio",
+        headers={"Authorization": f"Bearer {fx[3]}"},
+    )
+    bokforing = next(
+        c for c in r2.json()["competencies"] if c["key"] == "bokforing"
+    )
+    assert bokforing["level"] == "F"
+    assert bokforing["level_label"] == "FÖRDJUPNING"
+
+
+def test_v2_teacher_competency_override_update(fx) -> None:
+    """Andra POST på samma kompetens ska uppdatera, inte duplicera."""
+    from hembudget.school.models import (
+        Competency as _Comp,
+        StudentCompetencyOverride as _SCO,
+    )
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(key="x", name="X", level="grund", is_system=True)
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+
+    client.post(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}/override",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"level": "G", "motivation": "Första försök."},
+    )
+    r = client.post(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}/override",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"level": "F", "motivation": "Höjd igen."},
+    )
+    assert r.status_code == 200
+    with master_session() as db:
+        rows = db.query(_SCO).filter(_SCO.student_id == sid).all()
+        assert len(rows) == 1
+        assert rows[0].level == "F"
+
+
+def test_v2_teacher_competency_override_delete(fx) -> None:
+    from hembudget.school.models import (
+        Competency as _Comp,
+        StudentCompetencyOverride as _SCO,
+    )
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(key="x", name="X", level="grund", is_system=True)
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+    client.post(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}/override",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"level": "F", "motivation": "höj"},
+    )
+    r = client.delete(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}/override",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200
+    assert r.json()["deleted"] is True
+    with master_session() as db:
+        assert db.query(_SCO).count() == 0
+
+
+def test_v2_teacher_competency_override_cross_teacher_403(fx) -> None:
+    from hembudget.school.models import Competency as _Comp
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(key="x", name="X", level="grund", is_system=True)
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+    r = client.post(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}/override",
+        headers={"Authorization": f"Bearer {sa}"},
+        json={"level": "F", "motivation": "test"},
+    )
+    assert r.status_code == 403
