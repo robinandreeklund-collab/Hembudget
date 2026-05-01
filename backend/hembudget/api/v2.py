@@ -12075,6 +12075,217 @@ def bulk_inject_mail(
     )
 
 
+# === TeacherMariaListV2 (p-maria · Fas 2V) ===
+#
+# Speglar prototypens larare.html#p-maria: alla pågående och nyligen
+# avslutade lönesamtal i klassen, med konversations-snutt för senaste
+# rond + bud-historik + smärtgräns-flagga.
+
+
+class V2MariaRoundCompact(BaseModel):
+    round_no: int
+    student_message: str
+    employer_response: str
+    proposed_pct: Optional[float]
+    proposed_salary: Optional[float]
+    created_at: datetime
+
+
+class V2MariaListItem(BaseModel):
+    negotiation_id: int
+    student_id: int
+    student_name: str
+    profession: str
+    employer: str
+    starting_salary: float
+    status: str  # "active" | "completed" | "abandoned"
+    started_at: datetime
+    completed_at: Optional[datetime]
+    final_salary: Optional[float]
+    final_pct: Optional[float]
+    current_round_no: int
+    max_rounds: int
+    rounds: list[V2MariaRoundCompact]  # senaste 2 ronder för list-vy
+    near_pain_threshold: bool  # heuristik: senaste proposed_pct >= 6.0
+    avtal_norm_pct: Optional[float]
+
+
+class V2MariaListSummary(BaseModel):
+    total_count: int
+    active_count: int
+    completed_count: int
+    abandoned_count: int
+    avg_round_no: float  # bland aktiva
+    near_pain_count: int
+
+
+class V2MariaListResponse(BaseModel):
+    summary: V2MariaListSummary
+    active: list[V2MariaListItem]
+    completed: list[V2MariaListItem]
+
+
+def _build_maria_list_item(
+    neg: _SalaryNegotiation,
+    student_name: str,
+    max_rounds: int,
+    rounds: list[_NegotiationRound],
+) -> V2MariaListItem:
+    rounds_sorted = sorted(rounds, key=lambda r: r.round_no)
+    compact: list[V2MariaRoundCompact] = []
+    for r in rounds_sorted[-2:]:  # senaste 2 ronder
+        proposed_salary: Optional[float] = None
+        if r.proposed_pct is not None and neg.starting_salary is not None:
+            proposed_salary = float(neg.starting_salary) * (
+                1.0 + (r.proposed_pct / 100.0)
+            )
+        compact.append(V2MariaRoundCompact(
+            round_no=r.round_no,
+            student_message=r.student_message,
+            employer_response=r.employer_response,
+            proposed_pct=r.proposed_pct,
+            proposed_salary=proposed_salary,
+            created_at=r.created_at,
+        ))
+    current_round_no = rounds_sorted[-1].round_no if rounds_sorted else 0
+    near_pain = (
+        rounds_sorted[-1].proposed_pct is not None
+        and rounds_sorted[-1].proposed_pct >= 6.0
+    ) if rounds_sorted else False
+    return V2MariaListItem(
+        negotiation_id=neg.id,
+        student_id=neg.student_id,
+        student_name=student_name,
+        profession=neg.profession,
+        employer=neg.employer,
+        starting_salary=float(neg.starting_salary)
+        if neg.starting_salary is not None else 0.0,
+        status=neg.status,
+        started_at=neg.started_at,
+        completed_at=neg.completed_at,
+        final_salary=float(neg.final_salary)
+        if neg.final_salary is not None else None,
+        final_pct=neg.final_pct,
+        current_round_no=current_round_no,
+        max_rounds=max_rounds,
+        rounds=compact,
+        near_pain_threshold=near_pain,
+        avtal_norm_pct=neg.avtal_norm_pct,
+    )
+
+
+@router.get(
+    "/teacher/maria-list", response_model=V2MariaListResponse,
+)
+def teacher_maria_list(
+    info: TokenInfo = Depends(require_token),
+) -> V2MariaListResponse:
+    """Lärar-vy · alla lönesamtal (aktiva + senaste klara) för klassen."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        students = (
+            mdb.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .all()
+        )
+        name_by_id = {s.id: s.display_name for s in students}
+        student_ids = list(name_by_id.keys())
+
+    active: list[V2MariaListItem] = []
+    completed: list[V2MariaListItem] = []
+    abandoned_count = 0
+    near_pain = 0
+
+    if not student_ids:
+        return V2MariaListResponse(
+            summary=V2MariaListSummary(
+                total_count=0, active_count=0,
+                completed_count=0, abandoned_count=0,
+                avg_round_no=0.0, near_pain_count=0,
+            ),
+            active=[], completed=[],
+        )
+
+    with master_session() as ms:
+        cfg = ms.query(_NegotiationConfig).first()
+        max_rounds = cfg.max_rounds if cfg else 5
+        # Aktiva
+        active_negs = (
+            ms.query(_SalaryNegotiation)
+            .filter(
+                _SalaryNegotiation.student_id.in_(student_ids),
+                _SalaryNegotiation.status == "active",
+            )
+            .order_by(_SalaryNegotiation.started_at.desc())
+            .all()
+        )
+        # Klara · senaste 30 dgr
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        completed_negs = (
+            ms.query(_SalaryNegotiation)
+            .filter(
+                _SalaryNegotiation.student_id.in_(student_ids),
+                _SalaryNegotiation.status.in_(("completed", "abandoned")),
+                _SalaryNegotiation.completed_at.is_not(None),
+                _SalaryNegotiation.completed_at >= cutoff,
+            )
+            .order_by(_SalaryNegotiation.completed_at.desc())
+            .all()
+        )
+
+        for neg in active_negs:
+            rounds = (
+                ms.query(_NegotiationRound)
+                .filter(_NegotiationRound.negotiation_id == neg.id)
+                .all()
+            )
+            item = _build_maria_list_item(
+                neg,
+                name_by_id.get(neg.student_id, "Okänd elev"),
+                max_rounds,
+                rounds,
+            )
+            active.append(item)
+            if item.near_pain_threshold:
+                near_pain += 1
+
+        for neg in completed_negs:
+            rounds = (
+                ms.query(_NegotiationRound)
+                .filter(_NegotiationRound.negotiation_id == neg.id)
+                .all()
+            )
+            item = _build_maria_list_item(
+                neg,
+                name_by_id.get(neg.student_id, "Okänd elev"),
+                max_rounds,
+                rounds,
+            )
+            completed.append(item)
+            if neg.status == "abandoned":
+                abandoned_count += 1
+
+    avg_round = (
+        sum(it.current_round_no for it in active) / len(active)
+        if active else 0.0
+    )
+    summary = V2MariaListSummary(
+        total_count=len(active) + len(completed),
+        active_count=len(active),
+        completed_count=sum(1 for it in completed if it.status == "completed"),
+        abandoned_count=abandoned_count,
+        avg_round_no=round(avg_round, 1),
+        near_pain_count=near_pain,
+    )
+    return V2MariaListResponse(
+        summary=summary, active=active, completed=completed,
+    )
+
+
 class V2ReflectionFeedbackIn(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 

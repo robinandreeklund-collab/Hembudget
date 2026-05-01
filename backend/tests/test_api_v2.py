@@ -7026,3 +7026,149 @@ def test_v2_teacher_mailboxes_bulk_inject_blocks_other_teachers(
     # Super-admin har inga elever → 0 affected (inte 403, men inget skapas)
     assert r.status_code == 200
     assert r.json()["mails_created"] == 0
+
+
+# === TeacherMariaListV2 (p-maria) — Fas 2V ===
+
+
+def test_v2_teacher_maria_list_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/maria-list",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_maria_list_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/maria-list",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["total_count"] == 0
+    assert data["active"] == []
+    assert data["completed"] == []
+
+
+def test_v2_teacher_maria_list_active_with_rounds(fx) -> None:
+    """Aktiv förhandling med 3 ronder → senaste 2 visas i compact."""
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+        NegotiationRound as _NR,
+    )
+    from decimal import Decimal as _D
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        n = _SN(
+            student_id=sid,
+            profession="Underskoterska",
+            employer="Vården",
+            starting_salary=_D("25000.00"),
+            status="active",
+        )
+        db.add(n); db.flush()
+        nid = n.id
+        for i, pct in enumerate((4.0, 5.0, 6.5), start=1):
+            db.add(_NR(
+                negotiation_id=nid, round_no=i,
+                student_message=f"Yrkar mer (rond {i})",
+                employer_response=f"Vi kan {25000 * (1 + pct/100):.0f}",
+                proposed_pct=pct,
+            ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/maria-list",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert data["summary"]["active_count"] == 1
+    assert len(data["active"]) == 1
+    item = data["active"][0]
+    assert item["current_round_no"] == 3
+    assert len(item["rounds"]) == 2  # senaste 2
+    assert item["rounds"][0]["round_no"] == 2
+    assert item["rounds"][1]["round_no"] == 3
+    # 6.5 % >= 6 → near_pain
+    assert item["near_pain_threshold"] is True
+    assert data["summary"]["near_pain_count"] == 1
+
+
+def test_v2_teacher_maria_list_completed_in_window(fx) -> None:
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+    )
+    from decimal import Decimal as _D
+    from datetime import datetime as _dt, timedelta as _td
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        # Klar inom 30 dgr
+        n1 = _SN(
+            student_id=sid,
+            profession="X", employer="Y",
+            starting_salary=_D("25000.00"),
+            status="completed",
+            completed_at=_dt.utcnow() - _td(days=3),
+            final_salary=_D("26500.00"),
+            final_pct=6.0,
+        )
+        # För gammal — ska INTE komma med
+        n2 = _SN(
+            student_id=sid,
+            profession="A", employer="B",
+            starting_salary=_D("25000.00"),
+            status="completed",
+            completed_at=_dt.utcnow() - _td(days=60),
+        )
+        db.add(n1); db.add(n2); db.commit()
+
+    r = client.get(
+        "/v2/teacher/maria-list",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert data["summary"]["completed_count"] == 1
+    assert len(data["completed"]) == 1
+    assert data["completed"][0]["final_salary"] == 26500.0
+
+
+def test_v2_teacher_maria_list_only_own_students(fx) -> None:
+    """Annan lärares elev syns inte."""
+    from hembudget.school.models import Student as _S, Teacher as _T
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+    )
+    from hembudget.security.crypto import hash_password
+    from decimal import Decimal as _D
+
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    with master_session() as db:
+        t2 = _T(
+            email="other@x.se", name="Other",
+            password_hash=hash_password("Abcdef12!"),
+        )
+        db.add(t2); db.flush()
+        s_other = _S(
+            teacher_id=t2.id, display_name="Annan elev",
+            login_code="OTH00099",
+        )
+        db.add(s_other); db.flush()
+        db.add(_SN(
+            student_id=s_other.id,
+            profession="Z", employer="Q",
+            starting_salary=_D("25000.00"),
+            status="active",
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/maria-list",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert data["summary"]["active_count"] == 0
