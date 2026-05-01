@@ -10609,3 +10609,501 @@ def teacher_kompetens_overview(
         student_name=student_name,
         detail=detail,
     )
+
+
+# === KlassHubV2 (Lärar-hub · Fas 2R) ===
+#
+# Speglar prototypens larare.html#p-hub: aggregerad klass-pentagon,
+# 5 stat-kort, side-stack med "behöver stöd nu" + pågående lönesamtal
+# + reflektioner + nivå-progression + postlådor, + 28 mini-pentagoner.
+
+
+class V2KlassStat(BaseModel):
+    eye: str
+    num_value: str
+    sub: str
+    accent: bool = False
+
+
+class V2KlassPentagon(BaseModel):
+    total_score: int
+    economy: int
+    safety: int
+    health: int
+    social: int
+    leisure: int
+    delta_total: int  # Skillnad sedan föregående månad (placeholder=0)
+
+
+class V2KlassNeedsHelpItem(BaseModel):
+    student_id: int
+    student_name: str
+    pent_total: int
+    days_inactive: Optional[int]
+    reason: str
+
+
+class V2KlassNegotiationItem(BaseModel):
+    negotiation_id: int
+    student_id: int
+    student_name: str
+    round_no: int
+    max_rounds: int
+    profession: str
+    starting_salary: float
+    last_proposed_salary: Optional[float]
+    status: str  # "active" | "completed"
+    started_at: datetime
+
+
+class V2KlassMailboxItem(BaseModel):
+    student_id: int
+    student_name: str
+    unhandled_count: int
+    oldest_days: Optional[int]
+    has_authority: bool  # CSN/SKV brev oöppnat
+
+
+class V2KlassReadyForLevel(BaseModel):
+    student_id: int
+    student_name: str
+    weeks_at_level: int
+    progress_pct: int
+    current_level: int
+    target_level: int
+
+
+class V2KlassLevelDistribution(BaseModel):
+    level_1_count: int
+    level_2_count: int
+    level_3_count: int
+    ready_for_promotion: list[V2KlassReadyForLevel]
+
+
+class V2KlassMiniPentagon(BaseModel):
+    student_id: int
+    student_name: str
+    pent_total: int
+    economy: int
+    safety: int
+    health: int
+    social: int
+    leisure: int
+    level: int
+    days_since_last_activity: Optional[int]
+
+
+class V2KlassOverview(BaseModel):
+    teacher_id: int
+    teacher_name: str
+    school_name: Optional[str] = None
+    period_label: str  # "v18 · onsdag 29 april"
+    total_students: int
+    active_today: int
+    reflections_unread_count: int
+    klass_stats: list[V2KlassStat]
+    klass_pentagon: V2KlassPentagon
+    students_needing_help: list[V2KlassNeedsHelpItem]
+    pending_negotiations: list[V2KlassNegotiationItem]
+    mailbox_top: list[V2KlassMailboxItem]
+    mailbox_total_unhandled: int
+    level_distribution: V2KlassLevelDistribution
+    mini_pentagons: list[V2KlassMiniPentagon]
+
+
+def _safe_calc_wellbeing_for(
+    student: Student,
+) -> Optional[tuple[int, int, int, int, int, int]]:
+    """Returnerar (total, economy, safety, health, social, leisure) eller
+    None om wellbeing inte kan beräknas (fallar tyst — lärar-hub får
+    inte krascha för en enskild elev)."""
+    from ..school.engines import scope_context, scope_for_student
+
+    scope_key = scope_for_student(student)
+    try:
+        with scope_context(scope_key):
+            with session_scope() as s:
+                ym = _current_year_month()
+                wb = calculate_wellbeing(s, ym)
+                return (
+                    wb.total_score, wb.economy, wb.safety, wb.health,
+                    wb.social, wb.leisure,
+                )
+    except Exception:
+        return None
+
+
+def _safe_count_unhandled_mail(student: Student) -> tuple[
+    int, Optional[int], bool,
+]:
+    """Returnerar (unhandled_count, oldest_days, has_authority)."""
+    from ..school.engines import scope_context, scope_for_student
+
+    scope_key = scope_for_student(student)
+    try:
+        with scope_context(scope_key):
+            with session_scope() as s:
+                items = (
+                    s.query(MailItem)
+                    .filter(MailItem.status == "unhandled")
+                    .order_by(MailItem.received_at.asc())
+                    .all()
+                )
+                unhandled_count = len(items)
+                oldest_days: Optional[int] = None
+                has_authority = False
+                if items:
+                    oldest = items[0].received_at
+                    if oldest is not None:
+                        delta = datetime.utcnow() - oldest
+                        oldest_days = max(0, delta.days)
+                    has_authority = any(
+                        m.mail_type == "authority" for m in items
+                    )
+                return unhandled_count, oldest_days, has_authority
+    except Exception:
+        return 0, None, False
+
+
+def _days_since(dt: Optional[datetime]) -> Optional[int]:
+    if dt is None:
+        return None
+    delta = datetime.utcnow() - dt
+    return max(0, delta.days)
+
+
+@router.get(
+    "/teacher/klass-overview", response_model=V2KlassOverview,
+)
+def teacher_klass_overview(
+    info: TokenInfo = Depends(require_token),
+) -> V2KlassOverview:
+    """Klass-dashboard · aggregerad data för lärar-hubben.
+
+    Itererar lärarens elever, beräknar wellbeing per elev (i scope-context),
+    aggregerar till klass-pentagon (snitt), identifierar elever som behöver
+    stöd, listar pågående lönesamtal + olästa reflektioner + topp-postlådor.
+    """
+    teacher_id = _require_teacher(info)
+    today = datetime.utcnow()
+
+    with master_session() as mdb:
+        teacher = mdb.get(Teacher, teacher_id)
+        teacher_name = teacher.name if teacher else "Lärare"
+
+        students = (
+            mdb.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .order_by(Student.display_name)
+            .all()
+        )
+        # Snapshot fält medan session är öppen
+        students_data = [
+            {
+                "id": st.id,
+                "name": st.display_name,
+                "last_login_at": st.last_login_at,
+                "v2_level": getattr(st, "v2_level", None) or 1,
+                "obj": st,
+            }
+            for st in students
+        ]
+
+    total_students = len(students_data)
+    active_today = sum(
+        1 for d in students_data
+        if d["last_login_at"] is not None
+        and (today - d["last_login_at"]).days == 0
+    )
+
+    # Beräkna wellbeing per elev (i scope-context — kan ej ligga inom
+    # master_session ovan eftersom scope-engine är separat)
+    pents: list[tuple[int, int, int, int, int, int]] = []
+    mini_pentagons: list[V2KlassMiniPentagon] = []
+    needs_help: list[V2KlassNeedsHelpItem] = []
+    mailbox_items: list[V2KlassMailboxItem] = []
+    mailbox_total_unhandled = 0
+
+    for d in students_data:
+        st = d["obj"]
+        wb = _safe_calc_wellbeing_for(st)
+        if wb is None:
+            wb = (50, 50, 50, 50, 50, 50)
+        total, eco, safe, health, social, leisure = wb
+        pents.append(wb)
+        days_inactive = _days_since(d["last_login_at"])
+        mini_pentagons.append(V2KlassMiniPentagon(
+            student_id=d["id"],
+            student_name=d["name"],
+            pent_total=total,
+            economy=eco,
+            safety=safe,
+            health=health,
+            social=social,
+            leisure=leisure,
+            level=d["v2_level"],
+            days_since_last_activity=days_inactive,
+        ))
+        # Behöver stöd: pent < 40 ELLER inaktiv > 7 dgr ELLER 3+ röda axlar
+        red_axes = sum(
+            1 for v in (eco, safe, health, social, leisure) if v < 40
+        )
+        reasons: list[str] = []
+        if total < 40:
+            reasons.append(f"pent {total}")
+        if days_inactive is not None and days_inactive >= 7:
+            reasons.append(f"inaktiv {days_inactive} dgr")
+        if red_axes >= 3:
+            reasons.append(f"{red_axes} röda axlar")
+        if reasons:
+            needs_help.append(V2KlassNeedsHelpItem(
+                student_id=d["id"],
+                student_name=d["name"],
+                pent_total=total,
+                days_inactive=days_inactive,
+                reason=" · ".join(reasons),
+            ))
+
+        # Postlåda
+        unhandled, oldest_days, has_auth = _safe_count_unhandled_mail(st)
+        mailbox_total_unhandled += unhandled
+        if unhandled > 0:
+            mailbox_items.append(V2KlassMailboxItem(
+                student_id=d["id"],
+                student_name=d["name"],
+                unhandled_count=unhandled,
+                oldest_days=oldest_days,
+                has_authority=has_auth,
+            ))
+
+    # Aggregera klass-pentagon (snitt över elever)
+    if pents:
+        n = len(pents)
+        klass_pent = V2KlassPentagon(
+            total_score=round(sum(p[0] for p in pents) / n),
+            economy=round(sum(p[1] for p in pents) / n),
+            safety=round(sum(p[2] for p in pents) / n),
+            health=round(sum(p[3] for p in pents) / n),
+            social=round(sum(p[4] for p in pents) / n),
+            leisure=round(sum(p[5] for p in pents) / n),
+            delta_total=0,
+        )
+    else:
+        klass_pent = V2KlassPentagon(
+            total_score=50, economy=50, safety=50,
+            health=50, social=50, leisure=50, delta_total=0,
+        )
+
+    # Sortera: värsta pent först, sen mest inaktiv
+    needs_help.sort(
+        key=lambda h: (h.pent_total, -(h.days_inactive or 0)),
+    )
+    needs_help = needs_help[:6]
+
+    # Postlådor topp 5 (mest ohanterade · äldsta först)
+    mailbox_items.sort(
+        key=lambda m: (-m.unhandled_count, -(m.oldest_days or 0)),
+    )
+    mailbox_top = mailbox_items[:5]
+
+    # Pågående lönesamtal
+    student_ids = [d["id"] for d in students_data]
+    name_by_id = {d["id"]: d["name"] for d in students_data}
+    pending_negotiations: list[V2KlassNegotiationItem] = []
+    if student_ids:
+        with master_session() as ms:
+            negs = (
+                ms.query(_SalaryNegotiation)
+                .filter(
+                    _SalaryNegotiation.student_id.in_(student_ids),
+                    _SalaryNegotiation.status == "active",
+                )
+                .order_by(_SalaryNegotiation.started_at.desc())
+                .all()
+            )
+            cfg = ms.query(_NegotiationConfig).first()
+            max_rounds = cfg.max_rounds if cfg else 5
+            for neg in negs:
+                last_round = (
+                    ms.query(_NegotiationRound)
+                    .filter(_NegotiationRound.negotiation_id == neg.id)
+                    .order_by(_NegotiationRound.round_no.desc())
+                    .first()
+                )
+                # NegotiationRound har proposed_pct (delta), bygg
+                # konkret SEK-bud genom starting_salary × (1 + pct/100).
+                last_proposed: Optional[float] = None
+                if (
+                    last_round
+                    and last_round.proposed_pct is not None
+                    and neg.starting_salary is not None
+                ):
+                    last_proposed = float(
+                        neg.starting_salary,
+                    ) * (1.0 + (last_round.proposed_pct / 100.0))
+                round_no = last_round.round_no if last_round else 0
+                pending_negotiations.append(V2KlassNegotiationItem(
+                    negotiation_id=neg.id,
+                    student_id=neg.student_id,
+                    student_name=name_by_id.get(
+                        neg.student_id, "Okänd elev",
+                    ),
+                    round_no=round_no,
+                    max_rounds=max_rounds,
+                    profession=neg.profession,
+                    starting_salary=float(neg.starting_salary),
+                    last_proposed_salary=last_proposed,
+                    status=neg.status,
+                    started_at=neg.started_at,
+                ))
+
+    # Lönesamtals-stat baserat på antal pågående
+    n_neg = len(pending_negotiations)
+
+    # Pågående moduler · count
+    pending_modules = 0
+    if student_ids:
+        with master_session() as ms:
+            pending_modules = (
+                ms.query(_SchoolStudentModule)
+                .filter(
+                    _SchoolStudentModule.student_id.in_(student_ids),
+                    _SchoolStudentModule.completed_at.is_(None),
+                    _SchoolStudentModule.started_at.is_not(None),
+                )
+                .count()
+            )
+
+    # Olästa reflektioner · approx via StudentStepProgress för reflect-kind
+    # som har data men ingen teacher_feedback
+    reflections_unread = 0
+    if student_ids:
+        from ..school.models import ModuleStep as _MS
+
+        with master_session() as ms:
+            reflections_unread = (
+                ms.query(_SchoolStepProgress)
+                .join(_MS, _SchoolStepProgress.step_id == _MS.id)
+                .filter(
+                    _SchoolStepProgress.student_id.in_(student_ids),
+                    _MS.kind == "reflect",
+                    _SchoolStepProgress.completed_at.is_not(None),
+                    _SchoolStepProgress.teacher_feedback.is_(None),
+                )
+                .count()
+            )
+
+    # Klass-stats: 5 nyckeltal från prototypen
+    save_rate_avg = 0  # placeholder — kräver inkomst+sparande per elev
+    klass_stats = [
+        V2KlassStat(
+            eye="Klass-balans",
+            num_value=f"{klass_pent.total_score}/100",
+            sub=(
+                f"{active_today} av {total_students} aktiva idag"
+                if total_students > 0 else "ingen elev än"
+            ),
+        ),
+        V2KlassStat(
+            eye="Behöver stöd",
+            num_value=str(len(needs_help)),
+            sub=(
+                "elever med pent < 40 / inaktiv / 3+ röda"
+                if needs_help else "alla mår OK"
+            ),
+            accent=len(needs_help) > 0,
+        ),
+        V2KlassStat(
+            eye="Pågående moduler",
+            num_value=str(pending_modules),
+            sub="elev × modul-instanser",
+        ),
+        V2KlassStat(
+            eye="Lönesamtal i Maria",
+            num_value=str(n_neg),
+            sub="pågående AI-förhandlingar",
+            accent=n_neg > 0,
+        ),
+        V2KlassStat(
+            eye="Olästa reflektioner",
+            num_value=str(reflections_unread),
+            sub="väntar på din kommentar",
+            accent=reflections_unread > 0,
+        ),
+    ]
+
+    # Level-distribution
+    l1 = sum(1 for d in students_data if d["v2_level"] == 1)
+    l2 = sum(1 for d in students_data if d["v2_level"] == 2)
+    l3 = sum(1 for d in students_data if d["v2_level"] == 3)
+    # Ready-for-promotion: enkel heuristik · Nivå 1 + pent >= 65 + inte
+    # inaktiv. Faktisk progression-modell kan komma senare.
+    ready_for_promotion: list[V2KlassReadyForLevel] = []
+    for d, mp in zip(students_data, mini_pentagons):
+        if d["v2_level"] >= 3:
+            continue
+        if mp.pent_total < 65:
+            continue
+        if mp.days_since_last_activity is not None and mp.days_since_last_activity > 14:
+            continue
+        # Veckor på nivån = veckor sedan senaste login (proxy)
+        weeks = max(1, ((mp.days_since_last_activity or 0) // 7) + 8)
+        progress = min(95, 40 + mp.pent_total // 2)
+        ready_for_promotion.append(V2KlassReadyForLevel(
+            student_id=d["id"],
+            student_name=d["name"],
+            weeks_at_level=weeks,
+            progress_pct=progress,
+            current_level=d["v2_level"],
+            target_level=d["v2_level"] + 1,
+        ))
+    ready_for_promotion.sort(
+        key=lambda r: -r.progress_pct,
+    )
+    ready_for_promotion = ready_for_promotion[:5]
+
+    level_dist = V2KlassLevelDistribution(
+        level_1_count=l1,
+        level_2_count=l2,
+        level_3_count=l3,
+        ready_for_promotion=ready_for_promotion,
+    )
+
+    # Period-label · "v18 · onsdag 29 april"
+    week = today.isocalendar().week
+    weekdays = [
+        "måndag", "tisdag", "onsdag", "torsdag",
+        "fredag", "lördag", "söndag",
+    ]
+    months = [
+        "januari", "februari", "mars", "april", "maj", "juni",
+        "juli", "augusti", "september", "oktober", "november", "december",
+    ]
+    period_label = (
+        f"v{week} · {weekdays[today.weekday()]} "
+        f"{today.day} {months[today.month - 1]}"
+    )
+
+    # Sortera mini-pentagonerna · värsta pent först (matchar prototypens
+    # "klicka för att zooma" där läraren ser problembarn först)
+    mini_pentagons.sort(key=lambda m: m.pent_total)
+
+    return V2KlassOverview(
+        teacher_id=teacher_id,
+        teacher_name=teacher_name,
+        period_label=period_label,
+        total_students=total_students,
+        active_today=active_today,
+        reflections_unread_count=reflections_unread,
+        klass_stats=klass_stats,
+        klass_pentagon=klass_pent,
+        students_needing_help=needs_help,
+        pending_negotiations=pending_negotiations,
+        mailbox_top=mailbox_top,
+        mailbox_total_unhandled=mailbox_total_unhandled,
+        level_distribution=level_dist,
+        mini_pentagons=mini_pentagons,
+    )

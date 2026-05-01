@@ -6285,3 +6285,126 @@ def test_v2_teacher_kompetens_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === KlassHubV2 (Lärar-hub · klass-overview) — Fas 2R ===
+
+
+def test_v2_klass_overview_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/klass-overview",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_klass_overview_basic_shape(fx) -> None:
+    """Lärare med 1 elev → minimal payload med rätt struktur."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/teacher/klass-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["total_students"] == 1
+    assert data["teacher_name"] == "T"
+    assert "klass_pentagon" in data
+    assert "klass_stats" in data
+    assert len(data["klass_stats"]) == 5
+    assert "mini_pentagons" in data
+    assert len(data["mini_pentagons"]) == 1
+    assert data["mini_pentagons"][0]["student_id"] == sid
+    # Defaultvärden 50 när scope-DB är tom
+    p = data["klass_pentagon"]
+    for axis in ("total_score", "economy", "safety", "health", "social", "leisure"):
+        assert isinstance(p[axis], int)
+
+
+def test_v2_klass_overview_with_pending_negotiation(fx) -> None:
+    """Aktivt lönesamtal dyker upp i pending_negotiations."""
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+        NegotiationRound as _NR,
+    )
+    from decimal import Decimal as _D
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        n = _SN(
+            student_id=sid,
+            profession="Frisör",
+            employer="Salongen",
+            starting_salary=_D("25000.00"),
+            status="active",
+        )
+        db.add(n); db.flush()
+        nid = n.id
+        db.add(_NR(
+            negotiation_id=nid, round_no=2,
+            student_message="Jag yrkar 28 000.",
+            employer_response="Vi kan tänka oss 26 500.",
+            proposed_pct=6.0,
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/klass-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    negs = data["pending_negotiations"]
+    assert len(negs) == 1
+    assert negs[0]["round_no"] == 2
+    assert negs[0]["status"] == "active"
+    assert negs[0]["student_id"] == sid
+    # 25000 × 1.06 = 26500
+    assert abs(negs[0]["last_proposed_salary"] - 26500.0) < 0.5
+    # Stat-kortet "Lönesamtal i Maria" ska visa 1
+    maria_stat = next(
+        s for s in data["klass_stats"] if s["eye"] == "Lönesamtal i Maria"
+    )
+    assert maria_stat["num_value"] == "1"
+
+
+def test_v2_klass_overview_level_distribution(fx) -> None:
+    """v2_level=2 räknas i level_2_count."""
+    from hembudget.school.models import Student as _S
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        # Lägg till en till elev på nivå 2
+        s2 = _S(
+            teacher_id=tid, display_name="Hanna",
+            login_code="HAN00099",
+        )
+        db.add(s2); db.flush()
+        s2.v2_level = 2
+        # Befintliga eleven Eva → nivå 1 default
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/klass-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    ld = data["level_distribution"]
+    assert ld["level_1_count"] == 1
+    assert ld["level_2_count"] == 1
+    assert ld["level_3_count"] == 0
+
+
+def test_v2_klass_overview_period_label_format(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/klass-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    label = data["period_label"]
+    # "v18 · onsdag 29 april" eller liknande svensk format
+    assert label.startswith("v")
+    assert " · " in label
+    weekdays = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
+    assert any(w in label for w in weekdays)
