@@ -18,7 +18,7 @@ import { ForsakringarV2 } from "./v2/ForsakringarV2";
 import { TeacherUtilityOverviewPage } from "./v2/TeacherUtilityOverviewPage";
 import { ForbrukningV2 } from "./v2/ForbrukningV2";
 import { TeacherRentalOverviewPage } from "./v2/TeacherRentalOverviewPage";
-import { HyresvardenV2 } from "./v2/HyresvardenV2";
+import { BoendemarknadV2 } from "./v2/BoendemarknadV2";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
 import { AktierV2 } from "./v2/AktierV2";
@@ -311,7 +311,11 @@ export default function App() {
           <Route path="/v2/lan" element={<LanV2 />} />
           <Route path="/v2/forsakringar" element={<ForsakringarV2 />} />
           <Route path="/v2/forbrukning" element={<ForbrukningV2 />} />
-          <Route path="/v2/hyresvarden" element={<HyresvardenV2 />} />
+          {/* Boendemarknaden — wrapper med tabbar för hyra + köp/sälj.
+              /v2/hyresvarden är bakåt-kompat-alias så befintliga länkar
+              fortsätter fungera. */}
+          <Route path="/v2/boendemarknad" element={<BoendemarknadV2 />} />
+          <Route path="/v2/hyresvarden" element={<BoendemarknadV2 />} />
           <Route path="/v2/pension" element={<PensionV2 />} />
           <Route path="/v2/avanza" element={<AvanzaV2 />} />
           <Route path="/v2/aktier" element={<AktierV2 />} />

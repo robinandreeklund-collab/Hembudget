@@ -656,6 +656,67 @@ export type V2TeacherUtilityOverview = {
   readings: V2UtilityReadingOut[];
 };
 
+// === /v2/boendemarknad (Sprint 5 · B1-B5) ===
+
+export type V2BoendemarknadListing = {
+  listing_id: string;
+  city_key: string;
+  city_display: string;
+  type: "bostadsratt" | "villa" | "radhus";
+  address: string;
+  size_kvm: number;
+  rooms: number;
+  asking_price: number;
+  monthly_avgift: number;
+  description: string;
+  quality_score: number;
+};
+
+export type V2BoendemarknadListings = {
+  city_key: string;
+  city_display: string;
+  year_month: string;
+  market_price_per_kvm: number;
+  listings: V2BoendemarknadListing[];
+};
+
+export type V2BoendemarknadValuation = {
+  has_owned_home: boolean;
+  purchase_price: number | null;
+  current_value: number | null;
+  unrealized_gain: number | null;
+  loan_balance: number | null;
+  equity: number | null;
+  city_key: string | null;
+  note: string | null;
+};
+
+export type V2BoendemarknadBuyResult = {
+  listing_id: string;
+  accepted: boolean;
+  loan_id: number | null;
+  monthly_cost: number;
+  cash_required: number;
+  pentagon_delta: Record<string, number>;
+  error: string | null;
+};
+
+export type V2BoendemarknadSellResult = {
+  estimated_value: number;
+  estimated_proceeds_after_costs: number;
+  sell_horizon_months: number;
+  capital_gain_estimate: number;
+  pentagon_delta: Record<string, number>;
+};
+
+export type V2BoendemarknadCityPrice = {
+  city_key: string;
+  city_display: string;
+  year_month: string;
+  price_per_kvm: number;
+};
+
+
 // === /v2/hyresvarden (Fas 2F) ===
 
 export type V2RentalContractType =
@@ -2441,6 +2502,36 @@ export const v2Api = {
     api<V2TeacherAvanzaOverview>(
       `/v2/teacher/students/${studentId}/avanza-overview`,
     ),
+  // === /v2/boendemarknad (Sprint 5 · B1-B5) ===
+  boendemarknadListings: (ym: string, n = 6) =>
+    api<V2BoendemarknadListings>(
+      `/v2/boendemarknad/listings?ym=${encodeURIComponent(ym)}&n=${n}`,
+    ),
+  boendemarknadValuation: (ym: string) =>
+    api<V2BoendemarknadValuation>(
+      `/v2/boendemarknad/my-home/valuation?ym=${encodeURIComponent(ym)}`,
+    ),
+  boendemarknadBuy: (
+    listingId: string, body: { year_month: string; listing_id: string },
+  ) =>
+    api<V2BoendemarknadBuyResult>(
+      `/v2/boendemarknad/buy/${encodeURIComponent(listingId)}`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  boendemarknadSell: (body: { year_month: string }) =>
+    api<V2BoendemarknadSellResult>(
+      "/v2/boendemarknad/sell",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  teacherBoendemarknadListings: (city: string, ym: string, n = 6) =>
+    api<V2BoendemarknadListings>(
+      `/v2/teacher/boendemarknad/listings?city=${encodeURIComponent(city)}&ym=${encodeURIComponent(ym)}&n=${n}`,
+    ),
+  teacherBoendemarknadPrices: (ym: string) =>
+    api<V2BoendemarknadCityPrice[]>(
+      `/v2/teacher/boendemarknad/market-prices?ym=${encodeURIComponent(ym)}`,
+    ),
+
   // === /v2/bokforing (Fas 2H — Verktyg 02) ===
   bokforing: (period?: string) =>
     api<V2BookkeepingData>(

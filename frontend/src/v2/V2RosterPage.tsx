@@ -315,7 +315,7 @@ export function V2RosterPage() {
                     marginLeft: 8,
                   }}
                 >
-                  Hyresvärden →
+                  Boendemarknaden →
                 </Link>
                 <Link
                   to={`/teacher/v2/pension/${r.student_id}`}
