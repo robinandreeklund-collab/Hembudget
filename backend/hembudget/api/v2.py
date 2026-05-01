@@ -31,6 +31,7 @@ from ..db.models import (
     UtilitySubscription, UtilityReading,
     RentalContract, RentalNotice,
     PensionAssumption, StockHolding, StockTransaction,
+    Category,
 )
 from ..insurance import seed_default_insurance_policies
 from ..utility import seed_default_utility_subscriptions
@@ -6447,6 +6448,435 @@ def teacher_avanza_overview(
         student_id=student_id,
         student_name=student_name,
         avanza=avanza,
+    )
+
+
+# === Bokföring (/v2/bokforing) — Fas 2H ===
+#
+# Verktyg 02 · Bokföring · "Transaktioner — där pengar talar".
+# Återanvänder Transaction + Category-modeller (existerar sen v1) och
+# CategorizationEngine för bulk-klass via regelmotor + history + LLM.
+
+
+class V2BookkeepingTxRow(BaseModel):
+    id: int
+    date: _date
+    account_id: int
+    account_name: str
+    amount: float
+    raw_description: str
+    normalized_merchant: Optional[str]
+    category_id: Optional[int]
+    category_name: Optional[str]
+    ai_confidence: Optional[float]
+    user_verified: bool
+    is_transfer: bool
+    notes: Optional[str]
+
+
+class V2BookkeepingCategoryRef(BaseModel):
+    id: int
+    name: str
+    parent_id: Optional[int]
+    color: Optional[str]
+
+
+class V2BookkeepingSummary(BaseModel):
+    period_label: str
+    period_start: _date
+    period_end: _date
+    total_transactions: int
+    auto_classified: int  # rule + history + ai_confidence > 0.7
+    manual_classified: int  # user_verified = True
+    unclassified: int  # category_id IS NULL
+    classification_rate_pct: float  # (total - unclassified) / total
+    income_total: float
+    expense_total: float  # absolute value
+    saved_total: float  # income - expense
+    saved_pct: float  # saved / income
+    last_classified_at: Optional[datetime]
+
+
+class V2BookkeepingResponse(BaseModel):
+    student_id: int
+    summary: V2BookkeepingSummary
+    unclassified: list[V2BookkeepingTxRow]
+    classified: list[V2BookkeepingTxRow]
+    categories: list[V2BookkeepingCategoryRef]
+
+
+def _empty_bokforing(student_id: int, today: _date) -> V2BookkeepingResponse:
+    start = today.replace(day=1)
+    return V2BookkeepingResponse(
+        student_id=student_id,
+        summary=V2BookkeepingSummary(
+            period_label=today.strftime("%B %Y"),
+            period_start=start, period_end=today,
+            total_transactions=0,
+            auto_classified=0, manual_classified=0,
+            unclassified=0, classification_rate_pct=0,
+            income_total=0, expense_total=0,
+            saved_total=0, saved_pct=0,
+            last_classified_at=None,
+        ),
+        unclassified=[], classified=[], categories=[],
+    )
+
+
+def _tx_to_row(
+    t: Transaction,
+    accounts_by_id: dict[int, str],
+    cats_by_id: dict[int, str],
+) -> V2BookkeepingTxRow:
+    return V2BookkeepingTxRow(
+        id=t.id,
+        date=t.date,
+        account_id=t.account_id,
+        account_name=accounts_by_id.get(t.account_id, "—"),
+        amount=float(t.amount),
+        raw_description=t.raw_description,
+        normalized_merchant=t.normalized_merchant,
+        category_id=t.category_id,
+        category_name=(
+            cats_by_id.get(t.category_id) if t.category_id else None
+        ),
+        ai_confidence=t.ai_confidence,
+        user_verified=bool(t.user_verified),
+        is_transfer=bool(t.is_transfer),
+        notes=t.notes,
+    )
+
+
+@router.get("/bokforing", response_model=V2BookkeepingResponse)
+def get_bokforing(
+    period: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2BookkeepingResponse:
+    """Aggregat för Bokföring /v2/bokforing (Verktyg 02).
+
+    Period default = innevarande månad. Format "YYYY-MM" eller "all".
+    Returnerar:
+    - summary med klassningsgrad + inkomster/utgifter/sparat
+    - unclassified (top 50, sorted by date desc)
+    - classified (top 100)
+    - alla categories
+    """
+    today = _date.today()
+    if info.role != "student" or info.student_id is None:
+        return _empty_bokforing(0, today)
+
+    # Beräkna period
+    if period == "all":
+        period_start = _date(2000, 1, 1)
+        period_end = today
+        period_label = "Hela perioden"
+    else:
+        if period:
+            try:
+                year, month = map(int, period.split("-"))
+                period_start = _date(year, month, 1)
+            except (ValueError, AttributeError):
+                period_start = today.replace(day=1)
+        else:
+            period_start = today.replace(day=1)
+        # period_end = sista dagen i månaden
+        if period_start.month == 12:
+            next_month = _date(period_start.year + 1, 1, 1)
+        else:
+            next_month = _date(
+                period_start.year, period_start.month + 1, 1,
+            )
+        from datetime import timedelta as _td_b
+        period_end = next_month - _td_b(days=1)
+        period_label = period_start.strftime("%B %Y")
+
+    with session_scope() as s:
+        # Hämta alla konton + kategorier för lookup
+        accounts = s.query(Account).all()
+        accounts_by_id = {a.id: a.name for a in accounts}
+        categories = s.query(Category).order_by(Category.name).all()
+        cats_by_id = {c.id: c.name for c in categories}
+
+        # Alla transaktioner i perioden
+        txs_query = (
+            s.query(Transaction)
+            .filter(Transaction.date >= period_start)
+            .filter(Transaction.date <= period_end)
+        )
+        all_txs = txs_query.all()
+        total = len(all_txs)
+        unclassified_txs = [
+            t for t in all_txs if t.category_id is None
+        ]
+        classified_txs = [
+            t for t in all_txs if t.category_id is not None
+        ]
+        manual_count = sum(1 for t in classified_txs if t.user_verified)
+        auto_count = len(classified_txs) - manual_count
+
+        # Inkomster/utgifter exkl. transfers
+        income_total = sum(
+            float(t.amount) for t in all_txs
+            if not t.is_transfer and float(t.amount) > 0
+        )
+        expense_total = sum(
+            -float(t.amount) for t in all_txs
+            if not t.is_transfer and float(t.amount) < 0
+        )
+        saved = income_total - expense_total
+        saved_pct = (
+            (saved / income_total * 100) if income_total > 0 else 0
+        )
+        rate = (
+            (len(classified_txs) / total * 100) if total > 0 else 0
+        )
+
+        # Senaste klassning
+        last_class = (
+            s.query(Transaction)
+            .filter(Transaction.category_id.isnot(None))
+            .filter(Transaction.user_verified.is_(True))
+            .order_by(Transaction.id.desc())
+            .first()
+        )
+
+        # Sortera nyast först + begränsa
+        unclassified_txs.sort(
+            key=lambda t: (t.date, t.id), reverse=True,
+        )
+        classified_txs.sort(
+            key=lambda t: (t.date, t.id), reverse=True,
+        )
+
+        return V2BookkeepingResponse(
+            student_id=info.student_id,
+            summary=V2BookkeepingSummary(
+                period_label=period_label,
+                period_start=period_start,
+                period_end=period_end,
+                total_transactions=total,
+                auto_classified=auto_count,
+                manual_classified=manual_count,
+                unclassified=len(unclassified_txs),
+                classification_rate_pct=round(rate, 1),
+                income_total=round(income_total, 2),
+                expense_total=round(expense_total, 2),
+                saved_total=round(saved, 2),
+                saved_pct=round(saved_pct, 1),
+                last_classified_at=(
+                    last_class.date if last_class else None
+                ),
+            ),
+            unclassified=[
+                _tx_to_row(t, accounts_by_id, cats_by_id)
+                for t in unclassified_txs[:50]
+            ],
+            classified=[
+                _tx_to_row(t, accounts_by_id, cats_by_id)
+                for t in classified_txs[:100]
+            ],
+            categories=[
+                V2BookkeepingCategoryRef(
+                    id=c.id, name=c.name,
+                    parent_id=c.parent_id, color=c.color,
+                )
+                for c in categories
+            ],
+        )
+
+
+class V2ClassifyTxIn(BaseModel):
+    category_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+@router.patch(
+    "/bokforing/transactions/{tx_id}",
+    response_model=V2BookkeepingTxRow,
+)
+def patch_bookkeeping_transaction(
+    tx_id: int,
+    body: V2ClassifyTxIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2BookkeepingTxRow:
+    """Eleven klassar en transaktion · sätter category_id manuellt."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        t = s.get(Transaction, tx_id)
+        if t is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        if body.category_id is not None:
+            cat = s.get(Category, body.category_id)
+            if cat is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "Ogiltig kategori",
+                )
+            t.category_id = body.category_id
+            t.user_verified = True
+        if body.notes is not None:
+            t.notes = body.notes
+        s.flush()
+        # Bygg row
+        accounts_by_id = {
+            a.id: a.name for a in s.query(Account).all()
+        }
+        cats_by_id = {
+            c.id: c.name for c in s.query(Category).all()
+        }
+        return _tx_to_row(t, accounts_by_id, cats_by_id)
+
+
+class V2BulkClassifyIn(BaseModel):
+    transaction_ids: Optional[list[int]] = None
+    period: Optional[str] = None
+
+
+class V2BulkClassifyResult(BaseModel):
+    processed: int
+    classified: int
+    via_rule: int
+    via_history: int
+    via_llm: int
+    still_unclassified: int
+
+
+@router.post(
+    "/bokforing/classify-bulk",
+    response_model=V2BulkClassifyResult,
+)
+def classify_bulk(
+    body: V2BulkClassifyIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2BulkClassifyResult:
+    """Kör categorize_batch på alla unclassified transaktioner i
+    perioden (eller på en lista). Använder regelmotor + history (LLM
+    bara om aktiverat — annars hoppas det)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    from ..categorize.engine import CategorizationEngine
+    today = _date.today()
+
+    with session_scope() as s:
+        # Hitta unclassified
+        q = s.query(Transaction).filter(Transaction.category_id.is_(None))
+        if body.transaction_ids:
+            q = q.filter(Transaction.id.in_(body.transaction_ids))
+        elif body.period and body.period != "all":
+            try:
+                year, month = map(int, body.period.split("-"))
+                from datetime import timedelta as _td_bb
+                start = _date(year, month, 1)
+                if month == 12:
+                    end = _date(year + 1, 1, 1) - _td_bb(days=1)
+                else:
+                    end = _date(year, month + 1, 1) - _td_bb(days=1)
+                q = q.filter(
+                    Transaction.date >= start,
+                    Transaction.date <= end,
+                )
+            except (ValueError, AttributeError):
+                pass
+        else:
+            # Default: innevarande månad
+            from datetime import timedelta as _td_bb2
+            start = today.replace(day=1)
+            if today.month == 12:
+                end = _date(today.year + 1, 1, 1) - _td_bb2(days=1)
+            else:
+                end = _date(today.year, today.month + 1, 1) - _td_bb2(days=1)
+            q = q.filter(
+                Transaction.date >= start,
+                Transaction.date <= end,
+            )
+
+        unclassified = q.all()
+        if not unclassified:
+            return V2BulkClassifyResult(
+                processed=0, classified=0, via_rule=0,
+                via_history=0, via_llm=0, still_unclassified=0,
+            )
+
+        engine = CategorizationEngine(s, llm=None)
+        results = engine.categorize_batch(unclassified)
+
+        applied_rule = 0
+        applied_history = 0
+        applied_llm = 0
+        still_none = 0
+        for tx, res in zip(unclassified, results):
+            if res.category_id is not None:
+                tx.category_id = res.category_id
+                tx.normalized_merchant = res.merchant
+                tx.ai_confidence = res.confidence
+                # OBS: user_verified blir False — det är auto-klass
+                if res.source == "rule":
+                    applied_rule += 1
+                elif res.source == "history":
+                    applied_history += 1
+                elif res.source == "llm":
+                    applied_llm += 1
+            else:
+                still_none += 1
+
+        s.flush()
+
+        return V2BulkClassifyResult(
+            processed=len(unclassified),
+            classified=applied_rule + applied_history + applied_llm,
+            via_rule=applied_rule,
+            via_history=applied_history,
+            via_llm=applied_llm,
+            still_unclassified=still_none,
+        )
+
+
+# Lärar-overview
+class V2TeacherBookkeepingOverview(BaseModel):
+    student_id: int
+    student_name: str
+    bokforing: V2BookkeepingResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/bokforing-overview",
+    response_model=V2TeacherBookkeepingOverview,
+)
+def teacher_bokforing_overview(
+    student_id: int,
+    period: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherBookkeepingOverview:
+    """Lärar-vy · klassningsgrad + alla transaktioner per period."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        _outer_sid = student_id
+        _outer_period = period
+
+        class _Info:
+            role = "student"
+            student_id = _outer_sid
+
+        bok = get_bokforing(
+            period=_outer_period, info=_Info(),  # type: ignore[arg-type]
+        )
+
+    return V2TeacherBookkeepingOverview(
+        student_id=student_id,
+        student_name=student_name,
+        bokforing=bok,
     )
 
 

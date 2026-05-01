@@ -3766,3 +3766,360 @@ def test_v2_teacher_pension_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2H · Bokföring · Transaction-klassning ===
+
+
+def test_v2_bokforing_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/bokforing")
+    assert r.status_code == 401
+
+
+def test_v2_bokforing_for_teacher_returns_empty(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/bokforing",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+    assert r.json()["unclassified"] == []
+
+
+def test_v2_bokforing_empty_state_for_student(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/bokforing",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["unclassified"] == []
+    assert data["classified"] == []
+    assert data["summary"]["total_transactions"] == 0
+    assert data["summary"]["classification_rate_pct"] == 0
+
+
+def test_v2_bokforing_summary_with_transactions(fx) -> None:
+    """Eleven har 5 transaktioner — 3 klassade, 2 ovettade."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        Category as _Cat,
+        Transaction as _Tx,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today().replace(day=1),
+        )
+        s.add(acc)
+        s.flush()
+        # Använd default-seedade kategorier (finns redan i scope-DB)
+        cat_food = (
+            s.query(_Cat).filter(_Cat.name == "Livsmedel").first()
+        )
+        cat_lon = s.query(_Cat).filter(_Cat.name == "Lön").first()
+        assert cat_food is not None and cat_lon is not None
+        # 3 klassade
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("22400"), raw_description="Lön Sthlm Sjukhus",
+            hash="t1", category_id=cat_lon.id, user_verified=True,
+        ))
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-425"), raw_description="Hemköp Globen",
+            hash="t2", category_id=cat_food.id, user_verified=True,
+        ))
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-312"), raw_description="Coop Hökarängen",
+            hash="t3", category_id=cat_food.id, user_verified=True,
+        ))
+        # 2 ovettade
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-168"), raw_description="Max Restaurang",
+            hash="t4",
+        ))
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-195"), raw_description="Bio Rio Hornstull",
+            hash="t5",
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/bokforing",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    s = data["summary"]
+    assert s["total_transactions"] == 5
+    assert s["unclassified"] == 2
+    assert s["manual_classified"] == 3
+    assert s["classification_rate_pct"] == 60.0
+    # Inkomster 22400, utgifter 425+312+168+195 = 1100, sparat 21300
+    assert s["income_total"] == 22400
+    assert s["expense_total"] == 1100
+    assert s["saved_total"] == 21300
+    assert len(data["unclassified"]) == 2
+    assert len(data["classified"]) == 3
+    # Default-seedade kategorier finns (Lön, Livsmedel etc) — minst 10
+    assert len(data["categories"]) >= 10
+
+
+def test_v2_bokforing_student_classifies_transaction(fx) -> None:
+    """Eleven sätter category_id på ovettad → user_verified=True."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        Category as _Cat,
+        Transaction as _Tx,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+
+    tx_id_holder = {}
+    cat_id_holder = {}
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        # Använd existerande default-seedad "Restaurang"
+        cat = s.query(_Cat).filter(_Cat.name == "Restaurang").first()
+        assert cat is not None
+        cat_id_holder["id"] = cat.id
+        tx = _Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-168"), raw_description="Max Restaurang",
+            hash="ttest1",
+        )
+        s.add(tx)
+        s.flush()
+        tx_id_holder["id"] = tx.id
+
+    _seed_scope(sid, seed)
+
+    r = client.patch(
+        f"/v2/bokforing/transactions/{tx_id_holder['id']}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"category_id": cat_id_holder["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["category_id"] == cat_id_holder["id"]
+    assert r.json()["user_verified"] is True
+
+    # Lista igen — ska vara klassificerad nu
+    list_r = client.get(
+        "/v2/bokforing",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert list_r.json()["summary"]["unclassified"] == 0
+    assert list_r.json()["summary"]["manual_classified"] == 1
+
+
+def test_v2_bokforing_bulk_classify_via_history(fx) -> None:
+    """Bulk-classify: en ovettad matchar mot user_verified history."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        Category as _Cat,
+        Transaction as _Tx,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        cat = s.query(_Cat).filter(_Cat.name == "Livsmedel").first()
+        assert cat is not None
+        # En verifierad rad — drives history-match
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-200"), raw_description="HEMKOP GLOBEN",
+            normalized_merchant="HEMKOP GLOBEN",
+            hash="hist1", category_id=cat.id, user_verified=True,
+        ))
+        # En ovettad med matchande raw_description
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-425"), raw_description="HEMKOP GLOBEN",
+            hash="bulk1",
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.post(
+        "/v2/bokforing/classify-bulk",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["processed"] == 1
+    assert body["classified"] == 1
+    assert body["via_history"] == 1
+    assert body["still_unclassified"] == 0
+
+
+def test_v2_bokforing_invalid_category_400(fx) -> None:
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    tx_id_holder = {}
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        tx = _Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-168"), raw_description="Foo",
+            hash="invalidcat1",
+        )
+        s.add(tx)
+        s.flush()
+        tx_id_holder["id"] = tx.id
+
+    _seed_scope(sid, seed)
+
+    r = client.patch(
+        f"/v2/bokforing/transactions/{tx_id_holder['id']}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"category_id": 99999},
+    )
+    assert r.status_code == 400
+
+
+def test_v2_bokforing_wellbeing_high_classification_rate(fx) -> None:
+    """Klassningsgrad >= 80 % → +2 economy."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        Category as _Cat,
+        Transaction as _Tx,
+    )
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, _stu, _tid, _said, sid = fx
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        cat = s.query(_Cat).filter(_Cat.name == "Livsmedel").first()
+        assert cat is not None
+        # 5 klassade + 1 ovettad = 83 % klassning
+        for i in range(5):
+            s.add(_Tx(
+                account_id=acc.id, date=_d.today(),
+                amount=_D(f"-{100 + i}"),
+                raw_description=f"Hemkop {i}",
+                hash=f"hi{i}", category_id=cat.id,
+            ))
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-200"), raw_description="Foo",
+            hash="ovettad",
+        ))
+
+    _seed_scope(sid, seed)
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    rate_factors = [
+        f for f in result.factors
+        if "klassningsgrad" in f.explanation.lower()
+        and f.points > 0
+    ]
+    assert len(rate_factors) >= 1
+    assert rate_factors[0].dimension == "economy"
+    assert rate_factors[0].points == 2
+
+
+def test_v2_teacher_bokforing_overview(fx) -> None:
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-100"), raw_description="Test",
+            hash="ot1",
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/bokforing-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["bokforing"]["summary"]["total_transactions"] == 1
+
+
+def test_v2_teacher_bokforing_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/bokforing-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

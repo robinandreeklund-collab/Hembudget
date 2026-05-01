@@ -745,6 +745,44 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: pension-factor misslyckades",
         )
 
+    # Bokföring-klassningsgrad — pedagogiskt: hög klassningsgrad =
+    # eleven tittar på sina pengar. Påverkar economy + leisure
+    # (medvetenhet ger frigörelse).
+    try:
+        from datetime import date as _d_book, timedelta as _td_book
+        cutoff_book = _d_book.today() - _td_book(days=30)
+        recent_txs = (
+            session.query(Transaction)
+            .filter(Transaction.date >= cutoff_book)
+            .filter(Transaction.is_transfer.is_(False))
+            .all()
+        )
+        if len(recent_txs) >= 5:
+            classified = sum(
+                1 for t in recent_txs if t.category_id is not None
+            )
+            rate = classified / len(recent_txs)
+            if rate >= 0.80:
+                economy += 2
+                factors.append(WellbeingFactor(
+                    "economy", 2,
+                    f"Klassningsgrad {int(rate * 100)} % — du tittar "
+                    "aktivt på dina pengar, ger självbild + insikt.",
+                ))
+            elif rate < 0.40:
+                economy -= 1
+                factors.append(WellbeingFactor(
+                    "economy", -1,
+                    f"Klassningsgrad bara {int(rate * 100)} % — många "
+                    "transaktioner okategoriserade, svårare att lära "
+                    "sig sina vanor.",
+                ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: bookkeeping-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:
