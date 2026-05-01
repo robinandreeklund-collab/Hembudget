@@ -7805,3 +7805,74 @@ def test_v2_notifications_teacher_flagged_reflection(fx) -> None:
     )
     titles = [n["title"] for n in r.json()["items"]]
     assert any("flaggar stöd-behov" in t for t in titles)
+
+
+# === Skapa uppdrag (Fas 2AF) ===
+
+
+def test_v2_teacher_create_assignment_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/uppdrag",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "title": "Uppdrag-test", "description": "Beskrivning",
+            "kind": "free_text",
+        },
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_create_assignment_basic(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/uppdrag",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "title": "Räkna KALP för 2,4 Mkr",
+            "description": "Hämta data från banken + lön + budget",
+            "kind": "free_text",
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["title"] == "Räkna KALP för 2,4 Mkr"
+    assert data["kind"] == "free_text"
+
+    # Visas nu i elevens uppdrag-lista
+    r2 = client.get(
+        "/v2/uppdrag",
+        headers={"Authorization": f"Bearer {fx[3]}"},
+    )
+    titles = [a["title"] for a in r2.json()["active"]]
+    assert "Räkna KALP för 2,4 Mkr" in titles
+
+
+def test_v2_teacher_create_assignment_cross_teacher_403(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/uppdrag",
+        headers={"Authorization": f"Bearer {sa}"},
+        json={
+            "title": "Uppdrag-test", "description": "Beskrivning",
+            "kind": "free_text",
+        },
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_create_assignment_with_due_date(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/uppdrag",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "title": "Reflektion april",
+            "description": "200+ ord",
+            "kind": "free_text",
+            "due_date": "2026-05-14T23:59:59",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert "2026-05-14" in r.json()["due_date"]

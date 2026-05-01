@@ -2666,6 +2666,29 @@ export const v2Api = {
   // === /v2/notifications (Fas 2AB · live-notiser) ===
   notifications: () =>
     api<V2NotificationsResponse>("/v2/notifications"),
+  // === Fas 2AF · skapa uppdrag från lärar-elev-detalj ===
+  teacherCreateAssignment: (
+    studentId: number,
+    body: {
+      title: string;
+      description: string;
+      kind?: string;
+      target_year_month?: string | null;
+      due_date?: string | null;
+      params?: Record<string, unknown> | null;
+    },
+  ) =>
+    api<{
+      assignment_id: number;
+      student_id: number;
+      title: string;
+      kind: string;
+      due_date: string | null;
+      created_at: string;
+    }>(`/v2/teacher/students/${studentId}/uppdrag`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

@@ -14278,3 +14278,73 @@ def _build_teacher_notifications(
         by_kind=by_kind,
     )
     return V2NotificationsResponse(summary=summary, items=notifs)
+
+
+# === Skapa uppdrag (Fas 2AF) ===
+#
+# Lärare kan skapa uppdrag direkt från v2-elev-detaljen utan att gå
+# via v1-flödet. Stöder både kind="free_text" (manuell-bedömt) och
+# automatiska kinds via existerande evaluate()-motor.
+
+
+class V2CreateAssignmentIn(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    description: str = Field(min_length=2, max_length=2000)
+    kind: str = Field(default="free_text", min_length=2, max_length=30)
+    target_year_month: Optional[str] = Field(
+        default=None, pattern=r"^\d{4}-\d{2}$",
+    )
+    due_date: Optional[datetime] = None
+    params: Optional[dict] = None
+
+
+class V2CreateAssignmentResult(BaseModel):
+    assignment_id: int
+    student_id: int
+    title: str
+    kind: str
+    due_date: Optional[datetime]
+    created_at: datetime
+
+
+@router.post(
+    "/teacher/students/{student_id}/uppdrag",
+    response_model=V2CreateAssignmentResult,
+)
+def teacher_create_assignment_v2(
+    student_id: int,
+    body: V2CreateAssignmentIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2CreateAssignmentResult:
+    """Skapa ett uppdrag direkt från lärar-elev-detaljen."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as ms:
+        student = ms.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        a = _SchoolAssignment(
+            teacher_id=teacher_id,
+            student_id=student_id,
+            title=body.title.strip(),
+            description=body.description.strip(),
+            kind=body.kind,
+            target_year_month=body.target_year_month,
+            due_date=body.due_date,
+            params=body.params,
+        )
+        ms.add(a); ms.flush()
+        aid = a.id
+        created_at = a.created_at
+        ms.commit()
+
+    return V2CreateAssignmentResult(
+        assignment_id=aid,
+        student_id=student_id,
+        title=body.title.strip(),
+        kind=body.kind,
+        due_date=body.due_date,
+        created_at=created_at,
+    )

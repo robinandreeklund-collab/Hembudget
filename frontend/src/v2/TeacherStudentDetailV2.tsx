@@ -266,6 +266,8 @@ function ActionBar({
   data: V2TeacherStudentDetail;
   navigate: ReturnType<typeof useNavigate>;
 }) {
+  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
   return (
     <div
       style={{
@@ -273,10 +275,19 @@ function ActionBar({
         gap: 10,
         flexWrap: "wrap",
         marginBottom: 24,
+        position: "relative",
       }}
     >
-      <Link
+      <button
+        type="button"
         className="larare-tb-btn solid"
+        onClick={() => setShowCreateAssignment(true)}
+        style={{ background: "var(--accent, #dc4c2b)", color: "#fff" }}
+      >
+        + Skicka uppdrag
+      </button>
+      <Link
+        className="larare-tb-btn"
         to={`/teacher/v2/portfolio/${data.student_id}`}
       >
         Portfolio →
@@ -326,8 +337,319 @@ function ActionBar({
       >
         Aktivitets-historik →
       </Link>
+
+      {createMessage && (
+        <div
+          role="status"
+          style={{
+            width: "100%",
+            marginTop: 6,
+            padding: "10px 14px",
+            background: "rgba(110,231,183,0.10)",
+            border: "1px solid rgba(110,231,183,0.35)",
+            borderRadius: 6,
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 11,
+            color: "#6ee7b7",
+            letterSpacing: 0.6,
+          }}
+        >
+          ✓ {createMessage}
+        </div>
+      )}
+
+      {showCreateAssignment && (
+        <CreateAssignmentModal
+          studentId={data.student_id}
+          studentName={data.student_name}
+          onClose={() => setShowCreateAssignment(false)}
+          onCreated={(title) => {
+            setCreateMessage(
+              `Uppdrag "${title}" skickat till ${data.student_name.split(" ")[0]}`,
+            );
+            setShowCreateAssignment(false);
+            window.setTimeout(() => setCreateMessage(null), 6000);
+            // Soft refresh så assignments-räknaren uppdateras
+            window.setTimeout(() => navigate(0), 600);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function CreateAssignmentModal({
+  studentId,
+  studentName,
+  onClose,
+  onCreated,
+}: {
+  studentId: number;
+  studentName: string;
+  onClose: () => void;
+  onCreated: (title: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [kind, setKind] = useState<string>("free_text");
+  const [dueDate, setDueDate] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Esc stänger modalen
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function submit() {
+    if (submitting || title.trim().length < 2 || description.trim().length < 2) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const due_date = dueDate
+        ? new Date(`${dueDate}T23:59:59`).toISOString()
+        : null;
+      await v2Api.teacherCreateAssignment(studentId, {
+        title: title.trim(),
+        description: description.trim(),
+        kind,
+        due_date,
+      });
+      onCreated(title.trim());
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: "rgba(0,0,0,0.55)",
+        display: "grid",
+        placeItems: "center",
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          background: "rgba(15,21,37,0.98)",
+          border: "1px solid var(--line-strong, rgba(255,255,255,0.18))",
+          borderTop: "3px solid var(--accent, #dc4c2b)",
+          borderRadius: 8,
+          padding: "24px 28px",
+          maxHeight: "calc(100vh - 80px)",
+          overflowY: "auto",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: 1.4,
+            textTransform: "uppercase",
+            color: "var(--accent, #dc4c2b)",
+            marginBottom: 6,
+          }}
+        >
+          ● Skicka uppdrag
+        </div>
+        <h2
+          style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 24,
+            fontWeight: 700,
+            color: "#fff",
+            margin: "0 0 6px",
+            letterSpacing: -0.6,
+          }}
+        >
+          Nytt uppdrag till{" "}
+          <em
+            style={{
+              fontStyle: "italic",
+              color: "var(--warm, #fbbf24)",
+              fontWeight: 500,
+            }}
+          >
+            {studentName}
+          </em>
+        </h2>
+        <p
+          style={{
+            fontFamily: "Source Serif 4, Georgia, serif",
+            fontSize: 13,
+            color: "rgba(255,255,255,0.55)",
+            marginTop: 0,
+            marginBottom: 16,
+          }}
+        >
+          Eleven får uppdraget direkt i sin /v2/uppdrag-vy med deadline +
+          status. Free_text bedöms manuellt — andra kind:s utvärderas
+          automatiskt av appen.
+        </p>
+
+        <FormRow label="Titel">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="ex: Räkna KALP för 2,4 Mkr-bolån"
+            maxLength={200}
+            style={modalInputStyle()}
+          />
+        </FormRow>
+
+        <FormRow label="Beskrivning">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Vad ska eleven göra? Hänvisa gärna till relevanta verktyg…"
+            rows={4}
+            style={{
+              ...modalInputStyle(),
+              fontFamily: "Source Serif 4, Georgia, serif",
+              resize: "vertical",
+            }}
+          />
+        </FormRow>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 12,
+          }}
+        >
+          <FormRow label="Bedömnings-typ">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+              style={modalInputStyle()}
+            >
+              <option value="free_text">
+                Reflektion (manuellt bedömt)
+              </option>
+              <option value="set_budget">Budget (auto)</option>
+              <option value="balance_month">Bokslut (auto)</option>
+              <option value="categorize_all">Klassa alla tx (auto)</option>
+              <option value="save_amount">Spara belopp (auto)</option>
+              <option value="mortgage_decision">Bolåne-beslut (auto)</option>
+            </select>
+          </FormRow>
+          <FormRow label="Deadline (valfritt)">
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              style={modalInputStyle()}
+            />
+          </FormRow>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              color: "#fca5a5",
+              fontSize: 11,
+              marginTop: 8,
+              fontFamily: "JetBrains Mono, monospace",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            marginTop: 18,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="larare-tb-btn"
+          >
+            Avbryt
+          </button>
+          <button
+            type="button"
+            disabled={
+              submitting
+              || title.trim().length < 2
+              || description.trim().length < 2
+            }
+            onClick={submit}
+            className="larare-tb-btn solid"
+            style={{
+              cursor: submitting ? "wait" : "pointer",
+              background: "var(--accent, #dc4c2b)",
+              color: "#fff",
+              borderColor: "var(--accent, #dc4c2b)",
+              opacity:
+                title.trim().length < 2 || description.trim().length < 2
+                  ? 0.5
+                  : 1,
+            }}
+          >
+            {submitting ? "Skickar…" : "Skicka uppdrag →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormRow({
+  label, children,
+}: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 9.5,
+          color: "rgba(255,255,255,0.5)",
+          letterSpacing: 1,
+          textTransform: "uppercase",
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function modalInputStyle(): React.CSSProperties {
+  return {
+    width: "100%",
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--line-strong, rgba(255,255,255,0.18))",
+    color: "#fff",
+    padding: "9px 12px",
+    borderRadius: 6,
+    fontFamily: "Inter, sans-serif",
+    fontSize: 13,
+  };
 }
 
 function PromotionCard({ data }: { data: V2TeacherStudentDetail }) {
