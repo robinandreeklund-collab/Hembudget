@@ -368,3 +368,199 @@ class TestEndpoints:
             headers={"Authorization": f"Bearer {stok}"},
         )
         assert r.status_code == 400
+
+
+# === Sprint 5b · ActiveHome + säg upp + flytt + hushållsfilter ===
+
+
+class TestActiveHomeFlow:
+    def test_my_home_creates_and_returns_active_home(self, fx):
+        client, _, stok, _, sid = fx
+        r = client.get(
+            "/v2/boendemarknad/my-home?ym=2026-01",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["home_type"] == "hyresratt"
+        assert body["status"] == "active"
+        assert body["city_key"] == "stockholm"
+        assert body["monthly_cost"] == 12000
+
+    def test_terminate_rental_sets_termination_date(self, fx):
+        client, _, stok, _, sid = fx
+        # Säkerställ home först
+        client.get(
+            "/v2/boendemarknad/my-home?ym=2026-01",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        r = client.post(
+            "/v2/boendemarknad/terminate-rental",
+            json={"year_month": "2026-02"},
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "notice_given"
+        assert body["termination_date"] == "2026-05-01"
+        assert body["months_until_termination"] == 3
+
+    def test_terminate_rental_idempotent(self, fx):
+        client, _, stok, _, _ = fx
+        client.get(
+            "/v2/boendemarknad/my-home?ym=2026-01",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        a = client.post(
+            "/v2/boendemarknad/terminate-rental",
+            json={"year_month": "2026-02"},
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        b = client.post(
+            "/v2/boendemarknad/terminate-rental",
+            json={"year_month": "2026-02"},
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert a.status_code == 200 and b.status_code == 200
+        assert a.json()["termination_date"] == b.json()["termination_date"]
+
+    def test_move_rental_creates_new_active_home(self, fx):
+        client, _, stok, _, sid = fx
+        client.get(
+            "/v2/boendemarknad/my-home?ym=2026-01",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        r = client.post(
+            "/v2/boendemarknad/move-rental",
+            json={
+                "year_month": "2026-04",
+                "listing_id": "manual-test-001",
+                "listing_size_kvm": 35,
+                "listing_address": "Storgatan 1, Södermalm",
+                "listing_monthly_cost": 9000,
+            },
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "active"
+        assert body["address"] == "Storgatan 1, Södermalm"
+        assert body["size_kvm"] == 35
+        assert body["monthly_cost"] == 9000
+
+        # Verifiera att gamla är terminerad
+        my = client.get(
+            "/v2/boendemarknad/my-home?ym=2026-04",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        # Aktiv ska vara den nya
+        assert my.json()["address"] == "Storgatan 1, Södermalm"
+
+    def test_terminate_fails_for_non_rental(self, fx):
+        from hembudget.db.models import ActiveHome
+        from hembudget.school.engines import (
+            get_scope_session, scope_context, scope_for_student,
+        )
+        client, _, stok, _, sid = fx
+        with master_session() as s:
+            stu = s.get(Student, sid)
+            s.expunge(stu)
+        scope_key = scope_for_student(stu)
+        # Ersätt elevens active home med en bostadsrätt manuellt
+        from datetime import date
+        from decimal import Decimal
+        maker = get_scope_session(scope_key)
+        with scope_context(scope_key):
+            with maker() as s:
+                # Skapa BR direkt
+                s.add(ActiveHome(
+                    home_type="bostadsratt", status="active",
+                    city_key="stockholm", size_kvm=50, rooms=2,
+                    monthly_cost=Decimal(8000),
+                    entered_on=date(2026, 1, 1),
+                    household_size_when_chosen=1,
+                ))
+                s.commit()
+        r = client.post(
+            "/v2/boendemarknad/terminate-rental",
+            json={"year_month": "2026-02"},
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 400
+
+    def test_listings_filtered_by_household_size(self, fx):
+        # Eleven är ensam → min 28 kvm. Verifiera att inga listings under
+        # 28 kvm finns i resultatet.
+        client, _, stok, _, _ = fx
+        r = client.get(
+            "/v2/boendemarknad/listings?ym=2026-01&n=10&only_household_fit=true",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 200
+        for l in r.json()["listings"]:
+            assert l["size_kvm"] >= 28, (
+                f"Listing {l['size_kvm']}kvm < 28 trots only_household_fit"
+            )
+
+    def test_listings_unfiltered_returns_smaller_options(self, fx):
+        client, _, stok, _, _ = fx
+        r = client.get(
+            "/v2/boendemarknad/listings?ym=2026-01&n=10&only_household_fit=false",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 200
+        # Med n=10 unfiltered har vi högre chans att se små
+        sizes = [l["size_kvm"] for l in r.json()["listings"]]
+        assert any(s < 35 for s in sizes), f"Förväntat minst en mindre listing, fick {sizes}"
+
+    def test_buy_replaces_active_home(self, fx):
+        from hembudget.db.models import Account
+        from hembudget.school.engines import (
+            get_scope_session, scope_context, scope_for_student,
+        )
+        from decimal import Decimal
+        client, _, stok, _, sid = fx
+        # Säkerställ ActiveHome
+        client.get(
+            "/v2/boendemarknad/my-home?ym=2026-01",
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        with master_session() as s:
+            stu = s.get(Student, sid)
+            s.expunge(stu)
+        scope_key = scope_for_student(stu)
+
+        # Hitta en realistisk listing + säkerställ likvid
+        from hembudget.game_engine.housing_market import listings_for_city
+        ls = listings_for_city("stockholm", "2026-03", n=12, types=("bostadsratt",))
+        assert ls, "Inga BR-listings"
+        cheap = min(ls, key=lambda l: l.asking_price)
+
+        maker = get_scope_session(scope_key)
+        with scope_context(scope_key):
+            with maker() as s:
+                s.add(Account(
+                    name="Lk", bank="X", type="checking",
+                    opening_balance=Decimal(cheap.asking_price),
+                ))
+                s.commit()
+
+        r = client.post(
+            f"/v2/boendemarknad/buy/{cheap.listing_id}",
+            json={
+                "year_month": "2026-03",
+                "listing_id": cheap.listing_id,
+            },
+            headers={"Authorization": f"Bearer {stok}"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["accepted"] is True
+
+        # Active home ska nu vara den nya
+        my = client.get(
+            "/v2/boendemarknad/my-home?ym=2026-03",
+            headers={"Authorization": f"Bearer {stok}"},
+        ).json()
+        assert my["home_type"] == "bostadsratt"
+        assert my["listing_id"] == cheap.listing_id
+        assert my["loan_id"] is not None

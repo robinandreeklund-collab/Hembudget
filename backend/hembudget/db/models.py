@@ -1709,6 +1709,69 @@ class MailItem(TenantMixin, Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class ActiveHome(TenantMixin, Base):
+    """Spelmotor · vad eleven bor i JUST NU.
+
+    Källa-av-sanning för boendet i Sprint 5b. Profile Generator skapar
+    en ActiveHome vid karaktärsskapelse; alla flytt/köp/säljflöden
+    uppdaterar denna rad i stället för att lägga till parallella
+    boenden. Vi har max EN aktiv home åt gången per scope.
+
+    `status`:
+      "active"            — eleven bor här just nu
+      "notice_given"      — uppsägning aktiverad, flytta innan termination_date
+      "selling"           — ute till försäljning (för bostadsrätt/villa)
+      "terminated"        — historisk, syns inte som aktiv
+
+    Vid `notice_given`: termination_date = entered_on + notice_period.
+    Vid `selling`: estimated_sale_date = ungefär entered_on + 4 mån.
+    """
+    __tablename__ = "active_homes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    home_type: Mapped[str] = mapped_column(
+        String(20), nullable=False,
+    )  # hyresratt | bostadsratt | villa | radhus
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="active",
+    )
+    city_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    address: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
+    size_kvm: Mapped[int] = mapped_column(Integer, nullable=False)
+    rooms: Mapped[int] = mapped_column(Integer, default=1)
+    monthly_cost: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False,
+    )
+    monthly_avgift: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    purchase_price: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True,
+    )
+    loan_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("loans.id", ondelete="SET NULL"), nullable=True,
+    )
+    listing_id: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    entered_on: Mapped[date] = mapped_column(
+        Date, nullable=False,
+    )
+    termination_date: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True, index=True,
+    )
+    estimated_sale_date: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True,
+    )
+    household_size_when_chosen: Mapped[int] = mapped_column(
+        Integer, default=1,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 def create_all() -> None:
     from .base import get_engine
 

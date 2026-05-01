@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from ...db.models import Loan, MailItem
 from ..pentagon import apply_pentagon_delta
 from ..pools.stadspool import STAD_BY_KEY
+from .active_home import promote_listing_to_active_home
 from .listings import HousingListing
 
 
@@ -160,6 +161,20 @@ def buy_listing(
     )
     s.add(confirm)
     s.flush()
+
+    # Promote listing till ny ActiveHome (Sprint 5b · konsoliderar
+    # gamla boendet till "selling" eller "terminated").
+    try:
+        promote_listing_to_active_home(
+            s,
+            listing=listing,
+            loan_id=loan.id,
+            year_month=year_month,
+            monthly_cost=monthly_cost,
+        )
+    except Exception:
+        # ActiveHome får inte bryta köpet (logget i caller)
+        pass
 
     # Pentagon-effekter (B3 spec)
     pentagon_delta = {"safety": +5, "economy": -10}

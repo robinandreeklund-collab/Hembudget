@@ -30,6 +30,15 @@ from .valuation import (
     HomeValuation,
     valuate_current_home,
 )
+from .active_home import (
+    ensure_active_home,
+    get_active_home,
+    give_notice_on_rental,
+    household_size_for,
+    min_kvm_for_household,
+    move_to_rental,
+    promote_listing_to_active_home,
+)
 
 __all__ = [
     "PRICE_DRIFT_TRENDS",
@@ -42,4 +51,11 @@ __all__ = [
     "sell_current_home",
     "HomeValuation",
     "valuate_current_home",
+    "ensure_active_home",
+    "get_active_home",
+    "give_notice_on_rental",
+    "household_size_for",
+    "min_kvm_for_household",
+    "move_to_rental",
+    "promote_listing_to_active_home",
 ]

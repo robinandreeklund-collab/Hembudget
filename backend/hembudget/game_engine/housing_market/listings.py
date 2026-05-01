@@ -88,10 +88,18 @@ def listings_for_city(
     year_month: str,
     *,
     n: int = 6,
+    min_size_kvm: int = 0,
+    types: tuple[str, ...] | None = None,
 ) -> list[HousingListing]:
     """Generera n listings för en stad i en specifik spelmånad.
 
     Deterministisk: samma (city, year_month) → samma listings.
+
+    `min_size_kvm`: filtrera bort listings som är för små för hushållet
+    (Konsumentverkets norm: ensam ≥28 kvm, sambo ≥44 kvm, familj ≥60+).
+    `types`: begränsa till specifika typer ("hyresratt", "bostadsratt"...).
+    Notera: hyresrätt-listings genereras INTE av den generella poolen
+    (den är optimerad för köp); separat hyresrätts-pool kommer i Sprint 6.
     """
     city = STAD_BY_KEY.get(city_key)
     if city is None:
@@ -100,8 +108,13 @@ def listings_for_city(
     rng = random.Random(f"listings|{city_key}|{year_month}")
     base_price = market_price_for(city_key, year_month)
 
+    # Generera dubbelt så många kandidater när vi filtrerar — så vi
+    # inte hamnar med tom lista pga storlek/typ-filter.
+    target_n = n
+    candidates_to_try = n if (min_size_kvm == 0 and not types) else n * 3
+
     listings: list[HousingListing] = []
-    for idx in range(n):
+    for idx in range(candidates_to_try):
         # Slumpa typ baserat på stadens fördelning
         type_pool = []
         type_weights = []
@@ -152,6 +165,12 @@ def listings_for_city(
         district = _district_for(rng, city_key)
         address = f"{_street_for(rng, district)}, {district}"
 
+        # Filtrering
+        if min_size_kvm and size < min_size_kvm:
+            continue
+        if types and h_type not in types:
+            continue
+
         listings.append(HousingListing(
             listing_id=f"{city_key}-{year_month}-{idx:02d}",
             city_key=city_key,
@@ -165,5 +184,8 @@ def listings_for_city(
             description=_quality_text(quality),
             quality_score=quality,
         ))
+
+        if len(listings) >= target_n:
+            break
 
     return listings

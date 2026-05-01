@@ -29,8 +29,14 @@ from ..game_engine.housing_market import (
     HomeValuation,
     HousingListing,
     buy_listing,
+    ensure_active_home,
+    get_active_home,
+    give_notice_on_rental,
+    household_size_for,
     listings_for_city,
     market_price_for,
+    min_kvm_for_household,
+    move_to_rental,
     sell_current_home,
     valuate_current_home,
 )
@@ -111,6 +117,47 @@ class CityListingsOut(BaseModel):
     year_month: str
     market_price_per_kvm: int
     listings: list[ListingOut]
+
+
+# === Sprint 5b · ActiveHome-schemas ===
+
+
+class ActiveHomeOut(BaseModel):
+    """Status för elevens nuvarande boende (Sprint 5b)."""
+    id: int
+    home_type: str
+    status: str
+    city_key: str
+    address: Optional[str]
+    size_kvm: int
+    rooms: int
+    monthly_cost: int
+    purchase_price: Optional[int]
+    loan_id: Optional[int]
+    listing_id: Optional[str]
+    entered_on: str
+    termination_date: Optional[str]
+    estimated_sale_date: Optional[str]
+    household_size_when_chosen: int
+
+
+class TerminateIn(BaseModel):
+    year_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+
+
+class TerminateOut(BaseModel):
+    home_id: int
+    status: str
+    termination_date: str
+    months_until_termination: int
+
+
+class MoveRentalIn(BaseModel):
+    year_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    listing_id: str
+    listing_size_kvm: int
+    listing_address: str
+    listing_monthly_cost: int
 
 
 # === Helpers ===
@@ -204,9 +251,14 @@ def _checking_balance() -> int:
 def get_listings(
     ym: str = "2026-01",
     n: int = 6,
+    only_household_fit: bool = True,
     info: TokenInfo = Depends(require_token),
 ):
-    """Listings i elevens stad för given spelmånad."""
+    """Listings i elevens stad för given spelmånad.
+
+    `only_household_fit=True` (default) filtrerar bort listings för
+    små för elevens hushåll (Konsumentverkets norm).
+    """
     sid = _require_student(info)
     with master_session() as s:
         sp = (
@@ -221,8 +273,21 @@ def get_listings(
             )
         city_key = _city_key_from_display(sp.city) or "medelstad"
 
+        # Räkna ut min-kvm för hushållet
+        n_persons = 1
+        if sp.partner_age:
+            n_persons += 1
+        if sp.children_ages:
+            n_persons += len(sp.children_ages)
+        min_kvm = (
+            min_kvm_for_household(sp.family_status, n_persons)
+            if only_household_fit else 0
+        )
+
     city = STAD_BY_KEY.get(city_key) or STAD_BY_KEY["medelstad"]
-    listings = listings_for_city(city_key, ym, n=max(1, min(n, 12)))
+    listings = listings_for_city(
+        city_key, ym, n=max(1, min(n, 12)), min_size_kvm=min_kvm,
+    )
     return CityListingsOut(
         city_key=city_key,
         city_display=city.display,
@@ -373,6 +438,178 @@ def sell(
         capital_gain_estimate=result.capital_gain_estimate,
         pentagon_delta=result.pentagon_delta,
     )
+
+
+# === Sprint 5b · ActiveHome-endpoints ===
+
+
+@router.get("/my-home", response_model=Optional[ActiveHomeOut])
+def get_my_home(
+    ym: str = "2026-01",
+    info: TokenInfo = Depends(require_token),
+):
+    """Hämta elevens nuvarande aktiva boende (ActiveHome).
+
+    Skapas automatiskt vid första anrop baserat på StudentProfile-data.
+    """
+    sid = _require_student(info)
+    with master_session() as s:
+        sp = (
+            s.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        if sp is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elevens profil saknas.",
+            )
+    profile = _profile_from_studentprofile(sp)
+
+    with session_scope() as s:
+        home = get_active_home(s)
+        if home is None:
+            home = ensure_active_home(s, profile=profile, year_month=ym)
+            s.flush()
+        return ActiveHomeOut(
+            id=home.id,
+            home_type=home.home_type,
+            status=home.status,
+            city_key=home.city_key,
+            address=home.address,
+            size_kvm=home.size_kvm,
+            rooms=home.rooms,
+            monthly_cost=int(home.monthly_cost or 0),
+            purchase_price=int(home.purchase_price) if home.purchase_price else None,
+            loan_id=home.loan_id,
+            listing_id=home.listing_id,
+            entered_on=home.entered_on.isoformat(),
+            termination_date=(
+                home.termination_date.isoformat()
+                if home.termination_date else None
+            ),
+            estimated_sale_date=(
+                home.estimated_sale_date.isoformat()
+                if home.estimated_sale_date else None
+            ),
+            household_size_when_chosen=home.household_size_when_chosen,
+        )
+
+
+@router.post("/terminate-rental", response_model=TerminateOut)
+def terminate_rental(
+    body: TerminateIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Säg upp aktivt hyreskontrakt med 3 månaders uppsägning."""
+    sid = _require_student(info)
+    with master_session() as s:
+        sp = (
+            s.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        if sp is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Profil saknas.")
+    profile = _profile_from_studentprofile(sp)
+
+    with session_scope() as s:
+        # Säkerställ att eleven har en ActiveHome
+        ensure_active_home(s, profile=profile, year_month=body.year_month)
+        try:
+            home = give_notice_on_rental(
+                s, student_id=sid, year_month=body.year_month,
+            )
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+
+        # Räkna månader kvar grovt
+        from datetime import date as _d
+        today = _d.fromisoformat(f"{body.year_month}-01")
+        months = max(0, (
+            (home.termination_date.year - today.year) * 12
+            + (home.termination_date.month - today.month)
+        ))
+        return TerminateOut(
+            home_id=home.id,
+            status=home.status,
+            termination_date=home.termination_date.isoformat(),
+            months_until_termination=months,
+        )
+
+
+@router.post("/move-rental", response_model=ActiveHomeOut)
+def move_rental(
+    body: MoveRentalIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Flytta från en hyresrätt till en annan (mindre/billigare/större).
+
+    `listing_*` fälten beskriver det nya boendet — frontend skickar
+    värden från en hyresrätt-listing eller manuellt valda värden.
+    """
+    sid = _require_student(info)
+    with master_session() as s:
+        sp = (
+            s.query(StudentProfile)
+            .filter(StudentProfile.student_id == sid)
+            .first()
+        )
+        if sp is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Profil saknas.")
+        student = s.get(Student, sid)
+        from ..school.engines import scope_for_student
+        scope_key = scope_for_student(student) if student else f"s_{sid}"
+        if student is not None:
+            s.expunge(student)
+
+    profile = _profile_from_studentprofile(sp)
+
+    # Bygg HousingListing-stub från body
+    from ..game_engine.housing_market.listings import HousingListing as HL
+    from ..game_engine.pools.stadspool import STAD_BY_KEY as _STAD
+    new_listing = HL(
+        listing_id=body.listing_id,
+        city_key=profile.city_key,
+        city_display=_STAD.get(profile.city_key, _STAD["medelstad"]).display,
+        type="hyresratt",
+        address=body.listing_address,
+        size_kvm=body.listing_size_kvm,
+        rooms=max(1, body.listing_size_kvm // 30),
+        asking_price=0,
+        monthly_avgift=body.listing_monthly_cost,
+        description="Ny hyresrätt",
+        quality_score=5,
+    )
+
+    with session_scope() as s:
+        ensure_active_home(s, profile=profile, year_month=body.year_month)
+        try:
+            home = move_to_rental(
+                s,
+                student_id=sid,
+                student_scope=scope_key,
+                new_listing=new_listing,
+                year_month=body.year_month,
+            )
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+        return ActiveHomeOut(
+            id=home.id,
+            home_type=home.home_type,
+            status=home.status,
+            city_key=home.city_key,
+            address=home.address,
+            size_kvm=home.size_kvm,
+            rooms=home.rooms,
+            monthly_cost=int(home.monthly_cost or 0),
+            purchase_price=None,
+            loan_id=None,
+            listing_id=home.listing_id,
+            entered_on=home.entered_on.isoformat(),
+            termination_date=None,
+            estimated_sale_date=None,
+            household_size_when_chosen=home.household_size_when_chosen,
+        )
 
 
 # === Lärar-endpoints (test/preview) ===

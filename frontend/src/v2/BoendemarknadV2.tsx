@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   v2Api,
+  type V2BoendemarknadActiveHome,
   type V2BoendemarknadListing,
   type V2BoendemarknadListings,
   type V2BoendemarknadValuation,
@@ -135,34 +136,49 @@ function KopSaljPanel() {
   const [ym, setYm] = useState(CURRENT_YM);
   const [listings, setListings] = useState<V2BoendemarknadListings | null>(null);
   const [valuation, setValuation] = useState<V2BoendemarknadValuation | null>(null);
+  const [activeHome, setActiveHome] = useState<V2BoendemarknadActiveHome | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const refresh = (targetYm: string) => {
     setLoading(true);
     setError(null);
     Promise.all([
-      v2Api.boendemarknadListings(ym, 6),
-      v2Api.boendemarknadValuation(ym),
+      v2Api.boendemarknadListings(targetYm, 6, true),
+      v2Api.boendemarknadValuation(targetYm),
+      v2Api.boendemarknadMyHome(targetYm).catch(() => null),
     ])
-      .then(([ls, val]) => {
-        if (cancelled) return;
+      .then(([ls, val, home]) => {
         setListings(ls);
         setValuation(val);
+        setActiveHome(home);
       })
-      .catch((e) => {
-        if (!cancelled) setError(String(e?.message || e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch((e) => setError(String(e?.message || e)))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    refresh(ym);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ym]);
+
+  const handleTerminate = async () => {
+    if (!confirm("Säga upp ditt hyreskontrakt? Du har 3 mån uppsägningstid.")) {
+      return;
+    }
+    try {
+      const r = await v2Api.boendemarknadTerminate({ year_month: ym });
+      setConfirmMsg(
+        `Uppsägning registrerad. Du måste flytta ut senast ${r.termination_date} ` +
+          `(${r.months_until_termination} mån kvar).`,
+      );
+      refresh(ym);
+    } catch (e) {
+      setConfirmMsg(`Fel: ${String((e as Error).message || e)}`);
+    }
+  };
 
   const handleBuy = async (listing: V2BoendemarknadListing) => {
     setConfirmId(listing.listing_id);
@@ -226,10 +242,87 @@ function KopSaljPanel() {
         )}
       </header>
 
-      {/* MIN BOSTAD */}
+      {/* MIN AKTIVA BOSTAD (Sprint 5b · ActiveHome) */}
+      {activeHome && (
+        <section
+          className="acct"
+          style={{
+            marginBottom: 16,
+            background:
+              activeHome.status === "notice_given"
+                ? "rgba(255, 200, 60, 0.08)"
+                : activeHome.status === "selling"
+                  ? "rgba(120, 180, 255, 0.08)"
+                  : undefined,
+            border:
+              activeHome.status === "notice_given"
+                ? "1px solid rgba(255, 200, 60, 0.4)"
+                : "1px solid var(--border)",
+            borderRadius: 8,
+            padding: 14,
+          }}
+        >
+          <div>
+            <div className="acct-eye">Mitt boende just nu</div>
+            <div className="acct-name">
+              {activeHome.home_type === "hyresratt"
+                ? "Hyresrätt"
+                : activeHome.home_type === "bostadsratt"
+                  ? "Bostadsrätt"
+                  : activeHome.home_type === "villa"
+                    ? "Villa"
+                    : "Radhus"}{" "}
+              · {activeHome.size_kvm} kvm · {activeHome.rooms} rum
+            </div>
+            <div className="acct-num" style={{ marginTop: 4 }}>
+              {activeHome.address || "Ingen adress satt"} · hyra/avgift{" "}
+              <strong>{SEK(activeHome.monthly_cost)} kr/mån</strong>
+            </div>
+            {activeHome.status === "notice_given" && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 10,
+                  background: "rgba(255, 200, 60, 0.18)",
+                  borderRadius: 6,
+                }}
+              >
+                <strong>⚠ Uppsagd</strong> — du måste flytta ut senast{" "}
+                <strong>{activeHome.termination_date}</strong>. Hitta nytt
+                boende nedan eller köp en bostadsrätt.
+              </div>
+            )}
+            {activeHome.status === "selling" && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 10,
+                  background: "rgba(120, 180, 255, 0.18)",
+                  borderRadius: 6,
+                }}
+              >
+                Bostaden är ute till försäljning · estimerad slutdatum{" "}
+                <strong>{activeHome.estimated_sale_date}</strong>.
+              </div>
+            )}
+            {activeHome.status === "active" &&
+              activeHome.home_type === "hyresratt" && (
+                <button
+                  onClick={handleTerminate}
+                  style={{ marginTop: 12 }}
+                  className="btn-secondary"
+                >
+                  Säg upp hyreskontraktet (3 mån)
+                </button>
+              )}
+          </div>
+        </section>
+      )}
+
+      {/* MIN ÄGDA BOSTAD VÄRDERING */}
       <section className="acct" style={{ marginBottom: 24 }}>
         <div>
-          <div className="acct-eye">Min bostad</div>
+          <div className="acct-eye">Värdering</div>
           {valuation?.has_owned_home ? (
             <>
               <div className="acct-name">

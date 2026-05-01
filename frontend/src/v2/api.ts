@@ -716,6 +716,31 @@ export type V2BoendemarknadCityPrice = {
   price_per_kvm: number;
 };
 
+export type V2BoendemarknadActiveHome = {
+  id: number;
+  home_type: "hyresratt" | "bostadsratt" | "villa" | "radhus";
+  status: "active" | "notice_given" | "selling" | "terminated";
+  city_key: string;
+  address: string | null;
+  size_kvm: number;
+  rooms: number;
+  monthly_cost: number;
+  purchase_price: number | null;
+  loan_id: number | null;
+  listing_id: string | null;
+  entered_on: string;
+  termination_date: string | null;
+  estimated_sale_date: string | null;
+  household_size_when_chosen: number;
+};
+
+export type V2BoendemarknadTerminateResult = {
+  home_id: number;
+  status: string;
+  termination_date: string;
+  months_until_termination: number;
+};
+
 
 // === /v2/hyresvarden (Fas 2F) ===
 
@@ -2502,14 +2527,19 @@ export const v2Api = {
     api<V2TeacherAvanzaOverview>(
       `/v2/teacher/students/${studentId}/avanza-overview`,
     ),
-  // === /v2/boendemarknad (Sprint 5 · B1-B5) ===
-  boendemarknadListings: (ym: string, n = 6) =>
+  // === /v2/boendemarknad (Sprint 5 · B1-B5 + Sprint 5b · ActiveHome) ===
+  boendemarknadListings: (ym: string, n = 6, onlyHouseholdFit = true) =>
     api<V2BoendemarknadListings>(
-      `/v2/boendemarknad/listings?ym=${encodeURIComponent(ym)}&n=${n}`,
+      `/v2/boendemarknad/listings?ym=${encodeURIComponent(ym)}&n=${n}` +
+        `&only_household_fit=${onlyHouseholdFit}`,
     ),
   boendemarknadValuation: (ym: string) =>
     api<V2BoendemarknadValuation>(
       `/v2/boendemarknad/my-home/valuation?ym=${encodeURIComponent(ym)}`,
+    ),
+  boendemarknadMyHome: (ym: string) =>
+    api<V2BoendemarknadActiveHome | null>(
+      `/v2/boendemarknad/my-home?ym=${encodeURIComponent(ym)}`,
     ),
   boendemarknadBuy: (
     listingId: string, body: { year_month: string; listing_id: string },
@@ -2521,6 +2551,22 @@ export const v2Api = {
   boendemarknadSell: (body: { year_month: string }) =>
     api<V2BoendemarknadSellResult>(
       "/v2/boendemarknad/sell",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  boendemarknadTerminate: (body: { year_month: string }) =>
+    api<V2BoendemarknadTerminateResult>(
+      "/v2/boendemarknad/terminate-rental",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  boendemarknadMoveRental: (body: {
+    year_month: string;
+    listing_id: string;
+    listing_size_kvm: number;
+    listing_address: string;
+    listing_monthly_cost: number;
+  }) =>
+    api<V2BoendemarknadActiveHome>(
+      "/v2/boendemarknad/move-rental",
       { method: "POST", body: JSON.stringify(body) },
     ),
   teacherBoendemarknadListings: (city: string, ym: string, n = 6) =>
