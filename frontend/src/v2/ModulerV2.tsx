@@ -80,12 +80,12 @@ export function ModulerV2() {
           <div>
             <span className="pill">Skola · Mina moduler</span>
             <h1 className="actor-name" style={{ marginTop: 14 }}>
-              {s.in_progress_count} i <em>arbete</em>,{" "}
-              {s.available_count} möjliga.
+              {s.in_progress_count + s.completed_count} <em>tilldelade</em>,{" "}
+              {s.available_count} ej tilldelade.
             </h1>
             <p className="actor-sub">
-              Lärar-tilldelade systemmoduler · stegen leder dig genom
-              appens funktioner ·{" "}
+              Lärar-tilldelade moduler styr dig genom appen · ej
+              tilldelade moduler är låsta tills läraren delar ut dem ·{" "}
               {s.completed_count > 0
                 ? `${s.completed_count} klara hittills`
                 : "ingen klar än"}
@@ -101,129 +101,220 @@ export function ModulerV2() {
           </div>
         </header>
 
-        {/* CC-SUMMARY · pågående moduler som kort */}
-        {data.in_progress.length > 0 && (
-          <div
-            className="cc-summary"
-            style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${Math.min(data.in_progress.length, 3)}, 1fr)`,
-              gap: 12,
-              marginBottom: 22,
-            }}
-          >
-            {data.in_progress.slice(0, 3).map((m) => (
-              <ProgressCard key={m.student_module_id} m={m} />
-            ))}
-          </div>
-        )}
+        {(() => {
+          // Splitta in_progress: påbörjade vs tilldelade-men-ej-startade
+          const startedProgress = data.in_progress.filter(
+            (m) => m.completed_step_count > 0,
+          );
+          const assignedNotStarted = data.in_progress.filter(
+            (m) => m.completed_step_count === 0,
+          );
+          const hasAssigned =
+            startedProgress.length > 0
+            || assignedNotStarted.length > 0
+            || data.completed.length > 0;
+          const hasUnassigned = data.available.length > 0;
 
-        {/* MÖJLIGA · acct-grid */}
-        <div className="section-eye">
-          Möjliga moduler · klicka för att starta
-        </div>
-        {data.available.length === 0 && data.completed.length === 0 ? (
-          <div
-            style={{
-              padding: "20px 24px",
-              border: "1px solid var(--line)",
-              borderRadius: 6,
-              fontFamily: "var(--serif)",
-              color: "var(--text-mid)",
-              marginBottom: 22,
-            }}
-          >
-            Inga moduler tillgängliga än. Be läraren tilldela en
-            systemmodul (t.ex. "Din första månad") eller skapa en egen
-            modul i lärar-vyn.
-          </div>
-        ) : (
-          <div
-            className="acct-grid"
-            style={{
-              gridTemplateColumns: "repeat(3, 1fr)",
-              marginBottom: 22,
-            }}
-          >
-            {/* Klara moduler först */}
-            {data.completed.map((m) => (
-              <Link
-                to={`/modules/${m.module_id}`}
-                key={`done-${m.student_module_id}`}
-                className="acct"
-                style={{ textDecoration: "none" }}
-              >
-                <div>
-                  <div className="acct-eye">SYSTEMMODUL</div>
-                  <div className="acct-name">{m.title}</div>
-                  <div className="acct-num">
-                    {m.step_count} steg ·{" "}
-                    {m.estimated_minutes_left || 0} min · klar{" "}
-                    {SHORT_DATE(m.completed_at)}
-                  </div>
+          return (
+            <>
+              {/* CC-SUMMARY · pågående moduler som kort */}
+              {startedProgress.length > 0 && (
+                <div
+                  className="cc-summary"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${Math.min(startedProgress.length, 3)}, 1fr)`,
+                    gap: 12,
+                    marginBottom: 22,
+                  }}
+                >
+                  {startedProgress.slice(0, 3).map((m) => (
+                    <ProgressCard key={m.student_module_id} m={m} />
+                  ))}
                 </div>
-                <div>
-                  <div
-                    className="acct-bal"
-                    style={{ color: "#6ee7b7" }}
-                  >
-                    Klar
+              )}
+
+              {/* TILLDELADE · klickbara moduler (assigned not started + completed) */}
+              {hasAssigned && (
+                <>
+                  <div className="section-eye">
+                    Tilldelade moduler · klicka för att{" "}
+                    {assignedNotStarted.length > 0
+                      ? "starta eller fortsätta"
+                      : "fortsätta"}
                   </div>
-                  <div className="acct-bal-meta">visa →</div>
-                </div>
-              </Link>
-            ))}
-            {/* Tillgängliga */}
-            {data.available.map((m) => (
-              <Link
-                to={`/modules/${m.module_id}`}
-                key={`av-${m.module_id}`}
-                className="acct"
-                style={
-                  !m.is_template
-                    ? {
-                        borderColor: "rgba(99,102,241,0.4)",
-                        background: "rgba(99,102,241,0.04)",
-                        textDecoration: "none",
-                      }
-                    : { textDecoration: "none" }
-                }
-              >
-                <div>
                   <div
-                    className="acct-eye"
-                    style={!m.is_template ? { color: "#c7d2fe" } : undefined}
-                  >
-                    {m.is_template
-                      ? "SYSTEMMODUL"
-                      : m.teacher_owned
-                      ? "EGEN MODUL · LÄRARE"
-                      : "MODUL"}
-                    {!m.is_template && m.teacher_owned ? "" : ""}
-                  </div>
-                  <div className="acct-name">{m.title}</div>
-                  <div className="acct-num">
-                    {m.step_count} steg · ~{" "}
-                    {m.estimated_total_minutes} min · ej startad
-                  </div>
-                </div>
-                <div>
-                  <div
-                    className="acct-bal"
+                    className="acct-grid"
                     style={{
-                      color: !m.is_template ? "#c7d2fe" : "var(--text-mid)",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      marginBottom: 22,
                     }}
                   >
-                    Starta {!m.is_template ? "→" : ""}
+                    {/* Tilldelade men ej startade */}
+                    {assignedNotStarted.map((m) => (
+                      <Link
+                        to={`/modules/${m.module_id}`}
+                        key={`new-${m.student_module_id}`}
+                        className="acct"
+                        style={{
+                          textDecoration: "none",
+                          borderColor: "rgba(251,191,36,0.4)",
+                          background: "rgba(251,191,36,0.04)",
+                        }}
+                      >
+                        <div>
+                          <div
+                            className="acct-eye"
+                            style={{ color: "var(--warm)" }}
+                          >
+                            {m.is_template
+                              ? "SYSTEMMODUL · NY"
+                              : "EGEN MODUL · NY"}
+                          </div>
+                          <div className="acct-name">{m.title}</div>
+                          <div className="acct-num">
+                            {m.step_count} steg · ~
+                            {(m.estimated_minutes_left
+                              || m.step_count * 5)}{" "}
+                            min · ej startad
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="acct-bal"
+                            style={{ color: "var(--warm)" }}
+                          >
+                            Starta →
+                          </div>
+                          <div className="acct-bal-meta">klicka</div>
+                        </div>
+                      </Link>
+                    ))}
+
+                    {/* Klara */}
+                    {data.completed.map((m) => (
+                      <Link
+                        to={`/modules/${m.module_id}`}
+                        key={`done-${m.student_module_id}`}
+                        className="acct"
+                        style={{ textDecoration: "none" }}
+                      >
+                        <div>
+                          <div className="acct-eye">
+                            {m.is_template ? "SYSTEMMODUL" : "EGEN MODUL"}
+                          </div>
+                          <div className="acct-name">{m.title}</div>
+                          <div className="acct-num">
+                            {m.step_count} steg ·{" "}
+                            {m.estimated_minutes_left || 0} min · klar{" "}
+                            {SHORT_DATE(m.completed_at)}
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="acct-bal"
+                            style={{ color: "#6ee7b7" }}
+                          >
+                            Klar
+                          </div>
+                          <div className="acct-bal-meta">visa →</div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
-                  <div className="acct-bal-meta">
-                    {m.is_template ? "—" : "klicka"}
+                </>
+              )}
+
+              {/* EJ TILLDELADE · disabled-cards */}
+              {hasUnassigned && (
+                <>
+                  <div
+                    className="section-eye"
+                    style={{
+                      color: "var(--text-mid)",
+                      marginTop: hasAssigned ? 8 : 0,
+                    }}
+                  >
+                    Ej tilldelade moduler · be läraren tilldela för att
+                    kunna starta
                   </div>
+                  <div
+                    className="acct-grid"
+                    style={{
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      marginBottom: 22,
+                    }}
+                  >
+                    {data.available.map((m) => (
+                      <div
+                        key={`unav-${m.module_id}`}
+                        className="acct"
+                        style={{
+                          opacity: 0.55,
+                          cursor: "not-allowed",
+                          background: "rgba(255,255,255,0.02)",
+                        }}
+                        title="Inte tilldelad — be läraren tilldela modulen"
+                      >
+                        <div>
+                          <div
+                            className="acct-eye"
+                            style={{ color: "var(--text-dim)" }}
+                          >
+                            {m.is_template
+                              ? "SYSTEMMODUL"
+                              : m.teacher_owned
+                              ? "EGEN MODUL · LÄRARE"
+                              : "MODUL"}
+                          </div>
+                          <div
+                            className="acct-name"
+                            style={{ color: "rgba(255,255,255,0.65)" }}
+                          >
+                            {m.title}
+                          </div>
+                          <div className="acct-num">
+                            {m.step_count} steg · ~{" "}
+                            {m.estimated_total_minutes} min · ej tilldelad
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="acct-bal"
+                            style={{ color: "var(--text-dim)" }}
+                          >
+                            🔒 Låst
+                          </div>
+                          <div className="acct-bal-meta">
+                            be läraren tilldela
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* TOM */}
+              {!hasAssigned && !hasUnassigned && (
+                <div
+                  style={{
+                    padding: "20px 24px",
+                    border: "1px solid var(--line)",
+                    borderRadius: 6,
+                    fontFamily: "var(--serif)",
+                    color: "var(--text-mid)",
+                    marginBottom: 22,
+                  }}
+                >
+                  Inga moduler tillgängliga än. Be läraren tilldela en
+                  systemmodul (t.ex. "Din första månad") eller skapa en
+                  egen modul i lärar-vyn.
                 </div>
-              </Link>
-            ))}
-          </div>
-        )}
+              )}
+            </>
+          );
+        })()}
 
         {/* PEDA */}
         <div className="peda">
