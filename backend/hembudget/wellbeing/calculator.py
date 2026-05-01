@@ -1024,6 +1024,82 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: moduler-factor misslyckades",
         )
 
+    # Lärar-feedback (Skola) — pedagogiskt: regelbunden dialog är
+    # viktig. Många olästa = "missar feedback". Många lästa nyligen =
+    # eleven engagerar sig.
+    try:
+        from ..school.models import (
+            Message as _MFb,
+            StudentStepProgress as _SPFb,
+            FeedbackRead as _FRFb,
+        )
+        from ..school.engines import (
+            master_session as _ms_fb,
+            get_current_scope as _gcs_fb,
+        )
+        from ..school import is_enabled as _se_fb
+        if _se_fb():
+            scope_key = _gcs_fb()
+            if scope_key and scope_key.startswith("s_"):
+                target_sid = int(scope_key.split("_", 1)[1])
+                with _ms_fb() as _mdb_fb:
+                    from datetime import (
+                        timedelta as _td_fb,
+                        datetime as _dt_fb,
+                    )
+                    cutoff_fb = _dt_fb.utcnow() - _td_fb(days=30)
+                    reads = (
+                        _mdb_fb.query(_FRFb)
+                        .filter(_FRFb.student_id == target_sid)
+                        .all()
+                    )
+                    read_keys = {(r.kind, r.source_id) for r in reads}
+                    msgs = (
+                        _mdb_fb.query(_MFb)
+                        .filter(_MFb.student_id == target_sid)
+                        .filter(_MFb.sender_role == "teacher")
+                        .filter(_MFb.created_at >= cutoff_fb)
+                        .all()
+                    )
+                    unread_msgs = sum(
+                        1 for m in msgs
+                        if m.read_at is None
+                        and ("message", m.id) not in read_keys
+                    )
+                    fbs = (
+                        _mdb_fb.query(_SPFb)
+                        .filter(_SPFb.student_id == target_sid)
+                        .filter(_SPFb.teacher_feedback.isnot(None))
+                        .filter(_SPFb.feedback_at.isnot(None))
+                        .filter(_SPFb.feedback_at >= cutoff_fb)
+                        .all()
+                    )
+                    unread_fbs = sum(
+                        1 for f in fbs
+                        if ("module_step", f.id) not in read_keys
+                    )
+                    total_unread = unread_msgs + unread_fbs
+                    if total_unread >= 5:
+                        social -= 2
+                        factors.append(WellbeingFactor(
+                            "social", -2,
+                            f"{total_unread} olästa lärar-feedback "
+                            "senaste 30 dgr — missar dialog som "
+                            "hjälper lärandet.",
+                        ))
+                    elif total_unread == 0 and len(reads) > 0:
+                        social += 1
+                        factors.append(WellbeingFactor(
+                            "social", 1,
+                            "Du läser och engagerar dig i lärar-"
+                            "feedback — dialog driver utveckling.",
+                        ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: feedback-factor misslyckades",
+        )
+
     # --- KLAMP + TOTAL ---
     economy = max(0, min(100, economy))
     health = max(0, min(100, health))

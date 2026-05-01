@@ -39,6 +39,9 @@ from ..school.models import (
     StudentModule as _SchoolStudentModule,
     StudentStepProgress as _SchoolStepProgress,
     StudentStepHeartbeat as _SchoolStepHB,
+    Message as _SchoolMessage,
+    Assignment as _SchoolAssignment,
+    FeedbackRead as _SchoolFeedbackRead,
 )
 from ..insurance import seed_default_insurance_policies
 from ..utility import seed_default_utility_subscriptions
@@ -7630,6 +7633,352 @@ def teacher_simulator_overview(
         longest_horizon_years=longest,
         biggest_principal=biggest,
         scenarios=scenarios,
+    )
+
+
+# === Lärar-feedback (/v2/feedback) — Fas 2K (Skola) ===
+#
+# Aggregator-vy: lärar-feedback från 3 källor (master-DB):
+# - Message (sender_role="teacher") — chat
+# - StudentStepProgress.teacher_feedback — modul-steg
+# - Assignment.teacher_feedback — uppdrag
+#
+# Lästa items spåras via FeedbackRead. Olästa-räknare uppdateras live.
+
+
+class V2FeedbackKind(str):
+    pass
+
+
+class V2FeedbackItem(BaseModel):
+    kind: Literal[
+        "message", "module_step", "module_step_quiz",
+        "module_step_done", "assignment",
+    ]
+    source_id: int  # ID i ursprungs-tabellen
+    title: str  # Kort rubrik
+    body: str  # Själva feedback-texten
+    created_at: datetime
+    is_unread: bool
+    teacher_name: Optional[str]
+    # Kontext för UI
+    context_type: Optional[str]  # "module_id" | "assignment_kind" | osv
+    context_id: Optional[int]
+    context_label: Optional[str]  # T.ex. modul-titel
+    link_target: Optional[str]  # T.ex. /modules/4 eller /v2/postladan
+
+
+class V2FeedbackSummary(BaseModel):
+    total_count: int
+    unread_count: int
+    message_count: int
+    module_step_count: int
+    assignment_count: int
+    last_received_at: Optional[datetime]
+
+
+class V2FeedbackResponse(BaseModel):
+    student_id: int
+    summary: V2FeedbackSummary
+    items: list[V2FeedbackItem]
+
+
+def _empty_feedback(student_id: int) -> V2FeedbackResponse:
+    return V2FeedbackResponse(
+        student_id=student_id,
+        summary=V2FeedbackSummary(
+            total_count=0, unread_count=0,
+            message_count=0, module_step_count=0,
+            assignment_count=0, last_received_at=None,
+        ),
+        items=[],
+    )
+
+
+def _aggregate_feedback_for_student(
+    sid: int,
+    period_days: Optional[int] = 90,
+) -> V2FeedbackResponse:
+    """Bygg feedback-list från 3 källor + FeedbackRead-tabell."""
+    from datetime import timedelta as _td_fb
+    cutoff = (
+        datetime.utcnow() - _td_fb(days=period_days)
+        if period_days else None
+    )
+
+    items: list[V2FeedbackItem] = []
+    teacher_name_cache: dict[int, str] = {}
+
+    with master_session() as s:
+        # 0. Hämta alla read-poster för denna elev en gång
+        reads = (
+            s.query(_SchoolFeedbackRead)
+            .filter(_SchoolFeedbackRead.student_id == sid)
+            .all()
+        )
+        read_keys: set[tuple[str, int]] = {
+            (r.kind, r.source_id) for r in reads
+        }
+
+        # Helper: hitta lärar-namn via teacher_id
+        def _t_name(tid: Optional[int]) -> Optional[str]:
+            if tid is None:
+                return None
+            if tid in teacher_name_cache:
+                return teacher_name_cache[tid]
+            t = s.get(Teacher, tid)
+            n = t.name if t else None
+            teacher_name_cache[tid] = n  # type: ignore[assignment]
+            return n
+
+        # 1. Messages (sender_role=teacher)
+        msgs_q = (
+            s.query(_SchoolMessage)
+            .filter(_SchoolMessage.student_id == sid)
+            .filter(_SchoolMessage.sender_role == "teacher")
+            .order_by(_SchoolMessage.created_at.desc())
+        )
+        if cutoff:
+            msgs_q = msgs_q.filter(_SchoolMessage.created_at >= cutoff)
+        for m in msgs_q.all():
+            # Message har eget read_at — kombinera med FeedbackRead
+            is_unread = (
+                m.read_at is None
+                and ("message", m.id) not in read_keys
+            )
+            short = (
+                (m.body or "").replace("\n", " ").strip()[:80]
+                + ("…" if len(m.body or "") > 80 else "")
+            )
+            items.append(V2FeedbackItem(
+                kind="message",
+                source_id=m.id,
+                title=short or "Chat-meddelande",
+                body=m.body,
+                created_at=m.created_at,
+                is_unread=is_unread,
+                teacher_name=_t_name(m.teacher_id),
+                context_type=m.context_type,
+                context_id=m.context_id,
+                context_label=None,
+                link_target="/v2/postladan",
+            ))
+
+        # 2. StudentStepProgress.teacher_feedback (modul-steg)
+        prog_q = (
+            s.query(_SchoolStepProgress)
+            .filter(_SchoolStepProgress.student_id == sid)
+            .filter(_SchoolStepProgress.teacher_feedback.isnot(None))
+            .order_by(_SchoolStepProgress.feedback_at.desc().nullslast())
+        )
+        if cutoff:
+            prog_q = prog_q.filter(
+                or_(
+                    _SchoolStepProgress.feedback_at >= cutoff,
+                    _SchoolStepProgress.feedback_at.is_(None),
+                ),
+            )
+        for p in prog_q.all():
+            step = s.get(_SchoolModuleStep, p.step_id)
+            module = (
+                s.get(_SchoolModule, step.module_id)
+                if step else None
+            )
+            step_kind = step.kind if step else "—"
+            # Bestäm "kind"
+            if step_kind == "quiz":
+                k = "module_step_quiz"
+            elif p.completed_at is not None and p.feedback_at is not None:
+                k = "module_step_done"
+            else:
+                k = "module_step"
+            ctx_label = (
+                f"{module.title} · {step.title}"
+                if step and module
+                else (step.title if step else "Modul-steg")
+            )
+            items.append(V2FeedbackItem(
+                kind=k,  # type: ignore[arg-type]
+                source_id=p.id,
+                title=ctx_label,
+                body=p.teacher_feedback or "",
+                created_at=p.feedback_at or p.created_at,
+                is_unread=("module_step", p.id) not in read_keys,
+                teacher_name=None,  # Step-feedback har inte teacher_id
+                context_type="module_id",
+                context_id=module.id if module else None,
+                context_label=module.title if module else None,
+                link_target=(
+                    f"/modules/{module.id}" if module else None
+                ),
+            ))
+
+        # 3. Assignment.teacher_feedback (uppdrag)
+        ass_q = (
+            s.query(_SchoolAssignment)
+            .filter(_SchoolAssignment.student_id == sid)
+            .filter(_SchoolAssignment.teacher_feedback.isnot(None))
+            .order_by(
+                _SchoolAssignment.teacher_feedback_at.desc().nullslast(),
+            )
+        )
+        if cutoff:
+            ass_q = ass_q.filter(
+                or_(
+                    _SchoolAssignment.teacher_feedback_at >= cutoff,
+                    _SchoolAssignment.teacher_feedback_at.is_(None),
+                ),
+            )
+        for a in ass_q.all():
+            items.append(V2FeedbackItem(
+                kind="assignment",
+                source_id=a.id,
+                title=a.title,
+                body=a.teacher_feedback or "",
+                created_at=a.teacher_feedback_at or datetime.utcnow(),
+                is_unread=("assignment", a.id) not in read_keys,
+                teacher_name=None,
+                context_type="assignment_kind",
+                context_id=a.id,
+                context_label=a.kind,
+                link_target=None,
+            ))
+
+    items.sort(key=lambda i: i.created_at, reverse=True)
+    unread = sum(1 for i in items if i.is_unread)
+    last = items[0].created_at if items else None
+    msg_n = sum(1 for i in items if i.kind == "message")
+    step_n = sum(1 for i in items if i.kind.startswith("module_step"))
+    ass_n = sum(1 for i in items if i.kind == "assignment")
+    return V2FeedbackResponse(
+        student_id=sid,
+        summary=V2FeedbackSummary(
+            total_count=len(items),
+            unread_count=unread,
+            message_count=msg_n,
+            module_step_count=step_n,
+            assignment_count=ass_n,
+            last_received_at=last,
+        ),
+        items=items,
+    )
+
+
+@router.get("/feedback", response_model=V2FeedbackResponse)
+def get_feedback(
+    period_days: int = 90,
+    info: TokenInfo = Depends(require_token),
+) -> V2FeedbackResponse:
+    """Aggregat för Lärar-feedback /v2/feedback (Skola).
+
+    Sammanställer alla feedback-typer från läraren senaste N dagar.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_feedback(0)
+    return _aggregate_feedback_for_student(info.student_id, period_days)
+
+
+class V2FeedbackMarkReadIn(BaseModel):
+    items: list[dict]  # [{kind, source_id}, ...]
+
+
+class V2FeedbackMarkReadResult(BaseModel):
+    marked: int
+    already_read: int
+
+
+@router.post(
+    "/feedback/mark-read",
+    response_model=V2FeedbackMarkReadResult,
+)
+def mark_feedback_read(
+    body: V2FeedbackMarkReadIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2FeedbackMarkReadResult:
+    """Markera feedback-items som lästa. Idempotent."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    sid = info.student_id
+    valid_kinds = {
+        "message", "module_step",
+        "module_step_quiz", "module_step_done",
+        "assignment",
+    }
+    marked = 0
+    already = 0
+    with master_session() as s:
+        for item in body.items:
+            kind = item.get("kind")
+            source_id = item.get("source_id")
+            if (
+                not isinstance(kind, str)
+                or kind not in valid_kinds
+                or not isinstance(source_id, int)
+            ):
+                continue
+            # Normalisera modul-steg-varianter till "module_step"
+            stored_kind = (
+                "module_step"
+                if kind.startswith("module_step")
+                else kind
+            )
+            existing = (
+                s.query(_SchoolFeedbackRead)
+                .filter(
+                    _SchoolFeedbackRead.student_id == sid,
+                    _SchoolFeedbackRead.kind == stored_kind,
+                    _SchoolFeedbackRead.source_id == source_id,
+                )
+                .first()
+            )
+            if existing is not None:
+                already += 1
+                continue
+            s.add(_SchoolFeedbackRead(
+                student_id=sid,
+                kind=stored_kind,
+                source_id=source_id,
+            ))
+            marked += 1
+            # För Message-typ — uppdatera även Message.read_at för
+            # konsekvent beteende mot v1-Postlådan
+            if kind == "message":
+                m = s.get(_SchoolMessage, source_id)
+                if m is not None and m.read_at is None:
+                    m.read_at = datetime.utcnow()
+        s.commit()
+    return V2FeedbackMarkReadResult(marked=marked, already_read=already)
+
+
+# Lärar-overview
+class V2TeacherFeedbackOverview(BaseModel):
+    student_id: int
+    student_name: str
+    feedback: V2FeedbackResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/feedback-overview",
+    response_model=V2TeacherFeedbackOverview,
+)
+def teacher_feedback_overview(
+    student_id: int,
+    period_days: int = 90,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherFeedbackOverview:
+    """Lärar-vy · all feedback man gett eleven (samma data som elev)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    fb = _aggregate_feedback_for_student(student_id, period_days)
+    return V2TeacherFeedbackOverview(
+        student_id=student_id,
+        student_name=student_name,
+        feedback=fb,
     )
 
 

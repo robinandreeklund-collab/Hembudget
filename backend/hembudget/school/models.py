@@ -811,6 +811,40 @@ class PeerFeedback(MasterBase):
     )
 
 
+class FeedbackRead(MasterBase):
+    """Tracking av lästa lärar-feedback-items per elev.
+
+    Aggregator-vyn /v2/feedback samlar feedback från flera källor
+    (Message, StudentStepProgress.teacher_feedback, Assignment.
+    teacher_feedback). För att markera enskilda items som lästa per
+    elev har vi en separat tabell istället för att lägga read-fält
+    på respektive källa.
+
+    UNIQUE per (student, kind, source_id) — items markeras som lästa
+    en gång och består.
+    """
+    __tablename__ = "feedback_reads"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "kind", "source_id",
+            name="uq_feedback_read",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # "module_step" | "assignment" | "message" (även om message har
+    # eget read_at — vi speglar för konsekvent UI)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    source_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    read_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+
+
 class Competency(MasterBase):
     """En inlärningsfärdighet, t.ex. 'läsa lönespec', 'förstå skatteavdrag'.
 

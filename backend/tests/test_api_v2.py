@@ -4593,3 +4593,287 @@ def test_v2_teacher_simulator_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2K · Lärar-feedback · Message + Step-feedback + Assignment ===
+
+
+def test_v2_feedback_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/feedback")
+    assert r.status_code == 401
+
+
+def test_v2_feedback_for_teacher_returns_empty(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+
+
+def test_v2_feedback_empty_state_for_student(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["items"] == []
+    assert data["summary"]["total_count"] == 0
+
+
+def test_v2_feedback_aggregates_message_and_step(fx) -> None:
+    """Lärare har skickat 1 chat + gett feedback på 1 modul-steg."""
+    from hembudget.school.models import (
+        Message as _M,
+        Module as _Mo,
+        ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt_t
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        # 1 chat-meddelande
+        db.add(_M(
+            student_id=sid, teacher_id=tid,
+            sender_role="teacher",
+            body="Bra reflektion — höjer Bokföring till GRUND",
+        ))
+        # 1 step-feedback
+        m = _Mo(teacher_id=tid, title="Bolån", is_template=False)
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        st = _MS(
+            module_id=m.id, sort_order=0,
+            kind="reflect", title="Steg 3 KALP",
+        )
+        db.add(st)
+        db.commit()
+        db.refresh(st)
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            data={},
+            teacher_feedback="Bra svar — du fattade poängen",
+            feedback_at=_dt_t.utcnow(),
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["total_count"] == 2
+    assert data["summary"]["unread_count"] == 2
+    assert data["summary"]["message_count"] == 1
+    assert data["summary"]["module_step_count"] == 1
+    kinds = sorted([i["kind"] for i in data["items"]])
+    assert kinds == ["message", "module_step"]
+
+
+def test_v2_feedback_mark_read(fx) -> None:
+    """Mark-read minskar unread_count."""
+    from hembudget.school.models import Message as _M
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add_all([
+            _M(student_id=sid, teacher_id=tid, sender_role="teacher",
+               body="Meddelande 1"),
+            _M(student_id=sid, teacher_id=tid, sender_role="teacher",
+               body="Meddelande 2"),
+            _M(student_id=sid, teacher_id=tid, sender_role="teacher",
+               body="Meddelande 3"),
+        ])
+        db.commit()
+
+    list_r = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    items = list_r.json()["items"]
+    assert list_r.json()["summary"]["unread_count"] == 3
+
+    # Markera 2 som lästa
+    mark = client.post(
+        "/v2/feedback/mark-read",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "items": [
+                {"kind": "message", "source_id": items[0]["source_id"]},
+                {"kind": "message", "source_id": items[1]["source_id"]},
+            ],
+        },
+    )
+    assert mark.status_code == 200, mark.text
+    assert mark.json()["marked"] == 2
+    assert mark.json()["already_read"] == 0
+
+    # Idempotent: andra anropet → already_read=2
+    mark2 = client.post(
+        "/v2/feedback/mark-read",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "items": [
+                {"kind": "message", "source_id": items[0]["source_id"]},
+            ],
+        },
+    )
+    assert mark2.json()["marked"] == 0
+    assert mark2.json()["already_read"] == 1
+
+    # Lista igen — unread = 1
+    list_r2 = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert list_r2.json()["summary"]["unread_count"] == 1
+
+
+def test_v2_feedback_assignment(fx) -> None:
+    """Assignment med teacher_feedback kommer in i feedback-listan."""
+    from hembudget.school.models import Assignment as _A
+    from datetime import datetime as _dt_a
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_A(
+            teacher_id=tid,
+            student_id=sid,
+            title="Klassa 12 ovettade",
+            description="Klassa alla 12 ovettade transaktioner",
+            kind="categorize_all",
+            teacher_feedback="Klart 17 apr · 12 manuella",
+            teacher_feedback_at=_dt_a.utcnow(),
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    assignments = [i for i in data["items"] if i["kind"] == "assignment"]
+    assert len(assignments) == 1
+    assert "Klassa 12" in assignments[0]["title"]
+
+
+def test_v2_feedback_wellbeing_unread_penalty(fx) -> None:
+    """5+ olästa feedback senaste 30 dgr → -2 social."""
+    from hembudget.school.models import Message as _M
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        for i in range(6):
+            db.add(_M(
+                student_id=sid, teacher_id=tid,
+                sender_role="teacher",
+                body=f"Feedback {i}",
+            ))
+        db.commit()
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    penalty_factors = [
+        f for f in result.factors
+        if "olästa lärar-feedback" in f.explanation.lower()
+    ]
+    assert len(penalty_factors) >= 1
+    assert penalty_factors[0].dimension == "social"
+    assert penalty_factors[0].points == -2
+
+
+def test_v2_feedback_wellbeing_engaged_bonus(fx) -> None:
+    """Alla feedback lästa + minst 1 läst → +1 social."""
+    from hembudget.school.models import Message as _M
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_M(
+            student_id=sid, teacher_id=tid,
+            sender_role="teacher",
+            body="Feedback A",
+        ))
+        db.commit()
+    list_r = client.get(
+        "/v2/feedback",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    msg_id = list_r.json()["items"][0]["source_id"]
+    client.post(
+        "/v2/feedback/mark-read",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "items": [
+                {"kind": "message", "source_id": msg_id},
+            ],
+        },
+    )
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    bonus_factors = [
+        f for f in result.factors
+        if "engagerar dig i lärar-feedback" in f.explanation.lower()
+    ]
+    assert len(bonus_factors) >= 1
+    assert bonus_factors[0].points == 1
+
+
+def test_v2_teacher_feedback_overview(fx) -> None:
+    from hembudget.school.models import Message as _M
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_M(
+            student_id=sid, teacher_id=tid,
+            sender_role="teacher",
+            body="Test-feedback",
+        ))
+        db.commit()
+    r = client.get(
+        f"/v2/teacher/students/{sid}/feedback-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["feedback"]["summary"]["total_count"] >= 1
+
+
+def test_v2_teacher_feedback_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/feedback-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
