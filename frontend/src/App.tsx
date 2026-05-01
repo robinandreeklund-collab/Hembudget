@@ -56,6 +56,7 @@ import { V2RootRedirect } from "./v2/V2RootRedirect";
 import { DashboardV2Guard } from "./v2/DashboardV2Guard";
 import { V2DevSwitcher } from "./v2/V2DevSwitcher";
 import { V2RosterPage } from "./v2/V2RosterPage";
+import { TeacherHubV2 } from "./v2/TeacherHubV2";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budget from "./pages/Budget";
@@ -392,7 +393,11 @@ export default function App() {
           />
           <Route path="/v2/mal" element={<MalV2 />} />
           <Route path="/v2/postladan" element={<PostladanV2 />} />
-          <Route path="/teacher/v2" element={<V2RosterPage />} />
+          <Route path="/teacher/v2" element={<TeacherHubV2 />} />
+          <Route
+            path="/teacher/v2/roster"
+            element={<V2RosterPage />}
+          />
           {/* /dashboard har en V2-guard: super-admin och elever med
               v2_enabled redirectas till /v2/hub. Övriga får v1. */}
           <Route path="/dashboard" element={<DashboardV2Guard><Dashboard /></DashboardV2Guard>} />

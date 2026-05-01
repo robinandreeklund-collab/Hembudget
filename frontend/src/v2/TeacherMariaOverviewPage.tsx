@@ -84,7 +84,7 @@ export function TeacherMariaOverviewPage() {
           }}
           href="#"
         >
-          Tillbaka till v2-rostern
+          Tillbaka till klass-hubben
         </a>
 
         <header className="actor-head">

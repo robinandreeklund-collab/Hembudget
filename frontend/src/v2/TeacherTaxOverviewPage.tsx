@@ -175,7 +175,7 @@ export function TeacherTaxOverviewPage() {
           }}
           href="#"
         >
-          Tillbaka till v2-rostern
+          Tillbaka till klass-hubben
         </a>
 
         <header className="actor-head">

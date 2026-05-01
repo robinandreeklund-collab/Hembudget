@@ -1474,6 +1474,101 @@ export type V2TeacherKompetensOverview = {
   detail: V2KompetensDetail;
 };
 
+// === /v2/teacher/klass-overview (Lärar-hub · Fas 2R) ===
+
+export type V2KlassStat = {
+  eye: string;
+  num_value: string;
+  sub: string;
+  accent: boolean;
+};
+
+export type V2KlassPentagon = {
+  total_score: number;
+  economy: number;
+  safety: number;
+  health: number;
+  social: number;
+  leisure: number;
+  delta_total: number;
+};
+
+export type V2KlassNeedsHelpItem = {
+  student_id: number;
+  student_name: string;
+  pent_total: number;
+  days_inactive: number | null;
+  reason: string;
+};
+
+export type V2KlassNegotiationItem = {
+  negotiation_id: number;
+  student_id: number;
+  student_name: string;
+  round_no: number;
+  max_rounds: number;
+  profession: string;
+  starting_salary: number;
+  last_proposed_salary: number | null;
+  status: string;
+  started_at: string;
+};
+
+export type V2KlassMailboxItem = {
+  student_id: number;
+  student_name: string;
+  unhandled_count: number;
+  oldest_days: number | null;
+  has_authority: boolean;
+};
+
+export type V2KlassReadyForLevel = {
+  student_id: number;
+  student_name: string;
+  weeks_at_level: number;
+  progress_pct: number;
+  current_level: number;
+  target_level: number;
+};
+
+export type V2KlassLevelDistribution = {
+  level_1_count: number;
+  level_2_count: number;
+  level_3_count: number;
+  ready_for_promotion: V2KlassReadyForLevel[];
+};
+
+export type V2KlassMiniPentagon = {
+  student_id: number;
+  student_name: string;
+  pent_total: number;
+  economy: number;
+  safety: number;
+  health: number;
+  social: number;
+  leisure: number;
+  level: number;
+  days_since_last_activity: number | null;
+};
+
+export type V2KlassOverview = {
+  teacher_id: number;
+  teacher_name: string;
+  school_name: string | null;
+  period_label: string;
+  total_students: number;
+  active_today: number;
+  reflections_unread_count: number;
+  klass_stats: V2KlassStat[];
+  klass_pentagon: V2KlassPentagon;
+  students_needing_help: V2KlassNeedsHelpItem[];
+  pending_negotiations: V2KlassNegotiationItem[];
+  mailbox_top: V2KlassMailboxItem[];
+  mailbox_total_unhandled: number;
+  level_distribution: V2KlassLevelDistribution;
+  mini_pentagons: V2KlassMiniPentagon[];
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -2101,6 +2196,9 @@ export const v2Api = {
     api<V2TeacherKompetensOverview>(
       `/v2/teacher/students/${studentId}/kompetens/${competencyId}`,
     ),
+  // === /v2/teacher/klass-overview (Lärar-hub · Fas 2R) ===
+  teacherKlassOverview: () =>
+    api<V2KlassOverview>("/v2/teacher/klass-overview"),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

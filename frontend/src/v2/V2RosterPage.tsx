@@ -73,6 +73,21 @@ export function V2RosterPage() {
 
       <div style={{ maxWidth: 1100, margin: "60px auto", padding: "0 24px" }}>
         <div style={{ marginBottom: 28 }}>
+          <Link
+            to="/teacher/v2"
+            style={{
+              fontFamily: "JetBrains Mono",
+              fontSize: 10,
+              letterSpacing: 1.2,
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.5)",
+              textDecoration: "none",
+              marginBottom: 14,
+              display: "inline-block",
+            }}
+          >
+            ← Tillbaka till klass-hubben
+          </Link>
           <div style={{ fontFamily: "JetBrains Mono", fontSize: 11, fontWeight: 700, letterSpacing: 1.6, textTransform: "uppercase", color: "#fbbf24" }}>● V2 / Lärar-roster</div>
           <h1 style={{ fontFamily: "Source Serif 4, Georgia, serif", fontWeight: 700, fontSize: 48, letterSpacing: -1.4, lineHeight: 1, marginTop: 12, marginBottom: 12 }}>
             Aktivera <em style={{ fontStyle: "italic", color: "#dc4c2b" }}>v2</em> per elev.
