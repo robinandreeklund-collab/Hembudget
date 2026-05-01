@@ -23,6 +23,8 @@ from pydantic import BaseModel, Field
 
 import random as _random
 
+from ..game_engine.monte_carlo import SimConfig, run_simulations, summarize
+
 from ..db.models import InsurancePolicy
 from ..game_engine.event_engine import (
     EVENT_BY_KEY,
@@ -798,3 +800,45 @@ def list_pentagon_history(
         )
         for r in rows
     ]
+
+
+# === Fas 8 · Monte Carlo-endpoint ===
+
+
+class MonteCarloIn(BaseModel):
+    """Konfiguration för Monte Carlo-körning."""
+    n_simulations: int = Field(default=500, ge=10, le=10000)
+    n_months: int = Field(default=12, ge=1, le=36)
+    starting_level: int = Field(default=1, ge=1, le=3)
+    spend_profile: str = Field(default="balanserad")
+    archetype: str = Field(default="random")
+    partner_model: str = Field(default="auto")
+    seed_base: int = Field(default=0)
+
+
+@router.post("/monte-carlo", response_model=dict)
+def monte_carlo(
+    body: MonteCarloIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Kör N Monte Carlo-simuleringar och returnera statistik.
+
+    Verktyg för läraren att verifiera difficulty-balansen för en
+    klass innan eleverna startar:
+      - Nivå 1 (sparsam) bör ge ~90 % positiv balans efter 12 mån
+      - Nivå 2 (balanserad) ~60-70 %
+      - Nivå 3 (slösa) ~30-40 % (medvetet utmanande)
+
+    Snabbt: ~1500 simuleringar/sekund. Begränsat till max 10k per anrop.
+    """
+    cfg = SimConfig(
+        n_simulations=body.n_simulations,
+        n_months=body.n_months,
+        starting_level=body.starting_level,
+        spend_profile=body.spend_profile,
+        archetype=body.archetype,
+        partner_model=body.partner_model,
+        seed_base=body.seed_base,
+    )
+    res = run_simulations(cfg)
+    return summarize(res)
