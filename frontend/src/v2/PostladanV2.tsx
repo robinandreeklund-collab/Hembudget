@@ -101,12 +101,24 @@ export function PostladanV2() {
   }, [tab]);
 
   async function openMail(item: V2MailItem) {
+    // För kreditkortsfaktura och lönespec → öppna detalj-vy.
+    // För övrigt — bara markera viewed.
+    if (
+      item.mail_type === "invoice" && item.sender_kind === "cred"
+    ) {
+      navigate(`/v2/postladan/${item.id}`);
+      return;
+    }
+    if (item.mail_type === "salary_slip") {
+      navigate(`/v2/postladan/${item.id}`);
+      return;
+    }
     if (item.status === "unhandled") {
       try {
         await v2Api.updateMailStatus(item.id, "viewed");
         load(tab);
       } catch {
-        /* fail-soft — user kan ändå se brevet */
+        /* fail-soft */
       }
     }
   }

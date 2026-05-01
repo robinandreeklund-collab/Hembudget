@@ -222,6 +222,7 @@ export type V2MailItem = {
   mail_type: V2MailType;
   subject: string;
   body_meta: string | null;
+  body: string | null;
   amount: number | null;
   due_date: string | null;
   received_at: string;
@@ -231,6 +232,7 @@ export type V2MailItem = {
   is_recurring: boolean;
   ocr_reference: string | null;
   bankgiro: string | null;
+  notes: string | null;
 };
 
 export type V2MailSummary = {
@@ -1289,6 +1291,72 @@ export type V2TeacherPortfolioOverview = {
   portfolio: V2PortfolioData;
 };
 
+// === /v2/postladan/{id}/detail (Fas 2N · CC + Lönespec drill-down) ===
+
+export type V2CcTxRow = {
+  id: number;
+  date: string;
+  amount: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  is_classified: boolean;
+  user_verified: boolean;
+};
+
+export type V2CcInvoiceData = {
+  period_start: string;
+  period_end: string;
+  total_amount: number;
+  tx_count: number;
+  classified_count: number;
+  unclassified_count: number;
+  auto_classified_count: number;
+  avg_amount: number;
+  profile_label: string;
+  consumer_avg: number;
+  profile_avg: number;
+  transactions: V2CcTxRow[];
+  prev_month_amount: number | null;
+  diff_pct_vs_prev: number | null;
+};
+
+export type V2SalarySlipBreakdownRow = {
+  label: string;
+  amount: number;
+  is_total: boolean;
+};
+
+export type V2SalarySlipData = {
+  period_label: string;
+  gross_salary: number;
+  tax: number;
+  net_salary: number;
+  ob_total: number;
+  pension_adjustment: number;
+  employer_social: number;
+  employer_itp1: number;
+  employer_friskvard: number;
+  total_employer_cost: number;
+  net_lines: V2SalarySlipBreakdownRow[];
+  employer_lines: V2SalarySlipBreakdownRow[];
+  prev_month_net: number | null;
+  diff_vs_prev: number | null;
+};
+
+export type V2MailDetailData = {
+  mail: V2MailItem;
+  cc_invoice: V2CcInvoiceData | null;
+  salary_slip: V2SalarySlipData | null;
+};
+
+export type V2TeacherMailDetailOverview = {
+  student_id: number;
+  student_name: string;
+  detail: V2MailDetailData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1886,6 +1954,13 @@ export const v2Api = {
   teacherPortfolioOverview: (studentId: number) =>
     api<V2TeacherPortfolioOverview>(
       `/v2/teacher/students/${studentId}/portfolio-overview`,
+    ),
+  // === /v2/postladan/{id}/detail (Fas 2N · CC + Lönespec drill-down) ===
+  mailDetail: (mailId: number) =>
+    api<V2MailDetailData>(`/v2/postladan/${mailId}/detail`),
+  teacherMailDetail: (studentId: number, mailId: number) =>
+    api<V2TeacherMailDetailOverview>(
+      `/v2/teacher/students/${studentId}/mail/${mailId}/detail`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

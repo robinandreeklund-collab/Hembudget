@@ -42,6 +42,7 @@ import { MeddelandenV2 } from "./v2/MeddelandenV2";
 import { PortfolioV2 } from "./v2/PortfolioV2";
 import { TeacherMessagesOverviewPage } from "./v2/TeacherMessagesOverviewPage";
 import { TeacherPortfolioOverviewPage } from "./v2/TeacherPortfolioOverviewPage";
+import { MailDetailV2 } from "./v2/MailDetailV2";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -300,6 +301,10 @@ export default function App() {
           <Route path="/v2/tx/:txId" element={<TxV2 />} />
           <Route path="/v2/meddelanden" element={<MeddelandenV2 />} />
           <Route path="/v2/portfolio" element={<PortfolioV2 />} />
+          <Route
+            path="/v2/postladan/:mailId"
+            element={<MailDetailV2 />}
+          />
           <Route
             path="/teacher/v2/credit/:studentId"
             element={<TeacherCreditOverviewPage />}
