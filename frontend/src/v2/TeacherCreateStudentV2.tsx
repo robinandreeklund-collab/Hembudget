@@ -21,6 +21,7 @@ import {
   type V2CreateStudentIn,
 } from "./api";
 import { V2Banner } from "./V2Banner";
+import { LoginQrModal } from "./LoginQrModal";
 import "./larare.css";
 
 const ARCHETYPE_LABEL: Record<V2CharacterArchetype, string> = {
@@ -53,6 +54,7 @@ export function TeacherCreateStudentV2() {
   const [data, setData] = useState<V2CreatedStudentsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<V2CreatedStudentRow | null>(null);
+  const [qrStudentId, setQrStudentId] = useState<number | null>(null);
   const navigate = useNavigate();
 
   async function load() {
@@ -194,6 +196,26 @@ export function TeacherCreateStudentV2() {
               koden med eleven så loggar hen in på{" "}
               <code style={{ color: "var(--warm)" }}>/student/login</code>.
             </p>
+            <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setQrStudentId(created.student_id)}
+                className="larare-tb-btn solid"
+                style={{
+                  background: "var(--warm, #fbbf24)",
+                  color: "#422006",
+                  borderColor: "var(--warm, #fbbf24)",
+                }}
+              >
+                ▦ Visa QR-kod
+              </button>
+              <Link
+                to={`/teacher/v2/elev/${created.student_id}`}
+                className="larare-tb-btn"
+              >
+                Öppna elev-detalj →
+              </Link>
+            </div>
           </article>
         )}
 
@@ -263,14 +285,25 @@ export function TeacherCreateStudentV2() {
               <span>Partner</span>
               <span>Nivå</span>
               <span>Skapad</span>
-              <span>Status</span>
+              <span>QR</span>
             </div>
             {data.rows.map((row) => (
-              <CreatedStudentRow key={row.student_id} row={row} />
+              <CreatedStudentRow
+                key={row.student_id}
+                row={row}
+                onShowQr={() => setQrStudentId(row.student_id)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {qrStudentId !== null && (
+        <LoginQrModal
+          studentId={qrStudentId}
+          onClose={() => setQrStudentId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -497,11 +530,16 @@ function CreateForm({
   );
 }
 
-function CreatedStudentRow({ row }: { row: V2CreatedStudentRow }) {
+function CreatedStudentRow({
+  row,
+  onShowQr,
+}: {
+  row: V2CreatedStudentRow;
+  onShowQr: () => void;
+}) {
   const isPending = !row.activated;
   return (
-    <Link
-      to={`/teacher/v2/elev/${row.student_id}`}
+    <div
       style={{
         display: "grid",
         gridTemplateColumns: "120px 1.5fr 110px 110px 110px 100px 80px",
@@ -509,7 +547,6 @@ function CreatedStudentRow({ row }: { row: V2CreatedStudentRow }) {
         padding: "12px 16px",
         borderBottom: "1px solid var(--line, rgba(255,255,255,0.1))",
         alignItems: "center",
-        textDecoration: "none",
         color: "rgba(255,255,255,0.92)",
       }}
     >
@@ -524,15 +561,31 @@ function CreatedStudentRow({ row }: { row: V2CreatedStudentRow }) {
       >
         {row.login_code}
       </span>
-      <div>
+      <Link
+        to={`/teacher/v2/elev/${row.student_id}`}
+        style={{ textDecoration: "none", color: "inherit" }}
+      >
         <div
           style={{
             fontFamily: "Source Serif 4, Georgia, serif",
             fontSize: 13.5,
             color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
           {row.student_name}
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: isPending ? "var(--warm, #fbbf24)" : "#6ee7b7",
+              flexShrink: 0,
+            }}
+            title={isPending ? "Väntar på första login" : "Aktiv"}
+          />
         </div>
         <div
           style={{
@@ -541,9 +594,10 @@ function CreatedStudentRow({ row }: { row: V2CreatedStudentRow }) {
             color: "rgba(255,255,255,0.4)",
           }}
         >
-          {ARCHETYPE_LABEL[row.archetype] || row.archetype}
+          {ARCHETYPE_LABEL[row.archetype] || row.archetype} ·{" "}
+          {isPending ? "VÄNTAR" : "AKTIV"}
         </div>
-      </div>
+      </Link>
       <span
         style={{
           fontFamily: "JetBrains Mono, monospace",
@@ -589,24 +643,27 @@ function CreatedStudentRow({ row }: { row: V2CreatedStudentRow }) {
       >
         {SHORT_DATE(row.created_at)}
       </span>
-      <span
+      <button
+        type="button"
+        onClick={onShowQr}
+        title="Visa QR-kod"
         style={{
+          background: "rgba(251,191,36,0.10)",
+          border: "1px solid rgba(251,191,36,0.35)",
+          color: "var(--warm, #fbbf24)",
+          padding: "6px 10px",
+          borderRadius: 6,
           fontFamily: "JetBrains Mono, monospace",
-          fontSize: 9,
-          padding: "3px 8px",
-          borderRadius: 100,
-          background: isPending
-            ? "rgba(251,191,36,0.15)"
-            : "rgba(110,231,183,0.16)",
-          color: isPending ? "var(--warm, #fbbf24)" : "#6ee7b7",
-          textAlign: "center",
-          letterSpacing: 1,
+          fontSize: 9.5,
           fontWeight: 700,
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+          cursor: "pointer",
         }}
       >
-        {isPending ? "VÄNTAR" : "AKTIV"}
-      </span>
-    </Link>
+        ▦ QR
+      </button>
+    </div>
   );
 }
 

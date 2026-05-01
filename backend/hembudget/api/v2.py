@@ -14771,3 +14771,86 @@ def teacher_klass_pentagon_axis(
         bottom_contributors=bottom_contributors,
         summary_text=summary_text,
     )
+
+
+# === Login-QR-kod (Fas 2AJ) ===
+#
+# Genererar QR-kod för en elev-login-kod som SVG (skalbar, fungerar
+# i tryck). URL:en pekar på elevens login-sida med koden förifylld.
+
+
+class V2LoginQrResponse(BaseModel):
+    student_id: int
+    student_name: str
+    login_code: str
+    login_url: str
+    qr_svg: str  # Inbäddningsbar SVG-string
+
+
+def _build_login_url(login_code: str, base_url: Optional[str] = None) -> str:
+    """Bygg URL till student-login-sidan med koden förifylld.
+
+    Använder konfigurerad PUBLIC_BASE_URL om satt, annars relativ
+    URL — lärare kan klistra in basen själva i mailet.
+    """
+    from ..config import settings
+    base = (
+        getattr(settings, "public_base_url", None)
+        or "https://ekonomilabbet.org"
+    )
+    return f"{base.rstrip('/')}/login?code={login_code}"
+
+
+def _make_qr_svg(data: str, scale: int = 8) -> str:
+    """Generera QR-kod som inline SVG-string. Pure-Python (ingen
+    Pillow-dependency för SVG-faktor). Returneras som UTF-8 sträng."""
+    import qrcode
+    import qrcode.image.svg as qsvg
+    factory = qsvg.SvgPathImage
+    img = qrcode.make(
+        data,
+        image_factory=factory,
+        box_size=scale,
+        border=2,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+    )
+    import io as _io
+    buf = _io.BytesIO()
+    img.save(buf)
+    return buf.getvalue().decode("utf-8")
+
+
+@router.get(
+    "/teacher/students/{student_id}/login-qr",
+    response_model=V2LoginQrResponse,
+)
+def teacher_get_login_qr(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2LoginQrResponse:
+    """Returnerar elevens login-URL + QR-kod som SVG.
+
+    Lärare kan visa QR:en direkt i klassrummet (eleven scannar med
+    mobilen) eller skriva ut + dela.
+    """
+    teacher_id = _require_teacher(info)
+    with master_session() as ms:
+        student = ms.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        if not student.login_code:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Eleven saknar login-kod",
+            )
+        url = _build_login_url(student.login_code)
+        svg = _make_qr_svg(url)
+        return V2LoginQrResponse(
+            student_id=student_id,
+            student_name=student.display_name,
+            login_code=student.login_code,
+            login_url=url,
+            qr_svg=svg,
+        )

@@ -14,12 +14,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { v2Api, type V2RosterRow } from "./api";
 import { V2Banner } from "./V2Banner";
+import { LoginQrModal } from "./LoginQrModal";
 
 export function V2RosterPage() {
   const [rows, setRows] = useState<V2RosterRow[] | null>(null);
   const [busy, setBusy] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [qrStudentId, setQrStudentId] = useState<number | null>(null);
 
   async function load() {
     try {
@@ -469,6 +471,26 @@ export function V2RosterPage() {
                 >
                   Chatta →
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => setQrStudentId(r.student_id)}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(251,191,36,0.10)",
+                    border: "1px solid rgba(251,191,36,0.4)",
+                    color: "#fbbf24",
+                    cursor: "pointer",
+                    marginLeft: 8,
+                  }}
+                >
+                  ▦ QR
+                </button>
                 <Link
                   to={`/teacher/v2/portfolio/${r.student_id}`}
                   style={{
@@ -512,6 +534,13 @@ export function V2RosterPage() {
           </div>
         )}
       </div>
+
+      {qrStudentId !== null && (
+        <LoginQrModal
+          studentId={qrStudentId}
+          onClose={() => setQrStudentId(null)}
+        />
+      )}
     </div>
   );
 }

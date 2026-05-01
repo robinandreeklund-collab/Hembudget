@@ -8131,3 +8131,50 @@ def test_v2_hub_cross_teacher_impersonation_blocked(fx) -> None:
     # actor sätts inte → tom payload
     assert r.status_code == 200
     assert r.json()["student_id"] == 0
+
+
+# === Login-QR (Fas 2AJ) ===
+
+
+def test_v2_teacher_login_qr_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/login-qr",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_login_qr_basic(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/login-qr",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["login_code"]  # icke-tom
+    assert "ekonomilabbet" in data["login_url"]
+    assert data["login_code"] in data["login_url"]
+    # SVG bör börja med <?xml eller <svg
+    assert "<svg" in data["qr_svg"] or "<?xml" in data["qr_svg"]
+
+
+def test_v2_teacher_login_qr_cross_teacher_403(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/login-qr",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_login_qr_404_when_unknown_student(fx) -> None:
+    """Saknad elev → 403 (treatas som cross-teacher)."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/students/9999/login-qr",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 403

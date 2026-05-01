@@ -2754,6 +2754,15 @@ export const v2Api = {
   // === Fas 2AH · klass-pentagon axis-detail ===
   teacherKlassPentagonAxis: (axis: V2PentAxis) =>
     api<V2KlassAxisDetail>(`/v2/teacher/klass-pentagon/axis/${axis}`),
+  // === Fas 2AJ · QR-kod för elev-login ===
+  teacherStudentLoginQr: (studentId: number) =>
+    api<{
+      student_id: number;
+      student_name: string;
+      login_code: string;
+      login_url: string;
+      qr_svg: string;
+    }>(`/v2/teacher/students/${studentId}/login-qr`),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{
