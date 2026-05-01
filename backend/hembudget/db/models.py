@@ -1709,6 +1709,52 @@ class MailItem(TenantMixin, Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class JobApplication(TenantMixin, Base):
+    """Spelmotor · Sprint 6 · pågående/avslutad jobbansökan.
+
+    Spec: dev/game-motor/05-arbetsformedlingen.md (5-rond intervju)
+
+    State-machine:
+      1 cv      · CV + personligt brev (input: cover_letter_hours)
+      2 phone   · Telefonintervju (input: tone)
+      3 case    · Kompetenstest / case (input: effort_level + answer)
+      4 onsite  · Intervju på plats (input: dress_code + research_h)
+      5 offer   · Erbjudande/avslag + ev. löneförhandling
+
+    `status`:
+      "round_1" | "round_2" | "round_3" | "round_4" | "round_5"
+      "offer_pending" · väntar på elevens beslut om erbjudande
+      "accepted"      · eleven tog jobbet
+      "rejected"      · arbetsgivaren sa nej
+      "declined"      · eleven tackade nej till erbjudande
+      "abandoned"     · eleven avbröt mitten i flödet
+    """
+    __tablename__ = "job_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    yrke_key: Mapped[str] = mapped_column(String(60), nullable=False)
+    yrke_display: Mapped[str] = mapped_column(String(160), nullable=False)
+    employer_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    city_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    city_display: Mapped[str] = mapped_column(String(80), nullable=False)
+    monthly_gross_offered: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    match_score: Mapped[int] = mapped_column(Integer, default=50)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="round_1",
+    )
+    current_round: Mapped[int] = mapped_column(Integer, default=1)
+    rounds_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    final_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    feedback_md: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_on: Mapped[date] = mapped_column(Date, nullable=False)
+    completed_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class ActiveHome(TenantMixin, Base):
     """Spelmotor · vad eleven bor i JUST NU.
 

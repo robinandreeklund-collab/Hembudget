@@ -32,6 +32,7 @@ const ROUTE_TO_CRUMBS: Array<[RegExp, string[]]> = [
   [/^\/v2\/forbrukning$/, ["Hubben", "Förbrukning"]],
   [/^\/v2\/hyresvarden$/, ["Hubben", "Boendemarknaden"]],
   [/^\/v2\/boendemarknad$/, ["Hubben", "Boendemarknaden"]],
+  [/^\/v2\/arbetsformedlingen$/, ["Hubben", "Arbetsförmedlingen"]],
   [/^\/v2\/pension$/, ["Hubben", "Pension"]],
   [/^\/v2\/postladan/, ["Hubben", "Postlådan"]],
   [/^\/v2\/bokforing$/, ["Hubben", "Bokföring"]],

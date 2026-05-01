@@ -656,6 +656,61 @@ export type V2TeacherUtilityOverview = {
   readings: V2UtilityReadingOut[];
 };
 
+// === /v2/arbetsformedlingen (Sprint 6 · A1-A5) ===
+
+export type V2ArbetsformedlingenJob = {
+  listing_id: string;
+  yrke_key: string;
+  yrke_display: string;
+  yrke_ssyk: string;
+  employer_name: string;
+  city_key: string;
+  city_display: string;
+  monthly_gross_min: number;
+  monthly_gross_median: number;
+  monthly_gross_max: number;
+  education_level: string;
+  match_score: number;
+  description: string;
+};
+
+export type V2ArbetsformedlingenJobsResponse = {
+  mats_message: string;
+  year_month: string;
+  jobs: V2ArbetsformedlingenJob[];
+};
+
+export type V2ArbetsformedlingenApplication = {
+  id: number;
+  yrke_key: string;
+  yrke_display: string;
+  employer_name: string;
+  city_key: string;
+  city_display: string;
+  status:
+    | "round_1" | "round_2" | "round_3" | "round_4" | "round_5"
+    | "offer_pending" | "accepted" | "rejected" | "declined" | "abandoned";
+  current_round: number;
+  match_score: number;
+  monthly_gross_offered: number | null;
+  final_score: number | null;
+  feedback_md: string | null;
+  rounds_data: Record<string, unknown> | null;
+  started_on: string;
+  completed_on: string | null;
+};
+
+export type V2ArbetsformedlingenRoundOut = {
+  round_n: number;
+  score_delta: number;
+  feedback_md: string;
+  pentagon_delta: Record<string, number>;
+  advanced_to: number;
+  final_status: string | null;
+  application: V2ArbetsformedlingenApplication;
+};
+
+
 // === /v2/boendemarknad (Sprint 5 · B1-B5) ===
 
 export type V2BoendemarknadListing = {
@@ -2576,6 +2631,39 @@ export const v2Api = {
   teacherBoendemarknadPrices: (ym: string) =>
     api<V2BoendemarknadCityPrice[]>(
       `/v2/teacher/boendemarknad/market-prices?ym=${encodeURIComponent(ym)}`,
+    ),
+
+  // === /v2/arbetsformedlingen (Sprint 6 · A1-A5) ===
+  arbetsformedlingenJobs: (ym: string, n = 6) =>
+    api<V2ArbetsformedlingenJobsResponse>(
+      `/v2/arbetsformedlingen/jobs?ym=${encodeURIComponent(ym)}&n=${n}`,
+    ),
+  arbetsformedlingenApply: (opening: V2ArbetsformedlingenJob) =>
+    api<V2ArbetsformedlingenApplication>(
+      "/v2/arbetsformedlingen/apply",
+      { method: "POST", body: JSON.stringify(opening) },
+    ),
+  arbetsformedlingenApplications: () =>
+    api<V2ArbetsformedlingenApplication[]>("/v2/arbetsformedlingen/applications"),
+  arbetsformedlingenSubmitRound: (appId: number, payload: Record<string, unknown>) =>
+    api<V2ArbetsformedlingenRoundOut>(
+      `/v2/arbetsformedlingen/applications/${appId}/round`,
+      { method: "POST", body: JSON.stringify({ payload }) },
+    ),
+  arbetsformedlingenAccept: (appId: number) =>
+    api<V2ArbetsformedlingenApplication>(
+      `/v2/arbetsformedlingen/applications/${appId}/accept`,
+      { method: "POST" },
+    ),
+  arbetsformedlingenDecline: (appId: number) =>
+    api<V2ArbetsformedlingenApplication>(
+      `/v2/arbetsformedlingen/applications/${appId}/decline`,
+      { method: "POST" },
+    ),
+  arbetsformedlingenAbandon: (appId: number) =>
+    api<V2ArbetsformedlingenApplication>(
+      `/v2/arbetsformedlingen/applications/${appId}/abandon`,
+      { method: "POST" },
     ),
 
   // === /v2/bokforing (Fas 2H — Verktyg 02) ===

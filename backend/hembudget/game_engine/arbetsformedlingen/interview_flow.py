@@ -1,0 +1,518 @@
+"""A4 · Intervju-flöde state-machine.
+
+Spec: dev/game-motor/05-arbetsformedlingen.md (5-rond intervjuflöde)
+
+5 ronder med pedagogiska val + Mats-feedback + pentagon-effekter.
+
+Varje round-funktion tar ett input-objekt och returnerar (RoundResult,
+updated_application). Status-machine sköts av `submit_round_response`
+som dispatcherar till rätt funktion baserat på application.current_round.
+"""
+from __future__ import annotations
+
+import logging
+import random
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Literal, Optional
+
+from sqlalchemy.orm import Session
+
+from ...db.models import JobApplication
+from ..pentagon import apply_pentagon_delta
+from ..pools.yrkespool import YRKE_BY_KEY
+from .matching import JobOpening
+
+log = logging.getLogger(__name__)
+
+
+# === Input-objekt per rond ===
+
+@dataclass
+class Round1Input:
+    cover_letter_hours: float = 1.0     # 0.5 - 4.0
+
+
+@dataclass
+class Round2Input:
+    tone: Literal["saker", "reflekterande", "ansprakvol", "arlig"] = "reflekterande"
+    answers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Round3Input:
+    effort_level: Literal["lat", "normal", "djup"] = "normal"
+    case_answer: str = ""
+
+
+@dataclass
+class Round4Input:
+    dress: Literal["vardag", "business_casual", "formell"] = "business_casual"
+    research_hours: float = 0.5     # 0 / 0.5 / 2.0
+
+
+@dataclass
+class Round5Decision:
+    decision: Literal["accept", "decline", "negotiate"] = "accept"
+    counter_offer_kr: Optional[int] = None
+
+
+@dataclass
+class RoundResult:
+    """Resultat av en avslutad rond."""
+    round_n: int
+    score_delta: int                # -10 till +10 per rond
+    feedback_md: str
+    pentagon_delta: dict[str, int]
+    advanced_to: int                # Nästa round_n eller 0 om klart
+    final_status: Optional[str] = None
+
+
+# === Apply ===
+
+
+def apply_to_job(
+    s: Session,
+    *,
+    student_id: int,
+    opening: JobOpening,
+    today: date,
+) -> JobApplication:
+    """Skapa ny JobApplication, status round_1, current_round=1."""
+    app = JobApplication(
+        yrke_key=opening.yrke_key,
+        yrke_display=opening.yrke_display,
+        employer_name=opening.employer_name,
+        city_key=opening.city_key,
+        city_display=opening.city_display,
+        monthly_gross_offered=None,
+        match_score=opening.match_score,
+        status="round_1",
+        current_round=1,
+        rounds_data={"opening": {
+            "listing_id": opening.listing_id,
+            "ssyk": opening.yrke_ssyk,
+            "median_salary": opening.monthly_gross_median,
+            "match_score": opening.match_score,
+        }},
+        started_on=today,
+    )
+    s.add(app)
+    s.flush()
+
+    # Pentagon: +1 safety (har sökt = aktiv karriär)
+    try:
+        apply_pentagon_delta(
+            student_id, axis="safety", requested_delta=+1,
+            reason_kind="decision", reason_id=app.id,
+            reason_table="job_applications",
+            explanation=f"sökt jobb · {opening.yrke_display}",
+        )
+    except Exception:
+        log.exception("pentagon delta failed for apply_to_job")
+    return app
+
+
+# === Round logic ===
+
+
+def _round1(
+    s: Session, *, app: JobApplication, student_id: int,
+    inp: Round1Input,
+) -> RoundResult:
+    h = max(0.5, min(4.0, inp.cover_letter_hours))
+    # Mer tid = bättre intryck men kostar fritid + relation
+    quality = min(10, int(2 + h * 2))
+    score_delta = quality - 5
+    pentagon: dict[str, int] = {"safety": +1}
+    if h > 2:
+        pentagon["social"] = -1
+    if h > 1:
+        pentagon["leisure"] = -1
+    feedback = (
+        f"**Rond 1 · CV + personligt brev**\n\n"
+        f"Du la {h:.1f} timmar på personligt brev. Mats läser det och "
+        f"bedömer det som **{['svagt','okej','bra','mycket bra','utmärkt'][min(4, quality//2)]}**.\n\n"
+    )
+    if h < 1:
+        feedback += (
+            "Tips inför nästa gång: 1-2 h på brev brukar ge bästa "
+            "balans mellan kvalitet och egen tid.\n"
+        )
+
+    rd = app.rounds_data or {}
+    rd["round_1"] = {
+        "cover_letter_hours": h,
+        "quality": quality,
+        "score_delta": score_delta,
+    }
+    app.rounds_data = rd
+    app.status = "round_2"
+    app.current_round = 2
+    return RoundResult(
+        round_n=1, score_delta=score_delta, feedback_md=feedback,
+        pentagon_delta=pentagon, advanced_to=2,
+    )
+
+
+_TONE_EFFECTS = {
+    "saker": (+2, {"safety": +1}),
+    "reflekterande": (+1, {}),
+    "ansprakvol": (-1, {"safety": -1}),
+    "arlig": (+1, {"social": +1}),
+}
+
+
+def _round2(
+    s: Session, *, app: JobApplication, student_id: int,
+    inp: Round2Input,
+) -> RoundResult:
+    delta, extra = _TONE_EFFECTS.get(inp.tone, (+0, {}))
+    n_answers = len([a for a in inp.answers if a and len(a.strip()) > 5])
+    if n_answers >= 4:
+        delta += 1
+    score_delta = delta
+    pentagon: dict[str, int] = {"health": -2}
+    pentagon.update(extra)
+
+    feedback = (
+        f"**Rond 2 · Telefonintervju**\n\n"
+        f"Mats noterar att du valde tonen **{inp.tone}** och svarade "
+        f"på {n_answers} av frågorna utförligt. "
+    )
+    if inp.tone == "ansprakvol":
+        feedback += (
+            "Säkert i inställningen är bra — men för tidigt anspråksfull "
+            "kan rekryteraren tolka som arrogant.\n"
+        )
+    elif inp.tone == "arlig":
+        feedback += (
+            "Ärlig är vinnande för relation, men kan vara för naivt om "
+            "du visar svaga sidor utan kontext.\n"
+        )
+
+    rd = app.rounds_data or {}
+    rd["round_2"] = {"tone": inp.tone, "n_answers": n_answers, "score_delta": score_delta}
+    app.rounds_data = rd
+    app.status = "round_3"
+    app.current_round = 3
+    return RoundResult(
+        round_n=2, score_delta=score_delta, feedback_md=feedback,
+        pentagon_delta=pentagon, advanced_to=3,
+    )
+
+
+def _round3(
+    s: Session, *, app: JobApplication, student_id: int,
+    inp: Round3Input,
+) -> RoundResult:
+    answer_len = len((inp.case_answer or "").strip())
+    base_score = {"lat": -2, "normal": +1, "djup": +3}.get(inp.effort_level, 0)
+    if answer_len < 50:
+        base_score -= 1
+    elif answer_len > 200:
+        base_score += 1
+    score_delta = max(-4, min(4, base_score))
+
+    pentagon: dict[str, int] = {}
+    if inp.effort_level == "djup":
+        pentagon["leisure"] = -1
+    if score_delta < 0:
+        pentagon["safety"] = -1
+
+    yrke = YRKE_BY_KEY.get(app.yrke_key)
+    role = yrke.display if yrke else "rollen"
+    feedback = (
+        f"**Rond 3 · Kompetenstest**\n\n"
+        f"Mats granskar ditt case-svar för {role} och ger dig **score "
+        f"{5 + score_delta}/10**. "
+    )
+    if score_delta >= 3:
+        feedback += "Du visade stark förståelse för uppgiften.\n"
+    elif score_delta <= -2:
+        feedback += "Mer tid på case-uppgifter rekommenderas inför nästa.\n"
+
+    rd = app.rounds_data or {}
+    rd["round_3"] = {
+        "effort_level": inp.effort_level,
+        "answer_length": answer_len,
+        "score_delta": score_delta,
+    }
+    app.rounds_data = rd
+    app.status = "round_4"
+    app.current_round = 4
+    return RoundResult(
+        round_n=3, score_delta=score_delta, feedback_md=feedback,
+        pentagon_delta=pentagon, advanced_to=4,
+    )
+
+
+def _round4(
+    s: Session, *, app: JobApplication, student_id: int,
+    inp: Round4Input,
+) -> RoundResult:
+    dress_score = {"vardag": -1, "business_casual": +2, "formell": +1}.get(inp.dress, 0)
+    research_score = 0
+    if inp.research_hours == 0:
+        research_score = -1
+    elif inp.research_hours >= 2:
+        research_score = +2
+    else:
+        research_score = +1
+    score_delta = dress_score + research_score
+    pentagon: dict[str, int] = {"health": -3}
+    if inp.research_hours >= 2:
+        pentagon["leisure"] = -1
+
+    feedback = (
+        f"**Rond 4 · Intervju på plats**\n\n"
+        f"Mats noterar din klädsel ({inp.dress}) och att du la "
+        f"{inp.research_hours:.1f} h på företagsforskning. "
+    )
+    if score_delta >= 3:
+        feedback += "Mycket bra förberedelse — det syns och uppskattas.\n"
+    elif score_delta <= 0:
+        feedback += "Mer förberedelse hade kunnat ge ett starkare intryck.\n"
+
+    rd = app.rounds_data or {}
+    rd["round_4"] = {
+        "dress": inp.dress, "research_hours": inp.research_hours,
+        "score_delta": score_delta,
+    }
+    app.rounds_data = rd
+    app.status = "round_5"
+    app.current_round = 5
+    return RoundResult(
+        round_n=4, score_delta=score_delta, feedback_md=feedback,
+        pentagon_delta=pentagon, advanced_to=5,
+    )
+
+
+def _compute_final_score(app: JobApplication) -> int:
+    """Summera alla ronders score_delta + match_score-bias."""
+    rd = app.rounds_data or {}
+    total = app.match_score
+    for k in ("round_1", "round_2", "round_3", "round_4"):
+        if k in rd:
+            total += int(rd[k].get("score_delta", 0)) * 2
+    return max(0, min(100, total))
+
+
+def _round5_offer_or_reject(
+    s: Session, *, app: JobApplication, student_id: int,
+) -> RoundResult:
+    """Avgör om eleven får erbjudande eller avslag baserat på final_score.
+
+    Sannolikheter:
+      score >= 80: 95% offer
+      score 60-79: 70% offer
+      score 40-59: 40% offer
+      score < 40:  10% offer
+    """
+    score = _compute_final_score(app)
+    app.final_score = score
+    rng = random.Random(f"offer|{app.id}|{score}")
+
+    if score >= 80:
+        p = 0.95
+    elif score >= 60:
+        p = 0.70
+    elif score >= 40:
+        p = 0.40
+    else:
+        p = 0.10
+
+    if rng.random() < p:
+        # Erbjudande
+        yrke = YRKE_BY_KEY.get(app.yrke_key)
+        if yrke is None:
+            base = 30000
+        else:
+            # Lön baserad på final_score: median ± 30%
+            base = yrke.monthly_gross_median
+            offset_pct = (score - 50) / 100 * 0.3
+            base = int(base * (1 + offset_pct))
+            base = max(yrke.monthly_gross_min, min(yrke.monthly_gross_max, base))
+        app.monthly_gross_offered = base
+        app.status = "offer_pending"
+        feedback = (
+            f"**Rond 5 · Erbjudande från {app.employer_name}**\n\n"
+            f"Mats: \"Bra jobbat! De erbjuder dig **{base:,} kr/mån** "
+            f"brutto.\"\n\n".replace(",", " ")
+            + f"Final score: **{score}/100**.\n"
+            + "Du kan acceptera, motbjuda med högre lön, eller tacka nej."
+        )
+        return RoundResult(
+            round_n=5, score_delta=0, feedback_md=feedback,
+            pentagon_delta={}, advanced_to=0,
+            final_status="offer_pending",
+        )
+
+    # Avslag
+    app.status = "rejected"
+    app.completed_on = date.today()
+    feedback = (
+        f"**Rond 5 · Avslag från {app.employer_name}**\n\n"
+        f"Mats: \"Tyvärr gick det inte hela vägen den här gången. "
+        f"Final score blev {score}/100.\"\n\n"
+        "Det här lärde du dig:\n"
+    )
+    rd = app.rounds_data or {}
+    if rd.get("round_3", {}).get("score_delta", 0) < 0:
+        feedback += "- Lägg mer tid på case-uppgifter inför nästa intervju.\n"
+    if rd.get("round_4", {}).get("score_delta", 0) <= 0:
+        feedback += "- Förbered dig grundligare på företagets kultur.\n"
+    if rd.get("round_2", {}).get("tone") == "ansprakvol":
+        feedback += "- Mjukare ton i tidiga intervjuer kan ge bättre resultat.\n"
+
+    pentagon = {"safety": -2, "social": -1}
+    return RoundResult(
+        round_n=5, score_delta=0, feedback_md=feedback,
+        pentagon_delta=pentagon, advanced_to=0,
+        final_status="rejected",
+    )
+
+
+# === Dispatcher ===
+
+
+def submit_round_response(
+    s: Session,
+    *,
+    student_id: int,
+    application_id: int,
+    payload: dict,
+) -> RoundResult:
+    """Dispatcha till rätt rond-handler baserat på app.current_round."""
+    app = s.get(JobApplication, application_id)
+    if app is None:
+        raise ValueError(f"Application {application_id} hittades inte")
+    if app.status not in ("round_1", "round_2", "round_3", "round_4"):
+        raise ValueError(
+            f"Application {application_id} är inte i en aktiv rond "
+            f"(status={app.status})"
+        )
+
+    handlers = {
+        1: lambda: _round1(s, app=app, student_id=student_id,
+                           inp=Round1Input(**payload)),
+        2: lambda: _round2(s, app=app, student_id=student_id,
+                           inp=Round2Input(**payload)),
+        3: lambda: _round3(s, app=app, student_id=student_id,
+                           inp=Round3Input(**payload)),
+        4: lambda: _round4(s, app=app, student_id=student_id,
+                           inp=Round4Input(**payload)),
+    }
+    handler = handlers.get(app.current_round)
+    if handler is None:
+        raise ValueError(f"Okänd rond {app.current_round}")
+
+    result = handler()
+
+    # Applicera pentagon
+    for axis, delta in result.pentagon_delta.items():
+        try:
+            apply_pentagon_delta(
+                student_id, axis=axis, requested_delta=delta,
+                reason_kind="decision", reason_id=app.id,
+                reason_table="job_applications",
+                explanation=f"intervju rond {result.round_n} · {app.employer_name}",
+            )
+        except Exception:
+            log.exception("pentagon delta failed for round %d", result.round_n)
+
+    # Om vi nådde rond 5 → kör direkt
+    if result.advanced_to == 5:
+        offer_result = _round5_offer_or_reject(s, app=app, student_id=student_id)
+        for axis, delta in offer_result.pentagon_delta.items():
+            try:
+                apply_pentagon_delta(
+                    student_id, axis=axis, requested_delta=delta,
+                    reason_kind="decision", reason_id=app.id,
+                    reason_table="job_applications",
+                    explanation=f"intervju rond 5 · {app.employer_name}",
+                )
+            except Exception:
+                log.exception("pentagon delta failed for round 5")
+        s.flush()
+        return offer_result
+
+    s.flush()
+    return result
+
+
+def accept_offer(
+    s: Session,
+    *,
+    student_id: int,
+    application_id: int,
+) -> JobApplication:
+    """Eleven tar jobbet. Pentagon: +5 economy om högre lön (kommer i M5b)."""
+    app = s.get(JobApplication, application_id)
+    if app is None or app.status != "offer_pending":
+        raise ValueError("Inget pending erbjudande att acceptera.")
+    app.status = "accepted"
+    app.completed_on = date.today()
+    s.flush()
+
+    # Pentagon: +3 safety (säkrad inkomst) + ev. +5 economy om mer lön
+    deltas = {"safety": +3}
+    # Lön-jämförelse vs nuvarande kommer i Sprint 6b när vi vet
+    # nuvarande lön. För nu antar vi +1 economy.
+    deltas["economy"] = +1
+    for axis, delta in deltas.items():
+        try:
+            apply_pentagon_delta(
+                student_id, axis=axis, requested_delta=delta,
+                reason_kind="decision", reason_id=app.id,
+                reason_table="job_applications",
+                explanation=f"accepterade jobb · {app.employer_name}",
+            )
+        except Exception:
+            log.exception("pentagon delta failed for accept_offer")
+    return app
+
+
+def decline_offer(
+    s: Session,
+    *,
+    student_id: int,
+    application_id: int,
+) -> JobApplication:
+    """Eleven tackar nej. Pentagon: ingen större effekt."""
+    app = s.get(JobApplication, application_id)
+    if app is None or app.status != "offer_pending":
+        raise ValueError("Inget pending erbjudande att neka.")
+    app.status = "declined"
+    app.completed_on = date.today()
+    s.flush()
+    return app
+
+
+def abandon_application(
+    s: Session,
+    *,
+    student_id: int,
+    application_id: int,
+) -> JobApplication:
+    """Eleven avbryter mitt i flödet. Pentagon: -1 safety, -1 health."""
+    app = s.get(JobApplication, application_id)
+    if app is None:
+        raise ValueError("Application saknas.")
+    if app.status not in ("round_1", "round_2", "round_3", "round_4", "round_5"):
+        raise ValueError("Application är redan avslutad.")
+    app.status = "abandoned"
+    app.completed_on = date.today()
+    s.flush()
+
+    for axis, delta in (("safety", -1), ("health", -1)):
+        try:
+            apply_pentagon_delta(
+                student_id, axis=axis, requested_delta=delta,
+                reason_kind="decision", reason_id=app.id,
+                reason_table="job_applications",
+                explanation=f"avbröt ansökan · {app.employer_name}",
+            )
+        except Exception:
+            log.exception("pentagon delta failed for abandon")
+    return app

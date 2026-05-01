@@ -19,6 +19,7 @@ import { TeacherUtilityOverviewPage } from "./v2/TeacherUtilityOverviewPage";
 import { ForbrukningV2 } from "./v2/ForbrukningV2";
 import { TeacherRentalOverviewPage } from "./v2/TeacherRentalOverviewPage";
 import { BoendemarknadV2 } from "./v2/BoendemarknadV2";
+import { ArbetsformedlingenV2 } from "./v2/ArbetsformedlingenV2";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
 import { AktierV2 } from "./v2/AktierV2";
@@ -316,6 +317,8 @@ export default function App() {
               fortsätter fungera. */}
           <Route path="/v2/boendemarknad" element={<BoendemarknadV2 />} />
           <Route path="/v2/hyresvarden" element={<BoendemarknadV2 />} />
+          {/* Aktör 10 · Arbetsförmedlingen (Sprint 6 · A1-A5) */}
+          <Route path="/v2/arbetsformedlingen" element={<ArbetsformedlingenV2 />} />
           <Route path="/v2/pension" element={<PensionV2 />} />
           <Route path="/v2/avanza" element={<AvanzaV2 />} />
           <Route path="/v2/aktier" element={<AktierV2 />} />

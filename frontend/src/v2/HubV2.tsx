@@ -408,6 +408,11 @@ export function HubV2() {
               <div className="compass-node-name">Pension</div>
               <div className="compass-node-val">3 pelare + ISK</div>
             </Link>
+            <Link to="/v2/arbetsformedlingen" className="compass-node">
+              <div className="compass-node-eye">Aktör 10</div>
+              <div className="compass-node-name">Arbetsförmedlingen</div>
+              <div className="compass-node-val">jobbsök · 5-rond med Mats</div>
+            </Link>
           </div>
 
           <div className="compass-eye" style={{ marginTop: 18 }}>

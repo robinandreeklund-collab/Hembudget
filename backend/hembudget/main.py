@@ -15,12 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 faulthandler.enable()
 
 from .api import (
-    admin, ai, ai_admin, auth, backup, balances, bank, boendemarknad,
-    budget, chat, credit, elpris, email_auth, employer, funds, game_engine,
-    landing, ledger, loans, modules, reports, scenarios, school,
-    settings_kv, smtp_admin, stock_trading, stocks, tax, events,
-    teacher_credit, teacher_employer, teacher_stocks, teacher_wellbeing,
-    transactions, transfers, upcoming, upload, utility, v2, wellbeing,
+    admin, ai, ai_admin, arbetsformedlingen, auth, backup, balances, bank,
+    boendemarknad, budget, chat, credit, elpris, email_auth, employer,
+    funds, game_engine, landing, ledger, loans, modules, reports,
+    scenarios, school, settings_kv, smtp_admin, stock_trading, stocks,
+    tax, events, teacher_credit, teacher_employer, teacher_stocks,
+    teacher_wellbeing, transactions, transfers, upcoming, upload,
+    utility, v2, wellbeing,
 )
 from .config import settings
 
@@ -187,6 +188,9 @@ def build_app() -> FastAPI:
     # Boendemarknad (Sprint 5 · B1-B5): listings, valuation, köp/sälj.
     app.include_router(boendemarknad.router)
     app.include_router(boendemarknad.teacher_router)
+    # Arbetsförmedlingen (Sprint 6 · A1-A5): jobs + 5-rond intervju.
+    app.include_router(arbetsformedlingen.router)
+    app.include_router(arbetsformedlingen.teacher_router)
 
     @app.get("/healthz")
     def healthz() -> dict:
