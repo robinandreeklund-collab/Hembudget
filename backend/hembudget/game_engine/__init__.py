@@ -4,9 +4,9 @@ Spec: dev/game-motor/README.md
 
 Nuvarande implementation:
 - pools/ · Yrkespool + Stadspool (G1)
+- profile_generator/ · Profil-syntes (G3-G4)
 
 Kommande:
-- profile_generator/ · Profil-syntes (G3-G4)
 - monthly_engine/ · Veckotick (M1-M6)
 - event_engine/ · Oväntade händelser (E1-E7)
 - pentagon/ · Tröghet, drift, mål (P1-P5)

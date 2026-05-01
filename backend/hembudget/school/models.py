@@ -1116,3 +1116,7 @@ from . import employer_models as _employer_models  # noqa: E402, F401
 # Bank-flöde (BankSession för BankID-simulering) — idé 3 i dev_v1.md.
 # ScheduledPayment + PaymentReminder ligger i scope-DB.
 from . import bank_models as _bank_models  # noqa: E402, F401
+
+# Spelmotor-tabeller (ClassCalendar driver Monthly Engine-tickarna).
+# Spec: dev/game-motor/12-data-modeller.md
+from . import game_engine_models as _game_engine_models  # noqa: E402, F401

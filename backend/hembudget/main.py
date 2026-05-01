@@ -16,11 +16,11 @@ faulthandler.enable()
 
 from .api import (
     admin, ai, ai_admin, auth, backup, balances, bank, budget, chat,
-    credit, elpris, email_auth, employer, funds, landing, ledger, loans,
-    modules, reports, scenarios, school, settings_kv, smtp_admin,
-    stock_trading, stocks, tax, events, teacher_credit, teacher_employer,
-    teacher_stocks, teacher_wellbeing, transactions, transfers, upcoming,
-    upload, utility, v2, wellbeing,
+    credit, elpris, email_auth, employer, funds, game_engine, landing,
+    ledger, loans, modules, reports, scenarios, school, settings_kv,
+    smtp_admin, stock_trading, stocks, tax, events, teacher_credit,
+    teacher_employer, teacher_stocks, teacher_wellbeing, transactions,
+    transfers, upcoming, upload, utility, v2, wellbeing,
 )
 from .config import settings
 
@@ -181,6 +181,9 @@ def build_app() -> FastAPI:
     # === V2 (parallell migration · ny dashboard) ===
     # Kör bredvid v1. Ingen befintlig endpoint berörs.
     app.include_router(v2.router)
+    # Spelmotor: ClassCalendar + Profile Generator preview-endpoint.
+    # Spec: dev/game-motor/
+    app.include_router(game_engine.router)
 
     @app.get("/healthz")
     def healthz() -> dict:
