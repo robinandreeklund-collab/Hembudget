@@ -7578,3 +7578,65 @@ def test_v2_teacher_history_limit_param(fx) -> None:
     )
     data = r.json()
     assert len(data["events"]) == 5
+
+
+# === Pentagon Axis Detail (Flip-card) — Fas 2Z ===
+
+
+def test_v2_pentagon_axis_blocks_teachers(fx) -> None:
+    """Elev-endpoint blockerar lärare."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/pentagon/axis/economy",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_pentagon_axis_basic_shape(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    for axis in ("economy", "safety", "health", "social", "leisure"):
+        r = client.get(
+            f"/v2/pentagon/axis/{axis}",
+            headers={"Authorization": f"Bearer {stu}"},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["axis"] == axis
+        assert "axis_label" in data
+        assert "score" in data
+        assert "factors" in data
+        assert "events" in data
+        assert "summary_text" in data
+
+
+def test_v2_pentagon_axis_invalid_404(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/pentagon/axis/karriar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    # Ej en av Literal-typerna → 422
+    assert r.status_code == 422
+
+
+def test_v2_teacher_pentagon_axis(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/pentagon/axis/economy",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["detail"]["axis"] == "economy"
+    assert data["detail"]["axis_label"] == "Ekonomi"
+
+
+def test_v2_teacher_pentagon_axis_cross_teacher_403(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/pentagon/axis/economy",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

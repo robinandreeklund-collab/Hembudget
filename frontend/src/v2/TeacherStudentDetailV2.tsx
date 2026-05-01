@@ -15,8 +15,10 @@ import {
   type V2StudentDetailModule,
   type V2StudentDetailEvent,
   type V2StudentDetailCompetency,
+  type V2PentAxis,
 } from "./api";
 import { V2Banner } from "./V2Banner";
+import { PentagonFlipCard } from "./PentagonFlipCard";
 import "./larare.css";
 
 const SHORT_DATE = (iso: string | null): string => {
@@ -80,6 +82,7 @@ export function TeacherStudentDetailV2() {
   const sid = studentId ? parseInt(studentId, 10) : 0;
   const [data, setData] = useState<V2TeacherStudentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -138,7 +141,20 @@ export function TeacherStudentDetailV2() {
         )}
 
         <div className="class-stage">
-          <StudentPentagon data={data} />
+          <PentagonFlipCard
+            activeAxis={activeAxis}
+            onClose={() => setActiveAxis(null)}
+            fetchDetail={async (axis) => {
+              const res = await v2Api.teacherPentagonAxisDetail(sid, axis);
+              return res.detail;
+            }}
+            front={
+              <StudentPentagon
+                data={data}
+                onAxisClick={setActiveAxis}
+              />
+            }
+          />
           <StudentSideStack data={data} />
         </div>
 
@@ -425,7 +441,13 @@ function PromoCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function StudentPentagon({ data }: { data: V2TeacherStudentDetail }) {
+function StudentPentagon({
+  data,
+  onAxisClick,
+}: {
+  data: V2TeacherStudentDetail;
+  onAxisClick: (axis: V2PentAxis) => void;
+}) {
   const p = data.pentagon;
   const radius = 230;
   const cx = 300;
@@ -482,29 +504,70 @@ function StudentPentagon({ data }: { data: V2TeacherStudentDetail }) {
         </text>
       </svg>
       <div className="axis-tags">
-        <span>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("economy")}
+          style={axisTagStyle()}
+        >
           Ekonomi
           <strong>{p.economy}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("safety")}
+          style={axisTagStyle()}
+        >
           Karriär
           <strong>{p.safety}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("health")}
+          style={axisTagStyle()}
+        >
           Hälsa
           <strong>{p.health}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("social")}
+          style={axisTagStyle()}
+        >
           Relation
           <strong>{p.social}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("leisure")}
+          style={axisTagStyle()}
+        >
           Fritid
           <strong>{p.leisure}</strong>
-        </span>
+        </button>
       </div>
     </article>
   );
+}
+
+function axisTagStyle(): React.CSSProperties {
+  return {
+    padding: "8px 6px",
+    background: "rgba(255,255,255,0.03)",
+    borderRadius: 4,
+    border: "1px solid var(--line, rgba(255,255,255,0.1))",
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 10,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "center",
+    cursor: "pointer",
+  };
 }
 
 function StudentSideStack({ data }: { data: V2TeacherStudentDetail }) {

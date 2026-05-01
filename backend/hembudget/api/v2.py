@@ -13375,3 +13375,391 @@ def teacher_reflection_feedback_v2(
             flagged_for_help=_flagged_for_help(text),
             rubric_label=(module.title.upper() if module else None),
         )
+
+
+# === Pentagon Axis-Detail (Fas 2Z · flip-card) ===
+#
+# När eleven (eller läraren) klickar på en axel i pentagonen flippas
+# kortet och visar exakt vilka faktorer som påverkat just den axeln —
+# scenarierna, transaktionerna, kompetens-höjningarna, etc. Drivs av
+# WellbeingFactor-listan från calculator.py + senaste relevanta
+# transaktioner från scope-DB.
+
+
+PentAxis = Literal["economy", "safety", "health", "social", "leisure"]
+
+
+_AXIS_LABELS: dict[str, str] = {
+    "economy": "Ekonomi",
+    "safety": "Karriär",
+    "health": "Hälsa",
+    "social": "Relation",
+    "leisure": "Fritid",
+}
+
+_AXIS_NUMBER: dict[str, str] = {
+    "economy": "01",
+    "safety": "02",
+    "health": "03",
+    "social": "04",
+    "leisure": "05",
+}
+
+
+class V2PentAxisFactor(BaseModel):
+    explanation: str
+    points: int
+    delta_label: str  # "+5", "-3", "±0"
+
+
+class V2PentAxisEvent(BaseModel):
+    occurred_at: Optional[datetime]
+    date_label: str  # "29 apr"
+    title: str
+    detail: Optional[str] = None
+    delta: Optional[int] = None
+    delta_label: str  # "+5", "-3", "±0", ""
+
+
+class V2PentAxisDetail(BaseModel):
+    axis: PentAxis
+    axis_label: str
+    axis_number: str
+    score: int
+    year_month: str
+    factors: list[V2PentAxisFactor]
+    events: list[V2PentAxisEvent]
+    summary_text: str
+
+
+def _delta_label(points: Optional[int]) -> str:
+    if points is None:
+        return ""
+    if points > 0:
+        return f"+{points}"
+    if points < 0:
+        return str(points)
+    return "±0"
+
+
+def _gather_axis_events_for(
+    student: Student, axis: PentAxis,
+) -> list[V2PentAxisEvent]:
+    """Hämta senaste konkreta händelser kopplade till en axel.
+
+    economy → senaste transaktioner + sparmål-överföringar
+    safety  → modul-completion + lärar-feedback + lönesamtal
+    health  → vårdfakturor + reflektioner + 0 alkohol-tx (heuristik)
+    social  → meddelanden från lärare + peer-feedback
+    leisure → fritid-transaktioner (restaurang, nöje)
+
+    Fail-soft per scope-DB.
+    """
+    from ..school.engines import scope_context, scope_for_student
+    from ..school.models import StudentActivity as _SA
+
+    events: list[V2PentAxisEvent] = []
+    cutoff = datetime.utcnow() - timedelta(days=45)
+
+    # === Master-DB events ===
+    with master_session() as ms:
+        if axis == "safety":
+            # Lönesamtals-rundor
+            negs = (
+                ms.query(_NegotiationRound, _SalaryNegotiation)
+                .join(
+                    _SalaryNegotiation,
+                    _NegotiationRound.negotiation_id
+                    == _SalaryNegotiation.id,
+                )
+                .filter(
+                    _SalaryNegotiation.student_id == student.id,
+                    _NegotiationRound.created_at >= cutoff,
+                )
+                .order_by(_NegotiationRound.created_at.desc())
+                .limit(5)
+                .all()
+            )
+            for r, neg in negs:
+                events.append(V2PentAxisEvent(
+                    occurred_at=r.created_at,
+                    date_label=_short_date_label(r.created_at),
+                    title=f"Lönesamtal R{r.round_no} · {neg.profession}",
+                    detail=(
+                        f"Maria-bud {round(float(neg.starting_salary) * (1 + (r.proposed_pct or 0) / 100)):,} kr"
+                        .replace(",", " ")
+                        if r.proposed_pct is not None
+                        else "ingen procent"
+                    ),
+                    delta=2,
+                    delta_label="+2",
+                ))
+            # Modul-step-completion → safety/karriär bonus
+            steps_done = (
+                ms.query(_SchoolStepProgress, _SchoolModuleStep, _SchoolModule)
+                .join(_SchoolModuleStep,
+                      _SchoolStepProgress.step_id == _SchoolModuleStep.id)
+                .join(_SchoolModule,
+                      _SchoolModuleStep.module_id == _SchoolModule.id)
+                .filter(
+                    _SchoolStepProgress.student_id == student.id,
+                    _SchoolStepProgress.completed_at >= cutoff,
+                )
+                .order_by(_SchoolStepProgress.completed_at.desc())
+                .limit(5)
+                .all()
+            )
+            for prog, step, mod in steps_done:
+                events.append(V2PentAxisEvent(
+                    occurred_at=prog.completed_at,
+                    date_label=_short_date_label(prog.completed_at),
+                    title=f'Modul-steg "{step.title}" klart',
+                    detail=f"Modul: {mod.title}",
+                    delta=1,
+                    delta_label="+1",
+                ))
+
+        if axis == "social":
+            from ..school.models import Message as _M
+            msgs = (
+                ms.query(_M)
+                .filter(
+                    _M.student_id == student.id,
+                    _M.created_at >= cutoff,
+                )
+                .order_by(_M.created_at.desc())
+                .limit(5)
+                .all()
+            )
+            for m in msgs:
+                sender = "lärare" if m.sender_role == "teacher" else "du"
+                events.append(V2PentAxisEvent(
+                    occurred_at=m.created_at,
+                    date_label=_short_date_label(m.created_at),
+                    title=f"Meddelande från {sender}",
+                    detail=(m.body[:80] + "…")
+                    if m.body and len(m.body) > 80 else m.body,
+                    delta=1 if m.sender_role == "teacher" else None,
+                    delta_label="+1" if m.sender_role == "teacher" else "",
+                ))
+
+        # StudentActivity som matchar axel
+        sa_rows = (
+            ms.query(_SA)
+            .filter(
+                _SA.student_id == student.id,
+                _SA.occurred_at >= cutoff,
+            )
+            .order_by(_SA.occurred_at.desc())
+            .limit(20)
+            .all()
+        )
+        for sa in sa_rows:
+            kind = sa.kind
+            relevant = False
+            delta = 0
+            if axis == "economy" and (
+                kind.startswith("transaction.")
+                or kind.startswith("budget.")
+                or kind.startswith("transfer.")
+            ):
+                relevant = True
+                delta = 1 if "save" in kind or "transfer" in kind else 0
+            if axis == "safety" and kind.startswith("loan."):
+                relevant = True
+                delta = -1
+            if not relevant:
+                continue
+            events.append(V2PentAxisEvent(
+                occurred_at=sa.occurred_at,
+                date_label=_short_date_label(sa.occurred_at),
+                title=sa.summary,
+                detail=kind,
+                delta=delta if delta != 0 else None,
+                delta_label=_delta_label(delta) if delta != 0 else "±0",
+            ))
+
+    # === Scope-DB events (transaktioner) ===
+    if axis == "economy" or axis == "leisure":
+        try:
+            scope_key = scope_for_student(student)
+            with scope_context(scope_key):
+                with session_scope() as s:
+                    txs = (
+                        s.query(Transaction)
+                        .order_by(Transaction.date.desc())
+                        .limit(15)
+                        .all()
+                    )
+                    for tx in txs:
+                        amt = float(tx.amount) if tx.amount is not None else 0
+                        # leisure-axel: bara restaurang/nöje
+                        if axis == "leisure":
+                            cat_name: Optional[str] = None
+                            if tx.category_id:
+                                cat = s.get(Category, tx.category_id)
+                                cat_name = cat.name.lower() if cat else None
+                            if cat_name and any(
+                                kw in cat_name
+                                for kw in (
+                                    "restaurang", "nöje", "fritid", "kultur",
+                                )
+                            ):
+                                events.append(V2PentAxisEvent(
+                                    occurred_at=None,
+                                    date_label=tx.date.strftime("%-d %b")
+                                    if tx.date else "—",
+                                    title=tx.description or "Transaktion",
+                                    detail=f"{cat.name} · {amt:,.0f} kr".replace(
+                                        ",", " ",
+                                    ),
+                                    delta=-1 if amt < -200 else None,
+                                    delta_label="-1" if amt < -200 else "±0",
+                                ))
+                        elif axis == "economy":
+                            sign = "+" if amt > 0 else ""
+                            events.append(V2PentAxisEvent(
+                                occurred_at=None,
+                                date_label=tx.date.strftime("%-d %b")
+                                if tx.date else "—",
+                                title=tx.description or "Transaktion",
+                                detail=f"{sign}{amt:,.0f} kr".replace(
+                                    ",", " ",
+                                ),
+                                delta=2 if amt > 1000 else (
+                                    -1 if amt < -2000 else None
+                                ),
+                                delta_label=(
+                                    "+2" if amt > 1000
+                                    else "-1" if amt < -2000
+                                    else "±0"
+                                ),
+                            ))
+        except Exception:
+            pass
+
+    # Sortera nyast först · max 8 visas
+    events.sort(
+        key=lambda e: e.occurred_at or datetime.min, reverse=True,
+    )
+    return events[:8]
+
+
+def _short_date_label(dt: Optional[datetime]) -> str:
+    if dt is None:
+        return "—"
+    months = [
+        "jan", "feb", "mar", "apr", "maj", "jun",
+        "jul", "aug", "sep", "okt", "nov", "dec",
+    ]
+    return f"{dt.day} {months[dt.month - 1]}"
+
+
+def _build_pent_axis_detail(
+    student: Student, axis: PentAxis,
+) -> V2PentAxisDetail:
+    from ..school.engines import scope_context, scope_for_student
+
+    score = 50
+    factors_for_axis: list[V2PentAxisFactor] = []
+    ym = _current_year_month()
+    try:
+        scope_key = scope_for_student(student)
+        with scope_context(scope_key):
+            with session_scope() as s:
+                wb = calculate_wellbeing(s, ym)
+                score = getattr(wb, axis)
+                ym = wb.year_month
+                for f in wb.factors:
+                    if f.dimension == axis:
+                        factors_for_axis.append(V2PentAxisFactor(
+                            explanation=f.explanation,
+                            points=f.points,
+                            delta_label=_delta_label(f.points),
+                        ))
+    except Exception:
+        pass
+
+    events = _gather_axis_events_for(student, axis)
+
+    # Sorted factors: most-impact first
+    factors_for_axis.sort(key=lambda f: -abs(f.points))
+
+    if factors_for_axis:
+        top = factors_for_axis[0]
+        sign = "höjt" if top.points > 0 else "sänkt" if top.points < 0 else "påverkat"
+        summary = (
+            f"{score}/100 i {_AXIS_LABELS[axis].lower()}. "
+            f"Största enskilda bidraget har {sign} med {abs(top.points)} p: "
+            f'"{top.explanation}".'
+        )
+    else:
+        summary = (
+            f"{score}/100 i {_AXIS_LABELS[axis].lower()}. "
+            f"Inga registrerade faktorer än — gör mer i appen så ser du "
+            f"vad som påverkar."
+        )
+
+    return V2PentAxisDetail(
+        axis=axis,
+        axis_label=_AXIS_LABELS[axis],
+        axis_number=_AXIS_NUMBER[axis],
+        score=score,
+        year_month=ym,
+        factors=factors_for_axis,
+        events=events,
+        summary_text=summary,
+    )
+
+
+@router.get(
+    "/pentagon/axis/{axis}", response_model=V2PentAxisDetail,
+)
+def get_pentagon_axis_detail(
+    axis: PentAxis,
+    info: TokenInfo = Depends(require_token),
+) -> V2PentAxisDetail:
+    """Per-axel-detalj för flip-card. Fungerar för elev (egen pentagon)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+    with master_session() as mdb:
+        student = mdb.get(Student, info.student_id)
+        if not student:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev hittades inte",
+            )
+    return _build_pent_axis_detail(student, axis)
+
+
+class V2TeacherPentAxisDetail(BaseModel):
+    student_id: int
+    student_name: str
+    detail: V2PentAxisDetail
+
+
+@router.get(
+    "/teacher/students/{student_id}/pentagon/axis/{axis}",
+    response_model=V2TeacherPentAxisDetail,
+)
+def teacher_get_pentagon_axis_detail(
+    student_id: int,
+    axis: PentAxis,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherPentAxisDetail:
+    """Lärar-version · samma data men för specifik elev."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        student = mdb.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        student_name = student.display_name
+    detail = _build_pent_axis_detail(student, axis)
+    return V2TeacherPentAxisDetail(
+        student_id=student_id,
+        student_name=student_name,
+        detail=detail,
+    )

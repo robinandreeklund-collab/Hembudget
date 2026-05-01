@@ -4,10 +4,11 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { v2Api, type HubData } from "./api";
+import { v2Api, type HubData, type V2PentAxis } from "./api";
 import { V2Banner } from "./V2Banner";
 import { EchoButton } from "./EchoButton";
 import { useAutoStartIntroGuide } from "./guides/GuideContext";
+import { PentagonFlipCard } from "./PentagonFlipCard";
 import "./hub.css";
 
 const SEK = (n: number) =>
@@ -16,6 +17,7 @@ const SEK = (n: number) =>
 export function HubV2() {
   const [hub, setHub] = useState<HubData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
 
   // Auto-starta intro-guide om eleven inte sett den (efter onboarding)
   useAutoStartIntroGuide();
@@ -210,88 +212,120 @@ export function HubV2() {
           </div>
         </div>
 
-        {/* PENTAGON · live från wellbeing */}
+        {/* PENTAGON · live från wellbeing · klick på axel = flip-card */}
         {pentagon ? (
-          <div
-            className="hub-pent-stage"
-            data-guide="hub-pentagon"
-          >
-            <svg
-              className="hub-pent-svg"
-              viewBox="0 0 600 600"
-              aria-label="Wellbeing-pentagon"
-            >
-              <g transform="translate(300,300)">
-                <polygon
-                  points="0,-260 247,-80 153,210 -153,210 -247,-80"
-                  className="hub-p-axis-line"
-                />
-                <polygon
-                  points="0,-195 185,-60 115,158 -115,158 -185,-60"
-                  className="hub-p-axis-line"
-                />
-                <polygon
-                  points="0,-130 124,-40 76,105 -76,105 -124,-40"
-                  className="hub-p-axis-line"
-                />
-                <polygon
-                  points="0,-65 62,-20 38,53 -38,53 -62,-20"
-                  className="hub-p-axis-line"
-                />
-                <line x1="0" y1="0" x2="0" y2="-260" className="hub-p-axis-line" />
-                <line x1="0" y1="0" x2="247" y2="-80" className="hub-p-axis-line" />
-                <line x1="0" y1="0" x2="153" y2="210" className="hub-p-axis-line" />
-                <line x1="0" y1="0" x2="-153" y2="210" className="hub-p-axis-line" />
-                <line x1="0" y1="0" x2="-247" y2="-80" className="hub-p-axis-line" />
-                {/* Live polygon */}
-                <polygon points={points} className="hub-p-now" />
-              </g>
-            </svg>
+          <PentagonFlipCard
+            activeAxis={activeAxis}
+            onClose={() => setActiveAxis(null)}
+            fetchDetail={(axis) => v2Api.pentagonAxisDetail(axis)}
+            front={
+              <div
+                className="hub-pent-stage"
+                data-guide="hub-pentagon"
+              >
+                <svg
+                  className="hub-pent-svg"
+                  viewBox="0 0 600 600"
+                  aria-label="Wellbeing-pentagon"
+                >
+                  <g transform="translate(300,300)">
+                    <polygon
+                      points="0,-260 247,-80 153,210 -153,210 -247,-80"
+                      className="hub-p-axis-line"
+                    />
+                    <polygon
+                      points="0,-195 185,-60 115,158 -115,158 -185,-60"
+                      className="hub-p-axis-line"
+                    />
+                    <polygon
+                      points="0,-130 124,-40 76,105 -76,105 -124,-40"
+                      className="hub-p-axis-line"
+                    />
+                    <polygon
+                      points="0,-65 62,-20 38,53 -38,53 -62,-20"
+                      className="hub-p-axis-line"
+                    />
+                    <line x1="0" y1="0" x2="0" y2="-260" className="hub-p-axis-line" />
+                    <line x1="0" y1="0" x2="247" y2="-80" className="hub-p-axis-line" />
+                    <line x1="0" y1="0" x2="153" y2="210" className="hub-p-axis-line" />
+                    <line x1="0" y1="0" x2="-153" y2="210" className="hub-p-axis-line" />
+                    <line x1="0" y1="0" x2="-247" y2="-80" className="hub-p-axis-line" />
+                    {/* Live polygon */}
+                    <polygon points={points} className="hub-p-now" />
+                  </g>
+                </svg>
 
-            <div className="hub-axis-label hub-ax-eko">
-              <div className="hub-axis-eye">Axel 01</div>
-              <div className="hub-axis-name">Ekonomi</div>
-              <div className="hub-axis-num">
-                <em>{ekonomi}</em> / 100
-              </div>
-            </div>
-            <div className="hub-axis-label hub-ax-rel">
-              <div className="hub-axis-eye">Axel 02</div>
-              <div className="hub-axis-name">Relation</div>
-              <div className="hub-axis-num">
-                <em>{relation}</em> / 100
-              </div>
-            </div>
-            <div className="hub-axis-label hub-ax-har">
-              <div className="hub-axis-eye">Axel 03</div>
-              <div className="hub-axis-name">Hälsa</div>
-              <div className="hub-axis-num">
-                <em>{halsa}</em> / 100
-              </div>
-            </div>
-            <div className="hub-axis-label hub-ax-fri">
-              <div className="hub-axis-eye">Axel 04</div>
-              <div className="hub-axis-name">Fritid</div>
-              <div className="hub-axis-num">
-                <em>{fritid}</em> / 100
-              </div>
-            </div>
-            <div className="hub-axis-label hub-ax-kar">
-              <div className="hub-axis-eye">Axel 05</div>
-              <div className="hub-axis-name">Karriär</div>
-              <div className="hub-axis-num">
-                <em>{karriar}</em> / 100
-              </div>
-            </div>
+                <button
+                  type="button"
+                  className="hub-axis-label hub-ax-eko axis-clickable"
+                  onClick={() => setActiveAxis("economy")}
+                  aria-label="Visa Ekonomi-detaljer"
+                >
+                  <div className="hub-axis-eye">Axel 01</div>
+                  <div className="hub-axis-name">Ekonomi</div>
+                  <div className="hub-axis-num">
+                    <em>{ekonomi}</em> / 100
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="hub-axis-label hub-ax-rel axis-clickable"
+                  onClick={() => setActiveAxis("social")}
+                  aria-label="Visa Relation-detaljer"
+                >
+                  <div className="hub-axis-eye">Axel 02</div>
+                  <div className="hub-axis-name">Relation</div>
+                  <div className="hub-axis-num">
+                    <em>{relation}</em> / 100
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="hub-axis-label hub-ax-har axis-clickable"
+                  onClick={() => setActiveAxis("health")}
+                  aria-label="Visa Hälsa-detaljer"
+                >
+                  <div className="hub-axis-eye">Axel 03</div>
+                  <div className="hub-axis-name">Hälsa</div>
+                  <div className="hub-axis-num">
+                    <em>{halsa}</em> / 100
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="hub-axis-label hub-ax-fri axis-clickable"
+                  onClick={() => setActiveAxis("leisure")}
+                  aria-label="Visa Fritid-detaljer"
+                >
+                  <div className="hub-axis-eye">Axel 04</div>
+                  <div className="hub-axis-name">Fritid</div>
+                  <div className="hub-axis-num">
+                    <em>{fritid}</em> / 100
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="hub-axis-label hub-ax-kar axis-clickable"
+                  onClick={() => setActiveAxis("safety")}
+                  aria-label="Visa Karriär-detaljer"
+                >
+                  <div className="hub-axis-eye">Axel 05</div>
+                  <div className="hub-axis-name">Karriär</div>
+                  <div className="hub-axis-num">
+                    <em>{karriar}</em> / 100
+                  </div>
+                </button>
 
-            <div className="hub-center">
-              <div className="hub-center-eye">Pentagon</div>
-              <div className="hub-center-num">{score}</div>
-              <div className="hub-center-meta">
-                av 100 · {pentagon.year_month}
+                <div className="hub-center">
+                  <div className="hub-center-eye">Pentagon</div>
+                  <div className="hub-center-num">{score}</div>
+                  <div className="hub-center-meta">
+                    av 100 · {pentagon.year_month}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            }
+          />
         ) : (
           <div className="hub-peda">
             <div className="hub-peda-eye">Pentagon väntar</div>

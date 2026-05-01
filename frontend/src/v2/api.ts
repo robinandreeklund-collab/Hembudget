@@ -1629,6 +1629,42 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/pentagon/axis/{axis} (Fas 2Z · flip-card) ===
+
+export type V2PentAxis = "economy" | "safety" | "health" | "social" | "leisure";
+
+export type V2PentAxisFactor = {
+  explanation: string;
+  points: number;
+  delta_label: string;
+};
+
+export type V2PentAxisEvent = {
+  occurred_at: string | null;
+  date_label: string;
+  title: string;
+  detail: string | null;
+  delta: number | null;
+  delta_label: string;
+};
+
+export type V2PentAxisDetail = {
+  axis: V2PentAxis;
+  axis_label: string;
+  axis_number: string;
+  score: number;
+  year_month: string;
+  factors: V2PentAxisFactor[];
+  events: V2PentAxisEvent[];
+  summary_text: string;
+};
+
+export type V2TeacherPentAxisDetail = {
+  student_id: number;
+  student_name: string;
+  detail: V2PentAxisDetail;
+};
+
 // === /v2/teacher/students/{id}/activity-log (Fas 2Y · p-historik) ===
 
 export type V2HistoryEventKind =
@@ -2589,6 +2625,13 @@ export const v2Api = {
   teacherStudentHistory: (studentId: number, limit = 100) =>
     api<V2HistoryResponse>(
       `/v2/teacher/students/${studentId}/activity-log?limit=${limit}`,
+    ),
+  // === /v2/pentagon/axis/{axis} (Fas 2Z · flip-card) ===
+  pentagonAxisDetail: (axis: V2PentAxis) =>
+    api<V2PentAxisDetail>(`/v2/pentagon/axis/${axis}`),
+  teacherPentagonAxisDetail: (studentId: number, axis: V2PentAxis) =>
+    api<V2TeacherPentAxisDetail>(
+      `/v2/teacher/students/${studentId}/pentagon/axis/${axis}`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
