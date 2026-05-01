@@ -5,9 +5,8 @@
  * - localStorage `v2_force_v1` = "1" → /dashboard alltid (dev-toggle)
  * - student utan v2-onboarding → /v2/onboarding (default ny flow)
  * - student med v2-onboarding klar → /v2/hub
- * - lärare (inkl. super-admin) → /teacher (lärar-dashboard, inte
- *   v2/hub som är elev-vy). Super-admin kan manuellt navigera till
- *   /v2/hub via V2-toggle-bannern för att förhandsgranska elev-vyn.
+ * - lärare (inkl. super-admin) → /teacher/v2 (klass-hubben). Om
+ *   force_v1 är satt går de till /teacher (v1) istället.
  * - demo → /dashboard
  *
  * Om /v2/status fail:ar så fallback:ar vi till /dashboard så v1
@@ -32,8 +31,10 @@ export function V2RootRedirect() {
           window.localStorage.getItem("v2_force_v1") === "1";
 
         if (s.role === "teacher") {
-          // Teacher: respektera force_v1-flaggan om satt
-          setDestination("/teacher");
+          // Teacher: default till v2-klass-hubben. Om läraren tryckt
+          // "Tvinga v1" i dev-footern → respektera det och gå till
+          // /teacher (v1).
+          setDestination(forceV1 ? "/teacher" : "/teacher/v2");
         } else if (s.role === "student") {
           // Student: ignorera force_v1 helt — det är lärar-flagga.
           // Rensa den om den råkar ligga kvar i samma browser.

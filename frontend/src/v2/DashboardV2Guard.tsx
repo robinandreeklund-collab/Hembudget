@@ -1,16 +1,18 @@
 /**
- * V2-guard på /dashboard — auto-routar elever med v2_enabled till v2.
+ * V2-guard på /dashboard — auto-routar både elever och lärare till
+ * v2-vyer.
  *
  * Anledning: efter login körs window.location.reload() vilket landar
  * på /dashboard direkt (inte /). V2RootRedirect aktiveras bara på /.
- * Den här guarden hanterar fallet då en v2-elev hamnar på /dashboard
+ * Den här guarden hanterar fallet då användaren landar på /dashboard
  * direkt efter login eller via gamla länkar.
  *
- * Lärare (även super-admin) renderas v1-dashboard — de behöver
- * tillgång till lärar-funktioner som inte finns i v2-elev-vyn.
+ * Lärare (inkl. super-admin) skickas till /teacher/v2 (klass-hubben)
+ * sedan Fas 2AK. Tidigare gick lärare till v1-dashboard. Använd
+ * "Tvinga v1" i V2DevFooter för att tillfälligt komma åt v1.
  *
  * Dev-override: localStorage.v2_force_v1 = "1" stoppar all v2-redirect
- * (för att lärare/utvecklare ska kunna se v1 även för v2-elever).
+ * för lärare (för att se v1 även för v2-elever).
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
@@ -56,11 +58,15 @@ export function DashboardV2Guard({ children }: { children: ReactNode }) {
     return <Navigate to="/v2/hub" replace />;
   }
 
-  // Teacher med force_v1 → respektera, rendera v1-dashboard
-  if (forceV1) {
-    return <>{children}</>;
+  // Lärare → /teacher/v2 (om inte force_v1 är satt)
+  if (status?.role === "teacher") {
+    if (forceV1) {
+      // Respektera dev-flaggan och rendera v1-dashboard
+      return <>{children}</>;
+    }
+    return <Navigate to="/teacher/v2" replace />;
   }
 
-  // Övriga (alla lärare inkl. super-admin, demo, elev utan v2) → v1-dashboard
+  // Övriga (demo, elev utan v2) → v1-dashboard
   return <>{children}</>;
 }
