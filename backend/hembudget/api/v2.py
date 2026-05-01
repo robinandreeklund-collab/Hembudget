@@ -28,8 +28,10 @@ from ..db.models import (
     MailItem, Loan, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
     TaxDeduction, TaxProposal, TaxYearReturn,
     InsurancePolicy, InsuranceClaim,
+    UtilitySubscription, UtilityReading,
 )
 from ..insurance import seed_default_insurance_policies
+from ..utility import seed_default_utility_subscriptions
 from ..loans.credit import (
     compute_credit_check, latest_credit_check, latest_kalp,
 )
@@ -4740,10 +4742,11 @@ def teacher_insurance_overview(
 
     # Återanvänd get_insurance-logiken via scope-context
     with scope_context(scope_key):
-        # Skapa en mini-info för call
+        _outer_sid = student_id
+
         class _Info:
             role = "student"
-            student_id = sid_local = student_id
+            student_id = _outer_sid
 
         ins = get_insurance(_Info())  # type: ignore[arg-type]
 
@@ -4753,6 +4756,524 @@ def teacher_insurance_overview(
         summary=ins.summary,
         policies=ins.policies,
         claims=ins.claims,
+    )
+
+
+# === Förbrukning (/v2/forbrukning) — Fas 2E ===
+
+class V2UtilitySubscriptionOut(BaseModel):
+    id: int
+    supplier: str
+    name: str
+    category: Literal[
+        "electricity", "broadband", "mobile", "streaming",
+        "transport", "water", "heating", "ovrig",
+    ]
+    monthly_cost: float
+    grid_fee_monthly: Optional[float]
+    spot_pricing: bool
+    binding_end: Optional[_date]
+    notice_days: int
+    invoice_day: Optional[int]
+    status: Literal["active", "cancelled", "considered"]
+    included_in_rent: bool
+    started_on: Optional[_date]
+    ended_on: Optional[_date]
+    notes: Optional[str]
+
+
+class V2UtilityReadingOut(BaseModel):
+    id: int
+    supplier: str
+    meter_type: str
+    meter_role: str
+    period_start: _date
+    period_end: _date
+    consumption: Optional[float]
+    consumption_unit: Optional[str]
+    cost_kr: float
+    source: str
+    notes: Optional[str]
+
+
+class V2UtilitySummary(BaseModel):
+    active_count: int
+    total_monthly_cost: float
+    total_grid_fee: float
+    has_spot_pricing: bool
+    binding_expiring_soon: int  # antal aktiva med binding_end inom 30 dgr
+    last_month_cost: float  # summerad cost_kr för senaste 30 dgr i readings
+    last_month_kwh: float  # summerad kWh för senaste el-faktura
+    suggested_savings_monthly: float  # uppskattad besparingspotential
+
+
+class V2UtilityResponse(BaseModel):
+    student_id: int
+    summary: V2UtilitySummary
+    subscriptions: list[V2UtilitySubscriptionOut]
+    readings: list[V2UtilityReadingOut]
+
+
+def _empty_utility(student_id: int) -> V2UtilityResponse:
+    return V2UtilityResponse(
+        student_id=student_id,
+        summary=V2UtilitySummary(
+            active_count=0, total_monthly_cost=0, total_grid_fee=0,
+            has_spot_pricing=False, binding_expiring_soon=0,
+            last_month_cost=0, last_month_kwh=0,
+            suggested_savings_monthly=0,
+        ),
+        subscriptions=[],
+        readings=[],
+    )
+
+
+def _compute_savings(subs: list[UtilitySubscription]) -> float:
+    """Uppskattad besparingspotential per månad.
+
+    Heuristik (samma som prototyp):
+    - Bredband > 350 kr/mån + bindning slutar < 90 dgr → -80 kr (omförhandling)
+    - Mobil > 99 kr/mån utan bindning → -50 kr (byt till Comviq)
+    - Spotify Premium privat (utan familj-prenum) → -20 kr (familj-konto)
+    - Spotpris-el utan natttid-styrning → -50 kr (timer)
+    """
+    saving = 0.0
+    for u in subs:
+        if u.status != "active":
+            continue
+        cost = float(u.monthly_cost or 0)
+        if u.category == "broadband" and cost > 350:
+            saving += 80
+        if u.category == "mobile" and cost > 99 and u.binding_end is None:
+            saving += 50
+        if (
+            u.category == "streaming"
+            and "amilj" not in (u.notes or "").lower()
+            and cost >= 100
+        ):
+            saving += 20
+        if u.category == "electricity" and u.spot_pricing:
+            saving += 50
+    return saving
+
+
+@router.get("/forbrukning", response_model=V2UtilityResponse)
+def get_utility(
+    info: TokenInfo = Depends(require_token),
+) -> V2UtilityResponse:
+    """Aggregat för förbrukning /v2/forbrukning (Aktör 07).
+
+    Riktig data:
+    - UtilitySubscription (active/cancelled/considered) i scope-DB
+    - UtilityReading (12 senaste mån) per supplier + meter_type
+    - Beräknad besparing från heuristik (bindning, mobil, streaming)
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_utility(0)
+
+    from datetime import timedelta as _td
+
+    with session_scope() as s:
+        subs = (
+            s.query(UtilitySubscription)
+            .order_by(
+                UtilitySubscription.status,
+                UtilitySubscription.category,
+                UtilitySubscription.supplier,
+            )
+            .all()
+        )
+        active = [u for u in subs if u.status == "active"]
+        total_cost = sum(
+            float(u.monthly_cost or 0) for u in active
+            if not u.included_in_rent
+        )
+        total_grid = sum(float(u.grid_fee_monthly or 0) for u in active)
+        has_spot = any(u.spot_pricing for u in active)
+        soon = _date.today() + _td(days=30)
+        expiring = sum(
+            1 for u in active
+            if u.binding_end is not None and u.binding_end <= soon
+        )
+
+        # Senaste 12 mån utility readings
+        cutoff = _date.today() - _td(days=365)
+        readings = (
+            s.query(UtilityReading)
+            .filter(UtilityReading.period_end >= cutoff)
+            .order_by(
+                UtilityReading.period_end.desc(),
+                UtilityReading.id.desc(),
+            )
+            .all()
+        )
+
+        # Senaste månadens kostnad + kWh
+        last30 = _date.today() - _td(days=45)
+        last_month_readings = [
+            r for r in readings if r.period_end >= last30
+        ]
+        last_month_cost = sum(
+            float(r.cost_kr or 0) for r in last_month_readings
+        )
+        last_month_kwh = sum(
+            float(r.consumption or 0) for r in last_month_readings
+            if r.meter_type == "electricity"
+            and r.meter_role in ("energy", "total")
+        )
+
+        readings_out = [
+            V2UtilityReadingOut(
+                id=r.id, supplier=r.supplier,
+                meter_type=r.meter_type, meter_role=r.meter_role,
+                period_start=r.period_start, period_end=r.period_end,
+                consumption=(
+                    float(r.consumption) if r.consumption is not None else None
+                ),
+                consumption_unit=r.consumption_unit,
+                cost_kr=float(r.cost_kr),
+                source=r.source, notes=r.notes,
+            )
+            for r in readings
+        ]
+
+        subs_out = [
+            V2UtilitySubscriptionOut(
+                id=u.id, supplier=u.supplier, name=u.name,
+                category=u.category,  # type: ignore[arg-type]
+                monthly_cost=float(u.monthly_cost),
+                grid_fee_monthly=(
+                    float(u.grid_fee_monthly)
+                    if u.grid_fee_monthly is not None else None
+                ),
+                spot_pricing=bool(u.spot_pricing),
+                binding_end=u.binding_end,
+                notice_days=int(u.notice_days),
+                invoice_day=u.invoice_day,
+                status=u.status,  # type: ignore[arg-type]
+                included_in_rent=bool(u.included_in_rent),
+                started_on=u.started_on,
+                ended_on=u.ended_on,
+                notes=u.notes,
+            )
+            for u in subs
+        ]
+
+        savings = _compute_savings(subs)
+
+        return V2UtilityResponse(
+            student_id=info.student_id,
+            summary=V2UtilitySummary(
+                active_count=len(active),
+                total_monthly_cost=total_cost,
+                total_grid_fee=total_grid,
+                has_spot_pricing=has_spot,
+                binding_expiring_soon=expiring,
+                last_month_cost=last_month_cost,
+                last_month_kwh=last_month_kwh,
+                suggested_savings_monthly=savings,
+            ),
+            subscriptions=subs_out,
+            readings=readings_out,
+        )
+
+
+# Elev-endpoints
+class V2UtilitySubscriptionIn(BaseModel):
+    supplier: str = Field(..., min_length=1, max_length=80)
+    name: str = Field(..., min_length=1, max_length=120)
+    category: Literal[
+        "electricity", "broadband", "mobile", "streaming",
+        "transport", "water", "heating", "ovrig",
+    ]
+    monthly_cost: float = Field(..., ge=0)
+    grid_fee_monthly: Optional[float] = None
+    spot_pricing: bool = False
+    binding_end: Optional[_date] = None
+    notice_days: int = 30
+    invoice_day: Optional[int] = Field(None, ge=1, le=28)
+    status: Literal["active", "cancelled", "considered"] = "active"
+    included_in_rent: bool = False
+    started_on: Optional[_date] = None
+    notes: Optional[str] = None
+
+
+class V2UtilitySubscriptionPatch(BaseModel):
+    monthly_cost: Optional[float] = None
+    status: Optional[Literal["active", "cancelled", "considered"]] = None
+    binding_end: Optional[_date] = None
+    notes: Optional[str] = None
+
+
+def _sub_to_out(u: UtilitySubscription) -> V2UtilitySubscriptionOut:
+    return V2UtilitySubscriptionOut(
+        id=u.id, supplier=u.supplier, name=u.name,
+        category=u.category,  # type: ignore[arg-type]
+        monthly_cost=float(u.monthly_cost),
+        grid_fee_monthly=(
+            float(u.grid_fee_monthly)
+            if u.grid_fee_monthly is not None else None
+        ),
+        spot_pricing=bool(u.spot_pricing),
+        binding_end=u.binding_end,
+        notice_days=int(u.notice_days),
+        invoice_day=u.invoice_day,
+        status=u.status,  # type: ignore[arg-type]
+        included_in_rent=bool(u.included_in_rent),
+        started_on=u.started_on, ended_on=u.ended_on,
+        notes=u.notes,
+    )
+
+
+@router.post(
+    "/forbrukning/subscriptions",
+    response_model=V2UtilitySubscriptionOut,
+)
+def post_utility_subscription(
+    body: V2UtilitySubscriptionIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2UtilitySubscriptionOut:
+    """Eleven skapar en ny abonnemang."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    with session_scope() as s:
+        u = UtilitySubscription(
+            supplier=body.supplier,
+            name=body.name,
+            category=body.category,
+            monthly_cost=Decimal(str(body.monthly_cost)),
+            grid_fee_monthly=(
+                Decimal(str(body.grid_fee_monthly))
+                if body.grid_fee_monthly is not None else None
+            ),
+            spot_pricing=body.spot_pricing,
+            binding_end=body.binding_end,
+            notice_days=body.notice_days,
+            invoice_day=body.invoice_day,
+            status=body.status,
+            included_in_rent=body.included_in_rent,
+            started_on=body.started_on,
+            notes=body.notes,
+        )
+        s.add(u)
+        s.flush()
+        return _sub_to_out(u)
+
+
+@router.patch(
+    "/forbrukning/subscriptions/{sub_id}",
+    response_model=V2UtilitySubscriptionOut,
+)
+def patch_utility_subscription(
+    sub_id: int,
+    body: V2UtilitySubscriptionPatch,
+    info: TokenInfo = Depends(require_token),
+) -> V2UtilitySubscriptionOut:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    with session_scope() as s:
+        u = s.get(UtilitySubscription, sub_id)
+        if u is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        if body.monthly_cost is not None:
+            u.monthly_cost = Decimal(str(body.monthly_cost))
+        if body.status is not None:
+            u.status = body.status
+            if body.status == "cancelled" and u.ended_on is None:
+                u.ended_on = _date.today()
+        if body.binding_end is not None:
+            u.binding_end = body.binding_end
+        if body.notes is not None:
+            u.notes = body.notes
+        s.flush()
+        return _sub_to_out(u)
+
+
+@router.delete(
+    "/forbrukning/subscriptions/{sub_id}",
+    status_code=204,
+)
+def delete_utility_subscription(
+    sub_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        u = s.get(UtilitySubscription, sub_id)
+        if u is not None:
+            s.delete(u)
+            s.flush()
+
+
+# Lärar-endpoints
+@router.post(
+    "/teacher/students/{student_id}/utility/seed-default",
+    response_model=dict,
+)
+def teacher_seed_default_utility(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Seedа default-katalogen (6 svenska abonnemang) i scope-DB."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            n = seed_default_utility_subscriptions(s)
+    return {"student_id": student_id, "subscriptions_created": n}
+
+
+class V2UtilityReadingIn(BaseModel):
+    supplier: str = Field(..., min_length=1, max_length=60)
+    meter_type: Literal[
+        "electricity", "broadband", "water", "heating", "district_heating",
+    ]
+    meter_role: Literal["grid", "energy", "total"] = "total"
+    period_start: _date
+    period_end: _date
+    consumption: Optional[float] = None
+    consumption_unit: Optional[str] = None
+    cost_kr: float = Field(..., ge=0)
+    notes: Optional[str] = None
+
+
+@router.post(
+    "/teacher/students/{student_id}/utility/readings",
+    response_model=V2UtilityReadingOut,
+)
+def teacher_create_utility_reading(
+    student_id: int,
+    body: V2UtilityReadingIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2UtilityReadingOut:
+    """Lärare lägger in månadsfaktura/avläsning för simulering."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            r = UtilityReading(
+                supplier=body.supplier,
+                meter_type=body.meter_type,
+                meter_role=body.meter_role,
+                period_start=body.period_start,
+                period_end=body.period_end,
+                consumption=(
+                    Decimal(str(body.consumption))
+                    if body.consumption is not None else None
+                ),
+                consumption_unit=body.consumption_unit,
+                cost_kr=Decimal(str(body.cost_kr)),
+                source="manual",
+                notes=body.notes,
+            )
+            s.add(r)
+            s.flush()
+            return V2UtilityReadingOut(
+                id=r.id, supplier=r.supplier,
+                meter_type=r.meter_type, meter_role=r.meter_role,
+                period_start=r.period_start, period_end=r.period_end,
+                consumption=(
+                    float(r.consumption) if r.consumption is not None else None
+                ),
+                consumption_unit=r.consumption_unit,
+                cost_kr=float(r.cost_kr),
+                source=r.source, notes=r.notes,
+            )
+
+
+@router.delete(
+    "/teacher/students/{student_id}/utility/readings/{reading_id}",
+    status_code=204,
+)
+def teacher_delete_utility_reading(
+    student_id: int,
+    reading_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            r = s.get(UtilityReading, reading_id)
+            if r is not None:
+                s.delete(r)
+                s.flush()
+
+
+class V2TeacherUtilityOverview(BaseModel):
+    student_id: int
+    student_name: str
+    summary: V2UtilitySummary
+    subscriptions: list[V2UtilitySubscriptionOut]
+    readings: list[V2UtilityReadingOut]
+
+
+@router.get(
+    "/teacher/students/{student_id}/utility-overview",
+    response_model=V2TeacherUtilityOverview,
+)
+def teacher_utility_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherUtilityOverview:
+    """Lärar-vy · full insyn i elevens förbruknings-portfölj."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        _outer_sid = student_id
+
+        class _Info:
+            role = "student"
+            student_id = _outer_sid
+
+        util = get_utility(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherUtilityOverview(
+        student_id=student_id,
+        student_name=student_name,
+        summary=util.summary,
+        subscriptions=util.subscriptions,
+        readings=util.readings,
     )
 
 

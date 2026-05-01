@@ -483,6 +483,76 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: insurance-factor misslyckades",
         )
 
+    # Förbruknings-portfölj (UtilitySubscription) — påverkar safety
+    # och economy:
+    # - 3+ aktiva förbruknings-abonnemang → +3 safety (organiserat)
+    # - El med spotpris (Tibber) → +1 economy (smart leverantörsval)
+    # - Total månadskostnad > 1500 kr/mån → -economy (max -6)
+    # - Bindningstid utgår < 30 dagar utan åtgärd → varning (ingen impact)
+    try:
+        from ..db.models import UtilitySubscription as _US
+        from datetime import date as _d_us, timedelta as _td_us
+        active_subs = (
+            session.query(_US)
+            .filter(_US.status == "active")
+            .all()
+        )
+        active_subs_count = len(active_subs)
+        total_monthly = sum(
+            (
+                Decimal(str(u.monthly_cost or 0))
+                + Decimal(str(u.grid_fee_monthly or 0))
+                for u in active_subs
+                if not u.included_in_rent
+            ),
+            Decimal("0"),
+        )
+        has_spot = any(u.spot_pricing for u in active_subs)
+
+        if active_subs_count >= 3:
+            safety += 3
+            factors.append(WellbeingFactor(
+                "safety", 3,
+                f"{active_subs_count} aktiva abonnemang — el, värme, "
+                "internet och mobil organiserade.",
+            ))
+        if has_spot:
+            economy += 1
+            factors.append(WellbeingFactor(
+                "economy", 1,
+                "Spotpris-el (Tibber/likn) — du betalar marknadspris "
+                "och kan styra till natten för 30 % rabatt.",
+            ))
+        if total_monthly > 1500:
+            penalty = min(6, int((float(total_monthly) - 1500) / 200))
+            if penalty > 0:
+                economy -= penalty
+                factors.append(WellbeingFactor(
+                    "economy", -penalty,
+                    f"Förbrukning {int(total_monthly):,} kr/mån — ".replace(",", " ")
+                    + "över rimlig nivå, omförhandla bindningar?",
+                ))
+
+        # Bindningstid utgår snart (informativ - ingen wellbeing-impact,
+        # men loggas så lärare kan följa upp)
+        soon = _d_us.today() + _td_us(days=30)
+        expiring = [
+            u for u in active_subs
+            if u.binding_end is not None and u.binding_end <= soon
+        ]
+        if expiring:
+            factors.append(WellbeingFactor(
+                "growth", 0,
+                f"{len(expiring)} bindning"
+                f"{'ar' if len(expiring) > 1 else ''} utgår inom 30 "
+                "dagar — chans att omförhandla.",
+            ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: utility-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:

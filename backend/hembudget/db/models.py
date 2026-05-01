@@ -991,6 +991,64 @@ class UtilityReading(TenantMixin, Base):
     )
 
 
+class UtilitySubscription(TenantMixin, Base):
+    """En aktiv abonnemang/förbruknings-tjänst eleven har.
+
+    Representerar kontraktet med leverantören (Tibber, Telia, Spotify,
+    SL etc) — separat från `UtilityReading` som är de månatliga
+    fakturorna.
+
+    Pedagogiskt syfte: visa skillnad mellan fast abonnemang (subscription)
+    och rörlig förbrukning (reading). Bindningstid + uppsägningstid är
+    centrala koncept.
+    """
+    __tablename__ = "utility_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    supplier: Mapped[str] = mapped_column(String(80), nullable=False)
+    # Visningsnamn (t.ex. "Bredband 250/250" eller "Spotify Premium")
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # "electricity" | "broadband" | "mobile" | "streaming" | "transport" |
+    # "water" | "heating" | "ovrig"
+    category: Mapped[str] = mapped_column(String(30), nullable=False)
+    # Fast månadsbelopp (för rörliga som el = 0 + nät-avgift, men för
+    # streaming/bredband/mobil = den faktiska summan)
+    monthly_cost: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False,
+    )
+    # Fast nät-avgift (ellevio etc) som tillkommer även vid spotpris
+    grid_fee_monthly: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    # True för Tibber/spotpris (rörligt energipris) — flaggan ger
+    # +1 economy i wellbeing (smart leverantörsval)
+    spot_pricing: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False,
+    )
+    # Bindningstid (kontrakt-slut). NULL = ingen bindning.
+    binding_end: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Uppsägningstid i dagar (default 30 för svenska abonnemang)
+    notice_days: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30", nullable=False,
+    )
+    # Vilken dag i månaden fakturan kommer (1-28, eller None)
+    invoice_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # "active" | "cancelled" | "considered"
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", server_default="active", nullable=False,
+    )
+    # True om kostnaden ingår i hyran (t.ex. värme/vatten i Stockholmshem)
+    included_in_rent: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False,
+    )
+    started_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class AppSetting(TenantMixin, Base):
     """Enkelt key/value-lager för användarinställningar.
 

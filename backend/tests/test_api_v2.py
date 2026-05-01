@@ -2835,3 +2835,273 @@ def test_v2_bank_upcoming_bills(fx) -> None:
     # Total öppna fakturor: 8000 + 750
     assert data["summary"]["upcoming_open_total"] == 8750
     assert data["summary"]["upcoming_open_count"] == 2
+
+
+# === Fas 2E · Förbrukning · UtilitySubscription + UtilityReading ===
+
+
+def test_v2_forbrukning_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/forbrukning")
+    assert r.status_code == 401
+
+
+def test_v2_forbrukning_for_teacher_returns_empty(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+    assert r.json()["subscriptions"] == []
+    assert r.json()["readings"] == []
+
+
+def test_v2_forbrukning_empty_state_for_student(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["subscriptions"] == []
+    assert data["summary"]["active_count"] == 0
+    assert data["summary"]["total_monthly_cost"] == 0
+
+
+def test_v2_teacher_seed_default_utility(fx) -> None:
+    """Lärar-seed skapar 6 default-abonnemang i scope-DB."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["subscriptions_created"] == 6
+    # Idempotent: andra anropet skapar 0 till
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["subscriptions_created"] == 0
+
+
+def test_v2_forbrukning_with_seeded_subscriptions(fx) -> None:
+    """Efter seed visar elev-vyn rätt sammanställning."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 6 abonnemang totalt, alla active
+    assert len(data["subscriptions"]) == 6
+    assert data["summary"]["active_count"] == 6
+    # Tibber finns med spotpris
+    suppliers = {s["supplier"] for s in data["subscriptions"]}
+    assert "Tibber" in suppliers
+    assert "Telia" in suppliers
+    assert "Spotify" in suppliers
+    assert "SL" in suppliers
+    assert data["summary"]["has_spot_pricing"] is True
+    # Stockholmshem ingår i hyran → bidrar inte till total_monthly_cost
+    sthlms = [
+        s for s in data["subscriptions"]
+        if s["supplier"] == "Stockholmshem"
+    ][0]
+    assert sthlms["included_in_rent"] is True
+    # Bredband 389 + mobil 119 + spotify 119 + sl 320 = 947
+    # (Tibber själva = 0 fast, men har grid_fee 320 separat)
+    assert data["summary"]["total_monthly_cost"] == 947
+    assert data["summary"]["total_grid_fee"] == 320
+    # Bindning utgår snart för Telia bredband (10 mån fram, > 30 dgr)
+    # → ej "expiring soon" trots seed
+    assert data["summary"]["binding_expiring_soon"] == 0
+
+
+def test_v2_student_creates_and_patches_subscription(fx) -> None:
+    """Eleven kan skapa egen abonnemang och uppdatera den."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/forbrukning/subscriptions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "supplier": "Comviq",
+            "name": "Mobil Fastpris",
+            "category": "mobile",
+            "monthly_cost": 49,
+            "spot_pricing": False,
+            "notice_days": 30,
+            "status": "active",
+        },
+    )
+    assert r.status_code == 200, r.text
+    sub_id = r.json()["id"]
+    assert r.json()["supplier"] == "Comviq"
+
+    # Patcha till cancelled
+    r2 = client.patch(
+        f"/v2/forbrukning/subscriptions/{sub_id}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"status": "cancelled"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["status"] == "cancelled"
+    assert r2.json()["ended_on"] is not None
+
+    # Lista
+    list_r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert any(
+        s["id"] == sub_id and s["status"] == "cancelled"
+        for s in list_r.json()["subscriptions"]
+    )
+
+
+def test_v2_teacher_creates_utility_reading(fx) -> None:
+    """Lärare skapar månadsfaktura/avläsning som syns i elev-historiken."""
+    from datetime import date as _d
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/utility/readings",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "supplier": "Tibber",
+            "meter_type": "electricity",
+            "meter_role": "energy",
+            "period_start": _d.today().replace(day=1).isoformat(),
+            "period_end": _d.today().isoformat(),
+            "consumption": 184,
+            "consumption_unit": "kWh",
+            "cost_kr": 812,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["consumption"] == 184
+    assert r.json()["cost_kr"] == 812
+
+    # Eleven ser readingen + last_month_cost
+    list_r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = list_r.json()
+    assert len(data["readings"]) == 1
+    assert data["readings"][0]["supplier"] == "Tibber"
+    assert data["summary"]["last_month_cost"] == 812
+    assert data["summary"]["last_month_kwh"] == 184
+
+
+def test_v2_forbrukning_savings_heuristic(fx) -> None:
+    """Besparingspotential räknas korrekt enligt heuristik."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    # Seedа default-katalog → bredband 389 (>350) ⇒ -80, mobil 119
+    # (>99 utan binding) ⇒ -50, spotify 119 utan familj ⇒ -20,
+    # tibber spotpris ⇒ -50. Total ≈ 200
+    client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    r = client.get(
+        "/v2/forbrukning",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    saved = r.json()["summary"]["suggested_savings_monthly"]
+    # 80 (bredband > 350) + 50 (mobil > 99 utan binding) + 50 (spotpris-el)
+    # = 180. Spotify räknas inte (notes nämner "familj-prenum" → träff).
+    assert saved == 180
+
+
+def test_v2_forbrukning_wellbeing_includes_spot_pricing(fx) -> None:
+    """Spotpris-el ger +1 economy och 3+ aktiva +3 safety i wellbeing."""
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    # Kör calculator direkt mot scope-DB
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    spot_factors = [
+        f for f in result.factors
+        if "spotpris" in f.explanation.lower()
+    ]
+    assert len(spot_factors) >= 1
+    assert spot_factors[0].points == 1
+    assert spot_factors[0].dimension == "economy"
+
+    # 6 aktiva subscriptions (3+) → +3 safety
+    safety_factors = [
+        f for f in result.factors
+        if "abonnemang" in f.explanation.lower()
+        and f.dimension == "safety"
+    ]
+    assert len(safety_factors) >= 1
+    assert safety_factors[0].points == 3
+
+
+def test_v2_teacher_utility_overview(fx) -> None:
+    """Lärar-overview returnerar full insyn med summary + subs + readings."""
+    from datetime import date as _d
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    client.post(
+        f"/v2/teacher/students/{sid}/utility/readings",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "supplier": "Tibber",
+            "meter_type": "electricity",
+            "meter_role": "energy",
+            "period_start": _d.today().replace(day=1).isoformat(),
+            "period_end": _d.today().isoformat(),
+            "consumption": 184,
+            "cost_kr": 812,
+        },
+    )
+    r = client.get(
+        f"/v2/teacher/students/{sid}/utility-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["student_name"]
+    assert len(data["subscriptions"]) == 6
+    assert len(data["readings"]) == 1
+    assert data["summary"]["has_spot_pricing"] is True
+
+
+def test_v2_teacher_utility_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/utility/seed-default",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

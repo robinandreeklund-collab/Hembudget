@@ -113,6 +113,8 @@ def run_migrations(engine: Engine) -> list[str]:
         "tax_deductions", "tax_proposals", "tax_year_returns",
         # V2 Försäkringar — Fas 2D
         "insurance_policies", "insurance_claims",
+        # V2 Förbrukning — Fas 2E
+        "utility_subscriptions",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):
