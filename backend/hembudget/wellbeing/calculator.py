@@ -334,6 +334,63 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: tax_year_return-factor misslyckades",
         )
 
+    # Lönesamtal (SalaryNegotiation) — påverkar wellbeing pedagogiskt:
+    # - aktivt lönesamtal: +2 economy ("du tar tag i din lön")
+    # - completed med löneökning: +5 economy ("hen lyckades")
+    # - abandoned: -3 economy ("gav upp innan resultat")
+    # OBS: SalaryNegotiation ligger i master-DB men är scope:ad per
+    # student_id. För wellbeing räknas eleven via current_actor_student.
+    try:
+        from ..school.employer_models import (
+            SalaryNegotiation as _SN,
+        )
+        from ..school.engines import (
+            master_session as _ms_w, get_current_actor_student,
+        )
+        actor_id = get_current_actor_student()
+        if actor_id is not None:
+            with _ms_w() as msw:
+                latest_neg = (
+                    msw.query(_SN)
+                    .filter(_SN.student_id == actor_id)
+                    .order_by(_SN.started_at.desc())
+                    .first()
+                )
+                if latest_neg is not None:
+                    if latest_neg.status == "active":
+                        economy += 2
+                        factors.append(WellbeingFactor(
+                            "economy", 2,
+                            f"Pågående lönesamtal · runda startad — du "
+                            f"tar tag i din lön.",
+                        ))
+                    elif latest_neg.status == "completed":
+                        if latest_neg.final_pct and latest_neg.final_pct > 0:
+                            bonus = min(
+                                8, int(float(latest_neg.final_pct) * 2),
+                            )
+                            economy += bonus
+                            factors.append(WellbeingFactor(
+                                "economy", bonus,
+                                f"Lönesamtal klart · "
+                                f"{float(latest_neg.final_pct):.1f} % "
+                                "höjning sänker lönedipp och bygger upp "
+                                "ekonomin.",
+                            ))
+                    elif latest_neg.status == "abandoned":
+                        economy -= 3
+                        factors.append(WellbeingFactor(
+                            "economy", -3,
+                            f"Avbrutet lönesamtal — gav upp innan "
+                            "resultat. Kostar både i nuvarande lön och "
+                            "framtida förhandlingsläge.",
+                        ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: salary_negotiation-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:

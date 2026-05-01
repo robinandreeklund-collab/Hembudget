@@ -1944,6 +1944,235 @@ def test_v2_lan_with_active_loan_in_scope(fx) -> None:
     assert 0.10 <= data["debt_ratio"] <= 0.15
 
 
+# === Fas 2C · Arbetsgivaren · AgreementBenefit + MarketSalaryRange ===
+
+def test_v2_teacher_seed_default_agreement_benefits(fx) -> None:
+    """Lärar-seed skapar benefit-rader för befintliga avtal."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    # Seedа avtal först (annars finns inga agreements att koppla till)
+    from hembudget.school.employer_seed import (
+        seed_collective_agreements as _seed_agr,
+    )
+    with master_session() as mdb:
+        _seed_agr(mdb)
+
+    r = client.post(
+        "/v2/teacher/agreement-benefits/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] > 0
+
+    # Idempotent
+    r2 = client.post(
+        "/v2/teacher/agreement-benefits/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["created"] == 0
+
+
+def test_v2_teacher_seed_default_market_ranges(fx) -> None:
+    """Lärar-seed skapar marknadsspann för svenska 2026."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/teacher/market-salary-ranges/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] > 25  # 30+ rader i default-katalogen
+
+
+def test_v2_teacher_create_agreement_benefit(fx) -> None:
+    """Lärare skapar manuell benefit."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    from hembudget.school.employer_seed import (
+        seed_collective_agreements as _seed_agr,
+    )
+    from hembudget.school.employer_models import (
+        CollectiveAgreement as _CA,
+    )
+    with master_session() as mdb:
+        _seed_agr(mdb)
+        agreement_id = (
+            mdb.query(_CA).order_by(_CA.id).first().id
+        )
+
+    r = client.post(
+        "/v2/teacher/agreement-benefits",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "agreement_id": agreement_id,
+            "kind": "tjanstebil",
+            "name": "Tjänstebil",
+            "detail": "Bil ingår enligt Bilförmånsregler",
+            "value": "förmånsvärde",
+            "sort_order": 60,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["agreement_id"] == agreement_id
+    assert data["kind"] == "tjanstebil"
+    assert data["name"] == "Tjänstebil"
+
+
+def test_v2_teacher_create_market_range_idempotent_update(fx) -> None:
+    """Skapa range, skapa igen → uppdaterar istället för att duplicera."""
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+
+    body = {
+        "profession": "Snickare",
+        "city": "Helsingborg",
+        "year": 2026,
+        "experience_band": "alla",
+        "low": 28000,
+        "high": 38000,
+        "median": 33000,
+        "source": "test",
+    }
+    r1 = client.post(
+        "/v2/teacher/market-salary-ranges",
+        headers={"Authorization": f"Bearer {tch}"},
+        json=body,
+    )
+    assert r1.status_code == 200
+    range_id = r1.json()["id"]
+
+    # Update
+    body["high"] = 42000
+    r2 = client.post(
+        "/v2/teacher/market-salary-ranges",
+        headers={"Authorization": f"Bearer {tch}"},
+        json=body,
+    )
+    assert r2.status_code == 200
+    assert r2.json()["id"] == range_id  # Samma id — ingen dublett
+    assert r2.json()["high"] == 42000
+
+
+def test_v2_arbetsgivaren_uses_seeded_market_range(fx) -> None:
+    """När MarketSalaryRange är seedat ska /v2/arbetsgivaren visa det."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=31250,
+            net_salary_monthly=22400,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+        db.commit()
+
+    # Seedа default-marknadsspann
+    client.post(
+        "/v2/teacher/market-salary-ranges/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    r = client.get(
+        "/v2/arbetsgivaren",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Default har Undersköterska Stockholm 2026: low=28000, high=35500
+    assert data["market_low"] == 28000
+    assert data["market_high"] == 35500
+
+
+def test_v2_arbetsgivaren_uses_seeded_agreement_benefits(fx) -> None:
+    """När AgreementBenefit är seedat ska benefits dyka upp."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+
+    # Seedа kollektivavtal + profession-mapping först
+    from hembudget.school.employer_seed import (
+        seed_collective_agreements as _seed_agr,
+        seed_profession_agreements as _seed_pa,
+    )
+    with master_session() as mdb:
+        _seed_agr(mdb)
+        _seed_pa(mdb)
+
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=31250,
+            net_salary_monthly=22400,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+        db.commit()
+
+    # Seedа förmåner (Kommunal HÖK-avtalet ska få 5 förmåner)
+    client.post(
+        "/v2/teacher/agreement-benefits/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    r = client.get(
+        "/v2/arbetsgivaren",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    benefits = r.json()["agreement_benefits"]
+    assert len(benefits) >= 4  # pension/OB/lönerevision/friskvård
+    names = [b["name"] for b in benefits]
+    assert any("pension" in n.lower() or "kap" in n.lower() for n in names)
+    assert any("ob-tillägg" in n.lower() for n in names)
+
+
+def test_v2_teacher_employer_overview(fx) -> None:
+    """Lärar-vyn returnerar full insyn i arbetsgivar-aktören."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=31250,
+            net_salary_monthly=22400,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/employer-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["profession"] == "Undersköterska"
+    assert data["employer"] == "Sthlm Sjukhus AB"
+    assert data["gross_salary_monthly"] == 31250
+    assert isinstance(data["benefits"], list)
+    assert isinstance(data["salary_negotiations"], list)
+    # Default satisfaction = 70
+    assert data["satisfaction_score"] == 70
+
+
+def test_v2_teacher_employer_overview_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/employer-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
 # === Fas 2B · Skatten · TaxDeduction + TaxProposal + Submit ===
 
 def _seed_tax_profile(sid: int, has_student_loan: bool = False) -> None:

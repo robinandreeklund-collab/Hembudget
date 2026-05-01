@@ -120,6 +120,80 @@ class ProfessionAgreement(MasterBase):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class AgreementBenefit(MasterBase):
+    """Strukturerad förmånsrad för ett kollektivavtal.
+
+    Exempel: ITP1-tjänstepension 4,5 %, friskvårdsbidrag 5 000/år,
+    OB-tillägg-trappa, lönerevision 2,4 %. Lärare seedar dessa per
+    avtal eller laddar default-katalogen via /v2/teacher/seed-default-
+    agreement-benefits. /v2/arbetsgivaren läser denna tabell istället
+    för CollectiveAgreement.meta-JSON.
+    """
+    __tablename__ = "agreement_benefits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    agreement_id: Mapped[int] = mapped_column(
+        ForeignKey("collective_agreements.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # "pension" | "friskvard" | "ob_tillagg" | "lonerevision" |
+    # "semester" | "sjuklon" | "tjanstebil" | "ovrig"
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Visningsnamn ("Tjänstepension ITP1", "Friskvårdsbidrag")
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Detaljbeskrivning ("4,5 % under 7,5 IBB · 30 % över")
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Värde-text som visas i tabellen ("4,5 %", "5 000/år", "+30 %
+    # kväll · +50 % helg")
+    value: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Sortering i UI:n (lägre först)
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class MarketSalaryRange(MasterBase):
+    """Marknadsspann för ett yrke i en stad ett givet år.
+
+    Datakälla = SCB:s lönestatistik + Kollega.se /
+    fackförbundsrekommendationer. Lärare seedar för svenska 2026 eller
+    laddar default-katalogen. /v2/arbetsgivaren visar low/high i
+    side-card och Maria-AI:n använder spannet i lönesamtalet.
+    """
+    __tablename__ = "market_salary_ranges"
+    __table_args__ = (
+        UniqueConstraint(
+            "profession", "city", "year", "experience_band",
+            name="uq_market_range",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profession: Mapped[str] = mapped_column(
+        String(80), nullable=False, index=True,
+    )
+    city: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # "junior" (0-3 år) | "medel" (4-10 år) | "senior" (11+ år)
+    # Tom = "alla"
+    experience_band: Mapped[str] = mapped_column(
+        String(20), default="alla", nullable=False,
+    )
+    # Bruttolön kr/mån
+    low: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    high: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    median: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    # Källa-text (SCB-yrkeskod / Kollega.se / Förbundsrapport)
+    source: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class EmployerSatisfaction(MasterBase):
     """Levande satisfaction-score per elev. En rad per elev.
 

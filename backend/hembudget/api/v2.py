@@ -38,14 +38,20 @@ from ..tax.proposals import (
     reject_proposal, submit_tax_year, latest_tax_year_return,
 )
 from ..school.employer_models import (
+    AgreementBenefit,
     CollectiveAgreement,
     EmployerSatisfaction,
     EmployerSatisfactionEvent,
+    MarketSalaryRange,
     NegotiationRound,
     ProfessionAgreement,
     SalaryNegotiation,
     WorkplaceQuestion,
     WorkplaceQuestionAnswer,
+)
+from ..school.employer_market_seed import (
+    seed_default_agreement_benefits,
+    seed_default_market_salary_ranges,
 )
 from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
@@ -1814,50 +1820,82 @@ def _empty_employer(student_id: int) -> V2EmployerResponse:
     )
 
 
-def _agreement_benefits_from_meta(
+def _agreement_benefits_from_db(
+    mdb: Session,
     agreement: Optional[CollectiveAgreement],
-    pension_pct: Optional[float],
-    avtal_norm_pct: Optional[float],
 ) -> list[V2EmployerAgreementBenefit]:
-    """Extrahera kollektivavtals-förmåner från CollectiveAgreement.meta.
+    """Hämta strukturerade kollektivavtals-förmåner från
+    AgreementBenefit-tabellen.
 
-    Returnerar BARA rader vi har FAKTISK data för:
-    - Tjänstepension om ProfessionAgreement.pension_rate_pct är satt
-    - Lönerevision om CollectiveAgreement.meta['norm_pct'] är satt
-    - Övriga förmåner från meta['benefits'] (lista av {name, detail, value})
-
-    Inga schablon-defaults — om agreement saknar strukturerade förmåner
-    visas inget i kollektivavtals-tabellen ("Snart"-state i frontend).
-    Fas 2: AgreementBenefit-modell + lärar-API för seeding.
+    Returnerar tom lista om avtalet saknar seedade förmåner — då
+    visar frontend en "Snart"-state istället för defaults.
     """
     out: list[V2EmployerAgreementBenefit] = []
-    if pension_pct is not None and pension_pct > 0:
+    if agreement is None:
+        return out
+    rows = (
+        mdb.query(AgreementBenefit)
+        .filter(AgreementBenefit.agreement_id == agreement.id)
+        .order_by(AgreementBenefit.sort_order, AgreementBenefit.id)
+        .all()
+    )
+    for r in rows:
         out.append(V2EmployerAgreementBenefit(
-            name="Tjänstepension",
-            detail=f"{pension_pct:.1f} % av brutto · arbetsgivaren betalar",
-            value=f"{pension_pct:.1f} %",
+            name=r.name,
+            detail=r.detail or "",
+            value=r.value,
         ))
-    if avtal_norm_pct is not None and avtal_norm_pct > 0:
-        out.append(V2EmployerAgreementBenefit(
-            name="Lönerevision",
-            detail="Centralt avtal · årlig norm",
-            value=f"{avtal_norm_pct:.1f} %",
-        ))
-    # Extra förmåner från meta['benefits'] (list of dict)
-    if agreement and agreement.meta:
-        try:
-            extra = agreement.meta.get("benefits") or []
-            if isinstance(extra, list):
-                for b in extra:
-                    if isinstance(b, dict) and b.get("name") and b.get("value"):
-                        out.append(V2EmployerAgreementBenefit(
-                            name=str(b["name"]),
-                            detail=str(b.get("detail") or ""),
-                            value=str(b["value"]),
-                        ))
-        except Exception:
-            pass
     return out
+
+
+def _market_range_from_db(
+    mdb: Session,
+    profession: str,
+    city: Optional[str],
+    year: int,
+) -> tuple[Optional[float], Optional[float]]:
+    """Slå upp marknadsspann från MarketSalaryRange-tabellen.
+
+    Försök i ordning:
+    1. (profession, city, year, "alla")
+    2. (profession, city, närmaste år)
+    3. (profession, "Stockholm", year) som fallback
+    Returnerar (None, None) om inget hittas — då visas inte side-card.
+    """
+    if not profession:
+        return None, None
+    q = (
+        mdb.query(MarketSalaryRange)
+        .filter(MarketSalaryRange.profession == profession)
+    )
+    if city:
+        q1 = q.filter(
+            MarketSalaryRange.city == city,
+            MarketSalaryRange.year == year,
+        ).first()
+        if q1:
+            return float(q1.low), float(q1.high)
+        # Närmaste år
+        q2 = (
+            q.filter(MarketSalaryRange.city == city)
+            .order_by(MarketSalaryRange.year.desc())
+            .first()
+        )
+        if q2:
+            return float(q2.low), float(q2.high)
+    # Stockholm-fallback
+    q3 = (
+        mdb.query(MarketSalaryRange)
+        .filter(
+            MarketSalaryRange.profession == profession,
+            MarketSalaryRange.city == "Stockholm",
+        )
+        .order_by(MarketSalaryRange.year.desc())
+        .first()
+    )
+    if q3:
+        return float(q3.low), float(q3.high)
+    return None, None
 
 
 def _difficulty_label(diff: object) -> str:
@@ -1959,20 +1997,15 @@ def get_employer(
             if pension_pct else None
         )
 
-        # Marknadsspann · läses ENDAST från CollectiveAgreement.meta
-        # (market_low + market_high). Inga schabloner — Fas 2 lägger
-        # till MarketSalaryRange-modell per yrke + ort med faktiska
-        # SCB-data som lärare seedar.
-        market_low: Optional[float] = None
-        market_high: Optional[float] = None
-        if agreement and agreement.meta:
-            try:
-                if agreement.meta.get("market_low"):
-                    market_low = float(agreement.meta["market_low"])
-                if agreement.meta.get("market_high"):
-                    market_high = float(agreement.meta["market_high"])
-            except (TypeError, ValueError):
-                pass
+        # Marknadsspann från MarketSalaryRange (Fas 2C). Söker
+        # (profession, city, current_year). Faller tillbaka på
+        # närmaste år eller Stockholm. Returnerar (None, None) om
+        # inget seedat — frontend visar då inte side-card.
+        from datetime import date as _d_market
+        market_low, market_high = _market_range_from_db(
+            mdb, profile.profession, profile.city,
+            _d_market.today().year,
+        )
 
         # Anställd sedan / lönerevision — hämta från CollectiveAgreement.meta
         # om strukturerat. Annars lämna None.
@@ -2107,9 +2140,7 @@ def get_employer(
             ))
 
         # Avtals-förmåner (från meta eller default)
-        benefits = _agreement_benefits_from_meta(
-            agreement, pension_pct, avtal_norm_pct,
-        )
+        benefits = _agreement_benefits_from_db(mdb, agreement)
 
     # Lönespecar — från scope-DB:s transactions där amount > 0 och
     # description innehåller "lön" eller liknande, senaste 4 mån.
@@ -3737,6 +3768,442 @@ def teacher_tax_overview(
         proposals=prop_out,
         submitted=ret_out,
     )
+
+
+# === Arbetsgivaren · lärar-endpoints (Fas 2C) ===
+
+class V2AgreementBenefitIn(BaseModel):
+    agreement_id: int
+    kind: Literal[
+        "pension", "friskvard", "ob_tillagg", "lonerevision",
+        "semester", "sjuklon", "tjanstebil", "ovrig",
+    ]
+    name: str = Field(..., min_length=1, max_length=120)
+    detail: Optional[str] = None
+    value: str = Field(..., min_length=1, max_length=120)
+    sort_order: int = 100
+
+
+class V2AgreementBenefitOut(BaseModel):
+    id: int
+    agreement_id: int
+    kind: str
+    name: str
+    detail: Optional[str] = None
+    value: str
+    sort_order: int
+
+
+class V2MarketSalaryRangeIn(BaseModel):
+    profession: str
+    city: str
+    year: int = Field(..., ge=2020, le=2100)
+    experience_band: str = "alla"
+    low: float = Field(..., ge=0)
+    high: float = Field(..., ge=0)
+    median: Optional[float] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class V2MarketSalaryRangeOut(BaseModel):
+    id: int
+    profession: str
+    city: str
+    year: int
+    experience_band: str
+    low: float
+    high: float
+    median: Optional[float] = None
+    source: Optional[str] = None
+
+
+class V2CollectiveAgreementOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    union: str
+    employer_org: str
+
+
+@router.get(
+    "/teacher/agreements", response_model=list[V2CollectiveAgreementOut],
+)
+def teacher_list_agreements(
+    info: TokenInfo = Depends(require_token),
+) -> list[V2CollectiveAgreementOut]:
+    """Lista alla CollectiveAgreement (master-DB) för UI:n. Lärare
+    behöver veta vilka agreement_id de kan koppla AgreementBenefit
+    till."""
+    _require_teacher(info)
+    with master_session() as mdb:
+        rows = mdb.query(CollectiveAgreement).order_by(CollectiveAgreement.code).all()
+        return [
+            V2CollectiveAgreementOut(
+                id=a.id, code=a.code, name=a.name,
+                union=a.union, employer_org=a.employer_org,
+            )
+            for a in rows
+        ]
+
+
+@router.get(
+    "/teacher/agreements/{agreement_id}/benefits",
+    response_model=list[V2AgreementBenefitOut],
+)
+def teacher_list_agreement_benefits(
+    agreement_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> list[V2AgreementBenefitOut]:
+    """Lista alla förmåner för ett kollektivavtal."""
+    _require_teacher(info)
+    with master_session() as mdb:
+        rows = (
+            mdb.query(AgreementBenefit)
+            .filter(AgreementBenefit.agreement_id == agreement_id)
+            .order_by(AgreementBenefit.sort_order, AgreementBenefit.id)
+            .all()
+        )
+        return [
+            V2AgreementBenefitOut(
+                id=b.id, agreement_id=b.agreement_id, kind=b.kind,
+                name=b.name, detail=b.detail, value=b.value,
+                sort_order=b.sort_order,
+            )
+            for b in rows
+        ]
+
+
+@router.post(
+    "/teacher/agreement-benefits",
+    response_model=V2AgreementBenefitOut,
+)
+def teacher_create_agreement_benefit(
+    body: V2AgreementBenefitIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2AgreementBenefitOut:
+    """Skapa en ny strukturerad kollektivavtals-förmån (master-DB).
+    Synlig för alla elever som har det avtalet via ProfessionAgreement."""
+    _require_teacher(info)
+    with master_session() as mdb:
+        agr = mdb.get(CollectiveAgreement, body.agreement_id)
+        if not agr:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Avtalet hittades inte",
+            )
+        b = AgreementBenefit(
+            agreement_id=body.agreement_id,
+            kind=body.kind,
+            name=body.name,
+            detail=body.detail,
+            value=body.value,
+            sort_order=body.sort_order,
+        )
+        mdb.add(b)
+        mdb.flush()
+        mdb.refresh(b)
+        return V2AgreementBenefitOut(
+            id=b.id, agreement_id=b.agreement_id, kind=b.kind,
+            name=b.name, detail=b.detail, value=b.value,
+            sort_order=b.sort_order,
+        )
+
+
+@router.delete(
+    "/teacher/agreement-benefits/{benefit_id}", status_code=204,
+)
+def teacher_delete_agreement_benefit(
+    benefit_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    _require_teacher(info)
+    with master_session() as mdb:
+        b = mdb.get(AgreementBenefit, benefit_id)
+        if b is not None:
+            mdb.delete(b)
+            mdb.flush()
+
+
+@router.post("/teacher/agreement-benefits/seed-default", response_model=dict)
+def teacher_seed_default_agreement_benefits(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Seedа default-katalogen för alla CollectiveAgreement-koder
+    som finns. Idempotent."""
+    _require_teacher(info)
+    with master_session() as mdb:
+        n = seed_default_agreement_benefits(mdb)
+    return {"created": n}
+
+
+@router.get(
+    "/teacher/market-salary-ranges",
+    response_model=list[V2MarketSalaryRangeOut],
+)
+def teacher_list_market_ranges(
+    profession: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> list[V2MarketSalaryRangeOut]:
+    _require_teacher(info)
+    with master_session() as mdb:
+        q = mdb.query(MarketSalaryRange)
+        if profession:
+            q = q.filter(MarketSalaryRange.profession == profession)
+        rows = q.order_by(
+            MarketSalaryRange.profession, MarketSalaryRange.city,
+            MarketSalaryRange.year.desc(),
+        ).all()
+        return [
+            V2MarketSalaryRangeOut(
+                id=r.id, profession=r.profession, city=r.city,
+                year=r.year, experience_band=r.experience_band,
+                low=float(r.low), high=float(r.high),
+                median=float(r.median) if r.median else None,
+                source=r.source,
+            )
+            for r in rows
+        ]
+
+
+@router.post(
+    "/teacher/market-salary-ranges", response_model=V2MarketSalaryRangeOut,
+)
+def teacher_create_market_range(
+    body: V2MarketSalaryRangeIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2MarketSalaryRangeOut:
+    _require_teacher(info)
+    if body.high < body.low:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "high måste vara >= low",
+        )
+    with master_session() as mdb:
+        # Idempotent: om (profession, city, year, band) redan finns,
+        # uppdatera istället
+        existing = (
+            mdb.query(MarketSalaryRange)
+            .filter(
+                MarketSalaryRange.profession == body.profession,
+                MarketSalaryRange.city == body.city,
+                MarketSalaryRange.year == body.year,
+                MarketSalaryRange.experience_band == body.experience_band,
+            )
+            .first()
+        )
+        if existing is not None:
+            existing.low = Decimal(str(body.low))
+            existing.high = Decimal(str(body.high))
+            existing.median = (
+                Decimal(str(body.median)) if body.median is not None else None
+            )
+            existing.source = body.source
+            existing.notes = body.notes
+            r = existing
+        else:
+            r = MarketSalaryRange(
+                profession=body.profession,
+                city=body.city,
+                year=body.year,
+                experience_band=body.experience_band,
+                low=Decimal(str(body.low)),
+                high=Decimal(str(body.high)),
+                median=(
+                    Decimal(str(body.median)) if body.median is not None else None
+                ),
+                source=body.source,
+                notes=body.notes,
+            )
+            mdb.add(r)
+        mdb.flush()
+        mdb.refresh(r)
+        return V2MarketSalaryRangeOut(
+            id=r.id, profession=r.profession, city=r.city,
+            year=r.year, experience_band=r.experience_band,
+            low=float(r.low), high=float(r.high),
+            median=float(r.median) if r.median else None,
+            source=r.source,
+        )
+
+
+@router.delete(
+    "/teacher/market-salary-ranges/{range_id}", status_code=204,
+)
+def teacher_delete_market_range(
+    range_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    _require_teacher(info)
+    with master_session() as mdb:
+        r = mdb.get(MarketSalaryRange, range_id)
+        if r is not None:
+            mdb.delete(r)
+            mdb.flush()
+
+
+@router.post("/teacher/market-salary-ranges/seed-default", response_model=dict)
+def teacher_seed_default_market_ranges(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Seedа default-katalogen för svenska 2026 (SCB-snitt). Idempotent."""
+    _require_teacher(info)
+    with master_session() as mdb:
+        n = seed_default_market_salary_ranges(mdb)
+    return {"created": n}
+
+
+# Lärar-vy: full insyn i en elevs arbetsgivar-aktör
+class V2TeacherEmployerOverview(BaseModel):
+    student_id: int
+    student_name: str
+    profession: str
+    employer: str
+    agreement_name: Optional[str] = None
+    agreement_id: Optional[int] = None
+    pension_pct: Optional[float] = None
+    gross_salary_monthly: float
+    market_low: Optional[float] = None
+    market_high: Optional[float] = None
+    benefits: list[V2EmployerAgreementBenefit]
+    satisfaction_score: int
+    satisfaction_trend: str
+    satisfaction_delta_4w: int
+    salary_negotiations: list[V2EmployerNegotiation]
+    questions_answered_count: int
+    questions_pending_count: int
+
+
+@router.get(
+    "/teacher/students/{student_id}/employer-overview",
+    response_model=V2TeacherEmployerOverview,
+)
+def teacher_employer_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherEmployerOverview:
+    """Lärar-vy · full insyn i elevens arbetsgivar-aktör."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == student_id)
+            .first()
+        )
+        if not profile:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev saknar profil",
+            )
+
+        prof_agr = (
+            mdb.query(ProfessionAgreement)
+            .filter(ProfessionAgreement.profession == profile.profession)
+            .first()
+        )
+        agreement = None
+        if prof_agr:
+            agreement = mdb.get(CollectiveAgreement, prof_agr.agreement_id)
+
+        pension_pct = (
+            float(prof_agr.pension_rate_pct)
+            if prof_agr and prof_agr.pension_rate_pct is not None
+            else None
+        )
+
+        from datetime import date as _d_t
+        ml, mh = _market_range_from_db(
+            mdb, profile.profession, profile.city, _d_t.today().year,
+        )
+
+        benefits = _agreement_benefits_from_db(mdb, agreement)
+
+        # Satisfaction
+        sat_row = (
+            mdb.query(EmployerSatisfaction)
+            .filter(EmployerSatisfaction.student_id == student_id)
+            .first()
+        )
+        sat_score = sat_row.score if sat_row else 70
+        sat_trend = sat_row.trend if sat_row else "stable"
+
+        from datetime import timedelta as _td3
+        cutoff = datetime.utcnow() - _td3(days=28)
+        delta_4w = int(
+            mdb.query(_func.coalesce(_func.sum(EmployerSatisfactionEvent.delta_score), 0))
+            .filter(EmployerSatisfactionEvent.student_id == student_id)
+            .filter(EmployerSatisfactionEvent.ts >= cutoff)
+            .scalar() or 0
+        )
+
+        # Lönesamtal-historik
+        neg_rows = (
+            mdb.query(SalaryNegotiation)
+            .filter(SalaryNegotiation.student_id == student_id)
+            .order_by(SalaryNegotiation.started_at.desc())
+            .limit(10)
+            .all()
+        )
+        negs_out: list[V2EmployerNegotiation] = []
+        for n in neg_rows:
+            last_round = (
+                mdb.query(NegotiationRound)
+                .filter(NegotiationRound.negotiation_id == n.id)
+                .order_by(NegotiationRound.round_no.desc())
+                .first()
+            )
+            negs_out.append(V2EmployerNegotiation(
+                id=n.id,
+                status=n.status,
+                round_no=last_round.round_no if last_round else 0,
+                max_rounds=5,
+                starting_salary=float(n.starting_salary),
+                requested_salary=None,
+                proposed_pct=(
+                    float(last_round.proposed_pct)
+                    if last_round and last_round.proposed_pct is not None
+                    else None
+                ),
+                avtal_norm_pct=n.avtal_norm_pct,
+                final_salary=(
+                    float(n.final_salary) if n.final_salary is not None else None
+                ),
+                final_pct=n.final_pct,
+                started_at=n.started_at,
+                completed_at=n.completed_at,
+            ))
+
+        questions_answered = (
+            mdb.query(WorkplaceQuestionAnswer)
+            .filter(WorkplaceQuestionAnswer.student_id == student_id)
+            .count()
+        )
+        # Pending = totalt antal frågor minus besvarade
+        total_questions = mdb.query(WorkplaceQuestion).count()
+        questions_pending = max(0, total_questions - questions_answered)
+
+        return V2TeacherEmployerOverview(
+            student_id=student_id,
+            student_name=st.display_name,
+            profession=profile.profession,
+            employer=profile.employer,
+            agreement_name=agreement.name if agreement else None,
+            agreement_id=agreement.id if agreement else None,
+            pension_pct=pension_pct,
+            gross_salary_monthly=float(profile.gross_salary_monthly or 0),
+            market_low=ml,
+            market_high=mh,
+            benefits=benefits,
+            satisfaction_score=sat_score,
+            satisfaction_trend=sat_trend,
+            satisfaction_delta_4w=delta_4w,
+            salary_negotiations=negs_out,
+            questions_answered_count=questions_answered,
+            questions_pending_count=questions_pending,
+        )
 
 
 # === Endpoints ===
