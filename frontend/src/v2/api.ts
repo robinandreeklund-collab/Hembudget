@@ -492,6 +492,96 @@ export type V2TeacherCreditOverview = {
   available_products_count: number;
 };
 
+// === Fas 2D · Försäkringar ===
+
+export type V2InsurancePolicyKind =
+  | "hem"
+  | "olycksfall"
+  | "liv"
+  | "barnforsakring"
+  | "bostadsrattsforsakring"
+  | "bilforsakring"
+  | "djur"
+  | "ovrig";
+
+export type V2InsuranceClaimKind =
+  | "stold"
+  | "olycka"
+  | "skada"
+  | "vattenskada"
+  | "brand"
+  | "info"
+  | "premiehojning"
+  | "bytte_bolag";
+
+export type V2InsuranceStatus = "active" | "considered" | "cancelled";
+export type V2ClaimStatus =
+  | "submitted"
+  | "approved"
+  | "partial"
+  | "denied"
+  | "paid"
+  | "info";
+
+export type V2InsurancePolicyOut = {
+  id: number;
+  provider: string;
+  name: string;
+  kind: V2InsurancePolicyKind;
+  premium_monthly: number;
+  coverage_amount: number | null;
+  deductible: number | null;
+  autogiro: boolean;
+  status: V2InsuranceStatus;
+  started_on: string | null;
+  ended_on: string | null;
+  notes: string | null;
+};
+
+export type V2InsuranceClaimOut = {
+  id: number;
+  occurred_on: string;
+  policy_id: number | null;
+  policy_name: string | null;
+  kind: V2InsuranceClaimKind;
+  title: string;
+  description: string | null;
+  amount_claimed: number | null;
+  amount_paid: number | null;
+  status: V2ClaimStatus;
+  paid_at: string | null;
+  no_policy: boolean;
+  notes: string | null;
+  created_at: string;
+};
+
+export type V2InsuranceSummary = {
+  active_count: number;
+  considered_count: number;
+  cancelled_count: number;
+  total_premium_monthly: number;
+  total_coverage: number;
+  claims_paid_12m: number;
+  claims_paid_amount_12m: number;
+  claims_unprotected_12m: number;
+  coverage_gaps: string[];
+};
+
+export type V2InsuranceData = {
+  student_id: number;
+  summary: V2InsuranceSummary;
+  policies: V2InsurancePolicyOut[];
+  claims: V2InsuranceClaimOut[];
+};
+
+export type V2TeacherInsuranceOverview = {
+  student_id: number;
+  student_name: string;
+  summary: V2InsuranceSummary;
+  policies: V2InsurancePolicyOut[];
+  claims: V2InsuranceClaimOut[];
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -632,6 +722,70 @@ export const v2Api = {
     ),
   goals: () => api<GoalsData>("/v2/mal"),
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
+
+  // === Fas 2D · Försäkringar ===
+  forsakringar: () => api<V2InsuranceData>("/v2/forsakringar"),
+  insuranceCreatePolicy: (body: {
+    provider: string;
+    name: string;
+    kind: V2InsurancePolicyKind;
+    premium_monthly: number;
+    coverage_amount?: number;
+    deductible?: number;
+    autogiro?: boolean;
+    status?: V2InsuranceStatus;
+    started_on?: string;
+    notes?: string;
+  }) =>
+    api<V2InsurancePolicyOut>("/v2/forsakringar/policies", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  insuranceUpdateStatus: (policyId: number, status: V2InsuranceStatus) =>
+    api<V2InsurancePolicyOut>(
+      `/v2/forsakringar/policies/${policyId}/status`,
+      { method: "PATCH", body: JSON.stringify({ status }) },
+    ),
+  insuranceDeletePolicy: (policyId: number) =>
+    api<void>(`/v2/forsakringar/policies/${policyId}`, {
+      method: "DELETE",
+    }),
+  /** Lärar-API · seedа default-katalog. */
+  teacherSeedDefaultInsurance: (studentId: number) =>
+    api<{ student_id: number; policies_created: number }>(
+      `/v2/teacher/students/${studentId}/insurance/seed-default`,
+      { method: "POST", body: "{}" },
+    ),
+  /** Lärar-API · skapa skadehändelse. */
+  teacherCreateInsuranceClaim: (
+    studentId: number,
+    body: {
+      occurred_on: string;
+      policy_id?: number;
+      kind: V2InsuranceClaimKind;
+      title: string;
+      description?: string;
+      amount_claimed?: number;
+      amount_paid?: number;
+      status?: V2ClaimStatus;
+      paid_at?: string;
+      no_policy?: boolean;
+      notes?: string;
+    },
+  ) =>
+    api<V2InsuranceClaimOut>(
+      `/v2/teacher/students/${studentId}/insurance/claims`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  teacherDeleteInsuranceClaim: (studentId: number, claimId: number) =>
+    api<void>(
+      `/v2/teacher/students/${studentId}/insurance/claims/${claimId}`,
+      { method: "DELETE" },
+    ),
+  teacherInsuranceOverview: (studentId: number) =>
+    api<V2TeacherInsuranceOverview>(
+      `/v2/teacher/students/${studentId}/insurance-overview`,
+    ),
   /** Lärar-API · lista alla CollectiveAgreement. */
   teacherListAgreements: () =>
     api<V2CollectiveAgreementOut[]>("/v2/teacher/agreements"),

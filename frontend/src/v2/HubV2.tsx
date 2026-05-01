@@ -345,11 +345,11 @@ export function HubV2() {
               <div className="compass-node-name">Avanza · ISK</div>
               <div className="compass-node-val">snart</div>
             </span>
-            <span className="compass-node disabled">
+            <Link to="/v2/forsakringar" className="compass-node">
               <div className="compass-node-eye">Aktör 06</div>
               <div className="compass-node-name">Försäkringar</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">premie + skador</div>
+            </Link>
             <span className="compass-node disabled">
               <div className="compass-node-eye">Aktör 07</div>
               <div className="compass-node-name">Förbrukning</div>

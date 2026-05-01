@@ -226,6 +226,25 @@ export function V2RosterPage() {
                 >
                   Arbetsgivare →
                 </Link>
+                <Link
+                  to={`/teacher/v2/insurance/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(251,191,36,0.10)",
+                    border: "1px solid rgba(251,191,36,0.4)",
+                    color: "#fbbf24",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Försäkringar →
+                </Link>
               </div>
             ))}
           </div>
