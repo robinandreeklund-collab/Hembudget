@@ -5260,3 +5260,375 @@ def test_v2_teacher_maria_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2M · TxV2 + MeddelandenV2 + PortfolioV2 ===
+
+
+def _make_tx(s, acc_id, amount, desc, hash_, normalized=None,
+             category_id=None) -> int:
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Transaction as _Tx
+    t = _Tx(
+        account_id=acc_id, date=_d.today(),
+        amount=_D(str(amount)),
+        raw_description=desc,
+        normalized_merchant=normalized,
+        hash=hash_, category_id=category_id,
+    )
+    s.add(t)
+    s.flush()
+    return t.id
+
+
+def test_v2_tx_detail_404(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/tx/99999",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 404
+
+
+def test_v2_tx_detail_returns_recurring(fx) -> None:
+    """Foodora-köp: detalj-vyn ska visa de andra Foodora-köpen senaste 90 dgr."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc, Transaction as _Tx,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    target_id: dict[str, int] = {}
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="SEB Visa", bank="SEB", type="credit",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        # Tre Foodora-köp, första är "denna"
+        target_id["id"] = _make_tx(
+            s, acc.id, -187, "Foodora pizza",
+            "h1", normalized="FOODORA",
+        )
+        _make_tx(s, acc.id, -156, "Foodora burger",
+                 "h2", normalized="FOODORA")
+        _make_tx(s, acc.id, -212, "Foodora sushi",
+                 "h3", normalized="FOODORA")
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/tx/{target_id['id']}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["raw_description"] == "Foodora pizza"
+    assert data["amount"] == -187
+    assert len(data["recurring"]) == 3
+    self_rows = [r for r in data["recurring"] if r["is_self"]]
+    assert len(self_rows) == 1
+    assert self_rows[0]["id"] == target_id["id"]
+    assert data["recurring_count_30d"] == 2  # 2 andra utöver "denna"
+    assert data["recurring_total_30d"] == 156 + 212
+
+
+def test_v2_tx_classify_via_patch(fx) -> None:
+    """PATCH sätter category_id + user_verified=True."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc, Category as _Cat,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="SEB Visa", bank="SEB", type="credit",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        cat = (
+            s.query(_Cat).filter(_Cat.name == "Restaurang").first()
+        )
+        assert cat is not None
+        holder["cat_id"] = cat.id
+        holder["tx_id"] = _make_tx(
+            s, acc.id, -187, "Foodora", "patch1",
+            normalized="FOODORA",
+        )
+
+    _seed_scope(sid, seed)
+
+    r = client.patch(
+        f"/v2/tx/{holder['tx_id']}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "category_id": holder["cat_id"],
+            "notes": "Efter laxsim",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["category_id"] == holder["cat_id"]
+    assert r.json()["user_verified"] is True
+    assert r.json()["notes"] == "Efter laxsim"
+
+
+def test_v2_tx_create_rule_classifies_existing(fx) -> None:
+    """Skapa regel "FOODORA → Restaurang" + apply_to_existing=True."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc, Category as _Cat,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="SEB Visa", bank="SEB", type="credit",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        cat = s.query(_Cat).filter(_Cat.name == "Restaurang").first()
+        assert cat is not None
+        holder["cat_id"] = cat.id
+        # 3 oklassificerade Foodora
+        holder["tx_id"] = _make_tx(
+            s, acc.id, -187, "Foodora pizza", "rule1",
+            normalized="FOODORA",
+        )
+        _make_tx(s, acc.id, -156, "Foodora burger",
+                 "rule2", normalized="FOODORA")
+        _make_tx(s, acc.id, -212, "Foodora sushi",
+                 "rule3", normalized="FOODORA")
+
+    _seed_scope(sid, seed)
+
+    r = client.post(
+        f"/v2/tx/{holder['tx_id']}/create-rule",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "category_id": holder["cat_id"],
+            "apply_to_existing": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["already_existed"] is False
+    assert r.json()["applied_count"] == 3  # alla 3 klassades om
+    assert r.json()["pattern"] == "FOODORA"
+
+    # Andra anropet → already_existed
+    r2 = client.post(
+        f"/v2/tx/{holder['tx_id']}/create-rule",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "category_id": holder["cat_id"],
+            "apply_to_existing": False,
+        },
+    )
+    assert r2.json()["already_existed"] is True
+
+
+def test_v2_messages_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/messages")
+    assert r.status_code == 401
+
+
+def test_v2_messages_empty_state(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/messages",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["messages"] == []
+    assert data["unread_count"] == 0
+
+
+def test_v2_messages_send_and_receive(fx) -> None:
+    """Eleven skickar + lärare svarar via /v2/teacher/messages."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    # Eleven skickar
+    r1 = client.post(
+        "/v2/messages",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"body": "Hej Anders, jag har en fråga om CSN-räntan."},
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["sender_role"] == "student"
+
+    # Lärare svarar
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/messages",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"body": "Bra fråga — räntan är ovanligt låg."},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["sender_role"] == "teacher"
+
+    # Lista
+    list_r = client.get(
+        "/v2/messages",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert len(list_r.json()["messages"]) == 2
+    assert list_r.json()["unread_count"] == 1  # lärar-msg är oläst
+    assert list_r.json()["teacher_name"]
+
+
+def test_v2_messages_mark_read(fx) -> None:
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    client.post(
+        f"/v2/teacher/students/{sid}/messages",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"body": "Test"},
+    )
+    list_r = client.get(
+        "/v2/messages",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    msg_id = list_r.json()["messages"][0]["id"]
+    mark = client.post(
+        f"/v2/messages/{msg_id}/mark-read",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert mark.status_code == 204
+    list2 = client.get(
+        "/v2/messages",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert list2.json()["unread_count"] == 0
+
+
+def test_v2_portfolio_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/portfolio")
+    assert r.status_code == 401
+
+
+def test_v2_portfolio_empty_state(fx) -> None:
+    """Inga kompetenser seedade → tom payload."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/portfolio",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Kan ha system-kompetenser från default-seed, men alla på BASIS
+    assert data["summary"]["fordjup_count"] == 0
+
+
+def test_v2_portfolio_with_completed_competency(fx) -> None:
+    """En modul med 100% klar → kompetensen på FÖRDJUPNING."""
+    from hembudget.school.models import (
+        Module as _M,
+        ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+        Competency as _Comp,
+        ModuleStepCompetency as _MSC,
+    )
+    from datetime import datetime as _dt
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(
+            key="bokforing",
+            name="Bokföring",
+            level="grund",
+            is_system=True,
+        )
+        db.add(c)
+        db.commit()
+        db.refresh(c)
+        m = _M(teacher_id=tid, title="Test", is_template=False)
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        st = _MS(
+            module_id=m.id, sort_order=0,
+            kind="read", title="S1",
+        )
+        db.add(st)
+        db.commit()
+        db.refresh(st)
+        db.add(_MSC(step_id=st.id, competency_id=c.id, weight=1.0))
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            completed_at=_dt.utcnow(),
+            data={},
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/portfolio",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    bokforing = [
+        e for e in data["competencies"]
+        if e["key"] == "bokforing"
+    ]
+    assert len(bokforing) == 1
+    assert bokforing[0]["mastery"] == 1.0
+    assert bokforing[0]["level"] == "F"
+    assert bokforing[0]["level_label"] == "FÖRDJUPNING"
+    assert data["summary"]["fordjup_count"] >= 1
+
+
+def test_v2_teacher_messages_overview(fx) -> None:
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    client.post(
+        "/v2/messages",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"body": "Hej"},
+    )
+    r = client.get(
+        f"/v2/teacher/students/{sid}/messages-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["teacher_unread_count"] == 1
+
+
+def test_v2_teacher_portfolio_overview(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/portfolio-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == sid
+
+
+def test_v2_teacher_messages_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/messages-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_portfolio_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/portfolio-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

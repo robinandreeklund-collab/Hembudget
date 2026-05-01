@@ -883,6 +883,7 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: bankid-factor misslyckades",
         )
 
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:
@@ -1156,6 +1157,74 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         import logging
         logging.getLogger(__name__).exception(
             "calculate_wellbeing: feedback-factor misslyckades",
+        )
+
+    # Portfolio (kompetens-mastery) — pedagogiskt: F-nivåer (>= 0.66
+    # mastery) signalerar fördjupad förståelse. Klassas som health
+    # (självkänsla över sin egen utveckling).
+    try:
+        from ..school.models import (
+            ModuleStepCompetency as _MSC_pf,
+            ModuleStep as _MS_pf,
+            StudentStepProgress as _SSP_pf,
+        )
+        from ..school.engines import (
+            master_session as _ms_pf,
+            get_current_scope as _gcs_pf,
+        )
+        from ..school import is_enabled as _se_pf
+        if _se_pf():
+            scope_key = _gcs_pf()
+            if scope_key and scope_key.startswith("s_"):
+                target_sid = int(scope_key.split("_", 1)[1])
+                with _ms_pf() as _msdb_pf:
+                    rows = (
+                        _msdb_pf.query(_MSC_pf, _MS_pf)
+                        .join(_MS_pf, _MSC_pf.step_id == _MS_pf.id)
+                        .all()
+                    )
+                    progs = {
+                        p.step_id: p
+                        for p in _msdb_pf.query(_SSP_pf)
+                        .filter(_SSP_pf.student_id == target_sid)
+                        .all()
+                    }
+                    by_comp: dict[int, dict] = {}
+                    for msc, step in rows:
+                        bucket = by_comp.setdefault(
+                            msc.competency_id,
+                            {"total": 0.0, "earned": 0.0},
+                        )
+                        bucket["total"] += msc.weight
+                        prog = progs.get(step.id)
+                        if prog and prog.completed_at:
+                            bucket["earned"] += msc.weight
+                    f_count = 0
+                    for _cid, b in by_comp.items():
+                        m = (
+                            b["earned"] / b["total"]
+                            if b["total"] > 0 else 0
+                        )
+                        if m >= 0.66:
+                            f_count += 1
+                    if f_count >= 5:
+                        health += 3
+                        factors.append(WellbeingFactor(
+                            "health", 3,
+                            f"{f_count} kompetenser på FÖRDJUPNING-"
+                            "nivå — fördjupad förståelse av ekonomin.",
+                        ))
+                    elif f_count >= 2:
+                        health += 1
+                        factors.append(WellbeingFactor(
+                            "health", 1,
+                            f"{f_count} kompetenser på FÖRDJUPNING-"
+                            "nivå — du börjar bli expert.",
+                        ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: portfolio-factor misslyckades",
         )
 
     # --- KLAMP + TOTAL ---

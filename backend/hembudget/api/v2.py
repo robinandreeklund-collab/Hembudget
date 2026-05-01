@@ -33,6 +33,7 @@ from ..db.models import (
     PensionAssumption, StockHolding, StockTransaction,
     Category, Scenario,
     BankIDSession,
+    Rule,
 )
 from ..school.employer_models import (
     SalaryNegotiation as _SalaryNegotiation,
@@ -48,6 +49,8 @@ from ..school.models import (
     Message as _SchoolMessage,
     Assignment as _SchoolAssignment,
     FeedbackRead as _SchoolFeedbackRead,
+    Competency as _SchoolCompetency,
+    ModuleStepCompetency as _SchoolMSC,
 )
 from ..insurance import seed_default_insurance_policies
 from ..utility import seed_default_utility_subscriptions
@@ -8457,6 +8460,681 @@ def teacher_bankid_overview(
         student_id=student_id,
         student_name=student_name,
         bankid=bankid,
+    )
+
+
+# === TxV2 (transaktion-detalj /v2/tx/{id}) — Fas 2M ===
+#
+# Drill-down från BokforingV2: visa enskild transaktion med kategori-
+# select, sammanhangsfält, återkommande-mönster, och möjlighet att
+# skapa Rule "merchant → kategori". Speglar prototypens p-tx.
+
+
+class V2TxRecurringRow(BaseModel):
+    id: int
+    date: _date
+    amount: float
+    description: str
+    is_self: bool  # True om detta är "denna" transaktion
+
+
+class V2TxDetailResponse(BaseModel):
+    id: int
+    date: _date
+    amount: float
+    raw_description: str
+    normalized_merchant: Optional[str]
+    account_id: int
+    account_name: str
+    category_id: Optional[int]
+    category_name: Optional[str]
+    subcategory_id: Optional[int]
+    subcategory_name: Optional[str]
+    ai_confidence: Optional[float]
+    user_verified: bool
+    is_transfer: bool
+    notes: Optional[str]
+    tags: Optional[list]
+    # Återkommande-mönster (samma normalized_merchant senaste 90 dgr)
+    recurring: list[V2TxRecurringRow]
+    recurring_total_30d: float  # snitt-summa per månad
+    recurring_count_30d: int
+    # Tillgängliga val
+    categories: list[V2BookkeepingCategoryRef]
+    accounts: list[dict]  # [{id, name, type}]
+    # Befintlig regel som matchar denna merchant?
+    existing_rule_id: Optional[int]
+
+
+@router.get("/tx/{tx_id}", response_model=V2TxDetailResponse)
+def get_tx_detail(
+    tx_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TxDetailResponse:
+    """Drill-down på en enskild transaktion med fullständig kontext."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    from datetime import timedelta as _td_tx
+    today = _date.today()
+    cutoff_90 = today - _td_tx(days=90)
+    cutoff_30 = today - _td_tx(days=30)
+
+    with session_scope() as s:
+        t = s.get(Transaction, tx_id)
+        if t is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+
+        accounts = s.query(Account).all()
+        accounts_by_id = {a.id: a.name for a in accounts}
+        cats = s.query(Category).order_by(Category.name).all()
+        cats_by_id = {c.id: c for c in cats}
+
+        # Återkommande-mönster: matcha på normalized_merchant
+        recurring: list[V2TxRecurringRow] = []
+        recurring_30d_total = 0.0
+        recurring_30d_count = 0
+        if t.normalized_merchant:
+            rec_rows = (
+                s.query(Transaction)
+                .filter(
+                    Transaction.normalized_merchant == t.normalized_merchant,
+                    Transaction.date >= cutoff_90,
+                )
+                .order_by(Transaction.date.desc())
+                .limit(20)
+                .all()
+            )
+            for r in rec_rows:
+                recurring.append(V2TxRecurringRow(
+                    id=r.id,
+                    date=r.date,
+                    amount=float(r.amount),
+                    description=r.raw_description,
+                    is_self=(r.id == t.id),
+                ))
+                if r.date >= cutoff_30 and r.id != t.id:
+                    recurring_30d_count += 1
+                    recurring_30d_total += abs(float(r.amount))
+
+        # Existerande regel?
+        existing_rule_id: Optional[int] = None
+        if t.normalized_merchant:
+            er = (
+                s.query(Rule)
+                .filter(
+                    Rule.merchant == t.normalized_merchant,
+                )
+                .first()
+            )
+            if er is None:
+                # Kolla också mot raw_description
+                er = (
+                    s.query(Rule)
+                    .filter(Rule.pattern == t.raw_description)
+                    .first()
+                )
+            existing_rule_id = er.id if er else None
+
+        cat = cats_by_id.get(t.category_id) if t.category_id else None
+        sub = cats_by_id.get(t.subcategory_id) if t.subcategory_id else None
+
+        return V2TxDetailResponse(
+            id=t.id,
+            date=t.date,
+            amount=float(t.amount),
+            raw_description=t.raw_description,
+            normalized_merchant=t.normalized_merchant,
+            account_id=t.account_id,
+            account_name=accounts_by_id.get(t.account_id, "—"),
+            category_id=t.category_id,
+            category_name=cat.name if cat else None,
+            subcategory_id=t.subcategory_id,
+            subcategory_name=sub.name if sub else None,
+            ai_confidence=t.ai_confidence,
+            user_verified=bool(t.user_verified),
+            is_transfer=bool(t.is_transfer),
+            notes=t.notes,
+            tags=t.tags,
+            recurring=recurring,
+            recurring_total_30d=round(recurring_30d_total, 2),
+            recurring_count_30d=recurring_30d_count,
+            categories=[
+                V2BookkeepingCategoryRef(
+                    id=c.id, name=c.name,
+                    parent_id=c.parent_id, color=c.color,
+                )
+                for c in cats
+            ],
+            accounts=[
+                {"id": a.id, "name": a.name, "type": a.type}
+                for a in accounts
+            ],
+            existing_rule_id=existing_rule_id,
+        )
+
+
+class V2TxClassifyIn(BaseModel):
+    category_id: Optional[int] = None
+    subcategory_id: Optional[int] = None
+    account_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+@router.patch("/tx/{tx_id}", response_model=V2TxDetailResponse)
+def patch_tx_detail(
+    tx_id: int,
+    body: V2TxClassifyIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2TxDetailResponse:
+    """Uppdatera kategori/underkategori/konto/anteckning på transaktion."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        t = s.get(Transaction, tx_id)
+        if t is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        if body.category_id is not None:
+            cat = s.get(Category, body.category_id)
+            if cat is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "Ogiltig kategori",
+                )
+            t.category_id = body.category_id
+            t.user_verified = True
+        if body.subcategory_id is not None:
+            t.subcategory_id = body.subcategory_id
+        if body.account_id is not None:
+            acc = s.get(Account, body.account_id)
+            if acc is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "Ogiltigt konto",
+                )
+            t.account_id = body.account_id
+        if body.notes is not None:
+            t.notes = body.notes
+        s.flush()
+    return get_tx_detail(tx_id, info)
+
+
+class V2TxCreateRuleIn(BaseModel):
+    category_id: int
+    pattern: Optional[str] = None  # default = transaction.normalized_merchant
+    apply_to_existing: bool = True
+
+
+class V2TxCreateRuleResult(BaseModel):
+    rule_id: int
+    pattern: str
+    category_id: int
+    applied_count: int  # antal tx som klassades om
+    already_existed: bool
+
+
+@router.post(
+    "/tx/{tx_id}/create-rule",
+    response_model=V2TxCreateRuleResult,
+)
+def create_rule_from_tx(
+    tx_id: int,
+    body: V2TxCreateRuleIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2TxCreateRuleResult:
+    """Skapa en kategoriserings-regel från en transaktion.
+
+    "Foodora → Restaurang" — pattern matchar på raw_description (substring).
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        t = s.get(Transaction, tx_id)
+        if t is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        cat = s.get(Category, body.category_id)
+        if cat is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Ogiltig kategori",
+            )
+        pattern = body.pattern or t.normalized_merchant or t.raw_description
+        merchant = t.normalized_merchant
+
+        # Existerar redan?
+        existing = (
+            s.query(Rule)
+            .filter(Rule.pattern == pattern)
+            .first()
+        )
+        if existing is not None:
+            return V2TxCreateRuleResult(
+                rule_id=existing.id,
+                pattern=existing.pattern,
+                category_id=existing.category_id,
+                applied_count=0,
+                already_existed=True,
+            )
+
+        rule = Rule(
+            pattern=pattern,
+            is_regex=False,
+            merchant=merchant,
+            category_id=body.category_id,
+            priority=200,  # Användar-skapade > seed-regler
+            source="user",
+        )
+        s.add(rule)
+        s.flush()
+
+        applied = 0
+        if body.apply_to_existing:
+            # Klassa alla okategoriserade tx med samma normalized_merchant
+            ucat = (
+                s.query(Transaction)
+                .filter(Transaction.category_id.is_(None))
+                .filter(
+                    or_(
+                        Transaction.normalized_merchant == merchant,
+                        Transaction.raw_description.contains(pattern),
+                    ),
+                )
+                .all()
+            )
+            for tx in ucat:
+                tx.category_id = body.category_id
+                tx.ai_confidence = 1.0  # rule-match
+                applied += 1
+            s.flush()
+
+        return V2TxCreateRuleResult(
+            rule_id=rule.id,
+            pattern=rule.pattern,
+            category_id=rule.category_id,
+            applied_count=applied,
+            already_existed=False,
+        )
+
+
+# === MeddelandenV2 (lärar-chat /v2/messages) — Fas 2M ===
+
+
+class V2MessageRow(BaseModel):
+    id: int
+    sender_role: Literal["student", "teacher"]
+    body: str
+    context_type: Optional[str]
+    context_id: Optional[int]
+    created_at: datetime
+    read_at: Optional[datetime]
+    is_unread: bool
+
+
+class V2MessagesResponse(BaseModel):
+    student_id: int
+    teacher_name: Optional[str]
+    teacher_id: Optional[int]
+    messages: list[V2MessageRow]
+    unread_count: int
+    last_received_at: Optional[datetime]
+
+
+@router.get("/messages", response_model=V2MessagesResponse)
+def get_messages(
+    info: TokenInfo = Depends(require_token),
+) -> V2MessagesResponse:
+    """Tråd mellan elev och hennes lärare. Sorterad på datum."""
+    if info.role != "student" or info.student_id is None:
+        return V2MessagesResponse(
+            student_id=0, teacher_name=None, teacher_id=None,
+            messages=[], unread_count=0, last_received_at=None,
+        )
+    sid = info.student_id
+    with master_session() as s:
+        student = s.get(Student, sid)
+        teacher_id = student.teacher_id if student else None
+        teacher_name = None
+        if teacher_id is not None:
+            t = s.get(Teacher, teacher_id)
+            teacher_name = t.name if t else None
+
+        rows = (
+            s.query(_SchoolMessage)
+            .filter(_SchoolMessage.student_id == sid)
+            .order_by(_SchoolMessage.created_at.asc())
+            .all()
+        )
+        msgs = [
+            V2MessageRow(
+                id=m.id,
+                sender_role=m.sender_role,  # type: ignore[arg-type]
+                body=m.body,
+                context_type=m.context_type,
+                context_id=m.context_id,
+                created_at=m.created_at,
+                read_at=m.read_at,
+                is_unread=(
+                    m.sender_role == "teacher" and m.read_at is None
+                ),
+            )
+            for m in rows
+        ]
+        unread = sum(1 for m in msgs if m.is_unread)
+        last = next(
+            (
+                m.created_at for m in reversed(msgs)
+                if m.sender_role == "teacher"
+            ),
+            None,
+        )
+        return V2MessagesResponse(
+            student_id=sid,
+            teacher_name=teacher_name,
+            teacher_id=teacher_id,
+            messages=msgs,
+            unread_count=unread,
+            last_received_at=last,
+        )
+
+
+class V2SendMessageIn(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+    context_type: Optional[str] = None
+    context_id: Optional[int] = None
+
+
+@router.post("/messages", response_model=V2MessageRow)
+def post_message(
+    body: V2SendMessageIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2MessageRow:
+    """Eleven skickar meddelande till sin lärare."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    sid = info.student_id
+    with master_session() as s:
+        student = s.get(Student, sid)
+        if student is None or student.teacher_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Ingen lärare kopplad",
+            )
+        m = _SchoolMessage(
+            student_id=sid,
+            teacher_id=student.teacher_id,
+            sender_role="student",
+            body=body.body.strip(),
+            context_type=body.context_type,
+            context_id=body.context_id,
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        return V2MessageRow(
+            id=m.id,
+            sender_role="student",
+            body=m.body,
+            context_type=m.context_type,
+            context_id=m.context_id,
+            created_at=m.created_at,
+            read_at=m.read_at,
+            is_unread=False,
+        )
+
+
+@router.post(
+    "/messages/{message_id}/mark-read",
+    status_code=204,
+)
+def mark_message_read(
+    message_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with master_session() as s:
+        m = s.get(_SchoolMessage, message_id)
+        if m is None or m.student_id != info.student_id:
+            return
+        if m.read_at is None:
+            m.read_at = datetime.utcnow()
+            s.commit()
+
+
+# === PortfolioV2 (kompetens-portfolio /v2/portfolio) — Fas 2M ===
+
+
+class V2CompetencyEntry(BaseModel):
+    competency_id: int
+    key: str
+    name: str
+    description: Optional[str]
+    is_system: bool
+    mastery: float  # 0.0 – 1.0
+    completed_steps: int
+    last_event_at: Optional[datetime]
+    level: Literal["B", "G", "F"]  # Basis | Grund | Fördjupning
+    level_label: str
+
+
+class V2PortfolioSummary(BaseModel):
+    total_competencies: int
+    basis_count: int
+    grund_count: int
+    fordjup_count: int
+    last_event_at: Optional[datetime]
+
+
+class V2PortfolioResponse(BaseModel):
+    student_id: int
+    summary: V2PortfolioSummary
+    competencies: list[V2CompetencyEntry]
+
+
+def _mastery_to_level(m: float) -> tuple[str, str]:
+    if m >= 0.66:
+        return ("F", "FÖRDJUPNING")
+    if m >= 0.33:
+        return ("G", "GRUND")
+    return ("B", "BASIS")
+
+
+@router.get("/portfolio", response_model=V2PortfolioResponse)
+def get_portfolio(
+    info: TokenInfo = Depends(require_token),
+) -> V2PortfolioResponse:
+    """14 systemkompetenser med B/G/F-nivå per elev."""
+    if info.role != "student" or info.student_id is None:
+        return V2PortfolioResponse(
+            student_id=0,
+            summary=V2PortfolioSummary(
+                total_competencies=0,
+                basis_count=0, grund_count=0, fordjup_count=0,
+                last_event_at=None,
+            ),
+            competencies=[],
+        )
+    sid = info.student_id
+
+    # Återanvänd existerande mastery-beräkning från api/modules
+    from .modules import _compute_mastery_for_student
+
+    with master_session() as s:
+        mastery_by_cid = _compute_mastery_for_student(s, sid)
+        comps = s.query(_SchoolCompetency).all()
+        # Visa både system + lärar-egna kompetenser
+        out: list[V2CompetencyEntry] = []
+        last_event: Optional[datetime] = None
+        b = g = f = 0
+        for c in comps:
+            m_tuple = mastery_by_cid.get(c.id, (0.0, 0, None))
+            mastery, count, last = m_tuple
+            level_short, level_label = _mastery_to_level(mastery)
+            if level_short == "B":
+                b += 1
+            elif level_short == "G":
+                g += 1
+            else:
+                f += 1
+            if last is not None and (
+                last_event is None or last > last_event
+            ):
+                last_event = last
+            out.append(V2CompetencyEntry(
+                competency_id=c.id,
+                key=c.key,
+                name=c.name,
+                description=c.description,
+                is_system=bool(c.is_system),
+                mastery=round(mastery, 3),
+                completed_steps=count,
+                last_event_at=last,
+                level=level_short,  # type: ignore[arg-type]
+                level_label=level_label,
+            ))
+        # Sortera: F först, sen G, sen B; inom varje på namn
+        level_order = {"F": 0, "G": 1, "B": 2}
+        out.sort(key=lambda e: (level_order[e.level], e.name))
+
+        return V2PortfolioResponse(
+            student_id=sid,
+            summary=V2PortfolioSummary(
+                total_competencies=len(out),
+                basis_count=b,
+                grund_count=g,
+                fordjup_count=f,
+                last_event_at=last_event,
+            ),
+            competencies=out,
+        )
+
+
+# === LÄRAR-OVERVIEWS (Fas 2M) ===
+
+
+class V2TeacherMessagesOverview(BaseModel):
+    student_id: int
+    student_name: str
+    messages: V2MessagesResponse
+    student_unread_count: int  # vad eleven inte läst
+    teacher_unread_count: int  # vad läraren inte läst (eleven har skickat)
+
+
+@router.get(
+    "/teacher/students/{student_id}/messages-overview",
+    response_model=V2TeacherMessagesOverview,
+)
+def teacher_messages_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherMessagesOverview:
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    _outer_sid = student_id
+
+    class _Info:
+        role = "student"
+        student_id = _outer_sid
+
+    msgs = get_messages(_Info())  # type: ignore[arg-type]
+
+    # Beräkna lärarens olästa (msg från elev där read_at IS NULL)
+    teacher_unread = 0
+    with master_session() as mdb:
+        teacher_unread = (
+            mdb.query(_SchoolMessage)
+            .filter(_SchoolMessage.student_id == student_id)
+            .filter(_SchoolMessage.sender_role == "student")
+            .filter(_SchoolMessage.read_at.is_(None))
+            .count()
+        )
+
+    return V2TeacherMessagesOverview(
+        student_id=student_id,
+        student_name=student_name,
+        messages=msgs,
+        student_unread_count=msgs.unread_count,
+        teacher_unread_count=teacher_unread,
+    )
+
+
+class V2TeacherSendMessageIn(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+    context_type: Optional[str] = None
+    context_id: Optional[int] = None
+
+
+@router.post(
+    "/teacher/students/{student_id}/messages",
+    response_model=V2MessageRow,
+)
+def teacher_post_message(
+    student_id: int,
+    body: V2TeacherSendMessageIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2MessageRow:
+    """Lärare skickar meddelande till sin elev."""
+    teacher_id = _require_teacher(info)
+    with master_session() as s:
+        st = s.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        m = _SchoolMessage(
+            student_id=student_id,
+            teacher_id=teacher_id,
+            sender_role="teacher",
+            body=body.body.strip(),
+            context_type=body.context_type,
+            context_id=body.context_id,
+        )
+        s.add(m)
+        s.commit()
+        s.refresh(m)
+        return V2MessageRow(
+            id=m.id,
+            sender_role="teacher",
+            body=m.body,
+            context_type=m.context_type,
+            context_id=m.context_id,
+            created_at=m.created_at,
+            read_at=m.read_at,
+            is_unread=True,  # nyss skickat, eleven inte läst
+        )
+
+
+class V2TeacherPortfolioOverview(BaseModel):
+    student_id: int
+    student_name: str
+    portfolio: V2PortfolioResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/portfolio-overview",
+    response_model=V2TeacherPortfolioOverview,
+)
+def teacher_portfolio_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherPortfolioOverview:
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    _outer_sid = student_id
+
+    class _Info:
+        role = "student"
+        student_id = _outer_sid
+
+    portfolio = get_portfolio(_Info())  # type: ignore[arg-type]
+    return V2TeacherPortfolioOverview(
+        student_id=student_id,
+        student_name=student_name,
+        portfolio=portfolio,
     )
 
 
