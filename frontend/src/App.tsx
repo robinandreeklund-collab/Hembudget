@@ -49,6 +49,7 @@ import { KompetensV2 } from "./v2/KompetensV2";
 import { TeacherKompetensOverviewPage } from "./v2/TeacherKompetensOverviewPage";
 import { GuideProvider } from "./v2/guides/GuideContext";
 import { GuideOverlay } from "./v2/guides/GuideOverlay";
+import { V2DevFooter } from "./v2/V2DevFooter";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -236,12 +237,23 @@ export default function App() {
   // sidebaren när läraren inte valt elev — då var knappraden i
   // Teacher.tsx enda navigationen, vilket var inkonsekvent.
 
+  // V2 är aktivt på alla /v2/* och /teacher/v2/* — då visas V2DevFooter
+  // istället för den gamla feta dev-bannern.
+  const isV2Path = window.location.pathname.startsWith("/v2/")
+    || window.location.pathname.startsWith("/teacher/v2");
+
   return (
     <GuideProvider>
     <div className="h-full flex flex-col">
       <DemoBanner />
-      <V2DevSwitcher />
+      {!isV2Path && <V2DevSwitcher />}
       <GuideOverlay />
+      {isV2Path && (
+        <V2DevFooter
+          role={role || "student"}
+          isSuperAdmin={!!v2Status?.is_super_admin}
+        />
+      )}
       <div className="flex-1 flex flex-col md:flex-row min-h-0">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">

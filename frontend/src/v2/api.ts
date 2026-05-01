@@ -1629,6 +1629,36 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/notifications (Fas 2AB · live-notiser) ===
+
+export type V2NotifKind =
+  | "teacher" | "uppdrag" | "echo" | "modul"
+  | "bank" | "social" | "system";
+
+export type V2Notification = {
+  id: string;
+  kind: V2NotifKind;
+  icon: string;
+  occurred_at: string;
+  time_label: string;
+  title: string;
+  body: string;
+  unread: boolean;
+  target_route: string | null;
+};
+
+export type V2NotificationsSummary = {
+  total_count: number;
+  unread_count: number;
+  new_today_count: number;
+  by_kind: Record<string, number>;
+};
+
+export type V2NotificationsResponse = {
+  summary: V2NotificationsSummary;
+  items: V2Notification[];
+};
+
 // === /v2/pentagon/axis/{axis} (Fas 2Z · flip-card) ===
 
 export type V2PentAxis = "economy" | "safety" | "health" | "social" | "leisure";
@@ -2633,6 +2663,9 @@ export const v2Api = {
     api<V2TeacherPentAxisDetail>(
       `/v2/teacher/students/${studentId}/pentagon/axis/${axis}`,
     ),
+  // === /v2/notifications (Fas 2AB · live-notiser) ===
+  notifications: () =>
+    api<V2NotificationsResponse>("/v2/notifications"),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

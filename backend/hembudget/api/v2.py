@@ -13763,3 +13763,277 @@ def teacher_get_pentagon_axis_detail(
         student_name=student_name,
         detail=detail,
     )
+
+
+# === V2 Notifications (Fas 2AB · live-notiser) ===
+#
+# Speglar prototypens elev.html .notif-drawer + .notif-toast. Aggregerar
+# alla händelser som behöver elevens uppmärksamhet i en enhetlig
+# notif-stream:
+# - Lärar-uppdrag (nya / försenade)
+# - Lärar-feedback (ej läst)
+# - Lärar-meddelanden (ej läst)
+# - Postlådan (myndighet / påminnelser ohanterade)
+# - Modul-rekommendationer (nytilldelade)
+# - Klasskompis-förfrågningar (peer review · placeholder)
+#
+# Polling: frontend pollar /v2/notifications var 30 sek för "live".
+
+
+NotifKind = Literal[
+    "teacher", "uppdrag", "echo", "modul",
+    "bank", "social", "system",
+]
+
+
+class V2Notification(BaseModel):
+    id: str  # stabil för read-state ("uppdrag-42", "msg-17"...)
+    kind: NotifKind
+    icon: str  # 1-2 tecken
+    occurred_at: datetime
+    time_label: str  # "14:08 idag" / "i går 18:42"
+    title: str
+    body: str
+    unread: bool
+    target_route: Optional[str] = None  # "/v2/uppdrag" etc
+
+
+class V2NotificationsSummary(BaseModel):
+    total_count: int
+    unread_count: int
+    new_today_count: int
+    by_kind: dict[str, int]
+
+
+class V2NotificationsResponse(BaseModel):
+    summary: V2NotificationsSummary
+    items: list[V2Notification]
+
+
+def _time_label_for(dt: datetime) -> str:
+    now = datetime.utcnow()
+    delta = now - dt
+    h = int(delta.total_seconds() // 3600)
+    if h < 1:
+        return "just nu"
+    if delta.days == 0:
+        return dt.strftime("%H:%M") + " idag"
+    if delta.days == 1:
+        return "i går " + dt.strftime("%H:%M")
+    if delta.days < 7:
+        return f"{delta.days} dgr sedan"
+    months = [
+        "jan", "feb", "mar", "apr", "maj", "jun",
+        "jul", "aug", "sep", "okt", "nov", "dec",
+    ]
+    return f"{dt.day} {months[dt.month - 1]}"
+
+
+@router.get(
+    "/notifications", response_model=V2NotificationsResponse,
+)
+def get_v2_notifications(
+    info: TokenInfo = Depends(require_token),
+) -> V2NotificationsResponse:
+    """Live-notiser för eleven · aggregerade från flera källor.
+
+    Frontend pollar denna var 30:e sekund för att simulera realtid.
+    Returnerar sortering nyast först.
+    """
+    if info.role != "student" or info.student_id is None:
+        # Tom payload för icke-elever (lärare har egen notif-källa)
+        return V2NotificationsResponse(
+            summary=V2NotificationsSummary(
+                total_count=0, unread_count=0,
+                new_today_count=0, by_kind={},
+            ),
+            items=[],
+        )
+
+    sid = info.student_id
+    notifs: list[V2Notification] = []
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=14)
+
+    with master_session() as ms:
+        student = ms.get(Student, sid)
+        if student is None:
+            return V2NotificationsResponse(
+                summary=V2NotificationsSummary(
+                    total_count=0, unread_count=0,
+                    new_today_count=0, by_kind={},
+                ),
+                items=[],
+            )
+
+        # 1. Lärar-meddelanden (olästa = sender_role=teacher + read_at=None)
+        from ..school.models import Message as _M
+        msgs = (
+            ms.query(_M)
+            .filter(
+                _M.student_id == sid,
+                _M.sender_role == "teacher",
+                _M.created_at >= cutoff,
+            )
+            .order_by(_M.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        for m in msgs:
+            body = (m.body or "")[:140]
+            if len(m.body or "") > 140:
+                body += "…"
+            notifs.append(V2Notification(
+                id=f"msg-{m.id}",
+                kind="teacher",
+                icon="AL",
+                occurred_at=m.created_at,
+                time_label=_time_label_for(m.created_at),
+                title="Meddelande från läraren",
+                body=body,
+                unread=m.read_at is None,
+                target_route="/v2/meddelanden",
+            ))
+
+        # 2. Nya uppdrag (skapade senaste 14 dgr · ej manuellt klara)
+        teacher_name = "din lärare"
+        if student.teacher_id is not None:
+            t_obj = ms.get(Teacher, student.teacher_id)
+            if t_obj is not None:
+                teacher_name = t_obj.name or teacher_name
+        assignments = (
+            ms.query(_SchoolAssignment)
+            .filter(
+                _SchoolAssignment.student_id == sid,
+                _SchoolAssignment.created_at >= cutoff,
+            )
+            .order_by(_SchoolAssignment.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        for a in assignments:
+            if a.manually_completed_at is not None:
+                continue
+            unread = (now - a.created_at).total_seconds() < 7 * 24 * 3600
+            notifs.append(V2Notification(
+                id=f"uppdrag-{a.id}",
+                kind="uppdrag",
+                icon="▷",
+                occurred_at=a.created_at,
+                time_label=_time_label_for(a.created_at),
+                title=f"NYTT UPPDRAG · {teacher_name}",
+                body=(
+                    f"<em>{a.title}</em>"
+                    + (
+                        f". Förfaller {a.due_date.strftime('%-d %b')}"
+                        if a.due_date else ""
+                    )
+                ),
+                unread=unread,
+                target_route="/v2/uppdrag",
+            ))
+
+        # 3. Lärar-feedback på reflektioner (senaste 14 dgr · oläst)
+        from ..school.models import FeedbackRead as _FR
+        fb_progress = (
+            ms.query(_SchoolStepProgress)
+            .filter(
+                _SchoolStepProgress.student_id == sid,
+                _SchoolStepProgress.teacher_feedback.is_not(None),
+                _SchoolStepProgress.feedback_at.is_not(None),
+                _SchoolStepProgress.feedback_at >= cutoff,
+            )
+            .order_by(_SchoolStepProgress.feedback_at.desc())
+            .limit(10)
+            .all()
+        )
+        for prog in fb_progress:
+            if prog.feedback_at is None:
+                continue
+            # Kontrollera om eleven läst feedbacken
+            already_read = (
+                ms.query(_FR)
+                .filter(
+                    _FR.student_id == sid,
+                    _FR.kind == "module_step",
+                    _FR.source_id == prog.id,
+                )
+                .first()
+            )
+            unread = already_read is None
+            notifs.append(V2Notification(
+                id=f"fb-{prog.id}",
+                kind="teacher",
+                icon="AL",
+                occurred_at=prog.feedback_at,
+                time_label=_time_label_for(prog.feedback_at),
+                title="Feedback på reflektion",
+                body=(
+                    (prog.teacher_feedback or "")[:140]
+                    + ("…" if len(prog.teacher_feedback or "") > 140 else "")
+                ),
+                unread=unread,
+                target_route="/v2/feedback",
+            ))
+
+    # 4. Postlådan · myndighetspost / påminnelser ohanterade
+    try:
+        from ..school.engines import scope_context, scope_for_student
+        scope_key = scope_for_student(student)
+        with scope_context(scope_key):
+            with session_scope() as s:
+                authorities = (
+                    s.query(MailItem)
+                    .filter(
+                        MailItem.status == "unhandled",
+                        MailItem.mail_type.in_(("authority", "reminder")),
+                    )
+                    .order_by(MailItem.received_at.desc())
+                    .limit(5)
+                    .all()
+                )
+                for m in authorities:
+                    icon = "!" if m.mail_type == "reminder" else "★"
+                    title = (
+                        "PÅMINNELSE · ohanterad räkning"
+                        if m.mail_type == "reminder"
+                        else "MYNDIGHETSPOST"
+                    )
+                    notifs.append(V2Notification(
+                        id=f"mail-{m.id}",
+                        kind="bank",
+                        icon=icon,
+                        occurred_at=m.received_at or now,
+                        time_label=_time_label_for(m.received_at or now),
+                        title=title,
+                        body=(
+                            f"{m.sender}: <em>{m.subject}</em>"
+                            + (
+                                f" · {round(float(m.amount))} kr"
+                                if m.amount is not None else ""
+                            )
+                        ),
+                        unread=True,
+                        target_route="/v2/postladan",
+                    ))
+    except Exception:
+        pass
+
+    # Sortera nyast först
+    notifs.sort(key=lambda n: n.occurred_at, reverse=True)
+
+    today_count = sum(
+        1 for n in notifs if (now - n.occurred_at).days == 0
+    )
+    unread_count = sum(1 for n in notifs if n.unread)
+    by_kind: dict[str, int] = {}
+    for n in notifs:
+        by_kind[n.kind] = by_kind.get(n.kind, 0) + 1
+
+    summary = V2NotificationsSummary(
+        total_count=len(notifs),
+        unread_count=unread_count,
+        new_today_count=today_count,
+        by_kind=by_kind,
+    )
+    return V2NotificationsResponse(summary=summary, items=notifs)

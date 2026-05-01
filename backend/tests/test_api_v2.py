@@ -7640,3 +7640,69 @@ def test_v2_teacher_pentagon_axis_cross_teacher_403(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === V2 Notifications (Fas 2AB · live-notiser) ===
+
+
+def test_v2_notifications_empty_for_teacher(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["summary"]["total_count"] == 0
+    assert data["items"] == []
+
+
+def test_v2_notifications_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/notifications")
+    assert r.status_code == 401
+
+
+def test_v2_notifications_assignment_appears(fx) -> None:
+    from hembudget.school.models import Assignment as _A
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Räkna KALP",
+            description="Bolån för 2:a",
+            kind="free_text",
+        ))
+        db.commit()
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    assert data["summary"]["unread_count"] >= 1
+    titles = [n["title"] for n in data["items"]]
+    assert any("NYTT UPPDRAG" in t for t in titles)
+
+
+def test_v2_notifications_teacher_message(fx) -> None:
+    from hembudget.school.models import Message as _M
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_M(
+            student_id=sid,
+            teacher_id=tid,
+            sender_role="teacher",
+            body="Hej Eva, hur går det?",
+        ))
+        db.commit()
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    titles = [n["title"] for n in data["items"]]
+    assert any("Meddelande" in t for t in titles)
+    # Olästa räknas
+    assert data["summary"]["unread_count"] >= 1
