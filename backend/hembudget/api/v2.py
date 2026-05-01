@@ -9138,6 +9138,475 @@ def teacher_portfolio_overview(
     )
 
 
+# === MailDetailV2 (/v2/postladan/{id}/detail) — Fas 2N ===
+#
+# Drill-down från Postlådan: full detalj för kreditkortsfaktura och
+# lönespec. Speglar prototypens p-cc och p-lonespec.
+
+
+class V2CcTxRow(BaseModel):
+    id: int
+    date: _date
+    amount: float
+    raw_description: str
+    normalized_merchant: Optional[str]
+    category_id: Optional[int]
+    category_name: Optional[str]
+    is_classified: bool
+    user_verified: bool
+
+
+class V2CcInvoiceData(BaseModel):
+    period_start: _date
+    period_end: _date
+    total_amount: float
+    tx_count: int
+    classified_count: int
+    unclassified_count: int
+    auto_classified_count: int
+    avg_amount: float
+    profile_label: str  # "balanserad" / "sparsam" / "slösa"
+    consumer_avg: float  # Konsumentverket-schablon
+    profile_avg: float  # baserat på StudentProfile.personality
+    transactions: list[V2CcTxRow]
+    prev_month_amount: Optional[float]  # föregående månads CC-faktura
+    diff_pct_vs_prev: Optional[float]
+
+
+class V2SalarySlipBreakdownRow(BaseModel):
+    label: str
+    amount: float
+    is_total: bool
+
+
+class V2SalarySlipData(BaseModel):
+    period_label: str  # "april 2026"
+    gross_salary: float
+    tax: float
+    net_salary: float
+    ob_total: float  # OB-tillägg total
+    pension_adjustment: float  # allmän pensionsavgift
+    employer_social: float  # 31.42 % sociala avgifter
+    employer_itp1: float  # 4.5 % ITP1
+    employer_friskvard: float  # 417 kr/mån
+    total_employer_cost: float
+    net_lines: list[V2SalarySlipBreakdownRow]  # Specifikation
+    employer_lines: list[V2SalarySlipBreakdownRow]  # Arbetsgivaravgifter
+    prev_month_net: Optional[float]
+    diff_vs_prev: Optional[float]
+
+
+class V2MailDetailResponse(BaseModel):
+    mail: V2MailItemRow
+    cc_invoice: Optional[V2CcInvoiceData]  # endast för cred-invoice
+    salary_slip: Optional[V2SalarySlipData]  # endast för salary_slip
+
+
+def _profile_to_avg(personality: Optional[str]) -> tuple[str, float]:
+    """Map personality → label + avg-belopp per köp."""
+    if not personality:
+        return ("balanserad", 102.0)
+    p = personality.lower()
+    if "spara" in p or "sparsam" in p or "snål" in p:
+        return ("sparsam", 76.0)
+    if "slösa" in p or "spende" in p:
+        return ("slösa", 142.0)
+    return ("balanserad", 102.0)
+
+
+def _build_cc_invoice_data(
+    s, mail: MailItem, account_id: Optional[int],
+    profile_personality: Optional[str],
+) -> Optional[V2CcInvoiceData]:
+    """Bygg CC-detalj för kreditkortsfaktura. Hittar transaktioner
+    inom 30 dgr före due_date på det aktuella kontot."""
+    from datetime import timedelta as _td_cc
+    if mail.due_date is None:
+        return None
+    period_end = mail.due_date - _td_cc(days=1)
+    period_start = period_end - _td_cc(days=30)
+
+    txs_q = (
+        s.query(Transaction)
+        .filter(Transaction.date >= period_start)
+        .filter(Transaction.date <= period_end)
+    )
+    if account_id is not None:
+        txs_q = txs_q.filter(Transaction.account_id == account_id)
+    txs = txs_q.order_by(Transaction.date.desc()).all()
+
+    cats_by_id = {c.id: c.name for c in s.query(Category).all()}
+
+    classified = [t for t in txs if t.category_id is not None]
+    unclassified = [t for t in txs if t.category_id is None]
+    user_verified = [t for t in classified if t.user_verified]
+    auto = [t for t in classified if not t.user_verified]
+
+    total = sum(abs(float(t.amount)) for t in txs if float(t.amount) < 0)
+    avg = total / len(txs) if txs else 0.0
+
+    label, profile_avg = _profile_to_avg(profile_personality)
+    consumer_avg = 89.0  # Konsumentverket-schablon
+
+    # Föregående månad-faktura (samma sender + 30 dgr earlier)
+    prev_period_end = period_start - _td_cc(days=1)
+    prev_period_start = prev_period_end - _td_cc(days=30)
+    prev_q = (
+        s.query(Transaction)
+        .filter(Transaction.date >= prev_period_start)
+        .filter(Transaction.date <= prev_period_end)
+    )
+    if account_id is not None:
+        prev_q = prev_q.filter(Transaction.account_id == account_id)
+    prev_txs = prev_q.all()
+    prev_total = sum(
+        abs(float(t.amount)) for t in prev_txs if float(t.amount) < 0
+    )
+    diff_pct = None
+    if prev_total > 0:
+        diff_pct = round((total - prev_total) / prev_total * 100, 1)
+
+    rows = [
+        V2CcTxRow(
+            id=t.id,
+            date=t.date,
+            amount=float(t.amount),
+            raw_description=t.raw_description,
+            normalized_merchant=t.normalized_merchant,
+            category_id=t.category_id,
+            category_name=cats_by_id.get(t.category_id) if t.category_id else None,
+            is_classified=t.category_id is not None,
+            user_verified=bool(t.user_verified),
+        )
+        for t in txs
+    ]
+
+    return V2CcInvoiceData(
+        period_start=period_start,
+        period_end=period_end,
+        total_amount=round(total, 2),
+        tx_count=len(txs),
+        classified_count=len(classified),
+        unclassified_count=len(unclassified),
+        auto_classified_count=len(auto),
+        avg_amount=round(avg, 2),
+        profile_label=label,
+        consumer_avg=consumer_avg,
+        profile_avg=profile_avg,
+        transactions=rows,
+        prev_month_amount=round(prev_total, 2) if prev_total > 0 else None,
+        diff_pct_vs_prev=diff_pct,
+    )
+
+
+def _build_salary_slip_data(
+    mail: MailItem, profile: Optional[StudentProfile],
+) -> Optional[V2SalarySlipData]:
+    """Bygg lönespec-data från StudentProfile + mail.amount (netto)."""
+    if profile is None:
+        # Fallback från bara mail-info
+        net = float(mail.amount or 0)
+        gross = round(net * 1.387, 0)  # rough reverse
+        tax = gross - net
+        return V2SalarySlipData(
+            period_label=(mail.body_meta or "")[:60],
+            gross_salary=gross,
+            tax=tax,
+            net_salary=net,
+            ob_total=0,
+            pension_adjustment=0,
+            employer_social=round(gross * 0.3142, 2),
+            employer_itp1=round(gross * 0.045, 2),
+            employer_friskvard=417.0,
+            total_employer_cost=round(
+                gross * (1 + 0.3142 + 0.045) + 417, 2,
+            ),
+            net_lines=[
+                V2SalarySlipBreakdownRow(label="Bruttolön", amount=gross, is_total=False),
+                V2SalarySlipBreakdownRow(label="Preliminärskatt", amount=-tax, is_total=False),
+                V2SalarySlipBreakdownRow(label="Netto till lönekontot", amount=net, is_total=True),
+            ],
+            employer_lines=[
+                V2SalarySlipBreakdownRow(
+                    label="Sociala avgifter (31,42 %)",
+                    amount=round(gross * 0.3142, 2),
+                    is_total=False,
+                ),
+                V2SalarySlipBreakdownRow(
+                    label="ITP1 — tjänstepension (4,5 %)",
+                    amount=round(gross * 0.045, 2),
+                    is_total=False,
+                ),
+                V2SalarySlipBreakdownRow(
+                    label="Friskvårdsbidrag (5 000 kr / 12)",
+                    amount=417.0,
+                    is_total=False,
+                ),
+                V2SalarySlipBreakdownRow(
+                    label="Total kostnad för arbetsgivaren",
+                    amount=round(
+                        gross * (1 + 0.3142 + 0.045) + 417, 2,
+                    ),
+                    is_total=True,
+                ),
+            ],
+            prev_month_net=None,
+            diff_vs_prev=None,
+        )
+
+    gross = float(profile.gross_salary_monthly or 0)
+    net = float(profile.net_salary_monthly or 0)
+    tax = gross - net  # förenklat — verklig spec inkluderar pension-justering
+
+    # OB-tillägg uppskattning: ~1,5 % av brutto för vård-/serviceyrken
+    profession_lower = (profile.profession or "").lower()
+    has_ob = any(
+        kw in profession_lower
+        for kw in ["sköt", "läk", "service", "kassa", "vård"]
+    )
+    ob_total = round(gross * 0.015, 0) if has_ob else 0.0
+    pension_adj = round(gross * 0.004, 0)  # ~0.4 % allmän pensionsavg
+    employer_social = round(gross * 0.3142, 2)
+    employer_itp1 = round(gross * 0.045, 2)
+    employer_friskvard = 417.0
+    total_emp = round(
+        gross + employer_social + employer_itp1 + employer_friskvard, 2,
+    )
+
+    grund = round(gross - ob_total, 0)
+
+    net_lines: list[V2SalarySlipBreakdownRow] = []
+    if profile.profession:
+        emp_label = profile.employer or "arbetsgivare"
+        pct = "80 % tjänst" if "80" in (profile.profession or "") else ""
+        if pct:
+            net_lines.append(V2SalarySlipBreakdownRow(
+                label=f"Grundlön ({pct})",
+                amount=grund, is_total=False,
+            ))
+        else:
+            net_lines.append(V2SalarySlipBreakdownRow(
+                label="Grundlön", amount=grund, is_total=False,
+            ))
+    else:
+        net_lines.append(V2SalarySlipBreakdownRow(
+            label="Grundlön", amount=grund, is_total=False,
+        ))
+    if ob_total > 0:
+        net_lines.append(V2SalarySlipBreakdownRow(
+            label="OB-tillägg · totalt",
+            amount=ob_total, is_total=False,
+        ))
+    net_lines.extend([
+        V2SalarySlipBreakdownRow(
+            label="Bruttolön", amount=gross, is_total=False,
+        ),
+        V2SalarySlipBreakdownRow(
+            label="Preliminärskatt (tabell)",
+            amount=-(tax + pension_adj), is_total=False,
+        ),
+        V2SalarySlipBreakdownRow(
+            label="Allmän pensionsavgift (justering)",
+            amount=-pension_adj, is_total=False,
+        ),
+        V2SalarySlipBreakdownRow(
+            label="Netto till lönekontot",
+            amount=net, is_total=True,
+        ),
+    ])
+
+    employer_lines = [
+        V2SalarySlipBreakdownRow(
+            label="Sociala avgifter (31,42 %)",
+            amount=employer_social, is_total=False,
+        ),
+        V2SalarySlipBreakdownRow(
+            label="ITP1 — tjänstepension (4,5 %)",
+            amount=employer_itp1, is_total=False,
+        ),
+        V2SalarySlipBreakdownRow(
+            label="Friskvårdsbidrag (årligt 5 000 kr / 12)",
+            amount=employer_friskvard, is_total=False,
+        ),
+        V2SalarySlipBreakdownRow(
+            label="Total kostnad för arbetsgivaren",
+            amount=total_emp, is_total=True,
+        ),
+    ]
+
+    return V2SalarySlipData(
+        period_label=mail.body_meta or "",
+        gross_salary=gross,
+        tax=tax,
+        net_salary=net,
+        ob_total=ob_total,
+        pension_adjustment=pension_adj,
+        employer_social=employer_social,
+        employer_itp1=employer_itp1,
+        employer_friskvard=employer_friskvard,
+        total_employer_cost=total_emp,
+        net_lines=net_lines,
+        employer_lines=employer_lines,
+        prev_month_net=None,
+        diff_vs_prev=None,
+    )
+
+
+def _mail_to_row(m: MailItem) -> V2MailItemRow:
+    return V2MailItemRow(
+        id=m.id,
+        sender=m.sender,
+        sender_short=m.sender_short,
+        sender_kind=m.sender_kind,  # type: ignore[arg-type]
+        sender_meta=m.sender_meta,
+        mail_type=m.mail_type,  # type: ignore[arg-type]
+        subject=m.subject,
+        body_meta=m.body_meta,
+        body=m.body,
+        amount=float(m.amount) if m.amount is not None else None,
+        due_date=m.due_date,
+        received_at=m.received_at,
+        status=m.status,  # type: ignore[arg-type]
+        upcoming_id=m.upcoming_id,
+        transaction_id=m.transaction_id,
+        is_recurring=bool(m.is_recurring),
+        ocr_reference=m.ocr_reference,
+        bankgiro=m.bankgiro,
+        notes=m.notes,
+    )
+
+
+@router.get(
+    "/postladan/{mail_id}/detail",
+    response_model=V2MailDetailResponse,
+)
+def get_mail_detail(
+    mail_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2MailDetailResponse:
+    """Drill-down för MailItem · returnerar utvidgad data per typ."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    profile: Optional[StudentProfile] = None
+    with master_session() as mdb:
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+
+    with session_scope() as s:
+        m = s.get(MailItem, mail_id)
+        if m is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+
+        # Markera viewed om unhandled
+        if m.status == "unhandled":
+            m.status = "viewed"
+            s.flush()
+
+        cc_data: Optional[V2CcInvoiceData] = None
+        salary_data: Optional[V2SalarySlipData] = None
+
+        if m.mail_type == "invoice" and m.sender_kind == "cred":
+            # Hitta CC-konto baserat på sender
+            cc_account = (
+                s.query(Account)
+                .filter(Account.type == "credit")
+                .order_by(Account.id.desc())
+                .first()
+            )
+            account_id = cc_account.id if cc_account else None
+            personality = profile.personality if profile else None
+            cc_data = _build_cc_invoice_data(
+                s, m, account_id, personality,
+            )
+        elif m.mail_type == "salary_slip":
+            salary_data = _build_salary_slip_data(m, profile)
+
+        return V2MailDetailResponse(
+            mail=_mail_to_row(m),
+            cc_invoice=cc_data,
+            salary_slip=salary_data,
+        )
+
+
+# Lärar-overview för MailDetail — full insyn i specifikt brev
+class V2TeacherMailDetailOverview(BaseModel):
+    student_id: int
+    student_name: str
+    detail: V2MailDetailResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/mail/{mail_id}/detail",
+    response_model=V2TeacherMailDetailOverview,
+)
+def teacher_mail_detail_overview(
+    student_id: int,
+    mail_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherMailDetailOverview:
+    """Lärar-vy · full insyn i ett specifikt brev (utan att markera
+    viewed)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        # Inline detail-build utan att markera viewed
+        profile: Optional[StudentProfile] = None
+        with master_session() as mdb:
+            profile = (
+                mdb.query(StudentProfile)
+                .filter(StudentProfile.student_id == student_id)
+                .first()
+            )
+
+        with session_scope() as s:
+            mail = s.get(MailItem, mail_id)
+            if mail is None:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, "Brevet hittades inte",
+                )
+            cc_data: Optional[V2CcInvoiceData] = None
+            salary_data: Optional[V2SalarySlipData] = None
+            if mail.mail_type == "invoice" and mail.sender_kind == "cred":
+                cc_account = (
+                    s.query(Account)
+                    .filter(Account.type == "credit")
+                    .order_by(Account.id.desc())
+                    .first()
+                )
+                account_id = cc_account.id if cc_account else None
+                personality = profile.personality if profile else None
+                cc_data = _build_cc_invoice_data(
+                    s, mail, account_id, personality,
+                )
+            elif mail.mail_type == "salary_slip":
+                salary_data = _build_salary_slip_data(mail, profile)
+            detail = V2MailDetailResponse(
+                mail=_mail_to_row(mail),
+                cc_invoice=cc_data,
+                salary_slip=salary_data,
+            )
+
+    return V2TeacherMailDetailOverview(
+        student_id=student_id,
+        student_name=student_name,
+        detail=detail,
+    )
+
+
 # === Endpoints ===
 
 @router.get("/status", response_model=V2StatusResponse)

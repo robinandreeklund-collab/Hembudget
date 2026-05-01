@@ -5632,3 +5632,235 @@ def test_v2_teacher_portfolio_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2N · MailDetail (CC + Lönespec) ===
+
+
+def test_v2_mail_detail_404(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/postladan/99999/detail",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 404
+
+
+def test_v2_mail_detail_cc_invoice(fx) -> None:
+    """Kreditkortsfaktura-detalj med transaktioner inom perioden."""
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        MailItem as _Mail,
+        Transaction as _Tx,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        cc = _Acc(
+            name="SEB Visa", bank="SEB", type="credit",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today() - _td(days=60),
+        )
+        s.add(cc)
+        s.flush()
+        # 5 tx inom de senaste 30 dgr
+        for i, (amt, desc) in enumerate([
+            (-168, "Max Hökarängen"),
+            (-187, "Foodora pizza"),
+            (-312, "Coop Konsum"),
+            (-498, "H&M Globen"),
+            (-72, "Pressbyrån"),
+        ]):
+            t = _Tx(
+                account_id=cc.id,
+                date=_d.today() - _td(days=5 + i),
+                amount=_D(str(amt)),
+                raw_description=desc,
+                normalized_merchant=desc.upper(),
+                hash=f"cc{i}",
+                # Klassa 2 av 5 manuellt
+                category_id=None,
+                user_verified=False,
+            )
+            s.add(t)
+        # CC-faktura mail
+        mail = _Mail(
+            sender="SEB Visa",
+            sender_short="CC",
+            sender_kind="cred",
+            mail_type="invoice",
+            subject="April-spend",
+            amount=_D("-1237"),
+            due_date=_d.today() + _td(days=20),
+            status="unhandled",
+        )
+        s.add(mail)
+        s.flush()
+        holder["mail_id"] = mail.id
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/postladan/{holder['mail_id']}/detail",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mail"]["sender"] == "SEB Visa"
+    # status ska ha gått från unhandled → viewed
+    assert data["mail"]["status"] == "viewed"
+    assert data["cc_invoice"] is not None
+    assert data["salary_slip"] is None
+    cc = data["cc_invoice"]
+    assert cc["tx_count"] == 5
+    assert cc["unclassified_count"] == 5
+    assert cc["total_amount"] == 168 + 187 + 312 + 498 + 72  # 1237
+    assert len(cc["transactions"]) == 5
+    assert cc["profile_label"] in ["balanserad", "sparsam", "slösa"]
+
+
+def test_v2_mail_detail_salary_slip(fx) -> None:
+    """Lönespec-detalj med brutto/netto/employer-breakdown."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import MailItem as _Mail
+    from hembudget.school.models import StudentProfile
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    # Seed StudentProfile
+    with master_session() as db:
+        db.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska 80 % tjänst",
+            employer="Sthlm Sjukhus AB",
+            gross_salary_monthly=31730,
+            net_salary_monthly=22880,
+            tax_rate_effective=0.28,
+            age=22, city="Stockholm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=7240, personality="balanserad",
+        ))
+        db.commit()
+
+    holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        mail = _Mail(
+            sender="Sthlm Sjukhus AB",
+            sender_short="LÖN",
+            sender_kind="work",
+            mail_type="salary_slip",
+            subject="Lönespec april — 22 880 kr netto",
+            body_meta="april 2026 (preliminär)",
+            amount=_D("22880"),
+            due_date=_d.today(),
+            status="unhandled",
+        )
+        s.add(mail)
+        s.flush()
+        holder["mail_id"] = mail.id
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/postladan/{holder['mail_id']}/detail",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["salary_slip"] is not None
+    assert data["cc_invoice"] is None
+    sal = data["salary_slip"]
+    assert sal["gross_salary"] == 31730
+    assert sal["net_salary"] == 22880
+    assert sal["tax"] > 0
+    # ITP1 = 4.5 % av brutto ≈ 1428
+    assert 1400 < sal["employer_itp1"] < 1450
+    # Sociala = 31.42 % ≈ 9970
+    assert 9900 < sal["employer_social"] < 10000
+    assert sal["employer_friskvard"] == 417
+    # Total kostnad arbetsgivare = ~43545
+    assert 43500 < sal["total_employer_cost"] < 43600
+    # net_lines + employer_lines har innehåll
+    assert any(line["is_total"] for line in sal["net_lines"])
+    assert any(line["is_total"] for line in sal["employer_lines"])
+
+
+def test_v2_mail_detail_authority_no_extras(fx) -> None:
+    """Myndighetspost: cc_invoice och salary_slip ska vara None."""
+    from datetime import date as _d, timedelta as _td
+    from hembudget.db.models import MailItem as _Mail
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        mail = _Mail(
+            sender="Skatteverket",
+            sender_kind="skv",
+            mail_type="authority",
+            subject="Myndighetsbrev",
+            due_date=_d.today() + _td(days=30),
+            status="unhandled",
+        )
+        s.add(mail)
+        s.flush()
+        holder["mail_id"] = mail.id
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/postladan/{holder['mail_id']}/detail",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    assert data["cc_invoice"] is None
+    assert data["salary_slip"] is None
+
+
+def test_v2_teacher_mail_detail_overview(fx) -> None:
+    """Lärar-overview för mail-detail · markerar inte viewed."""
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import MailItem as _Mail
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    holder: dict[str, int] = {}
+
+    def seed(s) -> None:
+        mail = _Mail(
+            sender="SEB Visa",
+            sender_kind="cred",
+            mail_type="invoice",
+            subject="CC april",
+            amount=_D("-2400"),
+            due_date=_d.today() + _td(days=20),
+            status="unhandled",
+        )
+        s.add(mail)
+        s.flush()
+        holder["mail_id"] = mail.id
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/mail/{holder['mail_id']}/detail",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == sid
+    # Lärar-overview SKA INTE markera viewed
+    assert r.json()["detail"]["mail"]["status"] == "unhandled"
+
+
+def test_v2_teacher_mail_detail_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/mail/1/detail",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
