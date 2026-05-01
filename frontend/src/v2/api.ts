@@ -1695,6 +1695,27 @@ export type V2TeacherPentAxisDetail = {
   detail: V2PentAxisDetail;
 };
 
+export type V2KlassAxisStudentRow = {
+  student_id: number;
+  student_name: string;
+  axis_value: number;
+  pent_total: number;
+  delta_from_avg: number;
+};
+
+export type V2KlassAxisDetail = {
+  axis: V2PentAxis;
+  axis_label: string;
+  axis_number: string;
+  klass_avg: number;
+  klass_total_avg: number;
+  student_count: number;
+  distribution: Record<string, number>;
+  top_contributors: V2KlassAxisStudentRow[];
+  bottom_contributors: V2KlassAxisStudentRow[];
+  summary_text: string;
+};
+
 // === /v2/teacher/students/{id}/activity-log (Fas 2Y · p-historik) ===
 
 export type V2HistoryEventKind =
@@ -2730,6 +2751,9 @@ export const v2Api = {
       `/v2/teacher/students/${studentId}/kompetens/${competencyId}/override`,
       { method: "DELETE" },
     ),
+  // === Fas 2AH · klass-pentagon axis-detail ===
+  teacherKlassPentagonAxis: (axis: V2PentAxis) =>
+    api<V2KlassAxisDetail>(`/v2/teacher/klass-pentagon/axis/${axis}`),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

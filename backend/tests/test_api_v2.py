@@ -8034,3 +8034,54 @@ def test_v2_teacher_competency_override_cross_teacher_403(fx) -> None:
         json={"level": "F", "motivation": "test"},
     )
     assert r.status_code == 403
+
+
+# === Klass-pentagon axis-detail (Fas 2AH) ===
+
+
+def test_v2_klass_pentagon_axis_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/klass-pentagon/axis/economy",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_klass_pentagon_axis_basic(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    for axis in ("economy", "safety", "health", "social", "leisure"):
+        r = client.get(
+            f"/v2/teacher/klass-pentagon/axis/{axis}",
+            headers={"Authorization": f"Bearer {tch}"},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["axis"] == axis
+        assert data["student_count"] == 1
+        assert "distribution" in data
+        assert "top_contributors" in data
+        assert "bottom_contributors" in data
+        assert "summary_text" in data
+
+
+def test_v2_klass_pentagon_axis_includes_students(fx) -> None:
+    """Med 3 elever ska top + bottom contain elev-rader."""
+    from hembudget.school.models import Student as _S
+    client, tch, _sa, _stu, tid, _said, _sid = fx
+    with master_session() as db:
+        for i in range(3):
+            db.add(_S(
+                teacher_id=tid,
+                display_name=f"Elev {i}",
+                login_code=f"E{i:07d}",
+            ))
+        db.commit()
+    r = client.get(
+        "/v2/teacher/klass-pentagon/axis/economy",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert data["student_count"] == 4  # original Eva + 3
+    assert len(data["top_contributors"]) >= 1
+    assert len(data["bottom_contributors"]) >= 1

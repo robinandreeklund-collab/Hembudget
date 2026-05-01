@@ -17,8 +17,14 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { v2Api, type V2KlassOverview, type V2KlassMiniPentagon } from "./api";
+import {
+  v2Api,
+  type V2KlassOverview,
+  type V2KlassMiniPentagon,
+  type V2PentAxis,
+} from "./api";
 import { V2Banner } from "./V2Banner";
+import { KlassPentagonFlipCard } from "./KlassPentagonFlipCard";
 import "./larare.css";
 
 function fmtSEK(n: number | null): string {
@@ -56,6 +62,7 @@ function pentagonPoints(
 export function TeacherHubV2() {
   const [data, setData] = useState<V2KlassOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -136,7 +143,16 @@ export function TeacherHubV2() {
         <KlassStats stats={data.klass_stats} />
 
         <div className="class-stage">
-          <KlassPentagon data={data} />
+          <KlassPentagonFlipCard
+            activeAxis={activeAxis}
+            onClose={() => setActiveAxis(null)}
+            front={
+              <KlassPentagon
+                data={data}
+                onAxisClick={setActiveAxis}
+              />
+            }
+          />
           <SideStack data={data} navigate={navigate} />
         </div>
 
@@ -169,7 +185,13 @@ function KlassStats({ stats }: { stats: V2KlassOverview["klass_stats"] }) {
   );
 }
 
-function KlassPentagon({ data }: { data: V2KlassOverview }) {
+function KlassPentagon({
+  data,
+  onAxisClick,
+}: {
+  data: V2KlassOverview;
+  onAxisClick: (axis: V2PentAxis) => void;
+}) {
   const p = data.klass_pentagon;
   const radius = 230;
   const cx = 300;
@@ -255,29 +277,70 @@ function KlassPentagon({ data }: { data: V2KlassOverview }) {
         </text>
       </svg>
       <div className="axis-tags">
-        <span>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("economy")}
+          style={klassAxisTagStyle()}
+        >
           Ekonomi
           <strong>{p.economy}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("safety")}
+          style={klassAxisTagStyle()}
+        >
           Karriär
           <strong>{p.safety}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("health")}
+          style={klassAxisTagStyle()}
+        >
           Hälsa
           <strong>{p.health}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("social")}
+          style={klassAxisTagStyle()}
+        >
           Relation
           <strong>{p.social}</strong>
-        </span>
-        <span>
+        </button>
+        <button
+          type="button"
+          className="axis-clickable"
+          onClick={() => onAxisClick("leisure")}
+          style={klassAxisTagStyle()}
+        >
           Fritid
           <strong>{p.leisure}</strong>
-        </span>
+        </button>
       </div>
     </article>
   );
+}
+
+function klassAxisTagStyle(): React.CSSProperties {
+  return {
+    padding: "8px 6px",
+    background: "rgba(255,255,255,0.03)",
+    borderRadius: 4,
+    border: "1px solid var(--line, rgba(255,255,255,0.1))",
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 10,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "center",
+    cursor: "pointer",
+  };
 }
 
 function SideStack({

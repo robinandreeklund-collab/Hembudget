@@ -14618,3 +14618,149 @@ def teacher_delete_competency_override(
         ms.delete(existing)
         ms.commit()
     return {"deleted": True}
+
+
+# === Klass-pentagon flip-card (Fas 2AH) ===
+#
+# Klick på en axel på klass-hub-pentagon visar:
+# - Klassens snitt på axeln
+# - Sortering: elever som drar UPP snittet (top 3) + drar NER (top 3)
+# - Pedagogisk text om axeln
+
+
+class V2KlassAxisStudentRow(BaseModel):
+    student_id: int
+    student_name: str
+    axis_value: int
+    pent_total: int
+    delta_from_avg: int  # +/-
+
+
+class V2KlassAxisDetail(BaseModel):
+    axis: PentAxis
+    axis_label: str
+    axis_number: str
+    klass_avg: int
+    klass_total_avg: int
+    student_count: int
+    distribution: dict[str, int]  # {"<40": N, "40-59": N, ...}
+    top_contributors: list[V2KlassAxisStudentRow]  # drar upp
+    bottom_contributors: list[V2KlassAxisStudentRow]  # drar ner
+    summary_text: str
+
+
+@router.get(
+    "/teacher/klass-pentagon/axis/{axis}",
+    response_model=V2KlassAxisDetail,
+)
+def teacher_klass_pentagon_axis(
+    axis: PentAxis,
+    info: TokenInfo = Depends(require_token),
+) -> V2KlassAxisDetail:
+    """Per-axel-detalj för klass-pentagon flip-card."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as ms:
+        students = (
+            ms.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .all()
+        )
+
+    if not students:
+        return V2KlassAxisDetail(
+            axis=axis,
+            axis_label=_AXIS_LABELS[axis],
+            axis_number=_AXIS_NUMBER[axis],
+            klass_avg=50,
+            klass_total_avg=50,
+            student_count=0,
+            distribution={},
+            top_contributors=[],
+            bottom_contributors=[],
+            summary_text="Klassen har inga aktiva elever än.",
+        )
+
+    rows: list[tuple[Student, int, int]] = []  # (student, axis_value, total)
+    for st in students:
+        wb = _safe_calc_wellbeing_for(st)
+        if wb is None:
+            wb = (50, 50, 50, 50, 50, 50)
+        total, eco, safe, health, social, leisure = wb
+        axis_value = {
+            "economy": eco, "safety": safe, "health": health,
+            "social": social, "leisure": leisure,
+        }[axis]
+        rows.append((st, axis_value, total))
+
+    klass_avg = round(sum(r[1] for r in rows) / len(rows))
+    klass_total_avg = round(sum(r[2] for r in rows) / len(rows))
+
+    # Distribution
+    dist = {"<40": 0, "40-59": 0, "60-79": 0, "80+": 0}
+    for _, val, _ in rows:
+        if val < 40:
+            dist["<40"] += 1
+        elif val < 60:
+            dist["40-59"] += 1
+        elif val < 80:
+            dist["60-79"] += 1
+        else:
+            dist["80+"] += 1
+
+    # Top + bottom · 3 elever varje
+    sorted_desc = sorted(rows, key=lambda r: -r[1])
+    sorted_asc = sorted(rows, key=lambda r: r[1])
+    top_count = min(3, len(rows))
+    bottom_count = min(3, len(rows))
+
+    top_contributors = [
+        V2KlassAxisStudentRow(
+            student_id=st.id,
+            student_name=st.display_name,
+            axis_value=val,
+            pent_total=total,
+            delta_from_avg=val - klass_avg,
+        )
+        for st, val, total in sorted_desc[:top_count]
+    ]
+    bottom_contributors = [
+        V2KlassAxisStudentRow(
+            student_id=st.id,
+            student_name=st.display_name,
+            axis_value=val,
+            pent_total=total,
+            delta_from_avg=val - klass_avg,
+        )
+        for st, val, total in sorted_asc[:bottom_count]
+    ]
+
+    spread = max(r[1] for r in rows) - min(r[1] for r in rows)
+    if klass_avg >= 70:
+        verdict = "stark"
+    elif klass_avg >= 50:
+        verdict = "OK"
+    else:
+        verdict = "svag"
+    summary_text = (
+        f"{_AXIS_LABELS[axis]} · klassens snitt {klass_avg}/100 "
+        f"({verdict}). Spridning {spread} p mellan högsta och lägsta. "
+        f"{dist['<40']} elev{'er' if dist['<40'] != 1 else ''} ligger "
+        f"under 40 — bör få extra stöd."
+    )
+
+    return V2KlassAxisDetail(
+        axis=axis,
+        axis_label=_AXIS_LABELS[axis],
+        axis_number=_AXIS_NUMBER[axis],
+        klass_avg=klass_avg,
+        klass_total_avg=klass_total_avg,
+        student_count=len(rows),
+        distribution=dist,
+        top_contributors=top_contributors,
+        bottom_contributors=bottom_contributors,
+        summary_text=summary_text,
+    )
