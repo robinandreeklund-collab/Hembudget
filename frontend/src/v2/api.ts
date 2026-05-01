@@ -1629,6 +1629,41 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/teacher/reflections (Fas 2T · p-refl) ===
+
+export type V2ReflectionFilter = "all" | "unread" | "flagged";
+
+export type V2ReflectionItem = {
+  progress_id: number;
+  student_id: number;
+  student_name: string;
+  module_id: number;
+  module_title: string;
+  step_id: number;
+  step_title: string;
+  step_question: string | null;
+  body: string;
+  word_count: number;
+  completed_at: string | null;
+  teacher_feedback: string | null;
+  feedback_at: string | null;
+  flagged_for_help: boolean;
+  rubric_label: string | null;
+};
+
+export type V2ReflectionsSummary = {
+  total_count: number;
+  unread_count: number;
+  flagged_count: number;
+  avg_word_count: number;
+  last_received_at: string | null;
+};
+
+export type V2ReflectionsResponse = {
+  summary: V2ReflectionsSummary;
+  items: V2ReflectionItem[];
+};
+
 export type V2TeacherStudentDetail = {
   student_id: number;
   student_name: string;
@@ -2288,6 +2323,16 @@ export const v2Api = {
   teacherStudentDetail: (studentId: number) =>
     api<V2TeacherStudentDetail>(
       `/v2/teacher/students/${studentId}/student-detail`,
+    ),
+  // === /v2/teacher/reflections (Fas 2T) ===
+  teacherReflections: (filter: V2ReflectionFilter = "all") =>
+    api<V2ReflectionsResponse>(
+      `/v2/teacher/reflections?filter=${filter}`,
+    ),
+  teacherReflectionFeedback: (progressId: number, body: string) =>
+    api<V2ReflectionItem>(
+      `/v2/teacher/reflections/${progressId}/feedback`,
+      { method: "POST", body: JSON.stringify({ body }) },
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

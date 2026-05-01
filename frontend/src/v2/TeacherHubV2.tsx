@@ -349,8 +349,14 @@ function SideStack({
             }}
           >
             Eleven har klarat reflect-steg som väntar på din kommentar.
-            Öppna respektive elev-modul för att läsa och ge feedback.
           </p>
+          <Link
+            className="attn-go"
+            to="/teacher/v2/reflektioner"
+            style={{ display: "block", paddingTop: 6 }}
+          >
+            Öppna alla {data.reflections_unread_count} reflektioner →
+          </Link>
         </div>
       )}
 
