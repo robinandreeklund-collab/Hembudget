@@ -12286,6 +12286,392 @@ def teacher_maria_list(
     )
 
 
+# === TeacherPedagogicsV2 (p-peda · Fas 2W) ===
+#
+# Speglar prototypens larare.html#p-peda: pedagogik-paket per aktör/
+# verktyg/modul med exposure-räkning, kompetens-distribution över
+# klassen och åtgärds-förslag (heuristik).
+
+
+# Hård-kodad mappning av "concept-boxar" (aktör/verktyg/modul-mall) →
+# begrepp. Speglar prototypens 8 sektioner. Strukturen kan i framtiden
+# flyttas till en redigerbar tabell, men hård-kod räcker för v1.
+_PEDA_CONCEPT_BOXES: list[dict] = [
+    {
+        "key": "banken",
+        "kind": "actor",
+        "title": "Aktör · Banken",
+        "concepts": [
+            "likviditet", "sparkvot", "buffert",
+            "räntenetto", "disponibel inkomst",
+        ],
+        "exposure_via": "onboarded",
+    },
+    {
+        "key": "arbetsgivaren",
+        "kind": "actor",
+        "title": "Aktör · Arbetsgivaren",
+        "concepts": [
+            "brutto", "netto", "ITP1",
+            "kollektivavtal", "IBB", "marginalskatt",
+        ],
+        "exposure_via": "onboarded",
+    },
+    {
+        "key": "maria",
+        "kind": "actor",
+        "title": "Aktör · Maria (lönesamtal)",
+        "concepts": [
+            "centralavtal", "marknadssnitt", "BATNA",
+            "förhandlingsutrymme", "kompensation",
+        ],
+        "exposure_via": "negotiation",
+    },
+    {
+        "key": "postladan",
+        "kind": "actor",
+        "title": "Aktör · Postlådan",
+        "concepts": [
+            "förfallodatum", "dröjsmålsränta", "bestrida",
+            "betalningsanmärkning", "inkasso", "Kronofogden",
+        ],
+        "exposure_via": "mail_received",
+    },
+    {
+        "key": "avanza",
+        "kind": "actor",
+        "title": "Aktör · Avanza",
+        "concepts": [
+            "ISK", "KF", "indexfond",
+            "schablonskatt", "spridning", "TER",
+        ],
+        "exposure_via": "onboarded",
+    },
+    {
+        "key": "skatteverket",
+        "kind": "actor",
+        "title": "Aktör · Skatteverket",
+        "concepts": [
+            "inkomstdeklaration", "förifyllt", "avdrag",
+            "kvarskatt", "återbäring", "kontrolluppgift",
+        ],
+        "exposure_via": "module_skatt",
+    },
+    {
+        "key": "modul_bolan",
+        "kind": "module",
+        "title": "Modul · Bolån",
+        "concepts": [
+            "KALP", "belåningsgrad", "skuldkvot",
+            "amorteringskrav", "räntebindning", "bunden vs rörlig",
+        ],
+        "exposure_via": "module_bolan",
+    },
+    {
+        "key": "bankid",
+        "kind": "tool",
+        "title": "Verktyg · BankID",
+        "concepts": [
+            "elektronisk signatur", "autogiro",
+            "bankgiro", "förfallodatum", "OCR-nummer",
+        ],
+        "exposure_via": "bankid_session",
+    },
+]
+
+
+class V2PedaConceptBox(BaseModel):
+    key: str
+    kind: Literal["actor", "tool", "module"]
+    title: str
+    concepts: list[str]
+    student_count: int
+    is_underexposed: bool
+    is_critical: bool
+    note: Optional[str] = None
+
+
+class V2PedaCompetencyDist(BaseModel):
+    competency_id: int
+    key: str
+    name: str
+    basis_count: int
+    grund_count: int
+    fordjup_count: int
+    is_concerning: bool  # majoritet på basis
+
+
+class V2PedaSuggestion(BaseModel):
+    title: str
+    body: str
+    cta_label: str
+    cta_target: Optional[str] = None  # route där åtgärd kan tas
+
+
+class V2PedagogicsSummary(BaseModel):
+    total_concepts: int
+    total_boxes: int
+    most_seen_count: int  # boxes med ≥ 20 elever
+    rarely_seen_count: int  # boxes med ≤ 5 elever
+    underexposed_boxes: int
+
+
+class V2PedagogicsResponse(BaseModel):
+    summary: V2PedagogicsSummary
+    concept_boxes: list[V2PedaConceptBox]
+    competency_distribution: list[V2PedaCompetencyDist]
+    suggestions: list[V2PedaSuggestion]
+
+
+def _peda_exposure_count(
+    box: dict,
+    student_ids: list[int],
+    onboarded_ids: set[int],
+    negotiation_student_ids: set[int],
+    mail_received_ids: set[int],
+    bankid_student_ids: set[int],
+    module_started_by_title: dict[str, set[int]],
+) -> int:
+    """Räkna antal elever som har stött på begreppen i en concept-box."""
+    via = box["exposure_via"]
+    if via == "onboarded":
+        return len(onboarded_ids)
+    if via == "negotiation":
+        return len(negotiation_student_ids)
+    if via == "mail_received":
+        return len(mail_received_ids)
+    if via == "bankid_session":
+        return len(bankid_student_ids)
+    if via == "module_bolan":
+        # Hitta moduler vars titel innehåller "bolån" eller "kalp"
+        seen: set[int] = set()
+        for title, ids in module_started_by_title.items():
+            t = title.lower()
+            if "bolån" in t or "kalp" in t or "bostads" in t:
+                seen.update(ids)
+        return len(seen)
+    if via == "module_skatt":
+        seen: set[int] = set()
+        for title, ids in module_started_by_title.items():
+            t = title.lower()
+            if "skatt" in t or "deklaration" in t:
+                seen.update(ids)
+        return len(seen)
+    return 0
+
+
+@router.get(
+    "/teacher/pedagogics", response_model=V2PedagogicsResponse,
+)
+def teacher_pedagogics(
+    info: TokenInfo = Depends(require_token),
+) -> V2PedagogicsResponse:
+    """Lärar-vy · pedagogik-paket med exposure och åtgärds-förslag."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        students = (
+            mdb.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .all()
+        )
+        student_ids = [s.id for s in students]
+        onboarded_ids = {
+            s.id for s in students
+            if getattr(s, "v2_onboarding_completed_at", None) is not None
+            or getattr(s, "onboarding_completed", False)
+        }
+
+    if not student_ids:
+        return V2PedagogicsResponse(
+            summary=V2PedagogicsSummary(
+                total_concepts=sum(
+                    len(b["concepts"]) for b in _PEDA_CONCEPT_BOXES
+                ),
+                total_boxes=len(_PEDA_CONCEPT_BOXES),
+                most_seen_count=0, rarely_seen_count=0,
+                underexposed_boxes=0,
+            ),
+            concept_boxes=[
+                V2PedaConceptBox(
+                    key=b["key"], kind=b["kind"],
+                    title=b["title"], concepts=b["concepts"],
+                    student_count=0,
+                    is_underexposed=True, is_critical=True,
+                )
+                for b in _PEDA_CONCEPT_BOXES
+            ],
+            competency_distribution=[],
+            suggestions=[],
+        )
+
+    # Exposure-räkningar
+    with master_session() as ms:
+        # Pågående/avslutade förhandlingar
+        neg_student_ids = {
+            row[0] for row in ms.query(_SalaryNegotiation.student_id)
+            .filter(_SalaryNegotiation.student_id.in_(student_ids))
+            .all()
+        }
+        # Modul-progression per modul-titel
+        module_started_by_title: dict[str, set[int]] = {}
+        sm_rows = (
+            ms.query(_SchoolStudentModule, _SchoolModule)
+            .join(
+                _SchoolModule,
+                _SchoolStudentModule.module_id == _SchoolModule.id,
+            )
+            .filter(
+                _SchoolStudentModule.student_id.in_(student_ids),
+                _SchoolStudentModule.started_at.is_not(None),
+            )
+            .all()
+        )
+        for sm, mod in sm_rows:
+            module_started_by_title.setdefault(
+                mod.title, set(),
+            ).add(sm.student_id)
+
+    # Per-elev scope-data: mail_received + bankid_session
+    mail_received_ids: set[int] = set()
+    bankid_student_ids: set[int] = set()
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as mdb:
+        for st in students:
+            try:
+                scope_key = scope_for_student(st)
+                with scope_context(scope_key):
+                    with session_scope() as s:
+                        if s.query(MailItem).first() is not None:
+                            mail_received_ids.add(st.id)
+                        if s.query(BankIDSession).first() is not None:
+                            bankid_student_ids.add(st.id)
+            except Exception:
+                continue
+
+    # Bygg concept-boxar
+    boxes: list[V2PedaConceptBox] = []
+    most_seen = 0
+    rarely_seen = 0
+    underexposed = 0
+    total_students = len(student_ids)
+    for b in _PEDA_CONCEPT_BOXES:
+        cnt = _peda_exposure_count(
+            b, student_ids, onboarded_ids,
+            neg_student_ids, mail_received_ids,
+            bankid_student_ids, module_started_by_title,
+        )
+        is_under = cnt < 5
+        # Kritiskt = under 5 elever har stött på OCH klassen är ≥ 10
+        is_critical = is_under and total_students >= 10
+        note: Optional[str] = None
+        if is_under:
+            note = "⚠ FÅ HAR STÖTT — överväg helklass-introduktion"
+        if cnt >= 20:
+            most_seen += 1
+        if cnt <= 5:
+            rarely_seen += 1
+        if is_under:
+            underexposed += 1
+        boxes.append(V2PedaConceptBox(
+            key=b["key"], kind=b["kind"],
+            title=b["title"], concepts=b["concepts"],
+            student_count=cnt,
+            is_underexposed=is_under,
+            is_critical=is_critical,
+            note=note,
+        ))
+
+    # Kompetens-distribution
+    from .modules import _compute_mastery_for_student
+    competency_dist: list[V2PedaCompetencyDist] = []
+    with master_session() as ms:
+        comps = (
+            ms.query(_SchoolCompetency)
+            .filter(
+                or_(
+                    _SchoolCompetency.is_system.is_(True),
+                    _SchoolCompetency.teacher_id == teacher_id,
+                )
+            )
+            .order_by(_SchoolCompetency.name)
+            .all()
+        )
+        for c in comps:
+            b_cnt = g_cnt = f_cnt = 0
+            for sid in student_ids:
+                mastery_by_cid = _compute_mastery_for_student(ms, sid)
+                mastery, _count, _last = mastery_by_cid.get(
+                    c.id, (0.0, 0, None),
+                )
+                level_short, _label = _mastery_to_level(mastery)
+                if level_short == "F":
+                    f_cnt += 1
+                elif level_short == "G":
+                    g_cnt += 1
+                else:
+                    b_cnt += 1
+            is_concerning = b_cnt > (g_cnt + f_cnt)
+            competency_dist.append(V2PedaCompetencyDist(
+                competency_id=c.id,
+                key=c.key,
+                name=c.name,
+                basis_count=b_cnt,
+                grund_count=g_cnt,
+                fordjup_count=f_cnt,
+                is_concerning=is_concerning,
+            ))
+
+    # Genererade åtgärds-förslag baserat på data
+    suggestions: list[V2PedaSuggestion] = []
+    # Under-exposed boxes → föreslå modul
+    for box in boxes:
+        if box.is_critical:
+            suggestions.append(V2PedaSuggestion(
+                title=f"Modul: {box.title}",
+                body=(
+                    f"Endast {box.student_count} elev"
+                    f"{'er' if box.student_count != 1 else ''} har "
+                    f"stött på pedagogik-boxen. "
+                    f"Begrepp som behöver introduceras: "
+                    f"{', '.join(box.concepts[:3])}…"
+                ),
+                cta_label="Skapa modul",
+                cta_target="/teacher/v2",
+            ))
+    # Kompetens där > halva klassen ligger på basis
+    for cd in competency_dist:
+        if cd.is_concerning and cd.basis_count >= 5:
+            total = cd.basis_count + cd.grund_count + cd.fordjup_count
+            suggestions.append(V2PedaSuggestion(
+                title=f"Kompetens-gap: {cd.name}",
+                body=(
+                    f"{cd.basis_count} av {total} elever ligger på BASIS "
+                    f"i {cd.name}. Endast {cd.fordjup_count} har nått "
+                    f"fördjupning. Riktad modul kan lyfta klassen."
+                ),
+                cta_label="Se modul-bibliotek",
+                cta_target="/teacher/v2",
+            ))
+
+    summary = V2PedagogicsSummary(
+        total_concepts=sum(len(b["concepts"]) for b in _PEDA_CONCEPT_BOXES),
+        total_boxes=len(_PEDA_CONCEPT_BOXES),
+        most_seen_count=most_seen,
+        rarely_seen_count=rarely_seen,
+        underexposed_boxes=underexposed,
+    )
+    return V2PedagogicsResponse(
+        summary=summary,
+        concept_boxes=boxes,
+        competency_distribution=competency_dist,
+        suggestions=suggestions[:6],  # max 6 förslag
+    )
+
+
 class V2ReflectionFeedbackIn(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 

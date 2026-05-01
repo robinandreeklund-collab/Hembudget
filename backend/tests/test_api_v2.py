@@ -7172,3 +7172,124 @@ def test_v2_teacher_maria_list_only_own_students(fx) -> None:
     )
     data = r.json()
     assert data["summary"]["active_count"] == 0
+
+
+# === TeacherPedagogicsV2 (p-peda) — Fas 2W ===
+
+
+def test_v2_teacher_pedagogics_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/pedagogics",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_pedagogics_basic_shape(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/pedagogics",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # 8 hård-kodade boxar i mappningen
+    assert data["summary"]["total_boxes"] == 8
+    assert data["summary"]["total_concepts"] > 30
+    assert len(data["concept_boxes"]) == 8
+    # Tom klass · alla boxar är underexposed (single student, no scope-DB)
+    for box in data["concept_boxes"]:
+        assert "key" in box
+        assert "concepts" in box
+
+
+def test_v2_teacher_pedagogics_competency_distribution(fx) -> None:
+    """En system-kompetens med 1 elev som inte gjort något → basis_count=1."""
+    from hembudget.school.models import Competency as _Comp
+
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    with master_session() as db:
+        c = _Comp(
+            key="lan_ranta", name="Lån & ränta",
+            level="grund", is_system=True,
+        )
+        db.add(c); db.commit()
+
+    r = client.get(
+        "/v2/teacher/pedagogics",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    rows = data["competency_distribution"]
+    by_key = {r["key"]: r for r in rows}
+    assert "lan_ranta" in by_key
+    assert by_key["lan_ranta"]["basis_count"] == 1
+    assert by_key["lan_ranta"]["grund_count"] == 0
+    assert by_key["lan_ranta"]["fordjup_count"] == 0
+    assert by_key["lan_ranta"]["is_concerning"] is True
+
+
+def test_v2_teacher_pedagogics_suggests_action_for_concerning_competency(
+    fx,
+) -> None:
+    """5+ elever på basis i en kompetens → förslag dyker upp."""
+    from hembudget.school.models import (
+        Student as _S, Competency as _Comp,
+    )
+
+    client, tch, _sa, _stu, tid, _said, _sid = fx
+    with master_session() as db:
+        # Lägg till 5 elever till
+        for i in range(5):
+            db.add(_S(
+                teacher_id=tid,
+                display_name=f"Elev {i}",
+                login_code=f"E{i:07d}",
+            ))
+        c = _Comp(
+            key="skatt_grund", name="Skatte-grund",
+            level="grund", is_system=True,
+        )
+        db.add(c); db.commit()
+
+    r = client.get(
+        "/v2/teacher/pedagogics",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    titles = [s["title"] for s in data["suggestions"]]
+    # Förslag med kompetens-gap för skatt finns
+    assert any("Skatte-grund" in t for t in titles)
+
+
+def test_v2_teacher_pedagogics_module_exposure_counts(fx) -> None:
+    """Elev med startad bolåne-modul → modul_bolan-boxen räknar 1."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentModule as _SM,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(
+            teacher_id=tid, title="Bolån för 2:a",
+            is_template=False,
+        )
+        db.add(m); db.flush()
+        db.add(_SM(
+            student_id=sid, module_id=m.id,
+            started_at=_dt.utcnow(),
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/pedagogics",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    bolan_box = next(
+        b for b in data["concept_boxes"] if b["key"] == "modul_bolan"
+    )
+    assert bolan_box["student_count"] == 1
