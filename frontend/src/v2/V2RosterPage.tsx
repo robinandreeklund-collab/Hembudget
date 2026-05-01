@@ -264,6 +264,25 @@ export function V2RosterPage() {
                 >
                   Förbrukning →
                 </Link>
+                <Link
+                  to={`/teacher/v2/rental/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(56,189,248,0.10)",
+                    border: "1px solid rgba(56,189,248,0.4)",
+                    color: "#7dd3fc",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Hyresvärden →
+                </Link>
               </div>
             ))}
           </div>

@@ -654,6 +654,103 @@ export type V2TeacherUtilityOverview = {
   readings: V2UtilityReadingOut[];
 };
 
+// === /v2/hyresvarden (Fas 2F) ===
+
+export type V2RentalContractType =
+  | "forsta_hand"
+  | "andra_hand"
+  | "inneboende"
+  | "bostadsratt";
+
+export type V2RentalDurationType = "tillsvidare" | "tidsbegransad";
+
+export type V2RentalContractStatus =
+  | "active"
+  | "terminated"
+  | "considered";
+
+export type V2RentalNoticeType =
+  | "hyresavi"
+  | "underhall"
+  | "hyreshojning"
+  | "trapphusrenovering"
+  | "forhandling"
+  | "brand"
+  | "andrahand_ansokan"
+  | "ovrig";
+
+export type V2RentalNoticeStatus =
+  | "info"
+  | "action_required"
+  | "paid"
+  | "acknowledged"
+  | "denied";
+
+export type V2RentalContractOut = {
+  id: number;
+  landlord: string;
+  address: string;
+  rooms_label: string;
+  area_sqm: number;
+  city: string | null;
+  district: string | null;
+  contract_type: V2RentalContractType;
+  duration_type: V2RentalDurationType;
+  monthly_rent: number;
+  deposit: number | null;
+  ocr_reference: string | null;
+  autogiro: boolean;
+  notice_period_months: number;
+  started_on: string | null;
+  ended_on: string | null;
+  queue_years: number | null;
+  queue_priority: string | null;
+  market_price_per_sqm: number | null;
+  status: V2RentalContractStatus;
+  notes: string | null;
+};
+
+export type V2RentalNoticeOut = {
+  id: number;
+  contract_id: number | null;
+  occurred_on: string;
+  notice_type: V2RentalNoticeType;
+  title: string;
+  description: string | null;
+  amount: number | null;
+  change_pct: number | null;
+  status: V2RentalNoticeStatus;
+  notes: string | null;
+  created_at: string;
+};
+
+export type V2RentalSummary = {
+  has_active_contract: boolean;
+  monthly_rent: number;
+  rent_per_sqm_yearly: number;
+  rent_share_of_net_pct: number | null;
+  notices_open: number;
+  notices_paid_12m: number;
+  biggest_hike_pct_12m: number | null;
+  market_diff_pct: number | null;
+  market_buy_estimate: number | null;
+};
+
+export type V2RentalData = {
+  student_id: number;
+  summary: V2RentalSummary;
+  contract: V2RentalContractOut | null;
+  notices: V2RentalNoticeOut[];
+};
+
+export type V2TeacherRentalOverview = {
+  student_id: number;
+  student_name: string;
+  summary: V2RentalSummary;
+  contract: V2RentalContractOut | null;
+  notices: V2RentalNoticeOut[];
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -934,6 +1031,87 @@ export const v2Api = {
   teacherUtilityOverview: (studentId: number) =>
     api<V2TeacherUtilityOverview>(
       `/v2/teacher/students/${studentId}/utility-overview`,
+    ),
+  // === /v2/hyresvarden (Fas 2F) ===
+  hyresvarden: () => api<V2RentalData>("/v2/hyresvarden"),
+  rentalCreateContract: (body: {
+    landlord: string;
+    address: string;
+    rooms_label: string;
+    area_sqm: number;
+    city?: string;
+    district?: string;
+    contract_type?: V2RentalContractType;
+    duration_type?: V2RentalDurationType;
+    monthly_rent: number;
+    deposit?: number;
+    ocr_reference?: string;
+    autogiro?: boolean;
+    notice_period_months?: number;
+    started_on?: string;
+    queue_years?: number;
+    queue_priority?: string;
+    market_price_per_sqm?: number;
+    notes?: string;
+  }) =>
+    api<V2RentalContractOut>("/v2/hyresvarden/contracts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  rentalPatchContract: (
+    contractId: number,
+    body: {
+      monthly_rent?: number;
+      autogiro?: boolean;
+      status?: V2RentalContractStatus;
+      ended_on?: string;
+      notes?: string;
+    },
+  ) =>
+    api<V2RentalContractOut>(
+      `/v2/hyresvarden/contracts/${contractId}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  rentalDeleteContract: (contractId: number) =>
+    api<void>(`/v2/hyresvarden/contracts/${contractId}`, {
+      method: "DELETE",
+    }),
+  /** Lärar-API · seedа Stockholmshem-kontrakt + 4 notiser. */
+  teacherSeedDefaultRental: (studentId: number) =>
+    api<{
+      student_id: number;
+      contracts_created: number;
+      notices_created: number;
+    }>(`/v2/teacher/students/${studentId}/rental/seed-default`, {
+      method: "POST",
+      body: "{}",
+    }),
+  teacherCreateRentalNotice: (
+    studentId: number,
+    body: {
+      contract_id?: number;
+      occurred_on: string;
+      notice_type: V2RentalNoticeType;
+      title: string;
+      description?: string;
+      amount?: number;
+      change_pct?: number;
+      status?: V2RentalNoticeStatus;
+      notes?: string;
+    },
+  ) =>
+    api<V2RentalNoticeOut>(
+      `/v2/teacher/students/${studentId}/rental/notices`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  teacherDeleteRentalNotice: (studentId: number, noticeId: number) =>
+    api<void>(
+      `/v2/teacher/students/${studentId}/rental/notices/${noticeId}`,
+      { method: "DELETE" },
+    ),
+  teacherRentalOverview: (studentId: number) =>
+    api<V2TeacherRentalOverview>(
+      `/v2/teacher/students/${studentId}/rental-overview`,
     ),
   /** Lärar-API · lista alla CollectiveAgreement. */
   teacherListAgreements: () =>
