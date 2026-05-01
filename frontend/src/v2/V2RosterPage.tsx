@@ -283,6 +283,44 @@ export function V2RosterPage() {
                 >
                   Hyresvärden →
                 </Link>
+                <Link
+                  to={`/teacher/v2/pension/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(244,114,182,0.10)",
+                    border: "1px solid rgba(244,114,182,0.4)",
+                    color: "#f9a8d4",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Pension →
+                </Link>
+                <Link
+                  to={`/teacher/v2/avanza/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(34,197,94,0.10)",
+                    border: "1px solid rgba(34,197,94,0.4)",
+                    color: "#86efac",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Avanza →
+                </Link>
               </div>
             ))}
           </div>

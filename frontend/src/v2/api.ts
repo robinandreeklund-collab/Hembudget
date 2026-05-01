@@ -751,6 +751,118 @@ export type V2TeacherRentalOverview = {
   notices: V2RentalNoticeOut[];
 };
 
+// === /v2/pension (Fas 2G) ===
+
+export type V2PensionPillarSource = "auto" | "agreement" | "isk" | "missing";
+
+export type V2PensionPillar = {
+  label: string;
+  name: string;
+  detail: string;
+  monthly_at_retire: number;
+  source: V2PensionPillarSource;
+};
+
+export type V2PensionScenarios = {
+  age_65_early: number;
+  age_67_target: number;
+  age_70_late: number;
+};
+
+export type V2PensionAssumptions = {
+  retire_age: number;
+  real_return_pct: number;
+  ibb_yearly: number;
+  delningstal: number;
+  custom_isk_monthly: number;
+  itp1_low_pct: number;
+  itp1_high_pct: number;
+  notes: string | null;
+};
+
+export type V2PensionData = {
+  student_id: number;
+  assumptions: V2PensionAssumptions;
+  years_to_retire: number;
+  pillars: V2PensionPillar[];
+  total_monthly_at_retire: number;
+  scenarios: V2PensionScenarios;
+  isk_current_value: number;
+  has_collective_agreement: boolean;
+  age: number | null;
+  gross_salary_monthly: number | null;
+};
+
+export type V2TeacherPensionOverview = {
+  student_id: number;
+  student_name: string;
+  forecast: V2PensionData;
+};
+
+// === /v2/avanza (Fas 2G — Aktör 05) ===
+
+export type V2AvanzaFundOut = {
+  id: number;
+  fund_name: string;
+  units: number | null;
+  market_value: number;
+  last_price: number | null;
+  change_pct: number | null;
+  day_change_pct: number | null;
+  last_update_date: string;
+};
+
+export type V2AvanzaStockOut = {
+  id: number;
+  ticker: string;
+  quantity: number;
+  avg_cost: number;
+  last_price: number | null;
+  market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number | null;
+};
+
+export type V2AvanzaTradeRow = {
+  id: number;
+  ticker: string;
+  side: string;
+  quantity: number;
+  price: number;
+  courtage: number;
+  total_amount: number;
+  realized_pnl: number | null;
+  student_rationale: string | null;
+  executed_at: string;
+};
+
+export type V2AvanzaSummary = {
+  isk_account_id: number | null;
+  isk_account_name: string | null;
+  cash_balance: number;
+  funds_value: number;
+  stocks_value: number;
+  total_value: number;
+  schablonskatt_estimate: number;
+  fund_count: number;
+  stock_count: number;
+  monthly_savings: number;
+};
+
+export type V2AvanzaData = {
+  student_id: number;
+  summary: V2AvanzaSummary;
+  funds: V2AvanzaFundOut[];
+  stocks: V2AvanzaStockOut[];
+  recent_trades: V2AvanzaTradeRow[];
+};
+
+export type V2TeacherAvanzaOverview = {
+  student_id: number;
+  student_name: string;
+  avanza: V2AvanzaData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1113,6 +1225,117 @@ export const v2Api = {
     api<V2TeacherRentalOverview>(
       `/v2/teacher/students/${studentId}/rental-overview`,
     ),
+  // === /v2/pension (Fas 2G) ===
+  pension: () => api<V2PensionData>("/v2/pension"),
+  pensionPatchAssumptions: (body: {
+    retire_age?: number;
+    real_return_pct?: number;
+    custom_isk_monthly?: number;
+    itp1_low_pct?: number;
+    itp1_high_pct?: number;
+    notes?: string;
+  }) =>
+    api<V2PensionAssumptions>("/v2/pension/assumptions", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  teacherSeedDefaultPension: (studentId: number) =>
+    api<{ student_id: number; created: number }>(
+      `/v2/teacher/students/${studentId}/pension/seed-default`,
+      { method: "POST", body: "{}" },
+    ),
+  teacherPatchPensionAssumptions: (
+    studentId: number,
+    body: {
+      retire_age?: number;
+      real_return_pct?: number;
+      custom_isk_monthly?: number;
+      itp1_low_pct?: number;
+      itp1_high_pct?: number;
+      notes?: string;
+    },
+  ) =>
+    api<V2PensionAssumptions>(
+      `/v2/teacher/students/${studentId}/pension/assumptions`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  teacherPensionOverview: (studentId: number) =>
+    api<V2TeacherPensionOverview>(
+      `/v2/teacher/students/${studentId}/pension-overview`,
+    ),
+  // === /v2/avanza (Fas 2G — Aktör 05) ===
+  avanza: () => api<V2AvanzaData>("/v2/avanza"),
+  teacherAvanzaOverview: (studentId: number) =>
+    api<V2TeacherAvanzaOverview>(
+      `/v2/teacher/students/${studentId}/avanza-overview`,
+    ),
+  // Aktiehandel (existerande /stocks-API från gamla dashboarden)
+  stocksPortfolio: (accountId?: number) =>
+    api<{
+      cash_balance: number;
+      total_market_value: number;
+      total_unrealized_pnl: number;
+      positions: Array<{
+        ticker: string;
+        quantity: number;
+        avg_cost: number;
+        last_price: number;
+        market_value: number;
+        unrealized_pnl: number;
+        unrealized_pnl_pct: number;
+      }>;
+    }>(`/stocks/portfolio${accountId ? `?account_id=${accountId}` : ""}`),
+  stocksLedger: (limit = 200, ticker?: string) =>
+    api<{
+      ledger: Array<{
+        id: number;
+        ticker: string;
+        side: string;
+        quantity: number;
+        price: number;
+        courtage: number;
+        total_amount: number;
+        realized_pnl: number | null;
+        executed_at: string;
+        student_rationale: string | null;
+      }>;
+      count: number;
+    }>(
+      `/stocks/ledger?limit=${limit}${ticker ? `&ticker=${ticker}` : ""}`,
+    ),
+  stocksMarket: () =>
+    api<{
+      stocks: Array<{
+        ticker: string;
+        name: string;
+        sector: string | null;
+        currency: string;
+        last: number;
+        change_pct: number | null;
+        bid: number | null;
+        ask: number | null;
+      }>;
+      count: number;
+      market_open: boolean;
+    }>("/v2/aktier/market"),
+  stocksBuy: (ticker: string, body: {
+    account_id: number;
+    quantity: number;
+    student_rationale?: string;
+  }) =>
+    api<Record<string, unknown>>(`/stocks/${ticker}/buy`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  stocksSell: (ticker: string, body: {
+    account_id: number;
+    quantity: number;
+    student_rationale?: string;
+  }) =>
+    api<Record<string, unknown>>(`/stocks/${ticker}/sell`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   /** Lärar-API · lista alla CollectiveAgreement. */
   teacherListAgreements: () =>
     api<V2CollectiveAgreementOut[]>("/v2/teacher/agreements"),

@@ -340,11 +340,11 @@ export function HubV2() {
               <div className="compass-node-name">Lånegivaren</div>
               <div className="compass-node-val">CSN + lån</div>
             </Link>
-            <span className="compass-node disabled">
+            <Link to="/v2/avanza" className="compass-node">
               <div className="compass-node-eye">Aktör 05</div>
               <div className="compass-node-name">Avanza · ISK</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">fonder + aktier</div>
+            </Link>
             <Link to="/v2/forsakringar" className="compass-node">
               <div className="compass-node-eye">Aktör 06</div>
               <div className="compass-node-name">Försäkringar</div>
@@ -360,11 +360,11 @@ export function HubV2() {
               <div className="compass-node-name">Hyresvärden</div>
               <div className="compass-node-val">kontrakt + brev</div>
             </Link>
-            <span className="compass-node disabled">
+            <Link to="/v2/pension" className="compass-node">
               <div className="compass-node-eye">Aktör 09</div>
               <div className="compass-node-name">Pension</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">3 pelare + ISK</div>
+            </Link>
           </div>
 
           <div className="compass-eye" style={{ marginTop: 18 }}>

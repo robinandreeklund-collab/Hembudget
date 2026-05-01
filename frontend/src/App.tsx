@@ -19,6 +19,11 @@ import { TeacherUtilityOverviewPage } from "./v2/TeacherUtilityOverviewPage";
 import { ForbrukningV2 } from "./v2/ForbrukningV2";
 import { TeacherRentalOverviewPage } from "./v2/TeacherRentalOverviewPage";
 import { HyresvardenV2 } from "./v2/HyresvardenV2";
+import { PensionV2 } from "./v2/PensionV2";
+import { AvanzaV2 } from "./v2/AvanzaV2";
+import { AktierV2 } from "./v2/AktierV2";
+import { TeacherPensionOverviewPage } from "./v2/TeacherPensionOverviewPage";
+import { TeacherAvanzaOverviewPage } from "./v2/TeacherAvanzaOverviewPage";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -258,6 +263,9 @@ export default function App() {
           <Route path="/v2/forsakringar" element={<ForsakringarV2 />} />
           <Route path="/v2/forbrukning" element={<ForbrukningV2 />} />
           <Route path="/v2/hyresvarden" element={<HyresvardenV2 />} />
+          <Route path="/v2/pension" element={<PensionV2 />} />
+          <Route path="/v2/avanza" element={<AvanzaV2 />} />
+          <Route path="/v2/aktier" element={<AktierV2 />} />
           <Route
             path="/teacher/v2/credit/:studentId"
             element={<TeacherCreditOverviewPage />}
@@ -281,6 +289,14 @@ export default function App() {
           <Route
             path="/teacher/v2/rental/:studentId"
             element={<TeacherRentalOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/pension/:studentId"
+            element={<TeacherPensionOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/avanza/:studentId"
+            element={<TeacherAvanzaOverviewPage />}
           />
           <Route path="/v2/mal" element={<MalV2 />} />
           <Route path="/v2/postladan" element={<PostladanV2 />} />
