@@ -1629,6 +1629,51 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/teacher/pedagogics (Fas 2W · p-peda) ===
+
+export type V2PedaConceptBox = {
+  key: string;
+  kind: "actor" | "tool" | "module";
+  title: string;
+  concepts: string[];
+  student_count: number;
+  is_underexposed: boolean;
+  is_critical: boolean;
+  note: string | null;
+};
+
+export type V2PedaCompetencyDist = {
+  competency_id: number;
+  key: string;
+  name: string;
+  basis_count: number;
+  grund_count: number;
+  fordjup_count: number;
+  is_concerning: boolean;
+};
+
+export type V2PedaSuggestion = {
+  title: string;
+  body: string;
+  cta_label: string;
+  cta_target: string | null;
+};
+
+export type V2PedagogicsSummary = {
+  total_concepts: number;
+  total_boxes: number;
+  most_seen_count: number;
+  rarely_seen_count: number;
+  underexposed_boxes: number;
+};
+
+export type V2PedagogicsResponse = {
+  summary: V2PedagogicsSummary;
+  concept_boxes: V2PedaConceptBox[];
+  competency_distribution: V2PedaCompetencyDist[];
+  suggestions: V2PedaSuggestion[];
+};
+
 // === /v2/teacher/maria-list (Fas 2V · p-maria) ===
 
 export type V2MariaRoundCompact = {
@@ -2438,6 +2483,9 @@ export const v2Api = {
   // === /v2/teacher/maria-list (Fas 2V) ===
   teacherMariaList: () =>
     api<V2MariaListResponse>("/v2/teacher/maria-list"),
+  // === /v2/teacher/pedagogics (Fas 2W) ===
+  teacherPedagogics: () =>
+    api<V2PedagogicsResponse>("/v2/teacher/pedagogics"),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{
