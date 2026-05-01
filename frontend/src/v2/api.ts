@@ -927,6 +927,65 @@ export type V2TeacherBookkeepingOverview = {
   bokforing: V2BookkeepingData;
 };
 
+// === /v2/moduler (Fas 2I — Skola 09) ===
+
+export type V2ModuleStepKind =
+  | "read"
+  | "watch"
+  | "reflect"
+  | "task"
+  | "quiz";
+
+export type V2ModuleProgressOut = {
+  student_module_id: number;
+  module_id: number;
+  title: string;
+  summary: string | null;
+  is_template: boolean;
+  teacher_owned: boolean;
+  sort_order: number;
+  started_at: string | null;
+  completed_at: string | null;
+  assigned_at: string;
+  step_count: number;
+  completed_step_count: number;
+  progress_pct: number;
+  current_step_no: number | null;
+  estimated_minutes_left: number | null;
+};
+
+export type V2ModuleAvailableOut = {
+  module_id: number;
+  title: string;
+  summary: string | null;
+  is_template: boolean;
+  teacher_owned: boolean;
+  step_count: number;
+  estimated_total_minutes: number;
+};
+
+export type V2ModulerSummary = {
+  in_progress_count: number;
+  completed_count: number;
+  available_count: number;
+  avg_progress_pct: number;
+  last_activity_at: string | null;
+};
+
+export type V2ModulerData = {
+  student_id: number;
+  summary: V2ModulerSummary;
+  in_progress: V2ModuleProgressOut[];
+  completed: V2ModuleProgressOut[];
+  available: V2ModuleAvailableOut[];
+};
+
+export type V2TeacherModulerOverview = {
+  student_id: number;
+  student_name: string;
+  moduler: V2ModulerData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1357,6 +1416,12 @@ export const v2Api = {
   teacherBookkeepingOverview: (studentId: number, period?: string) =>
     api<V2TeacherBookkeepingOverview>(
       `/v2/teacher/students/${studentId}/bokforing-overview${period ? `?period=${encodeURIComponent(period)}` : ""}`,
+    ),
+  // === /v2/moduler (Fas 2I — Skola 09) ===
+  moduler: () => api<V2ModulerData>("/v2/moduler"),
+  teacherModulerOverview: (studentId: number) =>
+    api<V2TeacherModulerOverview>(
+      `/v2/teacher/students/${studentId}/moduler-overview`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

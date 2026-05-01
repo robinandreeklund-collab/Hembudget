@@ -396,11 +396,11 @@ export function HubV2() {
               <div className="compass-node-name">Lånekalkylator</div>
               <div className="compass-node-val">snart</div>
             </span>
-            <span className="compass-node disabled">
+            <Link to="/v2/moduler" className="compass-node">
               <div className="compass-node-eye">Skola 09</div>
               <div className="compass-node-name">Mina moduler</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">lärar-tilldelade</div>
+            </Link>
             <span className="compass-node disabled">
               <div className="compass-node-eye">Skola</div>
               <div className="compass-node-name">Lärar-feedback</div>
