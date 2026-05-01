@@ -22,6 +22,7 @@ import {
   type TaxDeductionKind,
 } from "./api";
 import { V2Banner } from "./V2Banner";
+import { EchoButton } from "./EchoButton";
 import "./skatten.css";
 
 const SEK = (n: number) =>
@@ -589,6 +590,7 @@ export function SkattenV2() {
           </div>
         </div>
       </div>
+      <EchoButton context="Skatten · deklaration, jobbskatteavdrag, ROT/RUT" />
     </div>
   );
 }

@@ -1099,6 +1099,88 @@ export type V2TeacherFeedbackOverview = {
   feedback: V2FeedbackData;
 };
 
+// === /v2/maria (Fas 2L · Maria-AI lönesamtal) ===
+
+export type V2MariaRound = {
+  round_no: number;
+  student_message: string;
+  employer_response: string;
+  proposed_pct: number | null;
+  created_at: string;
+};
+
+export type V2MariaNegotiation = {
+  id: number;
+  profession: string;
+  employer: string;
+  starting_salary: number;
+  avtal_norm_pct: number | null;
+  avtal_code: string | null;
+  started_at: string;
+  completed_at: string | null;
+  status: "active" | "completed" | "abandoned";
+  final_salary: number | null;
+  final_pct: number | null;
+  teacher_summary_md: string | null;
+  rounds: V2MariaRound[];
+  max_rounds: number;
+  is_disabled: boolean;
+};
+
+export type V2MariaData = {
+  student_id: number;
+  has_active: boolean;
+  active: V2MariaNegotiation | null;
+  history: V2MariaNegotiation[];
+};
+
+export type V2TeacherMariaOverview = {
+  student_id: number;
+  student_name: string;
+  maria: V2MariaData;
+};
+
+// === /v2/bankid (Fas 2L · BankID-simulator) ===
+
+export type V2BankIDInvoiceRow = {
+  upcoming_id: number;
+  name: string;
+  amount: number;
+  due_date: string;
+  is_recurring: boolean;
+  is_anomaly: boolean;
+};
+
+export type V2BankIDSessionOut = {
+  id: number;
+  upcoming_ids: number[];
+  total_amount: number;
+  invoice_count: number;
+  status: "pending" | "signed" | "cancelled";
+  current_step: number;
+  signed_at: string | null;
+  cancelled_at: string | null;
+  duration_seconds: number | null;
+  invoices: V2BankIDInvoiceRow[];
+  notes: string | null;
+  created_at: string;
+};
+
+export type V2BankIDListData = {
+  student_id: number;
+  sessions: V2BankIDSessionOut[];
+  pending_count: number;
+  signed_count: number;
+  cancelled_count: number;
+  total_signed_amount: number;
+};
+
+export type V2TeacherBankIDOverview = {
+  student_id: number;
+  student_name: string;
+  bankid: V2BankIDListData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1590,6 +1672,56 @@ export const v2Api = {
   teacherFeedbackOverview: (studentId: number, period_days = 90) =>
     api<V2TeacherFeedbackOverview>(
       `/v2/teacher/students/${studentId}/feedback-overview?period_days=${period_days}`,
+    ),
+  // === /v2/maria (Maria-AI lönesamtal) ===
+  maria: () => api<V2MariaData>("/v2/maria"),
+  mariaStart: () =>
+    api<{
+      negotiation_id: number;
+      profession: string;
+      employer: string;
+      starting_salary: number;
+    }>("/employer/negotiation/start", {
+      method: "POST",
+      body: "{}",
+    }),
+  mariaSendMessage: (negotiationId: number, message: string) =>
+    api<{
+      round_no: number;
+      employer_response: string;
+      proposed_pct: number | null;
+      is_final_round: boolean;
+      negotiation_status: string;
+    }>(`/employer/negotiation/${negotiationId}/message`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+  teacherMariaOverview: (studentId: number) =>
+    api<V2TeacherMariaOverview>(
+      `/v2/teacher/students/${studentId}/maria-overview`,
+    ),
+  // === /v2/bankid (BankID-simulator) ===
+  bankidList: () => api<V2BankIDListData>("/v2/bankid/sessions"),
+  bankidGet: (id: number) =>
+    api<V2BankIDSessionOut>(`/v2/bankid/sessions/${id}`),
+  bankidStart: (upcoming_ids: number[]) =>
+    api<V2BankIDSessionOut>("/v2/bankid/sessions", {
+      method: "POST",
+      body: JSON.stringify({ upcoming_ids }),
+    }),
+  bankidSign: (id: number, duration_seconds?: number) =>
+    api<V2BankIDSessionOut>(`/v2/bankid/sessions/${id}/sign`, {
+      method: "POST",
+      body: JSON.stringify({ duration_seconds }),
+    }),
+  bankidCancel: (id: number) =>
+    api<V2BankIDSessionOut>(`/v2/bankid/sessions/${id}/cancel`, {
+      method: "POST",
+      body: "{}",
+    }),
+  teacherBankIDOverview: (studentId: number) =>
+    api<V2TeacherBankIDOverview>(
+      `/v2/teacher/students/${studentId}/bankid-overview`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

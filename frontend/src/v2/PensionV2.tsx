@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { v2Api, type V2PensionData } from "./api";
 import { V2Banner } from "./V2Banner";
+import { EchoButton } from "./EchoButton";
 import "./lan.css";
 
 const SEK = (n: number) =>
@@ -538,6 +539,7 @@ export function PensionV2() {
           </div>
         </div>
       </div>
+      <EchoButton context="Pension · 4 pelare, ISK-spar, prognos vid 67" />
     </div>
   );
 }

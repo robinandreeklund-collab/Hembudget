@@ -218,7 +218,7 @@ export function ArbetsgivarenV2() {
                 <button
                   type="button"
                   className="cta-btn"
-                  onClick={() => navigate("/v2/hub")}
+                  onClick={() => navigate("/v2/maria")}
                 >
                   Fortsätt lönesamtalet →
                 </button>
@@ -241,7 +241,7 @@ export function ArbetsgivarenV2() {
                 <button
                   type="button"
                   className="cta-btn"
-                  onClick={() => navigate("/v2/hub")}
+                  onClick={() => navigate("/v2/maria")}
                 >
                   Starta lönesamtal →
                 </button>

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { v2Api, type HubData } from "./api";
 import { V2Banner } from "./V2Banner";
+import { EchoButton } from "./EchoButton";
 import "./hub.css";
 
 const SEK = (n: number) =>
@@ -422,6 +423,9 @@ export function HubV2() {
             men aggregerat. Allt på <em>en endpoint</em> — <code>/v2/hub</code>.
           </div>
         </div>
+
+        {/* Echo · global AI-chat (visas bara om AI är aktiverad) */}
+        <EchoButton context="Hubben — översikt över ekonomin" />
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { v2Api, type BankData } from "./api";
 import { V2Banner } from "./V2Banner";
+import { EchoButton } from "./EchoButton";
 import "./bank.css";
 
 const SEK = (n: number) =>
@@ -562,6 +563,7 @@ export function BankV2() {
           </aside>
         </div>
       </div>
+      <EchoButton context="Bank · konton, fakturor, BankID-signering" />
     </div>
   );
 }

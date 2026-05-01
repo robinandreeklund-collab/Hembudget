@@ -397,6 +397,44 @@ export function V2RosterPage() {
                 >
                   Feedback →
                 </Link>
+                <Link
+                  to={`/teacher/v2/maria/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(245,158,11,0.10)",
+                    border: "1px solid rgba(245,158,11,0.4)",
+                    color: "#fcd34d",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Maria →
+                </Link>
+                <Link
+                  to={`/teacher/v2/bankid/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(20,184,166,0.10)",
+                    border: "1px solid rgba(20,184,166,0.4)",
+                    color: "#5eead4",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  BankID →
+                </Link>
               </div>
             ))}
           </div>
