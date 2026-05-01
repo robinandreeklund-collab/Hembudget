@@ -986,6 +986,75 @@ export type V2TeacherModulerOverview = {
   moduler: V2ModulerData;
 };
 
+// === /v2/simulator (Fas 2J — Verktyg 05 + 06) ===
+
+export type V2InvestSimResult = {
+  start_amount: number;
+  monthly_save: number;
+  return_pct: number;
+  years: number;
+  is_isk: boolean;
+  schablonskatt_pct: number;
+  total_invested: number;
+  final_value: number;
+  total_growth: number;
+  total_taxes: number;
+  yearly_balances: number[];
+  saved_scenario_id: number | null;
+  compare: (Record<string, unknown> & {
+    final_value: number;
+    total_invested: number;
+    total_taxes: number;
+    diff_final: number;
+  }) | null;
+};
+
+export type V2SimulatorScheduleRow = {
+  month: number;
+  payment: number;
+  interest: number;
+  principal: number;
+  balance: number;
+};
+
+export type V2LoanSimResult = {
+  principal: number;
+  interest_rate_pct: number;
+  term_months: number;
+  amortization_type: "annuity" | "straight";
+  extra_amortization_monthly: number;
+  monthly_payment_baseline: number;
+  total_paid_baseline: number;
+  total_interest_baseline: number;
+  monthly_payment_with_extra: number;
+  total_paid_with_extra: number;
+  total_interest_with_extra: number;
+  payoff_months_with_extra: number;
+  interest_savings: number;
+  months_saved: number;
+  schedule_first_12: V2SimulatorScheduleRow[];
+  saved_scenario_id: number | null;
+};
+
+export type V2SimulatorScenarioRow = {
+  id: number;
+  name: string;
+  kind: "invest" | "loan";
+  params: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type V2TeacherSimulatorOverview = {
+  student_id: number;
+  student_name: string;
+  invest_count: number;
+  loan_count: number;
+  longest_horizon_years: number;
+  biggest_principal: number;
+  scenarios: V2SimulatorScenarioRow[];
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1422,6 +1491,47 @@ export const v2Api = {
   teacherModulerOverview: (studentId: number) =>
     api<V2TeacherModulerOverview>(
       `/v2/teacher/students/${studentId}/moduler-overview`,
+    ),
+  // === /v2/simulator (Fas 2J — Verktyg 05 + 06) ===
+  simulateInvestment: (body: {
+    start_amount: number;
+    monthly_save: number;
+    return_pct: number;
+    years: number;
+    schablonskatt_pct?: number;
+    is_isk?: boolean;
+    save_as_scenario?: boolean;
+    scenario_name?: string;
+    compare?: Record<string, unknown>;
+  }) =>
+    api<V2InvestSimResult>("/v2/simulator/investment", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  simulateLoan: (body: {
+    principal: number;
+    interest_rate_pct: number;
+    term_months: number;
+    extra_amortization_monthly?: number;
+    amortization_type?: "annuity" | "straight";
+    save_as_scenario?: boolean;
+    scenario_name?: string;
+  }) =>
+    api<V2LoanSimResult>("/v2/simulator/loan", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  simulatorScenarios: (kind?: "invest" | "loan") =>
+    api<V2SimulatorScenarioRow[]>(
+      `/v2/simulator/scenarios${kind ? `?kind=${kind}` : ""}`,
+    ),
+  simulatorDeleteScenario: (id: number) =>
+    api<void>(`/v2/simulator/scenarios/${id}`, {
+      method: "DELETE",
+    }),
+  teacherSimulatorOverview: (studentId: number) =>
+    api<V2TeacherSimulatorOverview>(
+      `/v2/teacher/students/${studentId}/simulator-overview`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

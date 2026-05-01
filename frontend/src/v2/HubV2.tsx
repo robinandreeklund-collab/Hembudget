@@ -386,16 +386,16 @@ export function HubV2() {
               <div className="compass-node-name">Bokföring</div>
               <div className="compass-node-val">klassa transaktioner</div>
             </Link>
-            <span className="compass-node disabled">
+            <Link to="/v2/simulator" className="compass-node">
               <div className="compass-node-eye">Verktyg 05</div>
               <div className="compass-node-name">Investeringssim</div>
-              <div className="compass-node-val">snart</div>
-            </span>
-            <span className="compass-node disabled">
+              <div className="compass-node-val">ränta-på-ränta</div>
+            </Link>
+            <Link to="/v2/lanekalkylator" className="compass-node">
               <div className="compass-node-eye">Verktyg 06</div>
               <div className="compass-node-name">Lånekalkylator</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">amorteringsplan</div>
+            </Link>
             <Link to="/v2/moduler" className="compass-node">
               <div className="compass-node-eye">Skola 09</div>
               <div className="compass-node-name">Mina moduler</div>

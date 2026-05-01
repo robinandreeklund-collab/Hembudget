@@ -359,6 +359,25 @@ export function V2RosterPage() {
                 >
                   Moduler →
                 </Link>
+                <Link
+                  to={`/teacher/v2/simulator/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(251,146,60,0.10)",
+                    border: "1px solid rgba(251,146,60,0.4)",
+                    color: "#fb923c",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Simulator →
+                </Link>
               </div>
             ))}
           </div>

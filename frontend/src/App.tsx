@@ -28,6 +28,9 @@ import { BokforingV2 } from "./v2/BokforingV2";
 import { TeacherBokforingOverviewPage } from "./v2/TeacherBokforingOverviewPage";
 import { ModulerV2 } from "./v2/ModulerV2";
 import { TeacherModulerOverviewPage } from "./v2/TeacherModulerOverviewPage";
+import { SimulatorV2 } from "./v2/SimulatorV2";
+import { LanekalkylatorV2 } from "./v2/LanekalkylatorV2";
+import { TeacherSimulatorOverviewPage } from "./v2/TeacherSimulatorOverviewPage";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -272,6 +275,11 @@ export default function App() {
           <Route path="/v2/aktier" element={<AktierV2 />} />
           <Route path="/v2/bokforing" element={<BokforingV2 />} />
           <Route path="/v2/moduler" element={<ModulerV2 />} />
+          <Route path="/v2/simulator" element={<SimulatorV2 />} />
+          <Route
+            path="/v2/lanekalkylator"
+            element={<LanekalkylatorV2 />}
+          />
           <Route
             path="/teacher/v2/credit/:studentId"
             element={<TeacherCreditOverviewPage />}
@@ -311,6 +319,10 @@ export default function App() {
           <Route
             path="/teacher/v2/moduler/:studentId"
             element={<TeacherModulerOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/simulator/:studentId"
+            element={<TeacherSimulatorOverviewPage />}
           />
           <Route path="/v2/mal" element={<MalV2 />} />
           <Route path="/v2/postladan" element={<PostladanV2 />} />
