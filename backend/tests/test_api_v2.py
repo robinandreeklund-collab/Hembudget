@@ -7293,3 +7293,118 @@ def test_v2_teacher_pedagogics_module_exposure_counts(fx) -> None:
         b for b in data["concept_boxes"] if b["key"] == "modul_bolan"
     )
     assert bolan_box["student_count"] == 1
+
+
+# === TeacherCreateStudentV2 (p-skapa) — Fas 2X ===
+
+
+def test_v2_teacher_create_student_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"first_name": "Test"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_create_student_basic(fx) -> None:
+    client, tch, _sa, _stu, tid, _said, _sid = fx
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "first_name": "Maja",
+            "last_initial": "F",
+            "archetype": "kassorska",
+            "spend_profile": "sparsam",
+            "partner_model": "solo",
+            "starting_level": 1,
+            "guardian_email": "erik.fredriksson@gmail.com",
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_name"] == "Maja F."
+    assert len(data["login_code"]) >= 6
+    assert data["spend_profile"] == "sparsam"
+    assert data["partner_model"] == "solo"
+    assert data["starting_level"] == 1
+    assert data["activated"] is False  # ingen login än
+
+    # Lärar-roster ska nu ha 2 elever (eva + maja)
+    from hembudget.school.models import Student as _S
+    with master_session() as db:
+        students = (
+            db.query(_S).filter(_S.teacher_id == tid).all()
+        )
+    assert len(students) == 2
+
+
+def test_v2_teacher_create_student_random_archetype(fx) -> None:
+    client, tch, *_ = fx
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "first_name": "Robin",
+            "last_initial": "Z.",
+            "archetype": "random",
+            "starting_level": 2,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["spend_profile"] == "balanserad"  # default för level 2
+    assert data["partner_model"] in ("solo", "ai", "klasskompis")
+
+
+def test_v2_teacher_list_created_students(fx) -> None:
+    client, tch, *_ = fx
+    # Eva finns från fixture (ej aktiverad)
+    r = client.get(
+        "/v2/teacher/students/created",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["total_count"] == 1
+    assert data["pending_activation_count"] == 1
+
+    # Skapa en till
+    client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"first_name": "Otto", "last_initial": "L"},
+    )
+    r = client.get(
+        "/v2/teacher/students/created",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert data["total_count"] == 2
+    assert data["pending_activation_count"] == 2
+    # Senaste först (Otto)
+    assert "Otto" in data["rows"][0]["student_name"]
+
+
+def test_v2_teacher_create_student_level_3_skips_onboarding(fx) -> None:
+    """Starting level > 1 → onboarding_completed=True direkt."""
+    from hembudget.school.models import Student as _S
+
+    client, tch, *_ = fx
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "first_name": "Erik",
+            "starting_level": 3,
+            "spend_profile": "slosa",
+        },
+    )
+    sid = r.json()["student_id"]
+    with master_session() as db:
+        st = db.get(_S, sid)
+        assert st.onboarding_completed is True
+        assert st.v2_level == 3
+        assert st.v2_spend_profile == "slosa"

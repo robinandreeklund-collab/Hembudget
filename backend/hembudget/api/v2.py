@@ -12286,6 +12286,257 @@ def teacher_maria_list(
     )
 
 
+# === TeacherCreateStudentV2 (p-skapa · Fas 2X) ===
+#
+# Speglar prototypens larare.html#p-skapa: snabb-create-formulär med
+# karaktärs-arketyp + spend_profile + partner-modell + level + auto-
+# generering av login-kod. Aktiverar v2 direkt så eleven hamnar på
+# /v2/onboarding vid första inloggning. Lärare kan skicka koden via
+# vårdnadshavar-mail (lagras men mailing implementeras senare).
+
+
+CharacterArchetype = Literal[
+    "random", "vard_underskoterska", "it_konsult_junior",
+    "butiksbitrade", "kassorska", "lar_vikarie",
+    "anstalld_kommun", "studerande_gymnasium",
+]
+
+
+class V2CreateStudentIn(BaseModel):
+    first_name: str = Field(min_length=1, max_length=80)
+    last_initial: Optional[str] = Field(default=None, max_length=2)
+    archetype: CharacterArchetype = "random"
+    spend_profile: Optional[SpendProfile] = None  # None → slumpa
+    partner_model: Optional[PartnerModel] = None  # None → slumpa
+    starting_level: int = Field(default=1, ge=1, le=3)
+    guardian_email: Optional[str] = Field(default=None, max_length=160)
+    family_id: Optional[int] = None
+
+
+class V2CreatedStudentRow(BaseModel):
+    student_id: int
+    student_name: str
+    login_code: str
+    archetype: CharacterArchetype
+    spend_profile: Optional[str]
+    partner_model: Optional[str]
+    starting_level: int
+    guardian_email: Optional[str]
+    created_at: datetime
+    last_login_at: Optional[datetime]
+    activated: bool  # has logged in at least once
+
+
+def _resolve_archetype(
+    archetype: CharacterArchetype,
+) -> tuple[str, str]:
+    """Returnerar (profession, employer) för en arketyp.
+
+    Random → väljer en av 7 fasta arketyper deterministiskt baserat på
+    timestamp. Det här är pedagogisk randomness — kan upprepas.
+    """
+    import random as _random
+    table: dict[CharacterArchetype, tuple[str, str]] = {
+        "vard_underskoterska": ("Undersköterska", "Vården"),
+        "it_konsult_junior": ("IT-konsult", "Konsultföretag"),
+        "butiksbitrade": ("Butiksbiträde", "Restaurang/butik"),
+        "kassorska": ("Kassörska", "Detaljhandel"),
+        "lar_vikarie": ("Lärar-vikarie", "Skolan"),
+        "anstalld_kommun": ("Anställd", "Kommun"),
+        "studerande_gymnasium": ("Studerande", "Gymnasium"),
+    }
+    if archetype == "random":
+        keys = list(table.keys())
+        return table[_random.choice(keys)]
+    return table[archetype]
+
+
+def _resolve_spend_profile(
+    profile: Optional[SpendProfile], level: int,
+) -> SpendProfile:
+    """Default per nivå: 1=sparsam, 2=balanserad, 3=slosa."""
+    if profile is not None:
+        return profile
+    return {1: "sparsam", 2: "balanserad", 3: "slosa"}.get(
+        level, "sparsam",
+    )
+
+
+def _resolve_partner_model(
+    partner: Optional[PartnerModel],
+) -> PartnerModel:
+    """Default-fördelning · 60% solo, 35% AI, 5% klasskompis."""
+    if partner is not None:
+        return partner
+    import random as _random
+    pick = _random.random()
+    if pick < 0.60:
+        return "solo"
+    if pick < 0.95:
+        return "ai"
+    return "klasskompis"
+
+
+@router.post(
+    "/teacher/students/create", response_model=V2CreatedStudentRow,
+)
+def v2_create_student(
+    payload: V2CreateStudentIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2CreatedStudentRow:
+    """Skapa elev med v2-karaktär · auto-aktiverad v2 + login-kod.
+
+    Sätter v2_spend_profile, v2_partner_model, v2_level på Student-
+    raden. Login-koden är 8-tecken alfanumerisk (samma format som
+    school.create_student använder).
+    """
+    from ..api.school import _gen_login_code, _create_profile_for_student
+    from ..school.engines import get_scope_engine, scope_for_student
+
+    teacher_id = _require_teacher(info)
+
+    display = payload.first_name.strip()
+    if payload.last_initial:
+        suffix = payload.last_initial.strip().rstrip(".")
+        if suffix:
+            display = f"{display} {suffix}."
+    profession, employer = _resolve_archetype(payload.archetype)
+    spend = _resolve_spend_profile(
+        payload.spend_profile, payload.starting_level,
+    )
+    partner = _resolve_partner_model(payload.partner_model)
+
+    with master_session() as s:
+        # Validera familj
+        if payload.family_id is not None:
+            from ..school.models import Family as _F
+            fam = (
+                s.query(_F)
+                .filter(
+                    _F.id == payload.family_id,
+                    _F.teacher_id == teacher_id,
+                )
+                .first()
+            )
+            if not fam:
+                raise HTTPException(404, "Familjen hittades inte")
+
+        # Generera unik login_code
+        code = None
+        for _ in range(5):
+            candidate = _gen_login_code()
+            if (
+                not s.query(Student)
+                .filter(Student.login_code == candidate)
+                .first()
+            ):
+                code = candidate
+                break
+        if code is None:
+            raise HTTPException(500, "Kunde inte generera login-kod")
+
+        student = Student(
+            teacher_id=teacher_id,
+            family_id=payload.family_id,
+            display_name=display,
+            login_code=code,
+        )
+        s.add(student); s.flush()
+
+        # V2-fält
+        student.v2_enabled = True
+        student.v2_spend_profile = spend
+        student.v2_partner_model = partner
+        student.v2_level = payload.starting_level
+        # När level > 1 → onboarding redan klar (eleven börjar på högre nivå)
+        if payload.starting_level > 1:
+            student.onboarding_completed = True
+        s.flush()
+
+        _create_profile_for_student(s, student)
+        # Skapa scope-DB direkt så kategorier seedas
+        get_scope_engine(scope_for_student(student))
+
+        # Guardian-mail returneras till klienten men persisteras inte
+        # i master-DB (kräver schema-tillägg). Mailar vi till föräldern
+        # senare så loggar vi till audit-trail då.
+        s.flush()
+        s.refresh(student)
+        sid = student.id
+        created_at = student.created_at
+        last_login = student.last_login_at
+
+    return V2CreatedStudentRow(
+        student_id=sid,
+        student_name=display,
+        login_code=code,
+        archetype=payload.archetype,
+        spend_profile=spend,
+        partner_model=partner,
+        starting_level=payload.starting_level,
+        guardian_email=payload.guardian_email,
+        created_at=created_at,
+        last_login_at=last_login,
+        activated=last_login is not None,
+    )
+
+
+class V2CreatedStudentsResponse(BaseModel):
+    total_count: int
+    pending_activation_count: int
+    rows: list[V2CreatedStudentRow]
+
+
+@router.get(
+    "/teacher/students/created", response_model=V2CreatedStudentsResponse,
+)
+def v2_list_created_students(
+    info: TokenInfo = Depends(require_token),
+) -> V2CreatedStudentsResponse:
+    """Lista alla skapade elever (med login-kod) för läraren.
+
+    Senast skapade först. Visar v2-fält + om eleven aktiverats
+    (loggat in minst en gång)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as s:
+        students = (
+            s.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .order_by(
+                Student.created_at.desc(),
+                Student.id.desc(),
+            )
+            .all()
+        )
+        rows: list[V2CreatedStudentRow] = []
+        pending = 0
+        for st in students:
+            row = V2CreatedStudentRow(
+                student_id=st.id,
+                student_name=st.display_name,
+                login_code=st.login_code or "",
+                archetype="random",
+                spend_profile=getattr(st, "v2_spend_profile", None),
+                partner_model=getattr(st, "v2_partner_model", None),
+                starting_level=getattr(st, "v2_level", None) or 1,
+                guardian_email=None,
+                created_at=st.created_at,
+                last_login_at=st.last_login_at,
+                activated=st.last_login_at is not None,
+            )
+            rows.append(row)
+            if not row.activated:
+                pending += 1
+    return V2CreatedStudentsResponse(
+        total_count=len(rows),
+        pending_activation_count=pending,
+        rows=rows,
+    )
+
+
 # === TeacherPedagogicsV2 (p-peda · Fas 2W) ===
 #
 # Speglar prototypens larare.html#p-peda: pedagogik-paket per aktör/
