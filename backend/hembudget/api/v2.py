@@ -30,10 +30,17 @@ from ..db.models import (
     InsurancePolicy, InsuranceClaim,
     UtilitySubscription, UtilityReading,
     RentalContract, RentalNotice,
+    PensionAssumption, StockHolding, StockTransaction,
 )
 from ..insurance import seed_default_insurance_policies
 from ..utility import seed_default_utility_subscriptions
 from ..rental import seed_default_rental
+from ..pension import (
+    seed_default_pension,
+    get_or_create_assumptions as _get_pension_assumptions,
+    isk_balance as _compute_isk_balance,
+    compute_pension_forecast,
+)
 from ..loans.credit import (
     compute_credit_check, latest_credit_check, latest_kalp,
 )
@@ -5794,6 +5801,652 @@ def teacher_rental_overview(
         summary=rent.summary,
         contract=rent.contract,
         notices=rent.notices,
+    )
+
+
+# === Pension (/v2/pension) — Fas 2G ===
+
+
+class V2PensionPillar(BaseModel):
+    label: str
+    name: str
+    detail: str
+    monthly_at_retire: float
+    source: Literal["auto", "agreement", "isk", "missing"]
+
+
+class V2PensionScenarios(BaseModel):
+    age_65_early: float
+    age_67_target: float
+    age_70_late: float
+
+
+class V2PensionAssumptionsOut(BaseModel):
+    retire_age: int
+    real_return_pct: float
+    ibb_yearly: float
+    delningstal: float
+    custom_isk_monthly: float
+    itp1_low_pct: float
+    itp1_high_pct: float
+    notes: Optional[str]
+
+
+class V2PensionResponse(BaseModel):
+    student_id: int
+    assumptions: V2PensionAssumptionsOut
+    years_to_retire: int
+    pillars: list[V2PensionPillar]
+    total_monthly_at_retire: float
+    scenarios: V2PensionScenarios
+    isk_current_value: float
+    has_collective_agreement: bool
+    age: Optional[int]
+    gross_salary_monthly: Optional[float]
+
+
+def _empty_pension(student_id: int) -> V2PensionResponse:
+    return V2PensionResponse(
+        student_id=student_id,
+        assumptions=V2PensionAssumptionsOut(
+            retire_age=67, real_return_pct=2.0,
+            ibb_yearly=80600, delningstal=17.0,
+            custom_isk_monthly=0, itp1_low_pct=4.5,
+            itp1_high_pct=30.0, notes=None,
+        ),
+        years_to_retire=0,
+        pillars=[],
+        total_monthly_at_retire=0,
+        scenarios=V2PensionScenarios(
+            age_65_early=0, age_67_target=0, age_70_late=0,
+        ),
+        isk_current_value=0,
+        has_collective_agreement=False,
+        age=None,
+        gross_salary_monthly=None,
+    )
+
+
+def _detect_collective_agreement(profile: Optional[StudentProfile]) -> bool:
+    """Heuristik: hög-lönade vita yrken + offentlig sektor har ofta
+    kollektivavtal. Undersköterska/lärare/sjuksköterska/utvecklare = ja.
+    Egenföretagare = nej.
+    """
+    if profile is None or not profile.profession:
+        return False
+    p = profile.profession.lower()
+    if "egenföret" in p or "frilans" in p or "soloentr" in p:
+        return False
+    return True
+
+
+@router.get("/pension", response_model=V2PensionResponse)
+def get_pension(
+    info: TokenInfo = Depends(require_token),
+) -> V2PensionResponse:
+    """Aggregat för pension /v2/pension (Aktör 09).
+
+    Riktig data: hämtar lön + ålder från StudentProfile (master-DB),
+    ISK-värde från FundHolding + StockHolding (scope-DB) +
+    PensionAssumption (lärar-justerbar singleton i scope-DB), beräknar
+    4 pelare + scenarier.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_pension(0)
+
+    age: Optional[int] = None
+    salary: Optional[float] = None
+    has_agreement = False
+    with master_session() as mdb:
+        prof = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if prof:
+            age = int(prof.age) if prof.age is not None else None
+            salary = (
+                float(prof.gross_salary_monthly)
+                if prof.gross_salary_monthly is not None else None
+            )
+            has_agreement = _detect_collective_agreement(prof)
+
+    with session_scope() as s:
+        a = _get_pension_assumptions(s)
+        forecast = compute_pension_forecast(
+            s,
+            age=age,
+            gross_salary_monthly=salary,
+            has_collective_agreement=has_agreement,
+        )
+        return V2PensionResponse(
+            student_id=info.student_id,
+            assumptions=V2PensionAssumptionsOut(
+                retire_age=int(a.retire_age),
+                real_return_pct=float(a.real_return_pct),
+                ibb_yearly=float(a.ibb_yearly),
+                delningstal=float(a.delningstal),
+                custom_isk_monthly=float(a.custom_isk_monthly),
+                itp1_low_pct=float(a.itp1_low_pct),
+                itp1_high_pct=float(a.itp1_high_pct),
+                notes=a.notes,
+            ),
+            years_to_retire=forecast["years_to_retire"],
+            pillars=[
+                V2PensionPillar(**p) for p in forecast["pillars"]
+            ],
+            total_monthly_at_retire=forecast["total_monthly_at_retire"],
+            scenarios=V2PensionScenarios(**forecast["scenarios"]),
+            isk_current_value=forecast["isk_current_value"],
+            has_collective_agreement=has_agreement,
+            age=age,
+            gross_salary_monthly=salary,
+        )
+
+
+class V2PensionAssumptionsPatch(BaseModel):
+    retire_age: Optional[int] = Field(None, ge=60, le=80)
+    real_return_pct: Optional[float] = Field(None, ge=-2, le=15)
+    custom_isk_monthly: Optional[float] = Field(None, ge=0)
+    itp1_low_pct: Optional[float] = Field(None, ge=0, le=15)
+    itp1_high_pct: Optional[float] = Field(None, ge=0, le=50)
+    notes: Optional[str] = None
+
+
+@router.patch(
+    "/pension/assumptions",
+    response_model=V2PensionAssumptionsOut,
+)
+def patch_pension_assumptions(
+    body: V2PensionAssumptionsPatch,
+    info: TokenInfo = Depends(require_token),
+) -> V2PensionAssumptionsOut:
+    """Eleven uppdaterar t.ex. custom_isk_monthly (vad jag sparar /mån)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        a = _get_pension_assumptions(s)
+        if body.retire_age is not None:
+            a.retire_age = body.retire_age
+        if body.real_return_pct is not None:
+            a.real_return_pct = Decimal(str(body.real_return_pct))
+        if body.custom_isk_monthly is not None:
+            a.custom_isk_monthly = Decimal(str(body.custom_isk_monthly))
+        if body.itp1_low_pct is not None:
+            a.itp1_low_pct = Decimal(str(body.itp1_low_pct))
+        if body.itp1_high_pct is not None:
+            a.itp1_high_pct = Decimal(str(body.itp1_high_pct))
+        if body.notes is not None:
+            a.notes = body.notes
+        s.flush()
+        return V2PensionAssumptionsOut(
+            retire_age=int(a.retire_age),
+            real_return_pct=float(a.real_return_pct),
+            ibb_yearly=float(a.ibb_yearly),
+            delningstal=float(a.delningstal),
+            custom_isk_monthly=float(a.custom_isk_monthly),
+            itp1_low_pct=float(a.itp1_low_pct),
+            itp1_high_pct=float(a.itp1_high_pct),
+            notes=a.notes,
+        )
+
+
+# Lärar-endpoints för pension
+@router.post(
+    "/teacher/students/{student_id}/pension/seed-default",
+    response_model=dict,
+)
+def teacher_seed_default_pension(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Skapa singleton PensionAssumption om saknas i elevens scope."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            n = seed_default_pension(s)
+    return {"student_id": student_id, "created": n}
+
+
+@router.patch(
+    "/teacher/students/{student_id}/pension/assumptions",
+    response_model=V2PensionAssumptionsOut,
+)
+def teacher_patch_pension_assumptions(
+    student_id: int,
+    body: V2PensionAssumptionsPatch,
+    info: TokenInfo = Depends(require_token),
+) -> V2PensionAssumptionsOut:
+    """Lärare justerar elevens pension-antaganden (riktålder, real
+    avkastning, ITP1-procent)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            a = _get_pension_assumptions(s)
+            if body.retire_age is not None:
+                a.retire_age = body.retire_age
+            if body.real_return_pct is not None:
+                a.real_return_pct = Decimal(str(body.real_return_pct))
+            if body.custom_isk_monthly is not None:
+                a.custom_isk_monthly = Decimal(
+                    str(body.custom_isk_monthly),
+                )
+            if body.itp1_low_pct is not None:
+                a.itp1_low_pct = Decimal(str(body.itp1_low_pct))
+            if body.itp1_high_pct is not None:
+                a.itp1_high_pct = Decimal(str(body.itp1_high_pct))
+            if body.notes is not None:
+                a.notes = body.notes
+            s.flush()
+            return V2PensionAssumptionsOut(
+                retire_age=int(a.retire_age),
+                real_return_pct=float(a.real_return_pct),
+                ibb_yearly=float(a.ibb_yearly),
+                delningstal=float(a.delningstal),
+                custom_isk_monthly=float(a.custom_isk_monthly),
+                itp1_low_pct=float(a.itp1_low_pct),
+                itp1_high_pct=float(a.itp1_high_pct),
+                notes=a.notes,
+            )
+
+
+class V2TeacherPensionOverview(BaseModel):
+    student_id: int
+    student_name: str
+    forecast: V2PensionResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/pension-overview",
+    response_model=V2TeacherPensionOverview,
+)
+def teacher_pension_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherPensionOverview:
+    """Lärar-vy · full insyn i elevens pension (samma forecast som elev)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        _outer_sid = student_id
+
+        class _Info:
+            role = "student"
+            student_id = _outer_sid
+
+        forecast = get_pension(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherPensionOverview(
+        student_id=student_id,
+        student_name=student_name,
+        forecast=forecast,
+    )
+
+
+# === Avanza · ISK + aktiehandel (/v2/avanza) — Fas 2G ===
+
+
+class V2AvanzaFundOut(BaseModel):
+    id: int
+    fund_name: str
+    units: Optional[float]
+    market_value: float
+    last_price: Optional[float]
+    change_pct: Optional[float]
+    day_change_pct: Optional[float]
+    last_update_date: _date
+
+
+class V2AvanzaStockOut(BaseModel):
+    id: int
+    ticker: str
+    quantity: int
+    avg_cost: float
+    last_price: Optional[float]
+    market_value: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: Optional[float]
+
+
+class V2AvanzaTradeRow(BaseModel):
+    id: int
+    ticker: str
+    side: str
+    quantity: int
+    price: float
+    courtage: float
+    total_amount: float
+    realized_pnl: Optional[float]
+    student_rationale: Optional[str]
+    executed_at: datetime
+
+
+class V2AvanzaSummary(BaseModel):
+    isk_account_id: Optional[int]
+    isk_account_name: Optional[str]
+    cash_balance: float
+    funds_value: float
+    stocks_value: float
+    total_value: float
+    schablonskatt_estimate: float  # 0.89 % av kapitalunderlag (proxy)
+    fund_count: int
+    stock_count: int
+    monthly_savings: float  # från PensionAssumption.custom_isk_monthly
+
+
+class V2AvanzaResponse(BaseModel):
+    student_id: int
+    summary: V2AvanzaSummary
+    funds: list[V2AvanzaFundOut]
+    stocks: list[V2AvanzaStockOut]
+    recent_trades: list[V2AvanzaTradeRow]
+
+
+def _empty_avanza(student_id: int) -> V2AvanzaResponse:
+    return V2AvanzaResponse(
+        student_id=student_id,
+        summary=V2AvanzaSummary(
+            isk_account_id=None, isk_account_name=None,
+            cash_balance=0, funds_value=0, stocks_value=0,
+            total_value=0, schablonskatt_estimate=0,
+            fund_count=0, stock_count=0, monthly_savings=0,
+        ),
+        funds=[], stocks=[], recent_trades=[],
+    )
+
+
+def _isk_cash_balance(s, account_id: int) -> Decimal:
+    """Cash-saldo för ett ISK-konto = opening_balance + sum(transactions)."""
+    acc = s.get(Account, account_id)
+    if acc is None:
+        return Decimal("0")
+    base = Decimal(str(acc.opening_balance or 0))
+    from sqlalchemy import func as _sa_func_local
+    total = (
+        s.query(_sa_func_local.coalesce(
+            _sa_func_local.sum(Transaction.amount), 0,
+        ))
+        .filter(Transaction.account_id == account_id)
+        .scalar()
+    )
+    return base + Decimal(str(total or 0))
+
+
+@router.get("/avanza", response_model=V2AvanzaResponse)
+def get_avanza(
+    info: TokenInfo = Depends(require_token),
+) -> V2AvanzaResponse:
+    """Aggregat för Avanza ISK /v2/avanza (Aktör 05).
+
+    Hittar första ISK-kontot, listar fonder + aktier + senaste trades,
+    beräknar schablonskatt ≈ 0,89 % av kapitalunderlaget.
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_avanza(0)
+
+    with session_scope() as s:
+        isk = (
+            s.query(Account)
+            .filter(Account.type == "isk")
+            .order_by(Account.id.asc())
+            .first()
+        )
+        if isk is None:
+            # Inget ISK-konto än — men visa ändå månads-spar-intentionen
+            # från PensionAssumption (eleven kan ha satt det innan kontot
+            # är skapat)
+            pa = _get_pension_assumptions(s)
+            empty = _empty_avanza(info.student_id)
+            empty.summary.monthly_savings = float(pa.custom_isk_monthly)
+            return empty
+
+        funds_q = (
+            s.query(FundHolding)
+            .filter(FundHolding.account_id == isk.id)
+            .order_by(FundHolding.market_value.desc())
+            .all()
+        )
+        funds_total = sum(
+            float(f.market_value or 0) for f in funds_q
+        )
+
+        stocks_q = (
+            s.query(StockHolding)
+            .filter(StockHolding.account_id == isk.id)
+            .all()
+        )
+
+        # Hämta senaste kurser för innehaven
+        from ..school.stock_models import LatestStockQuote
+        tickers = list({h.ticker for h in stocks_q})
+        price_by_ticker: dict[str, float] = {}
+        if tickers:
+            with master_session() as msdb:
+                quotes = (
+                    msdb.query(LatestStockQuote)
+                    .filter(LatestStockQuote.ticker.in_(tickers))
+                    .all()
+                )
+                price_by_ticker = {
+                    q.ticker: float(q.last) for q in quotes
+                }
+
+        stocks_out: list[V2AvanzaStockOut] = []
+        stocks_total = 0.0
+        for h in stocks_q:
+            last = price_by_ticker.get(h.ticker)
+            avg = float(h.avg_cost)
+            qty = int(h.quantity)
+            mv = (last if last is not None else avg) * qty
+            stocks_total += mv
+            pnl = mv - avg * qty
+            pnl_pct = (pnl / (avg * qty) * 100.0) if avg > 0 else None
+            stocks_out.append(V2AvanzaStockOut(
+                id=h.id, ticker=h.ticker, quantity=qty,
+                avg_cost=avg, last_price=last,
+                market_value=round(mv, 2),
+                unrealized_pnl=round(pnl, 2),
+                unrealized_pnl_pct=(
+                    round(pnl_pct, 2) if pnl_pct is not None else None
+                ),
+            ))
+
+        cash = float(_isk_cash_balance(s, isk.id))
+        total = funds_total + stocks_total + cash
+        # Schablonskatt 2026 ≈ 0.89 % av snitt-kapital (proxy: nuvärde)
+        sk = round(total * 0.0089, 0)
+
+        # Senaste 10 trades
+        trades = (
+            s.query(StockTransaction)
+            .filter(StockTransaction.account_id == isk.id)
+            .order_by(StockTransaction.executed_at.desc())
+            .limit(10)
+            .all()
+        )
+
+        # Lärar-månads-spar (från PensionAssumption)
+        pa = _get_pension_assumptions(s)
+        monthly_save = float(pa.custom_isk_monthly)
+
+        return V2AvanzaResponse(
+            student_id=info.student_id,
+            summary=V2AvanzaSummary(
+                isk_account_id=isk.id,
+                isk_account_name=isk.name,
+                cash_balance=round(cash, 2),
+                funds_value=round(funds_total, 2),
+                stocks_value=round(stocks_total, 2),
+                total_value=round(total, 2),
+                schablonskatt_estimate=sk,
+                fund_count=len(funds_q),
+                stock_count=len(stocks_q),
+                monthly_savings=monthly_save,
+            ),
+            funds=[
+                V2AvanzaFundOut(
+                    id=f.id, fund_name=f.fund_name,
+                    units=(
+                        float(f.units) if f.units is not None else None
+                    ),
+                    market_value=float(f.market_value),
+                    last_price=(
+                        float(f.last_price)
+                        if f.last_price is not None else None
+                    ),
+                    change_pct=f.change_pct,
+                    day_change_pct=f.day_change_pct,
+                    last_update_date=f.last_update_date,
+                )
+                for f in funds_q
+            ],
+            stocks=stocks_out,
+            recent_trades=[
+                V2AvanzaTradeRow(
+                    id=t.id, ticker=t.ticker, side=t.side,
+                    quantity=t.quantity, price=float(t.price),
+                    courtage=float(t.courtage),
+                    total_amount=float(t.total_amount),
+                    realized_pnl=(
+                        float(t.realized_pnl)
+                        if t.realized_pnl is not None else None
+                    ),
+                    student_rationale=t.student_rationale,
+                    executed_at=t.executed_at,
+                )
+                for t in trades
+            ],
+        )
+
+
+class V2StockMarketRow(BaseModel):
+    ticker: str
+    name: str
+    sector: Optional[str]
+    currency: str
+    last: float
+    change_pct: Optional[float]
+    bid: Optional[float]
+    ask: Optional[float]
+
+
+class V2StockMarketResponse(BaseModel):
+    stocks: list[V2StockMarketRow]
+    count: int
+    market_open: bool
+
+
+@router.get("/aktier/market", response_model=V2StockMarketResponse)
+def get_stock_market(
+    info: TokenInfo = Depends(require_token),
+) -> V2StockMarketResponse:
+    """Hela aktieuniversumet (StockMaster + LatestStockQuote) — för
+    aktiehandel-vyn. Tillgängligt för alla autentiserade användare
+    (även lärare) eftersom det är masterdata utan elev-koppling."""
+    from ..school.stock_models import StockMaster, LatestStockQuote
+    with master_session() as msdb:
+        masters = msdb.query(StockMaster).all()
+        latest = {
+            q.ticker: q
+            for q in msdb.query(LatestStockQuote).all()
+        }
+        rows: list[V2StockMarketRow] = []
+        for m in masters:
+            q = latest.get(m.ticker)
+            if q is None:
+                continue
+            rows.append(V2StockMarketRow(
+                ticker=m.ticker,
+                name=getattr(m, "name", m.ticker),
+                sector=getattr(m, "sector", None),
+                currency=getattr(m, "currency", "SEK"),
+                last=float(q.last),
+                change_pct=q.change_pct,
+                bid=float(q.bid) if q.bid is not None else None,
+                ask=float(q.ask) if q.ask is not None else None,
+            ))
+        # Marknad öppen = senaste quote inom 30 min
+        from datetime import datetime as _dt_market, timedelta as _td_market
+        now = _dt_market.utcnow()
+        market_open = any(
+            q.ts and (now - q.ts) < _td_market(minutes=30)
+            for q in latest.values()
+        )
+        return V2StockMarketResponse(
+            stocks=rows, count=len(rows), market_open=market_open,
+        )
+
+
+class V2TeacherAvanzaOverview(BaseModel):
+    student_id: int
+    student_name: str
+    avanza: V2AvanzaResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/avanza-overview",
+    response_model=V2TeacherAvanzaOverview,
+)
+def teacher_avanza_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherAvanzaOverview:
+    """Lärar-vy · full insyn i elevens ISK + fonder + aktier + ledger."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        _outer_sid = student_id
+
+        class _Info:
+            role = "student"
+            student_id = _outer_sid
+
+        avanza = get_avanza(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherAvanzaOverview(
+        student_id=student_id,
+        student_name=student_name,
+        avanza=avanza,
     )
 
 

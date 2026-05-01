@@ -3393,3 +3393,376 @@ def test_v2_teacher_rental_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2G · Pension + Avanza ISK + aktiehandel ===
+
+
+def _seed_pension_profile(sid: int, **overrides) -> None:
+    """Seedа en standard-profil för pension/avanza-tester."""
+    defaults = dict(
+        student_id=sid,
+        profession="Sjuksköterska",
+        employer="Sthlm Sjukhus",
+        gross_salary_monthly=32000,
+        net_salary_monthly=23500,
+        tax_rate_effective=0.27,
+        age=28, city="Stockholm",
+        family_status="ensam", housing_type="hyresratt",
+        housing_monthly=7240, personality="blandad",
+    )
+    defaults.update(overrides)
+    with master_session() as db:
+        db.add(StudentProfile(**defaults))
+        db.commit()
+
+
+def test_v2_pension_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/pension")
+    assert r.status_code == 401
+
+
+def test_v2_pension_for_teacher_returns_empty(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/pension",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+    assert r.json()["pillars"] == []
+
+
+def test_v2_pension_with_profile_returns_4_pelare(fx) -> None:
+    """28-åring med 32k lön → 4 pelare beräknas."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+    r = client.get(
+        "/v2/pension",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["age"] == 28
+    assert data["gross_salary_monthly"] == 32000
+    assert data["years_to_retire"] == 67 - 28
+    assert data["has_collective_agreement"] is True
+    assert len(data["pillars"]) == 4
+    pillar_names = {p["name"] for p in data["pillars"]}
+    assert "Inkomstpension" in pillar_names
+    assert "Premiepension" in pillar_names
+    assert "Tjänstepension ITP1" in pillar_names
+    assert "Privat (Avanza ISK)" in pillar_names
+    # Total ska vara > 0 (alla 4 pelare > 0 vid full karriär)
+    assert data["total_monthly_at_retire"] > 0
+    # Inkomstpension + premiepension > 0 (auto)
+    auto_pillars = [
+        p for p in data["pillars"] if p["source"] == "auto"
+    ]
+    assert all(p["monthly_at_retire"] > 0 for p in auto_pillars)
+
+
+def test_v2_pension_egenforetagare_no_itp1(fx) -> None:
+    """Egenföretagare → has_collective_agreement = False, ITP1 = 0."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid, profession="Egenföretagare frilans")
+    r = client.get(
+        "/v2/pension",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["has_collective_agreement"] is False
+    itp = [p for p in data["pillars"] if "ITP1" in p["name"]][0]
+    assert itp["monthly_at_retire"] == 0
+    assert itp["source"] == "missing"
+
+
+def test_v2_pension_scenarios_increase_with_age(fx) -> None:
+    """65 år tidigt < 67 mål < 70 sent."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+    r = client.get(
+        "/v2/pension",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    sc = data["scenarios"]
+    assert sc["age_65_early"] < sc["age_67_target"]
+    assert sc["age_70_late"] > sc["age_67_target"]
+
+
+def test_v2_student_patches_isk_monthly_savings(fx) -> None:
+    """Eleven sätter custom_isk_monthly = 600 → påverkar pelare 3."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+    # Set isk monthly
+    r = client.patch(
+        "/v2/pension/assumptions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"custom_isk_monthly": 600},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["custom_isk_monthly"] == 600
+
+    # Hämta pension igen — pelare 3 ska ha högre belopp än innan
+    r2 = client.get(
+        "/v2/pension",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    privat = [
+        p for p in r2.json()["pillars"]
+        if p["source"] == "isk"
+    ][0]
+    assert privat["monthly_at_retire"] > 0
+
+
+def test_v2_teacher_seed_default_pension(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/pension/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["created"] == 1
+    # Idempotent
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/pension/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["created"] == 0
+
+
+def test_v2_teacher_patches_pension_assumptions(fx) -> None:
+    """Lärare sätter retire_age=69 → years_to_retire ändras."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+    r = client.patch(
+        f"/v2/teacher/students/{sid}/pension/assumptions",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"retire_age": 69, "real_return_pct": 3.5},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["retire_age"] == 69
+    assert r.json()["real_return_pct"] == 3.5
+
+    # Pension-prognos ska reflektera 69-årig riktålder
+    r2 = client.get(
+        "/v2/pension",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.json()["years_to_retire"] == 69 - 28
+
+
+def test_v2_teacher_pension_overview(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+    r = client.get(
+        f"/v2/teacher/students/{sid}/pension-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["student_name"]
+    assert len(data["forecast"]["pillars"]) == 4
+
+
+def test_v2_avanza_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/avanza")
+    assert r.status_code == 401
+
+
+def test_v2_avanza_no_isk_account_returns_empty(fx) -> None:
+    """Eleven utan ISK-konto → tom payload."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/avanza",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["isk_account_id"] is None
+    assert data["funds"] == []
+    assert data["stocks"] == []
+
+
+def test_v2_avanza_with_isk_account_and_funds(fx) -> None:
+    """Skapa ISK-konto + 1 fond → returneras."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, FundHolding as _FH
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+
+    def seed(s) -> None:
+        isk = _Acc(
+            name="Avanza ISK", bank="Avanza", type="isk",
+            currency="SEK", opening_balance=_D("1200"),
+            opening_balance_date=_d(2026, 1, 1),
+        )
+        s.add(isk)
+        s.flush()
+        s.add(_FH(
+            account_id=isk.id, fund_name="Globalfond",
+            units=_D("12.5"), market_value=_D("3240"),
+            last_price=_D("259"), change_pct=2.4,
+            currency="SEK", last_update_date=_d.today(),
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/avanza",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["isk_account_id"] is not None
+    assert data["summary"]["isk_account_name"] == "Avanza ISK"
+    assert data["summary"]["fund_count"] == 1
+    assert data["summary"]["funds_value"] == 3240
+    assert len(data["funds"]) == 1
+    assert data["funds"][0]["fund_name"] == "Globalfond"
+    # Schablonskatt: 0.89 % av (3240 + 1200) = ~40
+    assert data["summary"]["schablonskatt_estimate"] == round(
+        4440 * 0.0089, 0,
+    )
+
+
+def test_v2_avanza_pension_isk_savings_visible(fx) -> None:
+    """Custom_isk_monthly från PensionAssumption visas i Avanza-summary."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+    client.patch(
+        "/v2/pension/assumptions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"custom_isk_monthly": 800},
+    )
+    r = client.get(
+        "/v2/avanza",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.json()["summary"]["monthly_savings"] == 800
+
+
+def test_v2_pension_wellbeing_isk_active_bonus(fx) -> None:
+    """ISK med innehav → +2 growth i wellbeing."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, FundHolding as _FH
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+
+    def seed(s) -> None:
+        isk = _Acc(
+            name="Avanza ISK", bank="Avanza", type="isk",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d(2026, 1, 1),
+        )
+        s.add(isk)
+        s.flush()
+        s.add(_FH(
+            account_id=isk.id, fund_name="Globalfond",
+            market_value=_D("8460"),
+            last_update_date=_d.today(),
+        ))
+
+    _seed_scope(sid, seed)
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    isk_factors = [
+        f for f in result.factors
+        if "isk-portf" in f.explanation.lower()
+    ]
+    assert len(isk_factors) >= 1
+    assert isk_factors[0].dimension == "economy"
+    assert isk_factors[0].points == 2
+
+
+def test_v2_pension_wellbeing_no_isk_age_25_penalty(fx) -> None:
+    """Eleven > 25 år utan ISK → -2 growth."""
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)  # age=28
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+    no_isk = [
+        f for f in result.factors
+        if "tappar tidsfönstret" in f.explanation.lower()
+    ]
+    assert len(no_isk) >= 1
+    assert no_isk[0].dimension == "economy"
+    assert no_isk[0].points == -2
+
+
+def test_v2_teacher_avanza_overview(fx) -> None:
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, FundHolding as _FH
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_pension_profile(sid)
+
+    def seed(s) -> None:
+        isk = _Acc(
+            name="Avanza ISK", bank="Avanza", type="isk",
+            currency="SEK", opening_balance=_D("500"),
+            opening_balance_date=_d(2026, 1, 1),
+        )
+        s.add(isk)
+        s.flush()
+        s.add(_FH(
+            account_id=isk.id, fund_name="Sverige",
+            market_value=_D("2180"),
+            last_update_date=_d.today(),
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/avanza-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["avanza"]["summary"]["isk_account_name"] == "Avanza ISK"
+    assert data["avanza"]["summary"]["fund_count"] == 1
+
+
+def test_v2_teacher_pension_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/pension/seed-default",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

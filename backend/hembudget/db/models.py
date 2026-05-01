@@ -991,6 +991,56 @@ class UtilityReading(TenantMixin, Base):
     )
 
 
+class PensionAssumption(TenantMixin, Base):
+    """Lärar-justerbara antaganden för pensions-prognosen (Aktör 09).
+
+    En rad per scope (singleton). Skapas av seed_default_pension om
+    saknas. Antaganden som inte är politiskt definierade (riktålder
+    67, real avkastning 2 %, IBB 2026) men kan tweakas av läraren.
+    """
+    __tablename__ = "pension_assumptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Riktålder för pension (2026 = 67, höjs till 69 år 2030)
+    retire_age: Mapped[int] = mapped_column(
+        Integer, default=67, server_default="67", nullable=False,
+    )
+    # Antagen real årlig avkastning på pensionskapitalet
+    real_return_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("2.0"),
+        server_default="2.0", nullable=False,
+    )
+    # Inkomstbasbelopp 2026 = 80 600 kr/år (årligt)
+    ibb_yearly: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("80600"),
+        server_default="80600", nullable=False,
+    )
+    # Delningstal (livslängd-faktor) vid riktålder — ~17 vid 67 år
+    delningstal: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("17.0"),
+        server_default="17.0", nullable=False,
+    )
+    # Privatsparande/månad (Pelare 3) — om eleven sparar utöver ISK
+    custom_isk_monthly: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("0"),
+        server_default="0", nullable=False,
+    )
+    # ITP1-procent under 7.5 IBB (default 4.5 %)
+    itp1_low_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("4.5"),
+        server_default="4.5", nullable=False,
+    )
+    # ITP1-procent över 7.5 IBB (default 30 %)
+    itp1_high_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("30.0"),
+        server_default="30.0", nullable=False,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class RentalContract(TenantMixin, Base):
     """Hyreskontrakt (eller bostadsrätts-info) för Aktör 08 · Hyresvärden.
 

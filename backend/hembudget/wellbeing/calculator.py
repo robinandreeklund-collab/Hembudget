@@ -542,7 +542,7 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         ]
         if expiring:
             factors.append(WellbeingFactor(
-                "growth", 0,
+                "economy", 0,
                 f"{len(expiring)} bindning"
                 f"{'ar' if len(expiring) > 1 else ''} utgår inom 30 "
                 "dagar — chans att omförhandla.",
@@ -679,6 +679,70 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         import logging
         logging.getLogger(__name__).exception(
             "calculate_wellbeing: rental-factor misslyckades",
+        )
+
+    # Pension (PensionAssumption + ISK-värde) — påverkar economy + safety
+    # ISK = privat pensionssparande, klassas som economy (långsiktig
+    # ekonomisk styrka). Pension i sig påverkar safety.
+    try:
+        from ..pension import isk_balance as _isk_bal
+        from ..school.models import StudentProfile as _SP_pen
+        from ..db.models import Account as _Acc_pen
+
+        _isk_now = float(_isk_bal(session))
+        # Hämta StudentProfile (master-DB) för ålder
+        try:
+            from ..school.engines import master_session as _ms_pen
+            with _ms_pen() as _msdb_pen:
+                _prof_pen = (
+                    _msdb_pen.query(_SP_pen)
+                    .order_by(_SP_pen.student_id.desc())
+                    .first()
+                )
+                _age_pen = (
+                    int(_prof_pen.age)
+                    if _prof_pen and _prof_pen.age is not None
+                    else None
+                )
+        except Exception:
+            _age_pen = None
+
+        # ISK aktivt (har innehav) → +economy
+        if _isk_now > 0:
+            economy += 2
+            factors.append(WellbeingFactor(
+                "economy", 2,
+                f"ISK-portfölj {int(_isk_now):,} kr — privat-sparande "
+                "för pension igång, ränta-på-ränta jobbar för dig.".replace(
+                    ",", " ",
+                ),
+            ))
+        elif _age_pen is not None and _age_pen >= 25:
+            # Ålder >= 25 utan ISK → tappar tidsfönstret
+            economy -= 2
+            factors.append(WellbeingFactor(
+                "economy", -2,
+                f"{_age_pen} år utan privat-sparande till pension — "
+                "tappar tidsfönstret för ränta-på-ränta.",
+            ))
+
+        # ISK-konto finns men 0 kr → minst medvetenhet (info, ingen impact)
+        has_isk = (
+            session.query(_Acc_pen)
+            .filter(_Acc_pen.type == "isk")
+            .first()
+            is not None
+        )
+        if has_isk and _isk_now == 0:
+            factors.append(WellbeingFactor(
+                "economy", 0,
+                "ISK-konto finns men inget innehav — börja månadsspara "
+                "för att aktivera ränta-på-ränta.",
+            ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: pension-factor misslyckades",
         )
 
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
