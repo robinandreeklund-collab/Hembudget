@@ -1629,6 +1629,51 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/teacher/maria-list (Fas 2V · p-maria) ===
+
+export type V2MariaRoundCompact = {
+  round_no: number;
+  student_message: string;
+  employer_response: string;
+  proposed_pct: number | null;
+  proposed_salary: number | null;
+  created_at: string;
+};
+
+export type V2MariaListItem = {
+  negotiation_id: number;
+  student_id: number;
+  student_name: string;
+  profession: string;
+  employer: string;
+  starting_salary: number;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  final_salary: number | null;
+  final_pct: number | null;
+  current_round_no: number;
+  max_rounds: number;
+  rounds: V2MariaRoundCompact[];
+  near_pain_threshold: boolean;
+  avtal_norm_pct: number | null;
+};
+
+export type V2MariaListSummary = {
+  total_count: number;
+  active_count: number;
+  completed_count: number;
+  abandoned_count: number;
+  avg_round_no: number;
+  near_pain_count: number;
+};
+
+export type V2MariaListResponse = {
+  summary: V2MariaListSummary;
+  active: V2MariaListItem[];
+  completed: V2MariaListItem[];
+};
+
 // === /v2/teacher/mailboxes (Fas 2U · p-mail) ===
 
 export type V2MailboxStatus = "klar" | "i_fas" | "släper" | "risk";
@@ -2390,6 +2435,9 @@ export const v2Api = {
       "/v2/teacher/mailboxes/bulk-inject",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  // === /v2/teacher/maria-list (Fas 2V) ===
+  teacherMariaList: () =>
+    api<V2MariaListResponse>("/v2/teacher/maria-list"),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

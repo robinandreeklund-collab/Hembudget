@@ -310,7 +310,7 @@ function SideStack({
           <div className="s-card-h">
             {data.pending_negotiations.length} elever <em>i Maria</em>
           </div>
-          {data.pending_negotiations.map((n) => (
+          {data.pending_negotiations.slice(0, 3).map((n) => (
             <button
               key={n.negotiation_id}
               className="maria-mini"
@@ -329,6 +329,13 @@ function SideStack({
               </div>
             </button>
           ))}
+          <Link
+            className="attn-go"
+            to="/teacher/v2/maria"
+            style={{ display: "block", paddingTop: 6 }}
+          >
+            Se alla {data.pending_negotiations.length} förhandlingar →
+          </Link>
         </div>
       )}
 
