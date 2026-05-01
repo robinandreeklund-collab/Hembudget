@@ -783,6 +783,48 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: bookkeeping-factor misslyckades",
         )
 
+    # Simulator-användning — pedagogiskt: planering räknas. Sparade
+    # scenarier (Scenario.kind in invest/loan) visar att eleven har
+    # tänkt långsiktigt.
+    try:
+        from ..db.models import Scenario as _Sc_sim
+        invest_rows = (
+            session.query(_Sc_sim)
+            .filter(_Sc_sim.kind == "invest")
+            .all()
+        )
+        if invest_rows:
+            longest = max(
+                int((r.params or {}).get("years", 0))
+                for r in invest_rows
+            )
+            if longest >= 20:
+                economy += 1
+                factors.append(WellbeingFactor(
+                    "economy", 1,
+                    f"Du har simulerat investerings-scenario med "
+                    f"{longest} års horisont — långsiktig planering "
+                    "räknas.",
+                ))
+        loan_rows = (
+            session.query(_Sc_sim)
+            .filter(_Sc_sim.kind == "loan")
+            .all()
+        )
+        if loan_rows:
+            # Räkna ut låne-scenarier räcker som "medvetenhet"
+            factors.append(WellbeingFactor(
+                "economy", 0,
+                f"Du har räknat på {len(loan_rows)} låne-scenario"
+                f"{'r' if len(loan_rows) > 1 else ''} — du förstår "
+                "vad lån kostar innan du tecknar.",
+            ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: simulator-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:

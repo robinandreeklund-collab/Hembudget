@@ -4329,3 +4329,267 @@ def test_v2_teacher_moduler_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2J · Investeringssim + Lånekalkylator ===
+
+
+def test_v2_simulator_investment_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.post("/v2/simulator/investment", json={
+        "start_amount": 0, "monthly_save": 600,
+        "return_pct": 7, "years": 40,
+    })
+    assert r.status_code == 401
+
+
+def test_v2_simulator_investment_basic_isk(fx) -> None:
+    """600 kr/mån × 40 år vid 7 % real avk + 0,89 % schablon → ~1,2 Mkr."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "start_amount": 0,
+            "monthly_save": 600,
+            "return_pct": 7,
+            "years": 40,
+            "schablonskatt_pct": 0.89,
+            "is_isk": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["total_invested"] == 600 * 12 * 40
+    # Final value bör vara > 1 000 000 vid 7 % över 40 år
+    assert data["final_value"] > 1_000_000
+    assert data["total_growth"] > 0
+    assert len(data["yearly_balances"]) == 40
+    # ISK-skatt > 0
+    assert data["total_taxes"] > 0
+
+
+def test_v2_simulator_investment_compare_modes(fx) -> None:
+    """ISK ger lägre skatt än depå för samma scenario."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    common = {
+        "start_amount": 0,
+        "monthly_save": 1000,
+        "return_pct": 7,
+        "years": 30,
+    }
+    isk = client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={**common, "is_isk": True},
+    ).json()
+    depo = client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={**common, "is_isk": False},
+    ).json()
+    # ISK har lägre total skatt
+    assert isk["total_taxes"] < depo["total_taxes"]
+    # ISK ger högre final
+    assert isk["final_value"] > depo["final_value"]
+
+
+def test_v2_simulator_investment_save_scenario(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "start_amount": 8460,
+            "monthly_save": 600,
+            "return_pct": 7,
+            "years": 40,
+            "save_as_scenario": True,
+            "scenario_name": "600 i 40 år",
+        },
+    )
+    assert r.status_code == 200, r.text
+    sid = r.json()["saved_scenario_id"]
+    assert sid is not None
+
+    # Lista
+    list_r = client.get(
+        "/v2/simulator/scenarios",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    rows = list_r.json()
+    assert len(rows) == 1
+    assert rows[0]["name"] == "600 i 40 år"
+    assert rows[0]["kind"] == "invest"
+
+
+def test_v2_simulator_loan_annuity(fx) -> None:
+    """Annuitet: 2,4 Mkr · 3,8 % · 240 mån → månadsbet ~14 270."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/simulator/loan",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "principal": 2_400_000,
+            "interest_rate_pct": 3.8,
+            "term_months": 240,
+            "amortization_type": "annuity",
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Annuitet på 240 mån ger ~14 270 / mån
+    assert 14_000 < data["monthly_payment_baseline"] < 14_500
+    assert data["total_interest_baseline"] > 1_000_000
+    assert data["payoff_months_with_extra"] == 240
+    assert data["months_saved"] == 0  # ingen extra
+    assert len(data["schedule_first_12"]) == 12
+
+
+def test_v2_simulator_loan_extra_amortization(fx) -> None:
+    """Extra 500/mån på 38 200 CSN-lån → räntebesparing > 0."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/simulator/loan",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "principal": 38_200,
+            "interest_rate_pct": 1.7,
+            "term_months": 247,
+            "amortization_type": "annuity",
+            "extra_amortization_monthly": 500,
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["interest_savings"] > 0
+    assert data["months_saved"] > 0
+
+
+def test_v2_simulator_loan_save_and_list(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/simulator/loan",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "principal": 100000,
+            "interest_rate_pct": 5.0,
+            "term_months": 120,
+            "amortization_type": "annuity",
+            "save_as_scenario": True,
+        },
+    )
+    assert r.json()["saved_scenario_id"] is not None
+    list_r = client.get(
+        "/v2/simulator/scenarios?kind=loan",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert len(list_r.json()) == 1
+    assert list_r.json()[0]["kind"] == "loan"
+
+
+def test_v2_simulator_delete_scenario(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "start_amount": 0, "monthly_save": 100,
+            "return_pct": 5, "years": 5,
+            "save_as_scenario": True,
+        },
+    )
+    sid = r.json()["saved_scenario_id"]
+    del_r = client.delete(
+        f"/v2/simulator/scenarios/{sid}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert del_r.status_code == 204
+    list_r = client.get(
+        "/v2/simulator/scenarios",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert all(r["id"] != sid for r in list_r.json())
+
+
+def test_v2_simulator_wellbeing_long_horizon(fx) -> None:
+    """Sparat invest-scenario med 40 års horisont → +1 economy."""
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "start_amount": 0, "monthly_save": 600,
+            "return_pct": 7, "years": 40,
+            "save_as_scenario": True,
+        },
+    )
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    horizon_factors = [
+        f for f in result.factors
+        if "långsiktig planering" in f.explanation.lower()
+    ]
+    assert len(horizon_factors) >= 1
+    assert horizon_factors[0].dimension == "economy"
+    assert horizon_factors[0].points == 1
+
+
+def test_v2_teacher_simulator_overview(fx) -> None:
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    client.post(
+        "/v2/simulator/investment",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "start_amount": 0, "monthly_save": 600,
+            "return_pct": 7, "years": 40,
+            "save_as_scenario": True,
+            "scenario_name": "Pension om 40 år",
+        },
+    )
+    client.post(
+        "/v2/simulator/loan",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "principal": 2_400_000,
+            "interest_rate_pct": 3.8,
+            "term_months": 360,
+            "amortization_type": "annuity",
+            "save_as_scenario": True,
+        },
+    )
+    r = client.get(
+        f"/v2/teacher/students/{sid}/simulator-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["invest_count"] == 1
+    assert data["loan_count"] == 1
+    assert data["longest_horizon_years"] == 40
+    assert data["biggest_principal"] == 2_400_000
+    assert len(data["scenarios"]) == 2
+
+
+def test_v2_teacher_simulator_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/simulator-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

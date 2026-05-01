@@ -31,7 +31,7 @@ from ..db.models import (
     UtilitySubscription, UtilityReading,
     RentalContract, RentalNotice,
     PensionAssumption, StockHolding, StockTransaction,
-    Category,
+    Category, Scenario,
 )
 from ..school.models import (
     Module as _SchoolModule,
@@ -7181,6 +7181,455 @@ def teacher_moduler_overview(
         student_id=student_id,
         student_name=student_name,
         moduler=moduler,
+    )
+
+
+# === Investeringssimulator + Lånekalkylator (/v2/simulator) — Fas 2J ===
+#
+# Verktyg 05 · Investeringssimulator + Verktyg 06 · Lånekalkylator.
+# Två rena kalkylatorer. Anropas stateless, men resultatet kan sparas
+# som Scenario (existerande modell, kind="invest" eller "loan").
+
+
+class V2InvestSimIn(BaseModel):
+    start_amount: float = Field(..., ge=0)
+    monthly_save: float = Field(..., ge=0, le=100000)
+    return_pct: float = Field(..., ge=-5, le=20)  # årlig real avkastning
+    years: int = Field(..., ge=1, le=80)
+    schablonskatt_pct: float = Field(default=0.89, ge=0, le=5)
+    is_isk: bool = True  # True=ISK schablon, False=depå 30% på vinst
+    save_as_scenario: bool = False
+    scenario_name: Optional[str] = None
+    # Andra scenariot för jämförelse (valfritt)
+    compare: Optional[dict] = None  # {monthly_save, years} — samma övriga
+
+
+class V2InvestSimResult(BaseModel):
+    start_amount: float
+    monthly_save: float
+    return_pct: float
+    years: int
+    is_isk: bool
+    schablonskatt_pct: float
+    total_invested: float  # start + monthly × 12 × years
+    final_value: float
+    total_growth: float  # final - total_invested
+    total_taxes: float  # uppskattad skatt över hela perioden
+    yearly_balances: list[float]  # snapshot per år (årets slut)
+    saved_scenario_id: Optional[int] = None
+    # Comparison (om compare specat)
+    compare: Optional[dict] = None  # samma struktur, plus diff
+
+
+def _compute_invest(
+    start: float,
+    monthly: float,
+    pct: float,
+    years: int,
+    is_isk: bool,
+    schablon_pct: float,
+) -> dict:
+    """Räkna investerings-tillväxt år för år.
+
+    ISK: schablon på snitt-kapital varje år (ingen skatt på vinst).
+    Depå: 30 % skatt på total vinst vid utbetalning (slutet).
+    Returnerar dict med final_value, total_growth, total_taxes,
+    yearly_balances.
+    """
+    r = pct / 100.0
+    yearly_balances: list[float] = []
+    balance = start
+    total_taxes_isk = 0.0
+    for _y in range(years):
+        avg_during_year = balance + (monthly * 12) / 2  # snitt under året
+        for _m in range(12):
+            balance += monthly
+            balance *= (1 + r / 12)  # månads-räntemetod
+        if is_isk:
+            tax = avg_during_year * (schablon_pct / 100.0)
+            balance -= tax
+            total_taxes_isk += tax
+        yearly_balances.append(round(balance, 2))
+
+    total_invested = start + monthly * 12 * years
+    growth = balance - total_invested
+
+    if is_isk:
+        total_taxes = round(total_taxes_isk, 2)
+        final = balance
+    else:
+        # Depå: 30 % på vinst vid uttag
+        if growth > 0:
+            tax = growth * 0.30
+            final = balance - tax
+            total_taxes = round(tax, 2)
+        else:
+            final = balance
+            total_taxes = 0.0
+
+    return {
+        "total_invested": round(total_invested, 2),
+        "final_value": round(final, 2),
+        "total_growth": round(final - total_invested, 2),
+        "total_taxes": total_taxes,
+        "yearly_balances": yearly_balances,
+    }
+
+
+@router.post("/simulator/investment", response_model=V2InvestSimResult)
+def simulate_investment(
+    body: V2InvestSimIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2InvestSimResult:
+    """Räkna investerings-scenario (ISK eller depå)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    res = _compute_invest(
+        body.start_amount, body.monthly_save, body.return_pct,
+        body.years, body.is_isk, body.schablonskatt_pct,
+    )
+
+    compare_out: Optional[dict] = None
+    if body.compare:
+        c_monthly = float(body.compare.get("monthly_save", 0))
+        c_years = int(body.compare.get("years", body.years))
+        c_start = float(body.compare.get("start_amount", body.start_amount))
+        c_pct = float(body.compare.get("return_pct", body.return_pct))
+        c_isk = bool(body.compare.get("is_isk", body.is_isk))
+        c_res = _compute_invest(
+            c_start, c_monthly, c_pct, c_years, c_isk, body.schablonskatt_pct,
+        )
+        compare_out = {
+            "start_amount": c_start,
+            "monthly_save": c_monthly,
+            "return_pct": c_pct,
+            "years": c_years,
+            "is_isk": c_isk,
+            **c_res,
+            "diff_final": round(
+                res["final_value"] - c_res["final_value"], 2,
+            ),
+        }
+
+    saved_id: Optional[int] = None
+    if body.save_as_scenario:
+        with session_scope() as s:
+            sc = Scenario(
+                name=body.scenario_name or (
+                    f"{int(body.monthly_save)} kr/mån i "
+                    f"{body.years} år"
+                ),
+                kind="invest",
+                params={
+                    "start_amount": body.start_amount,
+                    "monthly_save": body.monthly_save,
+                    "return_pct": body.return_pct,
+                    "years": body.years,
+                    "is_isk": body.is_isk,
+                    "schablonskatt_pct": body.schablonskatt_pct,
+                    "compare": body.compare,
+                },
+                result={**res, "compare": compare_out},
+            )
+            s.add(sc)
+            s.flush()
+            saved_id = sc.id
+
+    return V2InvestSimResult(
+        start_amount=body.start_amount,
+        monthly_save=body.monthly_save,
+        return_pct=body.return_pct,
+        years=body.years,
+        is_isk=body.is_isk,
+        schablonskatt_pct=body.schablonskatt_pct,
+        **res,
+        saved_scenario_id=saved_id,
+        compare=compare_out,
+    )
+
+
+class V2LoanSimIn(BaseModel):
+    principal: float = Field(..., ge=1, le=100000000)
+    interest_rate_pct: float = Field(..., ge=0, le=30)
+    term_months: int = Field(..., ge=1, le=600)
+    extra_amortization_monthly: float = Field(default=0, ge=0)
+    amortization_type: Literal["annuity", "straight"] = "annuity"
+    save_as_scenario: bool = False
+    scenario_name: Optional[str] = None
+
+
+class V2LoanSimResult(BaseModel):
+    principal: float
+    interest_rate_pct: float
+    term_months: int
+    amortization_type: str
+    extra_amortization_monthly: float
+    monthly_payment_baseline: float  # utan extra-amortering
+    total_paid_baseline: float
+    total_interest_baseline: float
+    monthly_payment_with_extra: float
+    total_paid_with_extra: float
+    total_interest_with_extra: float
+    payoff_months_with_extra: int
+    interest_savings: float  # baseline - with_extra
+    months_saved: int
+    schedule_first_12: list[dict]  # [{month, interest, principal, balance}]
+    saved_scenario_id: Optional[int] = None
+
+
+def _compute_loan_schedule(
+    principal: float,
+    rate_pct: float,
+    term_months: int,
+    amort_type: str,
+    extra: float = 0.0,
+) -> dict:
+    """Räkna amorteringsplan. Returnerar dict med monthly_payment,
+    total_paid, total_interest, payoff_months, schedule_first_12."""
+    r_month = rate_pct / 100.0 / 12
+    balance = principal
+    total_interest = 0.0
+    schedule: list[dict] = []
+    months = 0
+    if amort_type == "annuity":
+        if r_month > 0:
+            base_payment = (
+                principal * r_month / (1 - (1 + r_month) ** -term_months)
+            )
+        else:
+            base_payment = principal / term_months
+    else:  # straight
+        base_payment = principal / term_months  # bara amort, ränta tillkommer
+
+    while balance > 0.005 and months < term_months + 600:
+        months += 1
+        interest = balance * r_month
+        if amort_type == "annuity":
+            principal_part = base_payment - interest
+        else:
+            principal_part = principal / term_months
+        principal_part += extra
+        if principal_part > balance:
+            principal_part = balance
+        payment = interest + principal_part
+        balance -= principal_part
+        total_interest += interest
+        if months <= 12:
+            schedule.append({
+                "month": months,
+                "payment": round(payment, 2),
+                "interest": round(interest, 2),
+                "principal": round(principal_part, 2),
+                "balance": round(max(0.0, balance), 2),
+            })
+        if balance < 0.005:
+            break
+
+    return {
+        "monthly_payment": round(base_payment + extra, 2),
+        "total_paid": round(principal + total_interest, 2),
+        "total_interest": round(total_interest, 2),
+        "payoff_months": months,
+        "schedule_first_12": schedule,
+    }
+
+
+@router.post("/simulator/loan", response_model=V2LoanSimResult)
+def simulate_loan(
+    body: V2LoanSimIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2LoanSimResult:
+    """Räkna låne-scenario (annuitet eller rak amortering)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    baseline = _compute_loan_schedule(
+        body.principal, body.interest_rate_pct, body.term_months,
+        body.amortization_type, extra=0.0,
+    )
+    with_extra = _compute_loan_schedule(
+        body.principal, body.interest_rate_pct, body.term_months,
+        body.amortization_type, extra=body.extra_amortization_monthly,
+    )
+
+    interest_savings = (
+        baseline["total_interest"] - with_extra["total_interest"]
+    )
+    months_saved = baseline["payoff_months"] - with_extra["payoff_months"]
+
+    saved_id: Optional[int] = None
+    if body.save_as_scenario:
+        with session_scope() as s:
+            sc = Scenario(
+                name=body.scenario_name or (
+                    f"{int(body.principal):,} kr · "
+                    f"{body.interest_rate_pct:.1f} % · "
+                    f"{body.term_months} mån"
+                ).replace(",", " "),
+                kind="loan",
+                params={
+                    "principal": body.principal,
+                    "interest_rate_pct": body.interest_rate_pct,
+                    "term_months": body.term_months,
+                    "amortization_type": body.amortization_type,
+                    "extra_amortization_monthly":
+                        body.extra_amortization_monthly,
+                },
+                result={
+                    "baseline": baseline,
+                    "with_extra": with_extra,
+                    "interest_savings": interest_savings,
+                    "months_saved": months_saved,
+                },
+            )
+            s.add(sc)
+            s.flush()
+            saved_id = sc.id
+
+    return V2LoanSimResult(
+        principal=body.principal,
+        interest_rate_pct=body.interest_rate_pct,
+        term_months=body.term_months,
+        amortization_type=body.amortization_type,
+        extra_amortization_monthly=body.extra_amortization_monthly,
+        monthly_payment_baseline=baseline["monthly_payment"],
+        total_paid_baseline=baseline["total_paid"],
+        total_interest_baseline=baseline["total_interest"],
+        monthly_payment_with_extra=with_extra["monthly_payment"],
+        total_paid_with_extra=with_extra["total_paid"],
+        total_interest_with_extra=with_extra["total_interest"],
+        payoff_months_with_extra=with_extra["payoff_months"],
+        interest_savings=round(interest_savings, 2),
+        months_saved=months_saved,
+        schedule_first_12=with_extra["schedule_first_12"],
+        saved_scenario_id=saved_id,
+    )
+
+
+# Sparade scenarier
+class V2SimulatorScenarioRow(BaseModel):
+    id: int
+    name: str
+    kind: Literal["invest", "loan"]
+    params: dict
+    result: Optional[dict]
+    created_at: datetime
+
+
+@router.get(
+    "/simulator/scenarios",
+    response_model=list[V2SimulatorScenarioRow],
+)
+def list_simulator_scenarios(
+    kind: Optional[Literal["invest", "loan"]] = None,
+    info: TokenInfo = Depends(require_token),
+) -> list[V2SimulatorScenarioRow]:
+    """Lista sparade scenarier i scope-DB."""
+    if info.role != "student" or info.student_id is None:
+        return []
+    with session_scope() as s:
+        q = s.query(Scenario).filter(Scenario.kind.in_(["invest", "loan"]))
+        if kind:
+            q = q.filter(Scenario.kind == kind)
+        rows = q.order_by(Scenario.id.desc()).all()
+        return [
+            V2SimulatorScenarioRow(
+                id=r.id, name=r.name, kind=r.kind,  # type: ignore[arg-type]
+                params=r.params or {}, result=r.result,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ]
+
+
+@router.delete("/simulator/scenarios/{scenario_id}", status_code=204)
+def delete_simulator_scenario(
+    scenario_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        sc = s.get(Scenario, scenario_id)
+        if sc is not None and sc.kind in ("invest", "loan"):
+            s.delete(sc)
+            s.flush()
+
+
+# Lärar-overview
+class V2TeacherSimulatorOverview(BaseModel):
+    student_id: int
+    student_name: str
+    invest_count: int
+    loan_count: int
+    longest_horizon_years: int  # från sparade invest-scenarier
+    biggest_principal: float  # från sparade loan-scenarier
+    scenarios: list[V2SimulatorScenarioRow]
+
+
+@router.get(
+    "/teacher/students/{student_id}/simulator-overview",
+    response_model=V2TeacherSimulatorOverview,
+)
+def teacher_simulator_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherSimulatorOverview:
+    """Lärar-vy · alla elevens sparade scenarier (invest + loan)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            rows = (
+                s.query(Scenario)
+                .filter(Scenario.kind.in_(["invest", "loan"]))
+                .order_by(Scenario.id.desc())
+                .all()
+            )
+            invest_rows = [r for r in rows if r.kind == "invest"]
+            loan_rows = [r for r in rows if r.kind == "loan"]
+            longest = max(
+                (
+                    int((r.params or {}).get("years", 0))
+                    for r in invest_rows
+                ),
+                default=0,
+            )
+            biggest = max(
+                (
+                    float((r.params or {}).get("principal", 0))
+                    for r in loan_rows
+                ),
+                default=0.0,
+            )
+            scenarios = [
+                V2SimulatorScenarioRow(
+                    id=r.id, name=r.name, kind=r.kind,  # type: ignore[arg-type]
+                    params=r.params or {}, result=r.result,
+                    created_at=r.created_at,
+                )
+                for r in rows
+            ]
+
+    return V2TeacherSimulatorOverview(
+        student_id=student_id,
+        student_name=student_name,
+        invest_count=len(invest_rows),
+        loan_count=len(loan_rows),
+        longest_horizon_years=longest,
+        biggest_principal=biggest,
+        scenarios=scenarios,
     )
 
 
