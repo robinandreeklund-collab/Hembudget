@@ -4123,3 +4123,209 @@ def test_v2_teacher_bokforing_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2I · Mina moduler · Module + StudentModule ===
+
+
+def test_v2_moduler_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/moduler")
+    assert r.status_code == 401
+
+
+def test_v2_moduler_for_teacher_returns_empty(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/moduler",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+
+
+def test_v2_moduler_empty_state_for_student(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/moduler",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["in_progress"] == []
+    assert data["completed"] == []
+    # Available kan vara > 0 om systemet seedat templates
+
+
+def test_v2_moduler_with_assigned_module(fx) -> None:
+    """Lärar-tilldelar modul + eleven har klarat 2 av 4 steg."""
+    from hembudget.school.models import (
+        Module as _M,
+        ModuleStep as _MS,
+        StudentModule as _SM,
+        StudentStepProgress as _SSP,
+    )
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(
+            teacher_id=tid,
+            title="Bolån - din första",
+            summary="KALP, ränta, amortering",
+            is_template=False,
+            sort_order=1,
+        )
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        steps = []
+        for i, kind in enumerate(["read", "watch", "task", "quiz"]):
+            st = _MS(
+                module_id=m.id,
+                sort_order=i,
+                kind=kind,
+                title=f"Steg {i + 1}",
+            )
+            db.add(st)
+            steps.append(st)
+        db.commit()
+        for st in steps:
+            db.refresh(st)
+        sm = _SM(student_id=sid, module_id=m.id, sort_order=0)
+        db.add(sm)
+        db.commit()
+        # Eleven har klarat steg 1 + 2
+        from datetime import datetime as _dt_mod
+        for st in steps[:2]:
+            db.add(_SSP(
+                student_id=sid, step_id=st.id,
+                completed_at=_dt_mod.utcnow(),
+                data={},
+            ))
+        db.commit()
+
+    r = client.get(
+        "/v2/moduler",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["in_progress_count"] == 1
+    assert data["summary"]["completed_count"] == 0
+    assert data["summary"]["avg_progress_pct"] == 50.0
+    in_p = data["in_progress"][0]
+    assert in_p["title"] == "Bolån - din första"
+    assert in_p["step_count"] == 4
+    assert in_p["completed_step_count"] == 2
+    assert in_p["progress_pct"] == 50.0
+    assert in_p["current_step_no"] == 3
+    assert in_p["estimated_minutes_left"] == 10  # 2 steg × 5 min
+
+
+def test_v2_moduler_completed_module(fx) -> None:
+    """Modul med alla steg klara hamnar i 'completed'."""
+    from hembudget.school.models import (
+        Module as _M,
+        ModuleStep as _MS,
+        StudentModule as _SM,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt_mod
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(
+            teacher_id=tid,
+            title="Din första månad",
+            is_template=False,
+            sort_order=0,
+        )
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        st = _MS(module_id=m.id, sort_order=0, kind="read", title="S1")
+        db.add(st)
+        db.commit()
+        db.refresh(st)
+        db.add(_SM(student_id=sid, module_id=m.id, sort_order=0))
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            completed_at=_dt_mod.utcnow(),
+            data={},
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/moduler",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    assert data["summary"]["completed_count"] == 1
+    assert data["summary"]["in_progress_count"] == 0
+
+
+def test_v2_moduler_available_template(fx) -> None:
+    """Lärar-mall som inte är tilldelad → visas i available."""
+    from hembudget.school.models import Module as _M, ModuleStep as _MS
+
+    client, _tch, _sa, stu, tid, _said, _sid = fx
+    with master_session() as db:
+        m = _M(
+            teacher_id=tid,
+            title="Pension om 40 år",
+            summary="5-stegs systemmodul",
+            is_template=True,
+            sort_order=0,
+        )
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        for i in range(5):
+            db.add(_MS(
+                module_id=m.id, sort_order=i,
+                kind="read", title=f"S{i}",
+            ))
+        db.commit()
+
+    r = client.get(
+        "/v2/moduler",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    available_titles = [a["title"] for a in data["available"]]
+    assert "Pension om 40 år" in available_titles
+    pension = [
+        a for a in data["available"]
+        if a["title"] == "Pension om 40 år"
+    ][0]
+    assert pension["step_count"] == 5
+    assert pension["estimated_total_minutes"] == 25
+
+
+def test_v2_teacher_moduler_overview(fx) -> None:
+    from hembudget.school.models import Module as _M, StudentModule as _SM
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(title="Test-modul", is_template=False, sort_order=0)
+        db.add(m)
+        db.commit()
+        db.refresh(m)
+        db.add(_SM(student_id=sid, module_id=m.id, sort_order=0))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/moduler-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["student_name"]
+    assert data["moduler"]["summary"]["in_progress_count"] >= 1
+
+
+def test_v2_teacher_moduler_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/moduler-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

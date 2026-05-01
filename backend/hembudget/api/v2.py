@@ -33,6 +33,13 @@ from ..db.models import (
     PensionAssumption, StockHolding, StockTransaction,
     Category,
 )
+from ..school.models import (
+    Module as _SchoolModule,
+    ModuleStep as _SchoolModuleStep,
+    StudentModule as _SchoolStudentModule,
+    StudentStepProgress as _SchoolStepProgress,
+    StudentStepHeartbeat as _SchoolStepHB,
+)
 from ..insurance import seed_default_insurance_policies
 from ..utility import seed_default_utility_subscriptions
 from ..rental import seed_default_rental
@@ -71,7 +78,7 @@ from ..school.engines import master_session
 from ..school.models import Student, StudentProfile, Teacher, V2OnboardingEvent
 from ..wellbeing.calculator import calculate_wellbeing
 from .deps import TokenInfo, require_token
-from sqlalchemy import func as _func
+from sqlalchemy import func as _func, or_
 
 
 router = APIRouter(prefix="/v2", tags=["v2"])
@@ -6877,6 +6884,303 @@ def teacher_bokforing_overview(
         student_id=student_id,
         student_name=student_name,
         bokforing=bok,
+    )
+
+
+# === Moduler (/v2/moduler) — Fas 2I (Skola 09) ===
+#
+# Skola · Mina moduler · "3 i arbete, 7 möjliga". Återanvänder
+# Module + ModuleStep + StudentModule + StudentStepProgress (master-DB).
+# All data finns redan från v1 — v2-endpoint är aggregat-vy.
+
+
+class V2ModuleStepRef(BaseModel):
+    id: int
+    sort_order: int
+    kind: Literal["read", "watch", "reflect", "task", "quiz"]
+    title: str
+    completed: bool
+
+
+class V2ModuleProgressOut(BaseModel):
+    """Modul som eleven har påbörjat (eller fått tilldelad)."""
+    student_module_id: int
+    module_id: int
+    title: str
+    summary: Optional[str]
+    is_template: bool
+    teacher_owned: bool  # True om läraren skapade modulen specifikt
+    sort_order: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    assigned_at: datetime
+    step_count: int
+    completed_step_count: int
+    progress_pct: float  # 0–100
+    current_step_no: Optional[int]  # 1-baserad position i kvarvarande
+    estimated_minutes_left: Optional[int]
+
+
+class V2ModuleAvailableOut(BaseModel):
+    """Mall (system eller lärar-egen) som eleven kan starta."""
+    module_id: int
+    title: str
+    summary: Optional[str]
+    is_template: bool
+    teacher_owned: bool
+    step_count: int
+    estimated_total_minutes: int  # ~5 min per steg som proxy
+
+
+class V2ModulerSummary(BaseModel):
+    in_progress_count: int
+    completed_count: int
+    available_count: int
+    avg_progress_pct: float  # snitt över in_progress
+    last_activity_at: Optional[datetime]
+
+
+class V2ModulerResponse(BaseModel):
+    student_id: int
+    summary: V2ModulerSummary
+    in_progress: list[V2ModuleProgressOut]
+    completed: list[V2ModuleProgressOut]
+    available: list[V2ModuleAvailableOut]
+
+
+def _empty_moduler(student_id: int) -> V2ModulerResponse:
+    return V2ModulerResponse(
+        student_id=student_id,
+        summary=V2ModulerSummary(
+            in_progress_count=0, completed_count=0,
+            available_count=0, avg_progress_pct=0,
+            last_activity_at=None,
+        ),
+        in_progress=[], completed=[], available=[],
+    )
+
+
+@router.get("/moduler", response_model=V2ModulerResponse)
+def get_moduler(
+    info: TokenInfo = Depends(require_token),
+) -> V2ModulerResponse:
+    """Aggregat för Mina moduler /v2/moduler (Skola 09).
+
+    Returnerar:
+    - in_progress: tilldelade moduler där minst 1 steg startat OCH inte
+      alla klara
+    - completed: alla steg klara (ELLER completed_at satt)
+    - available: system-mallar + lärarens egna mallar som eleven INTE
+      redan har som StudentModule
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_moduler(0)
+
+    sid = info.student_id
+    out_progress: list[V2ModuleProgressOut] = []
+    out_completed: list[V2ModuleProgressOut] = []
+    out_available: list[V2ModuleAvailableOut] = []
+    last_activity: Optional[datetime] = None
+    progress_sum = 0.0
+    progress_n = 0
+
+    with master_session() as s:
+        # Hämta studentens lärare för "lärar-mallar"
+        student = s.get(Student, sid)
+        teacher_id = student.teacher_id if student else None
+
+        # Tilldelade moduler
+        assigned = (
+            s.query(_SchoolStudentModule)
+            .filter(_SchoolStudentModule.student_id == sid)
+            .order_by(_SchoolStudentModule.sort_order)
+            .all()
+        )
+        assigned_module_ids = set()
+        for sm in assigned:
+            m = s.get(_SchoolModule, sm.module_id)
+            if not m:
+                continue
+            assigned_module_ids.add(m.id)
+            steps = (
+                s.query(_SchoolModuleStep)
+                .filter(_SchoolModuleStep.module_id == m.id)
+                .order_by(_SchoolModuleStep.sort_order)
+                .all()
+            )
+            step_ids = [st.id for st in steps]
+            completed_progress = (
+                s.query(_SchoolStepProgress)
+                .filter(
+                    _SchoolStepProgress.student_id == sid,
+                    _SchoolStepProgress.step_id.in_(step_ids),
+                    _SchoolStepProgress.completed_at.isnot(None),
+                )
+                .all()
+                if step_ids else []
+            )
+            completed_count = len(completed_progress)
+            step_count = len(steps)
+            pct = (
+                (completed_count / step_count * 100)
+                if step_count > 0 else 0
+            )
+            # Track senaste aktivitet
+            for cp in completed_progress:
+                if cp.completed_at and (
+                    last_activity is None
+                    or cp.completed_at > last_activity
+                ):
+                    last_activity = cp.completed_at
+
+            # Current step = första steg utan completed_at
+            completed_step_ids = {
+                cp.step_id for cp in completed_progress
+            }
+            current_step_no: Optional[int] = None
+            for idx, st in enumerate(steps):
+                if st.id not in completed_step_ids:
+                    current_step_no = idx + 1
+                    break
+
+            # Estimera ~5 min per steg
+            est_left = (
+                (step_count - completed_count) * 5
+                if step_count > 0 else 0
+            )
+
+            row = V2ModuleProgressOut(
+                student_module_id=sm.id,
+                module_id=m.id,
+                title=m.title,
+                summary=m.summary,
+                is_template=bool(m.is_template),
+                teacher_owned=(
+                    teacher_id is not None
+                    and m.teacher_id == teacher_id
+                    and not m.is_template
+                ),
+                sort_order=sm.sort_order,
+                started_at=sm.started_at,
+                completed_at=sm.completed_at,
+                assigned_at=sm.assigned_at,
+                step_count=step_count,
+                completed_step_count=completed_count,
+                progress_pct=round(pct, 1),
+                current_step_no=current_step_no,
+                estimated_minutes_left=est_left,
+            )
+
+            is_done = (
+                sm.completed_at is not None
+                or (step_count > 0 and completed_count >= step_count)
+            )
+            if is_done:
+                out_completed.append(row)
+            else:
+                out_progress.append(row)
+                progress_sum += pct
+                progress_n += 1
+
+        # Tillgängliga (mallar som inte är tilldelade)
+        templates_q = s.query(_SchoolModule).filter(
+            _SchoolModule.is_template.is_(True),
+        )
+        if teacher_id is not None:
+            # Inkludera även lärarens egna icke-mall-moduler som inte
+            # tilldelats än
+            templates_q = s.query(_SchoolModule).filter(
+                or_(
+                    _SchoolModule.is_template.is_(True),
+                    _SchoolModule.teacher_id == teacher_id,
+                ),
+            )
+        templates = templates_q.all()
+        for m in templates:
+            if m.id in assigned_module_ids:
+                continue
+            steps = (
+                s.query(_SchoolModuleStep)
+                .filter(_SchoolModuleStep.module_id == m.id)
+                .all()
+            )
+            est = len(steps) * 5
+            out_available.append(V2ModuleAvailableOut(
+                module_id=m.id,
+                title=m.title,
+                summary=m.summary,
+                is_template=bool(m.is_template),
+                teacher_owned=(
+                    teacher_id is not None
+                    and m.teacher_id == teacher_id
+                ),
+                step_count=len(steps),
+                estimated_total_minutes=est,
+            ))
+
+    avg_progress = (
+        round(progress_sum / progress_n, 1) if progress_n > 0 else 0
+    )
+
+    # Sort
+    out_progress.sort(key=lambda r: -r.progress_pct)
+    out_completed.sort(
+        key=lambda r: r.completed_at or datetime.min, reverse=True,
+    )
+    out_available.sort(key=lambda r: r.title)
+
+    return V2ModulerResponse(
+        student_id=info.student_id,
+        summary=V2ModulerSummary(
+            in_progress_count=len(out_progress),
+            completed_count=len(out_completed),
+            available_count=len(out_available),
+            avg_progress_pct=avg_progress,
+            last_activity_at=last_activity,
+        ),
+        in_progress=out_progress,
+        completed=out_completed,
+        available=out_available,
+    )
+
+
+# Lärar-overview
+class V2TeacherModulerOverview(BaseModel):
+    student_id: int
+    student_name: str
+    moduler: V2ModulerResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/moduler-overview",
+    response_model=V2TeacherModulerOverview,
+)
+def teacher_moduler_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherModulerOverview:
+    """Lärar-vy · alla elevens moduler + tillgängliga + framsteg."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    # OBS: Module-data ligger i master-DB, inte scope-DB. Vi behöver
+    # bara köra get_moduler med en låtsas-info som har student_id.
+    _outer_sid = student_id
+
+    class _Info:
+        role = "student"
+        student_id = _outer_sid
+
+    moduler = get_moduler(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherModulerOverview(
+        student_id=student_id,
+        student_name=student_name,
+        moduler=moduler,
     )
 
 

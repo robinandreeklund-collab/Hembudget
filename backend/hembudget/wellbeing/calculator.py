@@ -907,6 +907,81 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             ))
             social -= 5
 
+    # Skola — moduler (Skola 09 · Mina moduler) → +leisure för lärande.
+    # En klar modul = +leisure (lärande är frigörande). Inga klara
+    # moduler men 1+ pågående = +leisure mindre. Inga moduler alls = 0.
+    try:
+        from ..school.models import (
+            StudentModule as _SM_book,
+            ModuleStep as _MS_book,
+            StudentStepProgress as _SSP_book,
+        )
+        from ..school.engines import master_session as _ms_book
+        from ..school import is_enabled as _school_enabled_book
+        if _school_enabled_book():
+            from ..school.engines import (
+                get_current_scope as _gcs_book,
+            )
+            scope_key = _gcs_book()
+            if scope_key and scope_key.startswith("s_"):
+                target_sid = int(scope_key.split("_", 1)[1])
+                with _ms_book() as _msdb_book:
+                    student_modules = (
+                        _msdb_book.query(_SM_book)
+                        .filter(_SM_book.student_id == target_sid)
+                        .all()
+                    )
+                    completed_count = 0
+                    in_progress_count = 0
+                    for sm in student_modules:
+                        if sm.completed_at is not None:
+                            completed_count += 1
+                            continue
+                        steps = (
+                            _msdb_book.query(_MS_book)
+                            .filter(_MS_book.module_id == sm.module_id)
+                            .all()
+                        )
+                        if not steps:
+                            continue
+                        step_ids = [st.id for st in steps]
+                        done = (
+                            _msdb_book.query(_SSP_book)
+                            .filter(
+                                _SSP_book.student_id == target_sid,
+                                _SSP_book.step_id.in_(step_ids),
+                                _SSP_book.completed_at.isnot(None),
+                            )
+                            .count()
+                        )
+                        if done >= len(steps):
+                            completed_count += 1
+                        elif done > 0:
+                            in_progress_count += 1
+                    if completed_count > 0:
+                        bonus = min(6, completed_count * 2)
+                        leisure += bonus
+                        factors.append(WellbeingFactor(
+                            "leisure", bonus,
+                            f"{completed_count} klar"
+                            f"{'a' if completed_count > 1 else ''} "
+                            f"modul{'er' if completed_count > 1 else ''} "
+                            "— lärande som frigörande.",
+                        ))
+                    elif in_progress_count > 0:
+                        leisure += 1
+                        factors.append(WellbeingFactor(
+                            "leisure", 1,
+                            f"{in_progress_count} modul"
+                            f"{'er' if in_progress_count > 1 else ''} "
+                            "pågår — lärande igång.",
+                        ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: moduler-factor misslyckades",
+        )
+
     # --- KLAMP + TOTAL ---
     economy = max(0, min(100, economy))
     health = max(0, min(100, health))
