@@ -391,6 +391,98 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: salary_negotiation-factor misslyckades",
         )
 
+    # Försäkringar (InsurancePolicy + InsuranceClaim) — påverkar
+    # safety-axeln pedagogiskt:
+    # - aktiva basförsäkringar (hem) → +safety
+    # - oskyddad händelse (no_policy=True) → -safety
+    # - utbetalad skada (status=paid) → +safety (försäkring fungerade)
+    # - höga premier över 600 kr/mån → -economy lite (kostar i nuet)
+    try:
+        from ..db.models import (
+            InsurancePolicy as _IP,
+            InsuranceClaim as _IC,
+        )
+        from datetime import date as _d_ins
+        active_policies = (
+            session.query(_IP)
+            .filter(_IP.status == "active")
+            .all()
+        )
+        active_count = len(active_policies)
+        has_hem = any(p.kind == "hem" for p in active_policies)
+        total_premium = sum(
+            (Decimal(str(p.premium_monthly or 0))
+             for p in active_policies),
+            Decimal("0"),
+        )
+
+        if has_hem:
+            safety += 5
+            factors.append(WellbeingFactor(
+                "safety", 5,
+                "Hemförsäkring aktiv — bohag och ansvar täckta. "
+                "Grundtrygghet på plats.",
+            ))
+        if active_count >= 3:
+            safety += 3
+            factors.append(WellbeingFactor(
+                "safety", 3,
+                f"{active_count} aktiva försäkringar — heltäckande "
+                "skydd för olika risker.",
+            ))
+
+        # Premie-belastning: höga totala premier kostar i nuet
+        if total_premium > 700:
+            penalty = min(8, int((float(total_premium) - 700) / 100))
+            economy -= penalty
+            factors.append(WellbeingFactor(
+                "economy", -penalty,
+                f"Försäkrings-premier {int(total_premium):,} kr/mån — ".replace(",", " ")
+                + "över snitt för ung vuxen, optimera bundling?",
+            ))
+
+        # Skadehändelser senaste 12 månader
+        from datetime import timedelta as _td_ins
+        cutoff = _d_ins.today() - _td_ins(days=365)
+        recent_claims = (
+            session.query(_IC)
+            .filter(_IC.occurred_on >= cutoff)
+            .all()
+        )
+
+        paid_count = sum(
+            1 for c in recent_claims if c.status == "paid"
+            and c.amount_paid and c.amount_paid > 0
+        )
+        unprotected_count = sum(
+            1 for c in recent_claims if c.no_policy
+        )
+
+        if paid_count > 0:
+            bonus = min(8, paid_count * 3)
+            safety += bonus
+            factors.append(WellbeingFactor(
+                "safety", bonus,
+                f"{paid_count} skadehändelse"
+                f"{'r' if paid_count > 1 else ''} ersatt"
+                f"{'a' if paid_count > 1 else ''} senaste året — "
+                "försäkringen fungerar konkret.",
+            ))
+        if unprotected_count > 0:
+            penalty = min(15, unprotected_count * 8)
+            safety -= penalty
+            factors.append(WellbeingFactor(
+                "safety", -penalty,
+                f"{unprotected_count} oskyddad händelse"
+                f"{'r' if unprotected_count > 1 else ''} senaste året — "
+                "konsekvenser bars helt själv.",
+            ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: insurance-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:

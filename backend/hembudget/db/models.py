@@ -405,6 +405,91 @@ class TaxYearReturn(TenantMixin, Base):
     )  # positiv = återbäring, negativ = kvarskatt
 
 
+# === V2 Försäkringar (Fas 2D) ===
+
+class InsurancePolicy(TenantMixin, Base):
+    """En aktiv eller övervägd försäkring för eleven.
+
+    Lärare seedar default-katalogen (Folksam Hem, Trygg-Hansa Liv etc)
+    eller eleven själv skapar policys via v2/forsakringar.
+    Premium dras varje månad (autogiro=True simulerar autogiro-beteende).
+    """
+    __tablename__ = "insurance_policies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # "hem" | "olycksfall" | "liv" | "barnforsakring" |
+    # "bostadsrattsforsakring" | "bilforsakring" | "djur" | "ovrig"
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    premium_monthly: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False,
+    )
+    coverage_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True,
+    )
+    deductible: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    autogiro: Mapped[bool] = mapped_column(Boolean, default=True)
+    # "active" | "considered" | "cancelled"
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    started_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class InsuranceClaim(TenantMixin, Base):
+    """En skadehändelse / försäkringshändelse.
+
+    Kan vara en faktisk skada (cykel-stöld, bilolycka) eller bara
+    info-händelse (granne brann, ändrade villkor). Lärare lägger in
+    dessa för att simulera realistiska scenarier.
+
+    Pedagogiskt: när status="paid" och amount_paid > 0 ger det safety-
+    bonus i wellbeing — eleven känner att försäkringen "fungerade".
+    När en oskyddad händelse inträffar (no_policy=True) ger det safety-
+    penalty.
+    """
+    __tablename__ = "insurance_claims"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+    # Vilken policy täckte skadan (None om eleven inte hade försäkring
+    # — då blir det en pedagogisk "oskyddad"-händelse)
+    policy_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("insurance_policies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # "stold" | "olycka" | "skada" | "vattenskada" | "brand" |
+    # "info" | "premiehojning" | "bytte_bolag"
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Belopp eleven yrkade
+    amount_claimed: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True,
+    )
+    # Belopp som faktiskt betalades ut (efter självrisk)
+    amount_paid: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True,
+    )
+    # "submitted" | "approved" | "partial" | "denied" | "paid" | "info"
+    status: Mapped[str] = mapped_column(String(20), default="submitted")
+    # När pengar betalades ut (om status=paid)
+    paid_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # True om händelsen var "oskyddad" (ingen policy fanns) — driver
+    # safety-penalty i wellbeing
+    no_policy: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class Subscription(TenantMixin, Base):
     __tablename__ = "subscriptions"
 

@@ -27,7 +27,9 @@ from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
     MailItem, Loan, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
     TaxDeduction, TaxProposal, TaxYearReturn,
+    InsurancePolicy, InsuranceClaim,
 )
+from ..insurance import seed_default_insurance_policies
 from ..loans.credit import (
     compute_credit_check, latest_credit_check, latest_kalp,
 )
@@ -4204,6 +4206,554 @@ def teacher_employer_overview(
             questions_answered_count=questions_answered,
             questions_pending_count=questions_pending,
         )
+
+
+# === Försäkringar (/v2/forsakringar) — Fas 2D ===
+
+class V2InsurancePolicyOut(BaseModel):
+    id: int
+    provider: str
+    name: str
+    kind: str
+    premium_monthly: float
+    coverage_amount: Optional[float] = None
+    deductible: Optional[float] = None
+    autogiro: bool
+    status: str
+    started_on: Optional[_date] = None
+    ended_on: Optional[_date] = None
+    notes: Optional[str] = None
+
+
+class V2InsuranceClaimOut(BaseModel):
+    id: int
+    occurred_on: _date
+    policy_id: Optional[int] = None
+    policy_name: Optional[str] = None
+    kind: str
+    title: str
+    description: Optional[str] = None
+    amount_claimed: Optional[float] = None
+    amount_paid: Optional[float] = None
+    status: str
+    paid_at: Optional[_date] = None
+    no_policy: bool
+    notes: Optional[str] = None
+    created_at: datetime
+
+
+class V2InsuranceSummary(BaseModel):
+    active_count: int
+    considered_count: int
+    cancelled_count: int
+    total_premium_monthly: float
+    total_coverage: float
+    claims_paid_12m: int
+    claims_paid_amount_12m: float
+    claims_unprotected_12m: int
+    coverage_gaps: list[str]
+
+
+class V2InsuranceResponse(BaseModel):
+    student_id: int
+    summary: V2InsuranceSummary
+    policies: list[V2InsurancePolicyOut]
+    claims: list[V2InsuranceClaimOut]
+
+
+def _empty_insurance(student_id: int) -> V2InsuranceResponse:
+    return V2InsuranceResponse(
+        student_id=student_id,
+        summary=V2InsuranceSummary(
+            active_count=0, considered_count=0, cancelled_count=0,
+            total_premium_monthly=0, total_coverage=0,
+            claims_paid_12m=0, claims_paid_amount_12m=0,
+            claims_unprotected_12m=0, coverage_gaps=[],
+        ),
+        policies=[],
+        claims=[],
+    )
+
+
+@router.get("/forsakringar", response_model=V2InsuranceResponse)
+def get_insurance(
+    info: TokenInfo = Depends(require_token),
+) -> V2InsuranceResponse:
+    """Aggregat för försäkringar /v2/forsakringar (Aktör 06).
+
+    Riktig data — ingen mockup:
+    - InsurancePolicy från scope-DB (active / considered / cancelled)
+    - InsuranceClaim från scope-DB (12 senaste mån)
+    - Coverage_gaps räknas dynamiskt från StudentProfile (har bostadsrätt
+      utan försäkring → "saknar bostadsrättsförsäkring")
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_insurance(0)
+
+    coverage_gaps: list[str] = []
+    has_bostadsratt = False
+    has_car = False
+    has_children = False
+    family_status = "ensam"
+
+    with master_session() as mdb:
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if profile:
+            has_bostadsratt = profile.housing_type in (
+                "bostadsratt", "villa",
+            )
+            has_car = bool(getattr(profile, "has_car_loan", False))
+            family_status = profile.family_status or "ensam"
+            ages = (
+                profile.children_ages if profile.children_ages else []
+            )
+            has_children = bool(ages and len(ages) > 0)
+
+    try:
+        with session_scope() as s:
+            policies = (
+                s.query(InsurancePolicy)
+                .order_by(InsurancePolicy.status, InsurancePolicy.kind)
+                .all()
+            )
+
+            policies_out: list[V2InsurancePolicyOut] = []
+            policy_by_id: dict[int, InsurancePolicy] = {}
+            active = []
+            considered = []
+            cancelled = []
+            total_premium = Decimal("0")
+            total_coverage = Decimal("0")
+            active_kinds: set[str] = set()
+
+            for p in policies:
+                policy_by_id[p.id] = p
+                policies_out.append(V2InsurancePolicyOut(
+                    id=p.id, provider=p.provider, name=p.name,
+                    kind=p.kind,
+                    premium_monthly=float(p.premium_monthly),
+                    coverage_amount=(
+                        float(p.coverage_amount)
+                        if p.coverage_amount else None
+                    ),
+                    deductible=(
+                        float(p.deductible) if p.deductible else None
+                    ),
+                    autogiro=p.autogiro,
+                    status=p.status,
+                    started_on=p.started_on,
+                    ended_on=p.ended_on,
+                    notes=p.notes,
+                ))
+                if p.status == "active":
+                    active.append(p)
+                    active_kinds.add(p.kind)
+                    total_premium += p.premium_monthly
+                    if p.coverage_amount:
+                        total_coverage += p.coverage_amount
+                elif p.status == "considered":
+                    considered.append(p)
+                else:
+                    cancelled.append(p)
+
+            # Coverage gaps — vad saknar eleven baserat på sin profil?
+            if "hem" not in active_kinds:
+                coverage_gaps.append(
+                    "Saknar hemförsäkring — bohag och ansvar oskyddade."
+                )
+            if has_bostadsratt and "bostadsrattsforsakring" not in active_kinds:
+                coverage_gaps.append(
+                    "Bor i bostadsrätt men saknar bostadsrättsförsäkring."
+                )
+            if has_car and "bilforsakring" not in active_kinds:
+                coverage_gaps.append(
+                    "Har billån men saknar bilförsäkring."
+                )
+            if (
+                family_status in ("sambo", "familj_med_barn")
+                and "liv" not in active_kinds
+            ):
+                coverage_gaps.append(
+                    "Har sambo/familj men ingen livförsäkring."
+                )
+            if has_children and "barnforsakring" not in active_kinds:
+                coverage_gaps.append(
+                    "Har barn men saknar barnförsäkring."
+                )
+
+            # Skadehändelser (12 senaste mån)
+            from datetime import date as _d_ic, timedelta as _td_ic
+            cutoff = _d_ic.today() - _td_ic(days=365)
+            claim_rows = (
+                s.query(InsuranceClaim)
+                .filter(InsuranceClaim.occurred_on >= cutoff)
+                .order_by(InsuranceClaim.occurred_on.desc())
+                .all()
+            )
+            claims_out: list[V2InsuranceClaimOut] = []
+            paid_count = 0
+            paid_amount = Decimal("0")
+            unprotected = 0
+            for c in claim_rows:
+                pol = policy_by_id.get(c.policy_id) if c.policy_id else None
+                claims_out.append(V2InsuranceClaimOut(
+                    id=c.id,
+                    occurred_on=c.occurred_on,
+                    policy_id=c.policy_id,
+                    policy_name=pol.name if pol else None,
+                    kind=c.kind,
+                    title=c.title,
+                    description=c.description,
+                    amount_claimed=(
+                        float(c.amount_claimed) if c.amount_claimed else None
+                    ),
+                    amount_paid=(
+                        float(c.amount_paid) if c.amount_paid else None
+                    ),
+                    status=c.status,
+                    paid_at=c.paid_at,
+                    no_policy=c.no_policy,
+                    notes=c.notes,
+                    created_at=c.created_at,
+                ))
+                if c.status == "paid" and c.amount_paid:
+                    paid_count += 1
+                    paid_amount += c.amount_paid
+                if c.no_policy:
+                    unprotected += 1
+
+            return V2InsuranceResponse(
+                student_id=info.student_id,
+                summary=V2InsuranceSummary(
+                    active_count=len(active),
+                    considered_count=len(considered),
+                    cancelled_count=len(cancelled),
+                    total_premium_monthly=float(total_premium),
+                    total_coverage=float(total_coverage),
+                    claims_paid_12m=paid_count,
+                    claims_paid_amount_12m=float(paid_amount),
+                    claims_unprotected_12m=unprotected,
+                    coverage_gaps=coverage_gaps,
+                ),
+                policies=policies_out,
+                claims=claims_out,
+            )
+    except Exception:
+        return _empty_insurance(info.student_id)
+
+
+class V2InsurancePolicyIn(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=80)
+    name: str = Field(..., min_length=1, max_length=120)
+    kind: Literal[
+        "hem", "olycksfall", "liv", "barnforsakring",
+        "bostadsrattsforsakring", "bilforsakring", "djur", "ovrig",
+    ]
+    premium_monthly: float = Field(..., ge=0)
+    coverage_amount: Optional[float] = None
+    deductible: Optional[float] = None
+    autogiro: bool = True
+    status: Literal["active", "considered", "cancelled"] = "considered"
+    started_on: Optional[_date] = None
+    notes: Optional[str] = None
+
+
+class V2InsurancePolicyStatusIn(BaseModel):
+    status: Literal["active", "considered", "cancelled"]
+
+
+@router.post("/forsakringar/policies", response_model=V2InsurancePolicyOut)
+def post_insurance_policy(
+    body: V2InsurancePolicyIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2InsurancePolicyOut:
+    """Eleven skapar/lägger till en försäkring."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elev",
+        )
+    with session_scope() as s:
+        p = InsurancePolicy(
+            provider=body.provider,
+            name=body.name,
+            kind=body.kind,
+            premium_monthly=Decimal(str(body.premium_monthly)),
+            coverage_amount=(
+                Decimal(str(body.coverage_amount))
+                if body.coverage_amount is not None else None
+            ),
+            deductible=(
+                Decimal(str(body.deductible))
+                if body.deductible is not None else None
+            ),
+            autogiro=body.autogiro,
+            status=body.status,
+            started_on=body.started_on,
+            notes=body.notes,
+        )
+        s.add(p)
+        s.flush()
+        return V2InsurancePolicyOut(
+            id=p.id, provider=p.provider, name=p.name, kind=p.kind,
+            premium_monthly=float(p.premium_monthly),
+            coverage_amount=(
+                float(p.coverage_amount) if p.coverage_amount else None
+            ),
+            deductible=(
+                float(p.deductible) if p.deductible else None
+            ),
+            autogiro=p.autogiro,
+            status=p.status, started_on=p.started_on,
+            ended_on=p.ended_on, notes=p.notes,
+        )
+
+
+@router.patch(
+    "/forsakringar/policies/{policy_id}/status",
+    response_model=V2InsurancePolicyOut,
+)
+def patch_insurance_policy_status(
+    policy_id: int,
+    body: V2InsurancePolicyStatusIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2InsurancePolicyOut:
+    """Eleven ändrar status (overväger → aktiv → avbryter).
+    När status går till active sätts started_on (om saknas).
+    När status går till cancelled sätts ended_on."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
+    with session_scope() as s:
+        p = s.get(InsurancePolicy, policy_id)
+        if p is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Försäkring hittades inte",
+            )
+        from datetime import date as _d_now
+        old_status = p.status
+        p.status = body.status
+        if body.status == "active" and p.started_on is None:
+            p.started_on = _d_now.today()
+        if body.status == "cancelled" and old_status == "active":
+            p.ended_on = _d_now.today()
+        s.flush()
+        return V2InsurancePolicyOut(
+            id=p.id, provider=p.provider, name=p.name, kind=p.kind,
+            premium_monthly=float(p.premium_monthly),
+            coverage_amount=(
+                float(p.coverage_amount) if p.coverage_amount else None
+            ),
+            deductible=(
+                float(p.deductible) if p.deductible else None
+            ),
+            autogiro=p.autogiro,
+            status=p.status, started_on=p.started_on,
+            ended_on=p.ended_on, notes=p.notes,
+        )
+
+
+@router.delete("/forsakringar/policies/{policy_id}", status_code=204)
+def delete_insurance_policy(
+    policy_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
+    with session_scope() as s:
+        p = s.get(InsurancePolicy, policy_id)
+        if p is not None:
+            s.delete(p)
+            s.flush()
+
+
+# Lärar-endpoints
+@router.post(
+    "/teacher/students/{student_id}/insurance/seed-default",
+    response_model=dict,
+)
+def teacher_seed_default_insurance(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Seedа default-katalogen (6 försäkringar) i en elevs scope-DB."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            n = seed_default_insurance_policies(s)
+    return {"student_id": student_id, "policies_created": n}
+
+
+class V2InsuranceClaimIn(BaseModel):
+    occurred_on: _date
+    policy_id: Optional[int] = None
+    kind: Literal[
+        "stold", "olycka", "skada", "vattenskada", "brand",
+        "info", "premiehojning", "bytte_bolag",
+    ]
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    amount_claimed: Optional[float] = None
+    amount_paid: Optional[float] = None
+    status: Literal[
+        "submitted", "approved", "partial", "denied", "paid", "info",
+    ] = "submitted"
+    paid_at: Optional[_date] = None
+    no_policy: bool = False
+    notes: Optional[str] = None
+
+
+@router.post(
+    "/teacher/students/{student_id}/insurance/claims",
+    response_model=V2InsuranceClaimOut,
+)
+def teacher_create_insurance_claim(
+    student_id: int,
+    body: V2InsuranceClaimIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2InsuranceClaimOut:
+    """Lärare lägger in en skadehändelse (simulera scenario)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            c = InsuranceClaim(
+                occurred_on=body.occurred_on,
+                policy_id=body.policy_id,
+                kind=body.kind,
+                title=body.title,
+                description=body.description,
+                amount_claimed=(
+                    Decimal(str(body.amount_claimed))
+                    if body.amount_claimed is not None else None
+                ),
+                amount_paid=(
+                    Decimal(str(body.amount_paid))
+                    if body.amount_paid is not None else None
+                ),
+                status=body.status,
+                paid_at=body.paid_at,
+                no_policy=body.no_policy,
+                notes=body.notes,
+            )
+            s.add(c)
+            s.flush()
+            pol = (
+                s.get(InsurancePolicy, c.policy_id)
+                if c.policy_id else None
+            )
+            return V2InsuranceClaimOut(
+                id=c.id, occurred_on=c.occurred_on,
+                policy_id=c.policy_id,
+                policy_name=pol.name if pol else None,
+                kind=c.kind, title=c.title,
+                description=c.description,
+                amount_claimed=(
+                    float(c.amount_claimed) if c.amount_claimed else None
+                ),
+                amount_paid=(
+                    float(c.amount_paid) if c.amount_paid else None
+                ),
+                status=c.status, paid_at=c.paid_at,
+                no_policy=c.no_policy, notes=c.notes,
+                created_at=c.created_at,
+            )
+
+
+@router.delete(
+    "/teacher/students/{student_id}/insurance/claims/{claim_id}",
+    status_code=204,
+)
+def teacher_delete_insurance_claim(
+    student_id: int,
+    claim_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            c = s.get(InsuranceClaim, claim_id)
+            if c is not None:
+                s.delete(c)
+                s.flush()
+
+
+class V2TeacherInsuranceOverview(BaseModel):
+    student_id: int
+    student_name: str
+    summary: V2InsuranceSummary
+    policies: list[V2InsurancePolicyOut]
+    claims: list[V2InsuranceClaimOut]
+
+
+@router.get(
+    "/teacher/students/{student_id}/insurance-overview",
+    response_model=V2TeacherInsuranceOverview,
+)
+def teacher_insurance_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherInsuranceOverview:
+    """Lärar-vy · full insyn i elevens försäkringar."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    # Återanvänd get_insurance-logiken via scope-context
+    with scope_context(scope_key):
+        # Skapa en mini-info för call
+        class _Info:
+            role = "student"
+            student_id = sid_local = student_id
+
+        ins = get_insurance(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherInsuranceOverview(
+        student_id=student_id,
+        student_name=student_name,
+        summary=ins.summary,
+        policies=ins.policies,
+        claims=ins.claims,
+    )
 
 
 # === Endpoints ===

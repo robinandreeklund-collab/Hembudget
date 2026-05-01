@@ -1944,6 +1944,241 @@ def test_v2_lan_with_active_loan_in_scope(fx) -> None:
     assert 0.10 <= data["debt_ratio"] <= 0.15
 
 
+# === Fas 2D · Försäkringar · InsurancePolicy + InsuranceClaim ===
+
+def _seed_insurance_profile(sid: int, **overrides) -> None:
+    """Seedа en standard-elev med profil."""
+    defaults = dict(
+        student_id=sid,
+        profession="Undersköterska",
+        employer="Sthlm Sjukhus",
+        gross_salary_monthly=26000,
+        net_salary_monthly=18750,
+        tax_rate_effective=0.28,
+        age=22, city="Stockholm",
+        family_status="ensam", housing_type="hyresratt",
+        housing_monthly=8000, personality="blandad",
+    )
+    defaults.update(overrides)
+    with master_session() as db:
+        db.add(StudentProfile(**defaults))
+        db.commit()
+
+
+def test_v2_forsakringar_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/forsakringar")
+    assert r.status_code == 401
+
+
+def test_v2_forsakringar_for_teacher_returns_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+    assert r.json()["policies"] == []
+
+
+def test_v2_forsakringar_empty_state_for_student(fx) -> None:
+    """Elev utan policys får tom payload + coverage_gaps."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_insurance_profile(sid)
+
+    r = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["policies"] == []
+    assert data["claims"] == []
+    summary = data["summary"]
+    assert summary["active_count"] == 0
+    # Coverage_gaps: åtminstone "saknar hemförsäkring"
+    gaps = summary["coverage_gaps"]
+    assert any("hemförsäkring" in g.lower() for g in gaps)
+
+
+def test_v2_teacher_seed_default_insurance(fx) -> None:
+    """Lärar-seed skapar 6 default-policys."""
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/insurance/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["policies_created"] == 6
+
+    # Idempotent
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/insurance/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["policies_created"] == 0
+
+
+def test_v2_forsakringar_with_seeded_policies(fx) -> None:
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_insurance_profile(sid)
+    client.post(
+        f"/v2/teacher/students/{sid}/insurance/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    r = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert len(data["policies"]) == 6
+    # Default-status är "considered" → 0 active, 6 considered
+    assert data["summary"]["active_count"] == 0
+    assert data["summary"]["considered_count"] == 6
+    assert data["summary"]["total_premium_monthly"] == 0  # bara active räknas
+
+
+def test_v2_student_creates_and_activates_policy(fx) -> None:
+    """Eleven skapar egen försäkring + aktiverar den."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_insurance_profile(sid)
+
+    r = client.post(
+        "/v2/forsakringar/policies",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "provider": "Folksam",
+            "name": "Hemförsäkring",
+            "kind": "hem",
+            "premium_monthly": 189,
+            "coverage_amount": 200000,
+            "deductible": 1500,
+            "autogiro": True,
+            "status": "considered",
+        },
+    )
+    assert r.status_code == 200, r.text
+    pid = r.json()["id"]
+
+    # Aktivera
+    r2 = client.patch(
+        f"/v2/forsakringar/policies/{pid}/status",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"status": "active"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["status"] == "active"
+    assert r2.json()["started_on"] is not None
+
+    # /v2/forsakringar visar nu 1 active + premie 189
+    r3 = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    summary = r3.json()["summary"]
+    assert summary["active_count"] == 1
+    assert summary["total_premium_monthly"] == 189
+    # Hem är nu täckt → ingen "saknar hemförsäkring"-gap längre
+    assert not any(
+        "saknar hemförsäkring" in g.lower()
+        for g in summary["coverage_gaps"]
+    )
+
+
+def test_v2_teacher_creates_paid_claim(fx) -> None:
+    """Lärare lägger in skadehändelse → räknas i claims_paid."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_insurance_profile(sid)
+
+    # Skapa policy via lärar-seed
+    client.post(
+        f"/v2/teacher/students/{sid}/insurance/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/insurance/claims",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "occurred_on": "2025-08-15",
+            "kind": "stold",
+            "title": "Cykel-stöld",
+            "description": "Cykeln togs från cykelställ",
+            "amount_claimed": 4700,
+            "amount_paid": 3200,
+            "status": "paid",
+            "paid_at": "2025-09-01",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "paid"
+    assert r.json()["amount_paid"] == 3200
+
+    # /v2/forsakringar reflekterar
+    r2 = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    summary = r2.json()["summary"]
+    assert summary["claims_paid_12m"] == 1
+    assert summary["claims_paid_amount_12m"] == 3200
+
+
+def test_v2_teacher_creates_unprotected_claim(fx) -> None:
+    """no_policy=True händelse → räknas som oskyddad."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_insurance_profile(sid)
+
+    r = client.post(
+        f"/v2/teacher/students/{sid}/insurance/claims",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "occurred_on": "2025-10-01",
+            "kind": "vattenskada",
+            "title": "Översvämning från grannlägenhet",
+            "amount_claimed": 35000,
+            "no_policy": True,
+            "status": "info",
+            "description": "Saknade hemförsäkring — bar kostnaden själv",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    r2 = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    summary = r2.json()["summary"]
+    assert summary["claims_unprotected_12m"] == 1
+
+
+def test_v2_forsakringar_coverage_gaps_for_bostadsratt(fx) -> None:
+    """Elev med bostadsrätt utan bostadsrättsförsäkring → coverage_gap."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_insurance_profile(
+        sid, housing_type="bostadsratt", has_mortgage=True,
+    )
+
+    r = client.get(
+        "/v2/forsakringar",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    gaps = r.json()["summary"]["coverage_gaps"]
+    assert any("bostadsrätt" in g.lower() for g in gaps)
+
+
+def test_v2_teacher_endpoint_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/insurance/seed-default",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
 # === Fas 2C · Arbetsgivaren · AgreementBenefit + MarketSalaryRange ===
 
 def test_v2_teacher_seed_default_agreement_benefits(fx) -> None:
