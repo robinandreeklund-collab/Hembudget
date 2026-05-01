@@ -7706,3 +7706,102 @@ def test_v2_notifications_teacher_message(fx) -> None:
     assert any("Meddelande" in t for t in titles)
     # Olästa räknas
     assert data["summary"]["unread_count"] >= 1
+
+
+# === Lärar-notiser (Fas 2AE) ===
+
+
+def test_v2_notifications_teacher_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    # Default: 1 elev (Eva) inaktiv → "behöver stöd"-notis kan dyka upp
+    assert "items" in data
+
+
+def test_v2_notifications_teacher_new_reflection(fx) -> None:
+    """Klar reflektion utan teacher_feedback → notis till läraren."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="X", is_template=False)
+        db.add(m); db.flush()
+        st = _MS(
+            module_id=m.id, sort_order=0,
+            kind="reflect", title="Vad lärde du dig?",
+        )
+        db.add(st); db.flush()
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "Bra reflektion utan flagga."},
+        ))
+        db.commit()
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    titles = [n["title"] for n in r.json()["items"]]
+    assert any("Ny reflektion" in t for t in titles)
+
+
+def test_v2_notifications_teacher_overdue_assignment(fx) -> None:
+    from hembudget.school.models import Assignment as _A
+    from datetime import datetime as _dt, timedelta as _td
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Försenad uppgift",
+            description="x",
+            kind="free_text",
+            due_date=_dt.utcnow() - _td(days=2),
+        ))
+        db.commit()
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    titles = [n["title"] for n in r.json()["items"]]
+    assert any("FÖRSENAT" in t for t in titles)
+
+
+def test_v2_notifications_teacher_flagged_reflection(fx) -> None:
+    """Reflektion med 'behöver hjälp' → flag-notis."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="X", is_template=False)
+        db.add(m); db.flush()
+        st = _MS(
+            module_id=m.id, sort_order=0,
+            kind="reflect", title="Q",
+        )
+        db.add(st); db.flush()
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "Vet inte hur jag ska göra"},
+        ))
+        db.commit()
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    titles = [n["title"] for n in r.json()["items"]]
+    assert any("flaggar stöd-behov" in t for t in titles)

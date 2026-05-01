@@ -13840,8 +13840,11 @@ def get_v2_notifications(
     Frontend pollar denna var 30:e sekund för att simulera realtid.
     Returnerar sortering nyast först.
     """
+    if info.role == "teacher" and info.teacher_id is not None:
+        return _build_teacher_notifications(info.teacher_id)
+
     if info.role != "student" or info.student_id is None:
-        # Tom payload för icke-elever (lärare har egen notif-källa)
+        # Tom payload för demo / okänd roll
         return V2NotificationsResponse(
             summary=V2NotificationsSummary(
                 total_count=0, unread_count=0,
@@ -14022,6 +14025,244 @@ def get_v2_notifications(
     # Sortera nyast först
     notifs.sort(key=lambda n: n.occurred_at, reverse=True)
 
+    today_count = sum(
+        1 for n in notifs if (now - n.occurred_at).days == 0
+    )
+    unread_count = sum(1 for n in notifs if n.unread)
+    by_kind: dict[str, int] = {}
+    for n in notifs:
+        by_kind[n.kind] = by_kind.get(n.kind, 0) + 1
+
+    summary = V2NotificationsSummary(
+        total_count=len(notifs),
+        unread_count=unread_count,
+        new_today_count=today_count,
+        by_kind=by_kind,
+    )
+    return V2NotificationsResponse(summary=summary, items=notifs)
+
+
+# === Lärar-notiser (Fas 2AE) ===
+#
+# Aggregerar notiser för läraren · samma format som elev-notiser men
+# källor är klass-aktivitet:
+# - Nya reflektioner att läsa (utan teacher_feedback)
+# - Flaggade reflektioner (heuristik · "behöver hjälp")
+# - Försenade uppdrag (due_date passerat, ej klart)
+# - Elever som behöver stöd (pent < 40 / 7 d inaktiv / 3+ röda axlar)
+# - Aktiva lönesamtal nära smärtgräns (proposed_pct ≥ 6,0)
+# - Olästa elev-meddelanden (från elev till lärare)
+
+
+def _build_teacher_notifications(
+    teacher_id: int,
+) -> V2NotificationsResponse:
+    notifs: list[V2Notification] = []
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=14)
+
+    with master_session() as ms:
+        students = (
+            ms.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .all()
+        )
+        student_ids = [s.id for s in students]
+        name_by_id = {s.id: s.display_name for s in students}
+
+        if not student_ids:
+            return V2NotificationsResponse(
+                summary=V2NotificationsSummary(
+                    total_count=0, unread_count=0,
+                    new_today_count=0, by_kind={},
+                ),
+                items=[],
+            )
+
+        # 1. Nya reflektioner (klar senaste 14 d, ingen feedback än)
+        new_reflections = (
+            ms.query(_SchoolStepProgress, _SchoolModuleStep)
+            .join(
+                _SchoolModuleStep,
+                _SchoolStepProgress.step_id == _SchoolModuleStep.id,
+            )
+            .filter(
+                _SchoolStepProgress.student_id.in_(student_ids),
+                _SchoolModuleStep.kind == "reflect",
+                _SchoolStepProgress.completed_at.is_not(None),
+                _SchoolStepProgress.completed_at >= cutoff,
+                _SchoolStepProgress.teacher_feedback.is_(None),
+            )
+            .order_by(_SchoolStepProgress.completed_at.desc())
+            .limit(10)
+            .all()
+        )
+        for prog, step in new_reflections:
+            if prog.completed_at is None:
+                continue
+            sname = name_by_id.get(prog.student_id, "Okänd elev")
+            text = ""
+            if prog.data and isinstance(prog.data, dict):
+                text = str(prog.data.get("reflection", "")).strip()
+            flagged = _flagged_for_help(text)
+            preview = text[:120] + ("…" if len(text) > 120 else "")
+            notifs.append(V2Notification(
+                id=f"refl-{prog.id}",
+                kind="social" if not flagged else "uppdrag",
+                icon="✦" if not flagged else "⚠",
+                occurred_at=prog.completed_at,
+                time_label=_time_label_for(prog.completed_at),
+                title=(
+                    f"⚠ {sname} flaggar stöd-behov"
+                    if flagged else
+                    f"Ny reflektion · {sname}"
+                ),
+                body=(
+                    f"<em>{step.title}</em>: \"{preview}\""
+                    if preview else f"<em>{step.title}</em>"
+                ),
+                unread=True,
+                target_route="/teacher/v2/reflektioner",
+            ))
+
+        # 2. Försenade uppdrag (due_date passerat, ej klart)
+        overdue_assignments = (
+            ms.query(_SchoolAssignment)
+            .filter(
+                _SchoolAssignment.teacher_id == teacher_id,
+                _SchoolAssignment.student_id.in_(student_ids),
+                _SchoolAssignment.due_date.is_not(None),
+                _SchoolAssignment.due_date < now,
+                _SchoolAssignment.manually_completed_at.is_(None),
+            )
+            .order_by(_SchoolAssignment.due_date.desc())
+            .limit(5)
+            .all()
+        )
+        for a in overdue_assignments:
+            sname = name_by_id.get(a.student_id, "Okänd elev")
+            days_late = (now - a.due_date).days if a.due_date else 0
+            notifs.append(V2Notification(
+                id=f"overdue-{a.id}",
+                kind="uppdrag",
+                icon="▷",
+                occurred_at=a.due_date or now,
+                time_label=_time_label_for(a.due_date or now),
+                title=f"FÖRSENAT UPPDRAG · {sname}",
+                body=(
+                    f"<em>{a.title}</em> · "
+                    f"{days_late} d försenat"
+                ),
+                unread=True,
+                target_route=f"/teacher/v2/uppdrag/{a.student_id}",
+            ))
+
+        # 3. Pågående lönesamtal nära smärtgräns
+        active_negs = (
+            ms.query(_SalaryNegotiation)
+            .filter(
+                _SalaryNegotiation.student_id.in_(student_ids),
+                _SalaryNegotiation.status == "active",
+            )
+            .order_by(_SalaryNegotiation.started_at.desc())
+            .all()
+        )
+        for neg in active_negs:
+            last_round = (
+                ms.query(_NegotiationRound)
+                .filter(_NegotiationRound.negotiation_id == neg.id)
+                .order_by(_NegotiationRound.round_no.desc())
+                .first()
+            )
+            if last_round is None or last_round.proposed_pct is None:
+                continue
+            if last_round.proposed_pct < 6.0:
+                continue
+            sname = name_by_id.get(neg.student_id, "Okänd elev")
+            notifs.append(V2Notification(
+                id=f"maria-pain-{neg.id}",
+                kind="modul",
+                icon="M",
+                occurred_at=last_round.created_at,
+                time_label=_time_label_for(last_round.created_at),
+                title=f"⚠ Maria nära smärtgräns · {sname}",
+                body=(
+                    f"R{last_round.round_no} · "
+                    f"{last_round.proposed_pct:.1f} % bud · "
+                    f"{neg.profession}"
+                ),
+                unread=True,
+                target_route=f"/teacher/v2/maria/{neg.student_id}",
+            ))
+
+        # 4. Olästa elev-meddelanden (sender_role=student)
+        from ..school.models import Message as _M
+        unread_msgs = (
+            ms.query(_M)
+            .filter(
+                _M.student_id.in_(student_ids),
+                _M.sender_role == "student",
+                _M.read_at.is_(None),
+                _M.created_at >= cutoff,
+            )
+            .order_by(_M.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        for m in unread_msgs:
+            sname = name_by_id.get(m.student_id, "Okänd elev")
+            preview = (m.body or "")[:120]
+            if len(m.body or "") > 120:
+                preview += "…"
+            notifs.append(V2Notification(
+                id=f"stu-msg-{m.id}",
+                kind="teacher",
+                icon=sname[:2].upper() if sname else "??",
+                occurred_at=m.created_at,
+                time_label=_time_label_for(m.created_at),
+                title=f"Meddelande från {sname}",
+                body=preview,
+                unread=True,
+                target_route=f"/teacher/v2/messages/{m.student_id}",
+            ))
+
+    # 5. Elever som behöver stöd (pent < 40 eller 7+ d inaktiv)
+    needs_help_count = 0
+    for st in students:
+        wb = _safe_calc_wellbeing_for(st)
+        if wb is None:
+            continue
+        total, eco, safe, health, social, leisure = wb
+        red_axes = sum(
+            1 for v in (eco, safe, health, social, leisure) if v < 40
+        )
+        days_inactive = _days_since(st.last_login_at)
+        if (
+            total < 40
+            or (days_inactive is not None and days_inactive >= 7)
+            or red_axes >= 3
+        ):
+            needs_help_count += 1
+    if needs_help_count > 0:
+        notifs.append(V2Notification(
+            id=f"needs-help-{needs_help_count}",
+            kind="uppdrag",
+            icon="!",
+            occurred_at=now - timedelta(minutes=1),
+            time_label="just nu",
+            title=f"{needs_help_count} elev{'er' if needs_help_count != 1 else ''} behöver stöd",
+            body=(
+                "Pentagon &lt; 40, inaktiv 7+ d eller "
+                "3+ röda axlar — se klass-hubben."
+            ),
+            unread=True,
+            target_route="/teacher/v2",
+        ))
+
+    notifs.sort(key=lambda n: n.occurred_at, reverse=True)
     today_count = sum(
         1 for n in notifs if (now - n.occurred_at).days == 0
     )
