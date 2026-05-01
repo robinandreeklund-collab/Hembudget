@@ -33,6 +33,7 @@ ska aldrig behöva generera data manuellt.
 10. [`10-saknas-foreslag.md`](./10-saknas-foreslag.md) — Vad som saknas i ursprungsförslaget
 11. [`11-implementations-plan.md`](./11-implementations-plan.md) — Faser, prioritet, integration med v2
 12. [`12-data-modeller.md`](./12-data-modeller.md) — Befintliga + nya tabeller (master + scope)
+13. [`13-elev-tester.md`](./13-elev-tester.md) — Veckotest med karaktärs-baserade frågor (anti-fusk via personalisering)
 
 ## Status (2026-05-01)
 
