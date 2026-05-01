@@ -418,3 +418,41 @@
   font-family: var(--serif);
   font-style: italic;
 }
+
+/* === Mobile (Fas 2AC) === */
+
+/* Smal mobile · stack pentagon labels under SVG, mindre padding */
+@media (max-width: 700px) {
+  .v2-hub-root .shell {
+    padding: 16px 14px 100px !important;
+  }
+  .hub-pent-stage {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .hub-axis-label {
+    padding: 11px 14px;
+  }
+  .hub-axis-name {
+    font-size: 16px;
+  }
+  .hub-pent-svg {
+    max-height: 360px;
+  }
+  .hub-center {
+    margin: 14px auto;
+  }
+  .hub-recap {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hub-axis-label {
+    padding: 10px 12px;
+  }
+  .hub-pent-svg {
+    max-height: 280px;
+  }
+}

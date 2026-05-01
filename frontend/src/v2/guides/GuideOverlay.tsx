@@ -69,50 +69,56 @@ export function GuideOverlay() {
           width: r.width + pad * 2,
           height: r.height + pad * 2,
         });
-        // Beräkna tip-position
-        const tipW = 380;
-        const tipH = 220;
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const isMobile = vw < 700;
+
+        // På mobil placeras tip-kortet alltid ankrad till botten av
+        // skärmen och spänner hela bredden — inga out-of-bounds-fel.
+        if (isMobile) {
+          setTipPos({ left: -1, top: -1 });  // mobile-läge styrs av CSS
+          return;
+        }
+
+        // Desktop: smart placering med tipW/tipH-beräkning
+        const tipW = Math.min(380, vw - 40);
+        const tipH = 240;
+        const margin = 16;
+        const safeTop = 70;  // topbar
+        const safeBottom = vh - 50;  // dev-footer
         let left = r.left + r.width / 2 - tipW / 2;
-        let top = r.bottom + 16;
+        let top = r.bottom + margin;
         const placement = step.placement;
         if (placement === "bottom") {
-          left = Math.max(
-            20,
-            Math.min(window.innerWidth - tipW - 20, left),
-          );
-          top = r.bottom + 16;
-          if (top + tipH > window.innerHeight - 20) {
-            top = r.top - tipH - 16;
-          }
+          left = Math.max(20, Math.min(vw - tipW - 20, left));
+          top = r.bottom + margin;
+          if (top + tipH > safeBottom) top = r.top - tipH - margin;
         } else if (placement === "top") {
-          left = Math.max(
-            20,
-            Math.min(window.innerWidth - tipW - 20, left),
-          );
-          top = r.top - tipH - 16;
-          if (top < 70) top = r.bottom + 16;
+          left = Math.max(20, Math.min(vw - tipW - 20, left));
+          top = r.top - tipH - margin;
+          if (top < safeTop) top = r.bottom + margin;
         } else if (placement === "right") {
-          left = r.right + 16;
+          left = r.right + margin;
           top = r.top + r.height / 2 - tipH / 2;
-          if (left + tipW > window.innerWidth - 20) {
-            left = r.left - tipW - 16;
-          }
-          if (top < 70) top = 70;
-          if (top + tipH > window.innerHeight - 20) {
-            top = window.innerHeight - tipH - 20;
-          }
+          if (left + tipW > vw - 20) left = r.left - tipW - margin;
+          if (left < 20) left = 20;
+          if (top < safeTop) top = safeTop;
+          if (top + tipH > safeBottom) top = safeBottom - tipH;
         } else if (placement === "left") {
-          left = r.left - tipW - 16;
+          left = r.left - tipW - margin;
           top = r.top + r.height / 2 - tipH / 2;
-          if (left < 20) left = r.right + 16;
-          if (top < 70) top = 70;
-          if (top + tipH > window.innerHeight - 20) {
-            top = window.innerHeight - tipH - 20;
-          }
+          if (left < 20) left = r.right + margin;
+          if (left + tipW > vw - 20) left = vw - tipW - 20;
+          if (top < safeTop) top = safeTop;
+          if (top + tipH > safeBottom) top = safeBottom - tipH;
         } else if (placement === "bottom-left") {
           left = Math.max(20, r.right - tipW);
-          top = r.bottom + 16;
+          top = r.bottom + margin;
         }
+        // Final clamp · ingen overflow åt något håll
+        left = Math.max(20, Math.min(vw - tipW - 20, left));
+        top = Math.max(safeTop, Math.min(safeBottom - tipH, top));
         setTipPos({ left, top });
       }, 350);
       return el;
@@ -163,11 +169,14 @@ export function GuideOverlay() {
       {tipPos && (
         <div
           ref={tipRef}
-          className="guide-tip"
-          style={{
-            left: tipPos.left,
-            top: tipPos.top,
-          }}
+          className={`guide-tip${
+            tipPos.left < 0 ? " guide-tip-mobile" : ""
+          }`}
+          style={
+            tipPos.left < 0
+              ? undefined
+              : { left: tipPos.left, top: tipPos.top }
+          }
         >
           <div className="guide-tip-eye">{step.eye}</div>
           <div

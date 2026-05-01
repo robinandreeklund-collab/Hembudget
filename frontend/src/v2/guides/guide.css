@@ -164,3 +164,57 @@
 .guide-dropdown.show {
   display: block;
 }
+
+/* === MOBILE FALLBACK · Fas 2AD === */
+/* På smala skärmar är smart placement omöjlig — tip-cardet ankrar
+ * istället till botten av skärmen och sträcker sig hela bredden.
+ * GuideOverlay sätter klassen guide-tip-mobile när vw < 700. */
+.guide-tip.guide-tip-mobile {
+  position: fixed;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: 60px;
+  top: auto !important;
+  width: auto;
+  max-width: none;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 700px) {
+  .guide-tip {
+    width: auto;
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 60px !important;
+    top: auto !important;
+    max-width: none;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .guide-tip-h {
+    font-size: 18px;
+  }
+  .guide-tip-prose {
+    font-size: 13.5px;
+  }
+  .guide-tip-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .guide-tip-btn {
+    padding: 7px 12px;
+    font-size: 9.5px;
+  }
+}
+
+@media (max-width: 400px) {
+  .guide-tip-prog {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  .guide-tip-actions .guide-tip-btn.ghost:nth-child(1) {
+    /* "Hoppa över" tar mycket plats — göm på riktigt små skärmar */
+    display: none;
+  }
+}
