@@ -6585,3 +6585,227 @@ def test_v2_teacher_student_detail_404_when_not_found(fx) -> None:
     )
     # Saknad elev → 403 (beror på Student-objekt None)
     assert r.status_code == 403
+
+
+# === TeacherReflectionsV2 (p-refl) — Fas 2T ===
+
+
+def test_v2_teacher_reflections_blocks_non_teacher(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/reflections",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_reflections_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/reflections",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["total_count"] == 0
+    assert data["items"] == []
+
+
+def test_v2_teacher_reflections_lists_with_summary(fx) -> None:
+    """3 reflektioner → summary räknar rätt + flaggar."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="Skatt", is_template=False)
+        db.add(m); db.flush()
+        s1 = _MS(
+            module_id=m.id, sort_order=0,
+            kind="reflect", title="Vad lärde du dig?",
+            content="Skriv 200+ ord",
+        )
+        s2 = _MS(
+            module_id=m.id, sort_order=1,
+            kind="reflect", title="Hur gick det?",
+        )
+        s3 = _MS(
+            module_id=m.id, sort_order=2,
+            kind="reflect", title="Reflektera om april",
+        )
+        db.add(s1); db.add(s2); db.add(s3); db.flush()
+        # Klar reflektion utan feedback
+        db.add(_SSP(
+            student_id=sid, step_id=s1.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "Jag förstår nu mycket bättre."},
+        ))
+        # Klar reflektion MED feedback
+        db.add(_SSP(
+            student_id=sid, step_id=s2.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "Det gick bra."},
+            teacher_feedback="Snyggt!",
+            feedback_at=_dt.utcnow(),
+        ))
+        # Klar reflektion med help-flagga
+        db.add(_SSP(
+            student_id=sid, step_id=s3.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "Vet inte hur jag deklarerar"},
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/reflections",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    s = data["summary"]
+    assert s["total_count"] == 3
+    assert s["unread_count"] == 2
+    assert s["flagged_count"] == 1
+    assert s["avg_word_count"] > 0
+    titles = [i["step_title"] for i in data["items"]]
+    assert "Vad lärde du dig?" in titles
+
+
+def test_v2_teacher_reflections_filter_unread(fx) -> None:
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="X", is_template=False)
+        db.add(m); db.flush()
+        s1 = _MS(module_id=m.id, sort_order=0, kind="reflect", title="A")
+        s2 = _MS(module_id=m.id, sort_order=1, kind="reflect", title="B")
+        db.add(s1); db.add(s2); db.flush()
+        db.add(_SSP(
+            student_id=sid, step_id=s1.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "ord ord ord"},
+            teacher_feedback="bra",
+            feedback_at=_dt.utcnow(),
+        ))
+        db.add(_SSP(
+            student_id=sid, step_id=s2.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "andra reflektion"},
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/reflections?filter=unread",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    # Items är filtrerat till bara olästa men summary är total
+    assert data["summary"]["total_count"] == 2
+    assert len(data["items"]) == 1
+    assert data["items"][0]["step_title"] == "B"
+
+
+def test_v2_teacher_reflections_filter_flagged(fx) -> None:
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="X", is_template=False)
+        db.add(m); db.flush()
+        s = _MS(module_id=m.id, sort_order=0, kind="reflect", title="Q")
+        db.add(s); db.flush()
+        db.add(_SSP(
+            student_id=sid, step_id=s.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "Behöver hjälp innan deadline"},
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/reflections?filter=flagged",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["flagged_for_help"] is True
+
+
+def test_v2_teacher_reflections_post_feedback(fx) -> None:
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="Z", is_template=False)
+        db.add(m); db.flush()
+        s = _MS(module_id=m.id, sort_order=0, kind="reflect", title="Q")
+        db.add(s); db.flush()
+        prog = _SSP(
+            student_id=sid, step_id=s.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "tankar"},
+        )
+        db.add(prog); db.flush()
+        pid = prog.id
+        db.commit()
+
+    r = client.post(
+        f"/v2/teacher/reflections/{pid}/feedback",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"body": "Bra reflektion! Försök gå djupare nästa gång."},
+    )
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["teacher_feedback"].startswith("Bra reflektion!")
+    assert out["feedback_at"] is not None
+
+    # Lista igen → unread_count nu 0
+    r2 = client.get(
+        "/v2/teacher/reflections",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["summary"]["unread_count"] == 0
+
+
+def test_v2_teacher_reflections_feedback_blocks_other_teacher(fx) -> None:
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, _tch, sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="Q", is_template=False)
+        db.add(m); db.flush()
+        s = _MS(module_id=m.id, sort_order=0, kind="reflect", title="?")
+        db.add(s); db.flush()
+        prog = _SSP(
+            student_id=sid, step_id=s.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "x"},
+        )
+        db.add(prog); db.flush()
+        pid = prog.id
+        db.commit()
+
+    r = client.post(
+        f"/v2/teacher/reflections/{pid}/feedback",
+        headers={"Authorization": f"Bearer {sa}"},
+        json={"body": "kommentar"},
+    )
+    assert r.status_code == 403

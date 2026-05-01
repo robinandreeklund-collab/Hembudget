@@ -11635,3 +11635,240 @@ def teacher_student_detail(
         mailbox_unhandled_count=unhandled,
         mailbox_oldest_days=oldest_days,
     )
+
+
+# === TeacherReflectionsV2 (p-refl · Fas 2T) ===
+#
+# Speglar prototypens larare.html#p-refl: lista över klassens
+# reflektioner från reflect-steg, med oläst/kommenterad-filtrering
+# och flagga för "elev mår inte bra"-mönster (heuristik på text).
+
+
+# Heuristik · ord/fraser som indikerar att eleven kämpar / behöver stöd.
+# Ger lärar-vyn röd flagga ("MÅR INTE BRA") så ingen reflektion flyger
+# under radarn. Lågt false-positive-tröskel föredras — bättre att läraren
+# tittar en gång för mycket än missar någon som faktiskt behöver hjälp.
+_HELP_FLAG_PHRASES = (
+    "vet inte hur",
+    "förstår inte",
+    "förstår ej",
+    "behöver hjälp",
+    "kan inte",
+    "klarar inte",
+    "ger upp",
+    "ångest",
+    "stress",
+    "panik",
+    "orolig",
+    "hjälp innan",
+    "boka",
+)
+
+
+def _flagged_for_help(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(phrase in lower for phrase in _HELP_FLAG_PHRASES)
+
+
+def _word_count(text: str) -> int:
+    if not text:
+        return 0
+    return len([t for t in text.split() if t.strip()])
+
+
+class V2ReflectionItem(BaseModel):
+    progress_id: int
+    student_id: int
+    student_name: str
+    module_id: int
+    module_title: str
+    step_id: int
+    step_title: str
+    step_question: Optional[str]
+    body: str
+    word_count: int
+    completed_at: Optional[datetime]
+    teacher_feedback: Optional[str]
+    feedback_at: Optional[datetime]
+    flagged_for_help: bool
+    rubric_label: Optional[str] = None  # AI-rubrik (tar modul-titeln)
+
+
+class V2ReflectionsSummary(BaseModel):
+    total_count: int
+    unread_count: int
+    flagged_count: int
+    avg_word_count: int
+    last_received_at: Optional[datetime]
+
+
+class V2ReflectionsResponse(BaseModel):
+    summary: V2ReflectionsSummary
+    items: list[V2ReflectionItem]
+
+
+@router.get(
+    "/teacher/reflections", response_model=V2ReflectionsResponse,
+)
+def teacher_reflections_v2(
+    filter: Literal["all", "unread", "flagged"] = "all",
+    info: TokenInfo = Depends(require_token),
+) -> V2ReflectionsResponse:
+    """Alla reflektioner från lärarens elever · sorterat nyast först.
+
+    filter:
+      - all       (default) alla reflektioner senaste 90 dgr
+      - unread    bara de utan teacher_feedback
+      - flagged   bara de där eleven verkar behöva hjälp (heuristik
+                  på text — "vet inte hur", "förstår inte" etc)
+    """
+    teacher_id = _require_teacher(info)
+    cutoff = datetime.utcnow() - timedelta(days=90)
+
+    items: list[V2ReflectionItem] = []
+    with master_session() as s:
+        rows = (
+            s.query(_SchoolStepProgress, _SchoolModuleStep, Student)
+            .join(
+                _SchoolModuleStep,
+                _SchoolStepProgress.step_id == _SchoolModuleStep.id,
+            )
+            .join(Student, _SchoolStepProgress.student_id == Student.id)
+            .filter(
+                Student.teacher_id == teacher_id,
+                _SchoolModuleStep.kind == "reflect",
+                _SchoolStepProgress.completed_at.is_not(None),
+                _SchoolStepProgress.completed_at >= cutoff,
+            )
+            .order_by(_SchoolStepProgress.completed_at.desc())
+            .all()
+        )
+        for prog, step, stu in rows:
+            text = ""
+            if prog.data and isinstance(prog.data, dict):
+                text = str(prog.data.get("reflection", "")).strip()
+            if not text:
+                continue  # tomt reflect-svar — hoppa
+            flagged = _flagged_for_help(text)
+            wc = _word_count(text)
+            module = (
+                s.query(_SchoolModule)
+                .filter(_SchoolModule.id == step.module_id)
+                .first()
+            )
+            module_title = module.title if module else "—"
+            items.append(V2ReflectionItem(
+                progress_id=prog.id,
+                student_id=stu.id,
+                student_name=stu.display_name,
+                module_id=step.module_id,
+                module_title=module_title,
+                step_id=step.id,
+                step_title=step.title,
+                step_question=step.content,
+                body=text,
+                word_count=wc,
+                completed_at=prog.completed_at,
+                teacher_feedback=prog.teacher_feedback,
+                feedback_at=prog.feedback_at,
+                flagged_for_help=flagged,
+                rubric_label=module_title.upper(),
+            ))
+
+    # Filter
+    filtered = items
+    if filter == "unread":
+        filtered = [i for i in items if i.teacher_feedback is None]
+    elif filter == "flagged":
+        filtered = [i for i in items if i.flagged_for_help]
+
+    # Summary räknas över alla items (oavsett filter)
+    avg_wc = (
+        round(sum(i.word_count for i in items) / len(items))
+        if items else 0
+    )
+    summary = V2ReflectionsSummary(
+        total_count=len(items),
+        unread_count=sum(1 for i in items if i.teacher_feedback is None),
+        flagged_count=sum(1 for i in items if i.flagged_for_help),
+        avg_word_count=avg_wc,
+        last_received_at=items[0].completed_at if items else None,
+    )
+    return V2ReflectionsResponse(summary=summary, items=filtered)
+
+
+class V2ReflectionFeedbackIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+@router.post(
+    "/teacher/reflections/{progress_id}/feedback",
+    response_model=V2ReflectionItem,
+)
+def teacher_reflection_feedback_v2(
+    progress_id: int,
+    payload: V2ReflectionFeedbackIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2ReflectionItem:
+    """Lärare ger feedback på en reflektion · uppdaterar
+    StudentStepProgress.teacher_feedback. Returnerar uppdaterad row."""
+    teacher_id = _require_teacher(info)
+    with master_session() as s:
+        prog = (
+            s.query(_SchoolStepProgress)
+            .filter(_SchoolStepProgress.id == progress_id)
+            .first()
+        )
+        if not prog:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Reflektionen hittades inte",
+            )
+        student = (
+            s.query(Student)
+            .filter(Student.id == prog.student_id)
+            .first()
+        )
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        prog.teacher_feedback = payload.body.strip()
+        prog.feedback_at = datetime.utcnow()
+        s.flush()
+
+        step = (
+            s.query(_SchoolModuleStep)
+            .filter(_SchoolModuleStep.id == prog.step_id)
+            .first()
+        )
+        if step is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Steget saknas",
+            )
+        module = (
+            s.query(_SchoolModule)
+            .filter(_SchoolModule.id == step.module_id)
+            .first()
+        )
+        text = ""
+        if prog.data and isinstance(prog.data, dict):
+            text = str(prog.data.get("reflection", "")).strip()
+        return V2ReflectionItem(
+            progress_id=prog.id,
+            student_id=student.id,
+            student_name=student.display_name,
+            module_id=step.module_id,
+            module_title=module.title if module else "—",
+            step_id=step.id,
+            step_title=step.title,
+            step_question=step.content,
+            body=text,
+            word_count=_word_count(text),
+            completed_at=prog.completed_at,
+            teacher_feedback=prog.teacher_feedback,
+            feedback_at=prog.feedback_at,
+            flagged_for_help=_flagged_for_help(text),
+            rubric_label=(module.title.upper() if module else None),
+        )
