@@ -5864,3 +5864,424 @@ def test_v2_teacher_mail_detail_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === UppdragV2 (Mina uppdrag) — Fas 2P ===
+
+
+def test_v2_uppdrag_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/uppdrag")
+    assert r.status_code == 401
+
+
+def test_v2_uppdrag_empty_state(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        "/v2/uppdrag",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["active"] == []
+    assert data["completed"] == []
+    assert data["summary"]["active_count"] == 0
+    assert data["summary"]["completed_count"] == 0
+    assert data["summary"]["overdue_count"] == 0
+
+
+def test_v2_uppdrag_lists_active_with_urgency(fx) -> None:
+    """Lärar-uppdrag med olika due_date → sorteras på urgency."""
+    from hembudget.school.models import Assignment as _A
+    from datetime import datetime as _dt, timedelta as _td
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Räkna KALP 2,4 Mkr",
+            description="Bolån för 2:a i Hökarängen",
+            kind="free_text",
+            due_date=_dt.utcnow() + _td(days=5),
+        ))
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Peer-review Hassans portfolio",
+            description="Granska klasskamratens lönesamtal",
+            kind="free_text",
+            due_date=_dt.utcnow() + _td(days=1),
+        ))
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Reflektera över april",
+            description="200-400 ord",
+            kind="free_text",
+            due_date=_dt.utcnow() + _td(days=14),
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/uppdrag",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    titles = [row["title"] for row in data["active"]]
+    # Sortering: 1 dag → 5 dgr → 14 dgr
+    assert titles[0].startswith("Peer-review")
+    assert "KALP" in titles[1]
+    assert "april" in titles[2]
+    assert data["summary"]["active_count"] == 3
+    assert data["summary"]["nearest_due_label"] in {"imorgon", "1 dgr"}
+    # urgency-tags
+    urgencies = [row["urgency"] for row in data["active"]]
+    assert urgencies[0] == "tomorrow"
+    assert urgencies[1] == "this_week"
+    assert urgencies[2] == "later"
+
+
+def test_v2_uppdrag_overdue_counted(fx) -> None:
+    from hembudget.school.models import Assignment as _A
+    from datetime import datetime as _dt, timedelta as _td
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Försenat", description="...",
+            kind="free_text",
+            due_date=_dt.utcnow() - _td(days=2),
+        ))
+        db.commit()
+    r = client.get(
+        "/v2/uppdrag",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    assert data["summary"]["overdue_count"] == 1
+    assert data["active"][0]["urgency"] == "overdue"
+
+
+def test_v2_uppdrag_self_complete_free_text(fx) -> None:
+    from hembudget.school.models import Assignment as _A
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        a = _A(
+            teacher_id=tid, student_id=sid,
+            title="Skriv reflektion",
+            description="200 ord",
+            kind="free_text",
+        )
+        db.add(a); db.flush()
+        aid = a.id
+        db.commit()
+
+    r = client.post(
+        f"/v2/uppdrag/{aid}/self-complete",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["assignment_id"] == aid
+
+    # Nu ska den ligga i completed-listan
+    r2 = client.get(
+        "/v2/uppdrag",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r2.json()
+    assert data["summary"]["active_count"] == 0
+    assert data["summary"]["completed_count"] == 1
+    assert data["completed"][0]["status"] == "completed"
+    assert data["summary"]["completed_this_month"] == 1
+
+
+def test_v2_uppdrag_self_complete_blocks_auto_kind(fx) -> None:
+    """save_amount bedöms automatiskt — kan ej själv-klarmarkeras."""
+    from hembudget.school.models import Assignment as _A
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        a = _A(
+            teacher_id=tid, student_id=sid,
+            title="Spara 2000",
+            description="Spara 2000 kr",
+            kind="save_amount",
+            params={"amount": 2000},
+        )
+        db.add(a); db.flush()
+        aid = a.id
+        db.commit()
+
+    r = client.post(
+        f"/v2/uppdrag/{aid}/self-complete",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 400
+
+
+def test_v2_uppdrag_self_complete_other_student_404(fx) -> None:
+    """Eleven kan inte själv-klarmarkera annan elevs uppdrag."""
+    from hembudget.school.models import Assignment as _A, Student as _S
+
+    client, _tch, _sa, stu, tid, _said, _sid = fx
+    with master_session() as db:
+        other = _S(
+            teacher_id=tid, display_name="Hassan",
+            login_code="HAS00002",
+        )
+        db.add(other); db.flush()
+        a = _A(
+            teacher_id=tid, student_id=other.id,
+            title="X", description="X", kind="free_text",
+        )
+        db.add(a); db.flush()
+        aid = a.id
+        db.commit()
+
+    r = client.post(
+        f"/v2/uppdrag/{aid}/self-complete",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 404
+
+
+def test_v2_teacher_uppdrag_overview(fx) -> None:
+    from hembudget.school.models import Assignment as _A
+    from datetime import datetime as _dt, timedelta as _td
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Räkna KALP",
+            description="Bolån",
+            kind="free_text",
+            due_date=_dt.utcnow() + _td(days=3),
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/uppdrag-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["uppdrag"]["summary"]["active_count"] == 1
+    assert data["uppdrag"]["active"][0]["title"] == "Räkna KALP"
+
+
+def test_v2_teacher_uppdrag_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/uppdrag-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+# === KompetensV2 (Kompetens-detalj) — Fas 2Q ===
+
+
+def test_v2_kompetens_detail_404_when_unknown(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/kompetens/9999",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 404
+
+
+def test_v2_kompetens_detail_basis_when_no_progress(fx) -> None:
+    """Ny kompetens, ingen progress → BASIS, krav i listan."""
+    from hembudget.school.models import Competency as _Comp
+
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    with master_session() as db:
+        c = _Comp(
+            key="lon", name="Lön",
+            level="grund", is_system=True,
+        )
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+
+    r = client.get(
+        f"/v2/kompetens/{cid}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["competency_id"] == cid
+    assert data["key"] == "lon"
+    assert data["level"] == "B"
+    assert data["next_level"] == "G"
+    assert data["next_level_label"] == "GRUND"
+    assert data["mastery"] == 0.0
+    assert data["completed_steps"] == 0
+    assert data["timeline"] == []
+    # 3 krav-rader för nästa nivå
+    assert len(data["requirements_for_next"]) == 3
+    assert all(r["met"] is False for r in data["requirements_for_next"])
+
+
+def test_v2_kompetens_detail_with_completed_module(fx) -> None:
+    """En modul klar → mastery=1.0 → FÖRDJUPNING + module_completed-event."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP, StudentModule as _SM,
+        Competency as _Comp, ModuleStepCompetency as _MSC,
+    )
+    from datetime import datetime as _dt
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(
+            key="bokforing", name="Bokföring",
+            level="grund", is_system=True,
+        )
+        db.add(c); db.flush()
+        cid = c.id
+        m = _M(
+            teacher_id=tid, title="Bokföring grunder",
+            is_template=False,
+        )
+        db.add(m); db.flush()
+        mid = m.id
+        st1 = _MS(
+            module_id=mid, sort_order=0,
+            kind="read", title="Vad är bokföring",
+        )
+        st2 = _MS(
+            module_id=mid, sort_order=1,
+            kind="task", title="Klassa 5 transaktioner",
+        )
+        db.add(st1); db.add(st2); db.flush()
+        db.add(_MSC(step_id=st1.id, competency_id=cid, weight=1.0))
+        db.add(_MSC(step_id=st2.id, competency_id=cid, weight=1.0))
+        completed_at = _dt.utcnow()
+        db.add(_SSP(
+            student_id=sid, step_id=st1.id,
+            completed_at=completed_at, data={},
+        ))
+        db.add(_SSP(
+            student_id=sid, step_id=st2.id,
+            completed_at=completed_at, data={},
+        ))
+        db.add(_SM(
+            student_id=sid, module_id=mid,
+            started_at=completed_at,
+            completed_at=completed_at,
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/kompetens/{cid}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["mastery"] == 1.0
+    assert data["level"] == "F"
+    assert data["next_level"] is None
+    assert data["completed_steps"] == 2
+    assert data["total_steps"] == 2
+    # Timeline: 2 step_completed + 1 module_completed = 3 events
+    assert len(data["timeline"]) == 3
+    types = {e["event_type"] for e in data["timeline"]}
+    assert "step_completed" in types
+    assert "module_completed" in types
+    # Connected modules · 1 klar
+    assert len(data["connected_modules"]) == 1
+    assert data["connected_modules"][0]["completed"] is True
+    assert data["connected_modules"][0]["completed_steps"] == 2
+
+
+def test_v2_kompetens_detail_progress_to_grund(fx) -> None:
+    """1 av 3 steg klart → mastery ~0.33 (G-tröskeln) → GRUND-nivå."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+        Competency as _Comp, ModuleStepCompetency as _MSC,
+    )
+    from datetime import datetime as _dt
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(key="skatt", name="Skatt", level="grund", is_system=True)
+        db.add(c); db.flush()
+        cid = c.id
+        m = _M(teacher_id=tid, title="Skatten", is_template=False)
+        db.add(m); db.flush()
+        steps = [
+            _MS(module_id=m.id, sort_order=i, kind="read", title=f"S{i}")
+            for i in range(3)
+        ]
+        for st in steps:
+            db.add(st)
+        db.flush()
+        for st in steps:
+            db.add(_MSC(step_id=st.id, competency_id=cid, weight=1.0))
+        db.add(_SSP(
+            student_id=sid, step_id=steps[0].id,
+            completed_at=_dt.utcnow(), data={},
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/kompetens/{cid}",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    # 1/3 = 0.3333 → just under threshold för GRUND (0.33),
+    # men round-to-3 hamnar på 0.333 som är >= 0.33
+    assert data["completed_steps"] == 1
+    assert data["total_steps"] == 3
+    # Mastery exakt 1/3 ~= 0.3333 → level G (>= 0.33)
+    assert data["level"] == "G"
+    assert data["next_level"] == "F"
+
+
+def test_v2_teacher_kompetens_overview(fx) -> None:
+    from hembudget.school.models import Competency as _Comp
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(
+            key="budget", name="Budget",
+            level="grund", is_system=True,
+        )
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["detail"]["competency_id"] == cid
+    assert data["detail"]["level"] == "B"
+
+
+def test_v2_teacher_kompetens_blocks_other_teachers(fx) -> None:
+    from hembudget.school.models import Competency as _Comp
+
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        c = _Comp(key="x", name="X", level="grund", is_system=True)
+        db.add(c); db.flush()
+        cid = c.id
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/kompetens/{cid}",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

@@ -9991,3 +9991,621 @@ def v2_roster(
             )
             for s in students
         ]
+
+
+# === UppdragV2 (Mina uppdrag · Fas 2P) ===
+#
+# Wrappar existerande Assignment + evaluate() med v2-style-summary.
+# Speglar prototypens p-uppdrag: aktiva uppdrag (med deadline-urgency)
+# + klara/godkända + lärar-feedback. Eleven kan självmarkera free_text
+# som klart; lärare kan begära retry via existerande feedback-flow.
+
+
+def _urgency_for_due(due: Optional[datetime]) -> tuple[Optional[int], str]:
+    """Returnerar (days_until_due, urgency-label).
+
+    urgency: 'overdue' | 'today' | 'tomorrow' | 'this_week' | 'later' | 'none'
+    """
+    if due is None:
+        return None, "none"
+    today = datetime.utcnow().date()
+    diff = (due.date() - today).days
+    if diff < 0:
+        return diff, "overdue"
+    if diff == 0:
+        return 0, "today"
+    if diff == 1:
+        return 1, "tomorrow"
+    if diff <= 7:
+        return diff, "this_week"
+    return diff, "later"
+
+
+class V2UppdragRow(BaseModel):
+    id: int
+    teacher_id: int
+    title: str
+    description: str
+    kind: str
+    target_year_month: Optional[str]
+    params: Optional[dict]
+    due_date: Optional[datetime]
+    created_at: datetime
+    status: Literal["not_started", "in_progress", "completed"]
+    progress: str
+    detail: Optional[dict] = None
+    teacher_feedback: Optional[str] = None
+    teacher_feedback_at: Optional[datetime] = None
+    manually_completed_at: Optional[datetime] = None
+    days_until_due: Optional[int] = None
+    urgency: Literal[
+        "overdue", "today", "tomorrow", "this_week", "later", "none",
+    ] = "none"
+
+
+class V2UppdragSummary(BaseModel):
+    active_count: int
+    completed_count: int
+    overdue_count: int
+    nearest_due_date: Optional[datetime] = None
+    nearest_due_label: Optional[str] = None
+    completed_this_month: int = 0
+
+
+class V2UppdragResponse(BaseModel):
+    student_id: int
+    teacher_name: Optional[str] = None
+    active: list[V2UppdragRow]
+    completed: list[V2UppdragRow]
+    summary: V2UppdragSummary
+
+
+def _evaluate_for_v2(a: _SchoolAssignment, student: Student) -> V2UppdragRow:
+    from ..teacher.assignments import evaluate as _evaluate
+
+    try:
+        res = _evaluate(a, student)
+        status_val = res.status
+        progress = res.progress
+        detail = res.detail
+    except Exception:  # pragma: no cover — defensiv
+        status_val = "in_progress"
+        progress = "Kunde inte utvärdera uppdraget"
+        detail = None
+    days, urgency = _urgency_for_due(a.due_date)
+    return V2UppdragRow(
+        id=a.id,
+        teacher_id=a.teacher_id,
+        title=a.title,
+        description=a.description,
+        kind=a.kind,
+        target_year_month=a.target_year_month,
+        params=a.params,
+        due_date=a.due_date,
+        created_at=a.created_at,
+        status=status_val,  # type: ignore[arg-type]
+        progress=progress,
+        detail=detail,
+        teacher_feedback=a.teacher_feedback,
+        teacher_feedback_at=a.teacher_feedback_at,
+        manually_completed_at=a.manually_completed_at,
+        days_until_due=days,
+        urgency=urgency,  # type: ignore[arg-type]
+    )
+
+
+def _build_uppdrag_response(student_id: int) -> V2UppdragResponse:
+    with master_session() as s:
+        student = s.get(Student, student_id)
+        if not student:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Eleven hittades inte",
+            )
+        teacher_name: Optional[str] = None
+        if student.teacher_id is not None:
+            t = s.get(Teacher, student.teacher_id)
+            teacher_name = t.name if t else None
+        rows = (
+            s.query(_SchoolAssignment)
+            .filter(_SchoolAssignment.student_id == student.id)
+            .order_by(_SchoolAssignment.created_at.desc())
+            .all()
+        )
+        evaluated = [_evaluate_for_v2(a, student) for a in rows]
+
+    active: list[V2UppdragRow] = []
+    completed: list[V2UppdragRow] = []
+    overdue = 0
+    nearest: Optional[V2UppdragRow] = None
+    completed_this_month = 0
+    today = datetime.utcnow()
+    month_key = today.strftime("%Y-%m")
+
+    for r in evaluated:
+        if r.status == "completed":
+            completed.append(r)
+            mc = r.manually_completed_at
+            if mc and mc.strftime("%Y-%m") == month_key:
+                completed_this_month += 1
+        else:
+            active.append(r)
+            if r.urgency == "overdue":
+                overdue += 1
+            if r.due_date is not None:
+                if nearest is None or (
+                    nearest.due_date is not None
+                    and r.due_date < nearest.due_date
+                ):
+                    nearest = r
+
+    # Sortera aktiva: först overdue, sen tidigast deadline, sen senast skapad
+    def _sort_key(row: V2UppdragRow) -> tuple:
+        urgency_rank = {
+            "overdue": 0, "today": 1, "tomorrow": 2,
+            "this_week": 3, "later": 4, "none": 5,
+        }
+        return (
+            urgency_rank.get(row.urgency, 9),
+            row.due_date or datetime.max,
+            -row.created_at.timestamp(),
+        )
+
+    active.sort(key=_sort_key)
+    # Klara: senast manuellt klar först
+    completed.sort(
+        key=lambda r: (r.manually_completed_at or r.created_at),
+        reverse=True,
+    )
+
+    nearest_label: Optional[str] = None
+    if nearest is not None and nearest.due_date is not None:
+        d = nearest.days_until_due
+        if d is None:
+            nearest_label = nearest.due_date.strftime("%-d %b")
+        elif d < 0:
+            nearest_label = f"försenad {abs(d)} d"
+        elif d == 0:
+            nearest_label = "idag"
+        elif d == 1:
+            nearest_label = "imorgon"
+        else:
+            nearest_label = f"{d} dgr"
+
+    summary = V2UppdragSummary(
+        active_count=len(active),
+        completed_count=len(completed),
+        overdue_count=overdue,
+        nearest_due_date=nearest.due_date if nearest else None,
+        nearest_due_label=nearest_label,
+        completed_this_month=completed_this_month,
+    )
+    return V2UppdragResponse(
+        student_id=student_id,
+        teacher_name=teacher_name,
+        active=active,
+        completed=completed,
+        summary=summary,
+    )
+
+
+@router.get("/uppdrag", response_model=V2UppdragResponse)
+def get_uppdrag(
+    info: TokenInfo = Depends(require_token),
+) -> V2UppdragResponse:
+    """Elevens egna uppdrag · live-status från evaluate() · sorterat
+    på deadline-urgency."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever har egna uppdrag",
+        )
+    return _build_uppdrag_response(info.student_id)
+
+
+class V2UppdragSelfCompleteOut(BaseModel):
+    ok: bool
+    assignment_id: int
+    manually_completed_at: datetime
+
+
+@router.post(
+    "/uppdrag/{assignment_id}/self-complete",
+    response_model=V2UppdragSelfCompleteOut,
+)
+def self_complete_uppdrag(
+    assignment_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2UppdragSelfCompleteOut:
+    """Eleven markerar ett free_text-uppdrag som klart. Andra kind:s
+    bedöms automatiskt och kan inte själv-klarmarkeras."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+    with master_session() as s:
+        a = (
+            s.query(_SchoolAssignment)
+            .filter(
+                _SchoolAssignment.id == assignment_id,
+                _SchoolAssignment.student_id == info.student_id,
+            )
+            .first()
+        )
+        if not a:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "Uppdraget finns ej eller tillhör inte dig",
+            )
+        if a.kind != "free_text":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                (
+                    "Det här uppdraget bedöms automatiskt — gör klart "
+                    "i rätt verktyg så uppdateras status."
+                ),
+            )
+        now = datetime.utcnow()
+        a.manually_completed_at = now
+        return V2UppdragSelfCompleteOut(
+            ok=True,
+            assignment_id=a.id,
+            manually_completed_at=now,
+        )
+
+
+# Lärar-overview · samma data men för elev under granskning
+class V2TeacherUppdragOverview(BaseModel):
+    student_id: int
+    student_name: str
+    uppdrag: V2UppdragResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/uppdrag-overview",
+    response_model=V2TeacherUppdragOverview,
+)
+def teacher_uppdrag_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherUppdragOverview:
+    """Lärar-vy · alla elevens uppdrag med live-status (ej impersonation)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        student_name = st.display_name
+
+    response = _build_uppdrag_response(student_id)
+    return V2TeacherUppdragOverview(
+        student_id=student_id,
+        student_name=student_name,
+        uppdrag=response,
+    )
+
+
+# === KompetensV2 (Kompetens-detalj · Fas 2Q) ===
+#
+# Speglar prototypens p-komp: full historik på en specifik kompetens
+# — resa hittills, timeline, krav för nästa nivå, anslutna moduler.
+
+
+class V2KompetensTimelineEvent(BaseModel):
+    occurred_at: datetime
+    event_type: Literal[
+        "step_completed", "level_reached", "module_completed",
+        "assigned",
+    ]
+    title: str
+    detail: Optional[str] = None
+    badge: Optional[str] = None
+    module_id: Optional[int] = None
+    step_id: Optional[int] = None
+
+
+class V2KompetensModuleStatus(BaseModel):
+    module_id: int
+    title: str
+    completed: bool
+    completed_steps: int
+    total_steps: int
+    completed_at: Optional[datetime]
+
+
+class V2KompetensRequirement(BaseModel):
+    label: str
+    description: Optional[str] = None
+    met: bool
+    value_label: str
+
+
+class V2KompetensDetail(BaseModel):
+    competency_id: int
+    key: str
+    name: str
+    description: Optional[str]
+    is_system: bool
+    mastery: float
+    level: Literal["B", "G", "F"]
+    level_label: str
+    next_level: Optional[Literal["G", "F"]] = None
+    next_level_label: Optional[str] = None
+    progress_to_next: float  # 0.0 – 1.0
+    completed_steps: int
+    total_steps: int
+    earned_weight: float
+    total_weight: float
+    last_event_at: Optional[datetime]
+    timeline: list[V2KompetensTimelineEvent]
+    connected_modules: list[V2KompetensModuleStatus]
+    requirements_for_next: list[V2KompetensRequirement]
+
+
+def _next_level_for(level: Literal["B", "G", "F"]) -> tuple[
+    Optional[Literal["G", "F"]], Optional[str], Optional[float],
+]:
+    """Returnerar (next_short, next_label, mastery_threshold)."""
+    if level == "B":
+        return ("G", "GRUND", 0.33)
+    if level == "G":
+        return ("F", "FÖRDJUPNING", 0.66)
+    return (None, None, None)
+
+
+def _build_kompetens_detail(
+    student_id: int, competency_id: int,
+) -> V2KompetensDetail:
+    from .modules import _compute_mastery_for_student
+
+    with master_session() as s:
+        comp = s.get(_SchoolCompetency, competency_id)
+        if comp is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Kompetensen finns ej",
+            )
+
+        # Mastery för aktuell elev
+        mastery_by_cid = _compute_mastery_for_student(s, student_id)
+        mastery, count, last = mastery_by_cid.get(
+            competency_id, (0.0, 0, None),
+        )
+        level_short, level_label = _mastery_to_level(mastery)
+        next_short, next_label, next_threshold = _next_level_for(
+            level_short,  # type: ignore[arg-type]
+        )
+
+        # Hitta progress till nästa nivå
+        if next_threshold is None:
+            progress_to_next = 1.0
+        else:
+            current_floor = 0.0 if level_short == "B" else 0.33
+            span = next_threshold - current_floor
+            progress_to_next = max(
+                0.0, min(1.0, (mastery - current_floor) / span if span > 0 else 1.0),
+            )
+
+        # Steg som är kopplade till denna kompetens (med vikt)
+        msc_rows = (
+            s.query(_SchoolMSC, _SchoolModuleStep, _SchoolModule)
+            .join(
+                _SchoolModuleStep,
+                _SchoolMSC.step_id == _SchoolModuleStep.id,
+            )
+            .join(
+                _SchoolModule,
+                _SchoolModuleStep.module_id == _SchoolModule.id,
+            )
+            .filter(_SchoolMSC.competency_id == competency_id)
+            .all()
+        )
+        step_ids = [s_.id for _msc, s_, _m in msc_rows]
+        total_steps = len(step_ids)
+        total_weight = sum(msc.weight for msc, _s, _m in msc_rows)
+
+        # Elevens progress på dessa steg
+        progress_rows = []
+        if step_ids:
+            progress_rows = (
+                s.query(_SchoolStepProgress)
+                .filter(
+                    _SchoolStepProgress.student_id == student_id,
+                    _SchoolStepProgress.step_id.in_(step_ids),
+                    _SchoolStepProgress.completed_at.is_not(None),
+                )
+                .all()
+            )
+        completed_step_ids = {p.step_id for p in progress_rows}
+        completed_steps = len(completed_step_ids)
+        # earned_weight ≈ mastery * total_weight
+        earned_weight = mastery * total_weight if total_weight > 0 else 0.0
+
+        # Bygg timeline · step_completed-events
+        step_meta: dict[int, tuple[_SchoolModuleStep, _SchoolModule]] = {
+            s_.id: (s_, m_) for _msc, s_, m_ in msc_rows
+        }
+        timeline: list[V2KompetensTimelineEvent] = []
+        for prog in progress_rows:
+            meta = step_meta.get(prog.step_id)
+            if meta is None or prog.completed_at is None:
+                continue
+            step, module = meta
+            timeline.append(V2KompetensTimelineEvent(
+                occurred_at=prog.completed_at,
+                event_type="step_completed",
+                title=f"Klarade steget {step.title}",
+                detail=f"Modul: {module.title} · {step.kind}",
+                badge="+ steg",
+                module_id=module.id,
+                step_id=step.id,
+            ))
+
+        # module_completed-events
+        connected_modules: list[V2KompetensModuleStatus] = []
+        seen_module_ids: set[int] = set()
+        for _msc, _step, mod in msc_rows:
+            if mod.id in seen_module_ids:
+                continue
+            seen_module_ids.add(mod.id)
+            mod_step_ids = [
+                _s.id for _m_, _s, _mm in msc_rows
+                if _mm.id == mod.id
+            ]
+            mod_completed = sum(
+                1 for sid in mod_step_ids if sid in completed_step_ids
+            )
+            mod_total = len(mod_step_ids)
+            sm = (
+                s.query(_SchoolStudentModule)
+                .filter(
+                    _SchoolStudentModule.student_id == student_id,
+                    _SchoolStudentModule.module_id == mod.id,
+                )
+                .first()
+            )
+            mod_completed_at = sm.completed_at if sm else None
+            connected_modules.append(V2KompetensModuleStatus(
+                module_id=mod.id,
+                title=mod.title,
+                completed=bool(sm and sm.completed_at),
+                completed_steps=mod_completed,
+                total_steps=mod_total,
+                completed_at=mod_completed_at,
+            ))
+            if sm and sm.completed_at:
+                timeline.append(V2KompetensTimelineEvent(
+                    occurred_at=sm.completed_at,
+                    event_type="module_completed",
+                    title=f'Modul "{mod.title}" klar',
+                    detail=f"{mod_total}/{mod_total} steg",
+                    badge="+ modul",
+                    module_id=mod.id,
+                ))
+
+        # Sortera moduler · klara först (senast klar överst), sen
+        # progressiva, sen ej startade
+        def _mod_sort_key(
+            m: V2KompetensModuleStatus,
+        ) -> tuple[int, float]:
+            if m.completed:
+                rank = 0
+                ts = -(m.completed_at.timestamp() if m.completed_at else 0)
+            elif m.completed_steps > 0:
+                rank = 1
+                ts = -float(m.completed_steps) / max(m.total_steps, 1)
+            else:
+                rank = 2
+                ts = 0.0
+            return (rank, ts)
+
+        connected_modules.sort(key=_mod_sort_key)
+
+        # Sortera timeline · senast först
+        timeline.sort(key=lambda e: e.occurred_at, reverse=True)
+
+        # Krav för nästa nivå
+        requirements: list[V2KompetensRequirement] = []
+        if next_threshold is not None:
+            mastery_pct = round(mastery * 100)
+            target_pct = round(next_threshold * 100)
+            requirements.append(V2KompetensRequirement(
+                label=f"Mastery ≥ {target_pct} %",
+                description=(
+                    f"Du ligger på {mastery_pct} % nu — "
+                    f"{max(0, target_pct - mastery_pct)} %-enheter kvar."
+                ),
+                met=mastery >= next_threshold,
+                value_label=f"{mastery_pct} %",
+            ))
+            target_modules = 2 if next_short == "G" else 3
+            mods_done = sum(1 for m in connected_modules if m.completed)
+            requirements.append(V2KompetensRequirement(
+                label=f"Klara {target_modules} kopplade moduler",
+                description=(
+                    "Modul-completions är konkret bevis "
+                    "på fördjupad förståelse."
+                ),
+                met=mods_done >= target_modules,
+                value_label=f"{mods_done}/{target_modules}",
+            ))
+            target_count = 5 if next_short == "G" else 10
+            requirements.append(V2KompetensRequirement(
+                label=f"≥ {target_count} klarade steg",
+                description=(
+                    "Steg räknas så fort de markeras som klara, "
+                    "även från olika moduler."
+                ),
+                met=completed_steps >= target_count,
+                value_label=f"{completed_steps}/{target_count}",
+            ))
+
+        return V2KompetensDetail(
+            competency_id=comp.id,
+            key=comp.key,
+            name=comp.name,
+            description=comp.description,
+            is_system=bool(comp.is_system),
+            mastery=round(mastery, 4),
+            level=level_short,  # type: ignore[arg-type]
+            level_label=level_label,
+            next_level=next_short,
+            next_level_label=next_label,
+            progress_to_next=round(progress_to_next, 4),
+            completed_steps=completed_steps,
+            total_steps=total_steps,
+            earned_weight=round(earned_weight, 4),
+            total_weight=round(total_weight, 4),
+            last_event_at=last,
+            timeline=timeline,
+            connected_modules=connected_modules,
+            requirements_for_next=requirements,
+        )
+
+
+@router.get(
+    "/kompetens/{competency_id}", response_model=V2KompetensDetail,
+)
+def get_kompetens_detail(
+    competency_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2KompetensDetail:
+    """Detaljvy · resa B → G → F för en specifik kompetens."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+    return _build_kompetens_detail(info.student_id, competency_id)
+
+
+class V2TeacherKompetensOverview(BaseModel):
+    student_id: int
+    student_name: str
+    detail: V2KompetensDetail
+
+
+@router.get(
+    "/teacher/students/{student_id}/kompetens/{competency_id}",
+    response_model=V2TeacherKompetensOverview,
+)
+def teacher_kompetens_overview(
+    student_id: int,
+    competency_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherKompetensOverview:
+    """Lärar-vy · samma kompetens-detalj men för specifik elev."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        student_name = st.display_name
+
+    detail = _build_kompetens_detail(student_id, competency_id)
+    return V2TeacherKompetensOverview(
+        student_id=student_id,
+        student_name=student_name,
+        detail=detail,
+    )
