@@ -378,6 +378,25 @@ export function V2RosterPage() {
                 >
                   Simulator →
                 </Link>
+                <Link
+                  to={`/teacher/v2/feedback/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(192,132,252,0.10)",
+                    border: "1px solid rgba(192,132,252,0.4)",
+                    color: "#d8b4fe",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Feedback →
+                </Link>
               </div>
             ))}
           </div>

@@ -1055,6 +1055,50 @@ export type V2TeacherSimulatorOverview = {
   scenarios: V2SimulatorScenarioRow[];
 };
 
+// === /v2/feedback (Fas 2K — Skola · Lärar-feedback) ===
+
+export type V2FeedbackKind =
+  | "message"
+  | "module_step"
+  | "module_step_quiz"
+  | "module_step_done"
+  | "assignment";
+
+export type V2FeedbackItem = {
+  kind: V2FeedbackKind;
+  source_id: number;
+  title: string;
+  body: string;
+  created_at: string;
+  is_unread: boolean;
+  teacher_name: string | null;
+  context_type: string | null;
+  context_id: number | null;
+  context_label: string | null;
+  link_target: string | null;
+};
+
+export type V2FeedbackSummary = {
+  total_count: number;
+  unread_count: number;
+  message_count: number;
+  module_step_count: number;
+  assignment_count: number;
+  last_received_at: string | null;
+};
+
+export type V2FeedbackData = {
+  student_id: number;
+  summary: V2FeedbackSummary;
+  items: V2FeedbackItem[];
+};
+
+export type V2TeacherFeedbackOverview = {
+  student_id: number;
+  student_name: string;
+  feedback: V2FeedbackData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1532,6 +1576,20 @@ export const v2Api = {
   teacherSimulatorOverview: (studentId: number) =>
     api<V2TeacherSimulatorOverview>(
       `/v2/teacher/students/${studentId}/simulator-overview`,
+    ),
+  // === /v2/feedback (Fas 2K — Skola · Lärar-feedback) ===
+  feedback: (period_days = 90) =>
+    api<V2FeedbackData>(`/v2/feedback?period_days=${period_days}`),
+  feedbackMarkRead: (
+    items: { kind: V2FeedbackKind; source_id: number }[],
+  ) =>
+    api<{ marked: number; already_read: number }>(
+      "/v2/feedback/mark-read",
+      { method: "POST", body: JSON.stringify({ items }) },
+    ),
+  teacherFeedbackOverview: (studentId: number, period_days = 90) =>
+    api<V2TeacherFeedbackOverview>(
+      `/v2/teacher/students/${studentId}/feedback-overview?period_days=${period_days}`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

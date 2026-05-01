@@ -401,11 +401,11 @@ export function HubV2() {
               <div className="compass-node-name">Mina moduler</div>
               <div className="compass-node-val">lärar-tilldelade</div>
             </Link>
-            <span className="compass-node disabled">
+            <Link to="/v2/feedback" className="compass-node">
               <div className="compass-node-eye">Skola</div>
               <div className="compass-node-name">Lärar-feedback</div>
-              <div className="compass-node-val">snart</div>
-            </span>
+              <div className="compass-node-val">spårbar dialog</div>
+            </Link>
           </div>
         </div>
 
