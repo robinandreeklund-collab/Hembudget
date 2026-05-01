@@ -825,6 +825,64 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: simulator-factor misslyckades",
         )
 
+    # BankID-signering (SigningSession) — pedagogiskt: friktion bevarad.
+    # Eleven som signerar fakturor visar medvetet beslutsfattande.
+    try:
+        from ..db.models import BankIDSession as _BIS
+        from datetime import date as _d_bid, timedelta as _td_bid
+        cutoff_bid = _d_bid.today() - _td_bid(days=90)
+        signed = (
+            session.query(_BIS)
+            .filter(_BIS.status == "signed")
+            .all()
+        )
+        cancelled = (
+            session.query(_BIS)
+            .filter(_BIS.status == "cancelled")
+            .all()
+        )
+        # Räkna signerade senaste 90 dgr
+        recent_signed = sum(
+            1 for sess in signed
+            if sess.signed_at
+            and sess.signed_at.date() >= cutoff_bid
+        )
+        if recent_signed >= 1:
+            economy += 2
+            factors.append(WellbeingFactor(
+                "economy", 2,
+                f"{recent_signed} BankID-signering"
+                f"{'ar' if recent_signed > 1 else ''} senaste 90 dgr "
+                "— autogiro-flöde aktivt, regelbunden ekonomi.",
+            ))
+        # Pedagogisk varning: snabb signering (< 5 sek = tryckte
+        # bara enter, "fingret fick inte veta")
+        rushed = [
+            sess for sess in signed
+            if sess.duration_seconds is not None
+            and sess.duration_seconds < 5
+        ]
+        if len(rushed) >= 2:
+            safety -= 1
+            factors.append(WellbeingFactor(
+                "safety", -1,
+                f"{len(rushed)} signeringar under 5 sek — du "
+                "läser inte sammandraget innan du signerar.",
+            ))
+        # Avbrutna sessioner = hälsosam vana (kollade och avbröt)
+        if len(cancelled) >= 1:
+            factors.append(WellbeingFactor(
+                "safety", 0,
+                f"{len(cancelled)} avbruten BankID-session"
+                f"{'er' if len(cancelled) > 1 else ''} — du läste och "
+                "tänkte efter innan signering, vilket är hälsosamt.",
+            ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: bankid-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:

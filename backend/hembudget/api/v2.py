@@ -32,6 +32,12 @@ from ..db.models import (
     RentalContract, RentalNotice,
     PensionAssumption, StockHolding, StockTransaction,
     Category, Scenario,
+    BankIDSession,
+)
+from ..school.employer_models import (
+    SalaryNegotiation as _SalaryNegotiation,
+    NegotiationRound as _NegotiationRound,
+    NegotiationConfig as _NegotiationConfig,
 )
 from ..school.models import (
     Module as _SchoolModule,
@@ -7979,6 +7985,478 @@ def teacher_feedback_overview(
         student_id=student_id,
         student_name=student_name,
         feedback=fb,
+    )
+
+
+# === MariaV2 (Maria-AI lönesamtal) — Fas 2L ===
+#
+# Wrappar existerande /employer/negotiation/* med v2-style summary.
+# Återanvänder SalaryNegotiation + NegotiationRound (master-DB).
+
+
+class V2MariaRound(BaseModel):
+    round_no: int
+    student_message: str
+    employer_response: str
+    proposed_pct: Optional[float]
+    created_at: datetime
+
+
+class V2MariaNegotiation(BaseModel):
+    id: int
+    profession: str
+    employer: str
+    starting_salary: float
+    avtal_norm_pct: Optional[float]
+    avtal_code: Optional[str]
+    started_at: datetime
+    completed_at: Optional[datetime]
+    status: Literal["active", "completed", "abandoned"]
+    final_salary: Optional[float]
+    final_pct: Optional[float]
+    teacher_summary_md: Optional[str]
+    rounds: list[V2MariaRound]
+    max_rounds: int
+    is_disabled: bool
+
+
+class V2MariaResponse(BaseModel):
+    student_id: int
+    has_active: bool
+    active: Optional[V2MariaNegotiation]
+    history: list[V2MariaNegotiation]
+
+
+def _negotiation_to_v2(
+    n: _SalaryNegotiation,
+    rounds: list[_NegotiationRound],
+    max_rounds: int,
+    is_disabled: bool,
+) -> V2MariaNegotiation:
+    return V2MariaNegotiation(
+        id=n.id,
+        profession=n.profession,
+        employer=n.employer,
+        starting_salary=float(n.starting_salary),
+        avtal_norm_pct=n.avtal_norm_pct,
+        avtal_code=n.avtal_code,
+        started_at=n.started_at,
+        completed_at=n.completed_at,
+        status=n.status,  # type: ignore[arg-type]
+        final_salary=(
+            float(n.final_salary) if n.final_salary is not None else None
+        ),
+        final_pct=n.final_pct,
+        teacher_summary_md=n.teacher_summary_md,
+        rounds=[
+            V2MariaRound(
+                round_no=r.round_no,
+                student_message=r.student_message,
+                employer_response=r.employer_response,
+                proposed_pct=r.proposed_pct,
+                created_at=r.created_at,
+            )
+            for r in sorted(rounds, key=lambda x: x.round_no)
+        ],
+        max_rounds=max_rounds,
+        is_disabled=is_disabled,
+    )
+
+
+@router.get("/maria", response_model=V2MariaResponse)
+def get_maria(
+    info: TokenInfo = Depends(require_token),
+) -> V2MariaResponse:
+    """Aktivt lönesamtal + historik. Återanvänder /employer/-modeller."""
+    if info.role != "student" or info.student_id is None:
+        return V2MariaResponse(
+            student_id=0, has_active=False,
+            active=None, history=[],
+        )
+    sid = info.student_id
+    with master_session() as s:
+        cfg = s.query(_NegotiationConfig).first()
+        max_r = cfg.max_rounds if cfg else 5
+        is_disabled = bool(cfg.disabled) if cfg else False
+        all_n = (
+            s.query(_SalaryNegotiation)
+            .filter(_SalaryNegotiation.student_id == sid)
+            .order_by(_SalaryNegotiation.started_at.desc())
+            .all()
+        )
+        active_n = next((n for n in all_n if n.status == "active"), None)
+        active_out: Optional[V2MariaNegotiation] = None
+        if active_n is not None:
+            rounds = (
+                s.query(_NegotiationRound)
+                .filter(
+                    _NegotiationRound.negotiation_id == active_n.id,
+                )
+                .all()
+            )
+            active_out = _negotiation_to_v2(
+                active_n, rounds, max_r, is_disabled,
+            )
+        history_out: list[V2MariaNegotiation] = []
+        for n in all_n:
+            if active_n and n.id == active_n.id:
+                continue
+            rounds = (
+                s.query(_NegotiationRound)
+                .filter(_NegotiationRound.negotiation_id == n.id)
+                .all()
+            )
+            history_out.append(
+                _negotiation_to_v2(n, rounds, max_r, is_disabled),
+            )
+
+        return V2MariaResponse(
+            student_id=sid,
+            has_active=active_n is not None,
+            active=active_out,
+            history=history_out,
+        )
+
+
+class V2TeacherMariaOverview(BaseModel):
+    student_id: int
+    student_name: str
+    maria: V2MariaResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/maria-overview",
+    response_model=V2TeacherMariaOverview,
+)
+def teacher_maria_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherMariaOverview:
+    """Lärar-vy · alla elevens lönesamtal med fullständiga rondsvar."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    _outer_sid = student_id
+
+    class _Info:
+        role = "student"
+        student_id = _outer_sid
+
+    maria = get_maria(_Info())  # type: ignore[arg-type]
+    return V2TeacherMariaOverview(
+        student_id=student_id,
+        student_name=student_name,
+        maria=maria,
+    )
+
+
+# === BankIDV2 (signering-simulator) — Fas 2L ===
+
+
+class V2BankIDInvoiceRow(BaseModel):
+    upcoming_id: int
+    name: str
+    amount: float
+    due_date: _date
+    is_recurring: bool
+    is_anomaly: bool  # T.ex. tandläkare = ovanlig
+
+
+class V2BankIDSessionOut(BaseModel):
+    id: int
+    upcoming_ids: list[int]
+    total_amount: float
+    invoice_count: int
+    status: Literal["pending", "signed", "cancelled"]
+    current_step: int
+    signed_at: Optional[datetime]
+    cancelled_at: Optional[datetime]
+    duration_seconds: Optional[int]
+    invoices: list[V2BankIDInvoiceRow]
+    notes: Optional[str]
+    created_at: datetime
+
+
+class V2BankIDStartIn(BaseModel):
+    upcoming_ids: list[int]
+
+
+@router.post("/bankid/sessions", response_model=V2BankIDSessionOut)
+def start_bankid_session(
+    body: V2BankIDStartIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2BankIDSessionOut:
+    """Skapa ny signerings-session från lista av upcoming-IDs."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    if not body.upcoming_ids:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Minst 1 faktura krävs",
+        )
+
+    with session_scope() as s:
+        ups = (
+            s.query(UpcomingTransaction)
+            .filter(UpcomingTransaction.id.in_(body.upcoming_ids))
+            .all()
+        )
+        if len(ups) != len(set(body.upcoming_ids)):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Vissa upcoming-IDs hittades inte",
+            )
+        total = sum(float(u.amount or 0) for u in ups)
+        sess = BankIDSession(
+            upcoming_ids=list({u.id for u in ups}),
+            total_amount=Decimal(str(total)),
+            invoice_count=len(ups),
+            status="pending",
+            current_step=4,
+        )
+        s.add(sess)
+        s.flush()
+        return _bankid_to_out(sess, ups)
+
+
+def _bankid_to_out(
+    sess: BankIDSession,
+    ups: list[UpcomingTransaction],
+) -> V2BankIDSessionOut:
+    return V2BankIDSessionOut(
+        id=sess.id,
+        upcoming_ids=list(sess.upcoming_ids or []),
+        total_amount=float(sess.total_amount),
+        invoice_count=sess.invoice_count,
+        status=sess.status,  # type: ignore[arg-type]
+        current_step=sess.current_step,
+        signed_at=sess.signed_at,
+        cancelled_at=sess.cancelled_at,
+        duration_seconds=sess.duration_seconds,
+        notes=sess.notes,
+        created_at=sess.created_at,
+        invoices=[
+            V2BankIDInvoiceRow(
+                upcoming_id=u.id,
+                name=u.name or "Faktura",
+                amount=float(u.amount or 0),
+                due_date=u.expected_date,
+                is_recurring=bool(u.recurring_monthly),
+                is_anomaly=False,  # framtida heuristik
+            )
+            for u in ups
+        ],
+    )
+
+
+@router.get(
+    "/bankid/sessions/{session_id}",
+    response_model=V2BankIDSessionOut,
+)
+def get_bankid_session(
+    session_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2BankIDSessionOut:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        sess = s.get(BankIDSession, session_id)
+        if sess is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        ups = (
+            s.query(UpcomingTransaction)
+            .filter(
+                UpcomingTransaction.id.in_(sess.upcoming_ids or []),
+            )
+            .all()
+        )
+        return _bankid_to_out(sess, ups)
+
+
+class V2BankIDSignIn(BaseModel):
+    duration_seconds: Optional[int] = None  # från frontend-timer
+
+
+@router.post(
+    "/bankid/sessions/{session_id}/sign",
+    response_model=V2BankIDSessionOut,
+)
+def sign_bankid_session(
+    session_id: int,
+    body: V2BankIDSignIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2BankIDSessionOut:
+    """Eleven signerar — markerar fakturor autogiro=True."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        sess = s.get(BankIDSession, session_id)
+        if sess is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        if sess.status != "pending":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Sessionen är {sess.status}",
+            )
+        sess.status = "signed"
+        sess.signed_at = datetime.utcnow()
+        sess.current_step = 6
+        if body.duration_seconds is not None:
+            sess.duration_seconds = body.duration_seconds
+        # Markera relaterade upcomings som autogiro
+        ups = (
+            s.query(UpcomingTransaction)
+            .filter(
+                UpcomingTransaction.id.in_(sess.upcoming_ids or []),
+            )
+            .all()
+        )
+        for u in ups:
+            if hasattr(u, "autogiro"):
+                u.autogiro = True
+        s.flush()
+        return _bankid_to_out(sess, ups)
+
+
+@router.post(
+    "/bankid/sessions/{session_id}/cancel",
+    response_model=V2BankIDSessionOut,
+)
+def cancel_bankid_session(
+    session_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2BankIDSessionOut:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        sess = s.get(BankIDSession, session_id)
+        if sess is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        if sess.status != "pending":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Sessionen är {sess.status}",
+            )
+        sess.status = "cancelled"
+        sess.cancelled_at = datetime.utcnow()
+        s.flush()
+        ups = (
+            s.query(UpcomingTransaction)
+            .filter(
+                UpcomingTransaction.id.in_(sess.upcoming_ids or []),
+            )
+            .all()
+        )
+        return _bankid_to_out(sess, ups)
+
+
+class V2BankIDListResponse(BaseModel):
+    student_id: int
+    sessions: list[V2BankIDSessionOut]
+    pending_count: int
+    signed_count: int
+    cancelled_count: int
+    total_signed_amount: float
+
+
+@router.get("/bankid/sessions", response_model=V2BankIDListResponse)
+def list_bankid_sessions(
+    info: TokenInfo = Depends(require_token),
+) -> V2BankIDListResponse:
+    if info.role != "student" or info.student_id is None:
+        return V2BankIDListResponse(
+            student_id=0, sessions=[],
+            pending_count=0, signed_count=0,
+            cancelled_count=0, total_signed_amount=0,
+        )
+    with session_scope() as s:
+        sessions = (
+            s.query(BankIDSession)
+            .order_by(BankIDSession.id.desc())
+            .all()
+        )
+        # Hämta upcoming-info per session
+        all_ids: set[int] = set()
+        for sess in sessions:
+            all_ids.update(sess.upcoming_ids or [])
+        ups_by_id: dict[int, UpcomingTransaction] = {}
+        if all_ids:
+            for u in (
+                s.query(UpcomingTransaction)
+                .filter(UpcomingTransaction.id.in_(all_ids))
+                .all()
+            ):
+                ups_by_id[u.id] = u
+        out: list[V2BankIDSessionOut] = []
+        for sess in sessions:
+            sess_ups = [
+                ups_by_id[uid]
+                for uid in (sess.upcoming_ids or [])
+                if uid in ups_by_id
+            ]
+            out.append(_bankid_to_out(sess, sess_ups))
+        return V2BankIDListResponse(
+            student_id=info.student_id,
+            sessions=out,
+            pending_count=sum(
+                1 for s_ in out if s_.status == "pending"
+            ),
+            signed_count=sum(
+                1 for s_ in out if s_.status == "signed"
+            ),
+            cancelled_count=sum(
+                1 for s_ in out if s_.status == "cancelled"
+            ),
+            total_signed_amount=sum(
+                s_.total_amount for s_ in out if s_.status == "signed"
+            ),
+        )
+
+
+class V2TeacherBankIDOverview(BaseModel):
+    student_id: int
+    student_name: str
+    bankid: V2BankIDListResponse
+
+
+@router.get(
+    "/teacher/students/{student_id}/bankid-overview",
+    response_model=V2TeacherBankIDOverview,
+)
+def teacher_bankid_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherBankIDOverview:
+    """Lärar-vy · alla elevens BankID-signeringar."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        _outer_sid = student_id
+
+        class _Info:
+            role = "student"
+            student_id = _outer_sid
+
+        bankid = list_bankid_sessions(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherBankIDOverview(
+        student_id=student_id,
+        student_name=student_name,
+        bankid=bankid,
     )
 
 

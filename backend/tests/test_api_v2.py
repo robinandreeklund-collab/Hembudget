@@ -4877,3 +4877,386 @@ def test_v2_teacher_feedback_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2L · MariaV2 + BankIDV2 ===
+
+
+def test_v2_maria_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/maria")
+    assert r.status_code == 401
+
+
+def test_v2_maria_empty_state(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/maria",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["has_active"] is False
+    assert r.json()["history"] == []
+
+
+def test_v2_maria_lists_active_negotiation(fx) -> None:
+    """Aktivt SalaryNegotiation visas i v2/maria."""
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+        NegotiationRound as _NR,
+    )
+    from datetime import datetime as _dt
+    from decimal import Decimal as _D
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    with master_session() as db:
+        n = _SN(
+            student_id=sid,
+            profession="Undersköterska",
+            employer="Sthlm Sjukhus",
+            starting_salary=_D("26000"),
+            avtal_norm_pct=2.4,
+            avtal_code="vard_oms",
+            status="active",
+        )
+        db.add(n)
+        db.commit()
+        db.refresh(n)
+        db.add(_NR(
+            negotiation_id=n.id,
+            round_no=1,
+            student_message="Jag yrkar 27 500.",
+            employer_response="Bra argument. Jag erbjuder 26 200.",
+            proposed_pct=3.1,
+            input_tokens=120, output_tokens=80,
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/maria",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = r.json()
+    assert data["has_active"] is True
+    assert data["active"]["status"] == "active"
+    assert len(data["active"]["rounds"]) == 1
+    assert data["active"]["rounds"][0]["round_no"] == 1
+
+
+def test_v2_teacher_maria_overview(fx) -> None:
+    from hembudget.school.employer_models import SalaryNegotiation as _SN
+    from decimal import Decimal as _D
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        db.add(_SN(
+            student_id=sid,
+            profession="Sjuksköterska",
+            employer="Sthlm Sjukhus",
+            starting_salary=_D("32000"),
+            status="active",
+        ))
+        db.commit()
+    r = client.get(
+        f"/v2/teacher/students/{sid}/maria-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["maria"]["has_active"] is True
+
+
+def test_v2_bankid_session_create_and_sign(fx) -> None:
+    """Skapa session med 2 fakturor → signera → autogiro=True."""
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        UpcomingTransaction as _UT,
+    )
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    upcoming_ids: list[int] = []
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        u1 = _UT(
+            kind="bill", name="Stockholmshem (hyra)",
+            amount=_D("7240"),
+            expected_date=_d.today() + _td(days=5),
+        )
+        u2 = _UT(
+            kind="bill", name="Tibber (el)",
+            amount=_D("812"),
+            expected_date=_d.today() + _td(days=10),
+        )
+        s.add(u1)
+        s.add(u2)
+        s.flush()
+        upcoming_ids.append(u1.id)
+        upcoming_ids.append(u2.id)
+
+    _seed_scope(sid, seed)
+
+    # Skapa session
+    r = client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": upcoming_ids},
+    )
+    assert r.status_code == 200, r.text
+    session_id = r.json()["id"]
+    assert r.json()["status"] == "pending"
+    assert r.json()["invoice_count"] == 2
+    assert r.json()["total_amount"] == 7240 + 812
+    assert r.json()["current_step"] == 4
+
+    # Signera
+    sign_r = client.post(
+        f"/v2/bankid/sessions/{session_id}/sign",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"duration_seconds": 12},
+    )
+    assert sign_r.status_code == 200, sign_r.text
+    assert sign_r.json()["status"] == "signed"
+    assert sign_r.json()["signed_at"] is not None
+    assert sign_r.json()["duration_seconds"] == 12
+    assert sign_r.json()["current_step"] == 6
+
+
+def test_v2_bankid_cancel(fx) -> None:
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        UpcomingTransaction as _UT,
+    )
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    upcoming_ids: list[int] = []
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        u = _UT(
+            kind="bill", name="Folktandvården",
+            amount=_D("4200"),
+            expected_date=_d.today() + _td(days=14),
+        )
+        s.add(u)
+        s.flush()
+        upcoming_ids.append(u.id)
+
+    _seed_scope(sid, seed)
+
+    r = client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": upcoming_ids},
+    )
+    sid2 = r.json()["id"]
+    cancel_r = client.post(
+        f"/v2/bankid/sessions/{sid2}/cancel",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert cancel_r.status_code == 200, cancel_r.text
+    assert cancel_r.json()["status"] == "cancelled"
+
+
+def test_v2_bankid_list_sessions_summary(fx) -> None:
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        UpcomingTransaction as _UT,
+    )
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    upcoming_ids: list[int] = []
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        for i, amt in enumerate([7240, 812]):
+            u = _UT(
+                kind="bill", name=f"Test {i}",
+                amount=_D(str(amt)),
+                expected_date=_d.today() + _td(days=5),
+            )
+            s.add(u)
+            s.flush()
+            upcoming_ids.append(u.id)
+
+    _seed_scope(sid, seed)
+
+    # Skapa + signera 1
+    r1 = client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": [upcoming_ids[0]]},
+    )
+    client.post(
+        f"/v2/bankid/sessions/{r1.json()['id']}/sign",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"duration_seconds": 8},
+    )
+    # Skapa pending
+    client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": [upcoming_ids[1]]},
+    )
+
+    list_r = client.get(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    data = list_r.json()
+    assert data["pending_count"] == 1
+    assert data["signed_count"] == 1
+    assert data["cancelled_count"] == 0
+    assert data["total_signed_amount"] == 7240
+
+
+def test_v2_bankid_invalid_upcoming_400(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": [99999]},
+    )
+    assert r.status_code == 400
+
+
+def test_v2_bankid_wellbeing_signed_bonus(fx) -> None:
+    """Signerad session senaste 90 dgr → +2 economy."""
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        UpcomingTransaction as _UT,
+    )
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    upcoming_ids: list[int] = []
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        u = _UT(
+            kind="bill", name="Test", amount=_D("1000"),
+            expected_date=_d.today() + _td(days=5),
+        )
+        s.add(u)
+        s.flush()
+        upcoming_ids.append(u.id)
+
+    _seed_scope(sid, seed)
+
+    r = client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": upcoming_ids},
+    )
+    client.post(
+        f"/v2/bankid/sessions/{r.json()['id']}/sign",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"duration_seconds": 12},
+    )
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    bonus_factors = [
+        f for f in result.factors
+        if "bankid-signering" in f.explanation.lower()
+        and f.points > 0
+    ]
+    assert len(bonus_factors) >= 1
+    assert bonus_factors[0].dimension == "economy"
+    assert bonus_factors[0].points == 2
+
+
+def test_v2_teacher_bankid_overview(fx) -> None:
+    from datetime import date as _d, timedelta as _td
+    from decimal import Decimal as _D
+    from hembudget.db.models import (
+        Account as _Acc,
+        UpcomingTransaction as _UT,
+    )
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    upcoming_ids: list[int] = []
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("0"),
+            opening_balance_date=_d.today(),
+        )
+        s.add(acc)
+        s.flush()
+        u = _UT(
+            kind="bill", name="Test", amount=_D("500"),
+            expected_date=_d.today() + _td(days=5),
+        )
+        s.add(u)
+        s.flush()
+        upcoming_ids.append(u.id)
+
+    _seed_scope(sid, seed)
+    client.post(
+        "/v2/bankid/sessions",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"upcoming_ids": upcoming_ids},
+    )
+    r = client.get(
+        f"/v2/teacher/students/{sid}/bankid-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["bankid"]["pending_count"] == 1
+
+
+def test_v2_teacher_bankid_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/bankid-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_maria_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/maria-overview",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

@@ -1041,6 +1041,54 @@ class PensionAssumption(TenantMixin, Base):
     )
 
 
+class BankIDSession(TenantMixin, Base):
+    """Pedagogisk BankID-simulator-session (Fas 2L · BankIDV2).
+
+    Eleven samlar 1-N UpcomingTransaction-IDs i en signerings-session,
+    går igenom 6-stegs-flödet, signerar med "Ekonomilabbet-ID" (mock).
+    Vid signering markeras alla relaterade UpcomingTransactions som
+    autogiro=True och en SigningSession.signed_at sätts.
+
+    Pedagogiskt: friktion bevarad — eleven måste välja, läsa
+    sammandraget, klicka signera. Ingen riktig BankID-anrop, men
+    UI matchar prototypen exakt.
+    """
+    __tablename__ = "bankid_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Lista av upcoming-IDs som ingår — JSON för enkelhet
+    upcoming_ids: Mapped[list] = mapped_column(JSON, nullable=False)
+    total_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False,
+    )
+    invoice_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    # "pending" | "signed" | "cancelled"
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending",
+        nullable=False,
+    )
+    # Aktuellt steg 1-6 (matchar prototypen)
+    current_step: Mapped[int] = mapped_column(
+        Integer, default=4, server_default="4", nullable=False,
+    )
+    # När signering klar
+    signed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Hur lång tid eleven tog att signera (för pedagogik · "fingret
+    # ska få veta")
+    duration_seconds: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class RentalContract(TenantMixin, Base):
     """Hyreskontrakt (eller bostadsrätts-info) för Aktör 08 · Hyresvärden.
 

@@ -119,6 +119,8 @@ def run_migrations(engine: Engine) -> list[str]:
         "rental_contracts", "rental_notices",
         # V2 Pension — Fas 2G
         "pension_assumptions",
+        # V2 BankID — Fas 2L
+        "bankid_sessions",
     ]
     for tbl in _scope_tables:
         if not _table_exists(engine, tbl):
