@@ -103,7 +103,7 @@ export function TeacherHubV2() {
               Klassens <em>pentagon</em> i rörelse.
             </h1>
             <div className="larare-actions">
-              <Link to="/teacher/v2/roster" className="larare-tb-btn solid">
+              <Link to="/teacher/v2/skapa" className="larare-tb-btn solid">
                 + Skapa elev / generera kod
               </Link>
               <Link to="/teacher/v2/pedagogik" className="larare-tb-btn">

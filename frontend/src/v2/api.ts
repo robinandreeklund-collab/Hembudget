@@ -1629,6 +1629,49 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/teacher/students/create (Fas 2X · p-skapa) ===
+
+export type V2CharacterArchetype =
+  | "random"
+  | "vard_underskoterska"
+  | "it_konsult_junior"
+  | "butiksbitrade"
+  | "kassorska"
+  | "lar_vikarie"
+  | "anstalld_kommun"
+  | "studerande_gymnasium";
+
+export type V2CreateStudentIn = {
+  first_name: string;
+  last_initial?: string;
+  archetype?: V2CharacterArchetype;
+  spend_profile?: "sparsam" | "balanserad" | "slosa";
+  partner_model?: "solo" | "ai" | "klasskompis";
+  starting_level?: number;
+  guardian_email?: string;
+  family_id?: number | null;
+};
+
+export type V2CreatedStudentRow = {
+  student_id: number;
+  student_name: string;
+  login_code: string;
+  archetype: V2CharacterArchetype;
+  spend_profile: string | null;
+  partner_model: string | null;
+  starting_level: number;
+  guardian_email: string | null;
+  created_at: string;
+  last_login_at: string | null;
+  activated: boolean;
+};
+
+export type V2CreatedStudentsResponse = {
+  total_count: number;
+  pending_activation_count: number;
+  rows: V2CreatedStudentRow[];
+};
+
 // === /v2/teacher/pedagogics (Fas 2W · p-peda) ===
 
 export type V2PedaConceptBox = {
@@ -2486,6 +2529,14 @@ export const v2Api = {
   // === /v2/teacher/pedagogics (Fas 2W) ===
   teacherPedagogics: () =>
     api<V2PedagogicsResponse>("/v2/teacher/pedagogics"),
+  // === /v2/teacher/students/create (Fas 2X) ===
+  teacherCreateStudent: (body: V2CreateStudentIn) =>
+    api<V2CreatedStudentRow>("/v2/teacher/students/create", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  teacherListCreatedStudents: () =>
+    api<V2CreatedStudentsResponse>("/v2/teacher/students/created"),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

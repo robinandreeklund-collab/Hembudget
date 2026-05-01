@@ -62,6 +62,7 @@ import { TeacherReflectionsV2 } from "./v2/TeacherReflectionsV2";
 import { TeacherMailboxV2 } from "./v2/TeacherMailboxV2";
 import { TeacherMariaListV2 } from "./v2/TeacherMariaListV2";
 import { TeacherPedagogicsV2 } from "./v2/TeacherPedagogicsV2";
+import { TeacherCreateStudentV2 } from "./v2/TeacherCreateStudentV2";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budget from "./pages/Budget";
@@ -422,6 +423,10 @@ export default function App() {
           <Route
             path="/teacher/v2/pedagogik"
             element={<TeacherPedagogicsV2 />}
+          />
+          <Route
+            path="/teacher/v2/skapa"
+            element={<TeacherCreateStudentV2 />}
           />
           {/* /dashboard har en V2-guard: super-admin och elever med
               v2_enabled redirectas till /v2/hub. Övriga får v1. */}
