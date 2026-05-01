@@ -1629,6 +1629,54 @@ export type V2StudentDetailAssignmentSummary = {
   completed_this_month: number;
 };
 
+// === /v2/teacher/students/{id}/activity-log (Fas 2Y · p-historik) ===
+
+export type V2HistoryEventKind =
+  | "onboarding"
+  | "module_step"
+  | "module_completed"
+  | "maria_round"
+  | "bankid"
+  | "assignment"
+  | "transaction"
+  | "budget"
+  | "loan"
+  | "transfer"
+  | "import"
+  | "competency_raised"
+  | "system";
+
+export type V2HistoryEvent = {
+  occurred_at: string;
+  kind: V2HistoryEventKind;
+  title: string;
+  detail: string | null;
+  badge: string;
+  color: string;
+  source_id: number | null;
+  payload: Record<string, unknown> | null;
+};
+
+export type V2HistoryStats = {
+  total_events: number;
+  onboarding_count: number;
+  transactions_count: number;
+  module_steps_count: number;
+  reflections_count: number;
+  bankid_count: number;
+  maria_rounds_count: number;
+  days_since_signup: number | null;
+};
+
+export type V2HistoryResponse = {
+  student_id: number;
+  student_name: string;
+  signup_at: string | null;
+  onboarding_completed_at: string | null;
+  stats: V2HistoryStats;
+  events: V2HistoryEvent[];
+};
+
 // === /v2/teacher/students/create (Fas 2X · p-skapa) ===
 
 export type V2CharacterArchetype =
@@ -2537,6 +2585,11 @@ export const v2Api = {
     }),
   teacherListCreatedStudents: () =>
     api<V2CreatedStudentsResponse>("/v2/teacher/students/created"),
+  // === /v2/teacher/students/{id}/activity-log (Fas 2Y) ===
+  teacherStudentHistory: (studentId: number, limit = 100) =>
+    api<V2HistoryResponse>(
+      `/v2/teacher/students/${studentId}/activity-log?limit=${limit}`,
+    ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{
