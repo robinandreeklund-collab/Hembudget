@@ -21,6 +21,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from ..game_engine.monthly_engine import tick_month
 from ..game_engine.profile_generator import (
     GeneratedProfile,
     generate_profile,
@@ -28,9 +29,11 @@ from ..game_engine.profile_generator import (
 from ..school.engines import master_session
 from ..school.game_engine_models import (
     ClassCalendar,
+    WeekTickRun,
     compute_current_sim_year_month,
     shift_year_month,
 )
+from ..school.models import Student
 from .deps import TokenInfo, require_teacher
 
 log = logging.getLogger(__name__)
@@ -79,6 +82,40 @@ class PauseIn(BaseModel):
     paused_until: datetime = Field(
         description="Klassens tid pausas tills denna tidpunkt.",
     )
+
+
+class AdvanceMonthIn(BaseModel):
+    """Tick:a en spelmånad för en elev.
+
+    `seed` styr Profile Generator (samma seed = samma karaktär över
+    tid). `year_month` är "YYYY-MM" och måste vara nästa otickade
+    månad för att inte hoppa över hål. `spend_profile` + `starting_level`
+    matchar elevens lärar-inställning.
+    """
+    year_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    seed: int = Field(description="Slumpfröet för Profile Generator.")
+    archetype: str = "random"
+    starting_level: int = Field(default=1, ge=1, le=3)
+    spend_profile: str = Field(default="balanserad")
+    partner_model: str = Field(default="solo")
+
+
+class TickResponse(BaseModel):
+    student_id: int
+    year_month: str
+    skipped: bool
+    summary: dict
+
+
+class WeekTickRunOut(BaseModel):
+    id: int
+    student_id: int
+    year_month: str
+    status: str
+    seed_used: Optional[int]
+    started_at: datetime
+    completed_at: Optional[datetime]
+    error_message: Optional[str]
 
 
 class ProfilePreviewIn(BaseModel):
@@ -256,3 +293,92 @@ def profile_preview(
         name=body.name,
         partner_model=body.partner_model,
     )
+
+
+# === Endpoints: Monthly Engine ===
+
+
+def _load_student_or_404(s, teacher_id: int, student_id: int) -> Student:
+    student = s.get(Student, student_id)
+    if student is None or student.teacher_id != teacher_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Elev saknas.")
+    return student
+
+
+@router.post(
+    "/students/{student_id}/advance-month",
+    response_model=TickResponse,
+)
+def advance_student_month(
+    student_id: int,
+    body: AdvanceMonthIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Tick:a en spelmånad för en specifik elev.
+
+    Idempotent: två anrop med samma `year_month` returnerar `skipped=True`
+    den andra gången. Reroll = först radera WeekTickRun + scope-data
+    (görs separat via /v2/teacher/students/{id}/rewind i Sprint 4).
+    """
+    with master_session() as s:
+        student = _load_student_or_404(s, info.teacher_id, student_id)
+        # Vi behöver bara plain attribut innan session stängs
+        student_id_local = student.id
+        student_obj = student
+        # Detacha så vi kan använda objektet utanför sessionen
+        s.expunge(student)
+
+    profile = generate_profile(
+        seed=body.seed,
+        archetype=body.archetype,
+        starting_level=body.starting_level,
+        name=student_obj.display_name or "Elev",
+        partner_model=body.partner_model,
+    )
+
+    result = tick_month(
+        student_obj,
+        profile,
+        body.year_month,
+        spend_profile=body.spend_profile,
+        starting_level=body.starting_level,
+    )
+
+    return TickResponse(
+        student_id=student_id_local,
+        year_month=result.year_month,
+        skipped=result.skipped,
+        summary=result.summary,
+    )
+
+
+@router.get(
+    "/students/{student_id}/tick-history",
+    response_model=list[WeekTickRunOut],
+)
+def list_tick_history(
+    student_id: int,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Lista alla tick-runs för en elev (för historik + felsökning)."""
+    with master_session() as s:
+        _load_student_or_404(s, info.teacher_id, student_id)
+        rows = (
+            s.query(WeekTickRun)
+            .filter(WeekTickRun.student_id == student_id)
+            .order_by(WeekTickRun.year_month.desc())
+            .all()
+        )
+        return [
+            WeekTickRunOut(
+                id=r.id,
+                student_id=r.student_id,
+                year_month=r.year_month,
+                status=r.status,
+                seed_used=r.seed_used,
+                started_at=r.started_at,
+                completed_at=r.completed_at,
+                error_message=r.error_message,
+            )
+            for r in rows
+        ]

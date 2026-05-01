@@ -19,13 +19,15 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .models import MasterBase, Teacher
+from .models import MasterBase, Student, Teacher
 
 
 class ClassCalendar(MasterBase):
@@ -89,6 +91,63 @@ class ClassCalendar(MasterBase):
     )
 
     teacher: Mapped[Teacher] = relationship()
+
+
+class WeekTickRun(MasterBase):
+    """Logg över Monthly Engine-tick per (elev, spelmånad).
+
+    Garanterar idempotens: orchestrator slår upp denna tabell innan
+    något genereras. Om en run finns för (student_id, year_month) →
+    return utan att röra scope-DB:n.
+
+    `phase_summary` är en JSON-blob med per-fas-statistik:
+      {
+        "salary":  {"gross": 32000, "net": 22500, "mail_id": 17},
+        "fixed":   {"items_created": 6, "total_amount": 12500},
+        "variable":{"transactions": 14, "total_amount": 8900},
+      }
+
+    Felade ticks markeras med `status="failed"` + `error_message`.
+    Lärare kan retry:a genom att radera raden + tick:a om.
+    """
+
+    __tablename__ = "week_tick_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "year_month",
+            name="uq_week_tick_student_ym",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    year_month: Mapped[str] = mapped_column(
+        String(7), nullable=False,  # "YYYY-MM"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="completed",
+    )  # "completed" | "failed" | "in_progress"
+    seed_used: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+        # Profilens seed — möjliggör reproducerbar regenerering
+    )
+    phase_summary: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True,
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+    student: Mapped[Student] = relationship()
 
 
 def shift_year_month(ym: str, months: int) -> str:
