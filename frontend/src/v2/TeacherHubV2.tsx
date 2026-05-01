@@ -293,7 +293,7 @@ function SideStack({
                 </div>
                 <Link
                   className="attn-go"
-                  to={`/teacher/v2/portfolio/${h.student_id}`}
+                  to={`/teacher/v2/elev/${h.student_id}`}
                 >
                   öppna →
                 </Link>
@@ -395,7 +395,7 @@ function SideStack({
                 </div>
                 <Link
                   className="attn-go"
-                  to={`/teacher/v2/portfolio/${r.student_id}`}
+                  to={`/teacher/v2/elev/${r.student_id}`}
                 >
                   se →
                 </Link>
@@ -438,7 +438,7 @@ function SideStack({
                 </div>
                 <Link
                   className="attn-go"
-                  to={`/teacher/v2/portfolio/${m.student_id}`}
+                  to={`/teacher/v2/elev/${m.student_id}`}
                 >
                   →
                 </Link>
@@ -467,7 +467,7 @@ function MiniPentagon({ mp }: { mp: V2KlassMiniPentagon }) {
 
   return (
     <Link
-      to={`/teacher/v2/portfolio/${mp.student_id}`}
+      to={`/teacher/v2/elev/${mp.student_id}`}
       className={`mini${isAlert ? " alert" : colorClass === "green" ? " green" : ""}`}
       title={`${mp.student_name} · pent ${mp.pent_total}`}
     >

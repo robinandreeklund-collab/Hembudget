@@ -1569,6 +1569,91 @@ export type V2KlassOverview = {
   mini_pentagons: V2KlassMiniPentagon[];
 };
 
+// === /v2/teacher/students/{id}/student-detail (Fas 2S · p-elev) ===
+
+export type V2StudentDetailPentagon = {
+  total_score: number;
+  economy: number;
+  safety: number;
+  health: number;
+  social: number;
+  leisure: number;
+  delta_total: number;
+  tipped_towards: string;
+};
+
+export type V2StudentDetailModule = {
+  student_module_id: number;
+  module_id: number;
+  title: string;
+  summary: string | null;
+  completed_steps: number;
+  total_steps: number;
+  progress_pct: number;
+  started_at: string | null;
+  last_activity_at: string | null;
+  next_step_title: string | null;
+};
+
+export type V2StudentDetailEvent = {
+  occurred_at: string;
+  kind: string;
+  summary: string;
+  badge: string | null;
+  detail: string | null;
+};
+
+export type V2StudentDetailCompetency = {
+  competency_id: number;
+  key: string;
+  name: string;
+  level: "B" | "G" | "F";
+  level_label: string;
+  mastery: number;
+};
+
+export type V2StudentDetailLevelProgression = {
+  current_level: number;
+  target_level: number | null;
+  weeks_at_level: number;
+  progress_pct: number;
+  requirements_met: number;
+  requirements_total: number;
+  ready_for_promotion: boolean;
+  blockers: string[];
+};
+
+export type V2StudentDetailAssignmentSummary = {
+  active_count: number;
+  overdue_count: number;
+  completed_this_month: number;
+};
+
+export type V2TeacherStudentDetail = {
+  student_id: number;
+  student_name: string;
+  login_code_suffix: string;
+  last_login_at: string | null;
+  days_since_last_login: number | null;
+  onboarding_completed: boolean;
+  v2_level: number;
+  v2_level_label: string;
+  spend_profile: string | null;
+  fairness_choice: string | null;
+  partner_model: string | null;
+  pentagon: V2StudentDetailPentagon;
+  pentagon_explanation: string;
+  active_modules: V2StudentDetailModule[];
+  completed_modules_count: number;
+  recent_events: V2StudentDetailEvent[];
+  competencies: V2StudentDetailCompetency[];
+  level_progression: V2StudentDetailLevelProgression;
+  pending_negotiation: V2KlassNegotiationItem | null;
+  assignments: V2StudentDetailAssignmentSummary;
+  mailbox_unhandled_count: number;
+  mailbox_oldest_days: number | null;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -2199,6 +2284,11 @@ export const v2Api = {
   // === /v2/teacher/klass-overview (Lärar-hub · Fas 2R) ===
   teacherKlassOverview: () =>
     api<V2KlassOverview>("/v2/teacher/klass-overview"),
+  // === /v2/teacher/students/{id}/student-detail (Fas 2S) ===
+  teacherStudentDetail: (studentId: number) =>
+    api<V2TeacherStudentDetail>(
+      `/v2/teacher/students/${studentId}/student-detail`,
+    ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{
