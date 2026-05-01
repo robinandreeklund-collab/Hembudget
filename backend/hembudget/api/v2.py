@@ -11799,6 +11799,282 @@ def teacher_reflections_v2(
     return V2ReflectionsResponse(summary=summary, items=filtered)
 
 
+# === TeacherMailboxV2 (p-mail · Fas 2U) ===
+#
+# Speglar prototypens larare.html#p-mail: tabell över alla elevers
+# postlådor med status-kolumn (KLAR/I FAS/SLÄPER/RISK), klass-summary
+# 5-stat (genererade, hanterade, försenade, påminnelser, profiler) +
+# bulk-inject-endpoint för att skicka samma brev till flera elever.
+
+
+class V2MailboxRow(BaseModel):
+    student_id: int
+    student_name: str
+    spend_profile: Optional[str]
+    total_count_period: int  # alla brev senaste 30 dgr (oavsett status)
+    unhandled_count: int
+    oldest_days: Optional[int]
+    reminders_count: int
+    has_authority_unhandled: bool
+    status: Literal["klar", "i_fas", "släper", "risk"]
+
+
+class V2MailboxClassSummary(BaseModel):
+    total_students: int
+    total_generated_period: int  # alla brev hos alla elever (30 dgr)
+    handled_in_time: int  # status != unhandled
+    handled_pct: int
+    overdue_count: int  # unhandled MED due_date i förfluten
+    reminders_total: int
+    profile_distribution: dict[str, int]  # {"sparsam": 12, "balanserad": 11, "slosa": 5}
+
+
+class V2MailboxResponse(BaseModel):
+    summary: V2MailboxClassSummary
+    rows: list[V2MailboxRow]
+
+
+def _mailbox_status_for(
+    unhandled: int, oldest_days: Optional[int], reminders: int,
+) -> Literal["klar", "i_fas", "släper", "risk"]:
+    if unhandled == 0:
+        return "klar"
+    if reminders > 0 or (oldest_days is not None and oldest_days >= 14):
+        return "risk"
+    if unhandled >= 4 or (oldest_days is not None and oldest_days >= 8):
+        return "släper"
+    return "i_fas"
+
+
+def _mailbox_stats_for_student(
+    student: Student,
+) -> tuple[int, int, Optional[int], int, bool, int]:
+    """Returnerar (total_period, unhandled, oldest_days, reminders,
+    has_authority, overdue_count) — mailbox-stats för en elev.
+
+    Fail-soft: returnerar nollor om scope-DB är otillgänglig.
+    """
+    from ..school.engines import scope_context, scope_for_student
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    today = datetime.utcnow().date()
+    try:
+        scope_key = scope_for_student(student)
+        with scope_context(scope_key):
+            with session_scope() as s:
+                all_period = (
+                    s.query(MailItem)
+                    .filter(MailItem.received_at >= cutoff)
+                    .all()
+                )
+                unhandled = [
+                    m for m in all_period if m.status == "unhandled"
+                ]
+                oldest_days: Optional[int] = None
+                if unhandled:
+                    sorted_unhandled = sorted(
+                        unhandled, key=lambda m: m.received_at,
+                    )
+                    oldest = sorted_unhandled[0].received_at
+                    if oldest is not None:
+                        delta = datetime.utcnow() - oldest
+                        oldest_days = max(0, delta.days)
+                reminders = sum(
+                    1 for m in unhandled if m.mail_type == "reminder"
+                )
+                has_authority = any(
+                    m.mail_type == "authority" for m in unhandled
+                )
+                overdue = sum(
+                    1 for m in unhandled
+                    if m.due_date is not None and m.due_date < today
+                )
+                return (
+                    len(all_period),
+                    len(unhandled),
+                    oldest_days,
+                    reminders,
+                    has_authority,
+                    overdue,
+                )
+    except Exception:
+        return (0, 0, None, 0, False, 0)
+
+
+@router.get(
+    "/teacher/mailboxes", response_model=V2MailboxResponse,
+)
+def teacher_mailboxes(
+    info: TokenInfo = Depends(require_token),
+) -> V2MailboxResponse:
+    """Lärar-vy · alla 28 postlådor i klassen med status + summary."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        students = (
+            mdb.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .order_by(Student.display_name)
+            .all()
+        )
+        snapshots: list[dict] = []
+        for st in students:
+            spend_profile: Optional[str] = (
+                getattr(st, "v2_spend_profile", None)
+            )
+            if spend_profile is None:
+                # Fallback från StudentProfile
+                prof = (
+                    mdb.query(StudentProfile)
+                    .filter(StudentProfile.student_id == st.id)
+                    .first()
+                )
+                spend_profile = (
+                    getattr(prof, "spend_profile", None) if prof else None
+                )
+            snapshots.append({
+                "id": st.id,
+                "name": st.display_name,
+                "obj": st,
+                "spend_profile": spend_profile,
+            })
+
+    total_generated = 0
+    handled_in_time = 0
+    overdue_total = 0
+    reminders_total = 0
+    rows: list[V2MailboxRow] = []
+    profile_dist: dict[str, int] = {}
+    for snap in snapshots:
+        st = snap["obj"]
+        total, unhandled, oldest_days, reminders, has_auth, overdue = (
+            _mailbox_stats_for_student(st)
+        )
+        total_generated += total
+        handled_in_time += max(0, total - unhandled)
+        overdue_total += overdue
+        reminders_total += reminders
+        if snap["spend_profile"]:
+            profile_dist[snap["spend_profile"]] = (
+                profile_dist.get(snap["spend_profile"], 0) + 1
+            )
+        rows.append(V2MailboxRow(
+            student_id=snap["id"],
+            student_name=snap["name"],
+            spend_profile=snap["spend_profile"],
+            total_count_period=total,
+            unhandled_count=unhandled,
+            oldest_days=oldest_days,
+            reminders_count=reminders,
+            has_authority_unhandled=has_auth,
+            status=_mailbox_status_for(unhandled, oldest_days, reminders),
+        ))
+
+    # Sortera: risk först, sen släpning, sen i fas, sen klar
+    status_order = {"risk": 0, "släper": 1, "i_fas": 2, "klar": 3}
+    rows.sort(
+        key=lambda r: (
+            status_order[r.status],
+            -r.unhandled_count,
+            -(r.oldest_days or 0),
+        ),
+    )
+
+    handled_pct = (
+        round(handled_in_time / total_generated * 100)
+        if total_generated > 0 else 100
+    )
+
+    summary = V2MailboxClassSummary(
+        total_students=len(snapshots),
+        total_generated_period=total_generated,
+        handled_in_time=handled_in_time,
+        handled_pct=handled_pct,
+        overdue_count=overdue_total,
+        reminders_total=reminders_total,
+        profile_distribution=profile_dist,
+    )
+    return V2MailboxResponse(summary=summary, rows=rows)
+
+
+class V2MailboxBulkInjectIn(BaseModel):
+    sender: str = Field(min_length=1, max_length=120)
+    sender_kind: MailSenderKind = "other"
+    sender_short: Optional[str] = None
+    mail_type: MailType
+    subject: str = Field(min_length=1, max_length=200)
+    body: Optional[str] = None
+    amount: Optional[float] = Field(default=None, ge=0)
+    due_date: Optional[_date] = None
+    target_student_ids: Optional[list[int]] = None  # None = alla aktiva
+
+
+class V2MailboxBulkInjectResult(BaseModel):
+    students_targeted: int
+    mails_created: int
+
+
+@router.post(
+    "/teacher/mailboxes/bulk-inject",
+    response_model=V2MailboxBulkInjectResult,
+)
+def bulk_inject_mail(
+    body: V2MailboxBulkInjectIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2MailboxBulkInjectResult:
+    """Lärare skickar samma brev till flera elever på en gång.
+
+    target_student_ids: None → alla aktiva elever till denna lärare.
+    Annars endast eleverna i listan (måste tillhöra läraren).
+    """
+    from ..school.engines import scope_context, scope_for_student
+
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        q = mdb.query(Student).filter(
+            Student.teacher_id == teacher_id,
+            Student.active.is_(True),
+        )
+        if body.target_student_ids is not None:
+            q = q.filter(Student.id.in_(body.target_student_ids))
+        students = q.all()
+        student_snapshots = [
+            (st.id, scope_for_student(st)) for st in students
+        ]
+
+    created = 0
+    for sid, scope_key in student_snapshots:
+        try:
+            with scope_context(scope_key):
+                with session_scope() as s:
+                    amount = (
+                        Decimal(str(body.amount))
+                        if body.amount is not None else None
+                    )
+                    s.add(MailItem(
+                        sender=body.sender,
+                        sender_short=body.sender_short,
+                        sender_kind=body.sender_kind,
+                        mail_type=body.mail_type,
+                        subject=body.subject,
+                        body=body.body,
+                        amount=amount,
+                        due_date=body.due_date,
+                        status="unhandled",
+                    ))
+                    created += 1
+        except Exception:
+            # Fail-soft per elev så en trasig scope-DB inte stoppar
+            # bulk-injicering till resten av klassen.
+            continue
+    return V2MailboxBulkInjectResult(
+        students_targeted=len(student_snapshots),
+        mails_created=created,
+    )
+
+
 class V2ReflectionFeedbackIn(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 

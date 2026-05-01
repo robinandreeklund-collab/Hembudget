@@ -6809,3 +6809,220 @@ def test_v2_teacher_reflections_feedback_blocks_other_teacher(fx) -> None:
         json={"body": "kommentar"},
     )
     assert r.status_code == 403
+
+
+# === TeacherMailboxV2 (p-mail) — Fas 2U ===
+
+
+def test_v2_teacher_mailboxes_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/mailboxes",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_mailboxes_empty(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/mailboxes",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["total_students"] == 1
+    assert len(data["rows"]) == 1
+    # Tom scope-DB → "klar"
+    assert data["rows"][0]["status"] == "klar"
+    assert data["rows"][0]["unhandled_count"] == 0
+
+
+def test_v2_teacher_mailboxes_status_levels(fx) -> None:
+    """Skicka olika antal brev till elever via mail-seed → status varieras."""
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    # Lägg till 2 elever till
+    from hembudget.school.models import Student as _S
+    with master_session() as db:
+        s2 = _S(
+            teacher_id=tid, display_name="B", login_code="BBB00002",
+        )
+        s3 = _S(
+            teacher_id=tid, display_name="C", login_code="CCC00003",
+        )
+        db.add(s2); db.add(s3); db.flush()
+        sid2 = s2.id
+        sid3 = s3.id
+        db.commit()
+
+    # Eleven Eva (sid) → 2 ohanterade (i_fas)
+    r = client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "items": [
+                {
+                    "sender": "El AB", "mail_type": "invoice",
+                    "subject": "El april", "amount": 800,
+                },
+                {
+                    "sender": "Tibber", "mail_type": "invoice",
+                    "subject": "El mars", "amount": 700,
+                },
+            ],
+            "replace_existing": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    # Eleven B (sid2) → 6 ohanterade (släper)
+    items_släper = [
+        {
+            "sender": f"X{i}", "mail_type": "invoice",
+            "subject": f"X{i}", "amount": 100,
+        }
+        for i in range(6)
+    ]
+    r = client.post(
+        f"/v2/teacher/students/{sid2}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"items": items_släper, "replace_existing": True},
+    )
+    assert r.status_code == 200, r.text
+    # Eleven C (sid3) → ingen → klar
+
+    r = client.get(
+        "/v2/teacher/mailboxes",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    rows = data["rows"]
+    by_id = {row["student_id"]: row for row in rows}
+    assert by_id[sid]["unhandled_count"] == 2
+    assert by_id[sid]["status"] == "i_fas"
+    assert by_id[sid2]["unhandled_count"] == 6
+    assert by_id[sid2]["status"] == "släper"
+    assert by_id[sid3]["unhandled_count"] == 0
+    assert by_id[sid3]["status"] == "klar"
+
+    # Sortering · risk/släper först
+    assert rows[0]["status"] in ("risk", "släper")
+
+
+def test_v2_teacher_mailboxes_summary_counts_correctly(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    client.post(
+        f"/v2/teacher/students/{sid}/mail-seed",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "items": [
+                {
+                    "sender": "X", "mail_type": "reminder",
+                    "subject": "Påminn", "amount": 100,
+                },
+                {
+                    "sender": "Y", "mail_type": "invoice",
+                    "subject": "Faktura", "amount": 200,
+                },
+            ],
+            "replace_existing": True,
+        },
+    )
+    r = client.get(
+        "/v2/teacher/mailboxes",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert data["summary"]["reminders_total"] == 1
+    assert data["summary"]["total_generated_period"] == 2
+    # Student Eva har 1 reminder → status risk
+    assert data["rows"][0]["status"] == "risk"
+
+
+def test_v2_teacher_mailboxes_bulk_inject_to_all(fx) -> None:
+    from hembudget.school.models import Student as _S
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        s2 = _S(
+            teacher_id=tid, display_name="B", login_code="BBB00002",
+        )
+        db.add(s2); db.flush()
+        sid2 = s2.id
+        db.commit()
+
+    r = client.post(
+        "/v2/teacher/mailboxes/bulk-inject",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "sender": "Folktandvården",
+            "mail_type": "invoice",
+            "subject": "Karies-bokning",
+            "amount": 850,
+        },
+    )
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["students_targeted"] == 2
+    assert out["mails_created"] == 2
+
+    r2 = client.get(
+        "/v2/teacher/mailboxes",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r2.json()
+    by_id = {row["student_id"]: row for row in data["rows"]}
+    assert by_id[sid]["unhandled_count"] == 1
+    assert by_id[sid2]["unhandled_count"] == 1
+
+
+def test_v2_teacher_mailboxes_bulk_inject_target_subset(fx) -> None:
+    from hembudget.school.models import Student as _S
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        s2 = _S(
+            teacher_id=tid, display_name="B", login_code="BBB00002",
+        )
+        db.add(s2); db.flush()
+        sid2 = s2.id
+        db.commit()
+
+    r = client.post(
+        "/v2/teacher/mailboxes/bulk-inject",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "sender": "Klarna",
+            "mail_type": "invoice",
+            "subject": "Faktura",
+            "amount": 500,
+            "target_student_ids": [sid2],
+        },
+    )
+    assert r.json()["mails_created"] == 1
+
+    r2 = client.get(
+        "/v2/teacher/mailboxes",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    by_id = {row["student_id"]: row for row in r2.json()["rows"]}
+    assert by_id[sid2]["unhandled_count"] == 1
+    assert by_id[sid]["unhandled_count"] == 0
+
+
+def test_v2_teacher_mailboxes_bulk_inject_blocks_other_teachers(
+    fx,
+) -> None:
+    """Annan lärare kan inte injicera till första lärarens elever."""
+    client, _tch, sa, _stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/teacher/mailboxes/bulk-inject",
+        headers={"Authorization": f"Bearer {sa}"},
+        json={
+            "sender": "X",
+            "mail_type": "invoice",
+            "subject": "X",
+        },
+    )
+    # Super-admin har inga elever → 0 affected (inte 403, men inget skapas)
+    assert r.status_code == 200
+    assert r.json()["mails_created"] == 0
