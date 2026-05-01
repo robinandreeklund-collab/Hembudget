@@ -12,7 +12,7 @@ Super-admin auto-routas till v2 (handlas i frontend via /v2/-flag).
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11106,4 +11106,532 @@ def teacher_klass_overview(
         mailbox_total_unhandled=mailbox_total_unhandled,
         level_distribution=level_dist,
         mini_pentagons=mini_pentagons,
+    )
+
+
+# === TeacherStudentDetailV2 (p-elev · Fas 2S) ===
+#
+# Speglar prototypens larare.html#p-elev: full elev-detalj-vy med
+# pentagon, pågående moduler, senaste händelser, kompetens-grid,
+# nivå-progression-card. Allt i ett anrop så lärar-detaljvyn kan
+# laddas snabbt (ingen vattenfalls-sekvens).
+
+
+class V2StudentDetailPentagon(BaseModel):
+    total_score: int
+    economy: int
+    safety: int
+    health: int
+    social: int
+    leisure: int
+    delta_total: int
+    tipped_towards: str  # max-axel namn
+
+
+class V2StudentDetailModule(BaseModel):
+    student_module_id: int
+    module_id: int
+    title: str
+    summary: Optional[str]
+    completed_steps: int
+    total_steps: int
+    progress_pct: int
+    started_at: Optional[datetime]
+    last_activity_at: Optional[datetime]
+    next_step_title: Optional[str] = None
+
+
+class V2StudentDetailEvent(BaseModel):
+    occurred_at: datetime
+    kind: str  # ex "tx.classified", "module.step_completed", "bankid.signed"
+    summary: str
+    badge: Optional[str] = None
+    detail: Optional[str] = None
+
+
+class V2StudentDetailCompetency(BaseModel):
+    competency_id: int
+    key: str
+    name: str
+    level: Literal["B", "G", "F"]
+    level_label: str
+    mastery: float
+
+
+class V2StudentDetailLevelProgression(BaseModel):
+    current_level: int
+    target_level: Optional[int]
+    weeks_at_level: int
+    progress_pct: int
+    requirements_met: int
+    requirements_total: int
+    ready_for_promotion: bool
+    blockers: list[str]
+
+
+class V2StudentDetailAssignmentSummary(BaseModel):
+    active_count: int
+    overdue_count: int
+    completed_this_month: int
+
+
+class V2TeacherStudentDetail(BaseModel):
+    student_id: int
+    student_name: str
+    login_code_suffix: str  # bara sista 4 tecken (för identifiering, ej hela)
+    last_login_at: Optional[datetime]
+    days_since_last_login: Optional[int]
+    onboarding_completed: bool
+    v2_level: int
+    v2_level_label: str
+    spend_profile: Optional[str]
+    fairness_choice: Optional[str]
+    partner_model: Optional[str]
+    pentagon: V2StudentDetailPentagon
+    pentagon_explanation: str
+    active_modules: list[V2StudentDetailModule]
+    completed_modules_count: int
+    recent_events: list[V2StudentDetailEvent]
+    competencies: list[V2StudentDetailCompetency]
+    level_progression: V2StudentDetailLevelProgression
+    pending_negotiation: Optional[V2KlassNegotiationItem]
+    assignments: V2StudentDetailAssignmentSummary
+    mailbox_unhandled_count: int
+    mailbox_oldest_days: Optional[int]
+
+
+def _level_label(level: int) -> str:
+    return {1: "Sparsam", 2: "Balanserad", 3: "Slösa"}.get(
+        level, f"Nivå {level}",
+    )
+
+
+def _build_recent_events_for(
+    student: Student, limit: int = 25,
+) -> list[V2StudentDetailEvent]:
+    """Aggregera senaste 30 dgr aktivitet · StudentActivity (master) +
+    BankID-sessioner + signerade fakturor + assignment-events.
+
+    Returnerar nyast först, max `limit` rader.
+    """
+    from ..school.engines import scope_context, scope_for_student
+    from ..school.models import StudentActivity as _SA
+
+    events: list[V2StudentDetailEvent] = []
+    cutoff = datetime.utcnow() - timedelta(days=30)
+
+    # Master-DB events (StudentActivity, Assignment-feedback,
+    # BankID-sessioner)
+    with master_session() as ms:
+        acts = (
+            ms.query(_SA)
+            .filter(
+                _SA.student_id == student.id,
+                _SA.occurred_at >= cutoff,
+            )
+            .order_by(_SA.occurred_at.desc())
+            .limit(limit * 2)
+            .all()
+        )
+        for a in acts:
+            events.append(V2StudentDetailEvent(
+                occurred_at=a.occurred_at,
+                kind=a.kind,
+                summary=a.summary,
+                badge=_summarize_kind_badge(a.kind),
+            ))
+
+        # Module step-progress (klarade steg senaste 30 dgr)
+        progress_rows = (
+            ms.query(_SchoolStepProgress, _SchoolModuleStep, _SchoolModule)
+            .join(
+                _SchoolModuleStep,
+                _SchoolStepProgress.step_id == _SchoolModuleStep.id,
+            )
+            .join(
+                _SchoolModule,
+                _SchoolModuleStep.module_id == _SchoolModule.id,
+            )
+            .filter(
+                _SchoolStepProgress.student_id == student.id,
+                _SchoolStepProgress.completed_at.is_not(None),
+                _SchoolStepProgress.completed_at >= cutoff,
+            )
+            .order_by(_SchoolStepProgress.completed_at.desc())
+            .limit(limit)
+            .all()
+        )
+        for prog, step, mod in progress_rows:
+            if prog.completed_at is None:
+                continue
+            events.append(V2StudentDetailEvent(
+                occurred_at=prog.completed_at,
+                kind="module.step_completed",
+                summary=f'Klarade steget "{step.title}"',
+                detail=f"Modul: {mod.title} · {step.kind}",
+                badge="+ steg",
+            ))
+
+    # Scope-DB events (BankID + Mail-viewed)
+    scope_key = scope_for_student(student)
+    try:
+        with scope_context(scope_key):
+            with session_scope() as s:
+                bankid_rows = (
+                    s.query(BankIDSession)
+                    .filter(BankIDSession.created_at >= cutoff)
+                    .order_by(BankIDSession.created_at.desc())
+                    .limit(10)
+                    .all()
+                )
+                for b in bankid_rows:
+                    if b.signed_at is not None:
+                        events.append(V2StudentDetailEvent(
+                            occurred_at=b.signed_at,
+                            kind="bankid.signed",
+                            summary=(
+                                f"Signerade {len(b.upcoming_ids or [])} "
+                                f"fakturor via BankID"
+                            ),
+                            badge="+ signering",
+                        ))
+                    elif b.cancelled_at is not None:
+                        events.append(V2StudentDetailEvent(
+                            occurred_at=b.cancelled_at,
+                            kind="bankid.cancelled",
+                            summary="Avbröt BankID-signering",
+                            badge="× avbruten",
+                        ))
+    except Exception:
+        pass  # fail-soft
+
+    events.sort(key=lambda e: e.occurred_at, reverse=True)
+    return events[:limit]
+
+
+def _summarize_kind_badge(kind: str) -> Optional[str]:
+    if kind.startswith("transaction."):
+        return "+ tx"
+    if kind.startswith("budget."):
+        return "+ budget"
+    if kind.startswith("loan."):
+        return "+ lån"
+    if kind.startswith("transfer."):
+        return "+ överföring"
+    if kind.startswith("batch."):
+        return "+ import"
+    if kind.startswith("module."):
+        return "+ modul"
+    if kind.startswith("bankid."):
+        return "+ signering"
+    if kind.startswith("assignment."):
+        return "+ uppdrag"
+    return None
+
+
+def _build_active_modules(
+    student_id: int,
+) -> tuple[list[V2StudentDetailModule], int]:
+    """Returnerar (active_modules, completed_count)."""
+    active: list[V2StudentDetailModule] = []
+    completed = 0
+    with master_session() as ms:
+        sms = (
+            ms.query(_SchoolStudentModule)
+            .filter(_SchoolStudentModule.student_id == student_id)
+            .all()
+        )
+        for sm in sms:
+            if sm.completed_at is not None:
+                completed += 1
+                continue
+            mod = ms.get(_SchoolModule, sm.module_id)
+            if mod is None:
+                continue
+            steps = (
+                ms.query(_SchoolModuleStep)
+                .filter(_SchoolModuleStep.module_id == mod.id)
+                .order_by(_SchoolModuleStep.sort_order)
+                .all()
+            )
+            step_ids = [st.id for st in steps]
+            total_steps = len(step_ids)
+            progs = (
+                ms.query(_SchoolStepProgress)
+                .filter(
+                    _SchoolStepProgress.student_id == student_id,
+                    _SchoolStepProgress.step_id.in_(step_ids),
+                    _SchoolStepProgress.completed_at.is_not(None),
+                )
+                .all()
+            )
+            done_ids = {p.step_id for p in progs}
+            completed_steps = len(done_ids)
+            last_activity = None
+            for p in progs:
+                if (
+                    last_activity is None
+                    or (
+                        p.completed_at is not None
+                        and p.completed_at > last_activity
+                    )
+                ):
+                    last_activity = p.completed_at
+
+            # Nästa-steg-titel
+            next_step_title: Optional[str] = None
+            for st in steps:
+                if st.id not in done_ids:
+                    next_step_title = st.title
+                    break
+
+            progress_pct = (
+                round(completed_steps / total_steps * 100)
+                if total_steps > 0 else 0
+            )
+            active.append(V2StudentDetailModule(
+                student_module_id=sm.id,
+                module_id=mod.id,
+                title=mod.title,
+                summary=mod.summary,
+                completed_steps=completed_steps,
+                total_steps=total_steps,
+                progress_pct=progress_pct,
+                started_at=sm.started_at,
+                last_activity_at=last_activity,
+                next_step_title=next_step_title,
+            ))
+    return active, completed
+
+
+def _build_competencies_for_student(
+    student_id: int,
+) -> list[V2StudentDetailCompetency]:
+    from .modules import _compute_mastery_for_student
+
+    out: list[V2StudentDetailCompetency] = []
+    with master_session() as s:
+        mastery_by_cid = _compute_mastery_for_student(s, student_id)
+        comps = (
+            s.query(_SchoolCompetency)
+            .order_by(_SchoolCompetency.name)
+            .all()
+        )
+        for c in comps:
+            mastery, _count, _last = mastery_by_cid.get(
+                c.id, (0.0, 0, None),
+            )
+            level_short, level_label = _mastery_to_level(mastery)
+            out.append(V2StudentDetailCompetency(
+                competency_id=c.id,
+                key=c.key,
+                name=c.name,
+                level=level_short,  # type: ignore[arg-type]
+                level_label=level_label,
+                mastery=round(mastery, 4),
+            ))
+    # Sortera: F först, sen G, sen B, sen på namn
+    level_order = {"F": 0, "G": 1, "B": 2}
+    out.sort(key=lambda c: (level_order[c.level], c.name))
+    return out
+
+
+@router.get(
+    "/teacher/students/{student_id}/student-detail",
+    response_model=V2TeacherStudentDetail,
+)
+def teacher_student_detail(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherStudentDetail:
+    """Lärar-detaljvy · alla aspekter av en specifik elev.
+
+    Speglar prototypens larare.html#p-elev: pentagon med delta,
+    pågående moduler, senaste händelser, kompetens-grid,
+    nivå-progression, pågående lönesamtal, uppdrag-summary, postlåda.
+    """
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        student = mdb.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        student_name = student.display_name
+        login_code = student.login_code or ""
+        last_login = student.last_login_at
+        v2_level = getattr(student, "v2_level", None) or 1
+        onboarding_done = getattr(student, "onboarding_completed", False)
+        spend_profile = getattr(student, "v2_spend_profile", None)
+        fairness = getattr(student, "v2_fairness_choice", None)
+        partner = getattr(student, "v2_partner_model", None)
+        v2_onboarded_at = getattr(
+            student, "v2_onboarding_completed_at", None,
+        )
+
+    days_since_login = _days_since(last_login)
+
+    # Pentagon
+    wb = _safe_calc_wellbeing_for(student)
+    if wb is None:
+        wb = (50, 50, 50, 50, 50, 50)
+    total, eco, safe, health, social, leisure = wb
+    axes = [
+        ("ekonomi", eco), ("karriär", safe), ("hälsa", health),
+        ("relation", social), ("fritid", leisure),
+    ]
+    tipped = max(axes, key=lambda x: x[1])[0]
+    pentagon = V2StudentDetailPentagon(
+        total_score=total,
+        economy=eco, safety=safe, health=health,
+        social=social, leisure=leisure,
+        delta_total=0,
+        tipped_towards=tipped,
+    )
+
+    # Förklaring · samma logik som elev-vyns wellbeing-explanation
+    pentagon_explanation = (
+        f"Pent {total}/100 · ekonomi {eco} · karriär {safe} · "
+        f"hälsa {health} · relation {social} · fritid {leisure}. "
+        f"Tippad mot {tipped}."
+    )
+
+    active_modules, completed_count = _build_active_modules(student_id)
+    competencies = _build_competencies_for_student(student_id)
+
+    with master_session() as m:
+        student_obj = m.get(Student, student_id)
+        if student_obj is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev hittades inte",
+            )
+        recent_events = _build_recent_events_for(student_obj, limit=25)
+
+    # Pågående lönesamtal
+    pending_negotiation: Optional[V2KlassNegotiationItem] = None
+    with master_session() as ms:
+        neg = (
+            ms.query(_SalaryNegotiation)
+            .filter(
+                _SalaryNegotiation.student_id == student_id,
+                _SalaryNegotiation.status == "active",
+            )
+            .order_by(_SalaryNegotiation.started_at.desc())
+            .first()
+        )
+        if neg is not None:
+            cfg = ms.query(_NegotiationConfig).first()
+            max_rounds = cfg.max_rounds if cfg else 5
+            last_round = (
+                ms.query(_NegotiationRound)
+                .filter(_NegotiationRound.negotiation_id == neg.id)
+                .order_by(_NegotiationRound.round_no.desc())
+                .first()
+            )
+            last_proposed: Optional[float] = None
+            if (
+                last_round and last_round.proposed_pct is not None
+                and neg.starting_salary is not None
+            ):
+                last_proposed = float(neg.starting_salary) * (
+                    1.0 + (last_round.proposed_pct / 100.0)
+                )
+            pending_negotiation = V2KlassNegotiationItem(
+                negotiation_id=neg.id,
+                student_id=neg.student_id,
+                student_name=student_name,
+                round_no=last_round.round_no if last_round else 0,
+                max_rounds=max_rounds,
+                profession=neg.profession,
+                starting_salary=float(neg.starting_salary),
+                last_proposed_salary=last_proposed,
+                status=neg.status,
+                started_at=neg.started_at,
+            )
+
+    # Uppdrag-summary · samma motor som /v2/uppdrag
+    upp_resp = _build_uppdrag_response(student_id)
+    assignments_summary = V2StudentDetailAssignmentSummary(
+        active_count=upp_resp.summary.active_count,
+        overdue_count=upp_resp.summary.overdue_count,
+        completed_this_month=upp_resp.summary.completed_this_month,
+    )
+
+    # Postlåda
+    with master_session() as m:
+        student_obj2 = m.get(Student, student_id)
+    unhandled, oldest_days, _has_auth = _safe_count_unhandled_mail(
+        student_obj2,
+    )
+
+    # Nivå-progression
+    weeks_at_level = max(
+        1, ((days_since_login or 0) // 7) + 8,
+    ) if v2_onboarded_at is None else max(
+        1, ((datetime.utcnow() - v2_onboarded_at).days // 7),
+    )
+    fordjup_count = sum(1 for c in competencies if c.level == "F")
+    grund_count = sum(1 for c in competencies if c.level == "G")
+    completed_steps_total = sum(
+        m.completed_steps for m in active_modules
+    )
+    blockers: list[str] = []
+    requirements_met = 0
+    requirements_total = 4
+    if total >= 65:
+        requirements_met += 1
+    else:
+        blockers.append(f"Pent under 65 (är {total})")
+    if grund_count + fordjup_count >= 1:
+        requirements_met += 1
+    else:
+        blockers.append("Saknar minst 1 kompetens på G eller F")
+    if completed_count >= 1:
+        requirements_met += 1
+    else:
+        blockers.append("Saknar minst 1 avslutad modul")
+    if days_since_login is None or days_since_login <= 14:
+        requirements_met += 1
+    else:
+        blockers.append(f"Inaktiv {days_since_login} d (krav ≤ 14)")
+    progress_pct = round(requirements_met / requirements_total * 100)
+    ready = requirements_met == requirements_total and v2_level < 3
+    level_progression = V2StudentDetailLevelProgression(
+        current_level=v2_level,
+        target_level=v2_level + 1 if v2_level < 3 else None,
+        weeks_at_level=weeks_at_level,
+        progress_pct=progress_pct,
+        requirements_met=requirements_met,
+        requirements_total=requirements_total,
+        ready_for_promotion=ready,
+        blockers=blockers,
+    )
+
+    # Login-code suffix · säkrare än hela koden i payload
+    login_suffix = login_code[-4:] if len(login_code) >= 4 else login_code
+
+    return V2TeacherStudentDetail(
+        student_id=student_id,
+        student_name=student_name,
+        login_code_suffix=login_suffix,
+        last_login_at=last_login,
+        days_since_last_login=days_since_login,
+        onboarding_completed=bool(onboarding_done),
+        v2_level=v2_level,
+        v2_level_label=_level_label(v2_level),
+        spend_profile=spend_profile,
+        fairness_choice=fairness,
+        partner_model=partner,
+        pentagon=pentagon,
+        pentagon_explanation=pentagon_explanation,
+        active_modules=active_modules,
+        completed_modules_count=completed_count,
+        recent_events=recent_events,
+        competencies=competencies,
+        level_progression=level_progression,
+        pending_negotiation=pending_negotiation,
+        assignments=assignments_summary,
+        mailbox_unhandled_count=unhandled,
+        mailbox_oldest_days=oldest_days,
     )

@@ -6408,3 +6408,180 @@ def test_v2_klass_overview_period_label_format(fx) -> None:
     assert " · " in label
     weekdays = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
     assert any(w in label for w in weekdays)
+
+
+# === TeacherStudentDetailV2 (p-elev) — Fas 2S ===
+
+
+def test_v2_teacher_student_detail_blocks_other_teacher(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_student_detail_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_student_detail_basic_shape(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["student_name"] == "Eva"
+    assert data["v2_level"] == 1
+    assert data["v2_level_label"] == "Sparsam"
+    # Pentagon-keys
+    p = data["pentagon"]
+    for axis in (
+        "total_score", "economy", "safety", "health",
+        "social", "leisure", "tipped_towards",
+    ):
+        assert axis in p
+    # Active modules + competencies (empty fixture)
+    assert isinstance(data["active_modules"], list)
+    assert isinstance(data["competencies"], list)
+    assert isinstance(data["recent_events"], list)
+    assert "level_progression" in data
+    assert data["level_progression"]["current_level"] == 1
+    assert data["level_progression"]["target_level"] == 2
+    # Login-suffix bara sista 4 tecken
+    assert data["login_code_suffix"] == "0001"
+
+
+def test_v2_teacher_student_detail_with_pending_negotiation(fx) -> None:
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+        NegotiationRound as _NR,
+    )
+    from decimal import Decimal as _D
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        n = _SN(
+            student_id=sid,
+            profession="Frisör",
+            employer="Salongen",
+            starting_salary=_D("25000.00"),
+            status="active",
+        )
+        db.add(n); db.flush()
+        nid = n.id
+        db.add(_NR(
+            negotiation_id=nid, round_no=3,
+            student_message="x", employer_response="y",
+            proposed_pct=8.0,
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    pneg = data["pending_negotiation"]
+    assert pneg is not None
+    assert pneg["round_no"] == 3
+    assert pneg["status"] == "active"
+
+
+def test_v2_teacher_student_detail_with_active_module(fx) -> None:
+    """Modul med delvis klar progress → räknas som aktiv med progress_pct."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP, StudentModule as _SM,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(
+            teacher_id=tid, title="Bolån",
+            summary="Förstå bolån",
+            is_template=False,
+        )
+        db.add(m); db.flush()
+        steps = [
+            _MS(module_id=m.id, sort_order=i, kind="read", title=f"S{i}")
+            for i in range(4)
+        ]
+        for st in steps:
+            db.add(st)
+        db.flush()
+        # 1 av 4 klar
+        db.add(_SSP(
+            student_id=sid, step_id=steps[0].id,
+            completed_at=_dt.utcnow(), data={},
+        ))
+        db.add(_SM(
+            student_id=sid, module_id=m.id,
+            started_at=_dt.utcnow(),
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    am = data["active_modules"]
+    assert len(am) == 1
+    assert am[0]["title"] == "Bolån"
+    assert am[0]["completed_steps"] == 1
+    assert am[0]["total_steps"] == 4
+    assert am[0]["progress_pct"] == 25
+    assert am[0]["next_step_title"] == "S1"
+
+
+def test_v2_teacher_student_detail_recent_events_includes_step(fx) -> None:
+    """Klarat steg senaste 30 dgr → kommer in i recent_events."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+    )
+    from datetime import datetime as _dt
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="X", is_template=False)
+        db.add(m); db.flush()
+        st = _MS(
+            module_id=m.id, sort_order=0,
+            kind="reflect", title="Reflektera om april",
+        )
+        db.add(st); db.flush()
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            completed_at=_dt.utcnow(), data={"reflection": "abc"},
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    titles = [e["summary"] for e in data["recent_events"]]
+    assert any("Reflektera om april" in t for t in titles)
+
+
+def test_v2_teacher_student_detail_404_when_not_found(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/teacher/students/9999/student-detail",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    # Saknad elev → 403 (beror på Student-objekt None)
+    assert r.status_code == 403
