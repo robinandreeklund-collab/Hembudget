@@ -594,11 +594,15 @@ export function BokforingV2() {
                 <span>Belopp</span>
               </div>
               {classifiedView.slice(0, 50).map((t) => (
-                <div
+                <Link
+                  to={`/v2/tx/${t.id}`}
                   className="biz-table-row"
                   key={t.id}
                   style={{
                     gridTemplateColumns: "100px 1.4fr 1fr 110px 90px",
+                    textDecoration: "none",
+                    color: "inherit",
+                    cursor: "pointer",
                   }}
                 >
                   <span
@@ -655,7 +659,7 @@ export function BokforingV2() {
                     {t.amount > 0 ? "+ " : "− "}
                     {SEK(Math.abs(t.amount))}
                   </span>
-                </div>
+                </Link>
               ))}
               {classifiedView.length > 50 && (
                 <div

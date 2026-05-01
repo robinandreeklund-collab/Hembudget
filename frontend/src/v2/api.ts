@@ -1181,6 +1181,114 @@ export type V2TeacherBankIDOverview = {
   bankid: V2BankIDListData;
 };
 
+// === /v2/tx/{id} (Fas 2M · Transaktion-detalj) ===
+
+export type V2TxRecurringRow = {
+  id: number;
+  date: string;
+  amount: number;
+  description: string;
+  is_self: boolean;
+};
+
+export type V2TxDetailData = {
+  id: number;
+  date: string;
+  amount: number;
+  raw_description: string;
+  normalized_merchant: string | null;
+  account_id: number;
+  account_name: string;
+  category_id: number | null;
+  category_name: string | null;
+  subcategory_id: number | null;
+  subcategory_name: string | null;
+  ai_confidence: number | null;
+  user_verified: boolean;
+  is_transfer: boolean;
+  notes: string | null;
+  tags: string[] | null;
+  recurring: V2TxRecurringRow[];
+  recurring_total_30d: number;
+  recurring_count_30d: number;
+  categories: V2BookkeepingCategoryRef[];
+  accounts: { id: number; name: string; type: string }[];
+  existing_rule_id: number | null;
+};
+
+export type V2TxCreateRuleResult = {
+  rule_id: number;
+  pattern: string;
+  category_id: number;
+  applied_count: number;
+  already_existed: boolean;
+};
+
+// === /v2/messages (Fas 2M · Lärar-chat) ===
+
+export type V2MessageRow = {
+  id: number;
+  sender_role: "student" | "teacher";
+  body: string;
+  context_type: string | null;
+  context_id: number | null;
+  created_at: string;
+  read_at: string | null;
+  is_unread: boolean;
+};
+
+export type V2MessagesData = {
+  student_id: number;
+  teacher_name: string | null;
+  teacher_id: number | null;
+  messages: V2MessageRow[];
+  unread_count: number;
+  last_received_at: string | null;
+};
+
+export type V2TeacherMessagesOverview = {
+  student_id: number;
+  student_name: string;
+  messages: V2MessagesData;
+  student_unread_count: number;
+  teacher_unread_count: number;
+};
+
+// === /v2/portfolio (Fas 2M · Kompetens-portfolio) ===
+
+export type V2CompetencyEntry = {
+  competency_id: number;
+  key: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  mastery: number;
+  completed_steps: number;
+  last_event_at: string | null;
+  level: "B" | "G" | "F";
+  level_label: string;
+};
+
+export type V2PortfolioSummary = {
+  total_competencies: number;
+  basis_count: number;
+  grund_count: number;
+  fordjup_count: number;
+  last_event_at: string | null;
+};
+
+export type V2PortfolioData = {
+  student_id: number;
+  summary: V2PortfolioSummary;
+  competencies: V2CompetencyEntry[];
+};
+
+export type V2TeacherPortfolioOverview = {
+  student_id: number;
+  student_name: string;
+  portfolio: V2PortfolioData;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1722,6 +1830,62 @@ export const v2Api = {
   teacherBankIDOverview: (studentId: number) =>
     api<V2TeacherBankIDOverview>(
       `/v2/teacher/students/${studentId}/bankid-overview`,
+    ),
+  // === /v2/tx (transaktion-detalj) ===
+  txDetail: (txId: number) => api<V2TxDetailData>(`/v2/tx/${txId}`),
+  txClassify: (txId: number, body: {
+    category_id?: number;
+    subcategory_id?: number;
+    account_id?: number;
+    notes?: string;
+  }) =>
+    api<V2TxDetailData>(`/v2/tx/${txId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  txCreateRule: (txId: number, body: {
+    category_id: number;
+    pattern?: string;
+    apply_to_existing?: boolean;
+  }) =>
+    api<V2TxCreateRuleResult>(`/v2/tx/${txId}/create-rule`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // === /v2/messages (lärar-chat) ===
+  messages: () => api<V2MessagesData>("/v2/messages"),
+  messagesSend: (body: string, context_type?: string, context_id?: number) =>
+    api<V2MessageRow>("/v2/messages", {
+      method: "POST",
+      body: JSON.stringify({ body, context_type, context_id }),
+    }),
+  messagesMarkRead: (messageId: number) =>
+    api<void>(`/v2/messages/${messageId}/mark-read`, {
+      method: "POST",
+      body: "{}",
+    }),
+  teacherMessagesOverview: (studentId: number) =>
+    api<V2TeacherMessagesOverview>(
+      `/v2/teacher/students/${studentId}/messages-overview`,
+    ),
+  teacherSendMessage: (
+    studentId: number,
+    body: string,
+    context_type?: string,
+    context_id?: number,
+  ) =>
+    api<V2MessageRow>(
+      `/v2/teacher/students/${studentId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body, context_type, context_id }),
+      },
+    ),
+  // === /v2/portfolio (kompetens) ===
+  portfolio: () => api<V2PortfolioData>("/v2/portfolio"),
+  teacherPortfolioOverview: (studentId: number) =>
+    api<V2TeacherPortfolioOverview>(
+      `/v2/teacher/students/${studentId}/portfolio-overview`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

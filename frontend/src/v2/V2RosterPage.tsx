@@ -435,6 +435,44 @@ export function V2RosterPage() {
                 >
                   BankID →
                 </Link>
+                <Link
+                  to={`/teacher/v2/messages/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(96,165,250,0.10)",
+                    border: "1px solid rgba(96,165,250,0.4)",
+                    color: "#93c5fd",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Chatta →
+                </Link>
+                <Link
+                  to={`/teacher/v2/portfolio/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(110,231,183,0.10)",
+                    border: "1px solid rgba(110,231,183,0.4)",
+                    color: "#6ee7b7",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Portfolio →
+                </Link>
               </div>
             ))}
           </div>

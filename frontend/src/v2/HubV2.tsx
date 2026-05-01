@@ -407,6 +407,16 @@ export function HubV2() {
               <div className="compass-node-name">Lärar-feedback</div>
               <div className="compass-node-val">spårbar dialog</div>
             </Link>
+            <Link to="/v2/meddelanden" className="compass-node">
+              <div className="compass-node-eye">Skola</div>
+              <div className="compass-node-name">Meddelanden</div>
+              <div className="compass-node-val">chat med lärare</div>
+            </Link>
+            <Link to="/v2/portfolio" className="compass-node">
+              <div className="compass-node-eye">Skola</div>
+              <div className="compass-node-name">Portfolio</div>
+              <div className="compass-node-val">kompetens-karta</div>
+            </Link>
           </div>
         </div>
 
