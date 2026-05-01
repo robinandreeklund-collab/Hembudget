@@ -15,6 +15,7 @@ import { Link } from "react-router-dom";
 import { v2Api, type V2RosterRow } from "./api";
 import { V2Banner } from "./V2Banner";
 import { LoginQrModal } from "./LoginQrModal";
+import { printAllLoginQrs } from "./printAllLoginQrs";
 
 export function V2RosterPage() {
   const [rows, setRows] = useState<V2RosterRow[] | null>(null);
@@ -119,6 +120,22 @@ export function V2RosterPage() {
             style={btnGhost()}
           >
             × Inaktivera alla
+          </button>
+          <button
+            type="button"
+            disabled={!rows || rows.length === 0}
+            onClick={async () => {
+              const r = await printAllLoginQrs();
+              if (r.error) alert(r.error);
+            }}
+            style={{
+              ...btnGhost(),
+              borderColor: "rgba(251,191,36,0.45)",
+              background: "rgba(251,191,36,0.10)",
+              color: "#fbbf24",
+            }}
+          >
+            🖨 Skriv ut alla koder ({rows?.length || 0})
           </button>
           <Link to="/teacher" style={{ ...btnGhost(), textDecoration: "none", display: "inline-block", marginLeft: "auto" }}>
             ← Tillbaka till lärar-vyn

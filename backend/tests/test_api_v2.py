@@ -8178,3 +8178,51 @@ def test_v2_teacher_login_qr_404_when_unknown_student(fx) -> None:
         headers={"Authorization": f"Bearer {tch}"},
     )
     assert r.status_code == 403
+
+
+# === Bulk login-QR (Fas 2AP) ===
+
+
+def test_v2_teacher_login_qr_bulk_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/students/login-qr-bulk",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_login_qr_bulk_returns_all(fx) -> None:
+    """Två elever → båda har QR i payload."""
+    from hembudget.school.models import Student as _S
+    client, tch, _sa, _stu, tid, _said, _sid = fx
+    with master_session() as db:
+        db.add(_S(
+            teacher_id=tid, display_name="Hassan",
+            login_code="HAS00099",
+        ))
+        db.commit()
+
+    r = client.get(
+        "/v2/teacher/students/login-qr-bulk",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert len(data["items"]) == 2
+    for it in data["items"]:
+        assert "<svg" in it["qr_svg"] or "<?xml" in it["qr_svg"]
+        assert it["login_code"]
+        assert it["login_code"] in it["login_url"]
+
+
+def test_v2_teacher_login_qr_bulk_only_own_students(fx) -> None:
+    """Annan lärare ska inte se första lärarens elever."""
+    client, _tch, sa, _stu, _tid, _said, _sid = fx
+    r = client.get(
+        "/v2/teacher/students/login-qr-bulk",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 200
+    # Super-admin-läraren har inga elever
+    assert r.json()["items"] == []

@@ -2793,6 +2793,19 @@ export const v2Api = {
       login_url: string;
       qr_svg: string;
     }>(`/v2/teacher/students/${studentId}/login-qr`),
+  // === Fas 2AP · Bulk-QR för utskrift ===
+  teacherLoginQrBulk: () =>
+    api<{
+      teacher_id: number;
+      teacher_name: string;
+      items: {
+        student_id: number;
+        student_name: string;
+        login_code: string;
+        login_url: string;
+        qr_svg: string;
+      }[];
+    }>("/v2/teacher/students/login-qr-bulk"),
   // === Fas 2AN/2AO · Lärar-modulbibliotek (wrappar v1-endpoints) ===
   teacherListModules: () =>
     api<V2TeacherModuleOut[]>("/teacher/modules"),

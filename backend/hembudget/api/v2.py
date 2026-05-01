@@ -14854,3 +14854,73 @@ def teacher_get_login_qr(
             login_url=url,
             qr_svg=svg,
         )
+
+
+# === Bulk-QR (Fas 2AP) ===
+#
+# Lärare kan hämta alla elevers login-koder + QR i ett anrop, för att
+# skriva ut allt på en gång. Per elev returneras login-kod, URL och
+# inbäddad SVG.
+
+
+class V2BulkLoginQrItem(BaseModel):
+    student_id: int
+    student_name: str
+    login_code: str
+    login_url: str
+    qr_svg: str
+
+
+class V2BulkLoginQrResponse(BaseModel):
+    teacher_id: int
+    teacher_name: str
+    items: list[V2BulkLoginQrItem]
+
+
+@router.get(
+    "/teacher/students/login-qr-bulk",
+    response_model=V2BulkLoginQrResponse,
+)
+def teacher_get_login_qr_bulk(
+    info: TokenInfo = Depends(require_token),
+) -> V2BulkLoginQrResponse:
+    """Returnerar QR + login-kod för ALLA lärarens aktiva elever.
+
+    Frontend använder detta för "Skriv ut alla koder"-funktionen.
+    """
+    teacher_id = _require_teacher(info)
+    items: list[V2BulkLoginQrItem] = []
+    teacher_name = "Lärare"
+    with master_session() as ms:
+        teacher = ms.get(Teacher, teacher_id)
+        if teacher is not None:
+            teacher_name = teacher.name or teacher_name
+        students = (
+            ms.query(Student)
+            .filter(
+                Student.teacher_id == teacher_id,
+                Student.active.is_(True),
+            )
+            .order_by(Student.display_name)
+            .all()
+        )
+        for st in students:
+            if not st.login_code:
+                continue
+            url = _build_login_url(st.login_code)
+            try:
+                svg = _make_qr_svg(url)
+            except Exception:
+                continue
+            items.append(V2BulkLoginQrItem(
+                student_id=st.id,
+                student_name=st.display_name,
+                login_code=st.login_code,
+                login_url=url,
+                qr_svg=svg,
+            ))
+    return V2BulkLoginQrResponse(
+        teacher_id=teacher_id,
+        teacher_name=teacher_name,
+        items=items,
+    )

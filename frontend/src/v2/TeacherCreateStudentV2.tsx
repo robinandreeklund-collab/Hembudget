@@ -22,6 +22,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import { LoginQrModal } from "./LoginQrModal";
+import { printAllLoginQrs } from "./printAllLoginQrs";
 import "./larare.css";
 
 const ARCHETYPE_LABEL: Record<V2CharacterArchetype, string> = {
@@ -230,13 +231,42 @@ export function TeacherCreateStudentV2() {
         />
 
         {/* Lista skapade elever */}
-        <div className="section-title" style={{ marginTop: 28 }}>
-          Skapade elever ({data.total_count})
-          {data.pending_activation_count > 0 && (
-            <span style={{ color: "var(--warm)" }}>
-              {" "}
-              · {data.pending_activation_count} väntar på aktivering
-            </span>
+        <div
+          style={{
+            marginTop: 28,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            flexWrap: "wrap",
+            gap: 10,
+            marginBottom: 14,
+          }}
+        >
+          <div className="section-title" style={{ margin: 0 }}>
+            Skapade elever ({data.total_count})
+            {data.pending_activation_count > 0 && (
+              <span style={{ color: "var(--warm)" }}>
+                {" "}
+                · {data.pending_activation_count} väntar på aktivering
+              </span>
+            )}
+          </div>
+          {data.rows.length > 0 && (
+            <button
+              type="button"
+              onClick={async () => {
+                const r = await printAllLoginQrs();
+                if (r.error) alert(r.error);
+              }}
+              className="larare-tb-btn solid"
+              style={{
+                background: "var(--warm, #fbbf24)",
+                color: "#422006",
+                borderColor: "var(--warm, #fbbf24)",
+              }}
+            >
+              🖨 Skriv ut alla koder ({data.rows.length})
+            </button>
           )}
         </div>
 
