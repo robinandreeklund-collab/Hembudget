@@ -473,6 +473,25 @@ export function V2RosterPage() {
                 >
                   Portfolio →
                 </Link>
+                <Link
+                  to={`/teacher/v2/uppdrag/${r.student_id}`}
+                  style={{
+                    fontFamily: "JetBrains Mono",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    padding: "8px 14px",
+                    borderRadius: 100,
+                    background: "rgba(220,76,43,0.10)",
+                    border: "1px solid rgba(220,76,43,0.4)",
+                    color: "#fda594",
+                    textDecoration: "none",
+                    marginLeft: 8,
+                  }}
+                >
+                  Uppdrag →
+                </Link>
               </div>
             ))}
           </div>

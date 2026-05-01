@@ -1357,6 +1357,123 @@ export type V2TeacherMailDetailOverview = {
   detail: V2MailDetailData;
 };
 
+// === /v2/uppdrag (Mina uppdrag · Fas 2P) ===
+
+export type V2UppdragStatus = "not_started" | "in_progress" | "completed";
+
+export type V2UppdragUrgency =
+  | "overdue"
+  | "today"
+  | "tomorrow"
+  | "this_week"
+  | "later"
+  | "none";
+
+export type V2UppdragRow = {
+  id: number;
+  teacher_id: number;
+  title: string;
+  description: string;
+  kind: string;
+  target_year_month: string | null;
+  params: Record<string, unknown> | null;
+  due_date: string | null;
+  created_at: string;
+  status: V2UppdragStatus;
+  progress: string;
+  detail: Record<string, unknown> | null;
+  teacher_feedback: string | null;
+  teacher_feedback_at: string | null;
+  manually_completed_at: string | null;
+  days_until_due: number | null;
+  urgency: V2UppdragUrgency;
+};
+
+export type V2UppdragSummary = {
+  active_count: number;
+  completed_count: number;
+  overdue_count: number;
+  nearest_due_date: string | null;
+  nearest_due_label: string | null;
+  completed_this_month: number;
+};
+
+export type V2UppdragData = {
+  student_id: number;
+  teacher_name: string | null;
+  active: V2UppdragRow[];
+  completed: V2UppdragRow[];
+  summary: V2UppdragSummary;
+};
+
+export type V2TeacherUppdragOverview = {
+  student_id: number;
+  student_name: string;
+  uppdrag: V2UppdragData;
+};
+
+// === /v2/kompetens (Kompetens-detalj · Fas 2Q) ===
+
+export type V2KompetensLevel = "B" | "G" | "F";
+
+export type V2KompetensTimelineEvent = {
+  occurred_at: string;
+  event_type:
+    | "step_completed"
+    | "level_reached"
+    | "module_completed"
+    | "assigned";
+  title: string;
+  detail: string | null;
+  badge: string | null;
+  module_id: number | null;
+  step_id: number | null;
+};
+
+export type V2KompetensModuleStatus = {
+  module_id: number;
+  title: string;
+  completed: boolean;
+  completed_steps: number;
+  total_steps: number;
+  completed_at: string | null;
+};
+
+export type V2KompetensRequirement = {
+  label: string;
+  description: string | null;
+  met: boolean;
+  value_label: string;
+};
+
+export type V2KompetensDetail = {
+  competency_id: number;
+  key: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  mastery: number;
+  level: V2KompetensLevel;
+  level_label: string;
+  next_level: "G" | "F" | null;
+  next_level_label: string | null;
+  progress_to_next: number;
+  completed_steps: number;
+  total_steps: number;
+  earned_weight: number;
+  total_weight: number;
+  last_event_at: string | null;
+  timeline: V2KompetensTimelineEvent[];
+  connected_modules: V2KompetensModuleStatus[];
+  requirements_for_next: V2KompetensRequirement[];
+};
+
+export type V2TeacherKompetensOverview = {
+  student_id: number;
+  student_name: string;
+  detail: V2KompetensDetail;
+};
+
 // === /v2/skatten ===
 
 export type V2TaxLineItem = {
@@ -1961,6 +2078,28 @@ export const v2Api = {
   teacherMailDetail: (studentId: number, mailId: number) =>
     api<V2TeacherMailDetailOverview>(
       `/v2/teacher/students/${studentId}/mail/${mailId}/detail`,
+    ),
+  // === /v2/uppdrag (Mina uppdrag · Fas 2P) ===
+  uppdrag: () => api<V2UppdragData>("/v2/uppdrag"),
+  uppdragSelfComplete: (assignmentId: number) =>
+    api<{
+      ok: boolean;
+      assignment_id: number;
+      manually_completed_at: string;
+    }>(`/v2/uppdrag/${assignmentId}/self-complete`, {
+      method: "POST",
+      body: "{}",
+    }),
+  teacherUppdragOverview: (studentId: number) =>
+    api<V2TeacherUppdragOverview>(
+      `/v2/teacher/students/${studentId}/uppdrag-overview`,
+    ),
+  // === /v2/kompetens (Kompetens-detalj · Fas 2Q) ===
+  kompetensDetail: (competencyId: number) =>
+    api<V2KompetensDetail>(`/v2/kompetens/${competencyId}`),
+  teacherKompetensOverview: (studentId: number, competencyId: number) =>
+    api<V2TeacherKompetensOverview>(
+      `/v2/teacher/students/${studentId}/kompetens/${competencyId}`,
     ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>

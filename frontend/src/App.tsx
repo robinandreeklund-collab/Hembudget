@@ -43,6 +43,10 @@ import { PortfolioV2 } from "./v2/PortfolioV2";
 import { TeacherMessagesOverviewPage } from "./v2/TeacherMessagesOverviewPage";
 import { TeacherPortfolioOverviewPage } from "./v2/TeacherPortfolioOverviewPage";
 import { MailDetailV2 } from "./v2/MailDetailV2";
+import { UppdragV2 } from "./v2/UppdragV2";
+import { TeacherUppdragOverviewPage } from "./v2/TeacherUppdragOverviewPage";
+import { KompetensV2 } from "./v2/KompetensV2";
+import { TeacherKompetensOverviewPage } from "./v2/TeacherKompetensOverviewPage";
 import { GuideProvider } from "./v2/guides/GuideContext";
 import { GuideOverlay } from "./v2/guides/GuideOverlay";
 import { MalV2 } from "./v2/MalV2";
@@ -306,6 +310,11 @@ export default function App() {
           <Route path="/v2/meddelanden" element={<MeddelandenV2 />} />
           <Route path="/v2/portfolio" element={<PortfolioV2 />} />
           <Route
+            path="/v2/kompetens/:competencyId"
+            element={<KompetensV2 />}
+          />
+          <Route path="/v2/uppdrag" element={<UppdragV2 />} />
+          <Route
             path="/v2/postladan/:mailId"
             element={<MailDetailV2 />}
           />
@@ -372,6 +381,14 @@ export default function App() {
           <Route
             path="/teacher/v2/portfolio/:studentId"
             element={<TeacherPortfolioOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/uppdrag/:studentId"
+            element={<TeacherUppdragOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/kompetens/:studentId/:competencyId"
+            element={<TeacherKompetensOverviewPage />}
           />
           <Route path="/v2/mal" element={<MalV2 />} />
           <Route path="/v2/postladan" element={<PostladanV2 />} />

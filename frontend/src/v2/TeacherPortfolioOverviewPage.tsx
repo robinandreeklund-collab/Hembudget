@@ -4,7 +4,7 @@
  * Routas via /teacher/v2/portfolio/:studentId.
  */
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   v2Api,
   type V2TeacherPortfolioOverview,
@@ -214,11 +214,14 @@ export function TeacherPortfolioOverviewPage() {
               <span>Steg klara</span>
             </div>
             {p.competencies.map((c) => (
-              <div
+              <Link
                 key={c.competency_id}
+                to={`/teacher/v2/kompetens/${sid}/${c.competency_id}`}
                 className="biz-table-row"
                 style={{
                   gridTemplateColumns: "36px 1.4fr 110px 90px 1fr 110px",
+                  textDecoration: "none",
+                  color: "inherit",
                 }}
               >
                 <span
@@ -286,7 +289,7 @@ export function TeacherPortfolioOverviewPage() {
                 >
                   {c.completed_steps} st
                 </span>
-              </div>
+              </Link>
             ))}
           </div>
         )}

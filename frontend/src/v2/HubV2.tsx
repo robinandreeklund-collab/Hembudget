@@ -425,6 +425,23 @@ export function HubV2() {
               <div className="compass-node-name">Portfolio</div>
               <div className="compass-node-val">kompetens-karta</div>
             </Link>
+            <Link
+              to="/v2/uppdrag"
+              className="compass-node"
+              style={{ borderColor: "rgba(220,76,43,0.4)" }}
+              data-guide="uppdrag-link"
+            >
+              <div
+                className="compass-node-eye"
+                style={{ color: "var(--accent)" }}
+              >
+                Skola
+              </div>
+              <div className="compass-node-name">Mina uppdrag</div>
+              <div className="compass-node-val">
+                lärar-tilldelade · deadline
+              </div>
+            </Link>
           </div>
         </div>
 

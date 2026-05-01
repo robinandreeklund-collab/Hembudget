@@ -378,6 +378,66 @@ const SKATT_STEPS: GuideStep[] = [
   },
 ];
 
+const UPPDRAG_STEPS: GuideStep[] = [
+  {
+    selector: "[data-guide='uppdrag-list']",
+    route: "/v2/uppdrag",
+    eye: "Uppdrag · 1 / 3",
+    h: "Uppdrag är <em>verklighetsförankring</em>.",
+    prose:
+      "Specifika lärar-uppgifter med deadline. \"Räkna KALP för 2,4 Mkr i Hökarängen\" — du måste hämta data från flera aktörer i appen.",
+    placement: "right",
+  },
+  {
+    selector: "[data-guide='uppdrag-list']",
+    route: "/v2/uppdrag",
+    eye: "Uppdrag · 2 / 3 · status",
+    h: "Status räknas <em>live</em>.",
+    prose:
+      "De flesta uppdrag bedöms automatiskt — gör jobbet i rätt verktyg så uppdateras status. Reflektioner markerar du själv klara.",
+    placement: "right",
+  },
+  {
+    selector: "[data-guide='uppdrag-list']",
+    route: "/v2/uppdrag",
+    eye: "Uppdrag · 3 / 3 · feedback",
+    h: "Lärare kan be om <em>retry</em>.",
+    prose:
+      "Om läraren ger feedback med 'request_retry' får uppdraget aktiv-status igen. Du kan då revidera och markera klart på nytt.",
+    placement: "right",
+  },
+];
+
+const KOMPETENS_STEPS: GuideStep[] = [
+  {
+    selector: "[data-guide='kompetens-detail']",
+    route: "/v2/portfolio",
+    eye: "Kompetens · 1 / 3",
+    h: "Klicka på en <em>kompetens</em>.",
+    prose:
+      "Varje rad i portfolio öppnar en detalj-vy. Du ser resa B → G → F, mastery, timeline med vad du gjort.",
+    placement: "bottom",
+  },
+  {
+    selector: "[data-guide='kompetens-detail']",
+    route: "/v2/portfolio",
+    eye: "Kompetens · 2 / 3 · krav",
+    h: "Krav är <em>transparenta</em>.",
+    prose:
+      "För nästa nivå listas mastery, antal kopplade moduler klara, och totalt klarade steg — med live-progress.",
+    placement: "bottom",
+  },
+  {
+    selector: "[data-guide='kompetens-detail']",
+    route: "/v2/portfolio",
+    eye: "Kompetens · 3 / 3 · pedagogik",
+    h: "Spårbarhet är <em>respekt</em>.",
+    prose:
+      "Inga svarta lådor. Du kan visa portfolio + kompetens-resa för en arbetsgivare om 5 år. Ekonomilabbet följer dig.",
+    placement: "bottom",
+  },
+];
+
 const MODUL_STEPS: GuideStep[] = [
   {
     selector: "[data-guide='moduler-list']",
@@ -487,6 +547,22 @@ export const GUIDES: Record<string, GuideDef> = {
     time: "2 steg · 2 min",
     sub: "Steg, kompetenshöjning, lärar-feedback",
     steps: MODUL_STEPS,
+  },
+  uppdrag: {
+    key: "uppdrag",
+    label: "Mina uppdrag",
+    icon: "▷",
+    time: "3 steg · 2 min",
+    sub: "Lärar-tilldelade uppgifter med deadline",
+    steps: UPPDRAG_STEPS,
+  },
+  kompetens: {
+    key: "kompetens",
+    label: "Kompetens-detalj",
+    icon: "★",
+    time: "3 steg · 2 min",
+    sub: "Resa B → G → F · spårbar progression",
+    steps: KOMPETENS_STEPS,
   },
 };
 

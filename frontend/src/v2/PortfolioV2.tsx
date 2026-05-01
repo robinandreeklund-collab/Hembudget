@@ -278,10 +278,13 @@ function SummaryCard({
 
 function CompetencyRow({ c }: { c: V2CompetencyEntry }) {
   return (
-    <div
+    <Link
+      to={`/v2/kompetens/${c.competency_id}`}
       className="biz-table-row"
       style={{
         gridTemplateColumns: "36px 1.4fr 110px 1fr 130px",
+        textDecoration: "none",
+        color: "inherit",
       }}
     >
       <span
@@ -345,6 +348,6 @@ function CompetencyRow({ c }: { c: V2CompetencyEntry }) {
       >
         {NEXT_HINT[c.level]}
       </span>
-    </div>
+    </Link>
   );
 }
