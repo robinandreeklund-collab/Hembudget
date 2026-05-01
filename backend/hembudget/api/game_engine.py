@@ -21,12 +21,25 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+import random as _random
+
+from ..db.models import InsurancePolicy
+from ..game_engine.event_engine import (
+    EVENT_BY_KEY,
+    apply_event,
+    list_active_templates,
+)
 from ..game_engine.monthly_engine import tick_month
 from ..game_engine.profile_generator import (
     GeneratedProfile,
     generate_profile,
 )
-from ..school.engines import master_session
+from ..school.engines import (
+    get_scope_session,
+    master_session,
+    scope_context,
+    scope_for_student,
+)
 from ..school.game_engine_models import (
     ClassCalendar,
     WeekTickRun,
@@ -352,6 +365,50 @@ def advance_student_month(
     )
 
 
+class EventTemplateOut(BaseModel):
+    """Hur en EventTemplate exponeras via API:n."""
+    key: str
+    display: str
+    description: str
+    kind: str
+    frequency_per_year: float
+    age_range: tuple[int, int]
+    family_status_filter: list[str]
+    cost_range: tuple[int, int]
+    pentagon_unmitigated: dict
+    pentagon_mitigated: Optional[dict]
+    mitigations: list[dict]
+    actor_route: Optional[str]
+    echo_trigger: Optional[str]
+
+
+class InjectEventIn(BaseModel):
+    """Lärar-injektion av ett specifikt event i en spelmånad."""
+    template_key: str = Field(description="EVENT_BY_KEY-key.")
+    year_month: str = Field(pattern=r"^\d{4}-\d{2}$")
+    seed: int = Field(description="Seed för Profile Generator.")
+    archetype: str = "random"
+    starting_level: int = Field(default=1, ge=1, le=3)
+    partner_model: str = "solo"
+    base_cost_override: Optional[int] = Field(
+        default=None,
+        description="Tvinga ett specifikt belopp (kr).",
+    )
+
+
+class InjectEventOut(BaseModel):
+    student_id: int
+    template_key: str
+    template_display: str
+    occurred_on: str
+    base_cost: int
+    effective_cost: int
+    mitigation_used: bool
+    mitigation_label: Optional[str]
+    mail_id: int
+    claim_id: Optional[int]
+
+
 @router.get(
     "/students/{student_id}/tick-history",
     response_model=list[WeekTickRunOut],
@@ -382,3 +439,105 @@ def list_tick_history(
             )
             for r in rows
         ]
+
+
+# === Endpoints: Event Engine ===
+
+
+@router.get("/event-templates", response_model=list[EventTemplateOut])
+def list_event_templates(info: TokenInfo = Depends(require_teacher)):
+    """Lista hela event-poolen så lärare kan välja template för injektion."""
+    return [
+        EventTemplateOut(
+            key=t.key,
+            display=t.display,
+            description=t.description,
+            kind=t.kind,
+            frequency_per_year=t.frequency_per_year,
+            age_range=t.age_range,
+            family_status_filter=list(t.family_status_filter),
+            cost_range=t.cost_range,
+            pentagon_unmitigated=t.pentagon_unmitigated.as_dict(),
+            pentagon_mitigated=(
+                t.pentagon_mitigated.as_dict() if t.pentagon_mitigated else None
+            ),
+            mitigations=[
+                {
+                    "insurance_kind": m.insurance_kind,
+                    "cost_multiplier": m.cost_multiplier,
+                    "label": m.label,
+                }
+                for m in t.mitigations
+            ],
+            actor_route=t.actor_route,
+            echo_trigger=t.echo_trigger,
+        )
+        for t in list_active_templates()
+    ]
+
+
+@router.post(
+    "/students/{student_id}/inject-event",
+    response_model=InjectEventOut,
+)
+def inject_event(
+    student_id: int,
+    body: InjectEventIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Tvinga ett specifikt event för en elev i en specifik spelmånad.
+
+    Idempotens: två anrop med samma (student, year_month, template) ger
+    två separata MailItems — det är medvetet, läraren kan ha pedagogisk
+    anledning att skicka samma event flera gånger.
+    """
+    template = EVENT_BY_KEY.get(body.template_key)
+    if template is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Okänd template: {body.template_key}",
+        )
+
+    with master_session() as s:
+        student = _load_student_or_404(s, info.teacher_id, student_id)
+        student_obj = student
+        s.expunge(student)
+
+    profile = generate_profile(
+        seed=body.seed,
+        archetype=body.archetype,
+        starting_level=body.starting_level,
+        name=student_obj.display_name or "Elev",
+        partner_model=body.partner_model,
+    )
+
+    scope_key = scope_for_student(student_obj)
+    rng = _random.Random(
+        f"{scope_key}|inject|{body.year_month}|{body.template_key}",
+    )
+    maker = get_scope_session(scope_key)
+    with scope_context(scope_key):
+        with maker() as s:
+            occ = apply_event(
+                s,
+                template=template,
+                profile=profile,
+                year_month=body.year_month,
+                student_scope=scope_key,
+                rng=rng,
+                base_cost_override=body.base_cost_override,
+            )
+            s.commit()
+
+    return InjectEventOut(
+        student_id=student_id,
+        template_key=occ.template_key,
+        template_display=occ.template_display,
+        occurred_on=occ.occurred_on.isoformat(),
+        base_cost=occ.mitigation.base_cost,
+        effective_cost=occ.mitigation.effective_cost,
+        mitigation_used=occ.mitigation.mitigation_used,
+        mitigation_label=occ.mitigation.mitigation_label,
+        mail_id=occ.mail_id,
+        claim_id=occ.claim_id,
+    )

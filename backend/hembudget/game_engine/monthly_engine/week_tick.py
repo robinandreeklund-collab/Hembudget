@@ -28,6 +28,7 @@ from ...school.engines import (
 )
 from ...school.game_engine_models import WeekTickRun
 from ...school.models import Student
+from ..event_engine import roll_monthly_events
 from ..profile_generator.schema import GeneratedProfile
 from .fixed_expenses import generate_fixed_expenses
 from .salary_phase import generate_salary_phase
@@ -170,6 +171,47 @@ def tick_month(
                     starting_level=starting_level,
                     rng=random.Random(rng_master.random()),
                 )
+
+                # Fas E · oväntade händelser (Sprint 3)
+                events = roll_monthly_events(
+                    s,
+                    profile=profile,
+                    year_month=year_month,
+                    student_scope=scope_key,
+                    rng=random.Random(rng_master.random()),
+                )
+                pentagon_total = {
+                    k: 0 for k in ("economy", "safety", "health", "social", "leisure")
+                }
+                for occ in events:
+                    for axis, delta in occ.mitigation.pentagon_impact.as_dict().items():
+                        pentagon_total[axis] += delta
+                summary["events"] = {
+                    "triggered": len(events),
+                    "total_cost": sum(
+                        max(0, occ.mitigation.effective_cost) for occ in events
+                    ),
+                    "total_income": sum(
+                        max(0, -occ.mitigation.effective_cost)
+                        for occ in events
+                    ),
+                    "mitigated": sum(
+                        1 for occ in events if occ.mitigation.mitigation_used
+                    ),
+                    "pentagon_delta": pentagon_total,
+                    "by_template": [
+                        {
+                            "key": occ.template_key,
+                            "display": occ.template_display,
+                            "occurred_on": occ.occurred_on.isoformat(),
+                            "effective_cost": occ.mitigation.effective_cost,
+                            "mitigation": occ.mitigation.mitigation_label,
+                            "mail_id": occ.mail_id,
+                            "claim_id": occ.claim_id,
+                        }
+                        for occ in events
+                    ],
+                }
 
                 s.commit()
     except Exception as exc:
