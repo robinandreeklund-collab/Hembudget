@@ -7,6 +7,7 @@
  * läraren kan testa v1-flödet (skapa elever, toggle v2 etc.).
  */
 import { Link, useNavigate } from "react-router-dom";
+import { GuideDropdown } from "./guides/GuideDropdown";
 
 const FORCE_V1_KEY = "v2_force_v1";
 
@@ -22,6 +23,7 @@ export function V2Banner({ status }: { status: { role: string; is_super_admin: b
 
   return (
     <div
+      data-guide="hub-banner"
       style={{
         position: "fixed",
         top: 0,
@@ -50,6 +52,7 @@ export function V2Banner({ status }: { status: { role: string; is_super_admin: b
       )}
       <span style={{ color: "#64748b" }}>· {status.role}</span>
       <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <GuideDropdown />
         <button
           type="button"
           onClick={forceV1}

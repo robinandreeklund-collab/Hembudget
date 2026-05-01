@@ -43,6 +43,8 @@ import { PortfolioV2 } from "./v2/PortfolioV2";
 import { TeacherMessagesOverviewPage } from "./v2/TeacherMessagesOverviewPage";
 import { TeacherPortfolioOverviewPage } from "./v2/TeacherPortfolioOverviewPage";
 import { MailDetailV2 } from "./v2/MailDetailV2";
+import { GuideProvider } from "./v2/guides/GuideContext";
+import { GuideOverlay } from "./v2/guides/GuideOverlay";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -223,9 +225,11 @@ export default function App() {
   // Teacher.tsx enda navigationen, vilket var inkonsekvent.
 
   return (
+    <GuideProvider>
     <div className="h-full flex flex-col">
       <DemoBanner />
       <V2DevSwitcher />
+      <GuideOverlay />
       <div className="flex-1 flex flex-col md:flex-row min-h-0">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
@@ -400,5 +404,6 @@ export default function App() {
       </main>
       </div>
     </div>
+    </GuideProvider>
   );
 }

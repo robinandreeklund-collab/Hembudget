@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { v2Api, type HubData } from "./api";
 import { V2Banner } from "./V2Banner";
 import { EchoButton } from "./EchoButton";
+import { useAutoStartIntroGuide } from "./guides/GuideContext";
 import "./hub.css";
 
 const SEK = (n: number) =>
@@ -15,6 +16,9 @@ const SEK = (n: number) =>
 export function HubV2() {
   const [hub, setHub] = useState<HubData | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-starta intro-guide om eleven inte sett den (efter onboarding)
+  useAutoStartIntroGuide();
 
   useEffect(() => {
     v2Api
@@ -208,7 +212,10 @@ export function HubV2() {
 
         {/* PENTAGON · live från wellbeing */}
         {pentagon ? (
-          <div className="hub-pent-stage">
+          <div
+            className="hub-pent-stage"
+            data-guide="hub-pentagon"
+          >
             <svg
               className="hub-pent-svg"
               viewBox="0 0 600 600"
@@ -300,12 +307,13 @@ export function HubV2() {
         )}
 
         {/* === KOMPASSEN · navigation till alla aktörer + verktyg === */}
-        <div className="compass">
+        <div className="compass" data-guide="hub-compass">
           <div className="compass-eye">Aktörerna · åtta rum + postlådan</div>
           <div className="compass-grid" style={{ marginBottom: 18 }}>
             <Link
               to="/v2/postladan"
               className="compass-node alert"
+              data-guide="postladan-link"
               style={{
                 background: "rgba(220,76,43,0.08)",
                 borderColor: "rgba(220,76,43,0.4)",
@@ -371,7 +379,7 @@ export function HubV2() {
           <div className="compass-eye" style={{ marginTop: 18 }}>
             Verktygen · där du tänker
           </div>
-          <div className="compass-grid">
+          <div className="compass-grid" data-guide="hub-tools">
             <Link to="/v2/budget" className="compass-node">
               <div className="compass-node-eye">Verktyg 03</div>
               <div className="compass-node-name">Budget</div>

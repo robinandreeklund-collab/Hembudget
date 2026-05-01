@@ -96,7 +96,7 @@ export function BankV2() {
     <div className="v2-bank-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
 
-      <div className="shell">
+      <div className="shell" data-guide="bank-accounts">
         <a
           className="actor-back"
           onClick={(e) => {

@@ -83,7 +83,7 @@ export function AvanzaV2() {
     <div className="v2-lan-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
 
-      <div className="shell">
+      <div className="shell" data-guide="avanza-funds">
         <Link className="actor-back" to="/v2/hub">
           Tillbaka till pentagonen
         </Link>

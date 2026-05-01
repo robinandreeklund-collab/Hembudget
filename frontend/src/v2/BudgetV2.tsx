@@ -233,7 +233,7 @@ export function BudgetV2() {
     <div className="v2-budget-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
 
-      <div className="shell">
+      <div className="shell" data-guide="budget-categories">
         <a
           className="actor-back"
           onClick={(e) => {

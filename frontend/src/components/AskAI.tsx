@@ -174,6 +174,7 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
+        data-guide="echo-button"
         className="fixed bottom-4 right-4 z-20 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg px-4 py-3 flex items-center gap-2 text-sm font-medium"
         aria-label="Fråga AI"
       >

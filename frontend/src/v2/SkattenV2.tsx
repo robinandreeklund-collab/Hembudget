@@ -191,7 +191,7 @@ export function SkattenV2() {
     <div className="v2-skatt-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
 
-      <div className="shell">
+      <div className="shell" data-guide="skatten-summary">
         <a
           className="actor-back"
           onClick={(e) => {

@@ -179,7 +179,7 @@ export function PostladanV2() {
     <div className="v2-postladan-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
 
-      <div className="shell">
+      <div className="shell" data-guide="postladan-list">
         <a
           className="actor-back"
           onClick={(e) => {
@@ -251,7 +251,7 @@ export function PostladanV2() {
         </div>
 
         {/* TABS */}
-        <div className="mail-tabs">
+        <div className="mail-tabs" data-guide="postladan-tabs">
           <a
             className={`mail-tab${tab === "all" ? " active" : ""}`}
             onClick={(e) => {
