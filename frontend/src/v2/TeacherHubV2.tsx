@@ -113,6 +113,9 @@ export function TeacherHubV2() {
               <Link to="/teacher/v2/skapa" className="larare-tb-btn solid">
                 + Skapa elev / generera kod
               </Link>
+              <Link to="/teacher/v2/moduler" className="larare-tb-btn">
+                Modulbibliotek
+              </Link>
               <Link to="/teacher/v2/pedagogik" className="larare-tb-btn">
                 Pedagogik-paket ✦
               </Link>

@@ -1716,6 +1716,36 @@ export type V2KlassAxisDetail = {
   summary_text: string;
 };
 
+// === Lärar-modulbibliotek (Fas 2AN/2AO) ===
+
+export type V2TeacherModuleStepKind =
+  | "read" | "watch" | "reflect" | "task" | "quiz";
+
+export type V2TeacherModuleStepOut = {
+  id: number;
+  module_id: number;
+  sort_order: number;
+  kind: V2TeacherModuleStepKind;
+  title: string;
+  content: string | null;
+  params: Record<string, unknown> | null;
+};
+
+export type V2TeacherModuleOut = {
+  id: number;
+  teacher_id: number | null;
+  title: string;
+  summary: string | null;
+  is_template: boolean;
+  sort_order: number;
+  created_at: string;
+  step_count: number;
+};
+
+export type V2TeacherModuleDetail = V2TeacherModuleOut & {
+  steps: V2TeacherModuleStepOut[];
+};
+
 // === /v2/teacher/students/{id}/activity-log (Fas 2Y · p-historik) ===
 
 export type V2HistoryEventKind =
@@ -2763,6 +2793,91 @@ export const v2Api = {
       login_url: string;
       qr_svg: string;
     }>(`/v2/teacher/students/${studentId}/login-qr`),
+  // === Fas 2AN/2AO · Lärar-modulbibliotek (wrappar v1-endpoints) ===
+  teacherListModules: () =>
+    api<V2TeacherModuleOut[]>("/teacher/modules"),
+  teacherGetModule: (moduleId: number) =>
+    api<V2TeacherModuleDetail>(`/teacher/modules/${moduleId}`),
+  teacherCreateModule: (body: {
+    title: string;
+    summary?: string;
+    is_template?: boolean;
+  }) =>
+    api<V2TeacherModuleDetail>("/teacher/modules", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  teacherUpdateModule: (
+    moduleId: number,
+    body: {
+      title: string;
+      summary?: string;
+      is_template?: boolean;
+    },
+  ) =>
+    api<V2TeacherModuleOut>(`/teacher/modules/${moduleId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  teacherDeleteModule: (moduleId: number) =>
+    api<{ ok: boolean }>(`/teacher/modules/${moduleId}`, {
+      method: "DELETE",
+    }),
+  teacherCloneModule: (moduleId: number) =>
+    api<V2TeacherModuleOut>(`/teacher/modules/${moduleId}/clone`, {
+      method: "POST",
+      body: "{}",
+    }),
+  teacherAssignModule: (moduleId: number, studentIds: number[]) =>
+    api<{ assigned: number; auto_assignments: number }>(
+      `/teacher/modules/${moduleId}/assign`,
+      {
+        method: "POST",
+        body: JSON.stringify({ student_ids: studentIds }),
+      },
+    ),
+  teacherUnassignModule: (moduleId: number, studentIds: number[]) =>
+    api<{ unassigned: number }>(
+      `/teacher/modules/${moduleId}/unassign`,
+      {
+        method: "POST",
+        body: JSON.stringify({ student_ids: studentIds }),
+      },
+    ),
+  teacherCreateModuleStep: (
+    moduleId: number,
+    body: {
+      kind: "read" | "watch" | "reflect" | "task" | "quiz";
+      title: string;
+      content?: string;
+      params?: Record<string, unknown> | null;
+      sort_order?: number;
+    },
+  ) =>
+    api<V2TeacherModuleStepOut>(
+      `/teacher/modules/${moduleId}/steps`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  teacherUpdateModuleStep: (
+    moduleId: number,
+    stepId: number,
+    body: {
+      kind: "read" | "watch" | "reflect" | "task" | "quiz";
+      title: string;
+      content?: string;
+      params?: Record<string, unknown> | null;
+      sort_order?: number;
+    },
+  ) =>
+    api<V2TeacherModuleStepOut>(
+      `/teacher/modules/${moduleId}/steps/${stepId}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  teacherDeleteModuleStep: (moduleId: number, stepId: number) =>
+    api<{ ok: boolean }>(
+      `/teacher/modules/${moduleId}/steps/${stepId}`,
+      { method: "DELETE" },
+    ),
   // Aktiehandel (existerande /stocks-API från gamla dashboarden)
   stocksPortfolio: (accountId?: number) =>
     api<{

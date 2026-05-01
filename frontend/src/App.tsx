@@ -65,6 +65,8 @@ import { TeacherMariaListV2 } from "./v2/TeacherMariaListV2";
 import { TeacherPedagogicsV2 } from "./v2/TeacherPedagogicsV2";
 import { TeacherCreateStudentV2 } from "./v2/TeacherCreateStudentV2";
 import { TeacherStudentHistoryV2 } from "./v2/TeacherStudentHistoryV2";
+import { TeacherModuleLibraryV2 } from "./v2/TeacherModuleLibraryV2";
+import { TeacherModuleEditV2 } from "./v2/TeacherModuleEditV2";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budget from "./pages/Budget";
@@ -444,6 +446,14 @@ export default function App() {
           <Route
             path="/teacher/v2/historik/:studentId"
             element={<TeacherStudentHistoryV2 />}
+          />
+          <Route
+            path="/teacher/v2/moduler"
+            element={<TeacherModuleLibraryV2 />}
+          />
+          <Route
+            path="/teacher/v2/moduler/:moduleId"
+            element={<TeacherModuleEditV2 />}
           />
           {/* /dashboard har en V2-guard: super-admin och elever med
               v2_enabled redirectas till /v2/hub. Övriga får v1. */}
