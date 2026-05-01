@@ -30,6 +30,7 @@ from ...school.engines import (
 from ...school.game_engine_models import WeekTickRun
 from ...school.models import Student
 from ..event_engine import roll_monthly_events
+from ..health_engine import roll_monthly_health_events
 from ..pentagon import (
     apply_pentagon_delta,
     compute_monthly_drift,
@@ -340,6 +341,37 @@ def tick_month(
                 summary["social_proposals"] = _run_legacy_event_tick(
                     s, profile=profile, year_month=year_month,
                 )
+
+                # Fas H · sjukdom + VAB (post-analys steg 1)
+                # Slumpa sjukperioder/VAB baserat på Försäkringskassans +
+                # Arbetsgivarverkets statistik. Skapar MailItem +
+                # löneavdrags-Transaction + pentagon-delta + EmployerSat-event.
+                health_events = roll_monthly_health_events(
+                    s,
+                    student_id=student.id,
+                    student_scope=scope_key,
+                    profile=profile,
+                    year_month=year_month,
+                    rng=random.Random(rng_master.random()),
+                    salary_account=lonekonto,
+                )
+                summary["health"] = {
+                    "episodes": len(health_events),
+                    "total_gross_loss": sum(o.gross_loss for o in health_events),
+                    "by_episode": [
+                        {
+                            "key": o.template.key,
+                            "display": o.template.display,
+                            "kind": o.template.kind,
+                            "n_days": o.n_days,
+                            "occurred_on": o.occurred_on.isoformat(),
+                            "gross_loss": o.gross_loss,
+                            "mail_id": o.mail_id,
+                            "tx_id": o.tx_id,
+                        }
+                        for o in health_events
+                    ],
+                }
 
                 # Fas G · drift + WellbeingEvent-logg (Sprint 4 · M4+P1+P2)
                 # Räkna månadsdrift baserat på beteende den månaden +

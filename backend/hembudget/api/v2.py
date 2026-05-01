@@ -1049,6 +1049,36 @@ def update_budget_category(
         svc.set_budget(ym, category_id, signed)
         s.flush()
 
+        # === Sprint 5b post-analys · pentagon-delta vid budget-violation ===
+        # Om eleven sänker en kategori under Konsumentverket-minimum loggas
+        # det DIREKT som WellbeingEvent (snarare än vänta på nästa
+        # wellbeing-recompute). Pedagogiskt: eleven ser konsekvensen direkt
+        # i pentagon-historiken.
+        if not body.is_income:
+            from ..wellbeing.minimums import check_against_minimum
+            check = check_against_minimum(cat.name, int(body.planned_amount))
+            if check.is_violation:
+                try:
+                    from ..game_engine.pentagon import apply_pentagon_delta
+                    delta = -5 if check.severity == "subexistens" else -2
+                    apply_pentagon_delta(
+                        info.student_id,
+                        axis="health",
+                        requested_delta=delta,
+                        reason_kind="decision",
+                        reason_id=category_id,
+                        reason_table="categories",
+                        explanation=(
+                            f"sänkt budget för {cat.name} till "
+                            f"{int(body.planned_amount)} kr (minimum "
+                            f"{check.minimum} kr) · {check.severity}"
+                        ),
+                        year_month=ym,
+                    )
+                except Exception:
+                    # Pentagon-loggning får inte bryta budget-update
+                    pass
+
         # Bygg svar via summary för att få färsk progress/status
         summ = svc.summary(ym)
         for line in summ.lines:
