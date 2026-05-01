@@ -3105,3 +3105,291 @@ def test_v2_teacher_utility_blocks_other_teachers(fx) -> None:
         headers={"Authorization": f"Bearer {sa}"},
     )
     assert r.status_code == 403
+
+
+# === Fas 2F · Hyresvärden · RentalContract + RentalNotice ===
+
+
+def _seed_rental_profile(sid: int, **overrides) -> None:
+    """Seedа en standard-elev-profil för hyres-tester."""
+    defaults = dict(
+        student_id=sid,
+        profession="Undersköterska",
+        employer="Sthlm Sjukhus",
+        gross_salary_monthly=26000,
+        net_salary_monthly=19000,
+        tax_rate_effective=0.27,
+        age=24, city="Stockholm",
+        family_status="ensam", housing_type="hyresratt",
+        housing_monthly=7240, personality="blandad",
+    )
+    defaults.update(overrides)
+    with master_session() as db:
+        db.add(StudentProfile(**defaults))
+        db.commit()
+
+
+def test_v2_hyresvarden_unauthenticated_401(fx) -> None:
+    client, *_ = fx
+    r = client.get("/v2/hyresvarden")
+    assert r.status_code == 401
+
+
+def test_v2_hyresvarden_for_teacher_returns_empty(fx) -> None:
+    client, tch, *_ = fx
+    r = client.get(
+        "/v2/hyresvarden",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["student_id"] == 0
+    assert r.json()["contract"] is None
+
+
+def test_v2_hyresvarden_empty_state_for_student(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    _seed_rental_profile(sid)
+    r = client.get(
+        "/v2/hyresvarden",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["contract"] is None
+    assert data["summary"]["has_active_contract"] is False
+    assert data["notices"] == []
+
+
+def test_v2_teacher_seed_default_rental(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["contracts_created"] == 1
+    assert body["notices_created"] == 4
+    # Idempotent
+    r2 = client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r2.json()["contracts_created"] == 0
+    assert r2.json()["notices_created"] == 0
+
+
+def test_v2_hyresvarden_with_seeded_contract(fx) -> None:
+    """Efter seed visar vyn Stockholmshem-kontraktet + 4 notiser."""
+    client, tch, _sa, stu, _tid, _said, sid = fx
+    _seed_rental_profile(sid)
+    client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    r = client.get(
+        "/v2/hyresvarden",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["summary"]["has_active_contract"] is True
+    assert data["summary"]["monthly_rent"] == 7240
+    assert data["contract"]["landlord"] == "Stockholmshem"
+    assert data["contract"]["rooms_label"] == "2 r o k"
+    assert data["contract"]["contract_type"] == "forsta_hand"
+    assert data["contract"]["duration_type"] == "tillsvidare"
+    # 7240*12/47 ≈ 1849
+    assert data["summary"]["rent_per_sqm_yearly"] == 1849
+    # Hyra 7240 / netto 19000 = 38.1 %
+    assert data["summary"]["rent_share_of_net_pct"] == 38.1
+    # market_buy_estimate = 47 * 51000 = 2397000
+    assert data["summary"]["market_buy_estimate"] == 2397000
+    assert len(data["notices"]) == 4
+    # Hyresavi finns och är paid
+    avis = [n for n in data["notices"] if n["notice_type"] == "hyresavi"]
+    assert len(avis) == 1
+    assert avis[0]["status"] == "paid"
+
+
+def test_v2_student_creates_and_terminates_contract(fx) -> None:
+    """Eleven kan skapa eget kontrakt och säga upp det."""
+    client, _tch, _sa, stu, _tid, _said, _sid = fx
+    r = client.post(
+        "/v2/hyresvarden/contracts",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={
+            "landlord": "BRF Solgården",
+            "address": "Storgatan 5",
+            "rooms_label": "3 r o k",
+            "area_sqm": 65,
+            "city": "Göteborg",
+            "contract_type": "bostadsratt",
+            "duration_type": "tillsvidare",
+            "monthly_rent": 4500,
+            "deposit": 0,
+        },
+    )
+    assert r.status_code == 200, r.text
+    cid = r.json()["id"]
+    assert r.json()["contract_type"] == "bostadsratt"
+
+    # Säg upp
+    r2 = client.patch(
+        f"/v2/hyresvarden/contracts/{cid}",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"status": "terminated"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["status"] == "terminated"
+    assert r2.json()["ended_on"] is not None
+
+
+def test_v2_teacher_creates_rent_hike_notice(fx) -> None:
+    """Lärare lägger in hyreshöjning > 4 % → drar economy i wellbeing."""
+    from datetime import date as _d
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_rental_profile(sid)
+    client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    r = client.post(
+        f"/v2/teacher/students/{sid}/rental/notices",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "occurred_on": _d.today().isoformat(),
+            "notice_type": "hyreshojning",
+            "title": "Hyreshöjning 5 %",
+            "description": "Förhandlat 5 % höjning från och med juli",
+            "change_pct": 5.0,
+            "status": "acknowledged",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["change_pct"] == 5.0
+
+    # Wellbeing ska ha hyreshöjning-faktor
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+    hike_factors = [
+        f for f in result.factors
+        if "hyreshöjning" in f.explanation.lower()
+    ]
+    assert len(hike_factors) >= 1
+    assert hike_factors[0].dimension == "economy"
+    assert hike_factors[0].points == -2
+
+
+def test_v2_hyresvarden_wellbeing_first_hand_bonus(fx) -> None:
+    """Förstahandskontrakt + tillsvidare → safety-bonus."""
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_rental_profile(sid)
+    client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+
+    # +5 förstahand + +3 tillsvidare = +8 safety
+    fh_factors = [
+        f for f in result.factors
+        if "förstahand" in f.explanation.lower()
+    ]
+    assert len(fh_factors) >= 1
+    assert fh_factors[0].dimension == "safety"
+    assert fh_factors[0].points == 5
+    tv_factors = [
+        f for f in result.factors
+        if "tillsvidare" in f.explanation.lower()
+    ]
+    assert len(tv_factors) >= 1
+    assert tv_factors[0].points == 3
+
+
+def test_v2_hyresvarden_wellbeing_high_rent_share(fx) -> None:
+    """Hyra > 40 % av netto → -economy."""
+    from hembudget.wellbeing.calculator import calculate_wellbeing
+    from hembudget.db.base import session_scope as _ss
+    from hembudget.school.engines import (
+        master_session as _ms, scope_context as _sc,
+        scope_for_student as _sfs,
+    )
+    from hembudget.school.models import Student as _St
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    # Lågt netto → hyran 7240/14000 = 51.7 % blir > 40 %
+    _seed_rental_profile(sid, net_salary_monthly=14000)
+    client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+
+    with _ms() as m:
+        student = m.get(_St, sid)
+        scope_key = _sfs(student)
+    with _sc(scope_key):
+        with _ss() as s:
+            result = calculate_wellbeing(s, "2026-04")
+    high_rent_factors = [
+        f for f in result.factors
+        if "%" in f.explanation
+        and "över 40" in f.explanation.lower()
+    ]
+    assert len(high_rent_factors) >= 1
+    assert high_rent_factors[0].dimension == "economy"
+    assert high_rent_factors[0].points < 0
+
+
+def test_v2_teacher_rental_overview(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    _seed_rental_profile(sid)
+    client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    r = client.get(
+        f"/v2/teacher/students/{sid}/rental-overview",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert data["student_name"]
+    assert data["contract"]["landlord"] == "Stockholmshem"
+    assert len(data["notices"]) == 4
+
+
+def test_v2_teacher_rental_blocks_other_teachers(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.post(
+        f"/v2/teacher/students/{sid}/rental/seed-default",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403

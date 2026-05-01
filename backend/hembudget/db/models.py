@@ -991,6 +991,108 @@ class UtilityReading(TenantMixin, Base):
     )
 
 
+class RentalContract(TenantMixin, Base):
+    """Hyreskontrakt (eller bostadsrätts-info) för Aktör 08 · Hyresvärden.
+
+    Pedagogiskt fokus: skillnaden mellan första-hands-, andra-hands- och
+    inneboende-kontrakt. Stabilitet (förstahandskontrakt på tillsvidare-
+    avtal) påverkar wellbeing-pentagonen positivt på safety. Hög
+    hyresandel av netto belastar economy.
+    """
+    __tablename__ = "rental_contracts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    landlord: Mapped[str] = mapped_column(String(120), nullable=False)
+    address: Mapped[str] = mapped_column(String(200), nullable=False)
+    # "1 r o k" | "2 r o k" | "3 r o k" | etc
+    rooms_label: Mapped[str] = mapped_column(String(40), nullable=False)
+    area_sqm: Mapped[Decimal] = mapped_column(Numeric(6, 1), nullable=False)
+    city: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    district: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # "forsta_hand" | "andra_hand" | "inneboende" | "bostadsratt"
+    contract_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="forsta_hand",
+    )
+    # "tillsvidare" | "tidsbegransad"
+    duration_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="tillsvidare",
+    )
+    monthly_rent: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False,
+    )
+    deposit: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    ocr_reference: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    autogiro: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False,
+    )
+    notice_period_months: Mapped[int] = mapped_column(
+        Integer, default=3, server_default="3", nullable=False,
+    )
+    # Tillträdesdatum
+    started_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Uppsägningsdatum (None = pågående)
+    ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Bostadskö-meta för förstagångs-kontrakt
+    queue_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    queue_priority: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+    # Marknadspris/m² i området (för köpa-vs-hyra-pedagogik)
+    market_price_per_sqm: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    # "active" | "terminated" | "considered"
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", server_default="active", nullable=False,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class RentalNotice(TenantMixin, Base):
+    """Brev / notis från hyresvärden — pedagogisk timeline.
+
+    Lärare seedar dessa för att simulera realistiska scenarier:
+    hyresavi, trapphusrenovering, hyresförhandling, brandsyn,
+    underhållsåtgärd. Eleven ska kunna se "vad händer i bostaden".
+    """
+    __tablename__ = "rental_notices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    contract_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("rental_contracts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+    # "hyresavi" | "underhall" | "hyreshojning" | "trapphusrenovering" |
+    # "forhandling" | "brand" | "andrahand_ansokan" | "ovrig"
+    notice_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # För hyresavi: belopp att betala. För hyreshöjning: ny hyra.
+    amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+    )
+    # För hyreshöjning: procent (positiv = höjning, 0 = oförändrad)
+    change_pct: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(5, 2), nullable=True,
+    )
+    # "info" | "action_required" | "paid" | "acknowledged" | "denied"
+    status: Mapped[str] = mapped_column(
+        String(20), default="info", server_default="info", nullable=False,
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
 class UtilitySubscription(TenantMixin, Base):
     """En aktiv abonnemang/förbruknings-tjänst eleven har.
 

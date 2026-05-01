@@ -29,9 +29,11 @@ from ..db.models import (
     TaxDeduction, TaxProposal, TaxYearReturn,
     InsurancePolicy, InsuranceClaim,
     UtilitySubscription, UtilityReading,
+    RentalContract, RentalNotice,
 )
 from ..insurance import seed_default_insurance_policies
 from ..utility import seed_default_utility_subscriptions
+from ..rental import seed_default_rental
 from ..loans.credit import (
     compute_credit_check, latest_credit_check, latest_kalp,
 )
@@ -5274,6 +5276,524 @@ def teacher_utility_overview(
         summary=util.summary,
         subscriptions=util.subscriptions,
         readings=util.readings,
+    )
+
+
+# === Hyresvärden (/v2/hyresvarden) — Fas 2F ===
+
+
+class V2RentalContractOut(BaseModel):
+    id: int
+    landlord: str
+    address: str
+    rooms_label: str
+    area_sqm: float
+    city: Optional[str]
+    district: Optional[str]
+    contract_type: Literal[
+        "forsta_hand", "andra_hand", "inneboende", "bostadsratt",
+    ]
+    duration_type: Literal["tillsvidare", "tidsbegransad"]
+    monthly_rent: float
+    deposit: Optional[float]
+    ocr_reference: Optional[str]
+    autogiro: bool
+    notice_period_months: int
+    started_on: Optional[_date]
+    ended_on: Optional[_date]
+    queue_years: Optional[int]
+    queue_priority: Optional[str]
+    market_price_per_sqm: Optional[float]
+    status: Literal["active", "terminated", "considered"]
+    notes: Optional[str]
+
+
+class V2RentalNoticeOut(BaseModel):
+    id: int
+    contract_id: Optional[int]
+    occurred_on: _date
+    notice_type: Literal[
+        "hyresavi", "underhall", "hyreshojning", "trapphusrenovering",
+        "forhandling", "brand", "andrahand_ansokan", "ovrig",
+    ]
+    title: str
+    description: Optional[str]
+    amount: Optional[float]
+    change_pct: Optional[float]
+    status: Literal[
+        "info", "action_required", "paid", "acknowledged", "denied",
+    ]
+    notes: Optional[str]
+    created_at: datetime
+
+
+class V2RentalSummary(BaseModel):
+    has_active_contract: bool
+    monthly_rent: float
+    rent_per_sqm_yearly: float
+    rent_share_of_net_pct: Optional[float]
+    notices_open: int  # action_required eller info <30 dgr
+    notices_paid_12m: int
+    biggest_hike_pct_12m: Optional[float]
+    market_diff_pct: Optional[float]  # rent vs marknadshyra (proxy)
+    market_buy_estimate: Optional[float]  # area * market_price_per_sqm
+
+
+class V2RentalResponse(BaseModel):
+    student_id: int
+    summary: V2RentalSummary
+    contract: Optional[V2RentalContractOut]
+    notices: list[V2RentalNoticeOut]
+
+
+def _empty_rental(student_id: int) -> V2RentalResponse:
+    return V2RentalResponse(
+        student_id=student_id,
+        summary=V2RentalSummary(
+            has_active_contract=False,
+            monthly_rent=0,
+            rent_per_sqm_yearly=0,
+            rent_share_of_net_pct=None,
+            notices_open=0,
+            notices_paid_12m=0,
+            biggest_hike_pct_12m=None,
+            market_diff_pct=None,
+            market_buy_estimate=None,
+        ),
+        contract=None,
+        notices=[],
+    )
+
+
+def _contract_to_out(c: RentalContract) -> V2RentalContractOut:
+    return V2RentalContractOut(
+        id=c.id, landlord=c.landlord, address=c.address,
+        rooms_label=c.rooms_label, area_sqm=float(c.area_sqm),
+        city=c.city, district=c.district,
+        contract_type=c.contract_type,  # type: ignore[arg-type]
+        duration_type=c.duration_type,  # type: ignore[arg-type]
+        monthly_rent=float(c.monthly_rent),
+        deposit=float(c.deposit) if c.deposit is not None else None,
+        ocr_reference=c.ocr_reference,
+        autogiro=bool(c.autogiro),
+        notice_period_months=int(c.notice_period_months),
+        started_on=c.started_on, ended_on=c.ended_on,
+        queue_years=c.queue_years, queue_priority=c.queue_priority,
+        market_price_per_sqm=(
+            float(c.market_price_per_sqm)
+            if c.market_price_per_sqm is not None else None
+        ),
+        status=c.status,  # type: ignore[arg-type]
+        notes=c.notes,
+    )
+
+
+def _notice_to_out(n: RentalNotice) -> V2RentalNoticeOut:
+    return V2RentalNoticeOut(
+        id=n.id, contract_id=n.contract_id,
+        occurred_on=n.occurred_on,
+        notice_type=n.notice_type,  # type: ignore[arg-type]
+        title=n.title, description=n.description,
+        amount=float(n.amount) if n.amount is not None else None,
+        change_pct=(
+            float(n.change_pct) if n.change_pct is not None else None
+        ),
+        status=n.status,  # type: ignore[arg-type]
+        notes=n.notes, created_at=n.created_at,
+    )
+
+
+@router.get("/hyresvarden", response_model=V2RentalResponse)
+def get_rental(
+    info: TokenInfo = Depends(require_token),
+) -> V2RentalResponse:
+    """Aggregat för hyresvärden /v2/hyresvarden (Aktör 08).
+
+    Riktig data:
+    - RentalContract (active) i scope-DB — primary contract
+    - RentalNotice (12 mån) sorterade nyast först
+    - Hyresandel av netto från StudentProfile
+    - market_diff_pct = (rent_per_sqm_yearly - marknad_avg) (proxy)
+    - market_buy_estimate = area * market_price_per_sqm (köp-jämförelse)
+    """
+    if info.role != "student" or info.student_id is None:
+        return _empty_rental(0)
+
+    # Hämta StudentProfile (master-DB) för netto-jämförelse
+    net_salary = None
+    with master_session() as mdb:
+        prof = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if prof and prof.net_salary_monthly:
+            net_salary = float(prof.net_salary_monthly)
+
+    from datetime import timedelta as _td_r
+
+    with session_scope() as s:
+        contract = (
+            s.query(RentalContract)
+            .filter(RentalContract.status == "active")
+            .order_by(RentalContract.id.desc())
+            .first()
+        )
+        cutoff = _date.today() - _td_r(days=365)
+        notices = (
+            s.query(RentalNotice)
+            .filter(RentalNotice.occurred_on >= cutoff)
+            .order_by(
+                RentalNotice.occurred_on.desc(),
+                RentalNotice.id.desc(),
+            )
+            .all()
+        )
+
+        notices_out = [_notice_to_out(n) for n in notices]
+        notices_open = sum(
+            1 for n in notices
+            if n.status in ("action_required", "info")
+            and n.occurred_on >= _date.today() - _td_r(days=30)
+        )
+        notices_paid_12m = sum(1 for n in notices if n.status == "paid")
+        hikes = [
+            float(n.change_pct) for n in notices
+            if n.notice_type == "hyreshojning"
+            and n.change_pct is not None
+        ]
+        biggest_hike = max(hikes) if hikes else None
+
+        contract_out: Optional[V2RentalContractOut] = None
+        rent = 0.0
+        rent_per_sqm_year = 0.0
+        share_pct: Optional[float] = None
+        market_diff_pct: Optional[float] = None
+        market_buy_estimate: Optional[float] = None
+
+        if contract is not None:
+            contract_out = _contract_to_out(contract)
+            rent = float(contract.monthly_rent or 0)
+            area = float(contract.area_sqm or 0)
+            if area > 0:
+                rent_per_sqm_year = (rent * 12) / area
+            if net_salary and net_salary > 0:
+                share_pct = round(rent / net_salary * 100, 1)
+            mps = (
+                float(contract.market_price_per_sqm)
+                if contract.market_price_per_sqm is not None else None
+            )
+            if mps and area > 0:
+                market_buy_estimate = round(area * mps, 0)
+                # Jämför hyran/m² med Sthlm-snitt 2026
+                # ≈ 1900 kr/m²/år för förstahand i ytterstad.
+                sthlm_avg = 1900.0
+                if rent_per_sqm_year > 0:
+                    market_diff_pct = round(
+                        (rent_per_sqm_year - sthlm_avg) / sthlm_avg * 100,
+                        1,
+                    )
+
+        return V2RentalResponse(
+            student_id=info.student_id,
+            summary=V2RentalSummary(
+                has_active_contract=contract is not None,
+                monthly_rent=rent,
+                rent_per_sqm_yearly=round(rent_per_sqm_year, 0),
+                rent_share_of_net_pct=share_pct,
+                notices_open=notices_open,
+                notices_paid_12m=notices_paid_12m,
+                biggest_hike_pct_12m=biggest_hike,
+                market_diff_pct=market_diff_pct,
+                market_buy_estimate=market_buy_estimate,
+            ),
+            contract=contract_out,
+            notices=notices_out,
+        )
+
+
+# Elev-endpoints
+class V2RentalContractIn(BaseModel):
+    landlord: str = Field(..., min_length=1, max_length=120)
+    address: str = Field(..., min_length=1, max_length=200)
+    rooms_label: str = Field(..., min_length=1, max_length=40)
+    area_sqm: float = Field(..., gt=0)
+    city: Optional[str] = None
+    district: Optional[str] = None
+    contract_type: Literal[
+        "forsta_hand", "andra_hand", "inneboende", "bostadsratt",
+    ] = "forsta_hand"
+    duration_type: Literal["tillsvidare", "tidsbegransad"] = "tillsvidare"
+    monthly_rent: float = Field(..., ge=0)
+    deposit: Optional[float] = None
+    ocr_reference: Optional[str] = None
+    autogiro: bool = True
+    notice_period_months: int = 3
+    started_on: Optional[_date] = None
+    queue_years: Optional[int] = None
+    queue_priority: Optional[str] = None
+    market_price_per_sqm: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class V2RentalContractPatch(BaseModel):
+    monthly_rent: Optional[float] = None
+    autogiro: Optional[bool] = None
+    status: Optional[Literal["active", "terminated", "considered"]] = None
+    ended_on: Optional[_date] = None
+    notes: Optional[str] = None
+
+
+@router.post("/hyresvarden/contracts", response_model=V2RentalContractOut)
+def post_rental_contract(
+    body: V2RentalContractIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2RentalContractOut:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        c = RentalContract(
+            landlord=body.landlord,
+            address=body.address,
+            rooms_label=body.rooms_label,
+            area_sqm=Decimal(str(body.area_sqm)),
+            city=body.city,
+            district=body.district,
+            contract_type=body.contract_type,
+            duration_type=body.duration_type,
+            monthly_rent=Decimal(str(body.monthly_rent)),
+            deposit=(
+                Decimal(str(body.deposit))
+                if body.deposit is not None else None
+            ),
+            ocr_reference=body.ocr_reference,
+            autogiro=body.autogiro,
+            notice_period_months=body.notice_period_months,
+            started_on=body.started_on,
+            queue_years=body.queue_years,
+            queue_priority=body.queue_priority,
+            market_price_per_sqm=(
+                Decimal(str(body.market_price_per_sqm))
+                if body.market_price_per_sqm is not None else None
+            ),
+            status="active",
+            notes=body.notes,
+        )
+        s.add(c)
+        s.flush()
+        return _contract_to_out(c)
+
+
+@router.patch(
+    "/hyresvarden/contracts/{contract_id}",
+    response_model=V2RentalContractOut,
+)
+def patch_rental_contract(
+    contract_id: int,
+    body: V2RentalContractPatch,
+    info: TokenInfo = Depends(require_token),
+) -> V2RentalContractOut:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        c = s.get(RentalContract, contract_id)
+        if c is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+        if body.monthly_rent is not None:
+            c.monthly_rent = Decimal(str(body.monthly_rent))
+        if body.autogiro is not None:
+            c.autogiro = body.autogiro
+        if body.status is not None:
+            c.status = body.status
+            if body.status == "terminated" and c.ended_on is None:
+                c.ended_on = _date.today()
+        if body.ended_on is not None:
+            c.ended_on = body.ended_on
+        if body.notes is not None:
+            c.notes = body.notes
+        s.flush()
+        return _contract_to_out(c)
+
+
+@router.delete("/hyresvarden/contracts/{contract_id}", status_code=204)
+def delete_rental_contract(
+    contract_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with session_scope() as s:
+        c = s.get(RentalContract, contract_id)
+        if c is not None:
+            s.delete(c)
+            s.flush()
+
+
+# Lärar-endpoints
+@router.post(
+    "/teacher/students/{student_id}/rental/seed-default",
+    response_model=dict,
+)
+def teacher_seed_default_rental(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Seedа Stockholmshem 2 r o k Hökarängen + 4 standard-notiser."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            contracts, notices = seed_default_rental(s)
+    return {
+        "student_id": student_id,
+        "contracts_created": contracts,
+        "notices_created": notices,
+    }
+
+
+class V2RentalNoticeIn(BaseModel):
+    contract_id: Optional[int] = None
+    occurred_on: _date
+    notice_type: Literal[
+        "hyresavi", "underhall", "hyreshojning", "trapphusrenovering",
+        "forhandling", "brand", "andrahand_ansokan", "ovrig",
+    ]
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    amount: Optional[float] = None
+    change_pct: Optional[float] = None
+    status: Literal[
+        "info", "action_required", "paid", "acknowledged", "denied",
+    ] = "info"
+    notes: Optional[str] = None
+
+
+@router.post(
+    "/teacher/students/{student_id}/rental/notices",
+    response_model=V2RentalNoticeOut,
+)
+def teacher_create_rental_notice(
+    student_id: int,
+    body: V2RentalNoticeIn,
+    info: TokenInfo = Depends(require_token),
+) -> V2RentalNoticeOut:
+    """Lärare lägger in brev/notis från värden (simulera scenario)."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            n = RentalNotice(
+                contract_id=body.contract_id,
+                occurred_on=body.occurred_on,
+                notice_type=body.notice_type,
+                title=body.title,
+                description=body.description,
+                amount=(
+                    Decimal(str(body.amount))
+                    if body.amount is not None else None
+                ),
+                change_pct=(
+                    Decimal(str(body.change_pct))
+                    if body.change_pct is not None else None
+                ),
+                status=body.status,
+                notes=body.notes,
+            )
+            s.add(n)
+            s.flush()
+            return _notice_to_out(n)
+
+
+@router.delete(
+    "/teacher/students/{student_id}/rental/notices/{notice_id}",
+    status_code=204,
+)
+def teacher_delete_rental_notice(
+    student_id: int,
+    notice_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            n = s.get(RentalNotice, notice_id)
+            if n is not None:
+                s.delete(n)
+                s.flush()
+
+
+class V2TeacherRentalOverview(BaseModel):
+    student_id: int
+    student_name: str
+    summary: V2RentalSummary
+    contract: Optional[V2RentalContractOut]
+    notices: list[V2RentalNoticeOut]
+
+
+@router.get(
+    "/teacher/students/{student_id}/rental-overview",
+    response_model=V2TeacherRentalOverview,
+)
+def teacher_rental_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TeacherRentalOverview:
+    """Lärar-vy · full insyn i elevens hyreskontrakt + notiser."""
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        st = mdb.get(Student, student_id)
+        if not st or st.teacher_id != teacher_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast egen elev")
+        student_name = st.display_name
+
+    from ..school.engines import scope_context, scope_for_student
+    with master_session() as m:
+        st = m.get(Student, student_id)
+        scope_key = scope_for_student(st)
+
+    with scope_context(scope_key):
+        _outer_sid = student_id
+
+        class _Info:
+            role = "student"
+            student_id = _outer_sid
+
+        rent = get_rental(_Info())  # type: ignore[arg-type]
+
+    return V2TeacherRentalOverview(
+        student_id=student_id,
+        student_name=student_name,
+        summary=rent.summary,
+        contract=rent.contract,
+        notices=rent.notices,
     )
 
 

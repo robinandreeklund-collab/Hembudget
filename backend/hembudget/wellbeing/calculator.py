@@ -553,6 +553,134 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: utility-factor misslyckades",
         )
 
+    # Hyresvärden (RentalContract + RentalNotice) — påverkar safety + economy
+    try:
+        from ..db.models import (
+            RentalContract as _RC,
+            RentalNotice as _RN,
+        )
+        from ..school.models import StudentProfile as _SP_rent
+        from datetime import date as _d_rent, timedelta as _td_rent
+        active_rentals = (
+            session.query(_RC)
+            .filter(_RC.status == "active")
+            .all()
+        )
+        if active_rentals:
+            primary = active_rentals[0]
+            ctype = primary.contract_type
+            duration = primary.duration_type
+            rent = float(primary.monthly_rent or 0)
+
+            if ctype == "forsta_hand":
+                safety += 5
+                factors.append(WellbeingFactor(
+                    "safety", 5,
+                    "Förstahandskontrakt — stabil bostad, "
+                    "besittningsskydd, ingen risk för uppsägning.",
+                ))
+            elif ctype == "andra_hand":
+                safety -= 3
+                factors.append(WellbeingFactor(
+                    "safety", -3,
+                    "Andrahandskontrakt — tidsbegränsat, "
+                    "begränsat skydd, värd kan säga upp.",
+                ))
+            elif ctype == "inneboende":
+                safety -= 2
+                factors.append(WellbeingFactor(
+                    "safety", -2,
+                    "Inneboende — minst skydd, inget eget kontrakt.",
+                ))
+
+            if duration == "tillsvidare" and ctype != "inneboende":
+                safety += 3
+                factors.append(WellbeingFactor(
+                    "safety", 3,
+                    "Tillsvidareavtal — ingen tidsbegränsning, "
+                    "långsiktigt boende.",
+                ))
+
+            # Hyresandel av netto — slå mot StudentProfile.net_salary_monthly
+            # OBS: StudentProfile bor i master-DB (MasterBase), inte i
+            # scope-DB. session-parametern här är en scope-DB-session
+            # → vi måste öppna master_session separat. Lazy import för
+            # att undvika circular.
+            try:
+                from ..school.engines import master_session as _ms_rent
+                with _ms_rent() as _msdb:
+                    profile = (
+                        _msdb.query(_SP_rent)
+                        .order_by(_SP_rent.student_id.desc())
+                        .first()
+                    )
+                    # Detacha så vi kan använda fältet utanför sessionen
+                    _net_salary = (
+                        float(profile.net_salary_monthly)
+                        if profile and profile.net_salary_monthly
+                        else None
+                    )
+            except Exception:
+                _net_salary = None
+            profile = _net_salary  # rebrand för enkelhet nedan
+            if profile is not None:
+                net = profile  # vi rebrand-ade till net_salary ovan
+                if net > 0 and rent > 0:
+                    share = rent / net
+                    if share > 0.40:
+                        penalty = min(
+                            8, int((share - 0.40) * 100 / 5),
+                        )
+                        if penalty > 0:
+                            economy -= penalty
+                            factors.append(WellbeingFactor(
+                                "economy", -penalty,
+                                f"Hyran är {int(share * 100)} % av "
+                                "nettoinkomsten — över 40 %-tröskeln, "
+                                "lite att leva av efter fasta utgifter.",
+                            ))
+                    elif share < 0.25:
+                        economy += 2
+                        factors.append(WellbeingFactor(
+                            "economy", 2,
+                            f"Hyran är bara {int(share * 100)} % av "
+                            "nettoinkomsten — bra utrymme för sparande.",
+                        ))
+
+            # Senaste 12 mån hyresnotiser med höjning > 4 %
+            cutoff_rent = _d_rent.today() - _td_rent(days=365)
+            big_hikes = (
+                session.query(_RN)
+                .filter(
+                    _RN.occurred_on >= cutoff_rent,
+                    _RN.notice_type == "hyreshojning",
+                    _RN.change_pct.isnot(None),
+                    _RN.change_pct > Decimal("4"),
+                )
+                .count()
+            )
+            if big_hikes > 0:
+                economy -= 2
+                factors.append(WellbeingFactor(
+                    "economy", -2,
+                    f"{big_hikes} hyreshöjning"
+                    f"{'ar' if big_hikes > 1 else ''} > 4 % senaste "
+                    "året — kostnaden ökar snabbare än lön.",
+                ))
+        else:
+            # Ingen aktiv bostad alls — registrerat boende saknas
+            factors.append(WellbeingFactor(
+                "safety", -2,
+                "Inget registrerat hyreskontrakt eller bostadsrätt — "
+                "boendet är odefinierat.",
+            ))
+            safety -= 2
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: rental-factor misslyckades",
+        )
+
     # Senaste kreditprövning (CreditCheck) — låg UC-score (D/E) drar
     # trygghet eftersom eleven inte kan låna sig ur en kris.
     try:
