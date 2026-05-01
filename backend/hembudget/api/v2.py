@@ -12286,6 +12286,385 @@ def teacher_maria_list(
     )
 
 
+# === TeacherStudentHistoryV2 (p-historik · Fas 2Y) ===
+#
+# Speglar prototypens larare.html#p-historik: komplett aktivitets-
+# tidslinje för en elev — alla events från signup till idag,
+# grupperade på datum, filtrerbart på kind. Aggregerar:
+# - StudentActivity (master) — tx, budget, lån, transfers, batches
+# - StudentStepProgress.completed_at — modul-steg klart
+# - BankIDSession.signed_at — BankID-signering
+# - NegotiationRound — Maria-rundor
+# - Assignment.manually_completed_at — uppdrag klart
+# - V2OnboardingEvent — onboarding-stegen
+
+
+HistoryEventKind = Literal[
+    "onboarding", "module_step", "module_completed", "maria_round",
+    "bankid", "assignment", "transaction", "budget", "loan",
+    "transfer", "import", "competency_raised", "system",
+]
+
+
+class V2HistoryEvent(BaseModel):
+    occurred_at: datetime
+    kind: HistoryEventKind
+    title: str
+    detail: Optional[str] = None
+    badge: str
+    color: str  # hex eller css-var
+    source_id: Optional[int] = None
+    payload: Optional[dict] = None
+
+
+class V2HistoryStats(BaseModel):
+    total_events: int
+    onboarding_count: int  # 0 eller 1 (klar?)
+    transactions_count: int
+    module_steps_count: int
+    reflections_count: int
+    bankid_count: int
+    maria_rounds_count: int
+    days_since_signup: Optional[int]
+
+
+class V2HistoryResponse(BaseModel):
+    student_id: int
+    student_name: str
+    signup_at: Optional[datetime]
+    onboarding_completed_at: Optional[datetime]
+    stats: V2HistoryStats
+    events: list[V2HistoryEvent]
+
+
+def _kind_to_visual(kind: HistoryEventKind) -> tuple[str, str]:
+    """Returnerar (badge, color) för en event-kind."""
+    table: dict[HistoryEventKind, tuple[str, str]] = {
+        "onboarding": ("ONBOARDING", "#c7d2fe"),
+        "module_step": ("MODUL-STEG", "var(--warm)"),
+        "module_completed": ("MODUL-KLAR", "var(--warm)"),
+        "maria_round": ("MARIA-RUNDA", "var(--accent)"),
+        "bankid": ("BANKID", "#6ee7b7"),
+        "assignment": ("UPPDRAG", "var(--accent)"),
+        "transaction": ("BOKFÖRING", "rgba(255,255,255,0.5)"),
+        "budget": ("BUDGET", "#fbbf24"),
+        "loan": ("LÅN", "#fda594"),
+        "transfer": ("ÖVERFÖRING", "#93c5fd"),
+        "import": ("IMPORT", "#a5b4fc"),
+        "competency_raised": ("KOMP-HÖJN", "#6ee7b7"),
+        "system": ("SYSTEM", "#c084fc"),
+    }
+    return table.get(kind, ("EVENT", "rgba(255,255,255,0.5)"))
+
+
+def _activity_kind_to_history_kind(
+    activity_kind: str,
+) -> HistoryEventKind:
+    if activity_kind.startswith("transaction."):
+        return "transaction"
+    if activity_kind.startswith("budget."):
+        return "budget"
+    if activity_kind.startswith("loan."):
+        return "loan"
+    if activity_kind.startswith("transfer."):
+        return "transfer"
+    if activity_kind.startswith("batch."):
+        return "import"
+    return "system"
+
+
+@router.get(
+    "/teacher/students/{student_id}/activity-log",
+    response_model=V2HistoryResponse,
+)
+def teacher_student_history(
+    student_id: int,
+    limit: int = 100,
+    info: TokenInfo = Depends(require_token),
+) -> V2HistoryResponse:
+    """Komplett aktivitets-tidslinje för en specifik elev (lärar-vy).
+
+    Aggregerar events från flera tabeller. limit begränsar antal
+    returnerade events (sortering nyast först)."""
+    teacher_id = _require_teacher(info)
+
+    with master_session() as mdb:
+        student = mdb.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        student_name = student.display_name
+        signup_at = student.created_at
+        onboarded_at = getattr(
+            student, "v2_onboarding_completed_at", None,
+        )
+
+    events: list[V2HistoryEvent] = []
+
+    # 1. Onboarding-events
+    with master_session() as ms:
+        from ..school.models import StudentActivity as _SA
+        ob_events = (
+            ms.query(V2OnboardingEvent)
+            .filter(V2OnboardingEvent.student_id == student_id)
+            .order_by(V2OnboardingEvent.created_at.asc())
+            .all()
+        )
+        for ev in ob_events:
+            badge, color = _kind_to_visual("onboarding")
+            if ev.event_type == "completed":
+                title = "Onboarding klar"
+                detail = f"steg {ev.step} · sista steget"
+            elif ev.event_type == "abandoned":
+                title = "Onboarding avbruten"
+                detail = f"steg {ev.step} · stängde fönstret"
+                color = "var(--accent)"
+            elif ev.event_type == "back":
+                title = f"Onboarding · gick tillbaka från steg {ev.step}"
+                detail = "klickade ← Tillbaka"
+            elif ev.event_type == "viewed":
+                title = f"Onboarding · steg {ev.step} visat"
+                detail = (
+                    f"{ev.duration_ms} ms"
+                    if ev.duration_ms else None
+                )
+            else:
+                title = f"Onboarding · steg {ev.step} ({ev.event_type})"
+                detail = None
+            events.append(V2HistoryEvent(
+                occurred_at=ev.created_at,
+                kind="onboarding",
+                title=title,
+                detail=detail,
+                badge=badge,
+                color=color,
+                source_id=ev.id,
+            ))
+
+        # 2. StudentActivity
+        sa_rows = (
+            ms.query(_SA)
+            .filter(_SA.student_id == student_id)
+            .order_by(_SA.occurred_at.desc())
+            .limit(200)
+            .all()
+        )
+        for sa in sa_rows:
+            kind = _activity_kind_to_history_kind(sa.kind)
+            badge, color = _kind_to_visual(kind)
+            events.append(V2HistoryEvent(
+                occurred_at=sa.occurred_at,
+                kind=kind,
+                title=sa.summary,
+                detail=sa.kind,
+                badge=badge,
+                color=color,
+                source_id=sa.id,
+                payload=sa.payload,
+            ))
+
+        # 3. StudentStepProgress
+        progress_rows = (
+            ms.query(
+                _SchoolStepProgress, _SchoolModuleStep, _SchoolModule,
+            )
+            .join(
+                _SchoolModuleStep,
+                _SchoolStepProgress.step_id == _SchoolModuleStep.id,
+            )
+            .join(
+                _SchoolModule,
+                _SchoolModuleStep.module_id == _SchoolModule.id,
+            )
+            .filter(
+                _SchoolStepProgress.student_id == student_id,
+                _SchoolStepProgress.completed_at.is_not(None),
+            )
+            .order_by(_SchoolStepProgress.completed_at.desc())
+            .limit(60)
+            .all()
+        )
+        for prog, step, module in progress_rows:
+            badge, color = _kind_to_visual("module_step")
+            events.append(V2HistoryEvent(
+                occurred_at=prog.completed_at,  # type: ignore[arg-type]
+                kind="module_step",
+                title=f'Steg "{step.title}" klart',
+                detail=f"Modul: {module.title} · {step.kind}",
+                badge=badge,
+                color=color,
+                source_id=prog.id,
+            ))
+
+        # 4. Module completion
+        sm_rows = (
+            ms.query(_SchoolStudentModule, _SchoolModule)
+            .join(
+                _SchoolModule,
+                _SchoolStudentModule.module_id == _SchoolModule.id,
+            )
+            .filter(
+                _SchoolStudentModule.student_id == student_id,
+                _SchoolStudentModule.completed_at.is_not(None),
+            )
+            .order_by(_SchoolStudentModule.completed_at.desc())
+            .all()
+        )
+        for sm, module in sm_rows:
+            badge, color = _kind_to_visual("module_completed")
+            events.append(V2HistoryEvent(
+                occurred_at=sm.completed_at,  # type: ignore[arg-type]
+                kind="module_completed",
+                title=f'Modulen "{module.title}" klar',
+                detail=None,
+                badge=badge,
+                color=color,
+                source_id=sm.id,
+            ))
+
+        # 5. NegotiationRound
+        neg_rounds = (
+            ms.query(_NegotiationRound, _SalaryNegotiation)
+            .join(
+                _SalaryNegotiation,
+                _NegotiationRound.negotiation_id == _SalaryNegotiation.id,
+            )
+            .filter(_SalaryNegotiation.student_id == student_id)
+            .order_by(_NegotiationRound.created_at.desc())
+            .all()
+        )
+        for r, neg in neg_rounds:
+            badge, color = _kind_to_visual("maria_round")
+            proposed: Optional[float] = None
+            if r.proposed_pct is not None and neg.starting_salary is not None:
+                proposed = float(neg.starting_salary) * (
+                    1.0 + (r.proposed_pct / 100.0)
+                )
+            events.append(V2HistoryEvent(
+                occurred_at=r.created_at,
+                kind="maria_round",
+                title=(
+                    f"Maria-lönesamtal · runda {r.round_no}"
+                    + (
+                        f" · bud {round(proposed):,} kr".replace(",", " ")
+                        if proposed else ""
+                    )
+                ),
+                detail=neg.profession,
+                badge=badge,
+                color=color,
+                source_id=r.id,
+            ))
+
+        # 6. Assignment.manually_completed_at
+        assignments_done = (
+            ms.query(_SchoolAssignment)
+            .filter(
+                _SchoolAssignment.student_id == student_id,
+                _SchoolAssignment.manually_completed_at.is_not(None),
+            )
+            .all()
+        )
+        for a in assignments_done:
+            badge, color = _kind_to_visual("assignment")
+            events.append(V2HistoryEvent(
+                occurred_at=a.manually_completed_at,  # type: ignore[arg-type]
+                kind="assignment",
+                title=f'Uppdrag "{a.title}" klart',
+                detail=None,
+                badge=badge,
+                color=color,
+                source_id=a.id,
+            ))
+
+    # 7. BankID-sessioner (i scope-DB)
+    from ..school.engines import scope_context, scope_for_student
+    bankid_count = 0
+    try:
+        with master_session() as mdb:
+            st_obj = mdb.get(Student, student_id)
+        scope_key = scope_for_student(st_obj)
+        with scope_context(scope_key):
+            with session_scope() as s:
+                bankid_rows = (
+                    s.query(BankIDSession)
+                    .order_by(BankIDSession.created_at.desc())
+                    .limit(30)
+                    .all()
+                )
+                for b in bankid_rows:
+                    if b.signed_at is not None:
+                        badge, color = _kind_to_visual("bankid")
+                        events.append(V2HistoryEvent(
+                            occurred_at=b.signed_at,
+                            kind="bankid",
+                            title=(
+                                f"BankID-signering · "
+                                f"{len(b.upcoming_ids or [])} fakturor"
+                            ),
+                            detail=None,
+                            badge=badge,
+                            color=color,
+                            source_id=b.id,
+                        ))
+                        bankid_count += 1
+    except Exception:
+        pass
+
+    # Räkningar för stats
+    transactions_count = sum(1 for e in events if e.kind == "transaction")
+    module_steps_count = sum(1 for e in events if e.kind == "module_step")
+    reflections_count = 0
+    # Reflektioner är progress-rader där step.kind='reflect' — räkna separat
+    with master_session() as ms:
+        reflections_count = (
+            ms.query(_SchoolStepProgress)
+            .join(
+                _SchoolModuleStep,
+                _SchoolStepProgress.step_id == _SchoolModuleStep.id,
+            )
+            .filter(
+                _SchoolStepProgress.student_id == student_id,
+                _SchoolModuleStep.kind == "reflect",
+                _SchoolStepProgress.completed_at.is_not(None),
+            )
+            .count()
+        )
+    maria_rounds_count = sum(
+        1 for e in events if e.kind == "maria_round"
+    )
+
+    days_since_signup = (
+        (datetime.utcnow() - signup_at).days
+        if signup_at else None
+    )
+
+    # Sortera nyast först
+    events.sort(key=lambda e: e.occurred_at, reverse=True)
+    events = events[:limit]
+
+    stats = V2HistoryStats(
+        total_events=len(events),
+        onboarding_count=1 if onboarded_at else 0,
+        transactions_count=transactions_count,
+        module_steps_count=module_steps_count,
+        reflections_count=reflections_count,
+        bankid_count=bankid_count,
+        maria_rounds_count=maria_rounds_count,
+        days_since_signup=days_since_signup,
+    )
+
+    return V2HistoryResponse(
+        student_id=student_id,
+        student_name=student_name,
+        signup_at=signup_at,
+        onboarding_completed_at=onboarded_at,
+        stats=stats,
+        events=events,
+    )
+
+
 # === TeacherCreateStudentV2 (p-skapa · Fas 2X) ===
 #
 # Speglar prototypens larare.html#p-skapa: snabb-create-formulär med

@@ -7408,3 +7408,173 @@ def test_v2_teacher_create_student_level_3_skips_onboarding(fx) -> None:
         assert st.onboarding_completed is True
         assert st.v2_level == 3
         assert st.v2_spend_profile == "slosa"
+
+
+# === TeacherStudentHistoryV2 (p-historik) — Fas 2Y ===
+
+
+def test_v2_teacher_history_blocks_other_teacher(fx) -> None:
+    client, _tch, sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/activity-log",
+        headers={"Authorization": f"Bearer {sa}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_history_blocks_students(fx) -> None:
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/activity-log",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 403
+
+
+def test_v2_teacher_history_basic_shape(fx) -> None:
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    r = client.get(
+        f"/v2/teacher/students/{sid}/activity-log",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["student_id"] == sid
+    assert "stats" in data
+    assert isinstance(data["events"], list)
+
+
+def test_v2_teacher_history_aggregates_multiple_kinds(fx) -> None:
+    """Skapa events av flera typer → alla syns i timeline."""
+    from hembudget.school.models import (
+        StudentActivity as _SA,
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP,
+        Assignment as _A,
+        V2OnboardingEvent as _OE,
+    )
+    from hembudget.school.employer_models import (
+        SalaryNegotiation as _SN,
+        NegotiationRound as _NR,
+    )
+    from datetime import datetime as _dt
+    from decimal import Decimal as _D
+
+    client, tch, _sa, _stu, tid, _said, sid = fx
+    with master_session() as db:
+        # Onboarding
+        db.add(_OE(
+            student_id=sid, step=8,
+            event_type="completed", duration_ms=11000,
+        ))
+        # StudentActivity
+        db.add(_SA(
+            student_id=sid, kind="transaction.created",
+            summary="Klassade 5 transaktioner i april",
+        ))
+        # Modul-steg
+        m = _M(teacher_id=tid, title="ISK-modul", is_template=False)
+        db.add(m); db.flush()
+        st = _MS(
+            module_id=m.id, sort_order=0,
+            kind="reflect", title="Vad är ISK?",
+        )
+        db.add(st); db.flush()
+        db.add(_SSP(
+            student_id=sid, step_id=st.id,
+            completed_at=_dt.utcnow(),
+            data={"reflection": "ord"},
+        ))
+        # Maria-runda
+        n = _SN(
+            student_id=sid, profession="X", employer="Y",
+            starting_salary=_D("25000.00"),
+            status="active",
+        )
+        db.add(n); db.flush()
+        db.add(_NR(
+            negotiation_id=n.id, round_no=1,
+            student_message="Yrkar 28k",
+            employer_response="26 800",
+            proposed_pct=7.2,
+        ))
+        # Uppdrag klart
+        db.add(_A(
+            teacher_id=tid, student_id=sid,
+            title="Reflektion-uppgift",
+            description="Skriv 200 ord",
+            kind="free_text",
+            manually_completed_at=_dt.utcnow(),
+        ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/activity-log",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    kinds = {e["kind"] for e in data["events"]}
+    assert "onboarding" in kinds
+    assert "transaction" in kinds
+    assert "module_step" in kinds
+    assert "maria_round" in kinds
+    assert "assignment" in kinds
+    assert data["stats"]["maria_rounds_count"] >= 1
+    assert data["stats"]["module_steps_count"] >= 1
+    assert data["stats"]["reflections_count"] >= 1
+
+
+def test_v2_teacher_history_sorts_newest_first(fx) -> None:
+    """Events sorteras nyast överst."""
+    from hembudget.school.models import StudentActivity as _SA
+    from datetime import datetime as _dt, timedelta as _td
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        # Äldre event
+        a1 = _SA(
+            student_id=sid, kind="transaction.created",
+            summary="Äldre tx",
+        )
+        a1.occurred_at = _dt.utcnow() - _td(days=10)
+        db.add(a1)
+        # Nyare event
+        a2 = _SA(
+            student_id=sid, kind="budget.set",
+            summary="Nyare budget",
+        )
+        a2.occurred_at = _dt.utcnow() - _td(hours=2)
+        db.add(a2)
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/activity-log",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    titles = [e["title"] for e in data["events"]]
+    # Den nyare ska komma först
+    nyare_idx = titles.index("Nyare budget")
+    aldre_idx = titles.index("Äldre tx")
+    assert nyare_idx < aldre_idx
+
+
+def test_v2_teacher_history_limit_param(fx) -> None:
+    """limit-param respekteras."""
+    from hembudget.school.models import StudentActivity as _SA
+
+    client, tch, _sa, _stu, _tid, _said, sid = fx
+    with master_session() as db:
+        for i in range(20):
+            db.add(_SA(
+                student_id=sid, kind="transaction.created",
+                summary=f"tx {i}",
+            ))
+        db.commit()
+
+    r = client.get(
+        f"/v2/teacher/students/{sid}/activity-log?limit=5",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    data = r.json()
+    assert len(data["events"]) == 5
