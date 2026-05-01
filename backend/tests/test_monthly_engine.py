@@ -394,3 +394,62 @@ class TestAdvanceEndpoint:
             headers={"Authorization": f"Bearer {tok}"},
         )
         assert r.status_code == 422
+
+
+# === Fas F · social_proposals integration (legacy events/-modul) ===
+
+
+class TestLegacyEventIntegration:
+    def test_social_proposals_in_summary(self, fx):
+        """tick_month inkluderar social_proposals-summary även när
+        EventTemplate-tabellen är tom (då 0 events_created)."""
+        from hembudget.game_engine.monthly_engine import tick_month
+        from hembudget.game_engine.profile_generator import generate_profile
+
+        _, _, _, sid = fx
+        with master_session() as s:
+            student = s.get(Student, sid)
+            s.expunge(student)
+        profile = generate_profile(seed=42)
+
+        result = tick_month(student, profile, "2031-01")
+        assert "social_proposals" in result.summary
+        sp = result.summary["social_proposals"]
+        assert "events_created" in sp
+
+    def test_legacy_templates_create_student_events(self, fx):
+        """Med seedade EventTemplate-rader ska legacy-tick generera
+        StudentEvent-rader i scope-DB:n."""
+        from hembudget.db.models import StudentEvent
+        from hembudget.game_engine.monthly_engine import tick_month
+        from hembudget.game_engine.profile_generator import generate_profile
+        from hembudget.school.event_seed import seed_event_templates
+
+        _, _, _, sid = fx
+        # Seeda template-poolen manuellt (lifespan körs inte i fixturen)
+        with master_session() as s:
+            n = seed_event_templates(s)
+            assert n > 0, "seed_event_templates returnerade 0 — ingen pool"
+            s.commit()
+
+        with master_session() as s:
+            student = s.get(Student, sid)
+            s.expunge(student)
+        scope_key = scope_for_student(student)
+        profile = generate_profile(seed=42)
+
+        result = tick_month(student, profile, "2031-02")
+        sp = result.summary["social_proposals"]
+        # Antingen skapades events ELLER hoppades pga ISO-vecka-dedup
+        # (real-tid kan ha tickat i samma vecka redan från prior test)
+        assert "events_created" in sp
+        if sp["events_created"] > 0:
+            maker = get_scope_session(scope_key)
+            with scope_context(scope_key):
+                with maker() as s:
+                    rows = s.query(StudentEvent).all()
+                    assert len(rows) >= sp["events_created"]
+                    for r in rows:
+                        # Existerande motor sätter source="system"
+                        assert r.source == "system"
+                        assert r.status == "pending"

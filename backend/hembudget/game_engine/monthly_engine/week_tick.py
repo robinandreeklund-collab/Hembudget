@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from ...events.engine import tick_for_student as legacy_event_tick
 from ...school.engines import (
     get_scope_session,
     master_session,
@@ -48,6 +49,54 @@ class TickResult:
 
 class TickSkipped(Exception):
     """Raises (intern) när year_month redan tickats — fångas av tick_month."""
+
+
+def _ym_first_day(year_month: str) -> "date":
+    """Första dagen i year_month som date — används som sim-datum för
+    legacy event tick.
+    """
+    from datetime import date as _date
+    y, m = map(int, year_month.split("-"))
+    return _date(y, m, 1)
+
+
+def _run_legacy_event_tick(
+    scope_session,
+    *,
+    profile: GeneratedProfile,
+    year_month: str,
+) -> dict:
+    """Anropar existerande events.engine.tick_for_student inom samma
+    scope-session så social-förslag (StudentEvent) skapas som driver
+    wellbeing.calculator (impact_economy/health/social/leisure/safety).
+
+    Felfall fångas och loggas — vi vill inte att en felande social-tick
+    ska bryta hela Monthly Engine.
+    """
+    try:
+        with master_session() as ms:
+            sim_today = _ym_first_day(year_month)
+            result = legacy_event_tick(
+                scope_session=scope_session,
+                master_session=ms,
+                student_seed=profile.seed,
+                today=sim_today,
+                max_events_per_tick=3,
+            )
+        return {
+            "events_created": result.events_created,
+            "candidates_evaluated": result.candidates_evaluated,
+            "skipped_reason_counts": result.skipped_reason_counts,
+            "tick_date": sim_today.isoformat(),
+        }
+    except Exception as exc:
+        log.exception(
+            "monthly_engine: legacy event tick failed för ym=%s", year_month,
+        )
+        return {
+            "events_created": 0,
+            "error": str(exc),
+        }
 
 
 def _check_and_create_run(
@@ -172,7 +221,8 @@ def tick_month(
                     rng=random.Random(rng_master.random()),
                 )
 
-                # Fas E · oväntade händelser (Sprint 3)
+                # Fas E · oväntade händelser (Sprint 3) — försäkrings-
+                # mildring, MailItem, InsuranceClaim, pentagon-impact direkt
                 events = roll_monthly_events(
                     s,
                     profile=profile,
@@ -212,6 +262,14 @@ def tick_month(
                         for occ in events
                     ],
                 }
+
+                # Fas F · social-förslag (existerande events/-modul,
+                # Sprint 3 integration). Skapar StudentEvent-rader som
+                # eleven kan acceptera/neka — wellbeing.calculator läser
+                # accepted+declined per spelmånad och summerar impact_*.
+                summary["social_proposals"] = _run_legacy_event_tick(
+                    s, profile=profile, year_month=year_month,
+                )
 
                 s.commit()
     except Exception as exc:
