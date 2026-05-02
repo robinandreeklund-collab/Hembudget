@@ -121,13 +121,33 @@ export function ArbetsformedlingenV2() {
           </div>
         </header>
 
-        <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            marginBottom: 16,
+            alignItems: "center",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+            color: "var(--text-mid)",
+            letterSpacing: "0.6px",
+          }}
+        >
           <label>
             Spelmånad:&nbsp;
             <input
               type="month"
               value={ym}
               onChange={(e) => setYm(e.target.value || CURRENT_YM)}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid var(--line-strong)",
+                color: "#fff",
+                padding: "6px 10px",
+                borderRadius: 6,
+                fontFamily: "var(--mono)",
+                fontSize: 11,
+              }}
             />
           </label>
         </div>
@@ -135,18 +155,33 @@ export function ArbetsformedlingenV2() {
         {confirmMsg && (
           <div
             style={{
-              background: "var(--surface-2, #f5f5f7)",
-              padding: 12,
-              borderRadius: 8,
+              background: "rgba(110,231,183,0.06)",
+              padding: "10px 16px",
+              borderRadius: 6,
               marginBottom: 16,
-              border: "1px solid var(--border)",
+              border: "1px solid rgba(110,231,183,0.4)",
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              color: "#6ee7b7",
+              letterSpacing: "0.5px",
             }}
           >
-            {confirmMsg}
+            ● {confirmMsg}
           </div>
         )}
 
-        {error && <div style={{ color: "var(--danger)" }}>Fel: {error}</div>}
+        {error && (
+          <div
+            style={{
+              color: "#fca5a5",
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              marginBottom: 12,
+            }}
+          >
+            Fel: {error}
+          </div>
+        )}
 
         <div
           style={{
@@ -167,28 +202,104 @@ export function ArbetsformedlingenV2() {
                 <article
                   key={j.listing_id}
                   style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: 10,
-                    padding: 14,
-                    background: "var(--surface, #fff)",
+                    border: "1px solid var(--line)",
+                    borderRadius: 8,
+                    padding: 18,
+                    background: "rgba(15,21,37,0.7)",
+                    color: "var(--text)",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <strong>{j.yrke_display}</strong>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "var(--serif)",
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: "#fff",
+                        }}
+                      >
+                        {j.yrke_display}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: "var(--mono)",
+                          fontSize: 10.5,
+                          color: "var(--text-mid)",
+                          marginTop: 4,
+                          letterSpacing: "0.4px",
+                        }}
+                      >
+                        {j.employer_name} · {j.city_display}
+                      </div>
+                    </div>
                     <MatchPill score={j.match_score} />
                   </div>
-                  <div style={{ color: "var(--text-mid)", fontSize: "0.85rem", marginTop: 4 }}>
-                    {j.employer_name} · median {SEK(j.monthly_gross_median)} kr/mån
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 8,
+                      fontFamily: "var(--mono)",
+                      fontSize: 11,
+                      color: "var(--text-mid)",
+                    }}
+                  >
+                    <div>
+                      Median:{" "}
+                      <strong style={{ color: "#fff" }}>
+                        {SEK(j.monthly_gross_median)} kr
+                      </strong>
+                    </div>
+                    <div>
+                      Utbildning:{" "}
+                      <strong style={{ color: "#fff" }}>
+                        {j.education_level}
+                      </strong>
+                    </div>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      Spann: {SEK(j.monthly_gross_min)}–
+                      {SEK(j.monthly_gross_max)} kr/mån brutto
+                    </div>
                   </div>
-                  <div style={{ fontSize: "0.8rem", color: "var(--text-mid)", marginTop: 4 }}>
-                    Spann: {SEK(j.monthly_gross_min)}–{SEK(j.monthly_gross_max)} kr · {j.education_level}
-                  </div>
+                  {j.description && (
+                    <p
+                      style={{
+                        marginTop: 12,
+                        fontFamily: "var(--serif)",
+                        fontSize: 13.5,
+                        lineHeight: 1.5,
+                        color: "var(--text)",
+                      }}
+                    >
+                      {j.description}
+                    </p>
+                  )}
                   <button
+                    type="button"
                     onClick={() => handleApply(j)}
                     style={{
-                      marginTop: 10, width: "100%", padding: "8px",
-                      background: "var(--accent, #0066cc)", color: "white",
-                      border: "none", borderRadius: 6, cursor: "pointer",
+                      marginTop: 14,
+                      width: "100%",
+                      padding: "10px",
+                      background: "var(--accent)",
+                      color: "#fff",
+                      border: 0,
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontFamily: "var(--mono)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "1.2px",
+                      textTransform: "uppercase",
                     }}
                   >
                     Sök jobbet →
@@ -216,35 +327,71 @@ export function ArbetsformedlingenV2() {
                   style={{
                     border: "1px solid",
                     borderColor:
-                      selectedAppId === a.id ? "var(--accent)" : "var(--border)",
-                    borderRadius: 10,
-                    padding: 12,
+                      selectedAppId === a.id
+                        ? "var(--accent)"
+                        : "var(--line)",
+                    borderRadius: 8,
+                    padding: 14,
                     cursor: "pointer",
                     background:
                       selectedAppId === a.id
-                        ? "rgba(0, 102, 204, 0.06)"
-                        : "var(--surface, #fff)",
+                        ? "rgba(220,76,43,0.08)"
+                        : "rgba(15,21,37,0.7)",
+                    color: "var(--text)",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <strong>{a.yrke_display}</strong>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    <strong
+                      style={{
+                        fontFamily: "var(--serif)",
+                        fontSize: 14.5,
+                        color: "#fff",
+                      }}
+                    >
+                      {a.yrke_display}
+                    </strong>
                     <span
                       style={{
-                        fontSize: "0.75rem",
+                        fontFamily: "var(--mono)",
+                        fontSize: 9.5,
                         color: STATUS_COLOR[a.status],
-                        fontWeight: 600,
+                        fontWeight: 700,
+                        letterSpacing: "1.2px",
+                        textTransform: "uppercase",
                       }}
                     >
                       {STATUS_LABEL[a.status]}
                     </span>
                   </div>
-                  <div style={{ fontSize: "0.85rem", color: "var(--text-mid)" }}>
-                    {a.employer_name} · started {a.started_on}
+                  <div
+                    style={{
+                      fontFamily: "var(--mono)",
+                      fontSize: 10.5,
+                      color: "var(--text-mid)",
+                      marginTop: 4,
+                    }}
+                  >
+                    {a.employer_name} · startade {a.started_on}
                   </div>
                   {a.final_score !== null && (
-                    <div style={{ fontSize: "0.8rem", marginTop: 4 }}>
-                      Final score: <strong>{a.final_score}/100</strong>
-                      {a.monthly_gross_offered &&
+                    <div
+                      style={{
+                        fontFamily: "var(--serif)",
+                        fontSize: 12.5,
+                        marginTop: 6,
+                      }}
+                    >
+                      Slutpoäng:{" "}
+                      <strong style={{ color: "var(--warm)" }}>
+                        {a.final_score}/100
+                      </strong>
+                      {a.monthly_gross_offered != null &&
                         ` · erbjudande ${SEK(a.monthly_gross_offered)} kr/mån`}
                     </div>
                   )}
