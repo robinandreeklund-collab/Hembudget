@@ -40,28 +40,9 @@ export function GuideDropdown() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="Interaktiva guider"
-        style={{
-          background: open
-            ? "rgba(251,191,36,0.15)"
-            : "rgba(255,255,255,0.04)",
-          border: open
-            ? "1px solid var(--warm)"
-            : "1px solid rgba(255,255,255,0.18)",
-          color: open ? "var(--warm)" : "rgba(255,255,255,0.85)",
-          padding: "8px 14px",
-          borderRadius: 100,
-          fontFamily: "var(--mono, monospace)",
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "1.2px",
-          textTransform: "uppercase",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-        }}
+        className="tb-echo tb-echo-ghost"
       >
-        <span>✦</span>
+        <span style={{ marginRight: 4 }}>✦</span>
         <span>Guider</span>
       </button>
 

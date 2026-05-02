@@ -90,7 +90,7 @@ const NEXT_LABELS = [
   "Visa Echo →",
   "En fråga om värderingar →",
   "Sista regeln →",
-  "Starta Vol. 18 ↗",
+  "Starta Ekonomilabbet ↗",
 ];
 
 export function OnboardingV2() {
@@ -1261,7 +1261,7 @@ function Step8({
     <div className="onb-step">
       <div className="onb-eye">Onboarding · steg 8 av 8 · klar</div>
       <h1 className="onb-h">
-        Vol. 18 är <em>laddad</em>.
+        Är du <em>redo</em>?
       </h1>
       <p className="onb-lead">
         Det är dag 1 i {charName}s ekonomiska liv. Lönekontot börjar fyllas
@@ -1287,10 +1287,11 @@ function Step8({
       <div className="onb-rules">
         <div className="onb-rule">
           <div className="onb-rule-eye">Aktörer</div>
-          <div className="onb-rule-h">8 + meta</div>
+          <div className="onb-rule-h">10 + meta</div>
           <div className="onb-rule-prose">
-            Banken, arbetsgivaren, Avanza, lånegivaren, försäkringar,
-            förbrukning, Skatteverket, pension, hyresvärden, postlådan
+            Banken, arbetsgivaren, Skatteverket, lånegivaren, Avanza,
+            försäkringar, förbrukning, boendemarknaden, pension,
+            arbetsförmedlingen — plus postlådan som meta.
           </div>
         </div>
         <div className="onb-rule">

@@ -64,17 +64,33 @@ export function TeacherHubV2() {
   const [data, setData] = useState<V2KlassOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
+  // Bug 7 · vald klass i topbar (filtrerar elev-listan)
+  const [classLabel, setClassLabel] = useState<string>(
+    () => localStorage.getItem("hb_teacher_class_label") || "",
+  );
   const navigate = useNavigate();
 
   // Bug #3 · Auto-starta lärar-guiden vid första besöket på v2
   useAutoStartTeacherGuide();
 
+  // Lyssna på klass-byte från ClassPicker i topbaren
   useEffect(() => {
+    function onClassChange(e: Event) {
+      const detail = (e as CustomEvent).detail || {};
+      setClassLabel(detail.label || "");
+    }
+    window.addEventListener("class-changed", onClassChange);
+    return () => window.removeEventListener("class-changed", onClassChange);
+  }, []);
+
+  useEffect(() => {
+    setData(null);
+    setError(null);
     v2Api
-      .teacherKlassOverview()
+      .teacherKlassOverview(classLabel || undefined)
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
-  }, []);
+  }, [classLabel]);
 
   if (error && !data) {
     return (

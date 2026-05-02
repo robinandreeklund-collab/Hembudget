@@ -11163,12 +11163,16 @@ def _days_since(dt: Optional[datetime]) -> Optional[int]:
 )
 def teacher_klass_overview(
     info: TokenInfo = Depends(require_token),
+    class_label: Optional[str] = None,
 ) -> V2KlassOverview:
     """Klass-dashboard · aggregerad data för lärar-hubben.
 
     Itererar lärarens elever, beräknar wellbeing per elev (i scope-context),
     aggregerar till klass-pentagon (snitt), identifierar elever som behöver
     stöd, listar pågående lönesamtal + olästa reflektioner + topp-postlådor.
+
+    Bug 7 · `class_label` filtrerar på elevernas Student.class_label.
+    None / tomt → visa alla elever (gamla beteendet).
     """
     teacher_id = _require_teacher(info)
     today = datetime.utcnow()
@@ -11177,15 +11181,18 @@ def teacher_klass_overview(
         teacher = mdb.get(Teacher, teacher_id)
         teacher_name = teacher.name if teacher else "Lärare"
 
-        students = (
+        students_q = (
             mdb.query(Student)
             .filter(
                 Student.teacher_id == teacher_id,
                 Student.active.is_(True),
             )
-            .order_by(Student.display_name)
-            .all()
         )
+        if class_label and class_label.strip():
+            students_q = students_q.filter(
+                Student.class_label == class_label.strip(),
+            )
+        students = students_q.order_by(Student.display_name).all()
         # Snapshot fält medan session är öppen
         students_data = [
             {

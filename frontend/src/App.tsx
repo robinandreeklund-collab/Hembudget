@@ -70,6 +70,7 @@ import { TeacherKompetensOverviewPage } from "./v2/TeacherKompetensOverviewPage"
 import { GuideProvider } from "./v2/guides/GuideContext";
 import { GuideOverlay } from "./v2/guides/GuideOverlay";
 import { V2DevFooter } from "./v2/V2DevFooter";
+import { EchoDrawer } from "./v2/EchoDrawer";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
@@ -269,6 +270,7 @@ export default function App() {
       <DemoBanner />
       {!isV2Path && <V2DevSwitcher />}
       <GuideOverlay />
+      {isV2Path && <EchoDrawer />}
       {isV2Path && (
         <V2DevFooter
           role={role || "student"}

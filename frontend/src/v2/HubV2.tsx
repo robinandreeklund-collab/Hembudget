@@ -168,7 +168,12 @@ export function HubV2() {
 
           <article className="hub-char-card">
             <div className="hub-char-eye">
-              {pentagon?.year_month || "—"} · Vol. 18
+              {(() => {
+                const d = new Date();
+                const day = d.toLocaleDateString("sv-SE", { weekday: "long" });
+                const month = d.toLocaleDateString("sv-SE", { month: "long" });
+                return `${day} · ${month}`;
+              })()}
               <span className={`hub-level-badge ${levelClass}`}>
                 Nivå {hub.v2_level} · {profileLabel}
               </span>
@@ -187,37 +192,94 @@ export function HubV2() {
                 : "—"}
             </div>
 
-            {(character.gross_salary_monthly ||
-              character.net_salary_monthly ||
-              character.housing_monthly) && (
-              <>
-                <div className="hub-char-section">Hennes ekonomi</div>
-                <p className="hub-char-prose">
-                  {character.net_salary_monthly && (
-                    <>
-                      Tjänar{" "}
-                      <em>{SEK(character.net_salary_monthly)} kr/mån</em>{" "}
-                      netto.{" "}
-                    </>
-                  )}
-                  {character.housing_monthly && (
-                    <>
-                      Hyran är{" "}
-                      <strong>
-                        {SEK(character.housing_monthly)} kr
-                      </strong>
-                      .{" "}
-                    </>
-                  )}
-                  {accounts_count > 0 && (
-                    <>
+            <div className="hub-char-section">Status den här veckan</div>
+            <p className="hub-char-prose">
+              {(() => {
+                const parts: React.ReactNode[] = [];
+                if (latestEvent) {
+                  if (
+                    latestEvent.mail_type === "invoice"
+                    && latestEvent.amount != null
+                  ) {
+                    parts.push(
+                      <span key="evt">
+                        <strong>{latestEvent.sender}</strong> ringde —{" "}
+                        <em>{SEK(Math.abs(latestEvent.amount))} kr</em>
+                        {latestEvent.due_date
+                          && `, betalas innan ${latestEvent.due_date}`}
+                        .{" "}
+                      </span>,
+                    );
+                  } else {
+                    parts.push(
+                      <span key="evt">
+                        Senaste händelse: <strong>{latestEvent.subject}</strong>
+                        .{" "}
+                      </span>,
+                    );
+                  }
+                }
+                if (character.net_salary_monthly) {
+                  parts.push(
+                    <span key="lon">
+                      Lönen <em>{SEK(character.net_salary_monthly)} kr</em>{" "}
+                      netto i fas.{" "}
+                    </span>,
+                  );
+                }
+                if (character.housing_monthly) {
+                  parts.push(
+                    <span key="hyra">
+                      Hyran på{" "}
+                      <strong>{SEK(character.housing_monthly)} kr</strong>{" "}
+                      dras varje månad.{" "}
+                    </span>,
+                  );
+                }
+                if (accounts_count > 0) {
+                  parts.push(
+                    <span key="bal">
                       {accounts_count} konton · totalt saldo{" "}
                       <em>{SEK(total_balance)} kr</em>.
-                    </>
-                  )}
-                </p>
-              </>
-            )}
+                    </span>,
+                  );
+                }
+                if (parts.length === 0) {
+                  return (
+                    <em>
+                      Pentagonen byggs upp så fort scope-databasen får sina
+                      första transaktioner.
+                    </em>
+                  );
+                }
+                return parts;
+              })()}
+            </p>
+
+            <div className="hub-char-pills">
+              <Link
+                to="/v2/postladan"
+                className={`hub-char-pill${mailUnread > 0 ? " alert" : ""}`}
+              >
+                Postlådan
+                {mailUnread > 0 && ` · ${mailUnread} ohanterade`}
+              </Link>
+              <Link to="/v2/banken" className="hub-char-pill">
+                Banken
+              </Link>
+              <Link to="/v2/arbetsgivaren" className="hub-char-pill">
+                Arbetsgivaren
+              </Link>
+              <Link to="/v2/skatten" className="hub-char-pill alert">
+                Deklaration
+              </Link>
+              <Link to="/v2/avanza" className="hub-char-pill">
+                Avanza
+              </Link>
+              <Link to="/v2/moduler" className="hub-char-pill">
+                Mina moduler
+              </Link>
+            </div>
           </article>
         </header>
 
@@ -400,7 +462,7 @@ export function HubV2() {
 
         {/* === KOMPASSEN · navigation till alla aktörer + verktyg === */}
         <div className="compass" data-guide="hub-compass">
-          <div className="compass-eye">Aktörerna · åtta rum + postlådan</div>
+          <div className="compass-eye">Aktörerna · tio rum + postlådan</div>
           <div className="compass-grid" style={{ marginBottom: 18 }}>
             <Link
               to="/v2/postladan"

@@ -156,6 +156,39 @@ body[data-mode="business"] .v2-larare-root {
 .hub-char-prose em { font-style: italic; color: var(--warm); }
 .hub-char-prose strong { color: var(--accent); font-weight: 700; }
 
+.hub-char-pills {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hub-char-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 100px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: var(--warm);
+  letter-spacing: 0.6px;
+  text-decoration: none;
+  transition: all 0.2s var(--ease);
+  cursor: pointer;
+}
+.hub-char-pill:hover {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: var(--warm);
+}
+.hub-char-pill.alert {
+  background: rgba(220, 76, 43, 0.08);
+  border-color: rgba(220, 76, 43, 0.4);
+  color: var(--accent);
+}
+.hub-char-pill.alert:hover {
+  background: rgba(220, 76, 43, 0.18);
+}
+
 /* Recap-stripe */
 .hub-recap {
   display: grid; grid-template-columns: repeat(4, 1fr);

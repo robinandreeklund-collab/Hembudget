@@ -1,8 +1,26 @@
 /**
- * V2 Topbar + Dev-footer · matchar prototypens .topbar.
- * Mobile-first med toggle till hamburger-meny.
+ * V2 Topbar · 1:1 med prototyp /proposals/vol-7/elev.html (.topbar).
+ *
+ * Allt baserat exakt på prototyp-CSS — inga egna designval.
  */
 
+:root {
+  --bg-deep: #0a0e1a;
+  --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --warm-soft: #f59e0b;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --text: rgba(255, 255, 255, 0.92);
+  --text-mid: rgba(255, 255, 255, 0.6);
+  --text-dim: rgba(255, 255, 255, 0.4);
+  --accent: #dc4c2b;
+  --serif: "Source Serif 4", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --ease: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+/* === TOPBAR === */
 .v2-topbar {
   position: fixed;
   top: 0;
@@ -10,21 +28,20 @@
   right: 0;
   height: 56px;
   z-index: 80;
-  background: rgba(10, 14, 26, 0.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  background: rgba(10, 14, 26, 0.88);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   padding: 0 22px;
-  gap: 16px;
-  /* Bug 3 · ingen wrap på desktop — låt crumbs trunkeras istället */
+  gap: 22px;
   flex-wrap: nowrap;
   min-width: 0;
 }
 
 .tb-brand {
-  font-family: "Source Serif 4", Georgia, serif;
+  font-family: var(--serif);
   font-weight: 700;
   font-size: 16px;
   color: #fff;
@@ -34,24 +51,27 @@
   gap: 9px;
   white-space: nowrap;
 }
-
 .tb-brand::before {
   content: "●";
-  color: var(--accent, #dc4c2b);
+  color: var(--accent);
   font-size: 11px;
 }
-
 .tb-brand-meta {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--mono);
   font-size: 9.5px;
   letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-dim);
   margin-left: 4px;
 }
 
-.tb-role {
-  font-family: "JetBrains Mono", monospace;
+/* === ROLE / LEVEL BADGES === */
+.priv-badge,
+.biz-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
   padding: 3px 9px;
@@ -59,44 +79,91 @@
   letter-spacing: 1.4px;
   text-transform: uppercase;
 }
-
-.tb-role.is-student {
-  background: var(--warm, #fbbf24);
-  color: #422006;
+.priv-badge {
+  background: rgba(220, 76, 43, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(220, 76, 43, 0.3);
+}
+.biz-badge {
+  display: none;
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  border: 1px solid rgba(99, 102, 241, 0.4);
 }
 
+.level-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 100px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid;
+}
+.level-badge.l1 {
+  background: rgba(110, 231, 183, 0.18);
+  border-color: rgba(110, 231, 183, 0.35);
+  color: #6ee7b7;
+}
+.level-badge.l2 {
+  background: rgba(251, 191, 36, 0.18);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: var(--warm);
+}
+.level-badge.l3 {
+  background: rgba(220, 76, 43, 0.18);
+  border-color: rgba(220, 76, 43, 0.35);
+  color: #fda594;
+}
+.level-badge.l1::before { content: "▰▱▱"; font-size: 7px; }
+.level-badge.l2::before { content: "▰▰▱"; font-size: 7px; }
+.level-badge.l3::before { content: "▰▰▰"; font-size: 7px; }
+
+/* Bakåtkompat: vår gamla .tb-role-stil styrs av prototypens
+   priv-badge / biz-badge / level-badge. Behåll bara fallback. */
+.tb-role {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 100px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
 .tb-role.is-teacher {
   background: rgba(99, 102, 241, 0.25);
   color: #c7d2fe;
   border: 1px solid rgba(99, 102, 241, 0.4);
 }
-
 .tb-role.is-admin {
-  background: var(--accent, #dc4c2b);
+  background: var(--accent);
   color: #fff;
 }
 
+/* === CRUMBS === */
 .tb-crumbs {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 1.4px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-dim);
   text-transform: uppercase;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   flex: 0 1 auto;
   min-width: 0;
 }
-
 .tb-crumbs strong {
   color: #fff;
   font-weight: 700;
 }
-
 .tb-crumbs .sep {
   color: rgba(255, 255, 255, 0.25);
 }
@@ -105,16 +172,313 @@
   flex: 1;
 }
 
-.tb-actions {
-  display: flex;
+/* === MODE SWITCH (privat ↔ företag) === */
+.mode-switch {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  white-space: nowrap;
+}
+.mode-switch:hover {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #c7d2fe;
+}
+.ms-track {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 100px;
+  transition: background 0.25s var(--ease);
+}
+.ms-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.25s var(--ease), background 0.25s var(--ease);
+}
+body[data-mode="business"] .mode-switch {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+}
+body[data-mode="business"] .ms-track {
+  background: rgba(99, 102, 241, 0.45);
+}
+body[data-mode="business"] .ms-knob {
+  transform: translateX(14px);
+  background: #c7d2fe;
 }
 
+/* === AI TOKENS METER === */
+.tb-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+.tb-meter-bar {
+  width: 80px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 100px;
+  overflow: hidden;
+  position: relative;
+}
+.tb-meter-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, var(--warm), var(--accent));
+  border-radius: 100px;
+  transition: width 0.3s var(--ease);
+}
+
+/* === ECHO BUTTON i topbar === */
+.tb-echo {
+  background: var(--warm);
+  color: #422006;
+  border: 0;
+  padding: 8px 14px;
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tb-echo::before {
+  content: "●";
+  color: #422006;
+}
+.tb-echo:hover {
+  background: var(--warm-soft);
+}
+/* Sekundär variant (Guide-knappen) */
+.tb-echo.tb-echo-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border: 1px solid var(--line-strong);
+}
+.tb-echo.tb-echo-ghost::before {
+  color: #a78bfa;
+}
+
+/* === USER AVATAR === */
+.tb-user {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #a83817);
+  color: #fff;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.tb-logout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.55);
+  padding: 5px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+.tb-logout:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* === NOTIF BELL · ses i notif.css (prototypens .notif-* stilar) === */
+
+/* === SCRIM (delas av Echo + Notif drawers) === */
+.v2-drawer-scrim {
+  position: fixed;
+  inset: 56px 0 0 0;
+  z-index: 90;
+  background: rgba(10, 14, 26, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s var(--ease);
+}
+.v2-drawer-scrim.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* === ECHO DRAWER === */
+.v2-echo-drawer {
+  position: fixed;
+  right: 0;
+  top: 56px;
+  bottom: 0;
+  width: 420px;
+  max-width: 100vw;
+  z-index: 95;
+  background: var(--bg-mid);
+  border-left: 1px solid var(--line-strong);
+  transform: translateX(100%);
+  transition: transform 0.4s var(--ease);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -20px 0 60px -10px rgba(0, 0, 0, 0.6);
+}
+.v2-echo-drawer.open {
+  transform: translateX(0);
+}
+.v2-echo-drawer-head {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.v2-echo-drawer-eye {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--warm);
+}
+.v2-echo-drawer-eye::before {
+  content: "● ";
+}
+.v2-echo-drawer-meta {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  letter-spacing: 0.6px;
+}
+.v2-echo-drawer-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-mid);
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+}
+.v2-echo-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.v2-echo-msg {
+  font-family: var(--serif);
+  font-size: 14.5px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border-radius: 6px;
+}
+.v2-echo-msg.echo {
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  font-style: italic;
+  color: var(--text);
+}
+.v2-echo-msg.user {
+  background: rgba(255, 255, 255, 0.06);
+  align-self: flex-end;
+  max-width: 80%;
+  color: var(--text);
+}
+.v2-echo-msg-error {
+  background: rgba(220, 76, 43, 0.12);
+  border: 1px solid rgba(220, 76, 43, 0.35);
+  color: #fda594;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.v2-echo-drawer-foot {
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 10px;
+}
+.v2-echo-drawer-foot input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line-strong);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 100px;
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+}
+.v2-echo-drawer-foot input::placeholder {
+  color: var(--text-dim);
+}
+.v2-echo-drawer-foot button {
+  background: var(--warm);
+  color: #422006;
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.v2-echo-drawer-foot button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* === NOTIF DRAWER · ses i notif.css === */
+
+/* === Mobile === */
 .tb-mobile-toggle {
   display: none;
   background: transparent;
-  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.18));
+  border: 1px solid var(--line-strong);
   color: #fff;
   width: 36px;
   height: 36px;
@@ -124,32 +488,27 @@
   align-items: center;
   justify-content: center;
 }
-
-.tb-user {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1e293b, #475569);
-  color: #fff;
-  font-family: "Source Serif 4", Georgia, serif;
-  font-weight: 700;
-  font-size: 13px;
-  display: grid;
-  place-items: center;
-  text-decoration: none;
-  flex-shrink: 0;
+.tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-
-/* Topbar mobile */
+@media (max-width: 1100px) {
+  .tb-meter,
+  .tb-brand-meta {
+    display: none;
+  }
+}
 @media (max-width: 880px) {
   .v2-topbar {
     padding: 0 14px;
     gap: 10px;
   }
-  .tb-brand-meta {
-    display: none;
-  }
-  .tb-crumbs {
+  .tb-crumbs,
+  .priv-badge,
+  .biz-badge,
+  .level-badge,
+  .mode-switch span:not(.ms-track):not(.ms-knob) {
     display: none;
   }
   .tb-mobile-toggle {
@@ -171,20 +530,43 @@
     gap: 8px;
     margin-top: 8px;
     padding-top: 14px;
-    border-top: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+    border-top: 1px solid var(--line);
   }
-  .v2-topbar.v2-topbar-mobile-open .tb-crumbs {
-    display: flex;
+  .v2-echo-drawer,
+  .v2-notif-drawer {
     width: 100%;
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid var(--line, rgba(255, 255, 255, 0.1));
-    text-overflow: clip;
-    overflow-x: auto;
   }
 }
 
-/* Dev footer */
+/* === Företagsläge · indigo accent === */
+body[data-mode="business"] .v2-topbar {
+  border-bottom-color: rgba(99, 102, 241, 0.35);
+  background: rgba(11, 11, 28, 0.92);
+}
+body[data-mode="business"] .tb-brand::before {
+  color: #6366f1;
+}
+body[data-mode="business"] .biz-badge {
+  display: inline-flex !important;
+}
+body[data-mode="business"] .priv-badge {
+  display: none !important;
+}
+body[data-mode="business"] .priv-only {
+  display: none !important;
+}
+body:not([data-mode="business"]) .biz-only {
+  display: none !important;
+}
+body[data-mode="business"] .v2-hub-root,
+body[data-mode="business"] .v2-larare-root {
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99, 102, 241, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168, 85, 247, 0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #0a0e1a 0%, #0d1226 60%, #0a0e1a 100%);
+}
+
+/* === Dev footer === */
 .v2-dev-footer {
   position: fixed;
   bottom: 0;
@@ -194,177 +576,54 @@
   background: rgba(10, 14, 26, 0.85);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  border-top: 1px solid var(--line);
   padding: 6px 18px;
   display: flex;
   align-items: center;
   gap: 12px;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.6px;
-  color: rgba(255, 255, 255, 0.4);
-  pointer-events: none;
+  color: var(--text-dim);
 }
-
-.v2-dev-footer > * {
-  pointer-events: auto;
-}
-
-.v2-dev-footer-brand {
-  font-family: "Source Serif 4", Georgia, serif;
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.v2-dev-footer-brand span {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.35);
-  margin-left: 6px;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-}
-
-.v2-dev-footer-meta {
-  font-size: 9px;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.v2-dev-footer-toggle {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
-  color: rgba(255, 255, 255, 0.5);
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 100px;
-  cursor: pointer;
-}
-
-.v2-dev-footer-toggle:hover {
-  color: var(--warm, #fbbf24);
-  border-color: var(--warm, #fbbf24);
-}
-
-.v2-dev-footer-pop {
-  position: absolute;
-  bottom: 100%;
-  right: 18px;
-  margin-bottom: 6px;
-  background: rgba(15, 21, 37, 0.96);
-  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.18));
-  border-radius: 8px;
-  padding: 14px;
-  min-width: 240px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-}
-
-.v2-dev-footer-pop-eye {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: var(--warm, #fbbf24);
-  margin-bottom: 6px;
-}
-
-.v2-dev-footer-pop-item {
-  background: transparent;
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
-  color: rgba(255, 255, 255, 0.85);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10px;
-  letter-spacing: 0.6px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  text-align: left;
-  text-decoration: none;
-  display: block;
-}
-
-.v2-dev-footer-pop-item:hover {
-  border-color: var(--warm, #fbbf24);
-  color: var(--warm, #fbbf24);
-}
-
-.v2-dev-footer-pop-item.is-danger {
-  border-color: rgba(220, 76, 43, 0.4);
-  color: #fda594;
-}
-
-.v2-dev-footer-pop-item.is-danger:hover {
-  background: rgba(220, 76, 43, 0.1);
-  border-color: var(--accent, #dc4c2b);
-  color: var(--accent, #dc4c2b);
-}
-
-.v2-dev-footer-pop-meta {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 0.5px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.1));
-}
-
 @media (max-width: 600px) {
   .v2-dev-footer {
     padding: 6px 12px;
     gap: 8px;
   }
-  .v2-dev-footer-meta {
-    display: none;
-  }
 }
 
-/* Justera body-padding så v2-content inte hamnar bakom topbar/footer */
+/* Body-padding så v2-content inte hamnar bakom topbar/footer */
 body.v2-app {
   padding-top: 56px;
   padding-bottom: 36px;
 }
 
-/* === Bug 4 · Företagsläget · indigo accent (matchar prototypens
-       body[data-mode="business"] i /proposals/vol-7/elev.html) === */
-body[data-mode="business"] {
-  --accent-mode: #6366f1;
+/* === V2 form-elements · gemensamma stilar för select/input/textarea === */
+/* Select-fält ska ha mörk bakgrund + ljus text även när öppna.
+   appearance: none stänger av OS-pilen så vi kan rita en själv. */
+.v2-larare-root select,
+.v2-hub-root select,
+body[data-mode] select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: rgba(15, 21, 37, 0.95) !important;
+  color: #fff !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1L6 6L11 1' stroke='rgba(255,255,255,0.5)' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px !important;
 }
-body[data-mode="business"] .v2-topbar {
-  border-bottom-color: rgba(99, 102, 241, 0.35);
-  background: rgba(11, 11, 28, 0.92);
+/* Native option-list — funkar på de flesta moderna browsers (Chrome 105+) */
+.v2-larare-root select option,
+.v2-hub-root select option,
+body[data-mode] select option {
+  background-color: #0f1525;
+  color: #fff;
 }
-body[data-mode="business"] .tb-brand {
-  color: #c7d2fe;
-}
-body[data-mode="business"] .tb-role {
-  background: rgba(99, 102, 241, 0.18);
-  border-color: rgba(99, 102, 241, 0.4);
-  color: #c7d2fe;
-}
-body[data-mode="business"] .v2-hub-root,
-body[data-mode="business"] .v2-larare-root {
-  background:
-    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99, 102, 241, 0.15) 0%, transparent 60%),
-    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168, 85, 247, 0.08) 0%, transparent 60%),
-    linear-gradient(180deg, #0a0e1a 0%, #0d1226 60%, #0a0e1a 100%);
-}
-/* Hide demo-style priv-only / biz-only elements baserat på mode */
-body[data-mode="business"] .priv-only {
-  display: none !important;
-}
-body:not([data-mode="business"]) .biz-only {
-  display: none !important;
+/* Firefox har egen rendering — använd colorscheme för dark options */
+.v2-larare-root select,
+.v2-hub-root select,
+body[data-mode] select {
+  color-scheme: dark;
 }

@@ -2912,8 +2912,12 @@ export const v2Api = {
       `/v2/teacher/students/${studentId}/kompetens/${competencyId}`,
     ),
   // === /v2/teacher/klass-overview (Lärar-hub · Fas 2R) ===
-  teacherKlassOverview: () =>
-    api<V2KlassOverview>("/v2/teacher/klass-overview"),
+  teacherKlassOverview: (classLabel?: string) =>
+    api<V2KlassOverview>(
+      classLabel
+        ? `/v2/teacher/klass-overview?class_label=${encodeURIComponent(classLabel)}`
+        : "/v2/teacher/klass-overview",
+    ),
   // === /v2/teacher/students/{id}/student-detail (Fas 2S) ===
   teacherStudentDetail: (studentId: number) =>
     api<V2TeacherStudentDetail>(
