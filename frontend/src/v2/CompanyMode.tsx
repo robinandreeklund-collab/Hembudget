@@ -10,6 +10,7 @@
  * mönster, men anpassat för React/Vite.
  */
 import { useEffect, useState } from "react";
+import { BizHub } from "./biz/BizHub";
 
 type Mode = "private" | "business";
 
@@ -92,15 +93,14 @@ export function CompanyModeToggle() {
 
 
 /**
- * Coming Soon-panel som visas när mode === "business".
- * Wrappa innehållet i hub-vyer med detta — om mode är business
- * visas Coming Soon, annars renderas children.
+ * Wrapper som visar BizHub när mode === "business" och privatekonomi
+ * children annars. BizHub har egen onboarding-flow om bolag saknas.
  */
 export function CompanyModeWrapper({ children }: { children: React.ReactNode }) {
   const [mode] = useCompanyMode();
 
   if (mode === "business") {
-    return <CompanyComingSoon />;
+    return <BizHub />;
   }
   return <>{children}</>;
 }

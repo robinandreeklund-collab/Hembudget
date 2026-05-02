@@ -24,6 +24,10 @@ import { TeacherClassesV2 } from "./v2/TeacherClassesV2";
 import { TeacherTimeOnTaskV2 } from "./v2/TeacherTimeOnTaskV2";
 import { TeacherRubricsV2 } from "./v2/TeacherRubricsV2";
 import { ModuleViewV2 } from "./v2/ModuleViewV2";
+import {
+  BizBokforing, BizFakturor, BizLon, BizMoms,
+  BizBolagsskatt, BizInstallningar,
+} from "./v2/biz/BizPages";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
 import { AktierV2 } from "./v2/AktierV2";
@@ -330,6 +334,13 @@ export default function App() {
           <Route path="/v2/moduler" element={<ModulerV2 />} />
           {/* Bug #12 · Modul-detalj v2 */}
           <Route path="/v2/moduler/:moduleId" element={<ModuleViewV2 />} />
+          {/* Bug #7-utbyggnad · Företagsläget · 6 vyer */}
+          <Route path="/v2/foretag/bokforing" element={<BizBokforing />} />
+          <Route path="/v2/foretag/fakturor" element={<BizFakturor />} />
+          <Route path="/v2/foretag/lon" element={<BizLon />} />
+          <Route path="/v2/foretag/moms" element={<BizMoms />} />
+          <Route path="/v2/foretag/bolagsskatt" element={<BizBolagsskatt />} />
+          <Route path="/v2/foretag/installningar" element={<BizInstallningar />} />
           <Route path="/v2/simulator" element={<SimulatorV2 />} />
           <Route
             path="/v2/lanekalkylator"
