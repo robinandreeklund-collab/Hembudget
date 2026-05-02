@@ -459,7 +459,73 @@ const MODUL_STEPS: GuideStep[] = [
   },
 ];
 
+// Bug #3 · Lärar-guide · för läraren när hen kommer in i v2-läget
+const TEACHER_INTRO_STEPS: GuideStep[] = [
+  {
+    selector: ".larare-head",
+    route: "/teacher/v2",
+    eye: "Lärare · 1 / 6",
+    h: "Välkommen till <em>lärar-dashboarden</em>.",
+    prose:
+      "Här ser du klassens pentagon i realtid, alla elevers status och senaste händelser. Vi börjar från toppen.",
+    placement: "bottom",
+  },
+  {
+    selector: ".larare-actions",
+    route: "/teacher/v2",
+    eye: "Lärare · 2 / 6",
+    h: "Action-bar · <em>din verktygslåda</em>.",
+    prose:
+      "Skapa elev (eller hela klasser via Klasser-knappen), öppna modulbiblioteket, hantera postlådor, läs reflektioner. Time-on-task och Rubrics finns också.",
+    placement: "bottom",
+  },
+  {
+    selector: "[data-guide='class-pentagon']",
+    route: "/teacher/v2",
+    eye: "Lärare · 3 / 6",
+    h: "Klassens <em>pentagon</em>.",
+    prose:
+      "Snittvärden över klassen per axel. Klicka för att flippa kortet och se topp/botten-elever per dimension. Pilar visar trend senaste veckan.",
+    placement: "right",
+  },
+  {
+    selector: "[data-guide='attn-list']",
+    route: "/teacher/v2",
+    eye: "Lärare · 4 / 6",
+    h: "Action-bar · <em>vad behöver din uppmärksamhet</em>.",
+    prose:
+      "Olästa reflektioner, väntande lönesamtal, elever som behöver feedback. Klicka för att öppna direkt.",
+    placement: "left",
+  },
+  {
+    selector: ".compass-grid",
+    route: "/teacher/v2",
+    eye: "Lärare · 5 / 6",
+    h: "Klassens <em>elever</em>.",
+    prose:
+      "Lista över alla elever med snabb-info: pentagonsnitt, level, senaste aktivitet. Klicka in för fulldetaljer + spelmotor-historik.",
+    placement: "top",
+  },
+  {
+    selector: ".tb-actions",
+    route: "/teacher/v2",
+    eye: "Lärare · 6 / 6",
+    h: "Topbar · <em>dina vardagsfunktioner</em>.",
+    prose:
+      "Notiser, AI-chatt (med dagskvot), guider, logga ut. Allt du behöver är här uppe.",
+    placement: "bottom",
+  },
+];
+
 export const GUIDES: Record<string, GuideDef> = {
+  teacher_intro: {
+    key: "teacher_intro",
+    label: "Lärar-intro · v2",
+    icon: "T",
+    time: "6 steg · 3 min",
+    sub: "Pentagon, action-bar, klass-listan, topbar",
+    steps: TEACHER_INTRO_STEPS,
+  },
   intro: {
     key: "intro",
     label: "Intro till plattformen",

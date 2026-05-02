@@ -25,6 +25,7 @@ import {
 } from "./api";
 import { V2Banner } from "./V2Banner";
 import { KlassPentagonFlipCard } from "./KlassPentagonFlipCard";
+import { useAutoStartTeacherGuide } from "./guides/GuideContext";
 import "./larare.css";
 
 function fmtSEK(n: number | null): string {
@@ -64,6 +65,9 @@ export function TeacherHubV2() {
   const [error, setError] = useState<string | null>(null);
   const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
   const navigate = useNavigate();
+
+  // Bug #3 · Auto-starta lärar-guiden vid första besöket på v2
+  useAutoStartTeacherGuide();
 
   useEffect(() => {
     v2Api

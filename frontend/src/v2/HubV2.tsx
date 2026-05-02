@@ -3,6 +3,7 @@
  * All data hämtas live från /v2/hub-endpointen.
  */
 import { useEffect, useState } from "react";
+import { CompanyModeWrapper } from "./CompanyMode";
 import { Link } from "react-router-dom";
 import { v2Api, type HubData, type V2PentAxis } from "./api";
 import { V2Banner } from "./V2Banner";
@@ -111,6 +112,7 @@ export function HubV2() {
         }}
       />
 
+      <CompanyModeWrapper>
       <div className="hub-shell">
         <header className="hub-head">
           <div>
@@ -528,6 +530,7 @@ export function HubV2() {
         {/* Echo · global AI-chat (visas bara om AI är aktiverad) */}
         <EchoButton context="Hubben — översikt över ekonomin" />
       </div>
+      </CompanyModeWrapper>
     </div>
   );
 }

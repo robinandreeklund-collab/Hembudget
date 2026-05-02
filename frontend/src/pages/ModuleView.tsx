@@ -115,6 +115,22 @@ export default function ModuleView() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Bug #12 · v2-bro · banner som meddelar att v2-design är på väg */}
+      <div
+        style={{
+          background: "linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)",
+          color: "#1a1a1a",
+          padding: "10px 20px",
+          textAlign: "center",
+          fontSize: "0.85rem",
+          fontWeight: 600,
+        }}
+      >
+        Modul-vyer migreras till v2-design successivt.
+        <Link to="/v2/moduler" style={{ marginLeft: 12, color: "#1a1a1a", textDecoration: "underline" }}>
+          → Öppna v2-listan över moduler
+        </Link>
+      </div>
       <div className="max-w-5xl mx-auto p-6 grid md:grid-cols-[280px_1fr] gap-6">
         {/* Sidomeny med alla steg */}
         <aside className="space-y-3">

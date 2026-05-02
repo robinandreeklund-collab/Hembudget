@@ -17,6 +17,7 @@ import { Link, useLocation } from "react-router-dom";
 import { GuideDropdown } from "./guides/GuideDropdown";
 import { NotifBell } from "./NotifBell";
 import { EchoButton } from "./EchoButton";
+import { CompanyModeToggle } from "./CompanyMode";
 import "./topbar.css";
 
 type Status = { role: string; is_super_admin: boolean };
@@ -134,6 +135,8 @@ export function V2Topbar({ status }: { status: Status }) {
       </button>
 
       <div className="tb-actions">
+        {/* Bug #7 · Företag-toggle (flippar dashboard) — bara för elev */}
+        {!isTeacher && <CompanyModeToggle />}
         <GuideDropdown />
         <NotifBell />
         {/* AI-chat alltid synlig i topbar — bug #4. AskAI:s FAB

@@ -3,6 +3,36 @@
  * Matchar /proposals/vol-7/elev.html-prototypen.
  */
 
+/* Bug #7 · Mode-toggle (Privat ↔ Företag) flip-animation */
+.v2-hub-root.flip-out,
+.v2-larare-root.flip-out {
+  animation: flipOut 0.5s cubic-bezier(.7, 0, .8, .3) forwards;
+}
+.v2-hub-root.flip-in,
+.v2-larare-root.flip-in {
+  animation: flipIn 0.5s cubic-bezier(.2, .8, .3, 1) forwards;
+}
+@keyframes flipOut {
+  from { transform: rotateY(0); opacity: 1; }
+  to   { transform: rotateY(90deg); opacity: 0; }
+}
+@keyframes flipIn {
+  from { transform: rotateY(-90deg); opacity: 0; }
+  to   { transform: rotateY(0); opacity: 1; }
+}
+
+/* Business-mode färgöverstyrning */
+body[data-mode="business"] .pill {
+  background: rgba(99,102,241,0.14);
+  color: #c7d2fe;
+  border-color: rgba(99,102,241,0.4);
+}
+body[data-mode="business"] .v2-hub-root,
+body[data-mode="business"] .v2-larare-root {
+  --warm: #818cf8;
+  --warm-soft: #6366f1;
+}
+
 .v2-hub-root {
   --bg-deep: #0a0e1a;
   --bg-mid: #0f1525;

@@ -193,3 +193,26 @@ export function useAutoStartIntroGuide() {
     return () => clearTimeout(t);
   }, [startGuide, isOpen]);
 }
+
+
+// Bug #3 · Lärar-anpassad guide
+const TEACHER_INTRO_DONE_KEY = "v2_teacher_intro_done";
+const TEACHER_INTRO_DISMISSED_KEY = "v2_teacher_intro_dismissed";
+
+export function useAutoStartTeacherGuide() {
+  const { startGuide, isOpen } = useGuide();
+  useEffect(() => {
+    if (isOpen) return;
+    let dismissed = false;
+    let done = false;
+    try {
+      dismissed = localStorage.getItem(TEACHER_INTRO_DISMISSED_KEY) === "1";
+      done = localStorage.getItem(TEACHER_INTRO_DONE_KEY) === "1";
+    } catch {
+      // fail-soft
+    }
+    if (dismissed || done) return;
+    const t = setTimeout(() => startGuide("teacher_intro"), 800);
+    return () => clearTimeout(t);
+  }, [startGuide, isOpen]);
+}
