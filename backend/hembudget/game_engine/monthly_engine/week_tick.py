@@ -300,6 +300,7 @@ def tick_month(
                     year_month=year_month,
                     student_scope=scope_key,
                     rng=random.Random(rng_master.random()),
+                    difficulty_level=starting_level,
                 )
                 pentagon_total = {
                     k: 0 for k in ("economy", "safety", "health", "social", "leisure")
@@ -354,6 +355,7 @@ def tick_month(
                     year_month=year_month,
                     rng=random.Random(rng_master.random()),
                     salary_account=lonekonto,
+                    difficulty_level=starting_level,
                 )
                 summary["health"] = {
                     "episodes": len(health_events),

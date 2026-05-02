@@ -27,6 +27,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ...db.models import Account, MailItem, Transaction
+from ..difficulty import get_difficulty
 from ..pentagon import apply_pentagon_delta
 from ..profile_generator.schema import GeneratedProfile
 
@@ -186,16 +187,23 @@ def _roll_sick_episodes(
     *,
     profile: GeneratedProfile,
     year_month: str,
+    difficulty_level: int = 2,
 ) -> list[tuple[HealthEvent, int]]:
-    """Slumpa sjukperioder för månaden. Returnerar lista av (template, n_days)."""
+    """Slumpa sjukperioder för månaden. Returnerar lista av (template, n_days).
+
+    `difficulty_level` skalar både sannolikheten för sjuk och chansen att
+    sjukperioden blir lång (utbrändhet/rygg).
+    """
+    diff = get_difficulty(difficulty_level)
     month = _ym_month(year_month)
     base_p = P_SICK_PER_MONTH_BASELINE * SEASON_MULT.get(month, 1.0)
     base_p *= _physical_factor(profile.facts.get("physical_demand", 5))
+    base_p *= diff.sick_probability_mult
 
     episodes: list[tuple[HealthEvent, int]] = []
     if rng.random() < base_p:
-        # Lång eller kort?
-        if rng.random() < P_LONG_SICK:
+        long_p = P_LONG_SICK * diff.long_sick_probability_mult
+        if rng.random() < long_p:
             tpl = rng.choice(LONG_SICK_TEMPLATES)
             n_days = rng.randint(21, 45)
         else:
@@ -210,6 +218,7 @@ def _roll_vab_episodes(
     *,
     profile: GeneratedProfile,
     year_month: str,
+    difficulty_level: int = 2,
 ) -> list[tuple[HealthEvent, int]]:
     """Slumpa VAB-tillfällen för månaden om eleven har barn under 12."""
     if profile.family.children_count == 0:
@@ -220,12 +229,13 @@ def _roll_vab_episodes(
     if not young_kids:
         return []
 
+    diff = get_difficulty(difficulty_level)
     month = _ym_month(year_month)
     season = VAB_SEASON_MULT.get(month, 1.0)
 
     episodes: list[tuple[HealthEvent, int]] = []
     for _ in young_kids:
-        p = P_VAB_PER_CHILD_PER_MONTH * season
+        p = P_VAB_PER_CHILD_PER_MONTH * season * diff.vab_probability_mult
         if rng.random() < p:
             tpl = rng.choice(VAB_TEMPLATES)
             n_days = rng.randint(*VAB_DAYS_RANGE)
@@ -469,13 +479,20 @@ def roll_monthly_health_events(
     year_month: str,
     rng: Optional[random.Random] = None,
     salary_account: Optional[Account] = None,
+    difficulty_level: int = 2,
 ) -> list[HealthOccurrence]:
     """Huvudfunktion · slumpa sjuk + VAB för månaden, applicera allt."""
     rng = rng or random.Random(f"{student_scope}|{year_month}|health")
     occurrences: list[HealthOccurrence] = []
 
-    sick = _roll_sick_episodes(rng, profile=profile, year_month=year_month)
-    vab = _roll_vab_episodes(rng, profile=profile, year_month=year_month)
+    sick = _roll_sick_episodes(
+        rng, profile=profile, year_month=year_month,
+        difficulty_level=difficulty_level,
+    )
+    vab = _roll_vab_episodes(
+        rng, profile=profile, year_month=year_month,
+        difficulty_level=difficulty_level,
+    )
 
     for idx, (tpl, n_days) in enumerate(sick + vab):
         try:

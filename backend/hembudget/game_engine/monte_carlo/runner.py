@@ -23,12 +23,16 @@ from dataclasses import dataclass, field
 from statistics import mean, median, stdev
 from typing import Optional
 
+from ..difficulty import get_difficulty
 from ..event_engine.templates import EVENT_TEMPLATES
 from ..health_engine.roller import (
     P_LONG_SICK,
     P_SICK_PER_MONTH_BASELINE,
+    P_VAB_PER_CHILD_PER_MONTH,
     SEASON_MULT,
     SICK_DAYS_RANGE,
+    VAB_DAYS_RANGE,
+    VAB_SEASON_MULT,
     apply_sick_pay_reduction,
 )
 from ..pools.stadspool import STAD_BY_KEY
@@ -101,19 +105,29 @@ class MCResult:
         return vals[idx]
 
 
-def _expected_sick_loss_for_year(
+def _expected_sick_and_vab_loss_for_year(
     profile: GeneratedProfile,
     rng: random.Random,
+    *,
+    difficulty_level: int = 2,
+    n_months: int = 12,
 ) -> int:
-    """Sample sjuk-bortfall över 12 månader."""
+    """Sample sjuk + VAB-bortfall över n månader."""
+    diff = get_difficulty(difficulty_level)
     physical = profile.facts.get("physical_demand", 5)
     physical_mult = 0.7 + (physical / 10) * 0.6
     total_loss = 0
-    for month in range(1, 13):
+
+    young_kids = [a for a in profile.family.children_ages if a < 12]
+
+    for month in range(1, n_months + 1):
+        # Sjuk
         season = SEASON_MULT.get(month, 1.0)
-        p = P_SICK_PER_MONTH_BASELINE * season * physical_mult
+        p = (P_SICK_PER_MONTH_BASELINE * season * physical_mult
+             * diff.sick_probability_mult)
         if rng.random() < p:
-            if rng.random() < P_LONG_SICK:
+            long_p = P_LONG_SICK * diff.long_sick_probability_mult
+            if rng.random() < long_p:
                 n_days = rng.randint(21, 45)
             else:
                 n_days = rng.randint(*SICK_DAYS_RANGE)
@@ -121,22 +135,38 @@ def _expected_sick_loss_for_year(
                 monthly_gross=profile.monthly_gross, sick_days=n_days,
             )
             total_loss += loss
+
+        # VAB
+        vab_season = VAB_SEASON_MULT.get(month, 1.0)
+        for _ in young_kids:
+            p_vab = (P_VAB_PER_CHILD_PER_MONTH * vab_season
+                     * diff.vab_probability_mult)
+            if rng.random() < p_vab:
+                n_days = rng.randint(*VAB_DAYS_RANGE)
+                loss, _ = apply_sick_pay_reduction(
+                    monthly_gross=profile.monthly_gross,
+                    sick_days=n_days, is_vab=True,
+                )
+                total_loss += loss
     return total_loss
 
 
 def _expected_event_impact_for_year(
     profile: GeneratedProfile,
     rng: random.Random,
+    *,
+    difficulty_level: int = 2,
     n_months: int = 12,
 ) -> tuple[int, int]:
     """Sample (cost, income) från event-engine över n månader."""
+    diff = get_difficulty(difficulty_level)
     cost = 0
     income = 0
     age = profile.facts.get("age", 30)
     family_status = profile.family.status
+    max_per_month = diff.max_events_per_month
 
     for _ in range(n_months):
-        # Slumpa events för månaden
         n_triggered = 0
         for tpl in EVENT_TEMPLATES:
             if not tpl.active:
@@ -145,7 +175,7 @@ def _expected_event_impact_for_year(
                 continue
             if tpl.family_status_filter and family_status not in tpl.family_status_filter:
                 continue
-            chance = tpl.frequency_per_year / 12.0
+            chance = (tpl.frequency_per_year / 12.0) * diff.event_frequency_mult
             if rng.random() < chance:
                 lo, hi = tpl.cost_range
                 if lo == hi == 0:
@@ -156,10 +186,10 @@ def _expected_event_impact_for_year(
                 if base < 0:
                     income += -base
                 else:
-                    cost += base
+                    cost += int(base * diff.event_cost_mult)
                 n_triggered += 1
-                if n_triggered >= 3:
-                    break  # max 3 events/månad
+                if n_triggered >= max_per_month:
+                    break
     return cost, income
 
 
@@ -185,6 +215,7 @@ def _simulate_one(config: SimConfig, sim_seed: int) -> Optional[MCSimulation]:
         return None
 
     rng = random.Random(sim_seed * 31)
+    diff = get_difficulty(config.starting_level)
 
     # Inkomst
     annual_net = profile.household_net_monthly * config.n_months
@@ -193,7 +224,7 @@ def _simulate_one(config: SimConfig, sim_seed: int) -> Optional[MCSimulation]:
     # Boende
     annual_housing = profile.housing.monthly_cost * config.n_months
 
-    # Variabel (Konsumentverket × spend_profile)
+    # Variabel (Konsumentverket × spend_profile × difficulty-extra)
     base_var = (
         2_840 +  # mat
         2_140 +  # individuellt övrigt
@@ -203,15 +234,29 @@ def _simulate_one(config: SimConfig, sim_seed: int) -> Optional[MCSimulation]:
     if profile.family.partner_yrke_key:
         base_var = int(base_var * 1.5)
     base_var += profile.family.children_count * 2_500
-    spend_mult = SPEND_MULTIPLIER.get(config.spend_profile, 1.0)
-    annual_variable = int(base_var * spend_mult * config.n_months)
+    base_spend_mult = SPEND_MULTIPLIER.get(config.spend_profile, 1.0)
+    # Amplifiera spreaden runt 1.0 (balanserad)
+    if diff.spend_profile_amplifier != 1.0:
+        spend_mult = 1.0 + (base_spend_mult - 1.0) * diff.spend_profile_amplifier
+    else:
+        spend_mult = base_spend_mult
+    annual_variable = int(
+        base_var * spend_mult * diff.variable_spend_extra_mult
+        * config.n_months
+    )
 
     # Sjuk + VAB
-    sick_loss = _expected_sick_loss_for_year(profile, rng)
+    sick_loss = _expected_sick_and_vab_loss_for_year(
+        profile, rng,
+        difficulty_level=config.starting_level,
+        n_months=config.n_months,
+    )
 
     # Events
     event_cost, event_income = _expected_event_impact_for_year(
-        profile, rng, n_months=config.n_months,
+        profile, rng,
+        difficulty_level=config.starting_level,
+        n_months=config.n_months,
     )
 
     # End balance

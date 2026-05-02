@@ -28,6 +28,7 @@ from ...school.konsumentverket import (
     INDIVID_OVRIGT_PER_AGE,
     MAT_HEMMA_PER_AGE,
 )
+from ..difficulty import get_difficulty
 from ..pools.stadspool import STAD_BY_KEY
 from ..profile_generator.schema import GeneratedProfile
 from .scope_seed import get_or_create_category
@@ -100,8 +101,15 @@ def _plans_for(
     starting_level: int,
 ) -> list[CategoryPlan]:
     """Bygger CategoryPlan-lista för månaden."""
+    from ..difficulty import get_difficulty
     base = _baseline_for_household(profile)
-    mult = SPEND_MULTIPLIER.get(spend_profile, 1.0)
+    base_mult = SPEND_MULTIPLIER.get(spend_profile, 1.0)
+    # Difficulty-amplifiering av spend-profile-spread
+    diff = get_difficulty(starting_level)
+    if diff.spend_profile_amplifier != 1.0:
+        mult = 1.0 + (base_mult - 1.0) * diff.spend_profile_amplifier
+    else:
+        mult = base_mult
     variation = VARIATION_PER_LEVEL.get(starting_level, 0.10)
     city = STAD_BY_KEY.get(profile.city_key)
     food_mult = city.cost_multiplier_food if city else 1.0
@@ -218,6 +226,20 @@ def generate_variable_expenses(
     rng = rng or random.Random(f"{student_scope}|{year_month}|var")
 
     plans = _plans_for(rng, profile, spend_profile, starting_level)
+    # Difficulty-extra-multiplikator (Fas 8b): nivå 3 har högre
+    # impulsköp + småutgifter eleven inte planerar för
+    diff = get_difficulty(starting_level)
+    if diff.variable_spend_extra_mult != 1.0:
+        plans = [
+            type(p)(
+                name=p.name,
+                monthly_amount=int(p.monthly_amount * diff.variable_spend_extra_mult),
+                n_transactions=p.n_transactions,
+                merchants=p.merchants,
+                cost_mult_kind=p.cost_mult_kind,
+            )
+            for p in plans
+        ]
 
     y, m = map(int, year_month.split("-"))
     # Beräkna antal dagar i månaden (förenklat: sista dag i ms_to_date)

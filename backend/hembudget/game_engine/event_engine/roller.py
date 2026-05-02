@@ -26,6 +26,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ...db.models import InsuranceClaim, InsurancePolicy, MailItem
+from ..difficulty import DifficultyProfile, get_difficulty
 from ..profile_generator.schema import GeneratedProfile
 from .mitigation import MitigationResult, apply_mitigation
 from .templates import EVENT_BY_KEY, EVENT_TEMPLATES, EventTemplate
@@ -203,13 +204,19 @@ def apply_event(
     student_scope: str,
     rng: random.Random,
     base_cost_override: Optional[int] = None,
+    difficulty_level: int = 2,
 ) -> EventOccurrence:
     """Applicera ETT event för en elev i en spelmånad.
 
     Används både av roller (slumpade events) och av lärar-injektionen
     (manuellt valda events). `base_cost_override` tillåter läraren att
     sätta exakt belopp.
+
+    `difficulty_level` (1-3) skalar utgifts-events: nivå 3 = dyrare
+    tandläkare/vattenskada. Inkomst-events oförändrade.
     """
+    diff = get_difficulty(difficulty_level)
+
     # Slumpa kostnad
     if base_cost_override is not None:
         base_cost = base_cost_override
@@ -221,6 +228,10 @@ def apply_event(
         if lo > hi:
             lo, hi = hi, lo
         base_cost = rng.randint(lo, hi)
+        # Difficulty-skalning för utgifter (positiva belopp).
+        # Inkomster (negativa) behålls oförändrade.
+        if base_cost > 0 and diff.event_cost_mult != 1.0:
+            base_cost = int(base_cost * diff.event_cost_mult)
 
     # Lookup elevens policys + buffer
     policies = s.query(InsurancePolicy).all()
@@ -271,22 +282,29 @@ def roll_monthly_events(
     year_month: str,
     student_scope: str,
     rng: Optional[random.Random] = None,
-    max_events: int = MAX_EVENTS_PER_MONTH,
+    max_events: Optional[int] = None,
+    difficulty_level: int = 2,
 ) -> list[EventOccurrence]:
     """Slumpa vilka events som triggas och applicera dem.
 
     Algoritm:
       1. Filtrera till profil-matchande templates
-      2. Per template: trigger om rng.random() < (frequency/12)
+      2. Per template: trigger om rng.random() < (frequency/12 × diff-mult)
       3. Klamp totalt antal till max_events (sortera efter
          pentagon_unmitigated.economy abs så största händelser prioriteras)
+
+    `difficulty_level` skalar både frekvens (event_frequency_mult) och
+    cap (max_events_per_month). Default 2 = neutralt baseline.
     """
     rng = rng or random.Random(f"{student_scope}|{year_month}|events")
+    diff = get_difficulty(difficulty_level)
+    if max_events is None:
+        max_events = diff.max_events_per_month
     eligible = _eligible_templates(profile)
 
     triggered: list[EventTemplate] = []
     for t in eligible:
-        chance = t.frequency_per_year / 12.0
+        chance = (t.frequency_per_year / 12.0) * diff.event_frequency_mult
         if rng.random() < chance:
             triggered.append(t)
 
@@ -308,6 +326,7 @@ def roll_monthly_events(
                 year_month=year_month,
                 student_scope=student_scope,
                 rng=rng,
+                difficulty_level=difficulty_level,
             )
             occurrences.append(occ)
         except Exception:
