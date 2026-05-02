@@ -9,7 +9,8 @@
  *   4. .mail-tabs · Allt / Ohanterade / Fakturor / Lönespecar /
  *      Myndighet / Övrigt (med count-badge)
  *   5. .mail-list · alla brev som rader (dot+ikon+from+subject+
- *      amount+due+status). Klick markerar som "viewed".
+ *      amount+due+status). Klick navigerar till /v2/postladan/{id}
+ *      som öppnar mail-detail (backend markerar viewed där).
  *   6. .peda · pedagogik-block
  *
  * All data live från /v2/postladan.
@@ -104,27 +105,12 @@ export function PostladanV2() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  async function openMail(item: V2MailItem) {
-    // För kreditkortsfaktura och lönespec → öppna detalj-vy.
-    // För övrigt — bara markera viewed.
-    if (
-      item.mail_type === "invoice" && item.sender_kind === "cred"
-    ) {
-      navigate(`/v2/postladan/${item.id}`);
-      return;
-    }
-    if (item.mail_type === "salary_slip") {
-      navigate(`/v2/postladan/${item.id}`);
-      return;
-    }
-    if (item.status === "unhandled") {
-      try {
-        await v2Api.updateMailStatus(item.id, "viewed");
-        load(tab);
-      } catch {
-        /* fail-soft */
-      }
-    }
+  function openMail(item: V2MailItem) {
+    // ALLA brev öppnas i detalj-vy. Status sätts till "viewed" av
+    // /postladan/{id}/detail när detalj-sidan laddas — inte här,
+    // för då skulle "klicka i listan" markera som hanterad utan
+    // att eleven ens läst brevet.
+    navigate(`/v2/postladan/${item.id}`);
   }
 
   if (error) {
