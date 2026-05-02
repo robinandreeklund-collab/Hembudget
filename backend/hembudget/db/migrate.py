@@ -723,4 +723,150 @@ def run_migrations(engine: Engine) -> list[str]:
                 _add_column(engine, "companies", col_sql)
                 applied.append(f"companies.{col_name}")
 
+    # === V2 Postlådan · MailItem-kolumner ===
+    # Bug-fix: tabellen mail_items skapades initialt med bara
+    # `sender + mail_type + subject + amount + due_date + status` —
+    # senare utbyggnader (sender_short, sender_kind, sender_meta,
+    # body_meta, body, upcoming_id, transaction_id, is_recurring,
+    # ocr_reference, bankgiro, notes) lades på modellen MEN
+    # ALTER TABLE saknades. Resultat: tick_month kraschade i prod-Postgres
+    # vid INSERT INTO mail_items.
+    if _table_exists(engine, "mail_items"):
+        mail_cols = _columns(engine, "mail_items")
+        mail_columns = [
+            ("sender_short", "sender_short VARCHAR(8)"),
+            (
+                "sender_kind",
+                "sender_kind VARCHAR(20) NOT NULL DEFAULT 'other'",
+            ),
+            ("sender_meta", "sender_meta VARCHAR(200)"),
+            ("body_meta", "body_meta TEXT"),
+            ("body", "body TEXT"),
+            (
+                "upcoming_id",
+                "upcoming_id INTEGER REFERENCES upcoming_transactions(id)",
+            ),
+            (
+                "transaction_id",
+                "transaction_id INTEGER REFERENCES transactions(id)",
+            ),
+            (
+                "is_recurring",
+                "is_recurring BOOLEAN NOT NULL DEFAULT 0",
+            ),
+            ("ocr_reference", "ocr_reference VARCHAR(40)"),
+            ("bankgiro", "bankgiro VARCHAR(20)"),
+            ("notes", "notes TEXT"),
+        ]
+        for col_name, col_sql in mail_columns:
+            if col_name not in mail_cols:
+                _add_column(engine, "mail_items", col_sql)
+                applied.append(f"mail_items.{col_name}")
+
+    # === Generisk auto-migration · saknade NULLABLE-kolumner ===
+    # Säkerhetsnät för framtiden: jämför varje scope-tabell mot
+    # SQLAlchemy-modellens kolumner. För kolumner som finns i modellen
+    # men SAKNAS i DB:n och är NULLABLE → ADD COLUMN automatiskt.
+    # Detta fångar buggar som mail_items.sender_meta innan de når prod.
+    #
+    # SÄKERT: bara nullable-kolumner läggs till. NOT NULL-kolumner kräver
+    # explicit migration med DEFAULT (skippas tyst — fixaren får göra det
+    # manuellt).
+    auto_applied = _auto_add_nullable_columns(engine)
+    applied.extend(auto_applied)
+
+    return applied
+
+
+def _auto_add_nullable_columns(engine: Engine) -> list[str]:
+    """Auto-migration för saknade nullable-kolumner i scope-tabeller.
+
+    Scannar alla TenantMixin-tabeller och lägger till kolumner som finns
+    i modellen men saknas i DB-schemat. Endast nullable-kolumner — NOT
+    NULL kräver explicit migration med säker DEFAULT.
+
+    Säkert att köra på varje uppstart. Idempotent.
+    """
+    from sqlalchemy import inspect as _inspect
+    from .base import Base, TenantMixin
+    # Triggera registrering av modeller om inte gjort
+    from . import models as _m  # noqa: F401
+    try:
+        from ..business import models as _bm  # noqa: F401
+    except Exception:
+        pass
+
+    applied: list[str] = []
+    inspector = _inspect(engine)
+
+    is_postgres = engine.dialect.name == "postgresql"
+
+    for table in Base.metadata.sorted_tables:
+        # Bara TenantMixin-tabeller (scope-DB)
+        model_class = next(
+            (
+                c for c in Base.registry.mappers
+                if c.local_table is table
+            ),
+            None,
+        )
+        if model_class is None or not issubclass(
+            model_class.class_, TenantMixin,
+        ):
+            continue
+
+        if not _table_exists(engine, table.name):
+            continue
+
+        existing_cols = _columns(engine, table.name)
+
+        for column in table.columns:
+            if column.name in existing_cols:
+                continue
+            # Bara säkra kolumner: nullable + ej PK
+            if column.primary_key:
+                continue
+            if not column.nullable:
+                # NOT NULL utan DEFAULT kräver explicit migration
+                if column.default is None and column.server_default is None:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "auto-migration: skippar %s.%s (NOT NULL utan "
+                        "DEFAULT — kräver explicit migration)",
+                        table.name, column.name,
+                    )
+                    continue
+
+            # Bygg ALTER TABLE-syntax
+            col_type = column.type.compile(dialect=engine.dialect)
+            null_clause = "" if column.nullable else " NOT NULL"
+            default_clause = ""
+            if column.server_default is not None:
+                default_clause = f" DEFAULT {column.server_default.arg}"
+            elif column.default is not None and column.default.is_scalar:
+                v = column.default.arg
+                if isinstance(v, bool):
+                    default_clause = (
+                        f" DEFAULT {'TRUE' if v else 'FALSE'}"
+                        if is_postgres else f" DEFAULT {1 if v else 0}"
+                    )
+                elif isinstance(v, (int, float)):
+                    default_clause = f" DEFAULT {v}"
+                elif isinstance(v, str):
+                    default_clause = f" DEFAULT '{v}'"
+
+            col_sql = (
+                f"{column.name} {col_type}{default_clause}{null_clause}"
+            )
+            try:
+                _add_column(engine, table.name, col_sql)
+                applied.append(f"{table.name}.{column.name} (auto)")
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "auto-migration: kunde inte lägga till %s.%s "
+                    "(SQL: %s)",
+                    table.name, column.name, col_sql,
+                )
+
     return applied
