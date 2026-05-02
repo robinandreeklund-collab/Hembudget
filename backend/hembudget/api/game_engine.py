@@ -45,6 +45,7 @@ from ..school.engines import (
 )
 from ..school.game_engine_models import (
     ClassCalendar,
+    SchoolClass,
     WeekTickRun,
     WellbeingEvent,
     compute_current_sim_year_month,
@@ -842,3 +843,158 @@ def monte_carlo(
     )
     res = run_simulations(cfg)
     return summarize(res)
+
+
+# === Bug #1 · Lärar-klasser CRUD ===
+
+
+class SchoolClassOut(BaseModel):
+    id: int
+    label: str
+    display_name: Optional[str]
+    description: Optional[str]
+    is_archived: bool
+    student_count: int
+    created_at: datetime
+
+
+class SchoolClassIn(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+    display_name: Optional[str] = Field(default=None, max_length=160)
+    description: Optional[str] = None
+
+
+class SchoolClassPatchIn(BaseModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=60)
+    display_name: Optional[str] = Field(default=None, max_length=160)
+    description: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+
+@router.get("/classes", response_model=list[SchoolClassOut])
+def list_classes(info: TokenInfo = Depends(require_teacher)):
+    """Lista lärarens alla klasser med elev-antal."""
+    with master_session() as s:
+        rows = (
+            s.query(SchoolClass)
+            .filter(SchoolClass.teacher_id == info.teacher_id)
+            .order_by(SchoolClass.is_archived, SchoolClass.label)
+            .all()
+        )
+        out = []
+        for r in rows:
+            n = (
+                s.query(Student)
+                .filter(
+                    Student.teacher_id == info.teacher_id,
+                    Student.class_label == r.label,
+                )
+                .count()
+            )
+            out.append(SchoolClassOut(
+                id=r.id, label=r.label, display_name=r.display_name,
+                description=r.description, is_archived=r.is_archived,
+                student_count=n, created_at=r.created_at,
+            ))
+        return out
+
+
+@router.post("/classes", response_model=SchoolClassOut)
+def create_class(
+    body: SchoolClassIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    with master_session() as s:
+        existing = (
+            s.query(SchoolClass)
+            .filter(
+                SchoolClass.teacher_id == info.teacher_id,
+                SchoolClass.label == body.label,
+            )
+            .one_or_none()
+        )
+        if existing is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Klass '{body.label}' finns redan.",
+            )
+        cls = SchoolClass(
+            teacher_id=info.teacher_id,
+            label=body.label,
+            display_name=body.display_name,
+            description=body.description,
+        )
+        s.add(cls)
+        s.commit()
+        s.refresh(cls)
+        return SchoolClassOut(
+            id=cls.id, label=cls.label, display_name=cls.display_name,
+            description=cls.description, is_archived=cls.is_archived,
+            student_count=0, created_at=cls.created_at,
+        )
+
+
+@router.patch("/classes/{class_id}", response_model=SchoolClassOut)
+def patch_class(
+    class_id: int,
+    body: SchoolClassPatchIn,
+    info: TokenInfo = Depends(require_teacher),
+):
+    with master_session() as s:
+        cls = s.get(SchoolClass, class_id)
+        if cls is None or cls.teacher_id != info.teacher_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Klass saknas.")
+
+        if body.label is not None and body.label != cls.label:
+            # Uppdatera även Student.class_label på alla elever som hade
+            # gamla labeln så data inte tappas
+            old = cls.label
+            students = (
+                s.query(Student)
+                .filter(
+                    Student.teacher_id == info.teacher_id,
+                    Student.class_label == old,
+                )
+                .all()
+            )
+            for stu in students:
+                stu.class_label = body.label
+            cls.label = body.label
+
+        if body.display_name is not None:
+            cls.display_name = body.display_name
+        if body.description is not None:
+            cls.description = body.description
+        if body.is_archived is not None:
+            cls.is_archived = body.is_archived
+        s.commit()
+        s.refresh(cls)
+        n = (
+            s.query(Student)
+            .filter(
+                Student.teacher_id == info.teacher_id,
+                Student.class_label == cls.label,
+            )
+            .count()
+        )
+        return SchoolClassOut(
+            id=cls.id, label=cls.label, display_name=cls.display_name,
+            description=cls.description, is_archived=cls.is_archived,
+            student_count=n, created_at=cls.created_at,
+        )
+
+
+@router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_class(
+    class_id: int,
+    info: TokenInfo = Depends(require_teacher),
+):
+    """Radera klass. Eleverna behåller class_label-strängen som
+    text-historik (ingen FK), men klassen försvinner från dropdown."""
+    with master_session() as s:
+        cls = s.get(SchoolClass, class_id)
+        if cls is None or cls.teacher_id != info.teacher_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Klass saknas.")
+        s.delete(cls)
+        s.commit()
+    return None

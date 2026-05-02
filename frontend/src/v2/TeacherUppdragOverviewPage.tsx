@@ -301,11 +301,11 @@ export function TeacherUppdragOverviewPage() {
             </div>
             <div className="side-card">
               <div className="side-card-eye">Skapa nytt uppdrag</div>
-              <div className="side-card-h">Lärar-dashboard</div>
+              <div className="side-card-h">Per elev → Skicka uppdrag</div>
               <div className="side-card-meta">
-                Nya uppdrag skapas via lärar-dashboarden i v1. v2:s
-                lärar-vy fokuserar på spårning. Skapa-flödet flyttas
-                successivt.
+                Klicka in på en elev från klass-listan och använd knappen{" "}
+                <strong>Skicka uppdrag</strong> uppe till höger på elev-detalj-vyn.
+                Uppdraget visas i elevens postlåda och spåras här.
               </div>
             </div>
           </aside>

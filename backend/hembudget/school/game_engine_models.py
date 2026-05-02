@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -148,6 +149,38 @@ class WeekTickRun(MasterBase):
     )
 
     student: Mapped[Student] = relationship()
+
+
+class SchoolClass(MasterBase):
+    """Bug #1 · Lärare kan skapa klasser så att elev-creation kan välja
+    från dropdown istället för fritext.
+
+    En lärare kan ha flera klasser (t.ex. "8A", "9B", "Vux21"). När en
+    lärare loggar in kan hen växla mellan klasser i sin dashboard.
+    Elever kan tillhöra max en klass åt gången via Student.class_label
+    (sträng-koppling, inte FK, för bakåt-kompatibilitet).
+    """
+    __tablename__ = "school_classes"
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "label", name="uq_school_class_teacher_label"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    label: Mapped[str] = mapped_column(String(60), nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(
+        String(160), nullable=True,
+    )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+    teacher: Mapped[Teacher] = relationship()
 
 
 class WellbeingEvent(MasterBase):
