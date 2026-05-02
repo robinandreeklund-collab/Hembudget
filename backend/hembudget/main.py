@@ -17,9 +17,9 @@ faulthandler.enable()
 from .api import (
     admin, ai, ai_admin, arbetsformedlingen, auth, backup, balances, bank,
     boendemarknad, budget, chat, credit, elpris, email_auth, employer,
-    funds, game_engine, landing, ledger, loans, modules, reports,
-    scenarios, school, settings_kv, smtp_admin, stock_trading, stocks,
-    tax, events, teacher_credit, teacher_employer, teacher_stocks,
+    foretag, funds, game_engine, landing, ledger, loans, modules,
+    reports, scenarios, school, settings_kv, smtp_admin, stock_trading,
+    stocks, tax, events, teacher_credit, teacher_employer, teacher_stocks,
     teacher_wellbeing, transactions, transfers, upcoming, upload,
     utility, v2, wellbeing,
 )
@@ -191,6 +191,8 @@ def build_app() -> FastAPI:
     # Arbetsförmedlingen (Sprint 6 · A1-A5): jobs + 5-rond intervju.
     app.include_router(arbetsformedlingen.router)
     app.include_router(arbetsformedlingen.teacher_router)
+    # Företagsläget (Bug #7-utbyggnad): bolag + transaktioner + lön + moms.
+    app.include_router(foretag.router)
 
     @app.get("/healthz")
     def healthz() -> dict:

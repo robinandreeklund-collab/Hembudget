@@ -1818,6 +1818,11 @@ class ActiveHome(TenantMixin, Base):
     )
 
 
+# Bug #7-utbyggnad · Företagsläget (scope-DB)
+# Importerad här så Base.metadata.create_all hittar tabellerna.
+from ..business import models as _business_models  # noqa: E402, F401
+
+
 def create_all() -> None:
     from .base import get_engine
 
