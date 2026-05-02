@@ -1956,6 +1956,7 @@ export type V2CreateStudentIn = {
   starting_level?: number;
   guardian_email?: string;
   family_id?: number | null;
+  class_label?: string;  // Bug #1 · klasskoppling
 };
 
 export type V2CreatedStudentRow = {

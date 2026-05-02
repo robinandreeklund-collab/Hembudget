@@ -345,6 +345,10 @@ function CreateForm({
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastInitial, setLastInitial] = useState("");
+  const [classLabel, setClassLabel] = useState<string>("");
+  const [classes, setClasses] = useState<Array<{
+    id: number; label: string; display_name: string | null; student_count: number;
+  }>>([]);
   const [archetype, setArchetype] = useState<V2CharacterArchetype>("random");
   const [partnerModel, setPartnerModel] = useState<
     "auto" | "solo" | "ai" | "klasskompis"
@@ -357,6 +361,16 @@ function CreateForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Bug #1 · hämta lärarens klasser för dropdown
+  useEffect(() => {
+    fetch("/v2/teacher/classes", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setClasses)
+      .catch(() => undefined);
+  }, []);
+
   async function submit() {
     if (submitting || firstName.trim().length === 0) return;
     setSubmitting(true);
@@ -368,6 +382,7 @@ function CreateForm({
         archetype,
         starting_level: startingLevel,
         guardian_email: guardianEmail.trim() || undefined,
+        class_label: classLabel.trim() || undefined,
       };
       if (spendProfile !== "auto") {
         payload.spend_profile = spendProfile;
@@ -494,6 +509,31 @@ function CreateForm({
             placeholder="förälder@exempel.se"
             style={inputStyle()}
           />
+        </FormField>
+        <FormField label="Klass">
+          {classes.length > 0 ? (
+            <select
+              value={classLabel}
+              onChange={(e) => setClassLabel(e.target.value)}
+              style={inputStyle()}
+            >
+              <option value="">— välj klass —</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.label}>
+                  {c.label}
+                  {c.display_name ? ` · ${c.display_name}` : ""}
+                  {" "}({c.student_count} elever)
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={classLabel}
+              onChange={(e) => setClassLabel(e.target.value)}
+              placeholder="ex: 8A (skapa via Klasser-vyn)"
+              style={inputStyle()}
+            />
+          )}
         </FormField>
         <FormField label="Startnivå">
           <select

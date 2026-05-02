@@ -97,6 +97,10 @@ export function PostladanV2() {
 
   useEffect(() => {
     load(tab);
+    // Bug #14 + #15 · Realtid via polling var 15:e sekund.
+    // Lärar-postlådan-injection och nya brev syns automatiskt.
+    const interval = setInterval(() => load(tab), 15000);
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 

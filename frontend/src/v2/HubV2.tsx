@@ -18,6 +18,8 @@ export function HubV2() {
   const [hub, setHub] = useState<HubData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
+  // Bug #14 · brev-räknare på Postlådan-länken
+  const [mailUnread, setMailUnread] = useState<number>(0);
 
   // Auto-starta intro-guide om eleven inte sett den (efter onboarding)
   useAutoStartIntroGuide();
@@ -27,6 +29,19 @@ export function HubV2() {
       .hub()
       .then(setHub)
       .catch((e) => setError(String((e as Error)?.message || e)));
+  }, []);
+
+  // Bug #14 · ohanterade brev (poll var 15:e sek för realtid)
+  useEffect(() => {
+    const fetchMail = () => {
+      v2Api
+        .postladan("unhandled")
+        .then((d) => setMailUnread(d.summary?.total_count || 0))
+        .catch(() => undefined);
+    };
+    fetchMail();
+    const t = setInterval(fetchMail, 15000);
+    return () => clearInterval(t);
   }, []);
 
   if (error) {
@@ -351,13 +366,39 @@ export function HubV2() {
               style={{
                 background: "rgba(220,76,43,0.08)",
                 borderColor: "rgba(220,76,43,0.4)",
+                position: "relative",
               }}
             >
+              {mailUnread > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    background: "var(--accent, #dc4c2b)",
+                    color: "#fff",
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: 100,
+                    minWidth: 22,
+                    textAlign: "center",
+                  }}
+                  title={`${mailUnread} ohanterade brev`}
+                >
+                  {mailUnread}
+                </span>
+              )}
               <div className="compass-node-eye" style={{ color: "var(--warm)" }}>
                 Meta
               </div>
               <div className="compass-node-name">Postlådan</div>
-              <div className="compass-node-val">brev som landar</div>
+              <div className="compass-node-val">
+                {mailUnread > 0
+                  ? `${mailUnread} ohanterade brev`
+                  : "brev som landar"}
+              </div>
             </Link>
             <Link to="/v2/banken" className="compass-node">
               <div className="compass-node-eye">Aktör 01</div>

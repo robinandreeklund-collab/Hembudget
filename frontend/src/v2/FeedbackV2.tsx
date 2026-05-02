@@ -59,6 +59,10 @@ export function FeedbackV2() {
 
   useEffect(() => {
     refresh();
+    // Bug #15 · realtids-poll var 15:e sek så nya meddelanden från
+    // läraren syns utan reload
+    const t = setInterval(refresh, 15000);
+    return () => clearInterval(t);
   }, []);
 
   // Markera unread items synliga i nuvarande filter som lästa via

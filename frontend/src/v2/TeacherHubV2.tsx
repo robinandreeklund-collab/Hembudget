@@ -128,6 +128,16 @@ export function TeacherHubV2() {
               <Link to="/teacher/v2/reflektioner" className="larare-tb-btn">
                 Reflektioner
               </Link>
+              <Link to="/teacher/v2/klasser" className="larare-tb-btn">
+                Klasser
+              </Link>
+              {/* Bug #16, #17 · v1-broar tills v2-design är migrerad */}
+              <Link to="/teacher/time-on-task" className="larare-tb-btn" title="Visas i v1-design tills v2-migrering är klar">
+                Time-on-task
+              </Link>
+              <Link to="/teacher/rubrics" className="larare-tb-btn" title="Visas i v1-design tills v2-migrering är klar">
+                Rubrics
+              </Link>
               <Link to="/teacher/v2/roster" className="larare-tb-btn">
                 v2-roster
               </Link>
