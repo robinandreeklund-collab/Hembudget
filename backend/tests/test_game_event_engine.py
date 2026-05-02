@@ -255,8 +255,10 @@ class TestRolling:
                     occs = roll_monthly_events(
                         s, profile=profile,
                         year_month=ym, student_scope=scope_key,
+                        difficulty_level=2,  # default = 4 events/månad cap
                     )
-                    assert len(occs) <= 3
+                    # Default difficulty 2 har max_events_per_month=4
+                    assert len(occs) <= 4
                     s.rollback()
 
     def test_family_filter_respected(self, fx):

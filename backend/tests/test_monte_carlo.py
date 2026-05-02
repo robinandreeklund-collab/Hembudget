@@ -46,20 +46,22 @@ class TestRunner:
         total = cls["positive"] + cls["marginal"] + cls["negative"]
         assert total == s["n_completed"]
 
-    def test_higher_level_has_more_savings(self, fx):
-        """Nivå 3 har högre lön → mer kvar i slutet av året."""
+    def test_higher_level_lower_positive_pct(self, fx):
+        """Efter Fas 8b-kalibrering: nivå 3 är HÅRDARE än nivå 1.
+        Nivå 3 har fler dyra events + mer sjuk + större spend-spread.
+        Förväntat: nivå 3 har lägre positive_pct än nivå 1 vid samma spend."""
         from hembudget.game_engine.monte_carlo import (
             SimConfig, run_simulations, summarize,
         )
         cfg1 = SimConfig(
-            n_simulations=200, starting_level=1, spend_profile="sparsam",
+            n_simulations=300, starting_level=1, spend_profile="balanserad",
         )
         cfg3 = SimConfig(
-            n_simulations=200, starting_level=3, spend_profile="sparsam",
+            n_simulations=300, starting_level=3, spend_profile="balanserad",
         )
         s1 = summarize(run_simulations(cfg1))
         s3 = summarize(run_simulations(cfg3))
-        assert s3["end_balance"]["median"] > s1["end_balance"]["median"]
+        assert s1["classification"]["positive_pct"] > s3["classification"]["positive_pct"]
 
     def test_slosa_worse_than_sparsam(self, fx):
         """Slösa-profil ska ha lägre median än sparsam vid samma nivå."""
