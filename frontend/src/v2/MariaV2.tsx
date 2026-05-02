@@ -403,6 +403,64 @@ export function MariaV2() {
                     </button>
                   </div>
                 )}
+
+              {/* Bug #8 · 'Acceptera bud'-knapp som v1 hade */}
+              {active.status === "active" && active.rounds.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 14,
+                    background: "rgba(110,231,183,0.06)",
+                    border: "1px solid rgba(110,231,183,0.25)",
+                    borderRadius: 10,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: "0.9rem" }}>
+                    Nöjd med Marias senaste bud? Avsluta förhandlingen och
+                    aktivera nya lönen från nästa månads lönespec.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm("Acceptera senaste bud och avsluta förhandlingen?")) return;
+                      try {
+                        const r = await fetch(
+                          `/employer/negotiation/${active.id}/complete`,
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}`,
+                            },
+                            body: JSON.stringify({ accept_offer: true }),
+                          },
+                        );
+                        if (r.ok) {
+                          window.location.reload();
+                        } else {
+                          alert(`Fel: ${await r.text()}`);
+                        }
+                      } catch (e) {
+                        alert(`Fel: ${String((e as Error).message || e)}`);
+                      }
+                    }}
+                    style={{
+                      background: "#34d399",
+                      color: "#0a3326",
+                      padding: "10px 20px",
+                      border: "none",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Acceptera bud →
+                  </button>
+                </div>
+              )}
               {active.status !== "active" && (
                 <div
                   style={{

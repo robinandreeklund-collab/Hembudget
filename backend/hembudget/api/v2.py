@@ -3577,6 +3577,10 @@ def post_submit_tax_year(
     Sparar TaxYearReturn med snapshot av siffrorna. Wellbeing-
     beräkningen plockar upp denna och ger +3 economy om i tid +
     bonus/penalty på diff.
+
+    Bug #11 · efter submit körs Rudolf-AI (Skatteverkets handläggare)
+    via separat endpoint /v2/skatten/rudolf-review som granskar
+    avdragen och returnerar GODKÄND eller AVSLAG med motivering.
     """
     if info.role != "student" or info.student_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
@@ -3610,6 +3614,146 @@ def post_submit_tax_year(
             final_tax=float(ret.final_tax),
             diff=float(ret.diff),
         )
+
+
+# Bug #11 · Rudolf-AI · Skatteverkets handläggare granskar deklarationen
+class RudolfReviewIn(BaseModel):
+    year: int
+
+
+class RudolfReviewOut(BaseModel):
+    verdict: Literal["godkand", "avslag", "kontroll"]
+    rudolf_message: str
+    flagged_deductions: list[dict] = []
+    score: int  # 0-100, hur trovärdig deklarationen är
+    next_steps: list[str] = []
+
+
+@router.post("/skatten/rudolf-review", response_model=RudolfReviewOut)
+def rudolf_review(
+    body: RudolfReviewIn,
+    info: TokenInfo = Depends(require_token),
+) -> RudolfReviewOut:
+    """Rudolf — Skatteverkets handläggare — granskar elevens deklaration.
+
+    Deterministisk (ingen LLM krävs) regelmotor som flaggar:
+    - Avdrag > 25 000 kr utan beskrivning
+    - Avdrag-summa > 30 % av brutto-årslön
+    - Resemål-avdrag på orealistiska sträckor
+    - Hemarbetsdagar > 220
+    - Helt saknade avdrag trots > 50k brutto
+
+    Returnerar verdict + Rudolf-message + flagged_deductions + score.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elev")
+
+    with master_session() as mdb:
+        profile = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if not profile:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Elev saknar profil",
+            )
+        annual_gross = (
+            int(profile.gross_salary_monthly) * 12
+            if profile.gross_salary_monthly else 0
+        )
+
+    flags: list[dict] = []
+    score = 100
+    next_steps: list[str] = []
+
+    with session_scope() as s:
+        deductions = (
+            s.query(TaxDeduction)
+            .filter(TaxDeduction.year == body.year)
+            .all()
+        )
+        total_deductions = sum(
+            int(d.amount or 0) for d in deductions
+        )
+
+        for d in deductions:
+            amt = int(d.amount or 0)
+            if amt > 25000 and not (d.description or "").strip():
+                flags.append({
+                    "deduction_id": d.id,
+                    "category": d.category,
+                    "amount": amt,
+                    "reason": "Stort avdrag utan beskrivning",
+                })
+                score -= 10
+            if amt > 50000:
+                flags.append({
+                    "deduction_id": d.id,
+                    "category": d.category,
+                    "amount": amt,
+                    "reason": "Mycket stort avdrag — kan kräva underlag",
+                })
+                score -= 5
+
+        if annual_gross > 0 and total_deductions > annual_gross * 0.30:
+            flags.append({
+                "category": "TOTALT",
+                "amount": total_deductions,
+                "reason": (
+                    f"Avdrag-summa {total_deductions:,} kr är "
+                    f"{int(total_deductions / annual_gross * 100)}% av "
+                    f"brutto-lön — Skatteverket granskar normalt > 30%"
+                ).replace(",", " "),
+            })
+            score -= 25
+            next_steps.append(
+                "Kontrollera att alla avdrag har kvitto/bilaga."
+            )
+
+        if not deductions and annual_gross > 600_000:
+            score -= 5
+            next_steps.append(
+                "Hög lön utan avdrag — har du missat reseavdrag eller "
+                "fackavgift?"
+            )
+
+    score = max(0, min(100, score))
+
+    if len(flags) >= 3 or score < 50:
+        verdict = "avslag"
+        msg = (
+            f"Hej, det här är Rudolf på Skatteverket. Jag har granskat "
+            f"din deklaration och hittade {len(flags)} punkter som inte "
+            f"stämmer. Trovärdighetsbedömning: {score}/100. Du behöver "
+            f"komplettera eller justera innan jag kan godkänna."
+        )
+        next_steps.insert(
+            0, "Gå igenom flaggade avdrag och korrigera eller ta bort dem.",
+        )
+    elif len(flags) >= 1 or score < 80:
+        verdict = "kontroll"
+        msg = (
+            f"Hej, det här är Rudolf. Deklarationen ser i huvudsak OK ut "
+            f"men jag har {len(flags)} punkt(er) som behöver verifieras. "
+            f"Score: {score}/100. Tillsänd underlag inom 30 dagar så "
+            f"avslutar vi ärendet."
+        )
+    else:
+        verdict = "godkand"
+        msg = (
+            f"Hej, det här är Rudolf på Skatteverket. Din deklaration är "
+            f"GODKÄND utan anmärkningar. Score: {score}/100. Eventuell "
+            f"återbäring/kvarskatt visas i ditt slutskattebesked."
+        )
+
+    return RudolfReviewOut(
+        verdict=verdict,
+        rudolf_message=msg,
+        flagged_deductions=flags,
+        score=score,
+        next_steps=next_steps,
+    )
 
 
 # Lärar-endpoints

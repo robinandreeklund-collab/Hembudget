@@ -67,6 +67,14 @@ export function SkattenV2() {
 
   // Submit-state
   const [submittingYear, setSubmittingYear] = useState(false);
+  // Bug #11 · Rudolf-AI granskningsresultat
+  const [rudolfReview, setRudolfReview] = useState<{
+    verdict: "godkand" | "avslag" | "kontroll";
+    rudolf_message: string;
+    flagged_deductions: Array<{ category: string; amount?: number; reason: string }>;
+    score: number;
+    next_steps: string[];
+  } | null>(null);
 
   function refresh(): Promise<void> {
     return v2Api
@@ -96,6 +104,23 @@ export function SkattenV2() {
     setSubmittingYear(true);
     try {
       await v2Api.taxSubmitYear(data.year);
+      // Bug #11 · efter submit kallar vi Rudolf-AI för granskning
+      try {
+        const r = await fetch("/v2/skatten/rudolf-review", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}`,
+          },
+          body: JSON.stringify({ year: data.year }),
+        });
+        if (r.ok) {
+          const review = await r.json();
+          setRudolfReview(review);
+        }
+      } catch {
+        // Rudolf får inte bryta submit
+      }
       await refresh();
     } catch (e) {
       setError(String((e as Error)?.message || e));
@@ -510,6 +535,76 @@ export function SkattenV2() {
                   Avbryt
                 </button>
               </div>
+            )}
+
+            {/* Bug #11 · Rudolf-AI granskningsresultat */}
+            {rudolfReview && (
+              <article
+                className="cta-card"
+                style={{
+                  marginBottom: 14,
+                  borderColor:
+                    rudolfReview.verdict === "godkand"
+                      ? "rgba(110,231,183,0.4)"
+                      : rudolfReview.verdict === "avslag"
+                        ? "rgba(220,76,43,0.4)"
+                        : "rgba(251,191,36,0.4)",
+                  background:
+                    rudolfReview.verdict === "godkand"
+                      ? "rgba(110,231,183,0.08)"
+                      : rudolfReview.verdict === "avslag"
+                        ? "rgba(220,76,43,0.08)"
+                        : "rgba(251,191,36,0.08)",
+                }}
+              >
+                <div className="cta-eye">
+                  Skatteverket · Rudolf granskar ·{" "}
+                  {rudolfReview.verdict === "godkand"
+                    ? "✓ GODKÄND"
+                    : rudolfReview.verdict === "avslag"
+                      ? "✗ AVSLAG"
+                      : "⚠ KONTROLL"}
+                </div>
+                <div className="cta-h">
+                  Trovärdighet: <em>{rudolfReview.score}/100</em>
+                </div>
+                <p className="cta-prose">{rudolfReview.rudolf_message}</p>
+                {rudolfReview.flagged_deductions.length > 0 && (
+                  <ul style={{ marginTop: 10, paddingLeft: 18 }}>
+                    {rudolfReview.flagged_deductions.map((f, i) => (
+                      <li key={i} style={{ color: "rgba(255,255,255,0.85)", marginBottom: 4 }}>
+                        <strong>{f.category}</strong>
+                        {f.amount ? ` (${f.amount} kr)` : ""}: {f.reason}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {rudolfReview.next_steps.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <strong style={{ color: "white" }}>Nästa steg:</strong>
+                    <ul style={{ marginTop: 4, paddingLeft: 18 }}>
+                      {rudolfReview.next_steps.map((s, i) => (
+                        <li key={i} style={{ color: "rgba(255,255,255,0.75)" }}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setRudolfReview(null)}
+                  style={{
+                    marginTop: 12,
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    color: "rgba(255,255,255,0.7)",
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                >
+                  Stäng
+                </button>
+              </article>
             )}
 
             {/* LÄMNA IN DEKLARATION */}
