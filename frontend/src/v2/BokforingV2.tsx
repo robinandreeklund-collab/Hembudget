@@ -10,7 +10,7 @@
  * - peda-block "Ovettade transaktioner är din spegel"
  */
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   v2Api,
   type V2BookkeepingData,
@@ -52,15 +52,28 @@ function buildPeriodOptions(): { value: string; label: string }[] {
 }
 
 export function BokforingV2() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<V2BookkeepingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState(currentMonthIso());
-  const [accountFilter, setAccountFilter] = useState<string>("all");
+  // Initiera account-filter från ?account=X · låter klick på ett
+  // bank-konto i /v2/banken filtrera bokföringen direkt.
+  const initialAccount = searchParams.get("account") || "all";
+  const [accountFilter, setAccountFilterState] =
+    useState<string>(initialAccount);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const [classifyingId, setClassifyingId] = useState<number | null>(null);
+
+  function setAccountFilter(value: string) {
+    setAccountFilterState(value);
+    const next = new URLSearchParams(searchParams);
+    if (value === "all") next.delete("account");
+    else next.set("account", value);
+    setSearchParams(next, { replace: true });
+  }
 
   function refresh(): Promise<void> {
     return v2Api

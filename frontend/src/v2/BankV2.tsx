@@ -17,7 +17,7 @@
  * All data hämtas via /v2/bank · ingen mock.
  */
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { v2Api, type BankData } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./bank.css";
@@ -111,8 +111,10 @@ export function BankV2() {
           <div>
             <span className="pill warm">Aktör 01 · Banken</span>
             <h1 className="actor-name" style={{ marginTop: 14 }}>
-              Banken — <em>{accCount === 1 ? "ett konto" : `${accCount} konton`}</em>,{" "}
-              ett dygn att signera.
+              Banken — <em>{accCount === 1 ? "ett konto" : `${accCount} konton`}</em>
+              {billsToSign > 0
+                ? `, ett dygn att signera.`
+                : `, allt rullar.`}
             </h1>
             <p className="actor-sub">
               {accounts[0]?.bank || "Banken"} · privatkund · konton synkade just nu
@@ -121,7 +123,7 @@ export function BankV2() {
           <div className="actor-meta">
             Inloggad via <strong>BankID</strong>
             <br />
-            Signerade fakturor i kö: <strong>{billsToSign} st</strong>
+            Fakturor att signera: <strong>{billsToSign} st</strong>
             <br />
             Totalt saldo: <strong>{SEK(summary.total_balance)} kr</strong>
           </div>
@@ -148,7 +150,12 @@ export function BankV2() {
               const isCredit = a.type === "credit";
               const balance = a.total_value;
               return (
-                <a key={a.id} className="acct" href="#">
+                <Link
+                  key={a.id}
+                  className="acct"
+                  to={`/v2/bokforing?account=${a.id}`}
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
                   <div>
                     <div className="acct-eye">{eye}</div>
                     <div className="acct-name">{a.name}</div>
@@ -180,7 +187,7 @@ export function BankV2() {
                         : a.bank}
                     </div>
                   </div>
-                </a>
+                </Link>
               );
             })}
           </div>
@@ -227,7 +234,16 @@ export function BankV2() {
                 {recent_transactions.slice(0, 12).map((t) => {
                   const isIncome = t.amount > 0;
                   return (
-                    <div className="tx-row" key={t.id}>
+                    <Link
+                      className="tx-row"
+                      key={t.id}
+                      to={`/v2/tx/${t.id}`}
+                      style={{
+                        textDecoration: "none",
+                        color: "inherit",
+                        cursor: "pointer",
+                      }}
+                    >
                       <span className="tx-date">{SHORT_DATE(t.date)}</span>
                       <div>
                         <div className="tx-name">
@@ -254,7 +270,7 @@ export function BankV2() {
                         )}{" "}
                         kr
                       </span>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -331,13 +347,21 @@ export function BankV2() {
                     : urgent
                     ? "Bestäm"
                     : "Schemalagd";
+                  // Klick på rad → till brev-detalj om vi har länken,
+                  // annars till postlådan i listan.
+                  const target = u.mail_id
+                    ? `/v2/postladan/${u.mail_id}`
+                    : `/v2/postladan`;
                   return (
-                    <a
+                    <Link
                       key={u.id}
                       className="biz-table-row"
                       style={{
                         gridTemplateColumns:
                           "32px 1.8fr 110px 110px 110px",
+                        textDecoration: "none",
+                        color: "inherit",
+                        cursor: "pointer",
                         ...(urgent || overdue
                           ? {
                               background: "rgba(220,76,43,0.06)",
@@ -345,7 +369,7 @@ export function BankV2() {
                             }
                           : {}),
                       }}
-                      href="#"
+                      to={target}
                     >
                       <span
                         style={{
@@ -422,7 +446,7 @@ export function BankV2() {
                       <span className={`biz-status ${statusClass}`}>
                         {statusText}
                       </span>
-                    </a>
+                    </Link>
                   );
                 })}
               </div>

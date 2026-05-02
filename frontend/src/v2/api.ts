@@ -112,6 +112,7 @@ export type BankUpcoming = {
   plusgiro: string | null;
   autogiro: boolean;
   is_paid: boolean;
+  mail_id: number | null;
 };
 
 export type BankSummary = {

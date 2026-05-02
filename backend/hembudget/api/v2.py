@@ -459,6 +459,9 @@ class BankUpcoming(BaseModel):
     plusgiro: Optional[str] = None
     autogiro: bool
     is_paid: bool
+    # Länk till brev som triggade upcoming (om det finns) — låter
+    # frontenden navigera till mail-detalj från bank-tabellen.
+    mail_id: Optional[int] = None
 
 
 class BankSummary(BaseModel):
@@ -603,6 +606,18 @@ def get_bank(
             upcoming: list[BankUpcoming] = []
             upcoming_open_total = Decimal("0")
             upcoming_open_count = 0
+            # Hämta länk upcoming → mail för drill-down från bank-tabellen
+            mail_by_upcoming: dict[int, int] = {}
+            if upcoming_rows:
+                upcoming_ids = [u.id for u in upcoming_rows]
+                mail_rows = (
+                    s.query(MailItem.upcoming_id, MailItem.id)
+                    .filter(MailItem.upcoming_id.in_(upcoming_ids))
+                    .all()
+                )
+                for up_id, m_id in mail_rows:
+                    if up_id is not None:
+                        mail_by_upcoming[up_id] = m_id
             for u in upcoming_rows:
                 # En upcoming räknas som "betald" när den är matchad mot
                 # en faktisk transaktion. Mer nyanserad delbetalnings-
@@ -623,6 +638,7 @@ def get_bank(
                     plusgiro=u.plusgiro,
                     autogiro=bool(u.autogiro),
                     is_paid=paid,
+                    mail_id=mail_by_upcoming.get(u.id),
                 ))
 
             # 4. Månads-summa
