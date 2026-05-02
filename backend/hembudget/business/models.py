@@ -73,6 +73,36 @@ class Company(TenantMixin, Base):
         DateTime, server_default=func.now(),
     )
 
+    # Spelmotor (Fas 2 i deb/README) ============================
+    # Affärsidé · fri text från eleven, AI-modererad innan sparning
+    business_idea: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Svårighetsnivå: basics → grund (ÄK1), advanced → fördjupning (ÄK2)
+    level: Mapped[str] = mapped_column(
+        String(20), default="basics", nullable=False,
+    )  # "basics" | "advanced"
+    # Rykte 0–100 · drivs upp av kvalitet/marknadsföring, ner av klagomål
+    reputation: Mapped[int] = mapped_column(
+        Integer, default=50, nullable=False,
+    )
+    # Antal levererade jobb (used för engine-beräkning)
+    jobs_delivered: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    # Snitt-kvalitet på levererade jobb (0–100, exponentiellt utjämnad)
+    avg_quality: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    # Antal aktiva klagomål (drar ner pipelinen)
+    open_complaints: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False,
+    )
+    # Senaste tick-vecka (deterministisk seed)
+    week_no: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Leveranskapacitet (1 = själv, +1 per anställd)
+    delivery_capacity: Mapped[int] = mapped_column(
+        Integer, default=1, nullable=False,
+    )
+
     transactions: Mapped[list["CompanyTransaction"]] = relationship(
         back_populates="company", cascade="all, delete-orphan",
     )

@@ -699,4 +699,28 @@ def run_migrations(engine: Engine) -> list[str]:
                     f"({result.rowcount} rader)"
                 )
 
+    # === Företagsläget · spelmotor-utbyggnad (deb/README.md fas 2) ===
+    # Nya kolumner på companies-tabellen för affärsidé, nivå, rykte och
+    # spelmotor-state. Befintliga scope-DB:er får ALTER TABLE, fresh
+    # scopes får dem direkt via Base.metadata.create_all.
+    if _table_exists(engine, "companies"):
+        cols = _columns(engine, "companies")
+        biz_company_columns = [
+            ("business_idea", "business_idea TEXT"),
+            ("level", "level VARCHAR(20) NOT NULL DEFAULT 'basics'"),
+            ("reputation", "reputation INTEGER NOT NULL DEFAULT 50"),
+            ("jobs_delivered", "jobs_delivered INTEGER NOT NULL DEFAULT 0"),
+            ("avg_quality", "avg_quality INTEGER"),
+            ("open_complaints", "open_complaints INTEGER NOT NULL DEFAULT 0"),
+            ("week_no", "week_no INTEGER NOT NULL DEFAULT 0"),
+            (
+                "delivery_capacity",
+                "delivery_capacity INTEGER NOT NULL DEFAULT 1",
+            ),
+        ]
+        for col_name, col_sql in biz_company_columns:
+            if col_name not in cols:
+                _add_column(engine, "companies", col_sql)
+                applied.append(f"companies.{col_name}")
+
     return applied
