@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { GuideDropdown } from "./guides/GuideDropdown";
 import { NotifBell } from "./NotifBell";
+import { EchoButton } from "./EchoButton";
 import "./topbar.css";
 
 type Status = { role: string; is_super_admin: boolean };
@@ -135,6 +136,10 @@ export function V2Topbar({ status }: { status: Status }) {
       <div className="tb-actions">
         <GuideDropdown />
         <NotifBell />
+        {/* AI-chat alltid synlig i topbar — bug #4. AskAI:s FAB
+            visas globalt om läraren har ai_enabled. Quota-badge
+            visas i chat-headern. */}
+        <EchoButton context="Global AI-chat — fråga om vad som helst" />
         <Link
           to={isTeacher ? "/teacher/v2" : "/v2/hub"}
           className="tb-user"

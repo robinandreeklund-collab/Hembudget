@@ -30,16 +30,38 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
   const [threadId, setThreadId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const nextIdRef = useRef(1);
 
   useEffect(() => {
-    api<{ ai_enabled: boolean }>("/admin/ai/me")
-      .then((r) => setVisible(Boolean(r.ai_enabled)))
+    // /ai/chat/status funkar både för elev OCH lärare och returnerar
+    // dagskvot. Tidigare användes /admin/ai/me som krävde lärar-token
+    // → eleven såg ALDRIG AI-knappen (bug #4 i bugglistan).
+    api<{
+      ai_enabled: boolean;
+      available: boolean;
+      daily_quota: number;
+      used_today: number;
+      remaining_today: number;
+    }>("/ai/chat/status")
+      .then((r) => {
+        setVisible(Boolean(r.ai_enabled && r.available));
+        setQuota({ used: r.used_today, limit: r.daily_quota });
+      })
       .catch(() => setVisible(false));
   }, []);
+
+  const refreshQuota = () => {
+    api<{
+      used_today: number;
+      daily_quota: number;
+    }>("/ai/chat/status")
+      .then((r) => setQuota({ used: r.used_today, limit: r.daily_quota }))
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
@@ -159,6 +181,7 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
     } finally {
       setBusy(false);
       abortRef.current = null;
+      refreshQuota();
     }
   }
 
@@ -198,6 +221,32 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
                 {threadId && (
                   <span className="text-xs text-slate-400">
                     (tråd #{threadId})
+                  </span>
+                )}
+                {quota && quota.limit > 0 && (
+                  <span
+                    className="text-xs"
+                    style={{
+                      marginLeft: 8,
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      background:
+                        quota.used >= quota.limit
+                          ? "rgba(220,76,43,0.15)"
+                          : quota.used >= quota.limit * 0.8
+                            ? "rgba(251,191,36,0.15)"
+                            : "rgba(110,231,183,0.15)",
+                      color:
+                        quota.used >= quota.limit
+                          ? "#dc4c2b"
+                          : quota.used >= quota.limit * 0.8
+                            ? "#b58410"
+                            : "#0d9b6b",
+                      fontWeight: 600,
+                    }}
+                    title="Antal AI-meddelanden idag"
+                  >
+                    {Math.max(0, quota.limit - quota.used)} / {quota.limit} kvar idag
                   </span>
                 )}
               </div>
