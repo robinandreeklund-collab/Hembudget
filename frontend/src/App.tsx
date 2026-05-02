@@ -30,6 +30,10 @@ import {
   BizBokforing, BizFakturor, BizLon, BizMoms,
   BizBolagsskatt, BizInstallningar,
 } from "./v2/biz/BizPages";
+import {
+  BizOfferter, BizJobb, BizMarknad, BizBeslut, BizLeverantorer,
+} from "./v2/biz/BizGameMotorPages";
+import { TeacherForetagKlassPage } from "./v2/TeacherForetagKlassPage";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
 import { AktierV2 } from "./v2/AktierV2";
@@ -343,6 +347,12 @@ export default function App() {
           <Route path="/v2/foretag/moms" element={<BizMoms />} />
           <Route path="/v2/foretag/bolagsskatt" element={<BizBolagsskatt />} />
           <Route path="/v2/foretag/installningar" element={<BizInstallningar />} />
+          <Route path="/v2/foretag/offerter" element={<BizOfferter />} />
+          <Route path="/v2/foretag/jobb" element={<BizJobb />} />
+          <Route path="/v2/foretag/marknad" element={<BizMarknad />} />
+          <Route path="/v2/foretag/beslut" element={<BizBeslut />} />
+          <Route path="/v2/foretag/leverantorer" element={<BizLeverantorer />} />
+          <Route path="/teacher/v2/foretag-klass" element={<TeacherForetagKlassPage />} />
           <Route path="/v2/simulator" element={<SimulatorV2 />} />
           <Route
             path="/v2/lanekalkylator"

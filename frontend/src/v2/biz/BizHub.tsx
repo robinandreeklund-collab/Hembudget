@@ -219,6 +219,36 @@ export function BizHub() {
           />
         )}
         <BizActorCard
+          eye="07"
+          name="Offerter"
+          desc="Inkommande förfrågningar — lämna offert"
+          to="/v2/foretag/offerter"
+        />
+        <BizActorCard
+          eye="08"
+          name="Pågående jobb"
+          desc="Leverera + sätt kvalitet"
+          to="/v2/foretag/jobb"
+        />
+        <BizActorCard
+          eye="09"
+          name="Marknadsföring"
+          desc="Kampanjer + AI-bedömd copy"
+          to="/v2/foretag/marknad"
+        />
+        <BizActorCard
+          eye="10"
+          name="Beslut"
+          desc="Anställa, friskvård, leasing, försäkring"
+          to="/v2/foretag/beslut"
+        />
+        <BizActorCard
+          eye="11"
+          name="Leverantörsfakturor"
+          desc="Inkommande från lärare + slumpevent"
+          to="/v2/foretag/leverantorer"
+        />
+        <BizActorCard
           eye="06"
           name="Inställningar"
           desc="Bolagsnamn, moms, branschkod"
@@ -226,8 +256,108 @@ export function BizHub() {
         />
       </div>
 
+      {/* Stega vecka-knapp · spelmotor */}
+      <TickWeekButton />
+
       {/* Pedagogisk info-box · "Hur biz & privat hänger ihop" */}
       <BizPrivateInfoBox />
+    </div>
+  );
+}
+
+
+function TickWeekButton() {
+  const [running, setRunning] = useState(false);
+  const [last, setLast] = useState<{
+    week_no: number; new_opps: number;
+    accepted: number; rejected: number;
+    paid: number; events: number;
+    rep: number;
+  } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function tick() {
+    setRunning(true);
+    setErr(null);
+    try {
+      const r = await bizApi.tick();
+      setLast({
+        week_no: r.week_no,
+        new_opps: r.new_opportunities,
+        accepted: r.quotes_accepted,
+        rejected: r.quotes_rejected,
+        paid: r.invoices_paid_now,
+        events: r.events_triggered,
+        rep: r.reputation_after,
+      });
+    } catch (e) {
+      setErr(String((e as Error).message || e));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div style={{
+      marginTop: 18,
+      background: "linear-gradient(120deg, rgba(99,102,241,0.18), rgba(167,139,250,0.12))",
+      border: "1px solid rgba(99,102,241,0.3)",
+      borderRadius: 12, padding: 18,
+      display: "flex", alignItems: "center", gap: 16,
+      flexWrap: "wrap",
+    }}>
+      <div style={{ flex: "1 1 240px" }}>
+        <div style={{
+          fontSize: 9, letterSpacing: 1.3, color: "#818cf8",
+          textTransform: "uppercase",
+          fontFamily: "JetBrains Mono, monospace",
+        }}>
+          Spelmotor · stega tiden
+        </div>
+        <div style={{ fontWeight: 700, fontSize: "1.1rem", marginTop: 4 }}>
+          Stega bolaget en vecka framåt
+        </div>
+        <div style={{ color: "#aab", fontSize: "0.85rem", marginTop: 4 }}>
+          Genererar nya offertförfrågningar, kunder svarar på öppna offerter,
+          gamla fakturor förfaller. Slump-events triggas i avancerat läge.
+        </div>
+      </div>
+      <button
+        onClick={tick}
+        disabled={running}
+        style={{
+          background: "rgba(99,102,241,0.4)",
+          border: "1px solid rgba(99,102,241,0.6)",
+          color: "white", padding: "12px 24px", borderRadius: 8,
+          cursor: running ? "not-allowed" : "pointer",
+          fontWeight: 700, fontSize: "1rem",
+        }}
+      >
+        {running ? "Stegar…" : "Stega vecka →"}
+      </button>
+      {err && (
+        <div style={{ color: "#fda594", flexBasis: "100%" }}>{err}</div>
+      )}
+      {last && (
+        <div style={{
+          flexBasis: "100%", marginTop: 8,
+          padding: 12, borderRadius: 8,
+          background: "rgba(15,21,37,0.5)",
+          fontSize: "0.85rem",
+        }}>
+          <div style={{ color: "#6ee7b7", fontWeight: 600 }}>
+            Vecka {last.week_no} klar
+          </div>
+          <div style={{ color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
+            {last.new_opps} nya förfrågningar
+            {last.accepted > 0 && ` · ${last.accepted} offerter accepterade`}
+            {last.rejected > 0 && ` · ${last.rejected} avslagna`}
+            {last.paid > 0 && ` · ${last.paid} fakturor betalda`}
+            {last.events > 0 && ` · ${last.events} oväntat event`}
+            {" · "}rykte {last.rep}/100
+          </div>
+        </div>
+      )}
     </div>
   );
 }
