@@ -17,11 +17,11 @@ faulthandler.enable()
 from .api import (
     admin, ai, ai_admin, arbetsformedlingen, auth, backup, balances, bank,
     boendemarknad, budget, chat, credit, elpris, email_auth, employer,
-    foretag, funds, game_engine, landing, ledger, loans, modules,
-    reports, scenarios, school, settings_kv, smtp_admin, stock_trading,
-    stocks, tax, events, teacher_credit, teacher_employer, teacher_stocks,
-    teacher_wellbeing, transactions, transfers, upcoming, upload,
-    utility, v2, wellbeing,
+    foretag, foretag_engine, funds, game_engine, landing, ledger, loans,
+    modules, reports, scenarios, school, settings_kv, smtp_admin,
+    stock_trading, stocks, tax, events, teacher_credit, teacher_employer,
+    teacher_stocks, teacher_wellbeing, transactions, transfers, upcoming,
+    upload, utility, v2, wellbeing,
 )
 from .config import settings
 
@@ -194,6 +194,10 @@ def build_app() -> FastAPI:
     # Företagsläget (Bug #7-utbyggnad): bolag + transaktioner + lön + moms.
     app.include_router(foretag.router)
     app.include_router(foretag.teacher_router)
+    # Företagsläget · spelmotor (deb/README.md fas 2-3):
+    # offerter, jobb, marknadsföring, beslut, leverantörsfakturor, tick.
+    app.include_router(foretag_engine.router)
+    app.include_router(foretag_engine.teacher_router)
 
     @app.get("/healthz")
     def healthz() -> dict:
