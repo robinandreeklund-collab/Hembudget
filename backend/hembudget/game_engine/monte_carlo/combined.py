@@ -57,19 +57,21 @@ class CombinedSim:
 
     @property
     def combined_balance(self) -> int:
-        """Total nettobehållning · privat + biz-kassa + ev. uttag.
+        """Total nettobehållning · privat + biz-kassa + uttagen lön.
 
-        För AB:
-        - private.end_balance redan inkluderar lönen (om profile har den)
-          MEN! Vår privat-MC genererar lön från PROFILE.salary, inte från
-          biz. Så vi LÄGGER TILL biz.owner_salary_total som extra inkomst
-          (eftersom privat antar att den fortfarande får lönen).
+        Privat-MC genererar lön från profile.gross_salary (privatmotorn
+        antar att eleven har en arbetsgivare). Biz tar UT owner_salary
+        som drar ner biz_kassa men pengarna landar på privat-kontot.
+        Privatmotorn räknar inte med detta.
 
-        Förenklad modell: combined = private_balance + biz_kassa, eftersom
-        owner_salary redan flödar internt mellan biz och privat och vi
-        räknar "total formuegen" som summan.
+        Combined = privat-balansen (lön+utgifter) + biz-kassa kvar
+                 + biz_owner_salary (pengar som lämnat biz till privat)
         """
-        return self.private.end_balance + self.biz.end_kassa
+        return (
+            self.private.end_balance
+            + self.biz.end_kassa
+            + self.biz.owner_salary_total
+        )
 
 
 @dataclass
@@ -137,15 +139,17 @@ def summarize_combined(result: CombinedResult) -> dict:
     comb_bal = result.combined_balances()
     total = result.n
 
-    # Räkna ut hur många simulationer där biz HELT NEUTRALISERAR (eller
-    # förvärrar) den privata ekonomin → en VARNING om det är för många
+    # Räkna ut hur många simuleringar där biz NETTO-bidrar (boost) eller
+    # NETTO-drar (drag) från elevens totala ekonomi.
+    # Net-bidrag = biz_kassa + owner_salary (det är pengarna eleven fick
+    # ut av biz). Drag = net-bidrag < 0.
     biz_drag = sum(
         1 for s in result.simulations
-        if s.biz.end_kassa < 0
+        if (s.biz.end_kassa + s.biz.owner_salary_total) < 0
     )
     biz_boost = sum(
         1 for s in result.simulations
-        if s.biz.end_kassa > 10_000
+        if (s.biz.end_kassa + s.biz.owner_salary_total) > 10_000
     )
 
     return {

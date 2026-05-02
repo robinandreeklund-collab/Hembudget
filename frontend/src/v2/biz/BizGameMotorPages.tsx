@@ -19,54 +19,37 @@ import {
   type Quote,
   type SupplierInvoice,
 } from "./api";
+import "./biz.css";
 
 
 const SEK = (n: number) =>
   new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 }).format(n);
 
 
+/** BizShell · gemensam layout för alla biz-pages med indigo-tema. */
 function BizShell({ title, eye, children }: {
   title: string; eye: string; children: React.ReactNode;
 }) {
+  // Säkerställ att body[data-mode="business"] sätts på biz-pages
+  useEffect(() => {
+    const prev = document.body.getAttribute("data-mode");
+    document.body.setAttribute("data-mode", "business");
+    return () => {
+      // Återställ till föregående mode (eller private som default)
+      document.body.setAttribute("data-mode", prev || "private");
+    };
+  }, []);
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #0a0e1a 0%, #0f1525 100%)",
-      }}
-    >
+    <div className="v2-biz-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "20px 28px 40px" }}>
-        <Link
-          to="/v2/hub"
-          style={{
-            color: "rgba(255,255,255,0.6)",
-            textDecoration: "none",
-            display: "inline-block",
-            marginBottom: 18,
-            fontFamily: "JetBrains Mono, monospace",
-            fontSize: "0.8rem",
-            letterSpacing: 1.1,
-            textTransform: "uppercase",
-          }}
-        >
+      <div className="biz-shell">
+        <Link to="/v2/hub" className="biz-back">
           ← Bolag · översikt
         </Link>
         <header style={{ marginBottom: 24 }}>
-          <div
-            style={{
-              fontFamily: "JetBrains Mono, monospace",
-              fontSize: 11,
-              color: "#818cf8",
-              letterSpacing: 1.4,
-              fontWeight: 700,
-            }}
-          >
-            {eye}
-          </div>
-          <h1 style={{ color: "white", fontSize: "1.8rem", margin: "6px 0 0" }}>
-            {title}
-          </h1>
+          <div className="biz-eye">{eye}</div>
+          <h1 className="biz-h1">{title}</h1>
         </header>
         {children}
       </div>

@@ -47,8 +47,74 @@ class BizSimConfig:
     level: str = "basics"  # basics | advanced
     starting_reputation: int = 50
     monthly_owner_salary: int = 0  # AB · 0 = inget uttag
-    monthly_fixed_cost: int = 1500  # licens, lokal-del, försäkring
+    # Bokföring + bank + mobil + ansvarsförsäkring · ALLA bolag har dessa
+    monthly_fixed_cost: int = 1500
     seed_base: int = 0
+
+
+# === Industry-specific kostnadsratio + overhead ===
+#
+# MATERIAL_COST_RATIO: hur stor del av revenue som går till material/inköp.
+#   Eleven ser detta som "kost-of-goods-sold" (KGS).
+# MONTHLY_OVERHEAD: extra fasta kostnader specifika för branschen
+#   (lokal för cafe/hantverk, leasing-bil för hantverk, etc.).
+#
+# Hämtat från SCB-statistik + Skatteverkets bransch-snitt 2024.
+
+INDUSTRY_COST_PROFILE: dict[str, dict] = {
+    "hantverk": {
+        "material_ratio": 0.35,
+        "monthly_overhead": 7500,
+        # Pipeline-multiplikator · branscher med många små jobb (cafe)
+        # behöver mer pipeline för att fånga verkligheten.
+        "pipeline_mult": 1.0,
+    },
+    "it": {
+        "material_ratio": 0.18,
+        "monthly_overhead": 2200,
+        "pipeline_mult": 1.0,
+    },
+    "cafe": {
+        # Cafe har VOLYM (catering-beställningar 1-3/v) + lite lokala jobb.
+        # Verklig cafe omsätter på 100+ kunder/dag — vi modellerar bara
+        # storjobb (catering, bröllopstårtor). Höjd pipeline kompenserar.
+        "material_ratio": 0.40,
+        "monthly_overhead": 4500,
+        "pipeline_mult": 2.5,
+    },
+    "konsult": {
+        "material_ratio": 0.22,
+        "monthly_overhead": 2500,
+        "pipeline_mult": 1.0,
+    },
+    "kreativ": {
+        "material_ratio": 0.28,
+        "monthly_overhead": 2500,
+        "pipeline_mult": 1.1,
+    },
+    "ehandel": {
+        # E-handel har också volym
+        "material_ratio": 0.50,
+        "monthly_overhead": 3500,
+        "pipeline_mult": 2.0,
+    },
+}
+
+DEFAULT_COST_PROFILE = {
+    "material_ratio": 0.25, "monthly_overhead": 2500, "pipeline_mult": 1.0,
+}
+
+
+def _industry_costs(industry_label: str) -> dict:
+    if industry_label is None:
+        return DEFAULT_COST_PROFILE
+    key = industry_label.lower().replace(" ", "-").replace(
+        "ä", "a",
+    ).replace("ö", "o").replace("å", "a")
+    if key in INDUSTRY_COST_PROFILE:
+        return INDUSTRY_COST_PROFILE[key]
+    head = key.split("-")[0]
+    return INDUSTRY_COST_PROFILE.get(head, DEFAULT_COST_PROFILE)
 
 
 @dataclass
@@ -151,6 +217,7 @@ def _simulate_one_biz(
     rng = random.Random(sim_seed * 31)
     profile = get_biz_difficulty(config.level)
     customers, jobs = industry_pool(config.industry_label)
+    industry_costs = _industry_costs(config.industry_label)
 
     reputation = config.starting_reputation
     avg_quality: Optional[int] = None
@@ -165,11 +232,43 @@ def _simulate_one_biz(
     cost = 0
     owner_salary_paid = 0
 
+    # Engångs-startkostnader · realistiska för småföretag år 1
+    # Bolagsregistrering, bokföringsprogram-uppsättning, verktyg,
+    # hemsida, visitkort, första försäkring m.m.
+    if config.level == "basics":
+        # Lärling — ofta missar man hidden costs. Slumpmässig 25-50k.
+        startup_cost = rng.randint(25_000, 50_000)
+    else:
+        # Advanced har mer erfarenhet → effektivare uppstart.
+        startup_cost = rng.randint(15_000, 35_000)
+    cost += startup_cost
+
     n_weeks = config.n_months * 4
 
+    # Lärlings-effekt · första 8 veckorna har eleven sämre offerter
+    # (mindre erfarenhet av prissättning + leverans-uppskattning).
+    LEARNING_WEEKS = 8
+
+    # Pipeline-throttle för MC-realism. Verkligheten: en småföretagare
+    # får ca 12-30 offerter/år (1-3/månad), inte 100+.
+    # Basics (skol-grundnivå) får MINDRE pipeline (svårt att etablera).
+    # Advanced får MER pipeline (eleven har lärt sig + mer komplexa jobb).
+    if config.level == "basics":
+        PIPELINE_REALISM_FACTOR = 0.40
+    else:
+        PIPELINE_REALISM_FACTOR = 0.60
+    # Bransch-multiplikator (cafe + ehandel har volym)
+    PIPELINE_REALISM_FACTOR *= industry_costs.get("pipeline_mult", 1.0)
+
     for week_no in range(1, n_weeks + 1):
+        is_learning = week_no <= LEARNING_WEEKS
         # --- Pipeline · antal nya offerter denna vecka ---
-        base = profile.base_opportunities_per_week
+        # KALIBRERAT: under learning är pipelinen halverad,
+        # och vi multiplicerar med realism-faktor.
+        base_raw = profile.base_opportunities_per_week
+        if is_learning:
+            base_raw = max(1, base_raw - 1)
+        base = max(0, int(round(base_raw * PIPELINE_REALISM_FACTOR + 0.001)))
         rep_bonus = (
             2 if reputation >= 80
             else 1 if reputation >= 60
@@ -204,12 +303,20 @@ def _simulate_one_biz(
             adj = 1.0 + rng.uniform(-vol, vol)
             mp = max(500, int(round(mp * adj / 100) * 100))
 
-            # Eleven lämnar offer · realistisk spread runt riktpriset.
-            # Många offerter blir för dyra (eleven optimerar inte alltid).
-            offered_price = int(mp * rng.uniform(0.92, 1.18))
-            offered_days = int(tmpl.delivery_days * rng.uniform(0.95, 1.4))
-            # Pitch-kvalitet · normalt-fördelad runt 0.5 (medel)
-            pitch_quality = max(0.2, min(0.85, rng.gauss(0.5, 0.15)))
+            # Eleven lämnar offert · realistisk fördelning kring riktpris.
+            # Verkligheten: nybörjare överprisar oftare än underprisar
+            # (svårt att veta sitt värde). Snittet är ~1.05-1.10 av riktpris.
+            # Under learning-fasen är spreaden bredare (mer fel-prissättning).
+            if is_learning:
+                offered_price = int(mp * rng.gauss(1.10, 0.15))
+                offered_days = int(tmpl.delivery_days * rng.gauss(1.25, 0.20))
+                pitch_quality = max(0.15, min(0.7, rng.gauss(0.40, 0.15)))
+            else:
+                offered_price = int(mp * rng.gauss(1.05, 0.10))
+                offered_days = int(tmpl.delivery_days * rng.gauss(1.15, 0.15))
+                pitch_quality = max(0.2, min(0.85, rng.gauss(0.55, 0.15)))
+            offered_price = max(int(mp * 0.7), offered_price)
+            offered_days = max(1, offered_days)
 
             accepted = _simulate_quote_decision(
                 market_price=mp,
@@ -228,30 +335,47 @@ def _simulate_one_biz(
 
             if accepted:
                 n_won += 1
-                # Eleven levererar (90% chans inom denna 12-mån sim)
-                if rng.random() < 0.9:
-                    # Kvalitet 60-90 (rimligt simulering-spann)
-                    quality = rng.randint(60, 90)
+                # Eleven levererar (90% chans inom denna 12-mån sim).
+                # Nybörjare missar oftare deadline → 80% under learning.
+                deliver_chance = 0.8 if is_learning else 0.92
+                if rng.random() < deliver_chance:
+                    # Kvalitet · nybörjare har lägre snitt + bredare spread
+                    if is_learning:
+                        quality = max(30, min(95, int(rng.gauss(58, 18))))
+                    else:
+                        quality = max(40, min(95, int(rng.gauss(72, 12))))
                     avg_quality = (
                         quality if avg_quality is None
                         else int(round(
                             avg_quality + (quality - avg_quality) * 0.3,
                         ))
                     )
-                    # Reputation drift mot kvalitet (15% per leverans)
+                    # Reputation drift mot kvalitet (15% per leverans).
+                    # Låg kvalitet skapar klagomål → ytterligare drag.
                     reputation = max(
                         0, min(100,
                                reputation + int((quality - reputation) * 0.15)),
                     )
-                    # Kunden betalar enligt payment_morality
-                    if rng.random() < float(cust.payment_morality):
+                    if quality < 50:
+                        open_complaints += 1
+                        reputation = max(0, reputation - 5)
+                    # Kunden betalar enligt payment_morality.
+                    # Nybörjare har sämre kund-screening → reducerad rate.
+                    effective_morality = (
+                        float(cust.payment_morality)
+                        * (0.75 if is_learning else 0.92)
+                    )
+                    if rng.random() < effective_morality:
                         revenue += offered_price
+                # else: levererat sent → inga pengar (eller halva)
             else:
                 n_lost += 1
 
         # --- Månadsvis · löpande kostnader + lön (varje 4:e vecka) ---
         if week_no % 4 == 0:
             cost += config.monthly_fixed_cost
+            # Bransch-specifik overhead (lokal, leasing, etc.)
+            cost += industry_costs["monthly_overhead"]
             if config.monthly_owner_salary > 0:
                 # Inkl. arbetsgivaravgift 31.42% (förenklad)
                 total_payroll = int(
@@ -263,16 +387,37 @@ def _simulate_one_biz(
                     config.monthly_owner_salary * 0.7,
                 )
 
-        # --- Slumpevents · advanced mode bara ---
+        # --- Slumpevents · realistiskt antal per år ---
+        # Verklighet: ett småföretag har 4-12 oväntade händelser/år
+        # (sjuk, datorhaveri, miljöskatt, kundklagomål etc.).
+        # Difficulty-profilen säger 0.4 prob × 2 max → 38 events/år
+        # vilket är ALLTFÖR mycket. Kalibrerar i MC:
         if profile.event_probability_per_week > 0:
-            for _ in range(profile.max_events_per_week):
-                if rng.random() < profile.event_probability_per_week:
-                    cost += rng.choice([2500, 4500, 8500, 12000, 18000])
+            # Advanced: ~10 events/år (1 var 5:e vecka)
+            mc_event_prob = 0.20
+            if rng.random() < mc_event_prob:
+                cost += rng.choice([2500, 4500, 8500, 12000])
+        else:
+            # Basics: ~5 events/år (mildare)
+            basics_event_prob = 0.10
+            if rng.random() < basics_event_prob:
+                cost += rng.choice([800, 1500, 2500, 4000])
+
+    # === Material-kostnad (KGS) ===
+    # Bransch-specifik andel av revenue. Advanced har MER komplexa jobb
+    # → större material-andel + längre lead-times.
+    material_ratio = industry_costs["material_ratio"]
+    if config.level == "advanced":
+        material_ratio = min(0.65, material_ratio + 0.07)
+    material_cost = int(revenue * material_ratio)
+    cost += material_cost
+    # Ingående moms (drag av) på material — 25% av material-kostnaden
+    input_vat_credit = int(material_cost * 0.25)
 
     # === Skatt + moms-justering ===
-    # Eleven offererar pris EXKL moms och får INTE momsen — den är
-    # skuld till SKV (25 % på revenue).
-    vat_owed = int(revenue * 0.20)  # ~20 % netto efter ingående-moms-avdrag
+    # Utgående moms 25% på revenue, ingående moms-avdrag på material.
+    output_vat = int(revenue * 0.25)
+    vat_owed = max(0, output_vat - input_vat_credit)
     cost += vat_owed
 
     # Bolagsskatt 20.6 % på vinsten (förenklat — bara om vinst > 0)

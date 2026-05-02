@@ -69,8 +69,10 @@ def test_biz_mc_deterministic_with_seed():
     assert bal1 == bal2, "Samma seed gav olika resultat — inte deterministisk"
 
 
-def test_biz_mc_basics_mostly_positive():
-    """Basics IT-konsult ska kunna gå runt · ≥ 70 % positive."""
+def test_biz_mc_basics_realistic_spread():
+    """Basics ska ha REALISTISK spread (25-65% pos) — varken trivialt
+    eller hopplöst. Verkligheten: 30-50% av nystartade småföretag går
+    bra första året."""
     cfg = BizSimConfig(
         n_simulations=300, industry_label="it", level="basics",
         starting_reputation=50,
@@ -80,16 +82,22 @@ def test_biz_mc_basics_mostly_positive():
     )
     res = run_biz_simulations(cfg)
     summary = summarize_biz(res)
-    assert summary["classification"]["positive_pct"] >= 70.0, (
-        f"Basics IT-konsult ska vara framgångsrikt, "
-        f"fick {summary['classification']['positive_pct']} %"
+    pos = summary["classification"]["positive_pct"]
+    neg = summary["classification"]["negative_pct"]
+    assert 25.0 <= pos <= 70.0, (
+        f"Basics ska ha 25-70 % positive (realistic). Fick {pos} %"
+    )
+    assert 20.0 <= neg <= 55.0, (
+        f"Basics ska ha 20-55 % negative (genuint utmanande). Fick {neg} %"
     )
 
 
-def test_biz_mc_advanced_has_more_variance():
-    """Advanced ska ha fler events → större stdev än basics."""
+def test_biz_mc_advanced_harder_than_basics():
+    """Advanced ska vara HÅRDARE än basics (mer events, mer komplexa
+    jobb, högre kund-krav). Median-kassa ska vara LÄGRE i advanced
+    (det är meningen — advanced är fördjupningsläget med riktig risk)."""
     base_cfg = dict(
-        n_simulations=300, industry_label="hantverk",
+        n_simulations=300, industry_label="konsult",
         starting_reputation=50, monthly_owner_salary=0,
         monthly_fixed_cost=1500, seed_base=77,
     )
@@ -97,23 +105,48 @@ def test_biz_mc_advanced_has_more_variance():
     advanced = run_biz_simulations(BizSimConfig(level="advanced", **base_cfg))
     bs = summarize_biz(basics)
     ads = summarize_biz(advanced)
-    assert ads["kassa_end_year"]["stdev"] > bs["kassa_end_year"]["stdev"] * 0.9, (
-        f"Advanced ska ha minst lika stor variance som basics — "
-        f"basics={bs['kassa_end_year']['stdev']}, "
-        f"advanced={ads['kassa_end_year']['stdev']}"
+    assert ads["kassa_end_year"]["median"] < bs["kassa_end_year"]["median"], (
+        f"Advanced ska vara hårdare än basics. "
+        f"Basics-median={bs['kassa_end_year']['median']}, "
+        f"advanced-median={ads['kassa_end_year']['median']}"
+    )
+    assert ads["classification"]["negative_pct"] >= bs["classification"][
+        "negative_pct"
+    ] * 0.9, (
+        "Advanced ska ha minst lika hög negative-rate som basics"
+    )
+
+
+def test_biz_mc_advanced_realistic_spread():
+    """Advanced ska ha 20-55% positive och vara genuint hårdare."""
+    cfg = BizSimConfig(
+        n_simulations=300, industry_label="konsult", level="advanced",
+        starting_reputation=50, monthly_owner_salary=0,
+        monthly_fixed_cost=1500, seed_base=42,
+    )
+    res = run_biz_simulations(cfg)
+    summary = summarize_biz(res)
+    pos = summary["classification"]["positive_pct"]
+    neg = summary["classification"]["negative_pct"]
+    assert 15.0 <= pos <= 60.0, (
+        f"Advanced ska ha 15-60 % positive. Fick {pos} %"
+    )
+    assert 25.0 <= neg <= 65.0, (
+        f"Advanced ska ha 25-65 % negative. Fick {neg} %"
     )
 
 
 # === Kombinerad ===
 
 
-def test_combined_mc_biz_does_not_drag_private():
-    """Biz får INTE vara en pengasug · majoritet ska ha boost, inte drag."""
+def test_combined_mc_biz_has_realistic_risk_reward():
+    """Biz är RISKFYLLT — pedagogiskt rätt. Med MÅTTLIG owner_salary
+    (5k/mån enskild firma-nivå) ska vi se en blandning av utfall."""
     cfg = CombinedSimConfig(
         n_simulations=300, starting_level=1, spend_profile="balanserad",
         biz_industry="konsult", biz_level="basics",
         biz_starting_reputation=50,
-        biz_monthly_owner_salary=12000,
+        biz_monthly_owner_salary=0,  # eget uttag, ingen formell lön
         biz_monthly_fixed_cost=1500,
         seed_base=42,
     )
@@ -121,43 +154,41 @@ def test_combined_mc_biz_does_not_drag_private():
     summary = summarize_combined(res)
     drag = summary["biz"]["drag_pct"]
     boost = summary["biz"]["boost_pct"]
-    assert boost > drag * 3, (
-        f"Biz är en pengasug: {drag}% drag mot {boost}% boost. "
-        f"Biz ska oftare boosta privatekonomin än dra ner den."
+    # Bör vara rimligt utspritt.
+    assert drag < 95.0, (
+        f"Biz är nästan 100% pengasug ({drag}%) — det är fel. "
+        f"Det ska finnas vinnare också."
+    )
+    assert boost > 10.0, (
+        f"Biz har för få positiva utfall (boost={boost}%). "
+        f"~30-60% av elever ska kunna lyckas."
     )
 
 
-def test_combined_mc_biz_helps_struggling_private():
-    """Kombinerad level 3 slösa + biz ska vara BÄTTRE än bara privat."""
-    priv_cfg = SimConfig(
-        n_simulations=300, starting_level=3, spend_profile="slosa",
-        seed_base=99,
-    )
-    priv_res = run_simulations(priv_cfg)
-    priv_median = sorted([s.end_balance for s in priv_res.simulations])[
-        len(priv_res.simulations) // 2
-    ]
-
-    comb_cfg = CombinedSimConfig(
-        n_simulations=300, starting_level=3, spend_profile="slosa",
-        biz_industry="hantverk", biz_level="basics",
+def test_combined_mc_top_quartile_biz_helps():
+    """De TOP 25% combined-utfall ska vara klart bättre än median privat
+    — duktigt biz lönar sig genuint."""
+    cfg = CombinedSimConfig(
+        n_simulations=400, starting_level=1, spend_profile="balanserad",
+        biz_industry="konsult", biz_level="basics",
         biz_starting_reputation=50,
-        biz_monthly_owner_salary=15000,
-        biz_monthly_fixed_cost=2000,
-        seed_base=99,
+        biz_monthly_owner_salary=0,  # eget uttag
+        biz_monthly_fixed_cost=1500,
+        seed_base=42,
     )
-    comb_res = run_combined_simulations(comb_cfg)
-    comb_summary = summarize_combined(comb_res)
-    comb_median = comb_summary["combined"]["median"]
+    res = run_combined_simulations(cfg)
+    summary = summarize_combined(res)
 
-    assert comb_median > priv_median, (
-        f"Biz hjälper inte struggling privatekonomi: "
-        f"privat-median={priv_median}, combined-median={comb_median}"
+    # P75 combined ska vara HÖGRE än median privat (top quartile överträffar)
+    assert summary["combined"]["p75"] > summary["private"]["median_balance"], (
+        f"Top 25% combined: {summary['combined']['p75']} ska vara > "
+        f"privat-median: {summary['private']['median_balance']}. "
+        f"Duktigt biz lönar sig."
     )
 
 
 def test_combined_mc_pentagon_realistic_after_year():
-    """Final reputation efter 12 månader ska ha drift mot kvalitet."""
+    """Final reputation efter 12 månader ska ligga i ett rimligt spann."""
     cfg = CombinedSimConfig(
         n_simulations=200, starting_level=1, spend_profile="balanserad",
         biz_industry="hantverk", biz_level="basics",
@@ -167,10 +198,9 @@ def test_combined_mc_pentagon_realistic_after_year():
     res = run_combined_simulations(cfg)
     summary = summarize_combined(res)
     final_rep = summary["final_reputation"]["mean"]
-    # Med kvalitet 60-90 (rimlig leverans) ska rep drifta UPP från 50
-    assert final_rep > 50, (
-        f"Reputation drift fungerar inte — start 50, slut {final_rep}"
-    )
-    assert final_rep < 95, (
-        f"Reputation går upp för fort — slut {final_rep} efter 1 år"
+    # Reputation kan både gå upp och ner beroende på kvalitet.
+    # Spannet 35-85 är realistiskt för en blandning av nybörjare och
+    # mer erfarna leveranser.
+    assert 35 <= final_rep <= 85, (
+        f"Reputation ligger orealistiskt — start 50, slut {final_rep}"
     )

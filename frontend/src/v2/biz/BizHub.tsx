@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { bizApi, type BizPentagon, type Company } from "./api";
 import { BizPentagon as BizPentagonChart } from "./BizPentagon";
+import "./biz.css";
 
 
 const SEK = (n: number) =>
@@ -17,6 +18,11 @@ const SEK = (n: number) =>
 
 
 export function BizHub() {
+  // Säkerställ att body[data-mode="business"] är satt (för indigo topbar)
+  useEffect(() => {
+    document.body.setAttribute("data-mode", "business");
+  }, []);
+
   const [company, setCompany] = useState<Company | null>(null);
   const [pentagon, setPentagon] = useState<BizPentagon | null>(null);
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -80,7 +86,7 @@ export function BizHub() {
   const profit = stats.income - stats.expense;
 
   return (
-    <div style={{ padding: "20px 28px 40px" }}>
+    <div className="biz-shell" style={{ paddingTop: 20, paddingBottom: 40 }}>
       {/* Pentagon + biz-char-card · matchar prototypens p-biz-hub */}
       {pentagon && (
         <div
