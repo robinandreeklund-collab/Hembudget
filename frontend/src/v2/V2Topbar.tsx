@@ -139,9 +139,35 @@ export function V2Topbar({ status }: { status: Status }) {
         {!isTeacher && <CompanyModeToggle />}
         <GuideDropdown />
         <NotifBell />
-        {/* AI-chat alltid synlig i topbar — bug #4. AskAI:s FAB
-            visas globalt om läraren har ai_enabled. Quota-badge
-            visas i chat-headern. */}
+        {/* Bug 3 · Echo-knapp öppnar AskAI som right-side drawer.
+            AskAI lyssnar på "echo-open"-event på window. */}
+        <button
+          type="button"
+          className="tb-echo"
+          aria-label="Fråga Ekon"
+          onClick={() => window.dispatchEvent(new Event("echo-open"))}
+          style={{
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            color: "#fff",
+            padding: "6px 14px",
+            borderRadius: 100,
+            cursor: "pointer",
+            fontSize: "0.78rem",
+            fontFamily: "JetBrains Mono, monospace",
+            fontWeight: 700,
+            letterSpacing: 1.1,
+            textTransform: "uppercase",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+          title="Öppna AI-chatt"
+        >
+          <span style={{ color: "#a78bfa" }}>✦</span>
+          Ekon
+        </button>
+        {/* Mounta AskAI så den kan ta emot "echo-open"-event */}
         <EchoButton context="Global AI-chat — fråga om vad som helst" />
         <Link
           to={isTeacher ? "/teacher/v2" : "/v2/hub"}

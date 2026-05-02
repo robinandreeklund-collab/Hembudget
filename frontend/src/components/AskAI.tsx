@@ -54,6 +54,20 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
       .catch(() => setVisible(false));
   }, []);
 
+  // Bug 3 · Topbar-knappen i v2 dispatchar "echo-open" → öppna direkt
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("echo-open", handler);
+    return () => window.removeEventListener("echo-open", handler);
+  }, []);
+
+  // V2-läge: dölj FAB:en (topbarens Echo-knapp triggar oss istället),
+  // och visa modal som right-side drawer.
+  const isV2 =
+    typeof window !== "undefined" &&
+    (window.location.pathname.startsWith("/v2") ||
+      window.location.pathname.startsWith("/teacher/v2"));
+
   const refreshQuota = () => {
     api<{
       used_today: number;
@@ -194,24 +208,35 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        data-guide="echo-button"
-        className="fixed bottom-4 right-4 z-20 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg px-4 py-3 flex items-center gap-2 text-sm font-medium"
-        aria-label="Fråga AI"
-      >
-        <HelpCircle className="w-4 h-4" />
-        Fråga Ekon
-      </button>
+      {/* FAB · visas BARA på v1-routes (v2 har topbar-knapp istället) */}
+      {!isV2 && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          data-guide="echo-button"
+          className="fixed bottom-4 right-4 z-20 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg px-4 py-3 flex items-center gap-2 text-sm font-medium"
+          aria-label="Fråga AI"
+        >
+          <HelpCircle className="w-4 h-4" />
+          Fråga Ekon
+        </button>
+      )}
 
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/40 flex items-end md:items-center justify-center p-0 md:p-4"
+          className={
+            isV2
+              ? "fixed inset-0 z-30 bg-slate-900/40"
+              : "fixed inset-0 z-30 bg-slate-900/40 flex items-end md:items-center justify-center p-0 md:p-4"
+          }
           onClick={close}
         >
           <div
-            className="bg-white w-full md:max-w-lg md:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]"
+            className={
+              isV2
+                ? "fixed top-0 right-0 bottom-0 w-full md:w-[440px] bg-white shadow-2xl flex flex-col"
+                : "bg-white w-full md:max-w-lg md:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]"
+            }
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 pt-4 pb-2 border-b">

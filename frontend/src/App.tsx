@@ -1,4 +1,9 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
+
+function RedirectModuleToV2() {
+  const { moduleId } = useParams<{ moduleId: string }>();
+  return <Navigate to={`/v2/moduler/${moduleId}`} replace />;
+}
 import { BackendSetup } from "./components/BackendSetup";
 import { ImpersonationBanner } from "./components/ImpersonationBanner";
 import { MobileTopBar, Sidebar } from "./components/Sidebar";
@@ -135,7 +140,6 @@ import EchoAi from "./pages/EchoAi";
 import ScrollStoryDemo from "./pages/ScrollStoryDemo";
 import MyAchievements from "./pages/MyAchievements";
 import MyModules from "./pages/MyModules";
-import ModuleView from "./pages/ModuleView";
 import TeacherModules from "./pages/TeacherModules";
 import TeacherModuleEdit from "./pages/TeacherModuleEdit";
 import TeacherReflections from "./pages/TeacherReflections";
@@ -296,7 +300,12 @@ export default function App() {
           <Route path="/rubriker" element={<Rubriker />} />
           <Route path="/echo" element={<EchoAi />} />
           <Route path="/modules" element={<MyModules />} />
-          <Route path="/modules/:moduleId" element={<ModuleView />} />
+          {/* Bug 10 · /modules/:moduleId redirectar till v2-vy så alla
+              ser den nya grafiska profilen istället för v1-design. */}
+          <Route
+            path="/modules/:moduleId"
+            element={<RedirectModuleToV2 />}
+          />
           <Route path="/achievements" element={<MyAchievements />} />
           <Route path="/teacher/modules" element={<TeacherModules />} />
           <Route path="/teacher/modules/:moduleId" element={<TeacherModuleEdit />} />
