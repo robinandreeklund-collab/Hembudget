@@ -7410,6 +7410,110 @@ def test_v2_teacher_create_student_level_3_skips_onboarding(fx) -> None:
         assert st.v2_spend_profile == "slosa"
 
 
+def test_v2_teacher_create_student_seeds_initial_data(fx) -> None:
+    """Ny elev ska få initial-data (lön + utgifter + mail + försäkring +
+    pension) direkt vid skapande, så hen inte ser tomt skal vid första
+    inloggning."""
+    from hembudget.school.engines import (
+        get_scope_session, scope_context, scope_for_student,
+    )
+    from hembudget.school.models import Student as _S
+    from hembudget.school.game_engine_models import WeekTickRun
+    from hembudget.db.models import (
+        Account as _Acc, InsurancePolicy, MailItem as _Mail,
+        PensionAssumption, Transaction as _Tx,
+    )
+
+    client, tch, *_ = fx
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "first_name": "Linn",
+            "last_initial": "B",
+            "archetype": "random",
+            "spend_profile": "balanserad",
+            "starting_level": 1,
+        },
+    )
+    assert r.status_code == 200, r.text
+    sid = r.json()["student_id"]
+
+    # 1. Master-DB ska ha en WeekTickRun för förra månaden
+    with master_session() as db:
+        runs = db.query(WeekTickRun).filter(
+            WeekTickRun.student_id == sid,
+        ).all()
+        assert len(runs) >= 1, "tick_month skulle ha kört åtminstone en gång"
+        assert runs[0].status == "completed"
+        # Plocka student för scope-key
+        st = db.get(_S, sid)
+        assert st is not None
+        scope_key = scope_for_student(st)
+
+    # 2. Scope-DB · konton + lönespec + fakturor + lön-transaktion
+    maker = get_scope_session(scope_key)
+    with scope_context(scope_key):
+        with maker() as s:
+            # === Konton ===
+            accounts = s.query(_Acc).all()
+            assert len(accounts) >= 1, (
+                "tick_month skulle ha skapat minst lönekontot"
+            )
+            account_types = {a.type for a in accounts}
+            assert "checking" in account_types, (
+                "Lönekontot (checking) saknas — tick_month "
+                "ensure_scope_accounts har inte körts"
+            )
+
+            # === Transaktioner ===
+            txs = s.query(_Tx).all()
+            assert len(txs) >= 1, (
+                "tick_month skulle ha skapat minst lönen"
+            )
+            # Det ska finnas minst en INKOMST-transaktion (positiv) =
+            # lönen som ramlade in
+            income_txs = [t for t in txs if t.amount and t.amount > 0]
+            assert len(income_txs) >= 1, (
+                f"Lön-inbetalning saknas. Hittade {len(txs)} txs men "
+                f"ingen positiv → spelmotorn matade inte lönespecen."
+            )
+            # Det ska finnas minst en utgift (fasta utgifter genererade)
+            expense_txs = [t for t in txs if t.amount and t.amount < 0]
+            # Inte assert — fasta utgifter beror på random men "lön in"
+            # är garanterat. Vi vill iaf veta att det inte är 0.
+
+            # === Postlådan: lönespec + fakturor ===
+            mails = s.query(_Mail).all()
+            assert len(mails) >= 1, (
+                f"Postlådan tom efter tick_month — borde ha minst "
+                f"lönespecen. Hittade 0 mail-items."
+            )
+            mail_types = {m.mail_type for m in mails}
+            assert "salary_slip" in mail_types, (
+                f"Lönespecen saknas i postlådan. Hittade typer: "
+                f"{mail_types}. Spelmotorn skickade inte lönespecen."
+            )
+            # Fasta-utgifts-fakturor (hyra, abonnemang) → invoices
+            invoice_count = sum(1 for m in mails if m.mail_type == "invoice")
+            assert invoice_count >= 1, (
+                f"Inga fakturor i postlådan. Spelmotorn skickade inte "
+                f"de fasta utgifterna (hyra, abonnemang) som mail. "
+                f"Mail-typer: {mail_types}"
+            )
+
+            # === Försäkring + pension seedade ===
+            policies = s.query(InsurancePolicy).all()
+            assert len(policies) >= 1, (
+                "seed_default_insurance_policies skulle ha skapat "
+                "default-katalogen"
+            )
+            pa = s.query(PensionAssumption).first()
+            assert pa is not None, (
+                "seed_default_pension skulle ha skapat singleton"
+            )
+
+
 # === TeacherStudentHistoryV2 (p-historik) — Fas 2Y ===
 
 

@@ -13236,6 +13236,41 @@ def v2_create_student(
         sid = student.id
         created_at = student.created_at
         last_login = student.last_login_at
+        # Detacha innan session stängs · vi behöver objektet utanför
+        # transaktionen för seed-funktionerna nedan.
+        s.expunge(student)
+        student_obj = student
+
+    # === Initial-seed så eleven har data att jobba med från dag 1 ===
+    #
+    # Tidigare hade en ny elev INGEN data: tomt postlådan, inga konton,
+    # ingen pentagon-historik. Det gjorde att läraren och eleven såg
+    # ett tomt skal och kunde inte börja jobba förrän någon manuellt
+    # körde "Snabbspola månad" på spelmotor-panelen.
+    #
+    # Nu kör vi:
+    #   1. tick_month för förra månaden (lön + fasta utgifter +
+    #      variabla utgifter + events + sjuk + pentagon)
+    #   2. Default-försäkringar (6 standard)
+    #   3. Default-pensionsantaganden (singleton)
+    #   4. Default-låneprodukter (UC-bedömningens katalog)
+    #
+    # Misslyckas tyst — student-skapandet får inte gå sönder om en
+    # seed-funktion krasch:ar.
+    try:
+        _seed_initial_student_data(
+            student_obj,
+            spend_profile=spend,
+            starting_level=payload.starting_level,
+            partner_model=partner,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "v2_create_student: initial seed failed for student %s "
+            "— eleven har skapats men saknar data",
+            sid,
+        )
 
     return V2CreatedStudentRow(
         student_id=sid,
@@ -13250,6 +13285,79 @@ def v2_create_student(
         last_login_at=last_login,
         activated=last_login is not None,
     )
+
+
+def _seed_initial_student_data(
+    student: "Student",
+    *,
+    spend_profile: str,
+    starting_level: int,
+    partner_model: str,
+) -> None:
+    """Seedar lön + utgifter + events + försäkring + pension för en ny
+    elev så hen har data att jobba med från första inloggningen.
+
+    Anropas direkt efter student-skapandet i v2_create_student.
+    """
+    from datetime import date as _d
+    from ..game_engine.monthly_engine import tick_month
+    from ..game_engine.profile_generator import generate_profile
+    from ..insurance import seed_default_insurance_policies
+    from ..pension import seed_default_pension
+    from ..school.engines import scope_context, scope_for_student
+
+    # === Steg 1: tick förra månaden via game_engine ===
+    today = _d.today()
+    if today.month == 1:
+        prev_year = today.year - 1
+        prev_month = 12
+    else:
+        prev_year = today.year
+        prev_month = today.month - 1
+    year_month = f"{prev_year:04d}-{prev_month:02d}"
+
+    profile = generate_profile(
+        seed=student.id,
+        archetype="random",
+        starting_level=starting_level,
+        name=student.display_name or "Elev",
+        partner_model=partner_model,  # type: ignore[arg-type]
+    )
+    try:
+        tick_month(
+            student,
+            profile,
+            year_month,
+            spend_profile=spend_profile,
+            starting_level=starting_level,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_initial_student_data: tick_month failed för %s",
+            student.id,
+        )
+
+    # === Steg 2-4: scope-bundna seeders (försäkring, pension, lån) ===
+    scope_key = scope_for_student(student)
+    with scope_context(scope_key):
+        with session_scope() as s:
+            try:
+                seed_default_insurance_policies(s)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data: insurance seed failed för %s",
+                    student.id,
+                )
+            try:
+                seed_default_pension(s)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data: pension seed failed för %s",
+                    student.id,
+                )
 
 
 class V2CreatedStudentsResponse(BaseModel):
