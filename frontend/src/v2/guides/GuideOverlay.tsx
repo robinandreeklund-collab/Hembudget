@@ -123,16 +123,34 @@ export function GuideOverlay() {
       }, 350);
       return el;
     }
-    // Försök mäta direkt; om elementet inte finns, retry x5
+    // Försök mäta direkt; om elementet inte finns, retry x5.
+    // Efter 5 försök: visa tip-kortet centrerat på skärmen utan
+    // spotlight, så användaren aldrig fastnar med en tom scrim.
     let tries = 0;
     let interval: ReturnType<typeof setInterval> | null = null;
     const elNow = measure();
     if (elNow == null) {
       interval = setInterval(() => {
+        if (cancelled) {
+          if (interval) clearInterval(interval);
+          return;
+        }
         tries += 1;
         const el = measure();
         if (el != null || tries > 5) {
           if (interval) clearInterval(interval);
+          if (el == null) {
+            // Fallback · centrera tip på viewporten utan spotlight
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const tipW = Math.min(380, vw - 40);
+            const tipH = 240;
+            setSpotRect(null);
+            setTipPos({
+              left: Math.max(20, (vw - tipW) / 2),
+              top: Math.max(80, (vh - tipH) / 2),
+            });
+          }
         }
       }, 250);
     }

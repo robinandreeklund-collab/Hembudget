@@ -480,7 +480,7 @@ const TEACHER_INTRO_STEPS: GuideStep[] = [
     placement: "bottom",
   },
   {
-    selector: "[data-guide='class-pentagon']",
+    selector: ".class-stage",
     route: "/teacher/v2",
     eye: "Lärare · 3 / 6",
     h: "Klassens <em>pentagon</em>.",
@@ -489,7 +489,7 @@ const TEACHER_INTRO_STEPS: GuideStep[] = [
     placement: "right",
   },
   {
-    selector: "[data-guide='attn-list']",
+    selector: ".attn-list",
     route: "/teacher/v2",
     eye: "Lärare · 4 / 6",
     h: "Action-bar · <em>vad behöver din uppmärksamhet</em>.",
@@ -498,7 +498,7 @@ const TEACHER_INTRO_STEPS: GuideStep[] = [
     placement: "left",
   },
   {
-    selector: ".compass-grid",
+    selector: ".mini-grid",
     route: "/teacher/v2",
     eye: "Lärare · 5 / 6",
     h: "Klassens <em>elever</em>.",
@@ -507,7 +507,7 @@ const TEACHER_INTRO_STEPS: GuideStep[] = [
     placement: "top",
   },
   {
-    selector: ".tb-actions",
+    selector: ".v2-topbar",
     route: "/teacher/v2",
     eye: "Lärare · 6 / 6",
     h: "Topbar · <em>dina vardagsfunktioner</em>.",

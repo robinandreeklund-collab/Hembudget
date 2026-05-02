@@ -23,7 +23,7 @@ type Row = {
 
 async function api<T>(path: string): Promise<T> {
   const r = await fetch(path, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+    headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
   return r.json();

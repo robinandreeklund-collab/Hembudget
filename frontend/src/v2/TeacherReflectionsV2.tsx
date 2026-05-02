@@ -111,7 +111,7 @@ export function TeacherReflectionsV2() {
                   ids.map((id) =>
                     fetch(`/v2/teacher/reflections/${id}/mark-read`, {
                       method: "POST",
-                      headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+                      headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
                     }).catch(() => undefined),
                   ),
                 );
@@ -127,7 +127,7 @@ export function TeacherReflectionsV2() {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
-                      Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}`,
+                      Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
                     },
                     body: JSON.stringify({ filter, ids }),
                   });

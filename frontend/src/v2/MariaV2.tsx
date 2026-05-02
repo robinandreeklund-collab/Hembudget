@@ -433,7 +433,7 @@ export function MariaV2() {
                             method: "POST",
                             headers: {
                               "Content-Type": "application/json",
-                              Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}`,
+                              Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
                             },
                             body: JSON.stringify({ accept_offer: true }),
                           },

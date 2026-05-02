@@ -492,7 +492,9 @@ async function advanceMonth(
 }
 
 function getToken(): string {
-  return localStorage.getItem("hb_token") || "";
+  // Auth-flödet sparar i sessionStorage("hembudget_token") · samma helper
+  // som @/api/client.ts. localStorage("hb_token") är legacy-bug.
+  return sessionStorage.getItem("hembudget_token") || "";
 }
 
 function labelStyle(): React.CSSProperties {

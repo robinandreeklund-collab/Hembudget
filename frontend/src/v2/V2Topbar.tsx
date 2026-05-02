@@ -179,10 +179,14 @@ async function handleLogout() {
     // Använd raw fetch eftersom vi inte vill importera api-klient hit
     await fetch("/logout", {
       method: "POST",
-      headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+      headers: {
+        Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
+      },
     }).catch(() => undefined);
   } finally {
-    localStorage.removeItem("hb_token");
+    sessionStorage.removeItem("hembudget_token");
+    sessionStorage.removeItem("hembudget_role");
+    sessionStorage.removeItem("hembudget_as_student");
     window.location.href = "/";
   }
 }

@@ -45,7 +45,7 @@ async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}`,
+      Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
       ...(opts.headers || {}),
     },
   });

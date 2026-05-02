@@ -21,7 +21,7 @@ type SchoolClass = {
   created_at: string;
 };
 
-const TOKEN = () => localStorage.getItem("hb_token") || "";
+const TOKEN = () => sessionStorage.getItem("hembudget_token") || "";
 
 async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(path, {

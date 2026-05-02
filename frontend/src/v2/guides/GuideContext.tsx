@@ -19,6 +19,9 @@ import { GUIDES, type GuideDef } from "./guidesData";
 const COMPLETED_KEY = "v2_completed_guides";
 const INTRO_DONE_KEY = "v2_intro_guide_done";
 const INTRO_DISMISSED_KEY = "v2_intro_guide_dismissed";
+// Bug #3 · Lärar-anpassad guide
+const TEACHER_INTRO_DONE_KEY = "v2_teacher_intro_done";
+const TEACHER_INTRO_DISMISSED_KEY = "v2_teacher_intro_dismissed";
 
 type GuideState = {
   activeKey: string | null;
@@ -79,16 +82,42 @@ export function GuideProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const endGuide = useCallback((markCompleted = false) => {
-    if (markCompleted && activeKey) {
+    if (activeKey) {
       const next = new Set(completedKeys);
-      next.add(activeKey);
-      setCompletedKeys(next);
-      writeCompleted(next);
-      if (activeKey === "intro") {
-        try {
-          localStorage.setItem(INTRO_DONE_KEY, "1");
-        } catch {
-          // fail-soft
+      if (markCompleted) {
+        next.add(activeKey);
+        setCompletedKeys(next);
+        writeCompleted(next);
+        if (activeKey === "intro") {
+          try {
+            localStorage.setItem(INTRO_DONE_KEY, "1");
+          } catch {
+            // fail-soft
+          }
+        }
+        if (activeKey === "teacher_intro") {
+          try {
+            localStorage.setItem(TEACHER_INTRO_DONE_KEY, "1");
+          } catch {
+            // fail-soft
+          }
+        }
+      } else {
+        // Hoppade över · sätt dismissed-flag så auto-start inte triggar igen
+        // i samma session.
+        if (activeKey === "intro") {
+          try {
+            localStorage.setItem(INTRO_DISMISSED_KEY, "1");
+          } catch {
+            // fail-soft
+          }
+        }
+        if (activeKey === "teacher_intro") {
+          try {
+            localStorage.setItem(TEACHER_INTRO_DISMISSED_KEY, "1");
+          } catch {
+            // fail-soft
+          }
         }
       }
     }
@@ -195,9 +224,7 @@ export function useAutoStartIntroGuide() {
 }
 
 
-// Bug #3 · Lärar-anpassad guide
-const TEACHER_INTRO_DONE_KEY = "v2_teacher_intro_done";
-const TEACHER_INTRO_DISMISSED_KEY = "v2_teacher_intro_dismissed";
+// Bug #3 · Lärar-anpassad guide (konstanter deklarerade högst upp)
 
 export function useAutoStartTeacherGuide() {
   const { startGuide, isOpen } = useGuide();

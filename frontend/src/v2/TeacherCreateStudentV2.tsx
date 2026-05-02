@@ -364,7 +364,7 @@ function CreateForm({
   // Bug #1 · hämta lärarens klasser för dropdown
   useEffect(() => {
     fetch("/v2/teacher/classes", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+      headers: { Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}` },
     })
       .then((r) => (r.ok ? r.json() : []))
       .then(setClasses)

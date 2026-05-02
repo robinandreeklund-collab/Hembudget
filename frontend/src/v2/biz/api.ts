@@ -3,7 +3,7 @@
  * Använder raw fetch + localStorage-token (samma som övriga v2-vyer).
  */
 
-const TOKEN = () => localStorage.getItem("hb_token") || "";
+const TOKEN = () => sessionStorage.getItem("hembudget_token") || "";
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const r = await fetch(path, {
