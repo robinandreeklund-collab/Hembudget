@@ -21,6 +21,8 @@ import { TeacherRentalOverviewPage } from "./v2/TeacherRentalOverviewPage";
 import { BoendemarknadV2 } from "./v2/BoendemarknadV2";
 import { ArbetsformedlingenV2 } from "./v2/ArbetsformedlingenV2";
 import { TeacherClassesV2 } from "./v2/TeacherClassesV2";
+import { TeacherTimeOnTaskV2 } from "./v2/TeacherTimeOnTaskV2";
+import { TeacherRubricsV2 } from "./v2/TeacherRubricsV2";
 import { PensionV2 } from "./v2/PensionV2";
 import { AvanzaV2 } from "./v2/AvanzaV2";
 import { AktierV2 } from "./v2/AktierV2";
@@ -455,6 +457,16 @@ export default function App() {
           <Route
             path="/teacher/v2/klasser"
             element={<TeacherClassesV2 />}
+          />
+          {/* Bug #16 · Time-on-task v2 */}
+          <Route
+            path="/teacher/v2/time-on-task"
+            element={<TeacherTimeOnTaskV2 />}
+          />
+          {/* Bug #17 · Rubrics v2 */}
+          <Route
+            path="/teacher/v2/rubrics"
+            element={<TeacherRubricsV2 />}
           />
           <Route
             path="/teacher/v2/historik/:studentId"

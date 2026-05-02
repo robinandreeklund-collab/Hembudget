@@ -469,6 +469,53 @@ Riktlinjer:
 - Använd inte emojis. Använd inte listformat. Ingen rubrik."""
 
 
+def generate_class_reflections_summary(
+    *,
+    items: list[dict],
+    teacher_id: int | None = None,
+) -> Optional[AIResult]:
+    """Bug #19 · Echo summerar trender över hela klassens reflektioner.
+
+    `items` är en lista av {student_name, module, step, text} per
+    reflektion. Returnerar en summering med:
+    - 3 huvudteman som syns över klassen
+    - 2 elever som behöver extra stöd (om text-signal)
+    - 1 konkret förslag på vad läraren kan ta upp på lektion
+    """
+    if not items:
+        return None
+    body = "\n\n---\n".join(
+        f"{i['student_name']} · {i.get('module', '?')} / {i.get('step', '?')}\n"
+        f"{i.get('text', '')}"
+        for i in items[:30]  # max 30 reflektioner per anrop
+    )
+    user = (
+        f"Här är {len(items)} reflektioner från en klass i ekonomi-undervisning. "
+        f"Summera trender, identifiera elever som verkar behöva stöd, och ge ett "
+        f"konkret förslag på vad läraren kan ta upp på nästa lektion.\n\n"
+        f"Format ditt svar som markdown med tre sektioner:\n"
+        f"## Klass-trender\n"
+        f"## Elever att uppmärksamma\n"
+        f"## Förslag till nästa lektion\n\n"
+        f"---\n\n{body}"
+    )
+    system = (
+        "Du är Echo, en pedagogisk AI-assistent för svenska gymnasielärare i "
+        "ekonomi. Du analyserar klassens reflektioner sakligt, lyfter mönster, "
+        "och varnar mjukt om någon elev visar tecken på att behöva extra stöd. "
+        "Du undviker att gissa diagnos eller psykosocial situation — bara det "
+        "läraren bör se på."
+    )
+    return _call_claude(
+        model=MODEL_HAIKU,
+        system=system,
+        user_prompt=user,
+        max_tokens=1200,
+        use_thinking=False,
+        teacher_id=teacher_id,
+    )
+
+
 def generate_feedback_suggestion(
     *,
     reflection_text: str,

@@ -13538,6 +13538,27 @@ class V2ReflectionFeedbackIn(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 
 
+# Bug #19 · Bulk-mark-read endpoint
+@router.post("/teacher/reflections/{progress_id}/mark-read", status_code=204)
+def teacher_reflection_mark_read_v2(
+    progress_id: int,
+    info: TokenInfo = Depends(require_token),
+):
+    """Markera en reflektion som 'läst' utan att skriva feedback."""
+    teacher_id = _require_teacher(info)
+    with master_session() as s:
+        progress = s.get(_SchoolStepProgress, progress_id)
+        if progress is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Progress saknas.")
+        # Markera teacher_feedback som tomt-string så filter visar som läst
+        if not (progress.teacher_feedback or "").strip():
+            progress.teacher_feedback = "(läst)"
+            from datetime import datetime as _dt
+            progress.teacher_feedback_at = _dt.utcnow()
+            s.commit()
+    return None
+
+
 @router.post(
     "/teacher/reflections/{progress_id}/feedback",
     response_model=V2ReflectionItem,

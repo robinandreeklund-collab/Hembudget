@@ -35,6 +35,8 @@ export function TeacherReflectionsV2() {
   const [data, setData] = useState<V2ReflectionsResponse | null>(null);
   const [filter, setFilter] = useState<V2ReflectionFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  // Bug #19 · bulk + AI-summering
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
   const navigate = useNavigate();
 
   async function load(f: V2ReflectionFilter = filter) {
@@ -99,19 +101,51 @@ export function TeacherReflectionsV2() {
             <h1 className="larare-head-h1">
               Klassens <em>tankar</em> denna period.
             </h1>
-            <a
-              href="/teacher/reflections"
-              style={{
-                display: "inline-block",
-                marginTop: 8,
-                fontSize: 12,
-                color: "rgba(255,255,255,0.5)",
-                textDecoration: "underline",
+            {/* Bug #19 · bulk-actions + AI-summering · v2-design */}
+            <BulkActions
+              n={data?.items?.length || 0}
+              onBulkMarkRead={async () => {
+                if (!confirm("Markera ALLA visade reflektioner som lästa?")) return;
+                const ids = (data?.items || []).map((r) => r.progress_id);
+                await Promise.all(
+                  ids.map((id) =>
+                    fetch(`/v2/teacher/reflections/${id}/mark-read`, {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+                    }).catch(() => undefined),
+                  ),
+                );
+                load(filter);
               }}
-              title="V2-vyn fokuserar på snabb-flöde · v1 har bulk-bedömning + AI-summering"
-            >
-              → Öppna v1-vyn med extra-funktioner (bulk + AI)
-            </a>
+              onAiSummary={async () => {
+                try {
+                  setAiSummary("Hämtar klass-summering från Echo…");
+                  const ids = (data?.items || []).map(
+                    (r: { progress_id: number }) => r.progress_id,
+                  );
+                  const resp = await fetch("/ai/teacher/reflections-summary", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}`,
+                    },
+                    body: JSON.stringify({ filter, ids }),
+                  });
+                  if (!resp.ok) {
+                    setAiSummary(
+                      resp.status === 503
+                        ? "AI är inte aktiverat på ditt konto. Be super-admin slå på."
+                        : `Fel: ${await resp.text()}`,
+                    );
+                    return;
+                  }
+                  const j = await resp.json();
+                  setAiSummary(j.summary || j.suggestion || "Tomt svar.");
+                } catch (e) {
+                  setAiSummary(`Fel: ${String((e as Error).message || e)}`);
+                }
+              }}
+            />
             <p
               style={{
                 fontFamily: "Source Serif 4, Georgia, serif",
@@ -132,6 +166,55 @@ export function TeacherReflectionsV2() {
             Snitt-längd <strong>{s.avg_word_count} ord</strong>
           </div>
         </header>
+
+        {/* Bug #19 · AI-summering visas här när lärare bett om den */}
+        {aiSummary && (
+          <article
+            style={{
+              marginTop: 18,
+              padding: 18,
+              background: "linear-gradient(135deg, rgba(168,85,247,0.08), rgba(99,102,241,0.05))",
+              border: "1px solid rgba(168,85,247,0.3)",
+              borderRadius: 12,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              <strong
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 11,
+                  color: "#d8b4fe",
+                  letterSpacing: 1.4,
+                  textTransform: "uppercase",
+                }}
+              >
+                ✨ Echo · klass-summering
+              </strong>
+              <button
+                onClick={() => setAiSummary(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255,255,255,0.5)",
+                  cursor: "pointer",
+                  fontSize: "1.2rem",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div
+              style={{
+                color: "rgba(255,255,255,0.85)",
+                fontFamily: "Source Serif 4, Georgia, serif",
+                lineHeight: 1.6,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {aiSummary}
+            </div>
+          </article>
+        )}
 
         {/* Filter-toggles */}
         <div
@@ -223,6 +306,54 @@ export function TeacherReflectionsV2() {
     </div>
   );
 }
+
+function BulkActions({
+  n,
+  onBulkMarkRead,
+  onAiSummary,
+}: {
+  n: number;
+  onBulkMarkRead: () => void | Promise<void>;
+  onAiSummary: () => void | Promise<void>;
+}) {
+  return (
+    <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <button
+        onClick={onBulkMarkRead}
+        disabled={n === 0}
+        style={{
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          color: n === 0 ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.85)",
+          padding: "8px 14px",
+          borderRadius: 6,
+          cursor: n === 0 ? "not-allowed" : "pointer",
+          fontSize: "0.85rem",
+        }}
+      >
+        ✓ Markera alla ({n}) som lästa
+      </button>
+      <button
+        onClick={onAiSummary}
+        disabled={n === 0}
+        style={{
+          background: "rgba(168,85,247,0.12)",
+          border: "1px solid rgba(168,85,247,0.4)",
+          color: n === 0 ? "rgba(255,255,255,0.3)" : "#d8b4fe",
+          padding: "8px 14px",
+          borderRadius: 6,
+          cursor: n === 0 ? "not-allowed" : "pointer",
+          fontSize: "0.85rem",
+          fontWeight: 600,
+        }}
+        title="Echo summerar trender över hela klassens reflektioner"
+      >
+        ✨ AI-summering av klassen
+      </button>
+    </div>
+  );
+}
+
 
 function FilterButton({
   label,

@@ -1704,3 +1704,86 @@ def chat_clear(info: TokenInfo = Depends(require_token)) -> dict:
             .delete()
         )
         return {"deleted": int(deleted)}
+
+
+# Bug #19 · AI-summering av klassens reflektioner
+class ClassReflectionsSummaryIn(BaseModel):
+    filter: str = "all"
+    ids: list[int] | None = None
+
+
+class ClassReflectionsSummaryOut(BaseModel):
+    summary: str
+    n_reflections: int
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@router.post(
+    "/teacher/reflections-summary",
+    response_model=ClassReflectionsSummaryOut,
+)
+def class_reflections_summary(
+    body: ClassReflectionsSummaryIn,
+    info: TokenInfo = Depends(require_teacher),
+) -> ClassReflectionsSummaryOut:
+    """Echo summerar trender över hela klassens reflektioner."""
+    _require_school()
+    teacher_id = info.teacher_id or 0
+    _gate_ai(teacher_id)
+
+    from ..school.models import (
+        ModuleStep, StudentStepProgress, Module,
+    )
+
+    items: list[dict] = []
+    with master_session() as s:
+        q = (
+            s.query(StudentStepProgress, Student, ModuleStep, Module)
+            .join(Student, StudentStepProgress.student_id == Student.id)
+            .join(ModuleStep, StudentStepProgress.step_id == ModuleStep.id)
+            .join(Module, ModuleStep.module_id == Module.id)
+            .filter(Student.teacher_id == teacher_id)
+            .filter(ModuleStep.kind == "reflect")
+            .filter(StudentStepProgress.reflection_text.isnot(None))
+        )
+        if body.ids:
+            q = q.filter(StudentStepProgress.id.in_(body.ids))
+        rows = q.order_by(StudentStepProgress.completed_at.desc()).limit(40).all()
+        for prog, stu, step, mod in rows:
+            txt = (prog.reflection_text or "").strip()
+            if not txt:
+                continue
+            items.append({
+                "student_name": stu.display_name,
+                "module": mod.title,
+                "step": step.title,
+                "text": txt,
+            })
+
+    if not items:
+        return ClassReflectionsSummaryOut(
+            summary=(
+                "Det finns inga reflektioner att summera än. "
+                "Be eleverna skriva minst en reflektion först."
+            ),
+            n_reflections=0,
+            model="(skipped)",
+            input_tokens=0,
+            output_tokens=0,
+        )
+
+    result = ai_core.generate_class_reflections_summary(
+        items=items, teacher_id=teacher_id,
+    )
+    if result is None:
+        raise HTTPException(503, "AI är inte tillgängligt just nu.")
+
+    return ClassReflectionsSummaryOut(
+        summary=result.text,
+        n_reflections=len(items),
+        model=result.model,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+    )
