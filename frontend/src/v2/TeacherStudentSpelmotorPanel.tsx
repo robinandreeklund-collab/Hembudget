@@ -311,6 +311,13 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
         )}
       </div>
 
+      {/* === Reseed-elev-data · för stuck failed runs === */}
+      <ReseedButton
+        studentId={studentId}
+        onMsg={setMsg}
+        onDone={refresh}
+      />
+
       <div
         style={{
           display: "grid",
@@ -495,6 +502,88 @@ function getToken(): string {
   // Auth-flödet sparar i sessionStorage("hembudget_token") · samma helper
   // som @/api/client.ts. localStorage("hb_token") är legacy-bug.
   return sessionStorage.getItem("hembudget_token") || "";
+}
+
+
+/** Knapp · trigga reseed för stuck failed runs.
+ *
+ * Reseed kallar samma flöde som auto-recovery vid student-detail.
+ * Idempotent — om eleven redan har data svarar vi att inget gjordes. */
+function ReseedButton({
+  studentId, onMsg, onDone,
+}: {
+  studentId: number;
+  onMsg: (s: string) => void;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const handle = async () => {
+    setBusy(true);
+    onMsg("Kör reseed…");
+    try {
+      const r = await fetch(
+        `/v2/teacher/students/${studentId}/reseed-initial-data`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+          },
+        },
+      );
+      if (!r.ok) {
+        throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+      }
+      const data = await r.json();
+      onMsg(`✓ ${data.message}`);
+      await onDone();
+    } catch (e) {
+      onMsg(`Fel vid reseed: ${String((e as Error).message || e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        background: "rgba(220,76,43,0.05)",
+        border: "1px solid rgba(220,76,43,0.2)",
+        padding: 14,
+        borderRadius: 10,
+        marginBottom: 18,
+      }}
+    >
+      <strong style={{ color: "white" }}>Reseed elev-data</strong>
+      <div
+        style={{
+          color: "rgba(255,255,255,0.6)",
+          fontSize: "0.85rem",
+          margin: "4px 0 10px",
+        }}
+      >
+        Om eleven saknar postlådan, banken eller pentagon-data — tryck
+        här för att köra om initial-seeden. Säkert · idempotent (gör
+        inget om eleven redan har data).
+      </div>
+      <button
+        onClick={handle}
+        disabled={busy}
+        style={{
+          padding: "8px 18px",
+          background: "rgba(220,76,43,0.85)",
+          border: "none",
+          color: "#fff",
+          borderRadius: 6,
+          cursor: busy ? "wait" : "pointer",
+          fontWeight: 600,
+        }}
+      >
+        {busy ? "Kör reseed…" : "Reseed elev-data →"}
+      </button>
+    </div>
+  );
 }
 
 function labelStyle(): React.CSSProperties {

@@ -11868,6 +11868,27 @@ def teacher_student_detail(
             student, "v2_onboarding_completed_at", None,
         )
 
+    # Auto-recovery · Bug-fix för "seed failed" på gamla elever:
+    # Om eleven inte har en SINGLE WeekTickRun med status='completed'
+    # så har den aldrig fått sin initial data. Trigga seed nu.
+    # Detta fixar elever som skapades innan seed-funktionen byggdes,
+    # eller elever vars tick failade av en gammal bugg.
+    try:
+        _ensure_student_has_initial_data(
+            student_id=student_id,
+            student_name=student_name,
+            spend_profile=spend_profile or "balanserad",
+            starting_level=v2_level,
+            partner_model=partner or "solo",
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "auto-recovery seed failed för student %s — vyn renderas "
+            "ändå, men data kan saknas",
+            student_id,
+        )
+
     days_since_login = _days_since(last_login)
 
     # Pentagon
@@ -13294,6 +13315,119 @@ def v2_create_student(
     )
 
 
+# === Lärar-endpoint · manuell reseed (om auto-recovery av någon
+#     anledning inte räcker) ===
+
+class V2ReseedResponse(BaseModel):
+    student_id: int
+    seeded: bool
+    message: str
+
+
+@router.post(
+    "/teacher/students/{student_id}/reseed-initial-data",
+    response_model=V2ReseedResponse,
+)
+def teacher_reseed_initial_data(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2ReseedResponse:
+    """Lärare triggar OM seed för en elev.
+
+    Använder samma flöde som auto-recovery vid student-detail. Idempotent
+    — om eleven redan har data svarar vi seeded=False utan fel.
+
+    Bug-fix för 'seed failed': om en elev har stuck failed runs kan
+    läraren trigga reseed manuellt från UI-knappen i spelmotor-panelen.
+    """
+    teacher_id = _require_teacher(info)
+    with master_session() as mdb:
+        student = mdb.get(Student, student_id)
+        if not student or student.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Endast egen elev",
+            )
+        student_name = student.display_name
+        v2_level = getattr(student, "v2_level", None) or 1
+        spend_profile = (
+            getattr(student, "v2_spend_profile", None) or "balanserad"
+        )
+        partner = getattr(student, "v2_partner_model", None) or "solo"
+
+    seeded = _ensure_student_has_initial_data(
+        student_id=student_id,
+        student_name=student_name,
+        spend_profile=spend_profile,
+        starting_level=v2_level,
+        partner_model=partner,
+    )
+    return V2ReseedResponse(
+        student_id=student_id,
+        seeded=seeded,
+        message=(
+            "Seed kördes. Eleven har nu lön, fakturor, försäkringar "
+            "och pension."
+            if seeded
+            else "Eleven hade redan data — ingen reseed behövdes."
+        ),
+    )
+
+
+def _ensure_student_has_initial_data(
+    *,
+    student_id: int,
+    student_name: str,
+    spend_profile: str,
+    starting_level: int,
+    partner_model: str,
+) -> bool:
+    """Auto-recovery · garanterar att en elev har initial data.
+
+    Bug-fix för 'seed failed' på gamla elever:
+    Om eleven inte har EN ENDA WeekTickRun med status='completed',
+    så har den aldrig fått initial-data (eller alla försök har failat).
+    Kör seed-flödet igen.
+
+    Returnerar True om seed kördes, False om eleven redan har data.
+
+    Idempotent: säker att anropa flera gånger. _check_and_create_run i
+    tick_month rensar partial state innan retry.
+    """
+    from ..school.game_engine_models import WeekTickRun
+    from ..school.models import Student as _Stu
+
+    with master_session() as s:
+        completed_runs = (
+            s.query(WeekTickRun)
+            .filter(
+                WeekTickRun.student_id == student_id,
+                WeekTickRun.status == "completed",
+            )
+            .count()
+        )
+        if completed_runs > 0:
+            return False  # Eleven har redan data
+        student = s.get(_Stu, student_id)
+        if student is None:
+            return False
+        s.expunge(student)
+
+    # Eleven saknar data → kör seed
+    import logging
+    logging.getLogger(__name__).info(
+        "auto-recovery: seed initial data för student %s (%s) "
+        "eftersom WeekTickRun completed = 0",
+        student_id, student_name,
+    )
+    _seed_initial_student_data(
+        student,
+        spend_profile=spend_profile,
+        starting_level=starting_level,
+        partner_model=partner_model,
+    )
+    return True
+
+
 def _seed_initial_student_data(
     student: "Student",
     *,
@@ -13304,7 +13438,9 @@ def _seed_initial_student_data(
     """Seedar lön + utgifter + events + försäkring + pension för en ny
     elev så hen har data att jobba med från första inloggningen.
 
-    Anropas direkt efter student-skapandet i v2_create_student.
+    Anropas direkt efter student-skapandet i v2_create_student OCH
+    när lärare öppnar elev-detalj-vyn för en elev som saknar data
+    (gamla failed-stuck-students från tidigare deploys).
     """
     from datetime import date as _d
     from ..game_engine.monthly_engine import tick_month

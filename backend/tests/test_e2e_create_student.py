@@ -299,6 +299,102 @@ def test_e2e_create_student_at_different_levels(app_and_token):
                 )
 
 
+def test_e2e_auto_recovery_from_old_student_without_data(app_and_token):
+    """KRITISK BUG: gamla elever som skapades innan seed-funktionen
+    byggdes (eller där alla seed-försök har failat) har INGEN data.
+    När läraren klickar på dem på student-detail-vyn ska auto-recovery
+    triggas så de får data automatiskt.
+
+    Reproducerar exakt det användaren såg: 'seed failed' på en student
+    som saknar data."""
+    client, token, teacher_id = app_and_token
+
+    # Skapa elev MED data
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"first_name": "Gamla", "starting_level": 1},
+    )
+    assert r.status_code == 200
+    sid = r.json()["student_id"]
+
+    # SIMULERA en gammal trasig student: ta BORT alla WeekTickRuns OCH
+    # all scope-DB-data för att efterlikna en student utan data.
+    from hembudget.school.game_engine_models import WeekTickRun
+    from hembudget.school.engines import (
+        get_scope_session, scope_context, scope_for_student,
+    )
+    from hembudget.db.models import (
+        Account as _Acc, MailItem as _Mail, Transaction as _Tx,
+    )
+    from hembudget.school.models import Student as _Stu
+
+    with master_session() as s:
+        # Ta bort alla WeekTickRuns
+        s.query(WeekTickRun).filter(
+            WeekTickRun.student_id == sid,
+        ).delete(synchronize_session=False)
+        # Skapa en FAILED rad så det ser ut som det aldrig gick
+        s.add(WeekTickRun(
+            student_id=sid,
+            year_month="2026-04",
+            status="failed",
+            error_message="simulerat fel från tidigare deploy",
+        ))
+        s.commit()
+        st = s.get(_Stu, sid)
+        scope_key = scope_for_student(st)
+
+    # Ta bort all scope-DB-data så student verkligen är tom
+    maker = get_scope_session(scope_key)
+    with scope_context(scope_key):
+        with maker() as s:
+            s.query(_Tx).delete(synchronize_session=False)
+            s.query(_Mail).delete(synchronize_session=False)
+            s.query(_Acc).delete(synchronize_session=False)
+            s.commit()
+
+    # Verifiera att eleven nu är TOM (som användaren ser i produktion)
+    with master_session() as s:
+        runs = s.query(WeekTickRun).filter(
+            WeekTickRun.student_id == sid,
+        ).all()
+        assert len(runs) == 1
+        assert runs[0].status == "failed"
+
+    # NU: lärare öppnar student-detail-vyn → auto-recovery ska köra seed
+    r = client.get(
+        f"/v2/teacher/students/{sid}/student-detail",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200, f"student-detail crashed: {r.text}"
+
+    # Efter auto-recovery ska det finnas en COMPLETED tick + scope-data
+    with master_session() as s:
+        completed = (
+            s.query(WeekTickRun)
+            .filter(
+                WeekTickRun.student_id == sid,
+                WeekTickRun.status == "completed",
+            )
+            .count()
+        )
+        assert completed >= 1, (
+            "Auto-recovery körde inte seed för stuck student"
+        )
+
+    with scope_context(scope_key):
+        with maker() as s:
+            accounts = s.query(_Acc).all()
+            assert len(accounts) >= 1, (
+                "Auto-recovery skapade inte konton"
+            )
+            mails = s.query(_Mail).all()
+            assert len(mails) >= 1, (
+                "Auto-recovery seedade inte postlådan"
+            )
+
+
 def test_e2e_recovery_from_stale_failed_run(app_and_token):
     """Om en student har en gammal WeekTickRun med status='failed' så
     ska seeden retry:a och få den till 'completed' eller skapa en ny."""
