@@ -422,6 +422,12 @@ def _run_master_migrations(engine: Engine) -> None:
             "students",
             "v2_partner_model VARCHAR(20) NOT NULL DEFAULT 'solo'",
         )
+    # Bug #7-utbyggnad · företagsläget per elev
+    if s_cols and "business_mode_enabled" not in s_cols:
+        _add(
+            "students",
+            "business_mode_enabled BOOLEAN NOT NULL DEFAULT 0",
+        )
 
     # BatchArtifact.exported_to_my_batches (idé 3 i dev_v1.md):
     # bank-flödet kräver att bank-artefakter passerar /my-batches via

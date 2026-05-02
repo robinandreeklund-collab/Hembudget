@@ -2164,6 +2164,7 @@ export type V2TeacherStudentDetail = {
   spend_profile: string | null;
   fairness_choice: string | null;
   partner_model: string | null;
+  business_mode_enabled?: boolean;
   pentagon: V2StudentDetailPentagon;
   pentagon_explanation: string;
   active_modules: V2StudentDetailModule[];

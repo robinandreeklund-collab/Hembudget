@@ -11426,6 +11426,7 @@ class V2TeacherStudentDetail(BaseModel):
     assignments: V2StudentDetailAssignmentSummary
     mailbox_unhandled_count: int
     mailbox_oldest_days: Optional[int]
+    business_mode_enabled: bool = False
 
 
 def _level_label(level: int) -> str:
@@ -11866,6 +11867,7 @@ def teacher_student_detail(
         assignments=assignments_summary,
         mailbox_unhandled_count=unhandled,
         mailbox_oldest_days=oldest_days,
+        business_mode_enabled=bool(getattr(student, "business_mode_enabled", False)),
     )
 
 

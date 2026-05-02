@@ -74,6 +74,50 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
   const [advanceSeed, setAdvanceSeed] = useState<number>(studentId * 31 + 7);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // Bug #7-utbyggnad · företagsläge per elev
+  const [bizEnabled, setBizEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch(`/v2/teacher/foretag/toggle/${studentId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({ enabled: false }),  // dry-read first
+    }).catch(() => undefined);
+    // Direkt-fetch student-data via existerande endpoint
+    fetch(`/v2/teacher/students/${studentId}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then(r => r.json()).then((d) => {
+      if (typeof d?.business_mode_enabled === "boolean") {
+        setBizEnabled(d.business_mode_enabled);
+      } else {
+        setBizEnabled(false);
+      }
+    }).catch(() => setBizEnabled(false));
+  }, [studentId]);
+
+  const toggleBiz = async () => {
+    if (bizEnabled === null) return;
+    const next = !bizEnabled;
+    try {
+      await fetch(`/v2/teacher/foretag/toggle/${studentId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ enabled: next }),
+      });
+      setBizEnabled(next);
+      setMsg(next
+        ? "Företagsläget aktiverat. Eleven kan nu starta enskild firma eller AB."
+        : "Företagsläget avstängt. Eleven återgår till bara privatekonomi.");
+    } catch (e) {
+      setMsg(`Fel: ${String((e as Error).message || e)}`);
+    }
+  };
 
   const refresh = async () => {
     try {
@@ -144,6 +188,59 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
           Tick-historik · Pentagon-händelser · Snabbspola
         </h2>
       </header>
+
+      {/* Bug #7-utbyggnad · Företagsläge-toggle */}
+      <div
+        style={{
+          background: "rgba(99,102,241,0.06)",
+          border: "1px solid rgba(99,102,241,0.25)",
+          padding: 14,
+          borderRadius: 10,
+          marginBottom: 14,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 10,
+            color: "#818cf8",
+            letterSpacing: 1.4,
+            fontWeight: 700,
+          }}>
+            FÖRETAGSLÄGE
+          </div>
+          <div style={{ color: "white", marginTop: 4 }}>
+            {bizEnabled === null
+              ? "Hämtar status…"
+              : bizEnabled
+                ? "✓ Aktiverat — eleven kan starta enskild firma eller AB"
+                : "Av — eleven har bara privatekonomi"}
+          </div>
+        </div>
+        <button
+          onClick={toggleBiz}
+          disabled={bizEnabled === null}
+          style={{
+            padding: "8px 18px",
+            background: bizEnabled
+              ? "rgba(220,76,43,0.15)"
+              : "rgba(129,140,248,0.18)",
+            border: `1px solid ${bizEnabled
+              ? "rgba(220,76,43,0.4)"
+              : "rgba(129,140,248,0.4)"}`,
+            color: bizEnabled ? "#fda594" : "#c7d2fe",
+            borderRadius: 6,
+            cursor: "pointer",
+            fontWeight: 600,
+            fontSize: "0.85rem",
+          }}
+        >
+          {bizEnabled === null ? "..." : bizEnabled ? "Stäng av" : "Aktivera"}
+        </button>
+      </div>
 
       {/* Snabbspola */}
       <div

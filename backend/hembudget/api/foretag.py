@@ -40,6 +40,8 @@ from ..business.models import (
 )
 from ..business.service import (
     book_owner_salary,
+    book_owner_withdrawal,
+    compute_business_pentagon,
     compute_owner_salary,
     compute_period_vat,
     estimate_corporate_tax_for_year,
@@ -50,6 +52,9 @@ from .deps import TokenInfo, require_token
 
 
 router = APIRouter(prefix="/v2/foretag", tags=["foretag"])
+teacher_router = APIRouter(
+    prefix="/v2/teacher/foretag", tags=["teacher-foretag"],
+)
 
 
 # === Schemas ===
@@ -621,6 +626,7 @@ def pay_owner_salary(
             paid_on=date.fromisoformat(body.paid_on),
             is_young=body.is_young,
             notes=body.notes,
+            student_id=info.student_id,
         )
         return OwnerSalaryOut(
             id=row.id,
@@ -630,6 +636,53 @@ def pay_owner_salary(
             prel_tax_amount=float(row.prel_tax_amount),
             net_to_owner=float(row.net_to_owner),
             total_cost_to_company=float(row.total_cost_to_company),
+        )
+
+
+class OwnerWithdrawalIn(BaseModel):
+    paid_on: str
+    amount: int = Field(ge=1)
+    notes: Optional[str] = None
+
+
+class OwnerWithdrawalOut(BaseModel):
+    id: int
+    paid_on: str
+    amount: int
+
+
+@router.post("/owner-withdrawal", response_model=OwnerWithdrawalOut)
+def withdraw_owner(
+    body: OwnerWithdrawalIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Bug #7-utbyggnad · Eget uttag från enskild firma.
+
+    Pengarna går från företagskontot till elevens privata lönekonto
+    direkt. Eleven betalar privatskatt på överskottet vid årsdeklaration.
+    """
+    sid = _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            raise HTTPException(400, "Skapa bolag först")
+        if c.form != "enskild_firma":
+            raise HTTPException(
+                400,
+                "Eget uttag gäller bara enskild firma. AB använder lön.",
+            )
+        tx = book_owner_withdrawal(
+            s,
+            company=c,
+            amount=body.amount,
+            paid_on=date.fromisoformat(body.paid_on),
+            notes=body.notes,
+            student_id=sid,
+        )
+        return OwnerWithdrawalOut(
+            id=tx.id,
+            paid_on=tx.occurred_on.isoformat(),
+            amount=int(tx.amount_excl_vat),
         )
 
 
@@ -753,3 +806,77 @@ def corporate_tax_estimate(
         return CorporateTaxOut(**estimate_corporate_tax_for_year(
             s, company=c, year=year,
         ))
+
+
+class BusinessPentagonOut(BaseModel):
+    axes: dict
+    total_score: int
+    metrics: dict
+
+
+@router.get("/pentagon", response_model=BusinessPentagonOut)
+def business_pentagon(info: TokenInfo = Depends(require_token)):
+    """Företagets pentagon (5 axlar). Räknas live från CompanyTransactions."""
+    _require_student(info)
+    with session_scope() as s:
+        c = _get_active_company(s)
+        if c is None:
+            raise HTTPException(400, "Skapa bolag först")
+        return BusinessPentagonOut(**compute_business_pentagon(s, company=c))
+
+
+# === Bug #7-utbyggnad · status-check (för CompanyMode-toggle) ===
+
+
+class BusinessModeStatusOut(BaseModel):
+    enabled: bool
+    has_active_company: bool
+
+
+@router.get("/mode-status", response_model=BusinessModeStatusOut)
+def mode_status(info: TokenInfo = Depends(require_token)):
+    """Säger om eleven får använda företagsläget (lärar-toggle) +
+    om hen har ett aktivt bolag."""
+    sid = _require_student(info)
+    from ..school.engines import master_session
+    from ..school.models import Student
+    with master_session() as ms:
+        stu = ms.get(Student, sid)
+        enabled = bool(stu and getattr(stu, "business_mode_enabled", False))
+    has_company = False
+    if enabled:
+        with session_scope() as s:
+            has_company = _get_active_company(s) is not None
+    return BusinessModeStatusOut(
+        enabled=enabled, has_active_company=has_company,
+    )
+
+
+# === Lärar-endpoint: toggla business-mode på elev ===
+
+
+class TeacherToggleIn(BaseModel):
+    enabled: bool
+
+
+@teacher_router.post("/toggle/{student_id}", response_model=BusinessModeStatusOut)
+def teacher_toggle_business_mode(
+    student_id: int,
+    body: TeacherToggleIn,
+    info: TokenInfo = Depends(require_token),
+):
+    """Läraren aktiverar/avaktiverar företagsläget för en elev."""
+    if info.role != "teacher" or info.teacher_id is None:
+        raise HTTPException(403, "Endast lärare")
+    from ..school.engines import master_session
+    from ..school.models import Student
+    with master_session() as ms:
+        stu = ms.get(Student, student_id)
+        if stu is None or stu.teacher_id != info.teacher_id:
+            raise HTTPException(404, "Elev saknas")
+        stu.business_mode_enabled = body.enabled
+        ms.commit()
+    return BusinessModeStatusOut(
+        enabled=body.enabled,
+        has_active_company=False,
+    )

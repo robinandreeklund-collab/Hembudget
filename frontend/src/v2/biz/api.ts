@@ -113,6 +113,31 @@ export type CorporateTax = {
 };
 
 
+export type BizPentagon = {
+  axes: {
+    omsattning: number;
+    kundbas: number;
+    likviditet: number;
+    tidsatgang: number;
+    vinst: number;
+  };
+  total_score: number;
+  metrics: {
+    income_4w: number;
+    expense_4w: number;
+    profit_4w: number;
+    margin_4w_pct: number;
+    kassa: number;
+    n_invoices_active: number;
+  };
+};
+
+export type ModeStatus = {
+  enabled: boolean;
+  has_active_company: boolean;
+};
+
+
 export const bizApi = {
   getCompany: () => call<Company | null>("/v2/foretag"),
   createCompany: (b: Partial<Company> & { name: string }) =>
@@ -197,4 +222,16 @@ export const bizApi = {
   // Corporate tax
   corporateTax: (year: number) =>
     call<CorporateTax>(`/v2/foretag/corporate-tax/${year}`),
+
+  // Bug #7-utbyggnad · företagets pentagon + status
+  pentagon: () => call<BizPentagon>("/v2/foretag/pentagon"),
+  modeStatus: () => call<ModeStatus>("/v2/foretag/mode-status"),
+
+  // Eget uttag (enskild firma)
+  withdraw: (b: { paid_on: string; amount: number; notes?: string }) =>
+    call<{ id: number; paid_on: string; amount: number }>(
+      "/v2/foretag/owner-withdrawal",
+      { method: "POST", body: JSON.stringify(b) },
+    ),
 };
+

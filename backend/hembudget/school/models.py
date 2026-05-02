@@ -201,6 +201,13 @@ class Student(MasterBase):
     v2_partner_model: Mapped[str] = mapped_column(
         String(20), default="solo", nullable=False,
     )
+    # Bug #7-utbyggnad · läraren aktiverar företagsläget per elev.
+    # När True kan eleven flippa dashboarden till business-mode och
+    # driva enskild firma eller AB. Eget företag blir då huvudsakligt
+    # 'jobb' — Maria-lönesamtal pausas, intäkter genereras via fakturor.
+    business_mode_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

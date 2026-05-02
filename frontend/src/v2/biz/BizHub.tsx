@@ -8,7 +8,8 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { bizApi, type Company } from "./api";
+import { bizApi, type BizPentagon, type Company } from "./api";
+import { BizPentagon as BizPentagonChart } from "./BizPentagon";
 
 
 const SEK = (n: number) =>
@@ -17,6 +18,8 @@ const SEK = (n: number) =>
 
 export function BizHub() {
   const [company, setCompany] = useState<Company | null>(null);
+  const [pentagon, setPentagon] = useState<BizPentagon | null>(null);
+  const [allowed, setAllowed] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<{
     income: number;
@@ -27,6 +30,13 @@ export function BizHub() {
   }>({ income: 0, expense: 0, n_invoices_open: 0, n_invoices_paid: 0 });
 
   useEffect(() => {
+    bizApi.modeStatus()
+      .then((s) => setAllowed(s.enabled))
+      .catch(() => setAllowed(false));
+  }, []);
+
+  useEffect(() => {
+    if (allowed !== true) return;
     Promise.all([
       bizApi.getCompany(),
       bizApi.listTransactions(500),
@@ -43,9 +53,17 @@ export function BizHub() {
         const paid = invs.filter((i) => i.status === "paid").length;
         const nextVat = vps.find((v) => v.status === "open")?.due_date || null;
         setStats({ income: inc, expense: exp, n_invoices_open: open, n_invoices_paid: paid, next_vat_due: nextVat });
+        if (c) {
+          bizApi.pentagon().then(setPentagon).catch(() => undefined);
+        }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [allowed]);
+
+  // Lärar-toggle av — visa info
+  if (allowed === false) {
+    return <BusinessNotAllowed />;
+  }
 
   if (loading) {
     return (
@@ -63,6 +81,23 @@ export function BizHub() {
 
   return (
     <div style={{ padding: "20px 28px 40px" }}>
+      {/* Pentagon + biz-char-card · matchar prototypens p-biz-hub */}
+      {pentagon && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.4fr 1fr",
+            gap: 28,
+            marginBottom: 26,
+            alignItems: "start",
+          }}
+        >
+          <div style={{ position: "relative", paddingTop: 30, paddingBottom: 30 }}>
+            <BizPentagonChart data={pentagon} />
+          </div>
+          <BizCharCard company={company!} pentagon={pentagon} stats={stats} />
+        </div>
+      )}
       {/* Bolagets header */}
       <header
         style={{
@@ -190,6 +225,292 @@ export function BizHub() {
           to="/v2/foretag/installningar"
         />
       </div>
+
+      {/* Pedagogisk info-box · "Hur biz & privat hänger ihop" */}
+      <BizPrivateInfoBox />
+    </div>
+  );
+}
+
+
+function BizCharCard({
+  company, pentagon, stats,
+}: {
+  company: Company;
+  pentagon: BizPentagon;
+  stats: { income: number; expense: number; n_invoices_open: number; n_invoices_paid: number };
+}) {
+  return (
+    <article
+      style={{
+        padding: 22,
+        background:
+          "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(15,21,37,0.5))",
+        border: "1px solid rgba(99,102,241,0.3)",
+        borderRadius: 16,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 10,
+          color: "#818cf8",
+          letterSpacing: 1.4,
+          fontWeight: 700,
+          textTransform: "uppercase",
+        }}
+      >
+        Företag · {company.form === "ab" ? "aktiebolag" : "enskild firma"}
+        {company.industry_label ? ` · ${company.industry_label}` : ""}
+      </div>
+      <h2
+        style={{
+          color: "white",
+          fontSize: "1.8rem",
+          margin: "10px 0 4px",
+          fontFamily: "Source Serif 4, Georgia, serif",
+        }}
+      >
+        {company.name}
+      </h2>
+      <div style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.9rem" }}>
+        Startat {company.started_on}
+        {company.org_number ? ` · ${company.org_number}` : ""}
+      </div>
+
+      <div
+        style={{
+          marginTop: 18,
+          paddingTop: 14,
+          borderTop: "1px solid rgba(99,102,241,0.2)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 9,
+            color: "#818cf8",
+            letterSpacing: 1.3,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            marginBottom: 8,
+          }}
+        >
+          Status nu
+        </div>
+        <p
+          style={{
+            color: "rgba(255,255,255,0.85)",
+            fontFamily: "Source Serif 4, Georgia, serif",
+            lineHeight: 1.55,
+            margin: 0,
+          }}
+        >
+          Omsättning <em style={{ color: "#c7d2fe" }}>{Math.round(pentagon.metrics.income_4w).toLocaleString("sv-SE")} kr</em> rullande 4 v ·
+          vinstmarginal <strong>{pentagon.metrics.margin_4w_pct.toFixed(0)}%</strong> ·
+          kassa <em>{Math.round(pentagon.metrics.kassa).toLocaleString("sv-SE")} kr</em>.
+          {stats.n_invoices_open > 0 && (
+            <> Du har <strong>{stats.n_invoices_open} öppna fakturor</strong> som väntar på betalning.</>
+          )}
+        </p>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 14 }}>
+        {stats.n_invoices_open > 0 && (
+          <Link to="/v2/foretag/fakturor" style={charPill("alert")}>
+            {stats.n_invoices_open} öppna fakturor
+          </Link>
+        )}
+        <Link to="/v2/foretag/bokforing" style={charPill()}>
+          Bokföring
+        </Link>
+        {company.vat_registered && (
+          <Link to="/v2/foretag/moms" style={charPill()}>
+            Moms
+          </Link>
+        )}
+        {company.form === "ab" && (
+          <Link to="/v2/foretag/lon" style={charPill()}>
+            Ta ut lön
+          </Link>
+        )}
+        {company.form === "enskild_firma" && (
+          <Link to="/v2/foretag/eget-uttag" style={charPill()}>
+            Eget uttag
+          </Link>
+        )}
+      </div>
+    </article>
+  );
+}
+
+
+function charPill(variant?: "alert"): React.CSSProperties {
+  const isAlert = variant === "alert";
+  return {
+    padding: "6px 14px",
+    fontSize: "0.78rem",
+    background: isAlert ? "rgba(220,76,43,0.15)" : "rgba(255,255,255,0.05)",
+    border: `1px solid ${isAlert ? "rgba(220,76,43,0.35)" : "rgba(255,255,255,0.18)"}`,
+    color: isAlert ? "#fda594" : "rgba(255,255,255,0.85)",
+    borderRadius: 100,
+    textDecoration: "none",
+    fontWeight: 600,
+  };
+}
+
+
+function BizPrivateInfoBox() {
+  return (
+    <article
+      style={{
+        marginTop: 28,
+        padding: 22,
+        borderLeft: "3px solid #818cf8",
+        background:
+          "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(15,21,37,0.5))",
+        borderRadius: 10,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 10,
+          color: "#c7d2fe",
+          letterSpacing: 1.4,
+          fontWeight: 700,
+          textTransform: "uppercase",
+        }}
+      >
+        Hur biz & privat hänger ihop
+      </div>
+      <h3
+        style={{
+          color: "white",
+          fontSize: "1.3rem",
+          margin: "10px 0",
+          fontFamily: "Source Serif 4, Georgia, serif",
+        }}
+      >
+        Allt är <em style={{ color: "#c7d2fe" }}>du</em>. Två konton, ett liv.
+      </h3>
+      <p
+        style={{
+          color: "rgba(255,255,255,0.75)",
+          fontFamily: "Source Serif 4, Georgia, serif",
+          lineHeight: 1.6,
+          fontSize: "1rem",
+        }}
+      >
+        Privat och företag är <strong>separata bokföringsenheter</strong> men samma
+        person. När du tar ut <em>egen lön</em> från företagskontot landar pengarna
+        direkt på ditt privata lönekonto — det syns i båda bokföringarna. Tjänar
+        företaget bra → privatkontot får mer. Pentagon i privatläge påverkas av
+        företagets resultat. Det är samma stress, samma framgång.
+      </p>
+      <ul
+        style={{
+          marginTop: 12,
+          padding: 0,
+          listStyle: "none",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 10,
+        }}
+      >
+        {[
+          ["AB-lön", "Eleven betalar privatskatt + arb.giv.avg. 31.42 % från företaget"],
+          ["Eget uttag", "Enskild firma · obeskattat, deklareras vid årsbokslut"],
+          ["Moms in & ut", "25 % på fakturor (ut), kvittas mot inköp (in)"],
+          ["Bolagsskatt", "20.6 % på AB:s årsresultat efter alla kostnader"],
+          ["Resultatöverföring", "Företagets vinst → ditt privat-economy + safety"],
+          ["F-skatt", "Privatskatt-prognos månadsvis (enskild firma)"],
+        ].map(([t, d]) => (
+          <li
+            key={t}
+            style={{
+              padding: 10,
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(99,102,241,0.15)",
+              borderRadius: 8,
+            }}
+          >
+            <strong style={{ color: "#c7d2fe" }}>{t}</strong>
+            <div style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.7)", marginTop: 2 }}>
+              {d}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div
+        style={{
+          marginTop: 14,
+          padding: 12,
+          background: "rgba(99,102,241,0.06)",
+          borderRadius: 6,
+          color: "rgba(255,255,255,0.7)",
+          fontSize: "0.85rem",
+          fontStyle: "italic",
+        }}
+      >
+        💡 Klicka på <strong style={{ color: "#c7d2fe" }}>→ Privat</strong> upptill för att flippa tillbaka
+        till privatekonomin. Allt du gör i biz påverkar din privata pentagon
+        över tid: bättre vinst → mer egen lön → bättre privat-pentagon.
+      </div>
+    </article>
+  );
+}
+
+
+function BusinessNotAllowed() {
+  return (
+    <div
+      style={{
+        padding: "60px 40px",
+        maxWidth: 720,
+        margin: "40px auto",
+        background:
+          "linear-gradient(135deg, rgba(251,191,36,0.06), rgba(15,21,37,0.5))",
+        border: "1px solid rgba(251,191,36,0.3)",
+        borderRadius: 16,
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 11,
+          color: "var(--warm)",
+          letterSpacing: 1.6,
+          fontWeight: 700,
+          textTransform: "uppercase",
+        }}
+      >
+        Företagsläge · INTE AKTIVERAT
+      </div>
+      <h2
+        style={{
+          color: "white",
+          fontSize: "1.8rem",
+          margin: "16px 0",
+          fontFamily: "Source Serif 4, Georgia, serif",
+        }}
+      >
+        Be din lärare aktivera företagsläget.
+      </h2>
+      <p style={{ color: "rgba(255,255,255,0.7)" }}>
+        Företagsläget aktiveras per elev av läraren. När det är på kan du driva
+        enskild firma eller AB parallellt med din privatekonomi.
+      </p>
+      <Link to="/v2/hub" style={{
+        display: "inline-block", marginTop: 18,
+        padding: "10px 20px",
+        background: "var(--warm, #fbbf24)",
+        color: "#1a1a1a", borderRadius: 6, textDecoration: "none",
+        fontWeight: 700,
+      }}>
+        ← Tillbaka till privatekonomin
+      </Link>
     </div>
   );
 }

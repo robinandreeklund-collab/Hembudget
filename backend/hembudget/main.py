@@ -193,6 +193,7 @@ def build_app() -> FastAPI:
     app.include_router(arbetsformedlingen.teacher_router)
     # Företagsläget (Bug #7-utbyggnad): bolag + transaktioner + lön + moms.
     app.include_router(foretag.router)
+    app.include_router(foretag.teacher_router)
 
     @app.get("/healthz")
     def healthz() -> dict:
