@@ -142,9 +142,41 @@ export function V2Topbar({ status }: { status: Status }) {
         >
           {getInitials(status.role)}
         </Link>
+        <button
+          type="button"
+          className="tb-logout"
+          onClick={handleLogout}
+          aria-label="Logga ut"
+          title="Logga ut"
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.15)",
+            color: "rgba(255,255,255,0.7)",
+            padding: "6px 10px",
+            borderRadius: 6,
+            cursor: "pointer",
+            fontSize: "0.8rem",
+            marginLeft: 8,
+          }}
+        >
+          Logga ut
+        </button>
       </div>
     </header>
   );
+}
+
+async function handleLogout() {
+  try {
+    // Använd raw fetch eftersom vi inte vill importera api-klient hit
+    await fetch("/logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${localStorage.getItem("hb_token") || ""}` },
+    }).catch(() => undefined);
+  } finally {
+    localStorage.removeItem("hb_token");
+    window.location.href = "/";
+  }
 }
 
 // Bakåtkompatibilitet: V2Banner re-exportar V2Topbar så befintliga

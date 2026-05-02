@@ -160,9 +160,12 @@
    .guide-dropdown */
 .guide-dropdown {
   display: none;
+  position: absolute;
+  z-index: 9100;
 }
 .guide-dropdown.show {
   display: block;
+  z-index: 9100;
 }
 
 /* === MOBILE FALLBACK · Fas 2AD === */

@@ -484,20 +484,6 @@ export function HubV2() {
           </div>
         </div>
 
-        <div className="hub-peda">
-          <div className="hub-peda-eye">Hub · live från DB</div>
-          <div className="hub-peda-h">
-            Allt här är <em>verklig data</em> — inga mockar.
-          </div>
-          <div className="hub-peda-prose">
-            Karaktären kommer från <code>StudentProfile</code>, pentagonen
-            beräknas via <code>wellbeing.calculate_wellbeing()</code>,
-            månads-summa läses direkt från <code>transactions</code>-tabellen
-            i din scope-DB. Saldot räknas precis som <code>/balances</code>{" "}
-            men aggregerat. Allt på <em>en endpoint</em> — <code>/v2/hub</code>.
-          </div>
-        </div>
-
         {/* Echo · global AI-chat (visas bara om AI är aktiverad) */}
         <EchoButton context="Hubben — översikt över ekonomin" />
       </div>

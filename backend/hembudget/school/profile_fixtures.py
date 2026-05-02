@@ -43,7 +43,7 @@ PROFESSIONS: list[Profession] = [
     ]),
     Profession("Frisör", 26_500, 33_000, [
         "Cutters", "Klippoteket", "Hairdo Sthlm",
-        "Egen verksamhet", "Frisörsalong Lockigt",
+        "Frisörsalong Lockigt", "BarberShop North",
     ]),
     Profession("Bilmekaniker", 30_500, 37_500, [
         "Mekonomen", "AD Bildelar", "Bilia AB", "Volvo Cars Service",
@@ -75,7 +75,7 @@ PROFESSIONS: list[Profession] = [
     ]),
     Profession("Kock", 28_500, 36_500, [
         "Operakällaren", "Sturehof", "Tre Små Rum", "Restaurang Volt",
-        "Ekstedt", "Egen verksamhet",
+        "Ekstedt", "Restaurang Mat",
     ]),
     Profession("Barnskötare", 26_500, 31_500, [
         "Stockholms Stad förskola", "Göteborgs Stad förskola",
