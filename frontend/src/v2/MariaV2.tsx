@@ -23,7 +23,6 @@ import {
   type V2MariaNegotiation,
 } from "./api";
 import { V2Banner } from "./V2Banner";
-import { EchoButton } from "./EchoButton";
 import "./lan.css";
 
 
@@ -666,7 +665,6 @@ export function MariaV2() {
         )}
 
         {/* Echo · taktiskt råd när som helst */}
-        <EchoButton context="Lönesamtal med Maria — taktik, BATNA, nästa drag" />
       </div>
     </div>
   );

@@ -16,7 +16,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { v2Api, type V2AvanzaData } from "./api";
 import { V2Banner } from "./V2Banner";
-import { EchoButton } from "./EchoButton";
 import "./lan.css";
 
 const SEK = (n: number) =>
@@ -507,7 +506,6 @@ export function AvanzaV2() {
           </div>
         </div>
       </div>
-      <EchoButton context="Avanza ISK — fonder, aktier, skatt" />
     </div>
   );
 }

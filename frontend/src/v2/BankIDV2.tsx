@@ -18,7 +18,6 @@ import {
   type V2BankIDSessionOut,
 } from "./api";
 import { V2Banner } from "./V2Banner";
-import { EchoButton } from "./EchoButton";
 import "./lan.css";
 
 const SEK = (n: number) =>
@@ -618,7 +617,6 @@ export function BankIDV2() {
         </div>
 
         {/* Echo · fråga om vad som ska signeras */}
-        <EchoButton context="BankID-signering — vad är detta för fakturor?" />
       </div>
     </div>
   );

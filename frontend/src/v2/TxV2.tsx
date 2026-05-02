@@ -21,7 +21,6 @@ import {
   type V2TxDetailData,
 } from "./api";
 import { V2Banner } from "./V2Banner";
-import { EchoButton } from "./EchoButton";
 import "./lan.css";
 
 const SEK = (n: number) =>
@@ -574,7 +573,6 @@ export function TxV2() {
           </p>
         </div>
 
-        <EchoButton context={`Transaktion · ${data.raw_description}`} />
       </div>
     </div>
   );

@@ -17,7 +17,6 @@ import {
   type V2MailDetailData,
 } from "./api";
 import { V2Banner } from "./V2Banner";
-import { EchoButton } from "./EchoButton";
 import "./lan.css";
 
 const SEK = (n: number) =>
@@ -305,7 +304,6 @@ export function MailDetailV2() {
         {isCcInvoice && <CcPedaBlock />}
         {isSalarySlip && <SalaryPedaBlock />}
 
-        <EchoButton context={`Brev: ${m.sender} · ${m.subject}`} />
       </div>
     </div>
   );
