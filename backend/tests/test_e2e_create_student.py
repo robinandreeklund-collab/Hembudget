@@ -395,6 +395,52 @@ def test_e2e_auto_recovery_from_old_student_without_data(app_and_token):
             )
 
 
+def test_e2e_v1_create_student_endpoint_also_seeds(app_and_token):
+    """Säkerställ att den GAMLA v1-endpointen /teacher/students också
+    triggar seed. Detta var en BUG där v1-endpointen skapade student
+    UTAN att köra tick_month → tomt postlådan."""
+    client, token, _teacher_id = app_and_token
+
+    r = client.post(
+        "/teacher/students",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"display_name": "V1 Elev"},
+    )
+    assert r.status_code == 200, f"v1 create failed: {r.text}"
+    sid = r.json()["id"]
+
+    # Verifiera att seed har körts
+    from hembudget.school.game_engine_models import WeekTickRun
+    with master_session() as s:
+        runs = s.query(WeekTickRun).filter(
+            WeekTickRun.student_id == sid,
+        ).all()
+        assert len(runs) >= 1, (
+            "v1-endpointen körde inte tick_month — eleven får ingen data"
+        )
+        for run in runs:
+            assert run.status != "failed", (
+                f"v1-endpointens seed failed: {run.error_message}"
+            )
+
+    # Verifiera scope-data finns
+    from hembudget.school.engines import (
+        get_scope_session, scope_context, scope_for_student,
+    )
+    from hembudget.db.models import Account, Transaction, MailItem
+    from hembudget.school.models import Student as _Stu
+    with master_session() as s:
+        st = s.get(_Stu, sid)
+        scope_key = scope_for_student(st)
+
+    maker = get_scope_session(scope_key)
+    with scope_context(scope_key):
+        with maker() as s:
+            assert s.query(Account).count() >= 1
+            assert s.query(Transaction).count() >= 1
+            assert s.query(MailItem).count() >= 1
+
+
 def test_e2e_recovery_from_stale_failed_run(app_and_token):
     """Om en student har en gammal WeekTickRun med status='failed' så
     ska seeden retry:a och få den till 'completed' eller skapa en ny."""
