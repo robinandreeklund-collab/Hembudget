@@ -1,21 +1,27 @@
 # 14 · Monte Carlo · validerings-resultat (Fas 8 V1)
 
-> Initial Monte Carlo-körning · 300 simuleringar per (level × spend_profile)
+> Komplett Monte Carlo-körning · **10 000 simuleringar per cell** =
+> 90 000 totalt · ~78 sekunder
 > Genererad efter Sprint 1-6 + post-analys (sjuk + budget-fix)
 
-## Resultat — initial körning
+## Resultat — full körning (10k per cell)
 
 ```
-Nivå 1 sparsam     pos= 95.7% mar=  0.7% neg=  3.7% median= +125 662 kr
-Nivå 1 balanserad  pos= 94.3% mar=  1.3% neg=  4.3% median= +110 420 kr
-Nivå 1 slosa       pos= 89.7% mar=  3.7% neg=  6.7% median=  +91 345 kr
-Nivå 2 sparsam     pos= 98.7% mar=  0.0% neg=  1.3% median= +147 051 kr
-Nivå 2 balanserad  pos= 98.0% mar=  0.7% neg=  1.3% median= +134 678 kr
-Nivå 2 slosa       pos= 95.3% mar=  2.3% neg=  2.3% median= +111 032 kr
-Nivå 3 sparsam     pos= 99.0% mar=  0.3% neg=  0.7% median= +182 832 kr
-Nivå 3 balanserad  pos= 99.0% mar=  0.0% neg=  1.0% median= +169 421 kr
-Nivå 3 slosa       pos= 97.3% mar=  1.7% neg=  1.0% median= +145 894 kr
+Nivå Spend            N   pos%   mar%   neg%       p10    median       p90      mean    tid
+---------------------------------------------------------------------------------------------------------
+    1 sparsam     10000   94.9    0.8    4.3    +36217   +121213   +308242   +147695   8.8s
+    1 balanserad  10000   93.8    1.4    4.9    +24672   +109367   +290495   +134149   8.7s
+    1 slosa       10000   90.0    3.0    7.0     +5109    +88791   +261447   +111573   8.6s
+    2 sparsam     10000   98.5    0.4    1.1    +56017   +150323   +363213   +183971   8.6s
+    2 balanserad  10000   97.8    0.8    1.4    +44803   +138110   +346009   +170429   8.6s
+    2 slosa       10000   95.3    2.1    2.6    +25981   +117468   +317640   +147860   8.6s
+    3 sparsam     10000   99.5    0.2    0.2    +69314   +174715   +413052   +213635   8.7s
+    3 balanserad  10000   99.1    0.5    0.3    +58100   +162816   +395638   +200092   8.7s
+    3 slosa       10000   97.6    1.3    1.1    +39293   +141724   +365746   +177520   8.6s
 ```
+
+(Initial 300-sample-körning matchar 10k inom <1 procentenhet — seed-systemet
+är robust och statistiken konvergerar snabbt.)
 
 ## Analys
 
