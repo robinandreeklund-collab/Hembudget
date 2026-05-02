@@ -10,6 +10,7 @@
  * mönster, men anpassat för React/Vite.
  */
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { BizHub } from "./biz/BizHub";
 
 type Mode = "private" | "business";
@@ -27,6 +28,7 @@ function writeMode(m: Mode) {
 
 export function useCompanyMode(): [Mode, () => void] {
   const [mode, setMode] = useState<Mode>(readMode());
+  const navigate = useNavigate();
 
   useEffect(() => {
     document.body.setAttribute("data-mode", mode);
@@ -43,6 +45,12 @@ export function useCompanyMode(): [Mode, () => void] {
       app?.classList.remove("flip-out");
       app?.classList.add("flip-in");
       setTimeout(() => app?.classList.remove("flip-in"), 550);
+      // Bug 12: navigera till hubben efter toggle så användaren ser
+      // RÄTT akörsmenyer (privat aktörer / biz aktörer) — inte stuck
+      // på en privat-page som inte matchar.
+      if (window.location.pathname !== "/v2/hub") {
+        navigate("/v2/hub");
+      }
     }, 460);
   };
 

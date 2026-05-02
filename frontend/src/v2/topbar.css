@@ -333,3 +333,35 @@ body.v2-app {
   padding-top: 56px;
   padding-bottom: 36px;
 }
+
+/* === Bug 4 · Företagsläget · indigo accent (matchar prototypens
+       body[data-mode="business"] i /proposals/vol-7/elev.html) === */
+body[data-mode="business"] {
+  --accent-mode: #6366f1;
+}
+body[data-mode="business"] .v2-topbar {
+  border-bottom-color: rgba(99, 102, 241, 0.35);
+  background: rgba(11, 11, 28, 0.92);
+}
+body[data-mode="business"] .tb-brand {
+  color: #c7d2fe;
+}
+body[data-mode="business"] .tb-role {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+}
+body[data-mode="business"] .v2-hub-root,
+body[data-mode="business"] .v2-larare-root {
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99, 102, 241, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168, 85, 247, 0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #0a0e1a 0%, #0d1226 60%, #0a0e1a 100%);
+}
+/* Hide demo-style priv-only / biz-only elements baserat på mode */
+body[data-mode="business"] .priv-only {
+  display: none !important;
+}
+body:not([data-mode="business"]) .biz-only {
+  display: none !important;
+}

@@ -5,7 +5,12 @@
 import { useEffect, useState } from "react";
 import { CompanyModeWrapper } from "./CompanyMode";
 import { Link } from "react-router-dom";
-import { v2Api, type HubData, type V2PentAxis } from "./api";
+import {
+  v2Api,
+  type HubData,
+  type V2MailItem,
+  type V2PentAxis,
+} from "./api";
 import { V2Banner } from "./V2Banner";
 import { useAutoStartIntroGuide } from "./guides/GuideContext";
 import { PentagonFlipCard } from "./PentagonFlipCard";
@@ -20,6 +25,8 @@ export function HubV2() {
   const [activeAxis, setActiveAxis] = useState<V2PentAxis | null>(null);
   // Bug #14 · brev-räknare på Postlådan-länken
   const [mailUnread, setMailUnread] = useState<number>(0);
+  // Bug 6 · senaste händelse (för EventCard under pentagon)
+  const [latestEvent, setLatestEvent] = useState<V2MailItem | null>(null);
 
   // Auto-starta intro-guide om eleven inte sett den (efter onboarding)
   useAutoStartIntroGuide();
@@ -32,11 +39,43 @@ export function HubV2() {
   }, []);
 
   // Bug #14 · ohanterade brev (poll var 15:e sek för realtid)
+  // Bug 6 · plocka det viktigaste mejlet som "senaste händelse"
   useEffect(() => {
     const fetchMail = () => {
       v2Api
         .postladan("unhandled")
-        .then((d) => setMailUnread(d.summary?.total_count || 0))
+        .then((d) => {
+          setMailUnread(d.summary?.total_count || 0);
+          // Pick the most-urgent unhandled item as the EventCard:
+          // prio 1: invoice with overdue/close due-date
+          // prio 2: latest mail by received_at
+          const items = d.items || [];
+          if (items.length === 0) {
+            setLatestEvent(null);
+            return;
+          }
+          const today = new Date().toISOString().slice(0, 10);
+          const invoices = items.filter(
+            (i) => i.mail_type === "invoice" && i.due_date,
+          );
+          const overdue = invoices.filter(
+            (i) => i.due_date && i.due_date < today,
+          );
+          if (overdue.length > 0) {
+            setLatestEvent(overdue[0]);
+            return;
+          }
+          if (invoices.length > 0) {
+            // Närmaste förfallodatum
+            const sorted = [...invoices].sort(
+              (a, b) => (a.due_date || "").localeCompare(b.due_date || ""),
+            );
+            setLatestEvent(sorted[0]);
+            return;
+          }
+          // Annars senaste mejlet
+          setLatestEvent(items[0]);
+        })
         .catch(() => undefined);
     };
     fetchMail();
@@ -356,6 +395,9 @@ export function HubV2() {
           </div>
         )}
 
+        {/* Bug 6 · HÄNDELSE under pentagon (matchar demo .event-card) */}
+        {latestEvent && <EventCard mail={latestEvent} />}
+
         {/* === KOMPASSEN · navigation till alla aktörer + verktyg === */}
         <div className="compass" data-guide="hub-compass">
           <div className="compass-eye">Aktörerna · åtta rum + postlådan</div>
@@ -530,5 +572,162 @@ export function HubV2() {
       </div>
       </CompanyModeWrapper>
     </div>
+  );
+}
+
+
+/**
+ * EventCard · senaste händelse under pentagon (Bug 6).
+ * Matchar demo .event-card-stilen i /proposals/vol-7/elev.html.
+ */
+function EventCard({ mail }: { mail: V2MailItem }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const isOverdue = mail.due_date != null && mail.due_date < today;
+  const isInvoice = mail.mail_type === "invoice";
+  const amount = mail.amount != null ? Math.abs(mail.amount) : null;
+
+  // Färg-tema: röd för overdue, varm för snart förfallande, neutral annars
+  const accentBorder = isOverdue
+    ? "rgba(220,76,43,0.55)"
+    : isInvoice
+    ? "rgba(251,191,36,0.45)"
+    : "rgba(99,102,241,0.4)";
+  const accentBg = isOverdue
+    ? "linear-gradient(135deg, rgba(220,76,43,0.10), rgba(15,21,37,0.5))"
+    : isInvoice
+    ? "linear-gradient(135deg, rgba(251,191,36,0.10), rgba(15,21,37,0.5))"
+    : "linear-gradient(135deg, rgba(99,102,241,0.10), rgba(15,21,37,0.5))";
+
+  return (
+    <article
+      className="event-card"
+      style={{
+        background: accentBg,
+        border: `1px solid ${accentBorder}`,
+        borderLeft: `4px solid ${accentBorder}`,
+        borderRadius: 12,
+        padding: 20,
+        margin: "20px 0",
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 9,
+          color: isOverdue
+            ? "#fda594"
+            : isInvoice
+            ? "#fbbf24"
+            : "#a5b4fc",
+          letterSpacing: 1.4,
+          fontWeight: 700,
+          textTransform: "uppercase",
+        }}
+      >
+        Händelse · {new Date(mail.received_at).toLocaleString("sv-SE", {
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        })}{isOverdue ? " · FÖRFALLEN" : isInvoice ? " · ohanterad" : ""}
+      </div>
+      <h2
+        style={{
+          color: "white",
+          fontSize: "1.4rem",
+          margin: "8px 0",
+          fontFamily: "Source Serif 4, Georgia, serif",
+          lineHeight: 1.3,
+        }}
+      >
+        {mail.sender}
+        {amount !== null && (
+          <>
+            {" "}
+            — <em style={{ color: isOverdue ? "#fda594" : "#fbbf24" }}>
+              {new Intl.NumberFormat("sv-SE").format(amount)} kr
+            </em>
+          </>
+        )}
+      </h2>
+      <p
+        style={{
+          color: "rgba(255,255,255,0.75)",
+          fontFamily: "Source Serif 4, Georgia, serif",
+          fontSize: "1rem",
+          margin: "8px 0 14px",
+          lineHeight: 1.55,
+        }}
+      >
+        {mail.subject}
+        {mail.due_date && (
+          <>
+            {" — "}
+            <strong>
+              {isOverdue ? "förföll " : "förfaller "}
+              {new Date(mail.due_date).toLocaleDateString("sv-SE", {
+                day: "numeric",
+                month: "long",
+              })}
+            </strong>
+          </>
+        )}
+      </p>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          marginTop: 12,
+        }}
+      >
+        <Link
+          to={`/v2/postladan/${mail.id}`}
+          style={{
+            background: "rgba(99,102,241,0.25)",
+            border: "1px solid rgba(99,102,241,0.5)",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: 6,
+            textDecoration: "none",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+          }}
+        >
+          Öppna brevet →
+        </Link>
+        <Link
+          to="/v2/postladan"
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(99,102,241,0.3)",
+            color: "#c7d2fe",
+            padding: "8px 16px",
+            borderRadius: 6,
+            textDecoration: "none",
+            fontSize: "0.85rem",
+          }}
+        >
+          Hela postlådan
+        </Link>
+        {isInvoice && (
+          <Link
+            to="/v2/banken"
+            style={{
+              background: "transparent",
+              border: "1px solid rgba(99,102,241,0.3)",
+              color: "#c7d2fe",
+              padding: "8px 16px",
+              borderRadius: 6,
+              textDecoration: "none",
+              fontSize: "0.85rem",
+            }}
+          >
+            Betala från lönekontot
+          </Link>
+        )}
+      </div>
+    </article>
   );
 }
