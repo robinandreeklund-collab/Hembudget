@@ -1593,6 +1593,221 @@ BANK_TEMPLATE = {
 }
 
 
+BUSINESS_TEMPLATE = {
+    "title": "Mitt företag — från idé till revision",
+    "summary": (
+        "Du driver ett eget företag i 8–16 veckor. Skickar offerter, "
+        "vinner jobb, levererar, fakturerar och bokför. Läraren agerar "
+        "myndighet/leverantör. Pedagogiken kommer från att DU faktiskt "
+        "ser konsekvenserna av varje val."
+    ),
+    "steps": [
+        {
+            "kind": "read",
+            "title": "Vad är ett företag?",
+            "content": (
+                "Ett företag är en organisation som producerar varor "
+                "eller tjänster i utbyte mot pengar. Som elev i den här "
+                "simulatorn väljer du:\n\n"
+                "- **Affärsidé** · vad ska du sälja? Hantverk, IT, "
+                "café, konsulttjänster, kreativa tjänster eller "
+                "e-handel.\n"
+                "- **Bolagsform** · enskild firma (enkelt) eller "
+                "aktiebolag (kräver 25 000 kr aktiekapital men separerar "
+                "din privatekonomi från företagets).\n\n"
+                "I företagssimulatorn kommer du att:\n"
+                "1. Få offertförfrågningar varje vecka\n"
+                "2. Lämna egna offerter (pris + tid + pitch)\n"
+                "3. Vinna eller förlora baserat på rykte, pris, pitch\n"
+                "4. Leverera, sätta kvalitet, skapa faktura\n"
+                "5. Bokföra och hantera moms\n\n"
+                "Du tjänar ihop privatekonomin via lön (AB) eller "
+                "uttag (enskild firma). Det du gör i bolaget påverkar "
+                "din privata pentagon."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Skapa ditt företag",
+            "content": (
+                "Gå till /v2/foretag (eller flippa kortet i hubben till "
+                "företagsläget). Tryck **Starta företag** och fyll i:\n\n"
+                "- Företagsnamn (bör vara tydligt och beskriva vad du gör)\n"
+                "- Bolagsform · börja med enskild firma om du är osäker\n"
+                "- Bransch · välj från listan, det styr vilka kunder du får\n\n"
+                "När du är klar: läraren kan se ditt bolag i klass-vyn."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "create_company",
+            },
+        },
+        {
+            "kind": "read",
+            "title": "Vad är en offert? Vad ska den innehålla?",
+            "content": (
+                "En offert är ditt erbjudande till en potentiell kund. "
+                "Den ska svara på tre frågor:\n\n"
+                "1. **Vad gör du?** — exakt vad ingår i jobbet?\n"
+                "2. **Hur mycket?** — totalpris exklusive moms\n"
+                "3. **När?** — leveranstid i dagar\n\n"
+                "Plus en **pitch** · varför ska de välja just dig? "
+                "Det är där du visar förståelse för deras behov och "
+                "varför ditt företag passar uppdraget.\n\n"
+                "**Spelmotorn räknar:**\n"
+                "Sannolikheten att kunden tackar ja styrs av:\n"
+                "- Pris vs riktpris (största faktorn)\n"
+                "- Ditt rykte (0–100)\n"
+                "- Pitch-kvaliteten (AI-bedömd om du skrev en)\n"
+                "- Leveranstid (för långsam = nej)\n"
+                "- Aktiv marknadsföring"
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Lämna din första offert",
+            "content": (
+                "Tryck på **Stega vecka** i biz-hubben för att generera "
+                "offertförfrågningar. Gå sedan till /v2/foretag/offerter "
+                "och välj en. Lämna en offert med:\n\n"
+                "- Pris (jämför med riktpriset som visas)\n"
+                "- Leveranstid\n"
+                "- Pitch (kort, övertygande text)\n\n"
+                "Kunden svarar nästa vecka. Stega igen för att få deras besked."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "submit_quote",
+            },
+        },
+        {
+            "kind": "quiz",
+            "title": "Brutto- vs nettovinst",
+            "content": (
+                "Du fakturerar 10 000 kr exkl moms. Direkta kostnader är "
+                "3 000 kr (material). Indirekta kostnader (kontor, "
+                "telefon) är 1 500 kr. Skatt på vinsten är 20 %."
+            ),
+            "params": {
+                "question": "Vad är nettovinsten?",
+                "options": [
+                    "10 000 kr",
+                    "7 000 kr",
+                    "5 500 kr",
+                    "4 400 kr",
+                ],
+                "correct_index": 3,
+                "explanation": (
+                    "Bruttovinst = intäkt – direkta kostnader = "
+                    "10 000 – 3 000 = **7 000 kr**.\n"
+                    "Resultat före skatt = bruttovinst – indirekta = "
+                    "7 000 – 1 500 = **5 500 kr**.\n"
+                    "Nettovinst = resultat × (1 – skatt) = "
+                    "5 500 × 0.80 = **4 400 kr**."
+                ),
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Leverera ditt första vunna jobb",
+            "content": (
+                "När en offert är accepterad blir den ett **Jobb** "
+                "i /v2/foretag/jobb. Tryck **Leverera** på ett pågående "
+                "jobb och sätt en kvalitet 0–100.\n\n"
+                "**OBS!** Var ärlig. Hög kvalitet:\n"
+                "- höjer ditt rykte (snabbare pipeline)\n"
+                "- triggar repetitionsorder från samma kund\n"
+                "- ger +2 economy + 1 leisure i din privata pentagon\n\n"
+                "Låg kvalitet (< 50):\n"
+                "- skapar klagomål → ryktesfall\n"
+                "- ger -2 social i privata pentagon\n\n"
+                "Levererat jobb skapar automatiskt en faktura som "
+                "kunden betalar inom 30 dagar (de flesta)."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "deliver_job",
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad var svårast med ditt första kunduppdrag?",
+            "content": (
+                "Skriv 5–8 meningar:\n\n"
+                "- Hur tänkte du när du satte ditt första pris?\n"
+                "- Var pitchen svår att skriva?\n"
+                "- Hur kändes det att sätta kvalitetspoäng själv?\n"
+                "- Vad ändrar du till nästa offert?"
+            ),
+        },
+        {
+            "kind": "read",
+            "title": "Marknadsföring + strategiska beslut",
+            "content": (
+                "Två kanaler för att växa bolaget:\n\n"
+                "**Marknadsföring** (löpande): Sociala medier, "
+                "flygblad, Google-annonser, sponsring eller event. "
+                "Skriv en copy-text — AI bedömer kvaliteten 0.5–1.5×. "
+                "Bra copy + konkret CTA → fler offertförfrågningar varje "
+                "vecka.\n\n"
+                "**Strategiska beslut** (engångs/löpande):\n"
+                "- *Anställa deltid* → +1 leveranskapacitet\n"
+                "- *Friskvård* → +3 rykte\n"
+                "- *Leasa bil* → låser upp körnings-jobb\n"
+                "- *Försäkring* → -90 % skada vid slumpevent\n"
+                "- *Ny lokal* → +5 rykte + 1 kapacitet\n\n"
+                "Varje beslut har en kostnad. Det är där företagsekonomin "
+                "blir verklig."
+            ),
+        },
+        {
+            "kind": "task",
+            "title": "Starta en marknadsföringskampanj",
+            "content": (
+                "Gå till /v2/foretag/marknad och tryck **Skapa kampanj**. "
+                "Välj typ + skriv copy-text + sätt budget. AI:n bedömer "
+                "din copy och ger en kvalitetsfaktor som påverkar "
+                "pipelinen i 4 veckor.\n\n"
+                "Tips för bra copy: konkret målgrupp + tydlig "
+                "uppmaning (CTA) + några väl valda ord."
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "create_marketing",
+            },
+        },
+        {
+            "kind": "task",
+            "title": "Stäm av första månaden",
+            "content": (
+                "Gå till /v2/foretag/bokforing. Granska:\n\n"
+                "- **Intäkter** · vad har kommit in?\n"
+                "- **Utgifter** · vad har gått ut? (löner, marknadsföring, "
+                "leverantörsfakturor)\n"
+                "- **Resultat** · intäkter minus utgifter\n\n"
+                "Är resultatet positivt? Bra! Du har gjort vinst.\n"
+                "Är det negativt? Vad kan du ändra till nästa månad?"
+            ),
+            "params": {
+                "assignment_kind": "free_text",
+                "free_text_check": "review_bookkeeping",
+            },
+        },
+        {
+            "kind": "reflect",
+            "title": "Vad ska du ändra på till nästa månad?",
+            "content": (
+                "Skriv 5–8 meningar:\n\n"
+                "- Vilka tre lärdomar tar du med dig?\n"
+                "- Var det något du tjänade pengar på som du inte räknat med?\n"
+                "- Var det något du betalade som du kunde undvikit?\n"
+                "- Vad är ditt mål för nästa månad?"
+            ),
+        },
+    ],
+}
+
+
 def seed_system_modules(master_session) -> int:
     """Lägg in systemmoduler (teacher_id=NULL + is_template=True) om saknas.
     Identifieras via unikt title+teacher_id=NULL — enklare än ett key-fält.
@@ -1619,6 +1834,7 @@ def seed_system_modules(master_session) -> int:
         EMPLOYER_TEMPLATE,
         SALARY_NEGOTIATION_TEMPLATE,
         BANK_TEMPLATE,
+        BUSINESS_TEMPLATE,
     ]:
         if tpl["title"] in existing:
             continue
