@@ -1715,6 +1715,255 @@ body.is-loaded .cover-credits { animation: hero-fade-in .5s ease 1.0s both; }
 .about-block p em {
   font-family: var(--serif); font-style: italic; color: var(--fg);
 }
+/* === ECONOMY-SIM ANIMATION · levande spelmotor-visualisering === */
+.econsim {
+  margin: clamp(20px, 3vh, 40px) auto clamp(56px, 7vh, 80px);
+  max-width: 920px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+.econsim-stage {
+  position: relative;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 50%, rgba(220,76,43,0.06) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(15,21,37,0.85), rgba(10,14,26,0.95));
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,0.5);
+}
+.econsim-stage::before {
+  content: "";
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(circle 1px at 8% 14%, rgba(255,255,255,0.4) 0%, transparent 50%),
+    radial-gradient(circle 1px at 22% 88%, rgba(255,255,255,0.3) 0%, transparent 50%),
+    radial-gradient(circle 1px at 75% 32%, rgba(255,255,255,0.25) 0%, transparent 50%),
+    radial-gradient(circle 1px at 92% 78%, rgba(255,255,255,0.3) 0%, transparent 50%);
+  pointer-events: none;
+  animation: econsim-stars 14s linear infinite;
+}
+@keyframes econsim-stars {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+.econsim-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  position: relative;
+  z-index: 2;
+}
+
+.econsim-hud {
+  position: absolute;
+  top: 14px; left: 18px; right: 18px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 3;
+}
+.econsim-hud-cell.econsim-hud-right { text-align: right; }
+.econsim-hud-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.econsim-hud-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  color: rgba(255,255,255,0.55);
+  margin-top: 3px;
+}
+.econsim-hud-meta strong { color: rgba(255,255,255,0.85); font-weight: 600; }
+.econsim-hud-bal {
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  color: rgba(110,231,183,0.9);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* === Aktör-cirklar === */
+.econsim-actor circle {
+  transition: r 0.3s ease, fill 0.3s ease;
+}
+.econsim-actor.active circle.actor-bg {
+  fill: rgba(251,191,36,0.18);
+  stroke: var(--warm);
+  stroke-width: 1.5;
+}
+.econsim-actor.active circle.actor-glow {
+  opacity: 1 !important;
+}
+.econsim-actor circle.actor-glow {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+.econsim-actor text.actor-icon {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 700;
+  fill: rgba(255,255,255,0.85);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  user-select: none;
+  pointer-events: none;
+}
+.econsim-actor.active text.actor-icon {
+  fill: var(--warm);
+}
+.econsim-actor text.actor-label {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  fill: rgba(255,255,255,0.55);
+  text-anchor: middle;
+  user-select: none;
+}
+.econsim-actor.active text.actor-label {
+  fill: var(--warm);
+}
+
+/* === Pentagon andas === */
+.econsim-pentagon .p-now {
+  transform-origin: center;
+  animation: pent-breathe 4.5s ease-in-out infinite;
+}
+@keyframes pent-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(0.96); opacity: 0.92; }
+}
+.econsim-pentagon .p-score {
+  transition: fill 0.3s ease;
+}
+
+/* Axel-etiketter */
+.econsim-axis-label {
+  font-family: var(--mono); font-size: 8px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  fill: rgba(255,255,255,0.45);
+}
+.econsim-axis-label.bumped {
+  fill: var(--warm);
+  animation: axis-flash 1.4s ease-out;
+}
+@keyframes axis-flash {
+  0%   { fill: rgba(110,231,183,1); }
+  100% { fill: rgba(255,255,255,0.45); }
+}
+
+/* === Partiklar (pengar/fakturor) === */
+.econsim-particle {
+  pointer-events: none;
+}
+
+/* === Energi-linjer aktör → centrum === */
+.econsim-line {
+  fill: none;
+  stroke: var(--warm);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: line-flash 1.2s ease-out forwards;
+}
+.econsim-line.income { stroke: rgba(110,231,183,0.85); }
+.econsim-line.expense { stroke: rgba(220,76,43,0.85); }
+.econsim-line.event { stroke: rgba(251,191,36,0.85); }
+.econsim-line.decision { stroke: rgba(129,140,248,0.85); }
+@keyframes line-flash {
+  0%   { opacity: 0; stroke-dashoffset: 200; }
+  20%  { opacity: 0.85; }
+  100% { opacity: 0; stroke-dashoffset: 0; }
+}
+
+/* === Live event-feed === */
+.econsim-feed {
+  background: rgba(15,21,37,0.6);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.78);
+}
+.econsim-feed-eye {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(220,76,43,0.85);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.econsim-feed-pulse {
+  animation: feed-pulse 1.6s ease-in-out infinite;
+}
+@keyframes feed-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.econsim-feed-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  height: 96px;
+  overflow: hidden;
+  position: relative;
+}
+.econsim-feed-list li {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.78);
+  padding: 4px 0;
+  animation: feed-slide-in 0.5s ease-out;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.econsim-feed-list li::before {
+  content: "● ";
+  color: rgba(255,255,255,0.4);
+  margin-right: 6px;
+}
+.econsim-feed-list li.income::before { color: rgba(110,231,183,0.9); }
+.econsim-feed-list li.expense::before { color: rgba(220,76,43,0.9); }
+.econsim-feed-list li.event::before { color: rgba(251,191,36,0.9); }
+.econsim-feed-list li.decision::before { color: rgba(129,140,248,0.9); }
+.econsim-feed-list li .ts {
+  color: rgba(255,255,255,0.4);
+  margin-right: 8px;
+}
+.econsim-feed-list li .amount {
+  font-weight: 700;
+  color: rgba(255,255,255,0.95);
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.econsim-feed-list li.income .amount { color: rgba(110,231,183,1); }
+.econsim-feed-list li.expense .amount { color: rgba(220,76,43,1); }
+@keyframes feed-slide-in {
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Mobil-justering */
+@media (max-width: 720px) {
+  .econsim-hud { top: 8px; left: 10px; right: 10px; }
+  .econsim-hud-eye { font-size: 8px; letter-spacing: 1.2px; }
+  .econsim-hud-meta { font-size: 8.5px; }
+  .econsim-hud-bal { font-size: 11px; }
+  .econsim-feed-list { height: 80px; }
+  .econsim-feed-list li { font-size: 10.5px; }
+}
+
 .about-close {
   text-align: center;
   font-family: var(--serif); font-style: italic;
@@ -2354,6 +2603,116 @@ html.lenis, html.lenis body { height: auto; }
         <h2>En levande simulering av <em>hela ekonomilivet</em>.</h2>
       </header>
 
+      <!-- LEVANDE SPELMOTOR-ANIMATION · pentagon + 8 aktörer + partikelflöde -->
+      <div class="econsim" data-fx="fade-up" aria-hidden="true">
+        <div class="econsim-stage">
+          <svg class="econsim-svg" viewBox="0 0 720 540" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <radialGradient id="sim-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="rgba(220,76,43,0.55)" />
+                <stop offset="60%" stop-color="rgba(220,76,43,0.10)" />
+                <stop offset="100%" stop-color="rgba(220,76,43,0)" />
+              </radialGradient>
+              <radialGradient id="sim-glow-warm" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="rgba(251,191,36,0.55)" />
+                <stop offset="60%" stop-color="rgba(251,191,36,0.10)" />
+                <stop offset="100%" stop-color="rgba(251,191,36,0)" />
+              </radialGradient>
+              <radialGradient id="sim-glow-green" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="rgba(110,231,183,0.55)" />
+                <stop offset="60%" stop-color="rgba(110,231,183,0.10)" />
+                <stop offset="100%" stop-color="rgba(110,231,183,0)" />
+              </radialGradient>
+              <radialGradient id="sim-glow-indigo" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="rgba(129,140,248,0.55)" />
+                <stop offset="60%" stop-color="rgba(129,140,248,0.10)" />
+                <stop offset="100%" stop-color="rgba(129,140,248,0)" />
+              </radialGradient>
+              <filter id="sim-blur">
+                <feGaussianBlur stdDeviation="2" />
+              </filter>
+              <pattern id="sim-grid" x="0" y="0" width="48" height="48" patternUnits="userSpaceOnUse">
+                <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+              </pattern>
+            </defs>
+
+            <!-- Bakgrundsraster -->
+            <rect width="720" height="540" fill="url(#sim-grid)" />
+
+            <!-- Aktör-ring (8 aktörer + postlåda) -->
+            <g class="econsim-actors" transform="translate(360 270)">
+              <!-- Genereras av JS för precis vinkelplacering -->
+            </g>
+
+            <!-- Energi-linjer aktör → centrum (genereras vid aktiv händelse) -->
+            <g class="econsim-lines"></g>
+
+            <!-- Partikel-lager (pengar/fakturor flödar mellan punkter) -->
+            <g class="econsim-particles"></g>
+
+            <!-- Pentagon i mitten -->
+            <g class="econsim-pentagon" transform="translate(360 270)">
+              <!-- Bakgrundsringar -->
+              <polygon class="p-bg" points="0,-100 95,-31 59,81 -59,81 -95,-31"
+                       fill="rgba(15,21,37,0.6)" stroke="rgba(255,255,255,0.08)" />
+              <polygon class="p-bg" points="0,-75 71,-23 44,61 -44,61 -71,-23"
+                       fill="none" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2 3" />
+              <polygon class="p-bg" points="0,-50 47,-15 29,40 -29,40 -47,-15"
+                       fill="none" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2 3" />
+
+              <!-- Axel-linjer (rays from center) -->
+              <line x1="0" y1="0" x2="0" y2="-100" stroke="rgba(255,255,255,0.08)" />
+              <line x1="0" y1="0" x2="95" y2="-31" stroke="rgba(255,255,255,0.08)" />
+              <line x1="0" y1="0" x2="59" y2="81" stroke="rgba(255,255,255,0.08)" />
+              <line x1="0" y1="0" x2="-59" y2="81" stroke="rgba(255,255,255,0.08)" />
+              <line x1="0" y1="0" x2="-95" y2="-31" stroke="rgba(255,255,255,0.08)" />
+
+              <!-- Aktuell pentagon (uppdateras via JS) -->
+              <polygon class="p-now"
+                       fill="rgba(220,76,43,0.22)"
+                       stroke="rgba(220,76,43,0.85)"
+                       stroke-width="2"
+                       filter="url(#sim-blur)" />
+
+              <!-- Centrum-puck -->
+              <circle r="32" fill="rgba(15,21,37,0.95)" stroke="rgba(220,76,43,0.4)" stroke-width="1.5" />
+              <text class="p-score" text-anchor="middle" y="2"
+                    font-family="JetBrains Mono, monospace" font-size="22"
+                    font-weight="700" fill="#fff">68</text>
+              <text class="p-of" text-anchor="middle" y="18"
+                    font-family="JetBrains Mono, monospace" font-size="7"
+                    letter-spacing="1.4" fill="rgba(255,255,255,0.4)">AV 100</text>
+            </g>
+
+            <!-- 5 axel-etiketter runt pentagonen -->
+            <g class="econsim-axis-labels"></g>
+          </svg>
+
+          <!-- HUD ovanpå SVG: vecka + biz-kassa indikatorer -->
+          <div class="econsim-hud">
+            <div class="econsim-hud-cell">
+              <div class="econsim-hud-eye">● Sara A. · vecka <span class="econsim-week">12</span> av 48</div>
+              <div class="econsim-hud-meta">profil <strong>Sparsam · 16 år · Stockholm</strong></div>
+            </div>
+            <div class="econsim-hud-cell econsim-hud-right">
+              <div class="econsim-hud-eye">● Lönekonto</div>
+              <div class="econsim-hud-bal"><span class="econsim-balance">14 282</span> kr</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LIVE EVENT-FEED · scrollande händelser -->
+        <div class="econsim-feed">
+          <div class="econsim-feed-eye">
+            <span class="econsim-feed-pulse">●</span>
+            Live spelmotor · deterministisk seed=42
+          </div>
+          <ul class="econsim-feed-list">
+            <!-- Items genereras + roteras av JS -->
+          </ul>
+        </div>
+      </div>
+
       <p class="about-lead">
         Ekonomilabbet är en djupgående lärplattform för privatekonomi och en unik simuleringsmiljö som fångar hela den ekonomiska livscykeln — från första sparpengen till pension, skuldsanering eller välstånd. <strong>För elever, lärare, föräldrar och barn.</strong>
       </p>
@@ -2960,6 +3319,406 @@ window.addEventListener('load', () => {
       window.location.href = "/";
     });
   });
+})();
+</script>
+
+<!-- ====================================================================
+     ECONOMY-SIM ANIMATION · pentagon + 8 aktörer + partikelflöde
+     Deterministisk · seedad sekvens av events spelas i 24-sek-loop.
+==================================================================== -->
+<script>
+(function(){
+  const root = document.querySelector('.econsim');
+  if (!root) return;
+
+  const svg = root.querySelector('.econsim-svg');
+  if (!svg) return;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  const CENTER = { x: 360, y: 270 };
+  const ACTOR_RADIUS = 195;
+  const ACTOR_NODE_R = 26;
+  const PENT_RADIUS = 100; // bakgrundsringens yttre radie
+
+  // 8 aktörer · ordning matchar prototypens compass + ikon-bokstav
+  const ACTORS = [
+    { key: 'arbg',   label: 'Arbetsgivare',  icon: 'A',  angle: -90 },
+    { key: 'avanza', label: 'Avanza',        icon: 'A',  angle: -45 },
+    { key: 'bank',   label: 'Banken',        icon: 'B',  angle: 0   },
+    { key: 'lan',    label: 'Lånegivaren',   icon: 'L',  angle: 45  },
+    { key: 'fors',   label: 'Försäkring',    icon: 'F',  angle: 90  },
+    { key: 'forb',   label: 'Förbrukning',   icon: 'F',  angle: 135 },
+    { key: 'boende', label: 'Boendemarkn.',  icon: 'B',  angle: 180 },
+    { key: 'skatt',  label: 'Skatteverket',  icon: 'S',  angle: -135},
+  ];
+
+  // 5 pentagon-axlar med vinkel + label
+  const AXES = [
+    { key: 'economy', label: 'Ekonomi', angle: -90, value: 68 },
+    { key: 'social',  label: 'Social',  angle: -18, value: 62 },
+    { key: 'health',  label: 'Hälsa',   angle:  54, value: 70 },
+    { key: 'leisure', label: 'Fritid',  angle: 126, value: 65 },
+    { key: 'safety',  label: 'Trygghet',angle: 198, value: 60 },
+  ];
+
+  function deg2rad(d) { return d * Math.PI / 180; }
+  function actorPos(angle) {
+    return {
+      x: ACTOR_RADIUS * Math.cos(deg2rad(angle)),
+      y: ACTOR_RADIUS * Math.sin(deg2rad(angle)),
+    };
+  }
+  function axisPos(angle, scale) {
+    return {
+      x: PENT_RADIUS * scale * Math.cos(deg2rad(angle)),
+      y: PENT_RADIUS * scale * Math.sin(deg2rad(angle)),
+    };
+  }
+
+  // === RENDERA AKTÖRER ===
+  const actorsGroup = svg.querySelector('.econsim-actors');
+  ACTORS.forEach((a, i) => {
+    const p = actorPos(a.angle);
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('class', 'econsim-actor');
+    g.setAttribute('data-actor', a.key);
+    g.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+
+    const glow = document.createElementNS(SVG_NS, 'circle');
+    glow.setAttribute('class', 'actor-glow');
+    glow.setAttribute('r', '38');
+    glow.setAttribute('fill', 'url(#sim-glow-warm)');
+    g.appendChild(glow);
+
+    const bg = document.createElementNS(SVG_NS, 'circle');
+    bg.setAttribute('class', 'actor-bg');
+    bg.setAttribute('r', ACTOR_NODE_R);
+    bg.setAttribute('fill', 'rgba(15,21,37,0.92)');
+    bg.setAttribute('stroke', 'rgba(255,255,255,0.18)');
+    bg.setAttribute('stroke-width', '1.2');
+    g.appendChild(bg);
+
+    const icon = document.createElementNS(SVG_NS, 'text');
+    icon.setAttribute('class', 'actor-icon');
+    icon.setAttribute('y', 1);
+    icon.textContent = a.icon;
+    g.appendChild(icon);
+
+    // Label utanför cirkeln, riktning baserat på vinkel
+    const lblOff = 42;
+    const lblX = lblOff * Math.cos(deg2rad(a.angle));
+    const lblY = lblOff * Math.sin(deg2rad(a.angle));
+    const lbl = document.createElementNS(SVG_NS, 'text');
+    lbl.setAttribute('class', 'actor-label');
+    lbl.setAttribute('x', lblX.toFixed(1));
+    lbl.setAttribute('y', (lblY + 3).toFixed(1));
+    lbl.textContent = a.label;
+    g.appendChild(lbl);
+
+    actorsGroup.appendChild(g);
+  });
+
+  // === RENDERA AXEL-ETIKETTER ===
+  const axesGroup = svg.querySelector('.econsim-axis-labels');
+  AXES.forEach(axis => {
+    const lblR = 132;
+    const x = CENTER.x + lblR * Math.cos(deg2rad(axis.angle));
+    const y = CENTER.y + lblR * Math.sin(deg2rad(axis.angle));
+    const t = document.createElementNS(SVG_NS, 'text');
+    t.setAttribute('class', 'econsim-axis-label');
+    t.setAttribute('data-axis', axis.key);
+    t.setAttribute('x', x.toFixed(1));
+    t.setAttribute('y', (y + 3).toFixed(1));
+    t.setAttribute('text-anchor', 'middle');
+    t.textContent = axis.label;
+    axesGroup.appendChild(t);
+  });
+
+  // === BERÄKNA PENTAGON-PUNKTER ===
+  function pentPoints(values) {
+    return AXES.map((a, i) => {
+      const v = values[i];
+      const p = axisPos(a.angle, v / 100);
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    }).join(' ');
+  }
+
+  let currentValues = AXES.map(a => a.value);
+  let displayValues = [...currentValues];
+
+  const pNow = svg.querySelector('.econsim-pentagon .p-now');
+  const pScore = svg.querySelector('.econsim-pentagon .p-score');
+  pNow.setAttribute('points', pentPoints(displayValues));
+
+  // === EVENTS · seedad sekvens, loopas ===
+  const EVENTS = [
+    {
+      ts: '08:15', actor: 'arbg', kind: 'income',
+      msg: 'Lönen ramlar in på lönekontot',
+      amount: '+22 400 kr', balance: 22400 + 14282 - 14282,
+      axis: 'economy', delta: +3, week: 12,
+    },
+    {
+      ts: '09:42', actor: 'boende', kind: 'expense',
+      msg: 'Hyran dras automatiskt',
+      amount: '−7 240 kr',
+      axis: 'safety', delta: -1, week: 12,
+    },
+    {
+      ts: '10:18', actor: 'forb', kind: 'expense',
+      msg: 'Spotpris elräkning · Tibber',
+      amount: '−480 kr',
+      axis: 'economy', delta: 0, week: 12,
+    },
+    {
+      ts: '11:55', actor: 'fors', kind: 'event',
+      msg: 'Tandläkaren ringer · akut undersökning',
+      amount: '−4 200 kr',
+      axis: 'health', delta: -3, week: 12,
+    },
+    {
+      ts: '13:30', actor: 'avanza', kind: 'income',
+      msg: 'ISK utdelning · Investor B',
+      amount: '+84 kr',
+      axis: 'economy', delta: +1, week: 12,
+    },
+    {
+      ts: '14:12', actor: 'skatt', kind: 'event',
+      msg: 'Skatteverket · ROT-arbete bekräftat',
+      amount: '+0 kr',
+      axis: 'economy', delta: +1, week: 12,
+    },
+    {
+      ts: '15:08', actor: 'lan', kind: 'expense',
+      msg: 'CSN amortering',
+      amount: '−1 250 kr',
+      axis: 'economy', delta: 0, week: 13,
+    },
+    {
+      ts: '16:30', actor: 'bank', kind: 'decision',
+      msg: 'Sparar till buffert · 1 500 kr',
+      amount: '−1 500 kr',
+      axis: 'safety', delta: +2, week: 13,
+    },
+    {
+      ts: '17:45', actor: 'avanza', kind: 'decision',
+      msg: 'Köper fond · Storebrand Global Indeks',
+      amount: '−500 kr',
+      axis: 'leisure', delta: +1, week: 13,
+    },
+    {
+      ts: '19:20', actor: 'forb', kind: 'event',
+      msg: 'Mobilräkning förfaller om 5 dagar',
+      amount: '−295 kr',
+      axis: 'safety', delta: 0, week: 13,
+    },
+    {
+      ts: '08:00', actor: 'arbg', kind: 'event',
+      msg: 'Lärar-uppdrag · KALP-beräkning',
+      amount: '+0 kr',
+      axis: 'leisure', delta: +1, week: 13,
+    },
+    {
+      ts: '12:14', actor: 'bank', kind: 'income',
+      msg: 'Pengar tillbaka · överbetald hyra',
+      amount: '+360 kr',
+      axis: 'economy', delta: 0, week: 13,
+    },
+  ];
+
+  // === FEED-LIST ===
+  const feed = root.querySelector('.econsim-feed-list');
+  const FEED_MAX = 4;
+  function pushFeed(ev) {
+    const li = document.createElement('li');
+    li.className = ev.kind;
+    li.innerHTML = `<span class="ts">${ev.ts}</span>${ev.msg} <span class="amount">${ev.amount}</span>`;
+    feed.insertBefore(li, feed.firstChild);
+    while (feed.children.length > FEED_MAX) {
+      feed.removeChild(feed.lastChild);
+    }
+  }
+
+  // === ENERGI-LINJER aktör → centrum ===
+  function spawnLine(actorKey, kind) {
+    const actor = ACTORS.find(a => a.key === actorKey);
+    if (!actor) return;
+    const p = actorPos(actor.angle);
+    // Bezier-kurva från aktör till centrum (relativt SVG)
+    const startX = CENTER.x + p.x;
+    const startY = CENTER.y + p.y;
+    const endX = CENTER.x;
+    const endY = CENTER.y;
+    const ctrlX = (startX + endX) / 2 + (Math.random() - 0.5) * 30;
+    const ctrlY = (startY + endY) / 2 + (Math.random() - 0.5) * 30;
+
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', `M ${startX} ${startY} Q ${ctrlX} ${ctrlY} ${endX} ${endY}`);
+    path.setAttribute('class', `econsim-line ${kind}`);
+    path.setAttribute('stroke-dasharray', '200');
+    svg.querySelector('.econsim-lines').appendChild(path);
+
+    setTimeout(() => path.remove(), 1300);
+  }
+
+  // === PARTIKLAR ===
+  function spawnParticles(actorKey, kind, count) {
+    const actor = ACTORS.find(a => a.key === actorKey);
+    if (!actor) return;
+    const p = actorPos(actor.angle);
+    const startX = CENTER.x + p.x;
+    const startY = CENTER.y + p.y;
+    const endX = CENTER.x;
+    const endY = CENTER.y;
+
+    const colors = {
+      income:   '#6ee7b7',
+      expense:  '#dc4c2b',
+      event:    '#fbbf24',
+      decision: '#818cf8',
+    };
+
+    for (let i = 0; i < count; i++) {
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('class', 'econsim-particle');
+      c.setAttribute('r', '2.4');
+      c.setAttribute('fill', colors[kind] || '#fff');
+      c.setAttribute('cx', startX);
+      c.setAttribute('cy', startY);
+      svg.querySelector('.econsim-particles').appendChild(c);
+
+      const delay = i * 60;
+      const duration = 1000 + Math.random() * 200;
+      const ctrlX = (startX + endX) / 2 + (Math.random() - 0.5) * 80;
+      const ctrlY = (startY + endY) / 2 + (Math.random() - 0.5) * 80;
+
+      // Animate via requestAnimationFrame
+      const start = performance.now() + delay;
+      function step(now) {
+        const t = Math.max(0, Math.min(1, (now - start) / duration));
+        if (t <= 0) { requestAnimationFrame(step); return; }
+        // Quadratic bezier: P0(1-t)^2 + 2P1(1-t)t + P2 t^2
+        const it = 1 - t;
+        const x = it*it*startX + 2*it*t*ctrlX + t*t*endX;
+        const y = it*it*startY + 2*it*t*ctrlY + t*t*endY;
+        c.setAttribute('cx', x.toFixed(1));
+        c.setAttribute('cy', y.toFixed(1));
+        c.setAttribute('opacity', t < 0.85 ? 1 : (1 - (t - 0.85) / 0.15));
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          c.remove();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+  }
+
+  // === HUD-uppdatering ===
+  const weekEl = root.querySelector('.econsim-week');
+  const balEl = root.querySelector('.econsim-balance');
+  let balance = 14282;
+
+  // === KÖR EN HÄNDELSE ===
+  function activate(actorKey) {
+    document.querySelectorAll('.econsim-actor').forEach(g =>
+      g.classList.remove('active'),
+    );
+    const g = document.querySelector(`.econsim-actor[data-actor="${actorKey}"]`);
+    if (g) {
+      g.classList.add('active');
+      setTimeout(() => g.classList.remove('active'), 1100);
+    }
+  }
+
+  function bumpAxis(axisKey, delta) {
+    const idx = AXES.findIndex(a => a.key === axisKey);
+    if (idx < 0) return;
+    currentValues[idx] = Math.max(0, Math.min(100, currentValues[idx] + delta));
+    // Animera mjuk övergång
+    const lbl = document.querySelector(`.econsim-axis-label[data-axis="${axisKey}"]`);
+    if (lbl) {
+      lbl.classList.add('bumped');
+      setTimeout(() => lbl.classList.remove('bumped'), 1400);
+    }
+  }
+
+  function smoothPentagon() {
+    let changed = false;
+    for (let i = 0; i < AXES.length; i++) {
+      const diff = currentValues[i] - displayValues[i];
+      if (Math.abs(diff) > 0.05) {
+        displayValues[i] += diff * 0.18;
+        changed = true;
+      } else {
+        displayValues[i] = currentValues[i];
+      }
+    }
+    pNow.setAttribute('points', pentPoints(displayValues));
+    const total = displayValues.reduce((a, b) => a + b, 0) / 5;
+    pScore.textContent = Math.round(total);
+    requestAnimationFrame(smoothPentagon);
+  }
+  requestAnimationFrame(smoothPentagon);
+
+  function runEvent(ev) {
+    activate(ev.actor);
+    spawnLine(ev.actor, ev.kind);
+    const particleCount = ev.kind === 'income' ? 6 : ev.kind === 'expense' ? 5 : 4;
+    spawnParticles(ev.actor, ev.kind, particleCount);
+    if (ev.delta !== 0) bumpAxis(ev.axis, ev.delta);
+    pushFeed(ev);
+    if (weekEl) weekEl.textContent = ev.week;
+
+    // Saldo-uppdatering
+    const m = ev.amount.match(/[+-−]?\s*([\d\s]+)\s*kr/);
+    if (m) {
+      let n = parseInt(m[1].replace(/\s/g, ''), 10);
+      const sign = ev.amount.startsWith('−') || ev.amount.startsWith('-') ? -1 : 1;
+      balance += sign * n;
+      if (balance < 0) balance = 100; // håll positiv för demo
+      if (balEl) {
+        balEl.textContent = balance.toLocaleString('sv-SE')
+          .replace(/,/g, ' ');
+      }
+    }
+  }
+
+  // === LOOP ===
+  const EVENT_INTERVAL = 2000; // ms mellan händelser
+  let evIdx = 0;
+  let started = false;
+
+  function startLoop() {
+    if (started) return;
+    started = true;
+    function tick() {
+      runEvent(EVENTS[evIdx]);
+      evIdx = (evIdx + 1) % EVENTS.length;
+      // Reset balance + values vid varje varv så loop känns kontinuerlig
+      if (evIdx === 0) {
+        balance = 14282;
+        currentValues = AXES.map(a => a.value);
+      }
+      setTimeout(tick, EVENT_INTERVAL);
+    }
+    tick();
+  }
+
+  // Vänta tills sektionen är synlig (bättre prestanda + spara batteri)
+  if ('IntersectionObserver' in window) {
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          startLoop();
+          obs.disconnect();
+        }
+      });
+    }, { threshold: 0.2 });
+    obs.observe(root);
+  } else {
+    startLoop();
+  }
 })();
 </script>
 
