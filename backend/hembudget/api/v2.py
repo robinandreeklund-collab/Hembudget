@@ -234,6 +234,30 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         from ..school.engines import get_current_actor_student
         target_sid = get_current_actor_student()
 
+    # Garantera att eleven har data när hubben laddas (auto-recovery
+    # för stuck students som missat seed). Idempotent: gör inget om data
+    # redan finns.
+    if target_sid is not None and info.role == "student":
+        try:
+            with master_session() as _ms:
+                _stu = _ms.get(Student, target_sid)
+                if _stu is not None:
+                    _ensure_student_has_initial_data(
+                        student_id=target_sid,
+                        student_name=_stu.display_name,
+                        spend_profile=(
+                            _stu.v2_spend_profile or "balanserad"
+                        ),
+                        starting_level=_stu.v2_level or 1,
+                        partner_model=_stu.v2_partner_model or "solo",
+                    )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "get_hub: auto-recovery seed failed för %s",
+                target_sid,
+            )
+
     if target_sid is None:
         return HubResponse(
             student_id=0,
@@ -10103,12 +10127,40 @@ def complete_v2_onboarding(
         # separat endpoint (kommer i nästa PR).
         db.commit()
 
-        return OnboardingCompleteResponse(
-            student_id=student.id,
-            completed_at=now,
-            v2_level=student.v2_level,
-            redirect_to="/v2/hub",
+        # Snapshot för seed-flow utanför sessionen
+        sid = student.id
+        sname = student.display_name
+        v2_level = student.v2_level
+        spend = student.v2_spend_profile or "balanserad"
+        partner = student.v2_partner_model or "solo"
+
+    # === Garantera att eleven har data efter onboarding ===
+    # Eleven har just slutfört onboarding och ska se hub-vyn med fylld
+    # postlåda, konton, fakturor. Om seed inte körts (gammal student
+    # eller failed seed) körs den nu. Idempotent: gör inget om data
+    # redan finns.
+    try:
+        _ensure_student_has_initial_data(
+            student_id=sid,
+            student_name=sname,
+            spend_profile=spend,
+            starting_level=v2_level,
+            partner_model=partner,
         )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "complete_v2_onboarding: seed failed för student %s — "
+            "eleven har slutfört onboarding men kan sakna initial data",
+            sid,
+        )
+
+    return OnboardingCompleteResponse(
+        student_id=sid,
+        completed_at=now,
+        v2_level=v2_level,
+        redirect_to="/v2/hub",
+    )
 
 
 # === Onboarding-event-tracking (per-stegs-loggning) ===

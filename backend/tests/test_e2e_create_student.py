@@ -395,6 +395,86 @@ def test_e2e_auto_recovery_from_old_student_without_data(app_and_token):
             )
 
 
+def test_e2e_full_user_flow_student_login_onboarding_hub(app_and_token):
+    """REPRODUKTION av användarens exakta flöde:
+       1. Lärare skapar elev
+       2. Elev loggar in med login-kod
+       3. Elev genomför onboarding
+       4. Elev går till /v2/hub
+       Förväntat: hubben visar konton, lön, postlådan och pentagon-värden.
+    """
+    client, teacher_token, _teacher_id = app_and_token
+
+    # 1. Lärare skapar elev (utan starting_level=3 → ska gå genom onboarding)
+    r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {teacher_token}"},
+        json={
+            "first_name": "Sara",
+            "last_initial": "A",
+            "starting_level": 1,
+            "spend_profile": "balanserad",
+        },
+    )
+    assert r.status_code == 200, f"create failed: {r.text}"
+    sid = r.json()["student_id"]
+    login_code = r.json()["login_code"]
+
+    # 2. Elev loggar in med kod
+    r = client.post(
+        "/student/login", json={"login_code": login_code},
+    )
+    assert r.status_code == 200, f"student login failed: {r.text}"
+    student_token = r.json()["token"]
+    H_S = {"Authorization": f"Bearer {student_token}"}
+
+    # 3. Elev gör onboarding
+    r = client.post(
+        "/v2/onboarding/complete",
+        headers=H_S,
+        json={
+            "spend_profile": "balanserad",
+            "fairness_choice": "50_50",
+            "partner_model": "solo",
+        },
+    )
+    assert r.status_code == 200, f"onboarding failed: {r.text}"
+
+    # 4. Elev hämtar hub
+    r = client.get("/v2/hub", headers=H_S)
+    assert r.status_code == 200, f"hub failed: {r.text}"
+    hub = r.json()
+
+    # === Verifiera att hubben har DATA (inte tomt skal) ===
+    assert hub["student_id"] == sid
+    # Karaktären har data
+    assert hub["character"]["display_name"], "Karaktären saknar namn"
+    # Saldo > 0 — eleven ska ha pengar på lönekontot efter seed
+    assert hub["total_balance"] > 0, (
+        f"Eleven har 0 saldo efter onboarding — seed kördes inte. "
+        f"hub: total_balance={hub['total_balance']}, "
+        f"accounts_count={hub['accounts_count']}"
+    )
+    assert hub["accounts_count"] >= 1, "Eleven saknar konton"
+    # Pentagon ska ha värden
+    pent = hub["pentagon"]
+    assert pent is not None, "Pentagon är None efter onboarding"
+
+    # 5. Postlådan ska ha mail
+    r = client.get("/v2/postladan", headers=H_S)
+    assert r.status_code == 200, f"postladan failed: {r.text}"
+    mail = r.json()
+    assert mail["summary"]["total_count"] >= 1, (
+        "Postlådan är tom efter onboarding — seed har inte körts"
+    )
+
+    # 6. Bank ska ha konton + transaktioner
+    r = client.get("/v2/bank", headers=H_S)
+    assert r.status_code == 200, f"bank failed: {r.text}"
+    bank = r.json()
+    assert len(bank["accounts"]) >= 1
+
+
 def test_e2e_v1_create_student_endpoint_also_seeds(app_and_token):
     """Säkerställ att den GAMLA v1-endpointen /teacher/students också
     triggar seed. Detta var en BUG där v1-endpointen skapade student
