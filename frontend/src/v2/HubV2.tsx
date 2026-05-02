@@ -228,9 +228,17 @@ export function HubV2() {
                   );
                 }
                 if (character.housing_monthly) {
+                  // Anpassa text efter boendetyp · "Hyran" är vilseledande
+                  // för bostadsrätt/villa där det är avgift+bolån+drift.
+                  const isOwned = character.housing_type === "bostadsratt"
+                    || character.housing_type === "villa"
+                    || character.housing_type === "radhus";
+                  const label = isOwned
+                    ? "Boendekostnaden (avgift/bolån/drift) på"
+                    : "Hyran på";
                   parts.push(
                     <span key="hyra">
-                      Hyran på{" "}
+                      {label}{" "}
                       <strong>{SEK(character.housing_monthly)} kr</strong>{" "}
                       dras varje månad.{" "}
                     </span>,

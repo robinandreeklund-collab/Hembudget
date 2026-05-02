@@ -236,12 +236,13 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
 
     # Garantera att eleven har data när hubben laddas (auto-recovery
     # för stuck students som missat seed). Idempotent: gör inget om data
-    # redan finns.
+    # redan finns. Bara för v2-aktiverade elever — v1-elever ska inte
+    # få sin manuellt-satta StudentProfile överskriven av game_engine.
     if target_sid is not None and info.role == "student":
         try:
             with master_session() as _ms:
                 _stu = _ms.get(Student, target_sid)
-                if _stu is not None:
+                if _stu is not None and _stu.v2_enabled:
                     _ensure_student_has_initial_data(
                         student_id=target_sid,
                         student_name=_stu.display_name,
@@ -13570,6 +13571,8 @@ def _seed_initial_student_data(
     (gamla failed-stuck-students från tidigare deploys).
     """
     from datetime import date as _d
+    from decimal import Decimal as _Dec
+    from ..db.models import RentalContract
     from ..game_engine.monthly_engine import tick_month
     from ..game_engine.profile_generator import generate_profile
     from ..insurance import seed_default_insurance_policies
@@ -13593,6 +13596,36 @@ def _seed_initial_student_data(
         name=student.display_name or "Elev",
         partner_model=partner_model,  # type: ignore[arg-type]
     )
+
+    # === Sync · master-DB:ns StudentProfile MÅSTE matcha den faktiska
+    # game_engine-profilen, annars säger HubV2 "Hyran på 15 500 kr"
+    # medan postlådan visar bolån + villa-drift för 6 255 kr/mån.
+    # Tidigare buggen kom av att profile_fixtures.generate_profile
+    # och game_engine.profile_generator.generate_profile kör helt
+    # olika RNG/pooler. ===
+    try:
+        with master_session() as mdb:
+            sp = (
+                mdb.query(StudentProfile)
+                .filter(StudentProfile.student_id == student.id)
+                .first()
+            )
+            if sp is not None:
+                sp.housing_type = profile.housing.type
+                sp.housing_monthly = int(profile.housing.monthly_cost)
+                sp.gross_salary_monthly = int(profile.monthly_gross)
+                sp.net_salary_monthly = int(profile.monthly_net)
+                sp.has_mortgage = profile.housing.type in (
+                    "bostadsratt", "villa", "radhus",
+                )
+                mdb.commit()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_initial_student_data: profile sync failed för %s",
+            student.id,
+        )
+
     try:
         tick_month(
             student,
@@ -13626,6 +13659,51 @@ def _seed_initial_student_data(
                 import logging
                 logging.getLogger(__name__).exception(
                     "_seed_initial_student_data: pension seed failed för %s",
+                    student.id,
+                )
+
+            # === Boende-kontrakt · matcha postlådans fakturor ===
+            # Om eleven har hyresrätt enligt game-engine-profilen,
+            # seeda ett RentalContract med rätt belopp + stad. Annars
+            # är hyresvärden-vyn tom och eleven ser "Inget registrerat
+            # boende" trots att hyran dras varje månad i postlådan.
+            try:
+                if profile.housing.type == "hyresratt":
+                    existing = s.query(RentalContract).first()
+                    if existing is None:
+                        rooms_label = (
+                            f"{max(1, profile.housing.size_kvm // 25)} r o k"
+                        )
+                        contract = RentalContract(
+                            landlord=(
+                                f"{profile.city_display} Bostäder"
+                            ),
+                            address=f"Centralvägen {profile.seed % 99 + 1}",
+                            rooms_label=rooms_label,
+                            area_sqm=_Dec(str(profile.housing.size_kvm)),
+                            city=profile.city_display,
+                            district=None,
+                            contract_type="forsta_hand",
+                            duration_type="tillsvidare",
+                            monthly_rent=_Dec(
+                                str(profile.housing.monthly_cost),
+                            ),
+                            deposit=_Dec("0"),
+                            ocr_reference=None,
+                            autogiro=True,
+                            notice_period_months=3,
+                            queue_years=None,
+                            queue_priority=None,
+                            market_price_per_sqm=None,
+                            status="active",
+                            notes=None,
+                        )
+                        s.add(contract)
+                        s.flush()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data: rental seed failed för %s",
                     student.id,
                 )
 
