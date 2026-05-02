@@ -238,12 +238,18 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
     # för stuck students som missat seed). Idempotent: gör inget om data
     # redan finns. Bara för v2-aktiverade elever — v1-elever ska inte
     # få sin manuellt-satta StudentProfile överskriven av game_engine.
+    #
+    # OBS: vi läser ut värdena ur master_session-contexten och stänger
+    # den INNAN vi kallar _ensure_student_has_initial_data — annars
+    # nestar vi master_session-contexter, vilket ger SQLite-deadlock
+    # i tester.
     if target_sid is not None and info.role == "student":
         try:
+            recovery_args: Optional[dict] = None
             with master_session() as _ms:
                 _stu = _ms.get(Student, target_sid)
                 if _stu is not None and _stu.v2_enabled:
-                    _ensure_student_has_initial_data(
+                    recovery_args = dict(
                         student_id=target_sid,
                         student_name=_stu.display_name,
                         spend_profile=(
@@ -252,6 +258,8 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                         starting_level=_stu.v2_level or 1,
                         partner_model=_stu.v2_partner_model or "solo",
                     )
+            if recovery_args is not None:
+                _ensure_student_has_initial_data(**recovery_args)
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
