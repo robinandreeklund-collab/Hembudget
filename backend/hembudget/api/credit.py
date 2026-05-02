@@ -20,7 +20,7 @@ from ..credit.scoring import (
     calculate_credit_score,
 )
 from ..db.models import Account, CreditApplication, Loan, Transaction
-from .deps import db, require_auth
+from .deps import TokenInfo, db, require_auth, require_token
 
 
 router = APIRouter(
@@ -28,6 +28,62 @@ router = APIRouter(
     tags=["credit"],
     dependencies=[Depends(require_auth)],
 )
+
+
+def _pentagon_log_loan(
+    student_id: int | None,
+    *,
+    loan_id: int,
+    kind: str,
+    amount: float,
+    is_high_cost: bool,
+) -> None:
+    """Logga lån som wellbeing-event. Privatlån ger en mild safety-dipp
+    (skuld kan kännas otryggt), SMS-lån ger en kraftig dipp på safety
+    + economy. Misslyckas tyst om pentagon-modulen inte är tillgänglig.
+    """
+    if student_id is None:
+        return
+    try:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        if is_high_cost:
+            apply_pentagon_delta(
+                student_id,
+                axis="safety",
+                requested_delta=-5,
+                reason_kind="decision",
+                reason_id=loan_id,
+                reason_table="loans",
+                explanation=(
+                    f"SMS-lån {int(amount)} kr — dyr kredit påverkar trygghet"
+                ),
+            )
+            apply_pentagon_delta(
+                student_id,
+                axis="economy",
+                requested_delta=-3,
+                reason_kind="decision",
+                reason_id=loan_id,
+                reason_table="loans",
+                explanation=(
+                    f"SMS-lån {int(amount)} kr — hög effektiv ränta"
+                ),
+            )
+        else:
+            apply_pentagon_delta(
+                student_id,
+                axis="safety",
+                requested_delta=-2,
+                reason_kind="decision",
+                reason_id=loan_id,
+                reason_table="loans",
+                explanation=(
+                    f"{kind}-lån {int(amount)} kr"
+                ),
+            )
+    except Exception:
+        # Pentagon-loggning får aldrig bryta lån-acceptansen
+        pass
 
 
 class AffordabilityIn(BaseModel):
@@ -236,7 +292,9 @@ class PrivateLoanAcceptOut(BaseModel):
 
 @router.post("/private/accept", response_model=PrivateLoanAcceptOut)
 def private_accept(
-    payload: PrivateLoanAcceptIn, session: Session = Depends(db),
+    payload: PrivateLoanAcceptIn,
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
 ) -> PrivateLoanAcceptOut:
     """Eleven accepterar ett godkänt privatlån-erbjudande. Skapar:
     1. Loan-rad med rätt loan_kind, ränta, amortering
@@ -296,6 +354,14 @@ def private_accept(
     app_row.result = "accepted"
     app_row.resulting_loan_id = loan.id
     session.flush()
+
+    _pentagon_log_loan(
+        info.student_id,
+        loan_id=loan.id,
+        kind="privat",
+        amount=float(app_row.requested_amount),
+        is_high_cost=False,
+    )
 
     note = (
         f"Du har lånat {app_row.requested_amount:.0f} kr av {loan.lender} "
@@ -486,7 +552,11 @@ class SmsAcceptOut(BaseModel):
 
 
 @router.post("/sms/accept", response_model=SmsAcceptOut)
-def sms_accept(payload: SmsAcceptIn, session: Session = Depends(db)) -> SmsAcceptOut:
+def sms_accept(
+    payload: SmsAcceptIn,
+    session: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> SmsAcceptOut:
     """Eleven accepterar SMS-lånet. Skapar Loan med is_high_cost_credit=True."""
     app_row = session.get(CreditApplication, payload.application_id)
     if app_row is None:
@@ -538,6 +608,14 @@ def sms_accept(payload: SmsAcceptIn, session: Session = Depends(db)) -> SmsAccep
     app_row.result = "accepted"
     app_row.resulting_loan_id = loan.id
     session.flush()
+
+    _pentagon_log_loan(
+        info.student_id,
+        loan_id=loan.id,
+        kind="sms",
+        amount=float(app_row.requested_amount),
+        is_high_cost=True,
+    )
 
     note = (
         f"Du har tagit ett SMS-lån på {app_row.requested_amount:.0f} kr.\n\n"

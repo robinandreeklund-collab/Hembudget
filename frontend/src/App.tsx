@@ -13,6 +13,8 @@ import { LanV2 } from "./v2/LanV2";
 import { TeacherCreditOverviewPage } from "./v2/TeacherCreditOverviewPage";
 import { TeacherTaxOverviewPage } from "./v2/TeacherTaxOverviewPage";
 import { TeacherEmployerOverviewPage } from "./v2/TeacherEmployerOverviewPage";
+import { TeacherForetagOverviewPage } from "./v2/TeacherForetagOverviewPage";
+import { TeacherArbetsformedlingenOverviewPage } from "./v2/TeacherArbetsformedlingenOverviewPage";
 import { TeacherInsuranceOverviewPage } from "./v2/TeacherInsuranceOverviewPage";
 import { ForsakringarV2 } from "./v2/ForsakringarV2";
 import { TeacherUtilityOverviewPage } from "./v2/TeacherUtilityOverviewPage";
@@ -431,6 +433,14 @@ export default function App() {
           <Route
             path="/teacher/v2/uppdrag/:studentId"
             element={<TeacherUppdragOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/foretag/:studentId"
+            element={<TeacherForetagOverviewPage />}
+          />
+          <Route
+            path="/teacher/v2/arbetsformedlingen/:studentId"
+            element={<TeacherArbetsformedlingenOverviewPage />}
           />
           <Route
             path="/teacher/v2/kompetens/:studentId/:competencyId"

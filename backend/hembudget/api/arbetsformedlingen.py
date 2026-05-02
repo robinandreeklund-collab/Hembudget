@@ -381,3 +381,117 @@ def teacher_list_applications(
                 .all()
             )
             return [_to_app_out(a) for a in rows]
+
+
+# === Lärar-overview · sammanställning över elevens AF-aktivitet ===
+
+
+class TeacherAFOverviewOut(BaseModel):
+    student_id: int
+    student_name: str
+    n_applications_total: int
+    n_active: int  # status in (applied, in_review, offered)
+    n_completed: int  # status == accepted
+    n_declined: int  # status == declined
+    n_abandoned: int  # status == abandoned
+    avg_match_score: Optional[float]
+    avg_final_score: Optional[float]
+    last_application_date: Optional[str]
+    summary_md: str
+
+
+@teacher_router.get(
+    "/overview/{student_id}", response_model=TeacherAFOverviewOut,
+)
+def teacher_af_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> TeacherAFOverviewOut:
+    """Sammanställning av elevens AF-aktivitet.
+
+    Räknar ansökningar per status, snitt match/final-score och senaste
+    ansökningsdatum. Genererar en kort sammanfattning för läraren med
+    pedagogisk indikator (är eleven aktiv? lyckas hen i intervjuerna?).
+    """
+    if info.role != "teacher" or info.teacher_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast lärare.")
+    from ..school.engines import scope_for_student, scope_context, get_scope_session
+    from ..school.models import Student
+
+    with master_session() as s:
+        stu = s.get(Student, student_id)
+        if stu is None or stu.teacher_id != info.teacher_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Elev saknas.")
+        student_name = stu.display_name
+        s.expunge(stu)
+
+    scope_key = scope_for_student(stu)
+    maker = get_scope_session(scope_key)
+    with scope_context(scope_key):
+        with maker() as s:
+            rows = (
+                s.query(JobApplication)
+                .order_by(JobApplication.started_on.desc())
+                .all()
+            )
+            n_total = len(rows)
+            n_active = sum(
+                1 for r in rows if r.status in ("applied", "in_review", "offered")
+            )
+            n_completed = sum(1 for r in rows if r.status == "accepted")
+            n_declined = sum(1 for r in rows if r.status == "declined")
+            n_abandoned = sum(1 for r in rows if r.status == "abandoned")
+            scores = [r.match_score for r in rows if r.match_score is not None]
+            avg_match = sum(scores) / len(scores) if scores else None
+            finals = [r.final_score for r in rows if r.final_score is not None]
+            avg_final = sum(finals) / len(finals) if finals else None
+            last_date = (
+                rows[0].started_on.isoformat() if rows else None
+            )
+
+    if n_total == 0:
+        summary = (
+            f"## {student_name} har inte sökt något jobb än\n\n"
+            "Eleven har inte interagerat med Arbetsförmedlingen. "
+            "Tipsa eleven om att Mats listar lediga tjänster i kollet "
+            "varje månad."
+        )
+    else:
+        accept_rate_str = (
+            f"{(n_completed / n_total * 100):.0f}%"
+            if n_total > 0 else "—"
+        )
+        summary = (
+            f"## {student_name} på Arbetsförmedlingen\n\n"
+            f"- Totalt antal ansökningar: **{n_total}**\n"
+            f"- Aktiva (pågående): {n_active}\n"
+            f"- Accepterade: {n_completed} ({accept_rate_str})\n"
+            f"- Avböjda av AG: {n_declined}\n"
+            f"- Avbrutna av elev: {n_abandoned}\n"
+            + (
+                f"- Snitt match-score: {avg_match:.0f}/100\n"
+                if avg_match is not None else ""
+            )
+            + (
+                f"- Snitt final-score (intervju): {avg_final:.0f}/100\n"
+                if avg_final is not None else ""
+            )
+            + (
+                f"- Senaste ansökan: {last_date}\n"
+                if last_date else ""
+            )
+        )
+
+    return TeacherAFOverviewOut(
+        student_id=student_id,
+        student_name=student_name,
+        n_applications_total=n_total,
+        n_active=n_active,
+        n_completed=n_completed,
+        n_declined=n_declined,
+        n_abandoned=n_abandoned,
+        avg_match_score=avg_match,
+        avg_final_score=avg_final,
+        last_application_date=last_date,
+        summary_md=summary,
+    )

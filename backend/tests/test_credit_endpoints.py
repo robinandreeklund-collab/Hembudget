@@ -17,6 +17,7 @@ from hembudget.api.credit import (
     private_apply,
     private_decline,
 )
+from hembudget.api.deps import TokenInfo
 from hembudget.db.models import (
     Account,
     Base,
@@ -24,6 +25,10 @@ from hembudget.db.models import (
     Loan,
     Transaction,
 )
+
+
+# Demo-token utan student_id → pentagon-loggning skippas tyst i testerna
+_DEMO = TokenInfo(token="t", role="demo")
 
 
 @pytest.fixture()
@@ -133,7 +138,7 @@ def test_accept_creates_loan_and_transaction(session):
         application_id=apply_result.application_id,
         deposit_account_id=acc_id,
     )
-    r = private_accept(accept, session)
+    r = private_accept(accept, session, _DEMO)
     # Loan finns
     loan = session.get(Loan, r.loan_id)
     assert loan is not None
@@ -168,6 +173,7 @@ def test_accept_rejects_unapproved(session):
                 deposit_account_id=1,
             ),
             session,
+            _DEMO,
         )
     assert exc.value.status_code == 400
 
@@ -184,6 +190,7 @@ def test_accept_rejects_double_accept(session):
             deposit_account_id=acc_id,
         ),
         session,
+        _DEMO,
     )
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as exc:
@@ -193,6 +200,7 @@ def test_accept_rejects_double_accept(session):
                 deposit_account_id=acc_id,
             ),
             session,
+            _DEMO,
         )
     assert exc.value.status_code == 400
 

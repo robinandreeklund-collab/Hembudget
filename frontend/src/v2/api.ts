@@ -710,6 +710,20 @@ export type V2ArbetsformedlingenRoundOut = {
   application: V2ArbetsformedlingenApplication;
 };
 
+export type V2TeacherAFOverview = {
+  student_id: number;
+  student_name: string;
+  n_applications_total: number;
+  n_active: number;
+  n_completed: number;
+  n_declined: number;
+  n_abandoned: number;
+  avg_match_score: number | null;
+  avg_final_score: number | null;
+  last_application_date: string | null;
+  summary_md: string;
+};
+
 
 // === /v2/boendemarknad (Sprint 5 · B1-B5) ===
 
@@ -2666,6 +2680,14 @@ export const v2Api = {
     api<V2ArbetsformedlingenApplication>(
       `/v2/arbetsformedlingen/applications/${appId}/abandon`,
       { method: "POST" },
+    ),
+  teacherAFApplications: (studentId: number) =>
+    api<V2ArbetsformedlingenApplication[]>(
+      `/v2/teacher/arbetsformedlingen/applications/${studentId}`,
+    ),
+  teacherAFOverview: (studentId: number) =>
+    api<V2TeacherAFOverview>(
+      `/v2/teacher/arbetsformedlingen/overview/${studentId}`,
     ),
 
   // === /v2/bokforing (Fas 2H — Verktyg 02) ===

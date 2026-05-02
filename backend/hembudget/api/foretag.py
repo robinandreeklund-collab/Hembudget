@@ -880,3 +880,149 @@ def teacher_toggle_business_mode(
         enabled=body.enabled,
         has_active_company=False,
     )
+
+
+# === Lärar-overview: full insyn i en elevs företag ===
+
+
+class TeacherForetagOverviewOut(BaseModel):
+    student_id: int
+    student_name: str
+    business_mode_enabled: bool
+    company: Optional[CompanyOut]
+    pentagon: Optional[BusinessPentagonOut]
+    n_transactions_total: int
+    n_invoices_total: int
+    n_invoices_unpaid: int
+    n_owner_salaries: int
+    last_owner_salary_date: Optional[str]
+    next_vat_due: Optional[str]
+    summary_md: str
+
+
+@teacher_router.get(
+    "/overview/{student_id}",
+    response_model=TeacherForetagOverviewOut,
+)
+def teacher_foretag_overview(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> TeacherForetagOverviewOut:
+    """Lärare ser elevens företagsstatus.
+
+    Innehåller bolag, pentagon, transaktioner-summa, fakturor (totalt +
+    obetalda), löneuttag och nästa moms-deadline. Ger läraren en snabb
+    bild av om eleven aktivt driver företaget och vart hen är i flödet.
+    """
+    if info.role != "teacher" or info.teacher_id is None:
+        raise HTTPException(403, "Endast lärare")
+
+    from ..school.engines import master_session, scope_context, scope_for_student
+    from ..school.models import Student
+    with master_session() as ms:
+        stu = ms.get(Student, student_id)
+        if stu is None or stu.teacher_id != info.teacher_id:
+            raise HTTPException(404, "Elev saknas")
+        student_name = stu.display_name
+        biz_enabled = bool(getattr(stu, "business_mode_enabled", False))
+        scope_key = scope_for_student(stu)
+
+    company_out: Optional[CompanyOut] = None
+    pentagon_out: Optional[BusinessPentagonOut] = None
+    n_tx = 0
+    n_inv = 0
+    n_inv_unpaid = 0
+    n_salary = 0
+    last_salary: Optional[str] = None
+    next_vat_due: Optional[str] = None
+
+    with scope_context(scope_key):
+        with session_scope() as s:
+            c = _get_active_company(s)
+            if c is not None:
+                company_out = _to_company_out(c)
+                pentagon_out = BusinessPentagonOut(
+                    **compute_business_pentagon(s, company=c),
+                )
+                n_tx = (
+                    s.query(CompanyTransaction)
+                    .filter(CompanyTransaction.company_id == c.id)
+                    .count()
+                )
+                invs = (
+                    s.query(CompanyInvoice)
+                    .filter(CompanyInvoice.company_id == c.id)
+                    .all()
+                )
+                n_inv = len(invs)
+                n_inv_unpaid = sum(1 for i in invs if i.paid_on is None)
+                salaries = (
+                    s.query(CompanyOwnerSalary)
+                    .filter(CompanyOwnerSalary.company_id == c.id)
+                    .order_by(CompanyOwnerSalary.paid_on.desc())
+                    .all()
+                )
+                n_salary = len(salaries)
+                if salaries:
+                    last_salary = salaries[0].paid_on.isoformat()
+                next_vat = (
+                    s.query(CompanyVatPeriod)
+                    .filter(
+                        CompanyVatPeriod.company_id == c.id,
+                        CompanyVatPeriod.filed_on.is_(None),
+                    )
+                    .order_by(CompanyVatPeriod.due_on.asc())
+                    .first()
+                )
+                if next_vat is not None and next_vat.due_on is not None:
+                    next_vat_due = next_vat.due_on.isoformat()
+
+    # Sammanfattning för läraren
+    if not biz_enabled:
+        summary = (
+            f"## {student_name} har inte aktiverat företagsläge\n\n"
+            "Använd toggeln på elev-detaljvyn för att aktivera "
+            "företagsläget. När det är på kan eleven bokföra, "
+            "fakturera, ta ut lön och hantera moms parallellt med "
+            "privatekonomin."
+        )
+    elif company_out is None:
+        summary = (
+            f"## {student_name} har inte startat något bolag än\n\n"
+            "Företagsläget är aktiverat men eleven har inte registrerat "
+            "ett bolag. Bjud eleven att klicka **Starta företag** på "
+            "biz-hubben för att börja."
+        )
+    else:
+        score = pentagon_out.total_score if pentagon_out else 0
+        summary = (
+            f"## {student_name} driver {company_out.name}\n\n"
+            f"- Form: **{company_out.form}**\n"
+            f"- Pentagon-score: **{score}/100**\n"
+            f"- Bokförda transaktioner: {n_tx}\n"
+            f"- Fakturor: {n_inv} ({n_inv_unpaid} obetalda)\n"
+            f"- Löneuttag: {n_salary}\n"
+            + (
+                f"- Nästa moms-due: **{next_vat_due}**\n"
+                if next_vat_due else ""
+            )
+            + (
+                f"- Senaste lön: {last_salary}\n"
+                if last_salary else ""
+            )
+        )
+
+    return TeacherForetagOverviewOut(
+        student_id=student_id,
+        student_name=student_name,
+        business_mode_enabled=biz_enabled,
+        company=company_out,
+        pentagon=pentagon_out,
+        n_transactions_total=n_tx,
+        n_invoices_total=n_inv,
+        n_invoices_unpaid=n_inv_unpaid,
+        n_owner_salaries=n_salary,
+        last_owner_salary_date=last_salary,
+        next_vat_due=next_vat_due,
+        summary_md=summary,
+    )

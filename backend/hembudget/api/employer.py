@@ -974,6 +974,20 @@ def complete_negotiation(
                 "Du valde att inte acceptera budet — eller AI lämnade "
                 "inget tydligt bud i ronderna. Din lön är oförändrad."
             )
+            # Pentagon · avbrutet samtal är en mild social-signal
+            try:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                apply_pentagon_delta(
+                    student_id,
+                    axis="social",
+                    requested_delta=-1,
+                    reason_kind="decision",
+                    reason_id=n.id,
+                    reason_table="salary_negotiations",
+                    explanation="lönesamtal avbrutet utan beslut",
+                )
+            except Exception:
+                pass
         else:
             n.status = "completed"
             new_salary_dec = float(n.starting_salary) * (1 + final_pct / 100)
@@ -1046,6 +1060,50 @@ def complete_negotiation(
                 ),
                 meta={"negotiation_id": n.id, "final_pct": final_pct},
             )
+
+            # Pentagon-koppling · framgång i lönesamtal höjer economy + social.
+            # Skala efter hur långt över avtals-normen eleven landade.
+            try:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                norm = n.avtal_norm_pct or 3.0
+                diff = final_pct - norm
+                if diff >= 1.5:
+                    eco_d, soc_d = 4, 2
+                elif diff >= 0.5:
+                    eco_d, soc_d = 2, 1
+                elif diff >= -0.5:
+                    eco_d, soc_d = 1, 0
+                elif diff >= -1.5:
+                    eco_d, soc_d = -1, -1
+                else:
+                    eco_d, soc_d = -2, -2
+                if eco_d != 0:
+                    apply_pentagon_delta(
+                        student_id,
+                        axis="economy",
+                        requested_delta=eco_d,
+                        reason_kind="decision",
+                        reason_id=n.id,
+                        reason_table="salary_negotiations",
+                        explanation=(
+                            f"lönesamtal: {final_pct:.1f}% (avtal {norm:.1f}%)"
+                        ),
+                    )
+                if soc_d != 0:
+                    apply_pentagon_delta(
+                        student_id,
+                        axis="social",
+                        requested_delta=soc_d,
+                        reason_kind="decision",
+                        reason_id=n.id,
+                        reason_table="salary_negotiations",
+                        explanation=(
+                            f"lönesamtal-resultat: "
+                            f"{'över' if diff > 0 else 'under'} avtals-norm"
+                        ),
+                    )
+            except Exception:
+                pass
 
         s.flush()
 

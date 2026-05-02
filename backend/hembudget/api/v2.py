@@ -1668,8 +1668,48 @@ def update_mail_status(
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, "Brevet hittades inte"
             )
+        old_status = m.status
         m.status = body.status
         s.flush()
+
+        # Pentagon-koppling · faktura går till "expired" (eleven hann inte
+        # hantera den) → safety-dipp, och om belopp > 1000 kr även economy.
+        if (
+            body.status == "expired"
+            and old_status != "expired"
+            and m.mail_type == "invoice"
+        ):
+            try:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                amt = float(m.amount or 0)
+                apply_pentagon_delta(
+                    info.student_id,
+                    axis="safety",
+                    requested_delta=-3,
+                    reason_kind="event",
+                    reason_id=m.id,
+                    reason_table="mail_items",
+                    explanation=(
+                        f"missade faktura: {m.subject} "
+                        f"({int(abs(amt))} kr förfallen)"
+                    ),
+                )
+                if abs(amt) >= 1000:
+                    apply_pentagon_delta(
+                        info.student_id,
+                        axis="economy",
+                        requested_delta=-2,
+                        reason_kind="event",
+                        reason_id=m.id,
+                        reason_table="mail_items",
+                        explanation=(
+                            f"obetald faktura {int(abs(amt))} kr — "
+                            f"riskerar inkasso"
+                        ),
+                    )
+            except Exception:
+                pass
+
         return V2MailItemRow(
             id=m.id,
             sender=m.sender,
@@ -3606,14 +3646,61 @@ def post_submit_tax_year(
 
     with session_scope() as s:
         ret = submit_tax_year(s, year, gross_monthly, tax_rate)
-        return V2TaxSubmitResponse(
-            return_id=ret.id,
-            year=ret.year,
-            submitted_at=ret.submitted_at,
-            locked=ret.locked,
-            final_tax=float(ret.final_tax),
-            diff=float(ret.diff),
+
+    # Pentagon-koppling · skattedeklaration är ett ekonomi-event.
+    # +3 economy bara för att lämna in i tid; diff > 0 (kvarskatt) ger
+    # en liten extra penalty på safety, diff < 0 (återbäring) ger bonus.
+    try:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        apply_pentagon_delta(
+            info.student_id,
+            axis="economy",
+            requested_delta=3,
+            reason_kind="decision",
+            reason_id=ret.id,
+            reason_table="tax_year_returns",
+            explanation=f"deklaration {ret.year} inlämnad",
+            year_month=f"{ret.year}-04",
         )
+        if float(ret.diff) > 5000:
+            apply_pentagon_delta(
+                info.student_id,
+                axis="safety",
+                requested_delta=-2,
+                reason_kind="decision",
+                reason_id=ret.id,
+                reason_table="tax_year_returns",
+                explanation=(
+                    f"kvarskatt {int(ret.diff)} kr — "
+                    f"oväntad utgift som påverkar trygghet"
+                ),
+                year_month=f"{ret.year}-04",
+            )
+        elif float(ret.diff) < -3000:
+            apply_pentagon_delta(
+                info.student_id,
+                axis="economy",
+                requested_delta=2,
+                reason_kind="decision",
+                reason_id=ret.id,
+                reason_table="tax_year_returns",
+                explanation=(
+                    f"skatteåterbäring {int(-ret.diff)} kr"
+                ),
+                year_month=f"{ret.year}-04",
+            )
+    except Exception:
+        # Pentagon-loggning får inte bryta inlämning
+        pass
+
+    return V2TaxSubmitResponse(
+        return_id=ret.id,
+        year=ret.year,
+        submitted_at=ret.submitted_at,
+        locked=ret.locked,
+        final_tax=float(ret.final_tax),
+        diff=float(ret.diff),
+    )
 
 
 # Bug #11 · Rudolf-AI · Skatteverkets handläggare granskar deklarationen
@@ -4709,6 +4796,23 @@ def post_insurance_policy(
         )
         s.add(p)
         s.flush()
+
+        # Pentagon-koppling · att teckna en aktiv försäkring höjer trygghet.
+        if body.status == "active":
+            try:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                apply_pentagon_delta(
+                    info.student_id,
+                    axis="safety",
+                    requested_delta=2,
+                    reason_kind="decision",
+                    reason_id=p.id,
+                    reason_table="insurance_policies",
+                    explanation=f"tecknade {p.name} ({p.kind})",
+                )
+            except Exception:
+                pass
+
         return V2InsurancePolicyOut(
             id=p.id, provider=p.provider, name=p.name, kind=p.kind,
             premium_monthly=float(p.premium_monthly),
@@ -4752,6 +4856,35 @@ def patch_insurance_policy_status(
         if body.status == "cancelled" and old_status == "active":
             p.ended_on = _d_now.today()
         s.flush()
+
+        # Pentagon-koppling · försäkrings-status-byten
+        try:
+            from ..game_engine.pentagon import apply_pentagon_delta
+            if old_status != "active" and body.status == "active":
+                apply_pentagon_delta(
+                    info.student_id,
+                    axis="safety",
+                    requested_delta=2,
+                    reason_kind="decision",
+                    reason_id=p.id,
+                    reason_table="insurance_policies",
+                    explanation=f"aktiverade {p.name} ({p.kind})",
+                )
+            elif old_status == "active" and body.status == "cancelled":
+                apply_pentagon_delta(
+                    info.student_id,
+                    axis="safety",
+                    requested_delta=-3,
+                    reason_kind="decision",
+                    reason_id=p.id,
+                    reason_table="insurance_policies",
+                    explanation=(
+                        f"avslutade {p.name} — minskat skyddsnät"
+                    ),
+                )
+        except Exception:
+            pass
+
         return V2InsurancePolicyOut(
             id=p.id, provider=p.provider, name=p.name, kind=p.kind,
             premium_monthly=float(p.premium_monthly),
@@ -6167,6 +6300,7 @@ def patch_pension_assumptions(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
     with session_scope() as s:
         a = _get_pension_assumptions(s)
+        old_isk = float(a.custom_isk_monthly or 0)
         if body.retire_age is not None:
             a.retire_age = body.retire_age
         if body.real_return_pct is not None:
@@ -6180,6 +6314,30 @@ def patch_pension_assumptions(
         if body.notes is not None:
             a.notes = body.notes
         s.flush()
+
+        # Pentagon-koppling · höjt månatligt eget pensionssparande är ett
+        # ekonomi-positivt long-term-event. Sänkning är inte negativt
+        # (eleven kan ha goda skäl), så bara höjning ger delta.
+        try:
+            new_isk = float(a.custom_isk_monthly or 0)
+            if body.custom_isk_monthly is not None and new_isk > old_isk + 200:
+                from ..game_engine.pentagon import apply_pentagon_delta
+                # Skala efter storleken på höjningen, men cap vid +3.
+                bump = min(3, max(1, int((new_isk - old_isk) // 500)))
+                apply_pentagon_delta(
+                    info.student_id,
+                    axis="economy",
+                    requested_delta=bump,
+                    reason_kind="decision",
+                    reason_table="pension_assumptions",
+                    explanation=(
+                        f"höjt eget pensionssparande "
+                        f"{int(old_isk)} → {int(new_isk)} kr/mån"
+                    ),
+                )
+        except Exception:
+            pass
+
         return V2PensionAssumptionsOut(
             retire_age=int(a.retire_age),
             real_return_pct=float(a.real_return_pct),

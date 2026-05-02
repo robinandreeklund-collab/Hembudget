@@ -21,12 +21,69 @@ from ..stocks.trading import (
     get_portfolio,
     sell_stock,
 )
-from .deps import db, require_auth
+from .deps import TokenInfo, db, require_auth, require_token
 
 
 router = APIRouter(
     prefix="/stocks", tags=["stocks-trading"], dependencies=[Depends(require_auth)],
 )
+
+
+def _pentagon_log_trade(
+    student_id: int | None,
+    *,
+    side: str,
+    ticker: str,
+    total_amount: float,
+    realized_pnl: Optional[float],
+) -> None:
+    """Logga aktiehandel som wellbeing-event.
+
+    - Köp: ekonomi -1 (pengar binds), leisure +1 (engagemang i sparande)
+    - Sälj med realized vinst > 1000 kr: economy +2, leisure +1
+    - Sälj med realized förlust > 1000 kr: economy -2, social -1
+    - Mindre belopp: ingen påverkan (under brus)
+    """
+    if student_id is None:
+        return
+    try:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        if side == "buy" and total_amount >= 5000:
+            apply_pentagon_delta(
+                student_id,
+                axis="economy",
+                requested_delta=-1,
+                reason_kind="decision",
+                reason_table="stock_transactions",
+                explanation=(
+                    f"köp {ticker} {int(total_amount)} kr — likvid binds"
+                ),
+            )
+        if side == "sell" and realized_pnl is not None:
+            if realized_pnl >= 1000:
+                apply_pentagon_delta(
+                    student_id,
+                    axis="economy",
+                    requested_delta=2,
+                    reason_kind="decision",
+                    reason_table="stock_transactions",
+                    explanation=(
+                        f"sålde {ticker} med vinst {int(realized_pnl)} kr"
+                    ),
+                )
+            elif realized_pnl <= -1000:
+                apply_pentagon_delta(
+                    student_id,
+                    axis="economy",
+                    requested_delta=-2,
+                    reason_kind="decision",
+                    reason_table="stock_transactions",
+                    explanation=(
+                        f"sålde {ticker} med förlust {int(realized_pnl)} kr"
+                    ),
+                )
+    except Exception:
+        pass
 
 
 class BuyIn(BaseModel):
@@ -63,7 +120,12 @@ def _result_dict(r: TradeResult) -> dict:
 
 
 @router.post("/{ticker}/buy")
-def buy(ticker: str, payload: BuyIn, scope: Session = Depends(db)) -> dict:
+def buy(
+    ticker: str,
+    payload: BuyIn,
+    scope: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> dict:
     """Köp aktier till marknadspris."""
     try:
         with master_session() as ms:
@@ -75,13 +137,25 @@ def buy(ticker: str, payload: BuyIn, scope: Session = Depends(db)) -> dict:
                 quantity=payload.quantity,
                 student_rationale=payload.student_rationale,
             )
+        _pentagon_log_trade(
+            info.student_id,
+            side="buy",
+            ticker=ticker,
+            total_amount=float(r.total_amount),
+            realized_pnl=None,
+        )
         return _result_dict(r)
     except TradeError as exc:
         raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/{ticker}/sell")
-def sell(ticker: str, payload: SellIn, scope: Session = Depends(db)) -> dict:
+def sell(
+    ticker: str,
+    payload: SellIn,
+    scope: Session = Depends(db),
+    info: TokenInfo = Depends(require_token),
+) -> dict:
     """Sälj aktier till marknadspris."""
     try:
         with master_session() as ms:
@@ -93,6 +167,15 @@ def sell(ticker: str, payload: SellIn, scope: Session = Depends(db)) -> dict:
                 quantity=payload.quantity,
                 student_rationale=payload.student_rationale,
             )
+        _pentagon_log_trade(
+            info.student_id,
+            side="sell",
+            ticker=ticker,
+            total_amount=float(r.total_amount),
+            realized_pnl=(
+                float(r.realized_pnl) if r.realized_pnl is not None else None
+            ),
+        )
         return _result_dict(r)
     except TradeError as exc:
         raise HTTPException(400, str(exc)) from exc

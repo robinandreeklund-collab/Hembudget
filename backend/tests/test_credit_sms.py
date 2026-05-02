@@ -14,6 +14,7 @@ from hembudget.api.credit import (
     sms_accept,
     sms_apply,
 )
+from hembudget.api.deps import TokenInfo
 from hembudget.db.models import (
     Account,
     Base,
@@ -21,6 +22,9 @@ from hembudget.db.models import (
     Loan,
     Transaction,
 )
+
+
+_DEMO = TokenInfo(token="t", role="demo")
 
 
 @pytest.fixture()
@@ -95,7 +99,7 @@ def test_sms_accept_creates_loan_with_high_cost_flag(session):
     accept_r = sms_accept(SmsAcceptIn(
         application_id=apply_r.application_id,
         deposit_account_id=acc_id,
-    ), session)
+    ), session, _DEMO)
     loan = session.get(Loan, accept_r.loan_id)
     assert loan is not None
     assert loan.loan_kind == "sms"
@@ -114,7 +118,7 @@ def test_sms_accept_creates_transaction(session):
     accept_r = sms_accept(SmsAcceptIn(
         application_id=apply_r.application_id,
         deposit_account_id=acc_id,
-    ), session)
+    ), session, _DEMO)
     tx = session.get(Transaction, accept_r.transaction_id)
     assert tx is not None
     assert tx.amount == Decimal("5000")
@@ -139,11 +143,11 @@ def test_sms_double_accept_blocked(session):
     sms_accept(SmsAcceptIn(
         application_id=apply_r.application_id,
         deposit_account_id=acc_id,
-    ), session)
+    ), session, _DEMO)
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as exc:
         sms_accept(SmsAcceptIn(
             application_id=apply_r.application_id,
             deposit_account_id=acc_id,
-        ), session)
+        ), session, _DEMO)
     assert exc.value.status_code == 400

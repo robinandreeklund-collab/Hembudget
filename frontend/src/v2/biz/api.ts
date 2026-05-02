@@ -235,3 +235,33 @@ export const bizApi = {
     ),
 };
 
+
+// === Lärar-endpoints ===
+
+export type TeacherForetagOverview = {
+  student_id: number;
+  student_name: string;
+  business_mode_enabled: boolean;
+  company: Company | null;
+  pentagon: BizPentagon | null;
+  n_transactions_total: number;
+  n_invoices_total: number;
+  n_invoices_unpaid: number;
+  n_owner_salaries: number;
+  last_owner_salary_date: string | null;
+  next_vat_due: string | null;
+  summary_md: string;
+};
+
+export const teacherBizApi = {
+  overview: (studentId: number) =>
+    call<TeacherForetagOverview>(
+      `/v2/teacher/foretag/overview/${studentId}`,
+    ),
+  toggle: (studentId: number, enabled: boolean) =>
+    call<{ enabled: boolean; has_active_company: boolean }>(
+      `/v2/teacher/foretag/toggle/${studentId}`,
+      { method: "POST", body: JSON.stringify({ enabled }) },
+    ),
+};
+
