@@ -387,6 +387,53 @@ def tick_month(
                     event_pentagon_delta=pentagon_total,
                 )
 
+                # Fas I · biz-tick · OM eleven har företagsläget på OCH
+                # ett aktivt bolag finns. Vi kör 4 biz-veckor per privat-
+                # månads-tick (eftersom privat tickar en månad åt gången
+                # och biz är vecko-baserad). Misslyckas tyst — skall inte
+                # ta ner privat-ticken om biz har en bug.
+                try:
+                    from ...school.engines import master_session as _ms
+                    from ...school.models import Student as _Stu
+                    with _ms() as ms:
+                        stu = ms.get(_Stu, student.id)
+                        biz_on = bool(
+                            stu and getattr(stu, "business_mode_enabled", False)
+                        )
+                    if biz_on:
+                        from ...business.engine import run_business_week
+                        from ...business.models import Company as _Co
+                        active_co = (
+                            s.query(_Co)
+                            .filter(_Co.active.is_(True))
+                            .first()
+                        )
+                        if active_co is not None:
+                            biz_summaries = []
+                            for _w in range(4):
+                                tsum = run_business_week(s, company=active_co)
+                                biz_summaries.append({
+                                    "week_no": tsum.week_no,
+                                    "new_opps": tsum.new_opportunities,
+                                    "decided": tsum.quotes_decided,
+                                    "accepted": tsum.quotes_accepted,
+                                    "rejected": tsum.quotes_rejected,
+                                    "paid": tsum.invoices_paid_now,
+                                    "events": tsum.events_triggered,
+                                    "reputation": tsum.reputation_after,
+                                })
+                            summary["business"] = {
+                                "company_id": active_co.id,
+                                "weeks": biz_summaries,
+                            }
+                except Exception as _biz_exc:
+                    log.exception(
+                        "biz-tick failed within monthly_engine — privat-tick "
+                        "fortsätter ändå (student=%s ym=%s): %s",
+                        student.id, year_month, _biz_exc,
+                    )
+                    summary["business"] = {"error": str(_biz_exc)[:300]}
+
                 s.commit()
     except Exception as exc:
         log.exception(

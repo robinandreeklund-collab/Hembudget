@@ -302,3 +302,305 @@ class CompanyOwnerSalary(TenantMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
+
+
+# === Spelmotor: offert · jobb · marknadsföring · beslut · leverantör ===
+#
+# Spec: deb/README.md avsnitt 4–6 + 12.
+# Allt deterministiskt seedat på (company_id, week_no) — läraren kan
+# spela om en vecka för att förstå utfall.
+
+
+class JobOpportunity(TenantMixin, Base):
+    """En offertförfrågan från en simulerad kund.
+
+    Genereras av pipeline_generator vid varje veckostick.
+    """
+    __tablename__ = "biz_job_opportunities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    # Kund
+    customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    customer_segment: Mapped[str] = mapped_column(
+        String(20), default="privat",
+    )  # privat | foretag | kommun
+    price_sensitivity: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3), default=Decimal("0.5"),
+    )
+    quality_sensitivity: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3), default=Decimal("0.5"),
+    )
+    payment_morality: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3), default=Decimal("0.9"),
+    )
+
+    # Jobbets innehåll
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    industry_tag: Mapped[Optional[str]] = mapped_column(
+        String(60), nullable=True,
+    )
+
+    # Marknad och deadline
+    market_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_delivery_days: Mapped[int] = mapped_column(
+        Integer, default=14, nullable=False,
+    )
+    deadline_on: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # Status: open | quoted | won | lost | cancelled | expired
+    status: Mapped[str] = mapped_column(
+        String(20), default="open", nullable=False,
+    )
+
+    week_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    received_on: Mapped[date] = mapped_column(Date, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+    quote: Mapped[Optional["Quote"]] = relationship(
+        back_populates="opportunity", uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class Quote(TenantMixin, Base):
+    """Elevens offert på en JobOpportunity."""
+    __tablename__ = "biz_quotes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("biz_job_opportunities.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    offered_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    offered_delivery_days: Mapped[int] = mapped_column(
+        Integer, nullable=False,
+    )
+    pitch_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    pitch_quality: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(4, 3), nullable=True,
+    )  # 0..1 från evaluate_quote_pitch
+    accept_probability: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(4, 3), nullable=True,
+    )
+    accepted: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    decision_explanation: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
+
+    submitted_on: Mapped[date] = mapped_column(Date, nullable=False)
+    decided_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+    opportunity: Mapped[JobOpportunity] = relationship(
+        back_populates="quote",
+    )
+
+
+class Job(TenantMixin, Base):
+    """Vunnen offert som blir uppdrag eleven ska leverera."""
+    __tablename__ = "biz_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("biz_job_opportunities.id"),
+        nullable=False, unique=True,
+    )
+    quote_id: Mapped[int] = mapped_column(
+        ForeignKey("biz_quotes.id"), nullable=False,
+    )
+
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    agreed_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_on: Mapped[date] = mapped_column(Date, nullable=False)
+    expected_complete_on: Mapped[date] = mapped_column(
+        Date, nullable=False,
+    )
+
+    # Status: in_progress | delivered | invoiced | paid | disputed
+    status: Mapped[str] = mapped_column(
+        String(20), default="in_progress", nullable=False,
+    )
+
+    quality_score: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    delivered_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    invoice_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("company_invoices.id"), nullable=True,
+    )
+
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class MarketingCampaign(TenantMixin, Base):
+    """En marknadsföringskampanj som ger pipeline-boost."""
+    __tablename__ = "biz_marketing_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    kind: Mapped[str] = mapped_column(
+        String(40), nullable=False,
+    )  # social | flygblad | google | sponsring | event
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    copy_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    cost: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_weeks: Mapped[int] = mapped_column(
+        Integer, default=4, nullable=False,
+    )
+
+    ai_quality_factor: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(4, 3), nullable=True,
+    )  # 0.5..1.5 från evaluate_marketing_copy
+    ai_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    base_pipeline_boost: Mapped[Decimal] = mapped_column(
+        Numeric(4, 3), default=Decimal("1.0"),
+    )
+
+    started_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class BusinessDecision(TenantMixin, Base):
+    """Strategiskt beslut: anställa, friskvård, leasing, försäkring."""
+    __tablename__ = "biz_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    kind: Mapped[str] = mapped_column(
+        String(40), nullable=False,
+    )  # hire_part_time | wellness | car_lease | insurance | new_office
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    monthly_cost: Mapped[int] = mapped_column(Integer, default=0)
+    one_time_cost: Mapped[int] = mapped_column(Integer, default=0)
+
+    capacity_delta: Mapped[int] = mapped_column(Integer, default=0)
+    reputation_delta: Mapped[int] = mapped_column(Integer, default=0)
+    insurance_kind: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+    )
+
+    started_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class SupplierInvoice(TenantMixin, Base):
+    """Inkommande leverantörsfaktura.
+
+    Källa: 'system' (genererad av tick_engine), 'teacher' (mass-skick),
+    'manual' (eleven matar in själv från ett papper).
+    """
+    __tablename__ = "biz_supplier_invoices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    sender_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    invoice_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    issued_on: Mapped[date] = mapped_column(Date, nullable=False)
+    due_on: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str] = mapped_column(String(240), nullable=False)
+    amount_excl_vat: Mapped[int] = mapped_column(Integer, nullable=False)
+    vat_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), default=Decimal("0.25"),
+    )
+
+    source: Mapped[str] = mapped_column(String(20), default="system")
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+
+    # Status: open | paid | overdue | disputed
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    paid_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+
+
+class BusinessTickJob(TenantMixin, Base):
+    """En körning av tick_engine för audit och re-spelning."""
+    __tablename__ = "biz_tick_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    week_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+
+    # Status: queued | running | done | failed
+    status: Mapped[str] = mapped_column(
+        String(20), default="done", nullable=False,
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Vad hände i denna tick (för audit + debug)
+    summary: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    n_new_opportunities: Mapped[int] = mapped_column(Integer, default=0)
+    n_quotes_decided: Mapped[int] = mapped_column(Integer, default=0)
+    n_jobs_delivered: Mapped[int] = mapped_column(Integer, default=0)
+    n_invoices_paid: Mapped[int] = mapped_column(Integer, default=0)
+    reputation_after: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
