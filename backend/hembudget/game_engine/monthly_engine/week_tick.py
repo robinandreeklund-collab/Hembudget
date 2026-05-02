@@ -176,7 +176,13 @@ def _check_and_create_run(
     seed_used: Optional[int],
 ) -> tuple[bool, int]:
     """Atomiskt: om run finns med completed → return (True, id).
-    Annars skapa en ny run i status='in_progress' och return (False, id)."""
+    Annars skapa en ny run i status='in_progress' och return (False, id).
+
+    När en gammal run var failed/in_progress finns delvis-skapade
+    transaktioner kvar i scope-DB:n. Vi rensar dem innan retry så att
+    samma deterministiska hash inte konfliktar (UNIQUE constraint på
+    transactions.tenant_id+hash).
+    """
     with master_session() as s:
         existing = (
             s.query(WeekTickRun)
@@ -189,12 +195,19 @@ def _check_and_create_run(
         if existing is not None and existing.status == "completed":
             return True, existing.id
         if existing is not None:
-            # in_progress eller failed — låt oss försöka igen
+            # in_progress eller failed — rensa partiell state INNAN retry
             existing.status = "in_progress"
             existing.started_at = datetime.utcnow()
             existing.error_message = None
             s.commit()
-            return False, existing.id
+            run_id = existing.id
+            # Rensa scope-DB-data från det failade/avbrutna försöket
+            from ...school.engines import master_session as _ms
+            with _ms() as ms:
+                stu = ms.get(Student, student_id)
+                if stu is not None:
+                    _purge_partial_tick_data(stu, year_month)
+            return False, run_id
         run = WeekTickRun(
             student_id=student_id,
             year_month=year_month,
@@ -205,6 +218,51 @@ def _check_and_create_run(
         s.commit()
         s.refresh(run)
         return False, run.id
+
+
+def _purge_partial_tick_data(student: Student, year_month: str) -> None:
+    """Rensa transaktioner + mail + events skapade av ett FAILED tick-run
+    så vi kan köra om idempotent. year_month = "YYYY-MM"."""
+    from datetime import date as _d
+    from ...db.models import (
+        Account as _Acc, MailItem as _Mail, Transaction as _Tx,
+    )
+    from ...school.engines import (
+        get_scope_session, scope_context, scope_for_student,
+    )
+
+    try:
+        year = int(year_month[:4])
+        month = int(year_month[5:7])
+    except (ValueError, IndexError):
+        return
+    start = _d(year, month, 1)
+    end_year = year + (1 if month == 12 else 0)
+    end_month = 1 if month == 12 else month + 1
+    end = _d(end_year, end_month, 1)
+
+    scope_key = scope_for_student(student)
+    maker = get_scope_session(scope_key)
+    try:
+        with scope_context(scope_key):
+            with maker() as s:
+                s.query(_Tx).filter(
+                    _Tx.date >= start, _Tx.date < end,
+                ).delete(synchronize_session=False)
+                s.query(_Mail).filter(
+                    _Mail.received_at >= datetime.combine(
+                        start, datetime.min.time(),
+                    ),
+                    _Mail.received_at < datetime.combine(
+                        end, datetime.min.time(),
+                    ),
+                ).delete(synchronize_session=False)
+                s.commit()
+    except Exception:
+        log.exception(
+            "_purge_partial_tick_data: rensning misslyckades för "
+            "student=%s ym=%s", student.id, year_month,
+        )
 
 
 def _finalize_run(run_id: int, summary: dict, status: str = "completed",

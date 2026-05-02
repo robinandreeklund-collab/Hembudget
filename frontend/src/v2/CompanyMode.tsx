@@ -8,6 +8,11 @@
  *
  * Speglar vol-7-prototypens .mode-switch + body[data-mode="business"]-
  * mönster, men anpassat för React/Vite.
+ *
+ * Bug 12 · GLOBAL state-synk · alla useCompanyMode-instanser delar
+ * state via custom event "company-mode-changed". När en topbar togglar
+ * uppdateras HubV2:s wrapper omedelbart — annars visade biz-hub fel
+ * innehåll eftersom React-state inte syncade mellan komponenter.
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +21,7 @@ import { BizHub } from "./biz/BizHub";
 type Mode = "private" | "business";
 
 const KEY = "hb_company_mode";
+const EVENT_NAME = "company-mode-changed";
 
 function readMode(): Mode {
   return (localStorage.getItem(KEY) as Mode) || "private";
@@ -24,6 +30,7 @@ function readMode(): Mode {
 function writeMode(m: Mode) {
   localStorage.setItem(KEY, m);
   document.body.setAttribute("data-mode", m);
+  window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: { mode: m } }));
 }
 
 export function useCompanyMode(): [Mode, () => void] {
@@ -34,13 +41,25 @@ export function useCompanyMode(): [Mode, () => void] {
     document.body.setAttribute("data-mode", mode);
   }, [mode]);
 
+  // Bug 12 · lyssna på globalt mode-byte så ALLA hook-instanser syncar
+  useEffect(() => {
+    function onChange(e: Event) {
+      const detail = (e as CustomEvent).detail || {};
+      if (detail.mode === "private" || detail.mode === "business") {
+        setMode(detail.mode);
+      }
+    }
+    window.addEventListener(EVENT_NAME, onChange);
+    return () => window.removeEventListener(EVENT_NAME, onChange);
+  }, []);
+
   const toggle = () => {
     // Steg 1: flip-out
     const app = document.querySelector(".v2-hub-root, .v2-larare-root");
     app?.classList.add("flip-out");
     setTimeout(() => {
       const next: Mode = mode === "private" ? "business" : "private";
-      writeMode(next);
+      writeMode(next);  // dispatchar event som syncar alla instanser
       setMode(next);
       app?.classList.remove("flip-out");
       app?.classList.add("flip-in");

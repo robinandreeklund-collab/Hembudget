@@ -106,6 +106,7 @@ const SPEND_LABEL: Record<string, string> = {
 
 type Mode = "private" | "business";
 const MODE_KEY = "hb_company_mode";
+const MODE_EVENT = "company-mode-changed";
 
 function readMode(): Mode {
   return (localStorage.getItem(MODE_KEY) as Mode) || "private";
@@ -114,6 +115,7 @@ function readMode(): Mode {
 function writeMode(m: Mode) {
   localStorage.setItem(MODE_KEY, m);
   document.body.setAttribute("data-mode", m);
+  window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: { mode: m } }));
 }
 
 export function V2Topbar({ status }: { status: Status }) {
@@ -142,6 +144,18 @@ export function V2Topbar({ status }: { status: Status }) {
   useEffect(() => {
     document.body.setAttribute("data-mode", mode);
   }, [mode]);
+
+  // Bug 12 · lyssna på globalt mode-byte (om annan komponent togglar)
+  useEffect(() => {
+    function onChange(e: Event) {
+      const detail = (e as CustomEvent).detail || {};
+      if (detail.mode === "private" || detail.mode === "business") {
+        setMode(detail.mode);
+      }
+    }
+    window.addEventListener(MODE_EVENT, onChange);
+    return () => window.removeEventListener(MODE_EVENT, onChange);
+  }, []);
 
   // Hämta AI-token-status (visas i meter)
   useEffect(() => {
