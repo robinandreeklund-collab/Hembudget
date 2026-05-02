@@ -343,42 +343,65 @@ export function TeacherStudentSpelmotorPanel({ studentId }: { studentId: number 
                   padding: 10,
                   borderRadius: 6,
                   background: "rgba(255,255,255,0.03)",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
                   fontSize: "0.85rem",
                 }}
               >
-                <div>
-                  <strong style={{ color: "white" }}>{t.year_month}</strong>
-                  {t.seed_used !== null && (
-                    <span style={{ color: "rgba(255,255,255,0.4)", marginLeft: 8 }}>
-                      seed {t.seed_used}
-                    </span>
-                  )}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}>
+                  <div>
+                    <strong style={{ color: "white" }}>{t.year_month}</strong>
+                    {t.seed_used !== null && (
+                      <span style={{ color: "rgba(255,255,255,0.4)", marginLeft: 8 }}>
+                        seed {t.seed_used}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 600,
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      background:
+                        t.status === "completed"
+                          ? "rgba(110,231,183,0.2)"
+                          : t.status === "failed"
+                            ? "rgba(220,76,43,0.2)"
+                            : "rgba(251,191,36,0.2)",
+                      color:
+                        t.status === "completed"
+                          ? "#6ee7b7"
+                          : t.status === "failed"
+                            ? "#fda594"
+                            : "var(--warm)",
+                    }}
+                  >
+                    {t.status}
+                  </span>
                 </div>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: 600,
-                    padding: "2px 8px",
-                    borderRadius: 10,
-                    background:
-                      t.status === "completed"
-                        ? "rgba(110,231,183,0.2)"
-                        : t.status === "failed"
-                          ? "rgba(220,76,43,0.2)"
-                          : "rgba(251,191,36,0.2)",
-                    color:
-                      t.status === "completed"
-                        ? "#6ee7b7"
-                        : t.status === "failed"
-                          ? "#fda594"
-                          : "var(--warm)",
-                  }}
-                >
-                  {t.status}
-                </span>
+                {/* Visa error_message vid failed så vi ser ROTORSAKEN */}
+                {t.status === "failed" && t.error_message && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: 8,
+                      background: "rgba(220,76,43,0.08)",
+                      border: "1px solid rgba(220,76,43,0.3)",
+                      borderRadius: 4,
+                      color: "#fda594",
+                      fontSize: "0.75rem",
+                      fontFamily: "JetBrains Mono, ui-monospace, monospace",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {t.error_message}
+                  </div>
+                )}
               </div>
             ))}
           </div>

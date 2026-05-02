@@ -13373,7 +13373,10 @@ def v2_create_student(
 class V2ReseedResponse(BaseModel):
     student_id: int
     seeded: bool
+    success: bool
     message: str
+    error_detail: Optional[str] = None
+    last_failed_run: Optional[dict] = None
 
 
 @router.post(
@@ -13391,6 +13394,9 @@ def teacher_reseed_initial_data(
 
     Bug-fix för 'seed failed': om en elev har stuck failed runs kan
     läraren trigga reseed manuellt från UI-knappen i spelmotor-panelen.
+
+    Vid fel returneras error_detail + last_failed_run så vi kan se
+    rotorsaken direkt i UI:t.
     """
     teacher_id = _require_teacher(info)
     with master_session() as mdb:
@@ -13406,22 +13412,75 @@ def teacher_reseed_initial_data(
         )
         partner = getattr(student, "v2_partner_model", None) or "solo"
 
-    seeded = _ensure_student_has_initial_data(
-        student_id=student_id,
-        student_name=student_name,
-        spend_profile=spend_profile,
-        starting_level=v2_level,
-        partner_model=partner,
-    )
+    # Försök seed:a · fångas exception:s så vi kan returnera diagnostik
+    seed_error: Optional[str] = None
+    try:
+        seeded = _ensure_student_has_initial_data(
+            student_id=student_id,
+            student_name=student_name,
+            spend_profile=spend_profile,
+            starting_level=v2_level,
+            partner_model=partner,
+        )
+    except Exception as exc:
+        seeded = False
+        seed_error = f"{type(exc).__name__}: {exc}"
+        import logging
+        logging.getLogger(__name__).exception(
+            "reseed-initial-data failed för student %s", student_id,
+        )
+
+    # Hämta senaste failed run för diagnostik
+    last_failed: Optional[dict] = None
+    from ..school.game_engine_models import WeekTickRun
+    with master_session() as s:
+        completed_count = (
+            s.query(WeekTickRun)
+            .filter(
+                WeekTickRun.student_id == student_id,
+                WeekTickRun.status == "completed",
+            )
+            .count()
+        )
+        if completed_count == 0:
+            failed = (
+                s.query(WeekTickRun)
+                .filter(
+                    WeekTickRun.student_id == student_id,
+                    WeekTickRun.status == "failed",
+                )
+                .order_by(WeekTickRun.started_at.desc())
+                .first()
+            )
+            if failed:
+                last_failed = {
+                    "year_month": failed.year_month,
+                    "seed": failed.seed_used,
+                    "error": failed.error_message,
+                }
+
+    success = seeded or completed_count > 0
+    if success and seeded:
+        message = (
+            "Seed kördes. Eleven har nu lön, fakturor, försäkringar "
+            "och pension."
+        )
+    elif success:
+        message = "Eleven hade redan data — ingen reseed behövdes."
+    else:
+        message = (
+            f"Seed misslyckades: {seed_error or 'okänt fel'}. "
+            f"Se error_detail nedan för detaljer."
+        )
+
     return V2ReseedResponse(
         student_id=student_id,
         seeded=seeded,
-        message=(
-            "Seed kördes. Eleven har nu lön, fakturor, försäkringar "
-            "och pension."
-            if seeded
-            else "Eleven hade redan data — ingen reseed behövdes."
-        ),
+        success=success,
+        message=message,
+        error_detail=seed_error
+        or (last_failed.get("error") if last_failed else None),
+        last_failed_run=last_failed,
     )
 
 
