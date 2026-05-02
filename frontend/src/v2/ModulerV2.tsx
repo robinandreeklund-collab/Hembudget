@@ -153,7 +153,7 @@ export function ModulerV2() {
                     {/* Tilldelade men ej startade */}
                     {assignedNotStarted.map((m) => (
                       <Link
-                        to={`/modules/${m.module_id}`}
+                        to={`/v2/moduler/${m.module_id}`}
                         key={`new-${m.student_module_id}`}
                         className="acct"
                         style={{
@@ -194,7 +194,7 @@ export function ModulerV2() {
                     {/* Klara */}
                     {data.completed.map((m) => (
                       <Link
-                        to={`/modules/${m.module_id}`}
+                        to={`/v2/moduler/${m.module_id}`}
                         key={`done-${m.student_module_id}`}
                         className="acct"
                         style={{ textDecoration: "none" }}
@@ -368,7 +368,7 @@ export function ModulerV2() {
 function ProgressCard({ m }: { m: V2ModuleProgressOut }) {
   return (
     <Link
-      to={`/modules/${m.module_id}`}
+      to={`/v2/moduler/${m.module_id}`}
       className="cc-stat"
       style={{
         textDecoration: "none",

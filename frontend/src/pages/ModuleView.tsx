@@ -39,7 +39,17 @@ type StepProgress = {
   auto_progress?: string | null;
 };
 
+// Bug #12 · ModuleView används både som v1 (default export) och som
+// inner-component i v2-wrapper. v2 lägger till V2Banner-shell.
+export function ModuleViewInner() {
+  return <ModuleViewBody />;
+}
+
 export default function ModuleView() {
+  return <ModuleViewBody />;
+}
+
+function ModuleViewBody() {
   const { moduleId } = useParams<{ moduleId: string }>();
   const mid = parseInt(moduleId || "0", 10);
   const [mod, setMod] = useState<ModuleDetail | null>(null);
@@ -115,22 +125,6 @@ export default function ModuleView() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Bug #12 · v2-bro · banner som meddelar att v2-design är på väg */}
-      <div
-        style={{
-          background: "linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)",
-          color: "#1a1a1a",
-          padding: "10px 20px",
-          textAlign: "center",
-          fontSize: "0.85rem",
-          fontWeight: 600,
-        }}
-      >
-        Modul-vyer migreras till v2-design successivt.
-        <Link to="/v2/moduler" style={{ marginLeft: 12, color: "#1a1a1a", textDecoration: "underline" }}>
-          → Öppna v2-listan över moduler
-        </Link>
-      </div>
       <div className="max-w-5xl mx-auto p-6 grid md:grid-cols-[280px_1fr] gap-6">
         {/* Sidomeny med alla steg */}
         <aside className="space-y-3">
