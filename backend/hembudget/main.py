@@ -468,6 +468,25 @@ def _school_bootstrap() -> None:
                     "school: seeded %d agreements + %d profession mappings",
                     ner["agreements_added"], ner["profession_mappings_added"],
                 )
+            # Bug #9 · Seed AgreementBenefit + MarketSalaryRange så att
+            # ArbetsgivarenV2 visar förmåner direkt utan att lärar-
+            # action behövs.
+            from .school.employer_market_seed import (
+                seed_default_agreement_benefits,
+                seed_default_market_salary_ranges,
+            )
+            try:
+                nab = seed_default_agreement_benefits(s)
+                nms = seed_default_market_salary_ranges(s)
+                if nab or nms:
+                    logging.getLogger(__name__).info(
+                        "school: seeded %d agreement benefits + %d market ranges",
+                        nab, nms,
+                    )
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "school: agreement-benefits/market-ranges seed failed",
+                )
             # Bootstrap: om LatestStockQuote är tom efter att StockMaster
             # har seedats, kör en force-poll så det finns kursdata direkt
             # vid boot — annars visar frontend tomma rader tills nästa

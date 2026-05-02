@@ -99,6 +99,19 @@ export function TeacherReflectionsV2() {
             <h1 className="larare-head-h1">
               Klassens <em>tankar</em> denna period.
             </h1>
+            <a
+              href="/teacher/reflections"
+              style={{
+                display: "inline-block",
+                marginTop: 8,
+                fontSize: 12,
+                color: "rgba(255,255,255,0.5)",
+                textDecoration: "underline",
+              }}
+              title="V2-vyn fokuserar på snabb-flöde · v1 har bulk-bedömning + AI-summering"
+            >
+              → Öppna v1-vyn med extra-funktioner (bulk + AI)
+            </a>
             <p
               style={{
                 fontFamily: "Source Serif 4, Georgia, serif",
