@@ -342,13 +342,10 @@ def apply_health_episode(
     day = rng.randint(2, 25)
     occurred = _ym_to_date(year_month, day)
 
-    mail = _create_mail_for_episode(
-        template=template, n_days=n_days,
-        gross_loss=gross_loss, occurred_on=occurred,
-    )
-    s.add(mail)
-    s.flush()
-
+    # Sjuk/VAB skapar INTE separat MailItem längre — det visas som rad
+    # på lönespec-mailen istället (matchar verkligheten där löneavdrag
+    # är en specifikationsrad, inte ett separat brev). Eleven ser ändå
+    # händelsen via löneavdrags-Transaction i banken/bokföringen.
     tx_id: Optional[int] = None
     if salary_account is not None and gross_loss > 0:
         tx = Transaction(
@@ -369,6 +366,8 @@ def apply_health_episode(
         s.flush()
         tx_id = tx.id
 
+    # Pentagon-delta · använd transaction som reason om vi har en,
+    # annars logga utan reason_id (event-loggen visar ändå texten).
     pentagon_delta = _pentagon_for_episode(template, n_days)
     for axis, delta in pentagon_delta.items():
         if delta == 0:
@@ -379,8 +378,8 @@ def apply_health_episode(
                 axis=axis,
                 requested_delta=delta,
                 reason_kind="event",
-                reason_id=mail.id,
-                reason_table="mail_items",
+                reason_id=tx_id or 0,
+                reason_table="transactions" if tx_id else "health",
                 explanation=f"{template.display} ({n_days} dagar)",
                 year_month=year_month,
             )
@@ -401,7 +400,7 @@ def apply_health_episode(
         occurred_on=occurred,
         gross_loss=gross_loss,
         pentagon_delta=pentagon_delta,
-        mail_id=mail.id,
+        mail_id=None,  # ingen separat MailItem längre · syns på lönespec
         tx_id=tx_id,
     )
 
@@ -512,4 +511,65 @@ def roll_monthly_health_events(
         except Exception:
             log.exception("health episode failed")
 
+    # Annotera lönespec-mailen för månaden med en frånvaro-sektion.
+    # Då syns VAB/sjuk där (matchar verkligheten) istället för som
+    # separata mail i postlådan.
+    if occurrences:
+        try:
+            _annotate_salary_slip(s, year_month=year_month, occs=occurrences)
+        except Exception:
+            log.exception("salary-slip annotation failed")
+
     return occurrences
+
+
+def _annotate_salary_slip(
+    s: Session, *, year_month: str, occs: list[HealthOccurrence],
+) -> None:
+    """Lägg till en 'Frånvaro denna månad'-sektion i lönespec-mailen."""
+    # Hitta huvudpersonens lönespec för månaden (inte partner)
+    slip = (
+        s.query(MailItem)
+        .filter(
+            MailItem.mail_type == "salary_slip",
+            MailItem.subject == f"Lönespec {year_month}",
+            MailItem.sender == "Arbetsgivaren",
+        )
+        .first()
+    )
+    if slip is None or not slip.body:
+        return
+
+    sick_total = sum(
+        o.gross_loss for o in occs if o.template.kind != "vab"
+    )
+    sick_days = sum(
+        o.n_days for o in occs if o.template.kind != "vab"
+    )
+    vab_total = sum(
+        o.gross_loss for o in occs if o.template.kind == "vab"
+    )
+    vab_days = sum(
+        o.n_days for o in occs if o.template.kind == "vab"
+    )
+
+    lines: list[str] = ["", "Frånvaro denna månad"]
+    if sick_days > 0:
+        lines.append(
+            f"Sjukdom ({sick_days} dgr)         "
+            f"{-sick_total:>10,} kr".replace(",", " ")
+        )
+    if vab_days > 0:
+        lines.append(
+            f"VAB ({vab_days} dgr)              "
+            f"{-vab_total:>10,} kr".replace(",", " ")
+        )
+    total_loss = sick_total + vab_total
+    lines.append("")
+    lines.append(
+        f"Justerad nettolön efter avdrag "
+        f"{int(slip.amount or 0) - total_loss:>8,} kr".replace(",", " ")
+    )
+
+    slip.body = (slip.body or "") + "\n" + "\n".join(lines)
+    s.flush()

@@ -15,6 +15,7 @@ Källor (faktagranskat 2026-04):
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -111,12 +112,35 @@ DEFAULT_INSURANCE_POLICIES = [
 ]
 
 
-def seed_default_insurance_policies(s: Session) -> int:
+def seed_default_insurance_policies(
+    s: Session,
+    *,
+    housing_type: Optional[str] = None,
+    has_partner: bool = False,
+) -> int:
     """Seedа default-katalogen i en scope-DB.
 
+    `housing_type` styr vilka som aktiveras vid seed:
+    - hyresratt → hem + olycksfall = active
+    - bostadsratt → hem + olycksfall + bostadsrättsforsakring = active
+    - villa/radhus → hem + olycksfall + villa-försäkring = active
+
+    Övriga (livförsäkring, sjukvård) lämnas "considered" så eleven
+    medvetet kan välja att aktivera.
+
     Idempotent: hoppar över policys som redan finns (matchar på
-    provider + kind + name). Returnerar antal nya rader.
+    provider + kind + name) men UPPDATERAR status om policy redan finns
+    men borde vara aktiv. Returnerar antal nya rader skapade.
     """
+    # Vilka policies ska sättas till "active" beroende på boende
+    active_kinds = {"hem", "olycksfall"}
+    if housing_type == "bostadsratt":
+        active_kinds.add("bostadsrattsforsakring")
+    elif housing_type in ("villa", "radhus"):
+        active_kinds.add("villa")  # om det finns villa-typ i katalogen
+    if has_partner:
+        active_kinds.add("liv")
+
     created = 0
     for spec in DEFAULT_INSURANCE_POLICIES:
         existing = (
@@ -128,9 +152,16 @@ def seed_default_insurance_policies(s: Session) -> int:
             )
             .first()
         )
+        target_status = (
+            "active" if spec["kind"] in active_kinds else "considered"
+        )
         if existing is not None:
+            # Befintlig policy · uppdatera status om eleven inte ändrat den
+            if existing.status == "considered" and target_status == "active":
+                existing.status = "active"
             continue
-        s.add(InsurancePolicy(**spec))
+        spec_with_status = {**spec, "status": target_status}
+        s.add(InsurancePolicy(**spec_with_status))
         created += 1
     if created:
         s.flush()

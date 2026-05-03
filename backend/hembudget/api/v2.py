@@ -606,9 +606,22 @@ def get_bank(
             ]
 
             # 3. Kommande fakturor (öppna = ej fullt matchade)
+            # Visa kommande dragningar (>= today) PLUS obetalda historiska
+            # (< today men inte matchade mot transaktion) — så fakturor som
+            # exporterats till banken med due-date i förfluten
+            # fortfarande syns och kan signeras.
+            from datetime import timedelta as _td_filter
             upcoming_rows = (
                 s.query(UpcomingTransaction)
-                .filter(UpcomingTransaction.expected_date >= today)
+                .filter(
+                    (
+                        (UpcomingTransaction.expected_date >= today)
+                        | (
+                            (UpcomingTransaction.matched_transaction_id.is_(None))
+                            & (UpcomingTransaction.expected_date >= today - _td_filter(days=60))
+                        )
+                    )
+                )
                 .order_by(UpcomingTransaction.expected_date.asc())
                 .all()
             )
@@ -2032,6 +2045,13 @@ def export_mail_to_bank(
                 )
 
         expected = body.expected_date or m.due_date or _date.today()
+        # Om eleven exporterar en faktura med förfluten due-date,
+        # flytta auto till idag + 7 dagar så banken hinner signera
+        # och autogiro fungerar (annars hamnar den i 'past' och
+        # försvinner från bankens upcoming-vy).
+        if expected < _date.today():
+            from datetime import timedelta as _td_exp
+            expected = _date.today() + _td_exp(days=7)
         amount_abs = abs(Decimal(str(m.amount)))
 
         upc = UpcomingTransaction(
@@ -14304,6 +14324,31 @@ def _seed_initial_student_data(
             student.id,
         )
 
+    # === Steg 2 (FÖRE tick): seed försäkringar så fixed_expenses
+    # kan generera korrekta försäkrings-fakturor från InsurancePolicy.
+    # Tidigare ordning: tick → insurance, vilket gjorde att fixed_expenses
+    # såg en tom InsurancePolicy-tabell och skapade INGA försäkrings-
+    # fakturor (eller hårdkodade dem felaktigt). ===
+    scope_key = scope_for_student(student)
+    has_partner = (
+        bool(profile.family.partner_gross_monthly)
+        if profile.family else False
+    )
+    with scope_context(scope_key):
+        with session_scope() as s:
+            try:
+                seed_default_insurance_policies(
+                    s,
+                    housing_type=profile.housing.type,
+                    has_partner=has_partner,
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data: insurance seed failed för %s",
+                    student.id,
+                )
+
     try:
         tick_month(
             student,
@@ -14319,18 +14364,9 @@ def _seed_initial_student_data(
             student.id,
         )
 
-    # === Steg 2-4: scope-bundna seeders (försäkring, pension, lån) ===
-    scope_key = scope_for_student(student)
+    # === Steg 3-4: pension + boende ===
     with scope_context(scope_key):
         with session_scope() as s:
-            try:
-                seed_default_insurance_policies(s)
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception(
-                    "_seed_initial_student_data: insurance seed failed för %s",
-                    student.id,
-                )
             try:
                 seed_default_pension(s)
             except Exception:

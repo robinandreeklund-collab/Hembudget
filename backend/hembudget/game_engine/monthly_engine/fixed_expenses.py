@@ -20,7 +20,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from ...db.models import MailItem
+from ...db.models import InsurancePolicy, MailItem
 from ..pools.stadspool import STAD_BY_KEY
 from ..profile_generator.schema import GeneratedProfile
 
@@ -49,16 +49,41 @@ def _bill_hash(student_scope: str, year_month: str, kind: str, day: int) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-def _seasonal_electricity(rng: random.Random, year_month: str) -> int:
-    """Vinter-månader = dyrare el. Ljusare april-sept = billigare."""
+def _seasonal_electricity_kwh(
+    rng: random.Random, year_month: str, size_kvm: int,
+) -> tuple[int, float]:
+    """Realistisk el-förbrukning baserad på storlek + säsong.
+
+    Returnerar (kWh, spotpris_per_kwh).
+
+    Schablon SCB 2026 för svensk hyresrätt/lägenhet:
+    - ~30 kWh/kvm/år för hushållsel (utan uppvärmning) i hyresrätt
+    - + ~80-120 kWh/kvm/år för uppvärmning i bostadsrätt/villa
+    - + ~3-5 kWh/kvm/år extra för varmvatten
+
+    Spotpris (snitt 2026):
+    - Vinter (dec/jan/feb): 1,40-2,20 kr/kWh
+    - Vår/höst (mar/apr/okt/nov): 0,80-1,30 kr/kWh
+    - Sommar (maj-sep): 0,40-0,80 kr/kWh
+    + elnätsavgift fast (~250 kr/mån) som läggs på i _build_bills.
+    """
     month = int(year_month.split("-")[1])
+    # Bas-förbrukning per kvm + säsong
     if month in (12, 1, 2):
-        return rng.randint(1100, 1800)
-    if month in (3, 11):
-        return rng.randint(800, 1300)
-    if month in (4, 10):
-        return rng.randint(600, 900)
-    return rng.randint(400, 700)  # Sommar
+        kwh_per_kvm_month = rng.uniform(7.0, 9.5)  # vinter, hög uppv.
+        spot = rng.uniform(1.40, 2.20)
+    elif month in (3, 11):
+        kwh_per_kvm_month = rng.uniform(5.0, 7.0)
+        spot = rng.uniform(0.80, 1.30)
+    elif month in (4, 10):
+        kwh_per_kvm_month = rng.uniform(3.5, 5.0)
+        spot = rng.uniform(0.60, 1.00)
+    else:  # maj-sep · sommar
+        kwh_per_kvm_month = rng.uniform(2.0, 3.5)
+        spot = rng.uniform(0.40, 0.80)
+
+    kwh = int(kwh_per_kvm_month * max(20, size_kvm))
+    return kwh, round(spot, 2)
 
 
 def _build_bills(
@@ -127,8 +152,13 @@ def _build_bills(
                 amount=profile.housing.monthly_drift,
             ))
 
-    # Dag 3 · El
-    el_amount = _seasonal_electricity(rng, year_month)
+    # Dag 3 · El · realistisk kWh × spotpris + elnätsavgift
+    kwh, spot = _seasonal_electricity_kwh(
+        rng, year_month, profile.housing.size_kvm,
+    )
+    grid_fee = 250  # elnätsavgift fast/mån (genomsnitt 2026)
+    spot_cost = int(kwh * spot)
+    el_amount = spot_cost + grid_fee
     if city:
         el_amount = int(el_amount * city.cost_multiplier_housing)
     bills.append(FixedBill(
@@ -137,7 +167,10 @@ def _build_bills(
         sender_short="EL",
         sender_kind="util",
         subject=f"Elräkning {year_month}",
-        body_meta="Spotpris + elnätsavgift",
+        body_meta=(
+            f"{kwh} kWh × {spot:.2f} kr ({spot_cost} kr) + "
+            f"{grid_fee} kr nät · {profile.housing.size_kvm} kvm"
+        ),
         amount=el_amount,
     ))
 
@@ -164,20 +197,12 @@ def _build_bills(
         amount=mobile_amount,
     ))
 
-    # Dag 8 · Hemförsäkring (bara om profil bor i egen lägenhet)
-    if profile.housing.type in ("hyresratt", "bostadsratt", "villa", "radhus"):
-        hf_amount = rng.randint(120, 220)
-        if profile.housing.type == "villa":
-            hf_amount = rng.randint(280, 480)  # villaförsäkring dyrare
-        bills.append(FixedBill(
-            day=8,
-            sender="If Skadeförsäkring",
-            sender_short="INS",
-            sender_kind="ins",
-            subject=f"Hemförsäkring {year_month}",
-            body_meta=f"Premie för {profile.housing.size_kvm} kvm",
-            amount=hf_amount,
-        ))
+    # Hemförsäkring + olycksfall + ev. bostadsrätts-/livförsäkring
+    # läggs till från InsurancePolicy-tabellen i generate_fixed_expenses
+    # nedan (efter att session öppnats). Då blir fakturorna konsistenta
+    # med försäkringar som syns i /v2/forsakringar (samma provider och
+    # premium som lärar-katalogen) — istället för en hårdkodad "If
+    # Skadeförsäkring" som inte fanns någonstans annars.
 
     # Dag 10 · SL-kort / pendlartrans (om städer med kollektivtrafik)
     if city and city.job_density >= 1.0:
@@ -213,11 +238,85 @@ def generate_fixed_expenses(
     rng = rng or random.Random(f"{student_scope}|{year_month}|fixed")
 
     bills = _build_bills(rng, profile, year_month)
+
+    # Lägg till försäkrings-fakturor BARA för aktiva InsurancePolicy
+    # i scope:n. Då matchar fakturorna policies som syns i
+    # /v2/forsakringar (1 system, ingen inkonsistens).
+    active_policies = (
+        s.query(InsurancePolicy)
+        .filter(InsurancePolicy.status == "active")
+        .all()
+    )
+    for ip_idx, policy in enumerate(active_policies):
+        if policy.premium_monthly is None or policy.premium_monthly <= 0:
+            continue
+        bills.append(FixedBill(
+            day=8 + (ip_idx % 4),  # staggera dag 8-11 om flera försäkringar
+            sender=policy.provider,
+            sender_short=policy.provider[:3].upper(),
+            sender_kind="ins",
+            subject=f"{policy.name} {year_month}",
+            body_meta=(
+                f"Premie {int(policy.premium_monthly)} kr/mån · "
+                f"självrisk {int(policy.deductible or 0)} kr"
+            ),
+            amount=int(policy.premium_monthly),
+        ))
+
+    bills = sorted(bills, key=lambda b: b.day)
+
     created_ids: list[int] = []
     total = 0
 
     for bill in bills:
         due = _ym_to_date(year_month, bill.day)
+        ocr = _bill_hash(
+            student_scope, year_month, bill.sender_short, bill.day,
+        )[:14].upper()
+        # Bygg en riktig faktura-body med rader, moms-uppdelning,
+        # förfallodag, OCR och bankgiro — istället för en lös rad.
+        # Moms 25 % är default; för bostadsrelaterat (hyra/avgift) 0 %.
+        is_housing = bill.sender_kind == "land"
+        is_insurance = bill.sender_kind == "ins"
+        # Hyra och försäkring momsfritt
+        moms_rate = 0.0 if (is_housing or is_insurance) else 0.25
+        net = (
+            int(round(bill.amount / (1 + moms_rate)))
+            if moms_rate > 0
+            else bill.amount
+        )
+        moms = bill.amount - net
+
+        body_lines: list[str] = [
+            f"FAKTURA · {bill.sender}",
+            f"Avser: {bill.subject}",
+            "",
+            f"  {'Beskrivning':<40} {'Belopp':>12}",
+            f"  {'-' * 40} {'-' * 12}",
+            f"  {bill.body_meta or bill.subject:<40} "
+            f"{net:>10,} kr".replace(",", " "),
+        ]
+        if moms > 0:
+            body_lines.append(
+                f"  {'Moms 25 %':<40} {moms:>10,} kr".replace(",", " ")
+            )
+        body_lines += [
+            f"  {'-' * 40} {'-' * 12}",
+            f"  {'TOTALT ATT BETALA':<40} "
+            f"{bill.amount:>10,} kr".replace(",", " "),
+            "",
+            f"Förfallodag: {due.isoformat()}",
+            f"OCR-referens: {ocr}",
+        ]
+        if bill.bankgiro:
+            body_lines.append(f"Bankgiro: {bill.bankgiro}")
+        body_lines += [
+            "",
+            "Vänligen betala via banken senast på förfallodagen.",
+            "Försenad betalning kan medföra påminnelseavgift.",
+        ]
+        body = "\n".join(body_lines)
+
         mail = MailItem(
             sender=bill.sender,
             sender_short=bill.sender_short,
@@ -226,20 +325,13 @@ def generate_fixed_expenses(
             mail_type="invoice",
             subject=bill.subject,
             body_meta=bill.body_meta,
-            body=(
-                f"{bill.subject}\n\n"
-                f"Belopp: {bill.amount:,} kr\n".replace(",", " ")
-                + f"Förfallodag: {due.isoformat()}\n"
-                + (f"Bankgiro: {bill.bankgiro}\n" if bill.bankgiro else "")
-            ),
+            body=body,
             amount=Decimal(-bill.amount),  # Negativt = utgift
             due_date=due,
             status="unhandled",
             is_recurring=True,
             bankgiro=bill.bankgiro,
-            ocr_reference=_bill_hash(
-                student_scope, year_month, bill.sender_short, bill.day,
-            )[:18],
+            ocr_reference=ocr,
         )
         s.add(mail)
         s.flush()
