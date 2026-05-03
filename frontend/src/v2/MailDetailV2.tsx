@@ -411,6 +411,29 @@ export function MailDetailV2() {
                   Använd i Maria-samtalet →
                 </Link>
               )}
+              {/* Ladda ner som riktig PDF · bara för fakturor med
+                  invoice_data (inte CC-fakturor eller lönespec som
+                  har egna layouter). */}
+              {isStructuredInvoice && (
+                <button
+                  type="button"
+                  className="cta-btn ghost"
+                  style={{ border: 0, cursor: "pointer" }}
+                  onClick={async () => {
+                    try {
+                      const blob = await v2Api.mailPdf(id);
+                      const url = URL.createObjectURL(blob);
+                      window.open(url, "_blank");
+                      // Frigör blob-URL efter 60 sek
+                      setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    } catch (e) {
+                      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+                    }
+                  }}
+                >
+                  ⬇ Ladda ner som PDF
+                </button>
+              )}
               <Link
                 to="/v2/postladan"
                 className="cta-btn ghost"

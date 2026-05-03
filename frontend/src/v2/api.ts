@@ -3093,6 +3093,37 @@ export const v2Api = {
   // === /v2/postladan/{id}/detail (Fas 2N · CC + Lönespec drill-down) ===
   mailDetail: (mailId: number) =>
     api<V2MailDetailData>(`/v2/postladan/${mailId}/detail`),
+  /** Hämtar fakturan som PDF (riktig reportlab-rendering). */
+  mailPdf: async (mailId: number): Promise<Blob> => {
+    const { getToken, getAsStudent } = await import("@/api/client");
+    const { default: clientMod } = await import("@/api/client") as any;
+    void clientMod;
+    // Använd raw fetch — api()-helpern returnerar JSON, vi behöver blob
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const asStudent = getAsStudent();
+    if (asStudent) headers["X-As-Student"] = String(asStudent);
+    // apiBase: samma logik som api-helpern · läs från env eller window
+    let base = (import.meta.env.VITE_API_BASE as string | undefined) || "";
+    if (base === "/" || base.toUpperCase?.() === "SAME_ORIGIN") base = "";
+    if (base && !/^https?:\/\//i.test(base)) base = `https://${base}`;
+    if (!base) {
+      // Lokal-dev: använd current host + port 8765 om inte SAME_ORIGIN
+      const port = localStorage.getItem("hembudget_port") || "8765";
+      const host = window.location.hostname;
+      base = window.location.protocol === "https:"
+        ? `https://${host}`
+        : `http://${host}:${port}`;
+    }
+    const res = await fetch(
+      `${base}/v2/postladan/${mailId}/pdf`, { headers },
+    );
+    if (!res.ok) {
+      throw new Error(`PDF-rendering misslyckades (${res.status})`);
+    }
+    return await res.blob();
+  },
   teacherMailDetail: (studentId: number, mailId: number) =>
     api<V2TeacherMailDetailOverview>(
       `/v2/teacher/students/${studentId}/mail/${mailId}/detail`,

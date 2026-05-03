@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -11182,6 +11183,81 @@ def get_mail_detail(
             cc_invoice=cc_data,
             salary_slip=salary_data,
             invoice=invoice_data,
+        )
+
+
+# === PDF-rendering av strukturerade fakturor ===
+
+@router.get("/postladan/{mail_id}/pdf")
+def get_mail_pdf(
+    mail_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> Response:
+    """Rendera fakturan som riktig PDF (reportlab) · ladda ner via
+    knapp i mail-detalj-vyn.
+
+    För invoice-mail med invoice_data: använder render_v2_invoice_pdf
+    med strukturerad faktura-layout (header, mottagare, specifikation
+    med moms, betalningsinfo, pedagogisk info-ruta).
+
+    För salary_slip: vi har redan render_lonespec i v1 — TODO i nästa
+    iteration. För andra typer returnerar vi 400.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever")
+
+    # Hämta studentens namn + adress för PDF-rubrik
+    student_name = "Eleven"
+    student_address: Optional[str] = None
+    with master_session() as mdb:
+        sp = (
+            mdb.query(StudentProfile)
+            .filter(StudentProfile.student_id == info.student_id)
+            .first()
+        )
+        if sp is not None:
+            first = getattr(sp, "character_first_name", None) or ""
+            last = getattr(sp, "character_last_name", None) or ""
+            full = f"{first} {last}".strip()
+            student_name = full or "Eleven"
+            if sp.city:
+                student_address = sp.city
+
+    with session_scope() as s:
+        m = s.get(MailItem, mail_id)
+        if m is None:
+            raise HTTPException(404, "Brevet hittades inte")
+        if not m.invoice_data:
+            raise HTTPException(
+                400,
+                "Det här brevet har ingen strukturerad fakturadata. "
+                "PDF stöds bara för game_engine-genererade fakturor "
+                "(hyra, el, mobil, bredband, försäkring, bolån etc).",
+            )
+
+        from ..teacher.v2_invoices import render_v2_invoice_pdf
+        try:
+            pdf_bytes = render_v2_invoice_pdf(
+                m.invoice_data,
+                sender=m.sender,
+                subject=m.subject,
+                due_date=m.due_date,
+                student_name=student_name,
+                student_address=student_address,
+            )
+        except Exception as e:
+            raise HTTPException(500, f"PDF-rendering misslyckades: {e}")
+
+        kind = str((m.invoice_data or {}).get("kind", "faktura"))
+        filename = (
+            f"{kind}-{(m.invoice_data or {}).get('invoice_number','x')}.pdf"
+        )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+            },
         )
 
 
