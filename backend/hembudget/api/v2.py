@@ -7162,6 +7162,124 @@ def _isk_cash_balance(s, account_id: int) -> Decimal:
     return base + Decimal(str(total or 0))
 
 
+class V2FundBuyRequest(BaseModel):
+    """Eleven köper en fond · cash dras från konto, FundHolding skapas/ökar."""
+    account_id: int
+    fund_name: str = Field(..., min_length=1, max_length=200)
+    amount: float = Field(..., gt=0)
+
+
+class V2FundBuyResponse(BaseModel):
+    fund_holding_id: int
+    fund_name: str
+    new_market_value: float
+    cash_remaining: float
+
+
+@router.post("/avanza/fund-buy", response_model=V2FundBuyResponse)
+def buy_fund(
+    body: V2FundBuyRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2FundBuyResponse:
+    """Eleven köper fond på ISK/sparkonto · skapar Transaction (negativt
+    cash) + ökar/skapar FundHolding-rad. Pedagogiskt: cash försvinner,
+    market_value växer — totalvärdet är samma direkt efter köp."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever")
+
+    with session_scope() as s:
+        acc = s.get(Account, body.account_id)
+        if acc is None:
+            raise HTTPException(404, "Kontot hittades inte")
+        if acc.type not in ("isk", "savings", "checking"):
+            raise HTTPException(
+                400, f"Kan inte köpa fonder från konto-typ {acc.type}",
+            )
+
+        amount = Decimal(str(body.amount))
+        cash = _isk_cash_balance(s, acc.id)
+        # Cash check (för ISK/sparkonto), men inte för checking
+        # eftersom användaren kan välja att gå minus där
+        if acc.type in ("isk", "savings") and cash < amount:
+            raise HTTPException(
+                400,
+                f"Inte tillräckligt med cash på {acc.name}: "
+                f"{int(cash)} kr (försökte köpa för {int(amount)} kr).",
+            )
+
+        today = _date.today()
+        idem = (
+            f"v2-fund-buy-{acc.id}-{body.fund_name[:40]}-"
+            f"{today.isoformat()}-{amount}"
+        )
+        existing_tx = (
+            s.query(Transaction)
+            .filter(Transaction.hash == idem)
+            .first()
+        )
+        if existing_tx is not None:
+            holding = (
+                s.query(FundHolding)
+                .filter(
+                    FundHolding.account_id == acc.id,
+                    FundHolding.fund_name == body.fund_name,
+                )
+                .first()
+            )
+            return V2FundBuyResponse(
+                fund_holding_id=holding.id if holding else 0,
+                fund_name=body.fund_name,
+                new_market_value=float(
+                    holding.market_value if holding else 0,
+                ),
+                cash_remaining=float(cash),
+            )
+
+        # 1. Cash-uttag
+        tx = Transaction(
+            account_id=acc.id,
+            date=today,
+            amount=-amount,
+            raw_description=f"Köp fond · {body.fund_name}",
+            user_verified=True,
+            hash=idem,
+        )
+        s.add(tx)
+        s.flush()
+
+        # 2. Öka eller skapa FundHolding
+        holding = (
+            s.query(FundHolding)
+            .filter(
+                FundHolding.account_id == acc.id,
+                FundHolding.fund_name == body.fund_name,
+            )
+            .first()
+        )
+        if holding is None:
+            holding = FundHolding(
+                account_id=acc.id,
+                fund_name=body.fund_name,
+                market_value=amount,
+                units=Decimal("1.0"),  # placeholder · kurs uppdateras nattligen
+            )
+            s.add(holding)
+        else:
+            holding.market_value = (
+                Decimal(str(holding.market_value or 0)) + amount
+            )
+            if holding.units is not None:
+                holding.units = Decimal(str(holding.units)) + Decimal("1.0")
+        s.flush()
+
+        return V2FundBuyResponse(
+            fund_holding_id=holding.id,
+            fund_name=holding.fund_name,
+            new_market_value=float(holding.market_value),
+            cash_remaining=float(cash - amount),
+        )
+
+
 @router.get("/avanza", response_model=V2AvanzaResponse)
 def get_avanza(
     info: TokenInfo = Depends(require_token),

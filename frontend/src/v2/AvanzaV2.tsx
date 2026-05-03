@@ -14,7 +14,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { v2Api, type V2AvanzaData } from "./api";
+import { v2Api, type BankData, type V2AvanzaData } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./lan.css";
 
@@ -31,14 +31,58 @@ const MONTH_LABEL = (iso: string): string => {
 
 export function AvanzaV2() {
   const [data, setData] = useState<V2AvanzaData | null>(null);
+  const [bank, setBank] = useState<BankData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [buyFund, setBuyFund] = useState("");
+  const [buyAccount, setBuyAccount] = useState<number | null>(null);
+  const [buyAmount, setBuyAmount] = useState("1000");
+  const [buyBusy, setBuyBusy] = useState(false);
+  const [buyMsg, setBuyMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  function refresh() {
     v2Api
       .avanza()
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
+    v2Api.bank(0).then(setBank).catch(() => null);
+  }
+
+  useEffect(() => {
+    refresh();
   }, []);
+
+  async function executeBuy() {
+    if (!buyAccount || !buyFund.trim()) {
+      setBuyMsg("Välj konto och fond");
+      return;
+    }
+    const amt = parseFloat(buyAmount.replace(/\s/g, "").replace(",", "."));
+    if (!amt || amt <= 0) {
+      setBuyMsg("Ange ett positivt belopp");
+      return;
+    }
+    setBuyBusy(true);
+    setBuyMsg(null);
+    try {
+      const r = await v2Api.fundBuy({
+        account_id: buyAccount,
+        fund_name: buyFund.trim(),
+        amount: amt,
+      });
+      setBuyMsg(
+        `✓ Köpte ${r.fund_name} för ${amt} kr. Nytt värde: ` +
+        `${Math.round(r.new_market_value)} kr · cash kvar: ` +
+        `${Math.round(r.cash_remaining)} kr.`,
+      );
+      setBuyFund("");
+      refresh();
+    } catch (e) {
+      setBuyMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setBuyBusy(false);
+    }
+  }
 
   if (error && !data) {
     return (
@@ -188,6 +232,138 @@ export function AvanzaV2() {
                 ))}
               </div>
             )}
+
+            {/* KÖP FOND · cash → fond */}
+            <article
+              className="cta-card"
+              style={{ marginTop: 22 }}
+            >
+              <div className="cta-eye">Köp fond · ISK</div>
+              <div className="cta-h">
+                Lägg <em>cash</em> i en fond.
+              </div>
+              <p className="cta-prose">
+                Cash på ISK är räntelöst — flytta över till en
+                indexfond eller branschfond för att starta tidsfaktorn.
+                Pedagogiskt: när du klickar 'Köp' försvinner cash och
+                fond-värdet växer. Totalvärdet är samma direkt efter
+                köp — men över tid kommer fonden att växa.
+              </p>
+              {!buyOpen ? (
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={() => {
+                    setBuyOpen(true);
+                    const isk = bank?.accounts.find(
+                      (a) => a.type === "isk",
+                    );
+                    setBuyAccount(
+                      isk?.id || bank?.accounts[0]?.id || null,
+                    );
+                  }}
+                >
+                  Köp fond →
+                </button>
+              ) : (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "14px 18px",
+                    background: "rgba(0,0,0,0.25)",
+                    border: "1px solid var(--line-strong)",
+                    borderRadius: 6,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 2fr 100px",
+                      gap: 8,
+                    }}
+                  >
+                    <select
+                      value={buyAccount || ""}
+                      onChange={(e) =>
+                        setBuyAccount(parseInt(e.target.value, 10))
+                      }
+                      style={inpStyle}
+                    >
+                      {bank?.accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.type})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      list="known-funds"
+                      placeholder="Fond (t.ex. 'Avanza Global')"
+                      value={buyFund}
+                      onChange={(e) => setBuyFund(e.target.value)}
+                      style={inpStyle}
+                    />
+                    <datalist id="known-funds">
+                      {data.funds.map((f) => (
+                        <option key={f.id} value={f.fund_name} />
+                      ))}
+                    </datalist>
+                    <input
+                      type="number"
+                      min="100"
+                      step="100"
+                      placeholder="kr"
+                      value={buyAmount}
+                      onChange={(e) => setBuyAmount(e.target.value)}
+                      style={inpStyle}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="cta-btn"
+                      onClick={executeBuy}
+                      disabled={buyBusy}
+                    >
+                      {buyBusy ? "Köper…" : "Bekräfta köp"}
+                    </button>
+                    <button
+                      type="button"
+                      className="cta-btn ghost"
+                      onClick={() => {
+                        setBuyOpen(false);
+                        setBuyMsg(null);
+                      }}
+                    >
+                      Avbryt
+                    </button>
+                  </div>
+                  {buyMsg && (
+                    <div
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 4,
+                        fontFamily: "var(--mono)",
+                        fontSize: 11,
+                        color: buyMsg.startsWith("Fel")
+                          ? "#fca5a5"
+                          : "#6ee7b7",
+                        background: buyMsg.startsWith("Fel")
+                          ? "rgba(252,165,165,0.06)"
+                          : "rgba(110,231,183,0.06)",
+                        border: buyMsg.startsWith("Fel")
+                          ? "1px solid rgba(252,165,165,0.4)"
+                          : "1px solid rgba(110,231,183,0.4)",
+                      }}
+                    >
+                      {buyMsg}
+                    </div>
+                  )}
+                </div>
+              )}
+            </article>
 
             {/* CTA · Aktiehandel */}
             <article
@@ -509,3 +685,13 @@ export function AvanzaV2() {
     </div>
   );
 }
+
+const inpStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid var(--line-strong)",
+  color: "#fff",
+  padding: "8px 10px",
+  borderRadius: 6,
+  fontFamily: "var(--mono)",
+  fontSize: 12,
+};

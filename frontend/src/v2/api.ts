@@ -2822,6 +2822,22 @@ export const v2Api = {
     api<V2TeacherFeedbackOverview>(
       `/v2/teacher/students/${studentId}/feedback-overview?period_days=${period_days}`,
     ),
+  // === Köp fond på Avanza/ISK ===
+  fundBuy: (body: {
+    account_id: number;
+    fund_name: string;
+    amount: number;
+  }) =>
+    api<{
+      fund_holding_id: number;
+      fund_name: string;
+      new_market_value: number;
+      cash_remaining: number;
+    }>("/v2/avanza/fund-buy", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // === Extra-amortering på lån ===
   loanExtraAmortering: (
     loanId: number,
