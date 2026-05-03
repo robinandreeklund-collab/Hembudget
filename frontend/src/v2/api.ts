@@ -2788,6 +2788,31 @@ export const v2Api = {
     api<V2TeacherFeedbackOverview>(
       `/v2/teacher/students/${studentId}/feedback-overview?period_days=${period_days}`,
     ),
+  // === Arbetsplats-frågor (workplace questions från arbetsgivaren) ===
+  employerNextQuestion: () =>
+    api<{
+      id: number;
+      code: string;
+      scenario_md: string;
+      options: Array<{ index: number; text: string }>;
+      difficulty: number;
+      tags: string[] | null;
+    } | null>("/employer/questions/next"),
+  employerAnswerQuestion: (questionId: number, chosenIndex: number) =>
+    api<{
+      delta_applied: number;
+      chosen_explanation: string;
+      correct_path_md: string;
+      new_score: number;
+      new_trend: string;
+    }>("/employer/questions/answer", {
+      method: "POST",
+      body: JSON.stringify({
+        question_id: questionId,
+        chosen_index: chosenIndex,
+      }),
+    }),
+
   // === /v2/maria (Maria-AI lönesamtal) ===
   maria: () => api<V2MariaData>("/v2/maria"),
   mariaStart: () =>

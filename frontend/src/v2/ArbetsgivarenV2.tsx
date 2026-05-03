@@ -50,17 +50,84 @@ const DIFFICULTY_LABEL: Record<string, string> = {
   hard: "▰▰▰ SVÅR",
 };
 
+type OpenQuestion = {
+  id: number;
+  scenario_md: string;
+  options: Array<{ index: number; text: string }>;
+  difficulty: number;
+};
+
+type AnswerResult = {
+  delta_applied: number;
+  chosen_explanation: string;
+  correct_path_md: string;
+};
+
 export function ArbetsgivarenV2() {
   const [data, setData] = useState<EmployerData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openQ, setOpenQ] = useState<OpenQuestion | null>(null);
+  const [answering, setAnswering] = useState(false);
+  const [answerResult, setAnswerResult] = useState<AnswerResult | null>(null);
+  const [loadingQ, setLoadingQ] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  function refresh() {
     v2Api
       .arbetsgivaren()
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
+  }
+
+  useEffect(() => {
+    refresh();
   }, []);
+
+  async function openNextQuestion() {
+    setLoadingQ(true);
+    setError(null);
+    setAnswerResult(null);
+    try {
+      const q = await v2Api.employerNextQuestion();
+      if (q == null) {
+        setError("Ingen ny fråga just nu — kom tillbaka senare.");
+        return;
+      }
+      setOpenQ({
+        id: q.id,
+        scenario_md: q.scenario_md,
+        options: q.options,
+        difficulty: q.difficulty,
+      });
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setLoadingQ(false);
+    }
+  }
+
+  async function answerQuestion(chosenIndex: number) {
+    if (!openQ) return;
+    setAnswering(true);
+    try {
+      const r = await v2Api.employerAnswerQuestion(openQ.id, chosenIndex);
+      setAnswerResult({
+        delta_applied: r.delta_applied,
+        chosen_explanation: r.chosen_explanation,
+        correct_path_md: r.correct_path_md,
+      });
+      refresh();
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setAnswering(false);
+    }
+  }
+
+  function closeQuestion() {
+    setOpenQ(null);
+    setAnswerResult(null);
+  }
 
   if (error) {
     return (
@@ -422,7 +489,20 @@ export function ArbetsgivarenV2() {
                       {DIFFICULTY_LABEL[q.difficulty]}
                     </span>
                     {q.is_open ? (
-                      <span className="biz-status open">Svara nu</span>
+                      <button
+                        type="button"
+                        className="biz-status open"
+                        onClick={openNextQuestion}
+                        disabled={loadingQ}
+                        style={{
+                          border: 0,
+                          cursor: "pointer",
+                          background: "var(--accent)",
+                          color: "#fff",
+                        }}
+                      >
+                        {loadingQ ? "Laddar…" : "Svara nu →"}
+                      </button>
                     ) : (
                       <span
                         className={`biz-status ${
@@ -557,6 +637,167 @@ export function ArbetsgivarenV2() {
           </aside>
         </div>
       </div>
+
+      {/* MODAL · arbetsplatsfråga */}
+      {openQ && (
+        <div
+          onClick={closeQuestion}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 640,
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              background: "rgba(15,21,37,0.98)",
+              border: "1px solid var(--line-strong)",
+              borderRadius: 8,
+              padding: "24px 28px",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 9.5,
+                letterSpacing: "1.2px",
+                textTransform: "uppercase",
+                color: "var(--accent)",
+                marginBottom: 8,
+              }}
+            >
+              ● Arbetsplatsfråga
+            </div>
+            <p
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 16,
+                lineHeight: 1.5,
+                color: "#fff",
+                marginTop: 0,
+              }}
+            >
+              {openQ.scenario_md}
+            </p>
+
+            {!answerResult ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  marginTop: 18,
+                }}
+              >
+                {openQ.options.map((opt) => (
+                  <button
+                    key={opt.index}
+                    type="button"
+                    disabled={answering}
+                    onClick={() => answerQuestion(opt.index)}
+                    style={{
+                      textAlign: "left",
+                      padding: "14px 18px",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid var(--line-strong)",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontFamily: "var(--serif)",
+                      fontSize: 14,
+                      cursor: answering ? "wait" : "pointer",
+                    }}
+                  >
+                    {opt.text}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={closeQuestion}
+                  className="cta-btn ghost"
+                  style={{ marginTop: 8 }}
+                >
+                  Avbryt
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 18 }}>
+                <div
+                  style={{
+                    padding: "14px 18px",
+                    background:
+                      answerResult.delta_applied >= 0
+                        ? "rgba(110,231,183,0.06)"
+                        : "rgba(252,165,165,0.06)",
+                    border:
+                      answerResult.delta_applied >= 0
+                        ? "1px solid rgba(110,231,183,0.4)"
+                        : "1px solid rgba(252,165,165,0.4)",
+                    borderRadius: 6,
+                    fontFamily: "var(--serif)",
+                    fontSize: 14,
+                    color: "#fff",
+                    marginBottom: 14,
+                  }}
+                >
+                  <strong
+                    style={{
+                      color:
+                        answerResult.delta_applied >= 0
+                          ? "#6ee7b7"
+                          : "#fca5a5",
+                    }}
+                  >
+                    {answerResult.delta_applied >= 0 ? "+" : ""}
+                    {answerResult.delta_applied} nöjdhet
+                  </strong>
+                  · {answerResult.chosen_explanation}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 9.5,
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color: "var(--text-mid)",
+                    marginBottom: 6,
+                  }}
+                >
+                  Rekommenderad väg
+                </div>
+                <p
+                  style={{
+                    fontFamily: "var(--serif)",
+                    fontSize: 13.5,
+                    lineHeight: 1.5,
+                    color: "var(--text)",
+                    whiteSpace: "pre-wrap",
+                    marginTop: 0,
+                  }}
+                >
+                  {answerResult.correct_path_md}
+                </p>
+                <button
+                  type="button"
+                  className="cta-btn"
+                  onClick={closeQuestion}
+                  style={{ marginTop: 10 }}
+                >
+                  Stäng
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
