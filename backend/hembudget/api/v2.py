@@ -1842,7 +1842,14 @@ def get_mail(
                 MailItem.received_at.desc(), MailItem.id.desc()
             )
             if filter == "unhandled":
-                q = q.filter(MailItem.status == "unhandled")
+                # 'Ohanterade' = både unhandled OCH viewed.
+                # Brev som eleven läst men inte aktivt hanterat
+                # (betalat/exporterat/ignorerat) räknas som ohanterade
+                # tills explicit val gjorts. Annars känns det som om
+                # öppning = hantering, vilket användaren inte vill.
+                q = q.filter(
+                    MailItem.status.in_(["unhandled", "viewed"])
+                )
             elif filter == "invoice":
                 q = q.filter(MailItem.mail_type == "invoice")
             elif filter == "salary_slip":
@@ -1880,7 +1887,10 @@ def get_mail(
             next_due: Optional[_date] = None
 
             for m in all_mails:
-                if m.status == "unhandled":
+                # 'Ohanterad' = både unhandled OCH viewed (läst men
+                # ej hanterat). Räknas som need-action tills eleven
+                # exporterar, betalar eller ignorerar explicit.
+                if m.status in ("unhandled", "viewed"):
                     unhandled_count += 1
                 if m.mail_type == "invoice":
                     invoice_count += 1
@@ -9447,6 +9457,54 @@ def get_bankid_session(
 
 class V2BankIDSignIn(BaseModel):
     duration_seconds: Optional[int] = None  # från frontend-timer
+    pin: Optional[str] = None  # 4-siffrig pin · krävs för signering
+
+
+class V2BankIDPinStatus(BaseModel):
+    has_pin: bool
+
+
+@router.get("/bankid/pin-status", response_model=V2BankIDPinStatus)
+def get_bankid_pin_status(
+    info: TokenInfo = Depends(require_token),
+) -> V2BankIDPinStatus:
+    """Kollar om eleven har satt sin 4-siffriga BankID-PIN."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    with master_session() as mdb:
+        st = mdb.get(Student, info.student_id)
+        if st is None:
+            raise HTTPException(404, "Student saknas")
+        return V2BankIDPinStatus(has_pin=bool(st.bank_pin_hash))
+
+
+class V2SetPinRequest(BaseModel):
+    pin: str = Field(..., min_length=4, max_length=4)
+
+
+@router.post("/bankid/set-pin")
+def set_bankid_pin(
+    body: V2SetPinRequest,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Eleven sätter sin 4-siffriga BankID-PIN.
+
+    Pedagogiskt: PIN är 'något du vet' som binder dig till sessionen.
+    Återanvänder bank_pin_hash från master-DB (samma som v1 BankID).
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+    import re as _re_pin
+    if not _re_pin.match(r"^\d{4}$", body.pin):
+        raise HTTPException(400, "PIN måste vara exakt 4 siffror")
+    from ..security.crypto import hash_password
+    with master_session() as mdb:
+        st = mdb.get(Student, info.student_id)
+        if st is None:
+            raise HTTPException(404, "Student saknas")
+        st.bank_pin_hash = hash_password(body.pin)
+        mdb.commit()
+        return {"ok": True}
 
 
 @router.post(
@@ -9458,9 +9516,38 @@ def sign_bankid_session(
     body: V2BankIDSignIn,
     info: TokenInfo = Depends(require_token),
 ) -> V2BankIDSessionOut:
-    """Eleven signerar — markerar fakturor autogiro=True."""
+    """Eleven signerar — markerar fakturor autogiro=True.
+
+    PIN-verifiering · graceful:
+    - Om eleven har satt PIN → kräv korrekt PIN i body (matchas mot
+      Student.bank_pin_hash, samma security-modell som v1 BankID).
+    - Om eleven inte har PIN → tillåt signering utan (första-gång-
+      flow eller bakåtkompat). Frontend triggar set-pin först om
+      pin-status=false.
+    """
     if info.role != "student" or info.student_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
+
+    from ..security.crypto import verify_password as _vp
+    with master_session() as mdb:
+        st = mdb.get(Student, info.student_id)
+        if st is not None and st.bank_pin_hash:
+            # Eleven har en PIN → kräv den
+            if (
+                not body.pin
+                or len(body.pin) != 4
+                or not body.pin.isdigit()
+            ):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "PIN måste vara exakt 4 siffror",
+                )
+            if not _vp(st.bank_pin_hash, body.pin):
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "Fel PIN",
+                )
+
     with session_scope() as s:
         sess = s.get(BankIDSession, session_id)
         if sess is None:

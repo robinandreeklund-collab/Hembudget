@@ -261,8 +261,11 @@ export default function App() {
 
   // V2 är aktivt på alla /v2/* och /teacher/* — då visas V2DevFooter
   // istället för den gamla feta dev-bannern. Echo-drawern mountas
-  // även för lärar-vyn (utan /v2-prefix) eftersom topbaren har
-  // Echo-knappen där också.
+  // ALLTID (oavsett path) eftersom topbaren har Echo-knappen och
+  // drawern måste vara mountad för att lyssna på 'echo-open'-eventet.
+  // Tidigare gating på window.location.pathname läste bara värdet vid
+  // initial render, så React Router-navigering mellan ej-v2 → v2 utan
+  // sida-reload lämnade drawern omountad.
   const isV2Path = window.location.pathname.startsWith("/v2/")
     || window.location.pathname.startsWith("/teacher/");
 
@@ -272,7 +275,7 @@ export default function App() {
       <DemoBanner />
       {!isV2Path && <V2DevSwitcher />}
       <GuideOverlay />
-      {isV2Path && <EchoDrawer />}
+      <EchoDrawer />
       {isV2Path && (
         <V2DevFooter
           role={role || "student"}

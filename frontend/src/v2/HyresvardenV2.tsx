@@ -98,9 +98,26 @@ export function HyresvardenV2() {
       .catch((e) => setError(String((e as Error)?.message || e)));
   }
 
+  const [housingType, setHousingType] = useState<string | null>(null);
+  const [housingMonthly, setHousingMonthly] = useState<number | null>(null);
+
   useEffect(() => {
     refresh();
+    // Hämta också hub-data så vi vet om eleven äger eller hyr.
+    // Om eleven äger sin bostad ska vi inte säga "Inget registrerat
+    // boende" — vi ska visa info om ägt boende istället och hänvisa
+    // till köp/sälj-tabben.
+    v2Api.hub()
+      .then((h) => {
+        setHousingType(h.character.housing_type || null);
+        setHousingMonthly(h.character.housing_monthly || null);
+      })
+      .catch(() => null);
   }, []);
+
+  const ownsHome = housingType === "bostadsratt"
+    || housingType === "villa"
+    || housingType === "radhus";
 
   async function terminateContract(id: number) {
     if (!confirm("Säg upp kontraktet?")) return;
@@ -195,6 +212,10 @@ export function HyresvardenV2() {
                 <>
                   {contract.landlord} — <em>din lägenhet</em>.
                 </>
+              ) : ownsHome ? (
+                <>
+                  Du <em>äger din bostad</em>.
+                </>
               ) : (
                 <>
                   Inget <em>registrerat boende</em>.
@@ -210,6 +231,16 @@ export function HyresvardenV2() {
                   }-kontrakt · tillträtt ${SHORT_DATE(
                     contract.started_on,
                   )}`
+                : ownsHome
+                ? `${
+                    housingType === "villa"
+                      ? "Villa"
+                      : housingType === "radhus"
+                      ? "Radhus"
+                      : "Bostadsrätt"
+                  } · boendekostnad ${
+                    housingMonthly ? SEK(housingMonthly) : "—"
+                  } kr/mån (avgift/bolån/drift). Hyresvärden hanterar bara hyresrätter — du har ingen sådan. Se köp/sälj-flikar för bostadsrätt.`
                 : "Skapa ett kontrakt nedan eller be läraren seedа Stockholmshem-mallen."}
             </p>
           </div>

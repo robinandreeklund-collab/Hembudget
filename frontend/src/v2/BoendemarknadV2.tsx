@@ -46,6 +46,19 @@ const CURRENT_YM = (() => {
 export function BoendemarknadV2() {
   const [tab, setTab] = useState<Tab>("hyra");
 
+  // Auto-välj "kop"-tabben om eleven äger sin bostad — annars
+  // landar de på en hyresrätt-vy som säger "Inget registrerat".
+  useEffect(() => {
+    v2Api.hub()
+      .then((h) => {
+        const t = h.character.housing_type;
+        if (t === "bostadsratt" || t === "villa" || t === "radhus") {
+          setTab("kop");
+        }
+      })
+      .catch(() => null);
+  }, []);
+
   return (
     <div className="v2-lan-root">
       <V2Banner status={{ role: "student", is_super_admin: false }} />

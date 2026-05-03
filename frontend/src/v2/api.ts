@@ -2940,10 +2940,17 @@ export const v2Api = {
       method: "POST",
       body: JSON.stringify({ upcoming_ids }),
     }),
-  bankidSign: (id: number, duration_seconds?: number) =>
+  bankidSign: (id: number, opts: { duration_seconds?: number; pin: string }) =>
     api<V2BankIDSessionOut>(`/v2/bankid/sessions/${id}/sign`, {
       method: "POST",
-      body: JSON.stringify({ duration_seconds }),
+      body: JSON.stringify(opts),
+    }),
+  bankidPinStatus: () =>
+    api<{ has_pin: boolean }>("/v2/bankid/pin-status"),
+  bankidSetPin: (pin: string) =>
+    api<{ ok: boolean }>("/v2/bankid/set-pin", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
     }),
   bankidCancel: (id: number) =>
     api<V2BankIDSessionOut>(`/v2/bankid/sessions/${id}/cancel`, {

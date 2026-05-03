@@ -38,7 +38,7 @@ const SHORT_DATE = (iso: string | null): string => {
 
 const STATUS_LABEL: Record<V2MailStatus, string> = {
   unhandled: "Ohanterad",
-  viewed: "Granskad",
+  viewed: "Läst",
   exported: "Exporterad",
   paid: "Betald",
   expired: "Utgången",
