@@ -388,21 +388,32 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             )
 
             # 3. Månads-summa från transactions
-            # Spelmotorn tickar FÖRRA månaden så innevarande månad har
-            # ofta 0 transaktioner i början. Använd den senaste
-            # månaden där det FINNS transaktioner — det är "den
-            # ekonomiska månad" som är pedagogiskt relevant. Faller
-            # tillbaka till innevarande månad om inga tx finns alls.
+            # Använd senaste NON-TRANSFER tx-datum som anchor — annars
+            # hamnar man på fel månad om bara pension-spar-transfern
+            # körts (då blir summary 0/0 även om föregående månad har
+            # full data).
             today = _date.today()
             latest_tx = (
                 s.query(Transaction)
+                .filter(
+                    (Transaction.is_transfer.is_(False))
+                    | (Transaction.is_transfer.is_(None))
+                )
                 .order_by(Transaction.date.desc())
                 .first()
             )
             if latest_tx is not None:
                 month_anchor = latest_tx.date
             else:
-                month_anchor = today
+                # Fallback: senaste tx oavsett typ (kan vara transfer)
+                fallback_tx = (
+                    s.query(Transaction)
+                    .order_by(Transaction.date.desc())
+                    .first()
+                )
+                month_anchor = (
+                    fallback_tx.date if fallback_tx is not None else today
+                )
             month_start = _date(month_anchor.year, month_anchor.month, 1)
             if month_anchor.month == 12:
                 month_end = _date(month_anchor.year + 1, 1, 1)
@@ -2846,51 +2857,114 @@ def get_employer(
         # Avtals-förmåner (från meta eller default)
         benefits = _agreement_benefits_from_db(mdb, agreement)
 
-    # Lönespecar — från scope-DB:s transactions där amount > 0 och
-    # description innehåller "lön" eller liknande, senaste 4 mån.
+    # Lönespecar · läses från MailItem.mail_type='salary_slip' istället
+    # för Transaction-likhetssökning på 'lön'. Raw_description-LIKE
+    # fångade fel transaktioner (skatteåterbäring, andra bidrag) och
+    # räknade `tax = gross - net` som inkluderade sjukavdrag — visade
+    # därför 'skatt 26 908' (84 %) för en månad med sjukfrånvaro.
     salary_slips: list[V2EmployerSalarySlip] = []
     try:
+        from ..school.tax import compute_net_salary as _emp_net
         with session_scope() as s:
             today = _date.today()
             from datetime import timedelta as _td
             cutoff_d = today - _td(days=120)
-            tx_rows = (
-                s.query(Transaction)
-                .filter(Transaction.amount > 0)
-                .filter(Transaction.date >= cutoff_d)
-                .filter(_func.lower(Transaction.raw_description).like("%lön%"))
-                .order_by(Transaction.date.desc())
+
+            # Primär källa: MailItem.mail_type='salary_slip' (game_engine-
+            # genererade lönespec). Då har vi explicit period + brutto/
+            # netto utan att behöva substring-matcha 'lön' i tx.
+            mail_rows = (
+                s.query(MailItem)
+                .filter(MailItem.mail_type == "salary_slip")
+                .filter(MailItem.due_date >= cutoff_d)
+                .order_by(MailItem.due_date.desc())
                 .limit(4)
                 .all()
             )
-            for t in tx_rows:
-                month_str = f"{t.date.year:04d}-{t.date.month:02d}"
-                # Härled brutto från net via skattesats om vi har den
-                net_amt = float(t.amount)
+            seen_months: set[str] = set()
+            for m in mail_rows:
+                if m.due_date is None:
+                    continue
+                month_str = (
+                    f"{m.due_date.year:04d}-{m.due_date.month:02d}"
+                )
                 gross_amt = (
                     float(profile.gross_salary_monthly)
                     if profile.gross_salary_monthly else None
                 )
-                tax_amt = (
-                    round(gross_amt - net_amt, 2)
-                    if gross_amt and gross_amt > net_amt else None
+                if gross_amt:
+                    real = _emp_net(int(gross_amt))
+                    tax_amt = float(real.total_tax)
+                else:
+                    tax_amt = None
+                net_paid = (
+                    float(m.amount) if m.amount is not None else 0.0
                 )
                 pension_amt = (
                     round(gross_amt * (pension_pct / 100), 2)
                     if gross_amt and pension_pct else None
                 )
                 salary_slips.append(V2EmployerSalarySlip(
-                    id=t.id,
+                    id=m.id,
                     month=month_str,
-                    date=t.date,
-                    net_amount=net_amt,
+                    date=m.due_date,
+                    net_amount=net_paid,
                     gross_amount=gross_amt,
                     tax_amount=tax_amt,
                     pension_amount=pension_amt,
-                    description=t.raw_description or "Lön",
+                    description=m.subject or "Lönespec",
                 ))
+                seen_months.add(month_str)
+
+            # Fallback (för v1-stilade scope:s utan MailItem-salary_slip):
+            # läs Transaction där description börjar med 'Lön ' så vi
+            # bevarar bakåtkompat med tester som seedar transactions
+            # direkt utan mail-rader.
+            if len(salary_slips) < 4:
+                tx_rows = (
+                    s.query(Transaction)
+                    .filter(Transaction.amount > 0)
+                    .filter(Transaction.date >= cutoff_d)
+                    .filter(
+                        _func.lower(Transaction.raw_description)
+                        .like("lön %"),
+                    )
+                    .order_by(Transaction.date.desc())
+                    .limit(4)
+                    .all()
+                )
+                for t in tx_rows:
+                    month_str = (
+                        f"{t.date.year:04d}-{t.date.month:02d}"
+                    )
+                    if month_str in seen_months:
+                        continue
+                    net_amt = float(t.amount)
+                    gross_amt = (
+                        float(profile.gross_salary_monthly)
+                        if profile.gross_salary_monthly else None
+                    )
+                    if gross_amt:
+                        real = _emp_net(int(gross_amt))
+                        tax_amt = float(real.total_tax)
+                    else:
+                        tax_amt = None
+                    pension_amt = (
+                        round(gross_amt * (pension_pct / 100), 2)
+                        if gross_amt and pension_pct else None
+                    )
+                    salary_slips.append(V2EmployerSalarySlip(
+                        id=t.id,
+                        month=month_str,
+                        date=t.date,
+                        net_amount=net_amt,
+                        gross_amount=gross_amt,
+                        tax_amount=tax_amt,
+                        pension_amount=pension_amt,
+                        description=t.raw_description or "Lön",
+                    ))
+                    seen_months.add(month_str)
     except Exception:
-        # Scope-DB saknas eller fel — låt salary_slips vara tomma
         pass
 
     return V2EmployerResponse(
@@ -14936,6 +15010,23 @@ def _seed_initial_student_data(
                             sp.partner_gross_salary = (
                                 profile.family.partner_gross_monthly
                             )
+                    # Children — game_engine har children_count men inte
+                    # ages. Ge n placeholder-åldrar 5+i*2 så has_children-
+                    # checken fungerar konsistent.
+                    cc = int(profile.family.children_count or 0)
+                    sp.children_ages = (
+                        [5 + i * 2 for i in range(cc)] if cc > 0 else []
+                    )
+                # has_car_loan / has_credit_card · synca från
+                # profile.facts. Singel-elever utan billån ska inte
+                # trigga 'Saknar bilförsäkring'-coverage-gap.
+                facts = profile.facts or {}
+                if "has_high_cost_credit" in facts:
+                    sp.has_credit_card = bool(facts["has_high_cost_credit"])
+                # Game_engine har inte has_car_loan i profile_generator
+                # (det är level-3-feature). Sätt False för låg-nivå-elever.
+                if hasattr(sp, "has_car_loan"):
+                    sp.has_car_loan = False
                 mdb.commit()
     except Exception:
         import logging
@@ -14966,6 +15057,21 @@ def _seed_initial_student_data(
                 import logging
                 logging.getLogger(__name__).exception(
                     "_seed_initial_student_data: insurance seed failed för %s",
+                    student.id,
+                )
+            try:
+                # Seedа Tibber/Bahnhof/Telia/SL som UtilitySubscription
+                # så /v2/forbrukning visar dem som aktiva abonnemang
+                # istället för 'Inga abonnemang seedade'-tom-state.
+                # Matchar fakturorna som fixed_expenses.py genererar
+                # för el/bredband/mobil — så bara EN sanning om vad
+                # eleven har.
+                from ..utility import seed_default_utility_subscriptions
+                seed_default_utility_subscriptions(s)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data: utility seed failed för %s",
                     student.id,
                 )
 

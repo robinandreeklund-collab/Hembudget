@@ -1570,8 +1570,12 @@ def test_v2_arbetsgivaren_with_salary_transactions(fx) -> None:
     # Senast först
     assert slips[0]["net_amount"] == 22400
     assert slips[0]["gross_amount"] == 31250
-    # Skatt = brutto − netto = 8850
-    assert slips[0]["tax_amount"] == 8850
+    # Skatt räknas nu via compute_net_salary (riktig kommunal+statlig)
+    # · för 31 250 kr brutto blir det 9 600 kr. Tidigare användes
+    # gross-net=8850 men det vilseleder vid sjukfrånvaro där diff:en
+    # även inkluderar löneavdrag (visar 'skatt 26 908' = 84 % istället
+    # för riktig skatt).
+    assert slips[0]["tax_amount"] == 9600
 
 
 # === Fas 2A: lärar-endpoints + KALP + CreditCheck ===
