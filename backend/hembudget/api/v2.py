@@ -25,7 +25,7 @@ from decimal import Decimal
 from ..db.base import session_scope
 from ..db.models import (
     Account, Transaction, FundHolding, UpcomingTransaction, Goal,
-    MailItem, Loan, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
+    MailItem, Loan, LoanPayment, LoanProduct, PaymentMark, CreditCheck, KALPCalculation,
     TaxDeduction, TaxProposal, TaxYearReturn,
     InsurancePolicy, InsuranceClaim,
     UtilitySubscription, UtilityReading,
@@ -1543,6 +1543,106 @@ def get_goals(info: TokenInfo = Depends(require_token)) -> V2GoalsResponse:
             )
     except Exception:
         return _empty_goals(info.student_id)
+
+
+class V2GoalCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    target_amount: float = Field(..., gt=0)
+    target_date: Optional[_date] = None
+    account_id: Optional[int] = None
+    initial_amount: float = 0
+
+
+class V2GoalUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    target_amount: Optional[float] = None
+    target_date: Optional[_date] = None
+    current_amount: Optional[float] = None
+    account_id: Optional[int] = None
+
+
+class V2GoalSimpleResponse(BaseModel):
+    id: int
+    name: str
+    target_amount: float
+    current_amount: float
+    target_date: Optional[_date]
+    account_id: Optional[int]
+
+
+@router.post("/mal", response_model=V2GoalSimpleResponse)
+def create_goal(
+    body: V2GoalCreateRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2GoalSimpleResponse:
+    """Eleven skapar ett nytt sparmål."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever")
+    with session_scope() as s:
+        g = Goal(
+            name=body.name.strip(),
+            target_amount=Decimal(str(body.target_amount)),
+            current_amount=Decimal(str(body.initial_amount)),
+            target_date=body.target_date,
+            account_id=body.account_id,
+        )
+        s.add(g)
+        s.flush()
+        return V2GoalSimpleResponse(
+            id=g.id,
+            name=g.name,
+            target_amount=float(g.target_amount),
+            current_amount=float(g.current_amount),
+            target_date=g.target_date,
+            account_id=g.account_id,
+        )
+
+
+@router.patch("/mal/{goal_id}", response_model=V2GoalSimpleResponse)
+def update_goal(
+    goal_id: int,
+    body: V2GoalUpdateRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2GoalSimpleResponse:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever")
+    with session_scope() as s:
+        g = s.get(Goal, goal_id)
+        if g is None:
+            raise HTTPException(404, "Målet finns inte")
+        if body.name is not None:
+            g.name = body.name.strip()
+        if body.target_amount is not None:
+            g.target_amount = Decimal(str(body.target_amount))
+        if body.target_date is not None:
+            g.target_date = body.target_date
+        if body.current_amount is not None:
+            g.current_amount = Decimal(str(body.current_amount))
+        if body.account_id is not None:
+            g.account_id = body.account_id
+        s.flush()
+        return V2GoalSimpleResponse(
+            id=g.id,
+            name=g.name,
+            target_amount=float(g.target_amount),
+            current_amount=float(g.current_amount),
+            target_date=g.target_date,
+            account_id=g.account_id,
+        )
+
+
+@router.delete("/mal/{goal_id}", status_code=204)
+def delete_goal(
+    goal_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> None:
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever")
+    with session_scope() as s:
+        g = s.get(Goal, goal_id)
+        if g is not None:
+            s.delete(g)
+            s.flush()
 
 
 # === Postlådan (MailItem-tabellen) ===
@@ -3326,6 +3426,145 @@ class V2KALPResponse(BaseModel):
     monthly_loan_payment_at_stress: float
     monthly_left_after_all: float
     passed: bool
+
+
+class V2ExtraAmortRequest(BaseModel):
+    """Eleven gör en extra amortering på ett befintligt lån."""
+    amount: float = Field(..., gt=0)
+    debit_account_id: int
+
+
+class V2ExtraAmortResponse(BaseModel):
+    loan_id: int
+    transaction_id: int
+    payment_id: int
+    amount: float
+    new_principal_estimate: float
+
+
+@router.post(
+    "/lan/{loan_id}/extra-amortering",
+    response_model=V2ExtraAmortResponse,
+)
+def extra_amortering(
+    loan_id: int,
+    body: V2ExtraAmortRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2ExtraAmortResponse:
+    """Eleven gör en extra amortering · skapar Transaction (negativt
+    belopp på debit_account) + LoanPayment (positivt, payment_type=
+    'amortization'). Banksaldot dras automatiskt eftersom
+    Account-saldot räknas live ur Transaction-summan.
+
+    Pedagogiskt: extra amortering är 'garanterad avkastning lika hög
+    som lånets räntenivå'. Konton räknas korrekt; nästa månads ränta
+    blir lägre.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+
+    with session_scope() as s:
+        loan = s.get(Loan, loan_id)
+        if loan is None:
+            raise HTTPException(404, "Lånet hittades inte")
+        acc = s.get(Account, body.debit_account_id)
+        if acc is None:
+            raise HTTPException(404, "Debit-kontot hittades inte")
+
+        amount = Decimal(str(body.amount))
+
+        # Kontrollera att kontot inte går minus (utöver lönekonto/credit)
+        from sqlalchemy import func as _f
+        opening = acc.opening_balance or Decimal("0")
+        tx_sum = (
+            s.query(_f.coalesce(_f.sum(Transaction.amount), 0))
+            .filter(Transaction.account_id == acc.id)
+            .scalar() or Decimal("0")
+        )
+        if not isinstance(tx_sum, Decimal):
+            tx_sum = Decimal(str(tx_sum))
+        balance = opening + tx_sum
+        if acc.type in ("savings", "isk", "pension"):
+            if balance - amount < 0:
+                raise HTTPException(
+                    400,
+                    f"Kontot {acc.name} har bara {int(balance)} kr — "
+                    "kan inte amortera så mycket.",
+                )
+
+        today = _date.today()
+        idem = (
+            f"v2-extra-amort-{loan_id}-{acc.id}-"
+            f"{today.isoformat()}-{amount}"
+        )
+        existing = (
+            s.query(Transaction)
+            .filter(Transaction.hash == idem)
+            .first()
+        )
+        if existing is not None:
+            pay = (
+                s.query(LoanPayment)
+                .filter(LoanPayment.transaction_id == existing.id)
+                .first()
+            )
+            return V2ExtraAmortResponse(
+                loan_id=loan.id,
+                transaction_id=existing.id,
+                payment_id=pay.id if pay else 0,
+                amount=float(amount),
+                new_principal_estimate=float(
+                    (loan.current_balance_at_creation
+                     or loan.principal_amount) - amount
+                ),
+            )
+
+        tx = Transaction(
+            account_id=acc.id,
+            date=today,
+            amount=-amount,
+            raw_description=f"Extra amortering · {loan.name}",
+            user_verified=True,
+            hash=idem,
+        )
+        s.add(tx)
+        s.flush()
+
+        pay = LoanPayment(
+            loan_id=loan.id,
+            transaction_id=tx.id,
+            date=today,
+            amount=amount,
+            payment_type="amortization",
+        )
+        s.add(pay)
+        s.flush()
+
+        # Beräkna nytt principal-estimate (kvarstående principal -
+        # alla amorteringar). Loan.current_balance_at_creation
+        # eller principal_amount är basen.
+        base = loan.current_balance_at_creation or loan.principal_amount
+        all_amort = (
+            s.query(_f.coalesce(_f.sum(LoanPayment.amount), 0))
+            .filter(
+                LoanPayment.loan_id == loan.id,
+                LoanPayment.payment_type == "amortization",
+            )
+            .scalar() or Decimal("0")
+        )
+        if not isinstance(all_amort, Decimal):
+            all_amort = Decimal(str(all_amort))
+        new_principal = base - all_amort
+
+        return V2ExtraAmortResponse(
+            loan_id=loan.id,
+            transaction_id=tx.id,
+            payment_id=pay.id,
+            amount=float(amount),
+            new_principal_estimate=float(max(new_principal, Decimal("0"))),
+        )
 
 
 @router.post("/lan/kalp", response_model=V2KALPResponse)

@@ -18,7 +18,7 @@
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { v2Api, type LoanData } from "./api";
+import { v2Api, type BankData, type LoanData } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./lan.css";
 
@@ -27,6 +27,7 @@ const SEK = (n: number) =>
 
 export function LanV2() {
   const [data, setData] = useState<LoanData | null>(null);
+  const [bank, setBank] = useState<BankData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -38,6 +39,48 @@ export function LanV2() {
   >(null);
   const [kalpRunning, setKalpRunning] = useState(false);
   const [kalpError, setKalpError] = useState<string | null>(null);
+
+  // Extra-amortering state
+  const [extraLoanId, setExtraLoanId] = useState<number | null>(null);
+  const [extraAmount, setExtraAmount] = useState<string>("1000");
+  const [extraAccountId, setExtraAccountId] = useState<number | null>(null);
+  const [extraBusy, setExtraBusy] = useState(false);
+  const [extraMsg, setExtraMsg] = useState<string | null>(null);
+
+  function refresh() {
+    v2Api
+      .lan()
+      .then(setData)
+      .catch((e) => setError(String((e as Error)?.message || e)));
+    v2Api.bank(0).then(setBank).catch(() => null);
+  }
+
+  async function executeExtraAmort() {
+    if (!extraLoanId || !extraAccountId) return;
+    const amt = parseFloat(extraAmount.replace(/\s/g, "").replace(",", "."));
+    if (!amt || amt <= 0) {
+      setExtraMsg("Ange ett positivt belopp");
+      return;
+    }
+    setExtraBusy(true);
+    setExtraMsg(null);
+    try {
+      const r = await v2Api.loanExtraAmortering(extraLoanId, {
+        amount: amt,
+        debit_account_id: extraAccountId,
+      });
+      setExtraMsg(
+        `✓ Amorterade ${r.amount} kr extra. Kvarstående principal ` +
+        `≈ ${Math.round(r.new_principal_estimate)} kr.`,
+      );
+      setExtraLoanId(null);
+      refresh();
+    } catch (e) {
+      setExtraMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setExtraBusy(false);
+    }
+  }
 
   async function runKalp() {
     const amt = parseFloat(kalpAmount.replace(/\s/g, "").replace(",", "."));
@@ -66,10 +109,8 @@ export function LanV2() {
   }
 
   useEffect(() => {
-    v2Api
-      .lan()
-      .then(setData)
-      .catch((e) => setError(String((e as Error)?.message || e)));
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (error) {
@@ -195,10 +236,193 @@ export function LanV2() {
                 {c.monthly_text && (
                   <div className="acct-bal-meta">{c.monthly_text}</div>
                 )}
+                {c.is_active && c.id != null && (
+                  <button
+                    type="button"
+                    className="cta-btn ghost"
+                    onClick={() => {
+                      setExtraLoanId(c.id);
+                      setExtraMsg(null);
+                      // Default till lönekonto
+                      const checking =
+                        bank?.accounts.find((a) => a.type === "checking");
+                      setExtraAccountId(
+                        checking?.id || bank?.accounts[0]?.id || null,
+                      );
+                    }}
+                    style={{
+                      marginTop: 10,
+                      padding: "6px 12px",
+                      fontSize: 9.5,
+                    }}
+                  >
+                    + Extra-amortering
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
+        )}
+
+        {/* INLINE EXTRA-AMORTERING-FORMULÄR */}
+        {extraLoanId != null && bank && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: "16px 20px",
+              border: "1px solid var(--accent)",
+              borderRadius: 6,
+              background: "rgba(220,76,43,0.04)",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 9.5,
+                letterSpacing: "1.2px",
+                textTransform: "uppercase",
+                color: "var(--accent)",
+                marginBottom: 10,
+              }}
+            >
+              ● Extra-amortering på {
+                cards.find((c) => c.id === extraLoanId)?.name || "lånet"
+              }
+            </div>
+            <p
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 13.5,
+                color: "var(--text-mid)",
+                marginTop: 0,
+              }}
+            >
+              Att amortera extra ger en{" "}
+              <em style={{ color: "var(--warm)" }}>
+                garanterad avkastning
+              </em>{" "}
+              lika hög som lånets ränta. Beloppet dras från det konto du
+              väljer.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 120px 120px",
+                gap: 10,
+                alignItems: "end",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontFamily: "var(--mono)",
+                    fontSize: 9,
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color: "var(--text-mid)",
+                    marginBottom: 4,
+                  }}
+                >
+                  Från konto
+                </label>
+                <select
+                  value={extraAccountId || ""}
+                  onChange={(e) =>
+                    setExtraAccountId(parseInt(e.target.value, 10))
+                  }
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid var(--line-strong)",
+                    color: "#fff",
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    fontFamily: "var(--mono)",
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                >
+                  {bank.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} · {SEK(a.total_value)} kr
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontFamily: "var(--mono)",
+                    fontSize: 9,
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color: "var(--text-mid)",
+                    marginBottom: 4,
+                  }}
+                >
+                  Belopp (kr)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="100"
+                  value={extraAmount}
+                  onChange={(e) => setExtraAmount(e.target.value)}
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid var(--line-strong)",
+                    color: "#fff",
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    fontFamily: "var(--mono)",
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                className="cta-btn"
+                onClick={executeExtraAmort}
+                disabled={extraBusy}
+              >
+                {extraBusy ? "Amorterar…" : "Amortera"}
+              </button>
+              <button
+                type="button"
+                className="cta-btn ghost"
+                onClick={() => {
+                  setExtraLoanId(null);
+                  setExtraMsg(null);
+                }}
+                disabled={extraBusy}
+              >
+                Avbryt
+              </button>
+            </div>
+            {extraMsg && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "8px 14px",
+                  background: extraMsg.startsWith("Fel")
+                    ? "rgba(252,165,165,0.06)"
+                    : "rgba(110,231,183,0.06)",
+                  border: extraMsg.startsWith("Fel")
+                    ? "1px solid rgba(252,165,165,0.4)"
+                    : "1px solid rgba(110,231,183,0.4)",
+                  borderRadius: 6,
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: extraMsg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+                }}
+              >
+                {extraMsg}
+              </div>
+            )}
+          </div>
         )}
 
         <div className="act-grid">

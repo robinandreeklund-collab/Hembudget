@@ -52,14 +52,85 @@ function statusLabel(s: V2GoalRow["status"]): string {
 export function MalV2() {
   const [goals, setGoals] = useState<GoalsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newTarget, setNewTarget] = useState("10000");
+  const [newDate, setNewDate] = useState("");
+  const [newInitial, setNewInitial] = useState("0");
+  const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
+  function refresh() {
     v2Api
       .goals()
       .then(setGoals)
       .catch((e) => setError(String((e as Error)?.message || e)));
+  }
+
+  useEffect(() => {
+    refresh();
   }, []);
+
+  async function createGoal() {
+    if (!newName.trim()) {
+      setError("Skriv ett namn");
+      return;
+    }
+    const target = parseFloat(newTarget.replace(/\s/g, "").replace(",", "."));
+    if (!target || target <= 0) {
+      setError("Ange ett målbelopp > 0");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await v2Api.goalCreate({
+        name: newName.trim(),
+        target_amount: target,
+        target_date: newDate || undefined,
+        initial_amount:
+          parseFloat(newInitial.replace(/\s/g, "").replace(",", "."))
+          || 0,
+      });
+      setNewName("");
+      setNewTarget("10000");
+      setNewDate("");
+      setNewInitial("0");
+      setAddOpen(false);
+      refresh();
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteGoal(id: number, name: string) {
+    if (!confirm(`Ta bort sparmålet "${name}"?`)) return;
+    try {
+      await v2Api.goalDelete(id);
+      refresh();
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    }
+  }
+
+  async function saveCurrentAmount(id: number) {
+    const amt = parseFloat(editAmount.replace(/\s/g, "").replace(",", "."));
+    if (isNaN(amt) || amt < 0) {
+      setError("Ange ett giltigt belopp");
+      return;
+    }
+    try {
+      await v2Api.goalUpdate(id, { current_amount: amt });
+      setEditId(null);
+      refresh();
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    }
+  }
 
   if (error) {
     return (
@@ -241,11 +312,181 @@ export function MalV2() {
                       }}
                     />
                   </div>
+                  {/* Actions per mål */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      marginTop: 12,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    {editId === g.id ? (
+                      <>
+                        <input
+                          type="number"
+                          min="0"
+                          step="100"
+                          value={editAmount}
+                          onChange={(e) => setEditAmount(e.target.value)}
+                          autoFocus
+                          style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid var(--accent)",
+                            color: "#fff",
+                            padding: "6px 8px",
+                            borderRadius: 4,
+                            fontFamily: "var(--mono)",
+                            fontSize: 11,
+                            width: 100,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="cta-btn"
+                          style={{ padding: "6px 12px", fontSize: 9.5 }}
+                          onClick={() => saveCurrentAmount(g.id)}
+                        >
+                          Spara
+                        </button>
+                        <button
+                          type="button"
+                          className="cta-btn ghost"
+                          style={{ padding: "6px 12px", fontSize: 9.5 }}
+                          onClick={() => setEditId(null)}
+                        >
+                          Avbryt
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="cta-btn ghost"
+                          style={{ padding: "6px 12px", fontSize: 9.5 }}
+                          onClick={() => {
+                            setEditId(g.id);
+                            setEditAmount(String(g.current_amount));
+                          }}
+                        >
+                          Uppdatera saldo
+                        </button>
+                        <button
+                          type="button"
+                          className="cta-btn ghost"
+                          style={{
+                            padding: "6px 12px",
+                            fontSize: 9.5,
+                            color: "#fca5a5",
+                          }}
+                          onClick={() => deleteGoal(g.id, g.name)}
+                        >
+                          Ta bort
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </article>
               );
             })}
           </div>
         )}
+
+        {/* Lägg till nytt mål */}
+        <div style={{ marginTop: 22, marginBottom: 22 }}>
+          {!addOpen ? (
+            <button
+              type="button"
+              className="cta-btn"
+              onClick={() => setAddOpen(true)}
+            >
+              + Nytt sparmål
+            </button>
+          ) : (
+            <div
+              style={{
+                padding: "16px 20px",
+                border: "1px solid var(--accent)",
+                borderRadius: 6,
+                background: "rgba(220,76,43,0.04)",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 9.5,
+                  letterSpacing: "1.2px",
+                  textTransform: "uppercase",
+                  color: "var(--accent)",
+                }}
+              >
+                ● Nytt sparmål
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "2fr 1fr 1fr 1fr",
+                  gap: 8,
+                }}
+              >
+                <input
+                  type="text"
+                  placeholder="Namn (t.ex. 'Buffert' eller 'Körkort')"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  style={inpStyle}
+                />
+                <input
+                  type="number"
+                  min="100"
+                  step="100"
+                  placeholder="Mål (kr)"
+                  value={newTarget}
+                  onChange={(e) => setNewTarget(e.target.value)}
+                  style={inpStyle}
+                />
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  style={inpStyle}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  placeholder="Sparat hittills"
+                  value={newInitial}
+                  onChange={(e) => setNewInitial(e.target.value)}
+                  style={inpStyle}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="cta-btn"
+                  disabled={busy}
+                  onClick={createGoal}
+                >
+                  {busy ? "Skapar…" : "Skapa mål"}
+                </button>
+                <button
+                  type="button"
+                  className="cta-btn ghost"
+                  onClick={() => {
+                    setAddOpen(false);
+                    setError(null);
+                  }}
+                >
+                  Avbryt
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* PEDAGOGIK */}
         <div className="peda">
@@ -297,3 +538,13 @@ export function MalV2() {
     </div>
   );
 }
+
+const inpStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid var(--line-strong)",
+  color: "#fff",
+  padding: "8px 10px",
+  borderRadius: 6,
+  fontFamily: "var(--mono)",
+  fontSize: 12,
+};

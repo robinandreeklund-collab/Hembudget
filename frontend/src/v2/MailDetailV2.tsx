@@ -76,6 +76,27 @@ export function MailDetailV2() {
     }
   }
 
+  async function setStatus(status: "paid" | "expired" | "viewed") {
+    if (!data) return;
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      await v2Api.updateMailStatus(id, status);
+      const refreshed = await v2Api.mailDetail(id);
+      setData(refreshed);
+      const labels = {
+        paid: "✓ Markerat som betalt",
+        expired: "⊘ Markerat som ignorerat (utgången)",
+        viewed: "✓ Markerat som granskad",
+      };
+      setExportMsg(labels[status]);
+    } catch (e) {
+      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (error && !data) {
     return (
       <div className="v2-lan-root">
@@ -328,6 +349,41 @@ export function MailDetailV2() {
                   style={{ border: 0, cursor: "pointer" }}
                 >
                   Gå till banken & signera →
+                </button>
+              )}
+              {/* Markera som betald manuellt (utan att gå via BankID) */}
+              {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
+                m.status !== "paid" &&
+                m.status !== "expired" && (
+                  <button
+                    type="button"
+                    className="cta-btn ghost"
+                    disabled={exporting}
+                    onClick={() => setStatus("paid")}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    Markera som betald →
+                  </button>
+                )}
+              {/* Ignorera = sätt expired (eleven har valt att inte hantera) */}
+              {m.status === "unhandled" && (
+                <button
+                  type="button"
+                  className="cta-btn ghost"
+                  disabled={exporting}
+                  onClick={() => {
+                    if (
+                      m.mail_type === "invoice" &&
+                      !confirm(
+                        "Ignorera fakturan? Den blir 'utgången' och påverkar pentagonen negativt (säkerhet & ekonomi)." +
+                        " Använd hellre 'Markera betald' eller 'Exportera till banken' om du faktiskt hanterar den.",
+                      )
+                    ) return;
+                    setStatus("expired");
+                  }}
+                  style={{ border: 0, cursor: "pointer" }}
+                >
+                  Ignorera (markera utgången)
                 </button>
               )}
               {isSalarySlip && (

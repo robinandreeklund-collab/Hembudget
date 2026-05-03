@@ -2343,6 +2343,40 @@ export const v2Api = {
       { method: "POST", body: "{}" },
     ),
   goals: () => api<GoalsData>("/v2/mal"),
+  goalCreate: (body: {
+    name: string;
+    target_amount: number;
+    target_date?: string;
+    account_id?: number;
+    initial_amount?: number;
+  }) =>
+    api<{
+      id: number;
+      name: string;
+      target_amount: number;
+      current_amount: number;
+      target_date: string | null;
+      account_id: number | null;
+    }>("/v2/mal", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  goalUpdate: (
+    goalId: number,
+    body: {
+      name?: string;
+      target_amount?: number;
+      target_date?: string;
+      current_amount?: number;
+      account_id?: number;
+    },
+  ) =>
+    api<unknown>(`/v2/mal/${goalId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  goalDelete: (goalId: number) =>
+    api<void>(`/v2/mal/${goalId}`, { method: "DELETE" }),
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
 
   // === Fas 2D · Försäkringar ===
@@ -2788,6 +2822,22 @@ export const v2Api = {
     api<V2TeacherFeedbackOverview>(
       `/v2/teacher/students/${studentId}/feedback-overview?period_days=${period_days}`,
     ),
+  // === Extra-amortering på lån ===
+  loanExtraAmortering: (
+    loanId: number,
+    body: { amount: number; debit_account_id: number },
+  ) =>
+    api<{
+      loan_id: number;
+      transaction_id: number;
+      payment_id: number;
+      amount: number;
+      new_principal_estimate: number;
+    }>(`/v2/lan/${loanId}/extra-amortering`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // === Arbetsplats-frågor (workplace questions från arbetsgivaren) ===
   employerNextQuestion: () =>
     api<{
