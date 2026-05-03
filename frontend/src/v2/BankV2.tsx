@@ -607,13 +607,20 @@ export function BankV2() {
                       </div>
                       <span
                         className={`tx-cat${
-                          t.category_id == null ? " unset" : ""
+                          t.category_id == null && !t.is_transfer
+                            && !((t.description || "").toLowerCase()
+                              .startsWith("lön "))
+                            ? " unset"
+                            : ""
                         }`}
                       >
-                        {t.category_id == null
-                          ? "Okatt"
-                          : t.is_transfer
+                        {t.is_transfer
                           ? "Överf."
+                          : (t.description || "").toLowerCase()
+                              .startsWith("lön ")
+                          ? "Lön"
+                          : t.category_id == null
+                          ? "Okatt"
                           : "Klassad"}
                       </span>
                       <span className={`tx-amt${isIncome ? " in" : ""}`}>
@@ -642,7 +649,12 @@ export function BankV2() {
               >
                 + {recent_transactions.length - 12} fler transaktioner i
                 listan ·{" "}
-                {recent_transactions.filter((t) => t.category_id == null).length}{" "}
+                {recent_transactions.filter((t) =>
+                  t.category_id == null
+                  && !t.is_transfer
+                  && !((t.description || "").toLowerCase()
+                    .startsWith("lön "))
+                ).length}{" "}
                 ovettade
               </div>
             )}

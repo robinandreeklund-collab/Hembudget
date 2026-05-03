@@ -417,11 +417,19 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 .filter(Transaction.date <= month_end_inclusive)
                 .all()
             )
+            # Exkludera transfers (mellan egna konton, pension-spar)
+            # från inkomst/utgift — annars räknas pension-transferns
+            # 1500 kr som BÅDE inkomst (på ISK) och utgift (från lön)
+            # och hub säger '+5000/-5000 = sparat 0' vilket är fel.
             income = sum(
-                float(t.amount) for t in txs if float(t.amount) > 0
+                float(t.amount) for t in txs
+                if float(t.amount) > 0
+                and not bool(getattr(t, "is_transfer", False))
             )
             expenses = sum(
-                -float(t.amount) for t in txs if float(t.amount) < 0
+                -float(t.amount) for t in txs
+                if float(t.amount) < 0
+                and not bool(getattr(t, "is_transfer", False))
             )
             saved = income - expenses
             save_rate = (saved / income * 100) if income > 0 else 0.0
@@ -725,11 +733,17 @@ def get_bank(
                 .filter(Transaction.date <= today)
                 .all()
             )
+            # Exkludera transfers så bank-summary inte räknar
+            # interna flytt mellan egna konton som inkomst/utgift.
             income = sum(
-                float(t.amount) for t in month_txs if float(t.amount) > 0
+                float(t.amount) for t in month_txs
+                if float(t.amount) > 0
+                and not bool(getattr(t, "is_transfer", False))
             )
             expenses = sum(
-                -float(t.amount) for t in month_txs if float(t.amount) < 0
+                -float(t.amount) for t in month_txs
+                if float(t.amount) < 0
+                and not bool(getattr(t, "is_transfer", False))
             )
 
             return BankResponse(
@@ -7722,6 +7736,21 @@ def _tx_to_row(
     accounts_by_id: dict[int, str],
     cats_by_id: dict[int, str],
 ) -> V2BookkeepingTxRow:
+    # Synthetic category-namn för system-tx som saknar Category-rad
+    # men ändå är 'klassificerade' (transfers, lön, pension-spar).
+    cat_name: Optional[str] = None
+    if t.category_id is not None:
+        cat_name = cats_by_id.get(t.category_id)
+    elif bool(getattr(t, "is_transfer", False)):
+        desc = (t.raw_description or "").lower()
+        if "pension-spar" in desc:
+            cat_name = "Pension-sparande"
+        else:
+            cat_name = "Överföring"
+    else:
+        desc = (t.raw_description or "").lower()
+        if desc.startswith("lön ") or " · lön " in desc:
+            cat_name = "Lön"
     return V2BookkeepingTxRow(
         id=t.id,
         date=t.date,
@@ -7731,9 +7760,7 @@ def _tx_to_row(
         raw_description=t.raw_description,
         normalized_merchant=t.normalized_merchant,
         category_id=t.category_id,
-        category_name=(
-            cats_by_id.get(t.category_id) if t.category_id else None
-        ),
+        category_name=cat_name,
         ai_confidence=t.ai_confidence,
         user_verified=bool(t.user_verified),
         is_transfer=bool(t.is_transfer),
@@ -7799,12 +7826,25 @@ def get_bokforing(
         )
         all_txs = txs_query.all()
         total = len(all_txs)
-        unclassified_txs = [
-            t for t in all_txs if t.category_id is None
-        ]
-        classified_txs = [
-            t for t in all_txs if t.category_id is not None
-        ]
+        # Transfers (mellan egna konton, pension-spar, lön-utbetalning)
+        # räknas som självklassificerade — eleven behöver inte
+        # manuellt klassa dem. is_transfer=True OR description som
+        # innehåller 'Lön ' (lönen från arbetsgivaren) räknas som
+        # auto-klassificerade så de hamnar inte i ovettade-listan.
+        def _is_auto_class(t) -> bool:
+            if t.category_id is not None:
+                return True
+            if bool(getattr(t, "is_transfer", False)):
+                return True
+            desc = (t.raw_description or "").lower()
+            if desc.startswith("lön ") or " · lön " in desc:
+                return True
+            if "pension-spar" in desc:
+                return True
+            return False
+
+        unclassified_txs = [t for t in all_txs if not _is_auto_class(t)]
+        classified_txs = [t for t in all_txs if _is_auto_class(t)]
         manual_count = sum(1 for t in classified_txs if t.user_verified)
         auto_count = len(classified_txs) - manual_count
 

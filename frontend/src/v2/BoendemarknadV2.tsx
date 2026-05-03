@@ -369,6 +369,25 @@ function KopSaljPanel() {
                 Sälj min bostad
               </button>
             </>
+          ) : activeHome && (
+            activeHome.home_type === "bostadsratt"
+            || activeHome.home_type === "villa"
+            || activeHome.home_type === "radhus"
+          ) ? (
+            <>
+              <div className="acct-name">
+                {activeHome.home_type === "villa" ? "Villa"
+                  : activeHome.home_type === "radhus" ? "Radhus"
+                  : "Bostadsrätt"} · {activeHome.size_kvm} kvm
+              </div>
+              <div className="acct-num">
+                Boendekostnad{" "}
+                <strong>
+                  {SEK(activeHome.monthly_cost)} kr/mån
+                </strong>{" "}
+                · värdering uppdateras månadsvis baserat på marknad.
+              </div>
+            </>
           ) : (
             <>
               <div className="acct-name">Du hyr</div>
@@ -384,14 +403,18 @@ function KopSaljPanel() {
       {confirmMsg && (
         <div
           style={{
-            background: "var(--surface-2, #f5f5f7)",
-            padding: 12,
-            borderRadius: 8,
+            background: "rgba(110,231,183,0.06)",
+            padding: "10px 16px",
+            borderRadius: 6,
             marginBottom: 16,
-            border: "1px solid var(--border)",
+            border: "1px solid rgba(110,231,183,0.4)",
+            color: "#6ee7b7",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+            letterSpacing: "0.4px",
           }}
         >
-          {confirmMsg}
+          ● {confirmMsg}
         </div>
       )}
 
@@ -417,56 +440,113 @@ function KopSaljPanel() {
           <article
             key={l.listing_id}
             style={{
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: 16,
-              background: "var(--surface, #fff)",
+              border: "1px solid var(--line)",
+              borderRadius: 8,
+              padding: 18,
+              background: "rgba(15,21,37,0.7)",
+              color: "var(--text)",
             }}
           >
-            <header style={{ marginBottom: 8 }}>
+            <header style={{ marginBottom: 12 }}>
               <span
-                className="pill"
-                style={{ fontSize: "0.75rem", marginBottom: 4 }}
+                style={{
+                  display: "inline-block",
+                  padding: "3px 9px",
+                  borderRadius: 100,
+                  background: "rgba(220,76,43,0.1)",
+                  border: "1px solid var(--accent)",
+                  fontFamily: "var(--mono)",
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  letterSpacing: "1.2px",
+                  textTransform: "uppercase",
+                  color: "var(--accent)",
+                  marginBottom: 8,
+                }}
               >
                 {TYPE_LABEL[l.type]}
               </span>
-              <h3 style={{ margin: "6px 0 2px", fontSize: "1.05rem" }}>
+              <h3
+                style={{
+                  margin: "8px 0 4px",
+                  fontFamily: "var(--serif)",
+                  fontSize: 17,
+                  fontWeight: 700,
+                  color: "#fff",
+                  letterSpacing: "-0.3px",
+                }}
+              >
                 {l.address}
               </h3>
-              <div style={{ color: "var(--text-mid)", fontSize: "0.85rem" }}>
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10.5,
+                  color: "var(--text-mid)",
+                  letterSpacing: "0.4px",
+                }}
+              >
                 {l.size_kvm} kvm · {l.rooms} rum · kvalitet {l.quality_score}/10
               </div>
             </header>
 
-            <div style={{ marginBottom: 8 }}>
-              <strong style={{ fontSize: "1.1rem" }}>
+            <div style={{ marginBottom: 12 }}>
+              <strong
+                style={{
+                  fontFamily: "var(--serif)",
+                  fontSize: 22,
+                  fontStyle: "italic",
+                  color: "var(--warm)",
+                  fontWeight: 700,
+                }}
+              >
                 {SEK(l.asking_price)} kr
               </strong>
-              <div style={{ fontSize: "0.8rem", color: "var(--text-mid)" }}>
+              <div
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10.5,
+                  color: "var(--text-mid)",
+                  marginTop: 4,
+                }}
+              >
                 Avgift/drift: {SEK(l.monthly_avgift)} kr/mån ·{" "}
                 {Math.round(l.asking_price / l.size_kvm).toLocaleString("sv-SE")} kr/kvm
               </div>
             </div>
 
-            <p style={{ fontSize: "0.85rem", color: "var(--text-mid)" }}>
+            <p
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 13.5,
+                lineHeight: 1.5,
+                color: "var(--text)",
+                margin: "10px 0 14px",
+              }}
+            >
               {l.description}
             </p>
 
             <button
+              type="button"
               onClick={() => handleBuy(l)}
               disabled={confirmId === l.listing_id}
               style={{
                 width: "100%",
-                marginTop: 10,
-                padding: "10px",
-                background: "var(--accent, #0066cc)",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
+                padding: "10px 18px",
+                background: "var(--accent)",
+                color: "#fff",
+                border: 0,
+                borderRadius: 100,
                 cursor: confirmId === l.listing_id ? "wait" : "pointer",
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "1.2px",
+                textTransform: "uppercase",
               }}
             >
-              {confirmId === l.listing_id ? "Behandlar…" : "Köp"}
+              {confirmId === l.listing_id ? "Behandlar…" : "Köp →"}
             </button>
           </article>
         ))}
