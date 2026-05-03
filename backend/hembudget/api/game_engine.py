@@ -873,21 +873,56 @@ class SchoolClassPatchIn(BaseModel):
 
 @router.get("/classes", response_model=list[SchoolClassOut])
 def list_classes(info: TokenInfo = Depends(require_teacher)):
-    """Lista lärarens alla klasser med elev-antal."""
+    """Lista lärarens alla klasser med elev-antal.
+
+    Heal-pass: om läraren har EN klass och elever med class_label=NULL,
+    backfill:a class_label på dem. Tidigare visade dropdown '1 elev'
+    trots att läraren hade t.ex. 18 elever — eftersom de gamla elev-
+    raderna saknade class_label och bara den nyaste matchade.
+    """
     with master_session() as s:
         rows = (
+            s.query(SchoolClass)
+            .filter(SchoolClass.teacher_id == info.teacher_id)
+            .filter(SchoolClass.is_archived.is_(False))
+            .order_by(SchoolClass.is_archived, SchoolClass.label)
+            .all()
+        )
+
+        # Heal: backfill class_label på elever utan label om läraren
+        # bara har EN aktiv klass (entydigt vilken de tillhör).
+        if len(rows) == 1:
+            backfilled = (
+                s.query(Student)
+                .filter(
+                    Student.teacher_id == info.teacher_id,
+                    Student.active.is_(True),
+                    (Student.class_label.is_(None))
+                    | (Student.class_label == ""),
+                )
+                .update(
+                    {Student.class_label: rows[0].label},
+                    synchronize_session=False,
+                )
+            )
+            if backfilled:
+                s.commit()
+
+        # Hämta alla klasser (inkl. arkiverade för räkning)
+        all_rows = (
             s.query(SchoolClass)
             .filter(SchoolClass.teacher_id == info.teacher_id)
             .order_by(SchoolClass.is_archived, SchoolClass.label)
             .all()
         )
         out = []
-        for r in rows:
+        for r in all_rows:
             n = (
                 s.query(Student)
                 .filter(
                     Student.teacher_id == info.teacher_id,
                     Student.class_label == r.label,
+                    Student.active.is_(True),
                 )
                 .count()
             )

@@ -9,7 +9,7 @@
  * /bank/sign?token=X.
  */
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { v2Api } from "./api";
 
 const SEK = (n: number) =>
@@ -27,6 +27,9 @@ type Info = Awaited<ReturnType<typeof v2Api.bankidConfirmInfo>>;
 
 export function BankIDConfirmV2() {
   const { token } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  const sidParam = searchParams.get("sid");
+  const sid = sidParam ? parseInt(sidParam, 10) : undefined;
   const [info, setInfo] = useState<Info | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pin, setPin] = useState("");
@@ -36,10 +39,10 @@ export function BankIDConfirmV2() {
   useEffect(() => {
     if (!token) return;
     v2Api
-      .bankidConfirmInfo(token)
+      .bankidConfirmInfo(token, sid)
       .then(setInfo)
       .catch((e) => setError(String((e as Error)?.message || e)));
-  }, [token]);
+  }, [token, sid]);
 
   async function submit() {
     if (!token) return;
@@ -50,7 +53,7 @@ export function BankIDConfirmV2() {
     setSigning(true);
     setError(null);
     try {
-      const r = await v2Api.bankidConfirmSign(token, pin);
+      const r = await v2Api.bankidConfirmSign(token, pin, sid);
       if (r.status === "signed") {
         setSigned(true);
       }

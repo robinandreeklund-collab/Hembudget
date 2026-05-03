@@ -1324,6 +1324,7 @@ export type V2BankIDSessionOut = {
   notes: string | null;
   created_at: string;
   confirm_token: string | null;
+  student_id: number | null;
 };
 
 export type V2BankIDListData = {
@@ -2954,8 +2955,11 @@ export const v2Api = {
       body: JSON.stringify({ pin }),
     }),
   // Mobil-confirm-flöde · token från QR (no auth)
-  bankidConfirmInfo: (token: string) =>
-    api<{
+  // sid är optional men gör att backend slipper loopa alla scopes —
+  // utan den tar request:en flera sekunder på instanser med många elever.
+  bankidConfirmInfo: (token: string, sid?: number) => {
+    const q = sid != null ? `?sid=${sid}` : "";
+    return api<{
       session_id: number;
       invoice_count: number;
       total_amount: number;
@@ -2969,18 +2973,21 @@ export const v2Api = {
         is_anomaly: boolean;
       }>;
       has_pin: boolean;
-    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}`),
-  bankidConfirmSign: (token: string, pin: string) =>
-    api<{
+    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}${q}`);
+  },
+  bankidConfirmSign: (token: string, pin: string, sid?: number) => {
+    const q = sid != null ? `?sid=${sid}` : "";
+    return api<{
       session_id: number;
       status: "pending" | "signed" | "cancelled";
       invoice_count: number;
       total_amount: number;
       has_pin: boolean;
-    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}`, {
+    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}${q}`, {
       method: "POST",
       body: JSON.stringify({ pin }),
-    }),
+    });
+  },
   bankidCancel: (id: number) =>
     api<V2BankIDSessionOut>(`/v2/bankid/sessions/${id}/cancel`, {
       method: "POST",

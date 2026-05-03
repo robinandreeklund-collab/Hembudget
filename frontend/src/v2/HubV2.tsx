@@ -45,7 +45,11 @@ export function HubV2() {
       v2Api
         .postladan("unhandled")
         .then((d) => {
-          setMailUnread(d.summary?.total_count || 0);
+          // Använd unhandled_count (= unhandled + viewed, dvs lästa
+          // men ej hanterade). total_count räknade ALLA brev inkl.
+          // betalda/exporterade vilket gjorde att counter aldrig
+          // sjönk när eleven hanterat brev.
+          setMailUnread(d.summary?.unhandled_count || 0);
           // Pick the most-urgent unhandled item as the EventCard:
           // prio 1: invoice with overdue/close due-date
           // prio 2: latest mail by received_at

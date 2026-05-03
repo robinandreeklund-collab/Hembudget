@@ -302,13 +302,18 @@ export function BankIDV2() {
                 }}
               >
                 <QRCodeSVG
-                  value={
-                    session.confirm_token
-                      ? (typeof window !== "undefined"
-                        ? `${window.location.origin}/v2/bankid/confirm/${session.confirm_token}`
-                        : `https://ekonomilabbet.org/v2/bankid/confirm/${session.confirm_token}`)
-                      : `https://ekonomilabbet.org/v2/bankid/${session.id}`
-                  }
+                  value={(() => {
+                    if (!session.confirm_token) {
+                      return `https://ekonomilabbet.org/v2/bankid/${session.id}`;
+                    }
+                    const origin = typeof window !== "undefined"
+                      ? window.location.origin
+                      : "https://ekonomilabbet.org";
+                    const sidParam = session.student_id
+                      ? `?sid=${session.student_id}`
+                      : "";
+                    return `${origin}/v2/bankid/confirm/${session.confirm_token}${sidParam}`;
+                  })()}
                   size={200}
                   bgColor="#ffffff"
                   fgColor="#0a0e1a"

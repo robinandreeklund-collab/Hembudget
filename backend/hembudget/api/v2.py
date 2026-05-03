@@ -9473,6 +9473,7 @@ class V2BankIDSessionOut(BaseModel):
     notes: Optional[str]
     created_at: datetime
     confirm_token: Optional[str] = None  # för QR-länken
+    student_id: Optional[int] = None  # för QR-URL ?sid=N
 
 
 class V2BankIDStartIn(BaseModel):
@@ -9545,6 +9546,7 @@ def _bankid_to_out(
         notes=sess.notes,
         created_at=sess.created_at,
         confirm_token=sess.confirm_token,
+        student_id=sess.student_id_for_confirm,
         invoices=[
             V2BankIDInvoiceRow(
                 upcoming_id=u.id,
@@ -9756,7 +9758,9 @@ class V2BankIDConfirmInfo(BaseModel):
     "/bankid/confirm/{token}",
     response_model=V2BankIDConfirmInfo,
 )
-def get_bankid_confirm_info(token: str) -> V2BankIDConfirmInfo:
+def get_bankid_confirm_info(
+    token: str, sid: Optional[int] = None,
+) -> V2BankIDConfirmInfo:
     """Mobilen hämtar sammanfattning av sessionen via token.
 
     INTE authenticated · samma som v1 /bank/session/{token}/confirm.
@@ -9775,20 +9779,18 @@ def get_bankid_confirm_info(token: str) -> V2BankIDConfirmInfo:
     )
     from ..school.models import Student as _Stu
 
-    # Steg 1: hitta vilken student tokenen tillhör. Vi måste loopa scope-DBs
-    # — men det är dyrt. Smartare: lagra scope-key i sessionen, eller
-    # använd en MASTER-tabell för bankid-session-tokens. För att undvika
-    # ny tabell: query alla scopes där detta token kan finnas.
-    #
-    # Praktiskt enklare: vi lagrar student_id_for_confirm direkt på
-    # sessionen, så vi kan slå student → scope → ladda sessionen.
+    # Steg 1: hitta vilken student tokenen tillhör.
+    # Optimerat: om sid-query-param skickas (från QR-koden) slår vi
+    # direkt mot den scopen istället för att loopa alla. Tidigare
+    # loop-implementation var O(n_students × scope-DB-queries) vilket
+    # gjorde att mobilen timeoutade på instanser med många elever.
     with _ms_local() as mdb:
-        # Tyvärr har vi inte ett mapping från token → student utan att
-        # läsa varje scope-DB. Vi får istället loopa alla aktiva students
-        # och slå sessions-tabellen via tenant_id-filtrering. För enkelhet:
-        # vi lagrar token i master-DB i en lookup. Här gör vi en rak
-        # student-loop för MVP.
-        students = mdb.query(_Stu).filter(_Stu.active.is_(True)).all()
+        if sid is not None:
+            students = mdb.query(_Stu).filter(
+                _Stu.id == sid, _Stu.active.is_(True),
+            ).all()
+        else:
+            students = mdb.query(_Stu).filter(_Stu.active.is_(True)).all()
         target_sid: Optional[int] = None
         target_session: Optional[BankIDSession] = None
         for stu in students:
@@ -9857,7 +9859,9 @@ class V2BankIDConfirmIn(BaseModel):
 
 @router.post("/bankid/confirm/{token}", response_model=V2BankIDConfirmInfo)
 def post_bankid_confirm(
-    token: str, body: V2BankIDConfirmIn,
+    token: str,
+    body: V2BankIDConfirmIn,
+    sid: Optional[int] = None,
 ) -> V2BankIDConfirmInfo:
     """Mobilen bekräftar sessionen genom att ange PIN.
 
@@ -9882,7 +9886,13 @@ def post_bankid_confirm(
     from ..school.models import Student as _Stu
 
     with _ms_local() as mdb:
-        students = mdb.query(_Stu).filter(_Stu.active.is_(True)).all()
+        # Optimerat: om sid-query-param finns, hoppa loop:en
+        if sid is not None:
+            students = mdb.query(_Stu).filter(
+                _Stu.id == sid, _Stu.active.is_(True),
+            ).all()
+        else:
+            students = mdb.query(_Stu).filter(_Stu.active.is_(True)).all()
         target_sid: Optional[int] = None
         target_session_data: Optional[dict] = None
         for stu in students:
@@ -11215,39 +11225,75 @@ def get_mail_detail(
             )
         elif m.mail_type == "salary_slip":
             salary_data = _build_salary_slip_data(m, profile)
-        elif m.mail_type in ("invoice", "reminder") and m.invoice_data:
-            # Game-engine-genererad faktura med strukturerade rader
+        elif m.mail_type in ("invoice", "reminder"):
+            raw = m.invoice_data
             try:
-                raw = m.invoice_data
-                invoice_data = V2InvoiceData(
-                    kind=str(raw.get("kind", "annan")),
-                    invoice_number=str(raw.get("invoice_number", "—")),
-                    period_start=(
-                        _date.fromisoformat(raw["period_start"])
-                        if raw.get("period_start") else None
-                    ),
-                    period_end=(
-                        _date.fromisoformat(raw["period_end"])
-                        if raw.get("period_end") else None
-                    ),
-                    rows=[
-                        V2InvoiceRow(
-                            label=str(r.get("label", "")),
-                            qty=r.get("qty"),
-                            unit=r.get("unit"),
-                            unit_price=r.get("unit_price"),
-                            amount=float(r.get("amount", 0)),
-                        )
-                        for r in (raw.get("rows") or [])
-                    ],
-                    subtotal=float(raw.get("subtotal", 0)),
-                    moms=float(raw.get("moms", 0)),
-                    moms_rate=float(raw.get("moms_rate", 0)),
-                    total=float(raw.get("total", 0)),
-                    ocr=raw.get("ocr"),
-                    bankgiro=raw.get("bankgiro"),
-                    extra=raw.get("extra") or {},
-                )
+                if raw:
+                    # Strukturerad invoice_data finns
+                    invoice_data = V2InvoiceData(
+                        kind=str(raw.get("kind", "annan")),
+                        invoice_number=str(raw.get("invoice_number", "—")),
+                        period_start=(
+                            _date.fromisoformat(raw["period_start"])
+                            if raw.get("period_start") else None
+                        ),
+                        period_end=(
+                            _date.fromisoformat(raw["period_end"])
+                            if raw.get("period_end") else None
+                        ),
+                        rows=[
+                            V2InvoiceRow(
+                                label=str(r.get("label", "")),
+                                qty=r.get("qty"),
+                                unit=r.get("unit"),
+                                unit_price=r.get("unit_price"),
+                                amount=float(r.get("amount", 0)),
+                            )
+                            for r in (raw.get("rows") or [])
+                        ],
+                        subtotal=float(raw.get("subtotal", 0)),
+                        moms=float(raw.get("moms", 0)),
+                        moms_rate=float(raw.get("moms_rate", 0)),
+                        total=float(raw.get("total", 0)),
+                        ocr=raw.get("ocr"),
+                        bankgiro=raw.get("bankgiro"),
+                        extra=raw.get("extra") or {},
+                    )
+                elif m.amount is not None:
+                    # Fallback för gamla mail utan invoice_data ·
+                    # bygg minimal struktur från body_meta + amount så
+                    # InvoiceLayout fortfarande renderas (1 rad, ingen
+                    # moms-uppdelning). Bättre än text-only-fallback.
+                    amount_abs = abs(float(m.amount))
+                    invoice_data = V2InvoiceData(
+                        kind="annan",
+                        invoice_number=(
+                            m.ocr_reference or f"FAK-{m.id:06d}"
+                        ),
+                        period_start=None,
+                        period_end=None,
+                        rows=[
+                            V2InvoiceRow(
+                                label=m.body_meta or m.subject,
+                                qty=None,
+                                unit=None,
+                                unit_price=None,
+                                amount=amount_abs,
+                            ),
+                        ],
+                        subtotal=amount_abs,
+                        moms=0,
+                        moms_rate=0,
+                        total=amount_abs,
+                        ocr=m.ocr_reference,
+                        bankgiro=m.bankgiro,
+                        extra={
+                            "moms_note": (
+                                "Strukturerad fakturadata saknas — "
+                                "fakturan visar bara totalbelopp."
+                            ),
+                        },
+                    )
             except Exception:
                 # Robust mot felaktig JSON-data — visa bara body
                 invoice_data = None
@@ -11301,18 +11347,37 @@ def get_mail_pdf(
         m = s.get(MailItem, mail_id)
         if m is None:
             raise HTTPException(404, "Brevet hittades inte")
-        if not m.invoice_data:
+        # Använd strukturerad invoice_data om den finns, annars
+        # bygg minimal fallback så även gamla mail kan PDF-renderas.
+        inv = m.invoice_data
+        if not inv and m.amount is not None:
+            amount_abs = abs(float(m.amount))
+            inv = {
+                "kind": "annan",
+                "invoice_number": m.ocr_reference or f"FAK-{m.id:06d}",
+                "period_start": None,
+                "period_end": None,
+                "rows": [{
+                    "label": m.body_meta or m.subject,
+                    "amount": amount_abs,
+                }],
+                "subtotal": amount_abs,
+                "moms": 0,
+                "moms_rate": 0,
+                "total": amount_abs,
+                "ocr": m.ocr_reference,
+                "bankgiro": m.bankgiro,
+                "extra": {},
+            }
+        if not inv:
             raise HTTPException(
-                400,
-                "Det här brevet har ingen strukturerad fakturadata. "
-                "PDF stöds bara för game_engine-genererade fakturor "
-                "(hyra, el, mobil, bredband, försäkring, bolån etc).",
+                400, "Brevet saknar belopp — kan inte renderas som PDF.",
             )
 
         from ..teacher.v2_invoices import render_v2_invoice_pdf
         try:
             pdf_bytes = render_v2_invoice_pdf(
-                m.invoice_data,
+                inv,
                 sender=m.sender,
                 subject=m.subject,
                 due_date=m.due_date,
@@ -11322,10 +11387,8 @@ def get_mail_pdf(
         except Exception as e:
             raise HTTPException(500, f"PDF-rendering misslyckades: {e}")
 
-        kind = str((m.invoice_data or {}).get("kind", "faktura"))
-        filename = (
-            f"{kind}-{(m.invoice_data or {}).get('invoice_number','x')}.pdf"
-        )
+        kind = str(inv.get("kind", "faktura"))
+        filename = f"{kind}-{inv.get('invoice_number', 'x')}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
