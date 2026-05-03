@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   v2Api,
+  type V2InvoiceData,
   type V2MailDetailData,
 } from "./api";
 import { V2Banner } from "./V2Banner";
@@ -124,6 +125,7 @@ export function MailDetailV2() {
   const m = data.mail;
   const isCcInvoice = data.cc_invoice != null;
   const isSalarySlip = data.salary_slip != null;
+  const isStructuredInvoice = data.invoice != null;
 
   // Avsändar-icon-färg per kind
   const senderColors: Record<string, string> = {
@@ -278,7 +280,12 @@ export function MailDetailV2() {
             {isSalarySlip && data.salary_slip && (
               <SalarySlipLayout sal={data.salary_slip} />
             )}
-            {!isCcInvoice && !isSalarySlip && m.body && (
+            {!isCcInvoice && !isSalarySlip && isStructuredInvoice
+              && data.invoice && (
+              <InvoiceLayout inv={data.invoice} />
+            )}
+            {!isCcInvoice && !isSalarySlip && !isStructuredInvoice
+              && m.body && (
               <div
                 style={{
                   fontFamily: "var(--serif)",
@@ -421,6 +428,271 @@ export function MailDetailV2() {
 
       </div>
     </div>
+  );
+}
+
+/**
+ * Strukturerad fakturarendering · för game_engine-fakturor
+ * (el, mobil, bredband, hyra, BRF-avgift, bolån, drift, försäkring,
+ * lokaltrafik). Visar header med fakturanummer + period, tabell med
+ * rader (label, qty, unit, price, amount), moms-sektion, totalsumma
+ * och payment-info. Analog SalarySlipLayout.
+ */
+function InvoiceLayout({ inv }: { inv: V2InvoiceData }) {
+  const periodLabel =
+    inv.period_start && inv.period_end
+      ? `${SHORT_DATE(inv.period_start)} – ${SHORT_DATE(inv.period_end)}`
+      : "—";
+  const extra = inv.extra || {};
+  const momsNote = (extra.moms_note as string) || null;
+  const tip = (extra.tip as string) || null;
+  const policyNotes = (extra.policy_notes as string) || null;
+
+  return (
+    <>
+      {/* HEADER · fakturanummer + period */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 10,
+          marginBottom: 22,
+        }}
+      >
+        <StatCard
+          eye="Fakturanummer"
+          value={inv.invoice_number}
+          sub={`Period ${periodLabel}`}
+        />
+        <StatCard
+          eye="Att betala"
+          value={`${SEK(inv.total)} kr`}
+          sub={
+            inv.moms > 0
+              ? `inkl moms ${Math.round(inv.moms_rate)} %`
+              : "momsfritt"
+          }
+          warm
+        />
+        <StatCard
+          eye="OCR-referens"
+          value={inv.ocr || "—"}
+          sub={inv.bankgiro ? `BG ${inv.bankgiro}` : "—"}
+        />
+      </div>
+
+      {/* SPECIFIKATION · rader */}
+      <div className="section-eye" style={{ marginBottom: 14 }}>
+        Specifikation · {inv.rows.length} {inv.rows.length === 1 ? "rad" : "rader"}
+      </div>
+      <div
+        style={{
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid var(--line)",
+          borderRadius: 6,
+          padding: "16px 22px",
+          marginBottom: 22,
+        }}
+      >
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontFamily: "var(--mono)",
+            fontSize: 12,
+          }}
+        >
+          <tbody>
+            {inv.rows.map((r, i) => {
+              const showQty = r.qty != null;
+              return (
+                <tr
+                  key={i}
+                  style={{
+                    borderTop: "1px solid rgba(255,255,255,0.04)",
+                  }}
+                >
+                  <td
+                    style={{
+                      padding: "10px 0",
+                      color: "var(--text)",
+                      fontFamily: "var(--mono)",
+                      fontSize: 12,
+                    }}
+                  >
+                    {r.label}
+                    {showQty && (
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "var(--text-dim)",
+                          marginTop: 2,
+                        }}
+                      >
+                        {r.qty} {r.unit || ""}
+                        {r.unit_price != null
+                          && ` × ${r.unit_price.toFixed(2)} kr`}
+                      </div>
+                    )}
+                  </td>
+                  <td
+                    style={{
+                      padding: "10px 0",
+                      textAlign: "right",
+                      color: "#fff",
+                      fontFamily: "var(--mono)",
+                      fontSize: 12,
+                    }}
+                  >
+                    {SEK(r.amount)} kr
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* SUBTOTAL */}
+            <tr
+              style={{
+                borderTop: "1px solid var(--line-strong)",
+              }}
+            >
+              <td
+                style={{
+                  padding: "10px 0",
+                  color: "var(--text-mid)",
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.6px",
+                }}
+              >
+                Subtotal (exkl moms)
+              </td>
+              <td
+                style={{
+                  padding: "10px 0",
+                  textAlign: "right",
+                  color: "var(--text-mid)",
+                  fontFamily: "var(--mono)",
+                  fontSize: 12,
+                }}
+              >
+                {SEK(inv.subtotal)} kr
+              </td>
+            </tr>
+
+            {/* MOMS */}
+            {inv.moms > 0 && (
+              <tr>
+                <td
+                  style={{
+                    padding: "6px 0",
+                    color: "var(--text-mid)",
+                    fontFamily: "var(--mono)",
+                    fontSize: 11,
+                  }}
+                >
+                  Moms {Math.round(inv.moms_rate)} %
+                </td>
+                <td
+                  style={{
+                    padding: "6px 0",
+                    textAlign: "right",
+                    color: "var(--text-mid)",
+                    fontFamily: "var(--mono)",
+                    fontSize: 12,
+                  }}
+                >
+                  {SEK(inv.moms)} kr
+                </td>
+              </tr>
+            )}
+
+            {/* TOTAL */}
+            <tr style={{ borderTop: "1px solid var(--warm)" }}>
+              <td
+                style={{
+                  padding: "12px 0",
+                  color: "var(--warm)",
+                  fontFamily: "var(--serif)",
+                  fontSize: 14,
+                  fontWeight: 700,
+                }}
+              >
+                TOTALT ATT BETALA
+              </td>
+              <td
+                style={{
+                  padding: "12px 0",
+                  textAlign: "right",
+                  color: "var(--warm)",
+                  fontFamily: "var(--serif)",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  fontStyle: "italic",
+                }}
+              >
+                {SEK(inv.total)} kr
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* MOMS-INFO + tip + försäkringsvillkor */}
+      {(momsNote || tip || policyNotes) && (
+        <div
+          style={{
+            padding: "12px 16px",
+            background: "rgba(99,102,241,0.06)",
+            border: "1px solid rgba(99,102,241,0.2)",
+            borderRadius: 6,
+            marginBottom: 18,
+            fontFamily: "var(--serif)",
+            fontSize: 12.5,
+            color: "var(--text-mid)",
+            lineHeight: 1.5,
+          }}
+        >
+          {momsNote && (
+            <div>
+              <strong style={{ color: "#a5b4fc" }}>Moms-info: </strong>
+              {momsNote}
+            </div>
+          )}
+          {tip && (
+            <div style={{ marginTop: momsNote ? 6 : 0 }}>
+              <strong style={{ color: "#a5b4fc" }}>Tips: </strong>
+              {tip}
+            </div>
+          )}
+          {policyNotes && (
+            <div style={{ marginTop: 6 }}>
+              <strong style={{ color: "#a5b4fc" }}>
+                Försäkringsvillkor:{" "}
+              </strong>
+              {policyNotes}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* BETALNINGSINFO */}
+      <div
+        style={{
+          padding: "12px 16px",
+          border: "1px solid var(--line)",
+          borderRadius: 6,
+          fontFamily: "var(--mono)",
+          fontSize: 11,
+          color: "var(--text-mid)",
+          letterSpacing: "0.4px",
+        }}
+      >
+        Betala via banken senast på förfallodagen. Vid försening:
+        påminnelseavgift 60-95 kr + ränta enl. räntelagen.
+      </div>
+    </>
   );
 }
 

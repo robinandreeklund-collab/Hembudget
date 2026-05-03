@@ -1708,6 +1708,15 @@ class MailItem(TenantMixin, Base):
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Strukturerad fakturadata · för riktig fakturarendering med rader,
+    # moms, subtotal, total. Fakturor genererade av game_engine
+    # (hyra, el, bredband, mobil, försäkring, bolån, drift, lokaltrafik)
+    # fyller denna med kind + rows + summa-fält. CC-fakturor använder
+    # _build_cc_invoice_data dynamiskt istället.
+    invoice_data: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True,
+    )
+
 
 class JobApplication(TenantMixin, Base):
     """Spelmotor · Sprint 6 · pågående/avslutad jobbansökan.

@@ -757,6 +757,9 @@ def run_migrations(engine: Engine) -> list[str]:
             ("ocr_reference", "ocr_reference VARCHAR(40)"),
             ("bankgiro", "bankgiro VARCHAR(20)"),
             ("notes", "notes TEXT"),
+            # Strukturerad fakturadata · JSON för Postgres / TEXT för
+            # SQLite. SQLAlchemy JSON-kolumnen mappar transparent.
+            ("invoice_data", "invoice_data TEXT"),
         ]
         for col_name, col_sql in mail_columns:
             if col_name not in mail_cols:

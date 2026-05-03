@@ -10378,10 +10378,40 @@ class V2SalarySlipData(BaseModel):
     diff_vs_prev: Optional[float]
 
 
+class V2InvoiceRow(BaseModel):
+    """En rad i en strukturerad faktura."""
+    label: str
+    qty: Optional[float] = None
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
+    amount: float
+
+
+class V2InvoiceData(BaseModel):
+    """Strukturerad fakturadata · matchar invoice_data JSON i MailItem.
+
+    Renderas i MailDetailV2.InvoiceLayout med fakturarader, moms,
+    OCR och payment-info — analogt med SalarySlipLayout.
+    """
+    kind: str  # el|mobil|bredband|hyra|brf_avgift|bolan|drift_villa|forsakring|lokaltrafik|annan
+    invoice_number: str
+    period_start: Optional[_date] = None
+    period_end: Optional[_date] = None
+    rows: list[V2InvoiceRow]
+    subtotal: float
+    moms: float
+    moms_rate: float
+    total: float
+    ocr: Optional[str] = None
+    bankgiro: Optional[str] = None
+    extra: dict = Field(default_factory=dict)
+
+
 class V2MailDetailResponse(BaseModel):
     mail: V2MailItemRow
     cc_invoice: Optional[V2CcInvoiceData]  # endast för cred-invoice
     salary_slip: Optional[V2SalarySlipData]  # endast för salary_slip
+    invoice: Optional[V2InvoiceData] = None  # för game_engine-fakturor
 
 
 def _profile_to_avg(personality: Optional[str]) -> tuple[str, float]:
@@ -10690,6 +10720,7 @@ def get_mail_detail(
 
         cc_data: Optional[V2CcInvoiceData] = None
         salary_data: Optional[V2SalarySlipData] = None
+        invoice_data: Optional[V2InvoiceData] = None
 
         if m.mail_type == "invoice" and m.sender_kind == "cred":
             # Hitta CC-konto baserat på sender
@@ -10706,11 +10737,48 @@ def get_mail_detail(
             )
         elif m.mail_type == "salary_slip":
             salary_data = _build_salary_slip_data(m, profile)
+        elif m.mail_type in ("invoice", "reminder") and m.invoice_data:
+            # Game-engine-genererad faktura med strukturerade rader
+            try:
+                raw = m.invoice_data
+                invoice_data = V2InvoiceData(
+                    kind=str(raw.get("kind", "annan")),
+                    invoice_number=str(raw.get("invoice_number", "—")),
+                    period_start=(
+                        _date.fromisoformat(raw["period_start"])
+                        if raw.get("period_start") else None
+                    ),
+                    period_end=(
+                        _date.fromisoformat(raw["period_end"])
+                        if raw.get("period_end") else None
+                    ),
+                    rows=[
+                        V2InvoiceRow(
+                            label=str(r.get("label", "")),
+                            qty=r.get("qty"),
+                            unit=r.get("unit"),
+                            unit_price=r.get("unit_price"),
+                            amount=float(r.get("amount", 0)),
+                        )
+                        for r in (raw.get("rows") or [])
+                    ],
+                    subtotal=float(raw.get("subtotal", 0)),
+                    moms=float(raw.get("moms", 0)),
+                    moms_rate=float(raw.get("moms_rate", 0)),
+                    total=float(raw.get("total", 0)),
+                    ocr=raw.get("ocr"),
+                    bankgiro=raw.get("bankgiro"),
+                    extra=raw.get("extra") or {},
+                )
+            except Exception:
+                # Robust mot felaktig JSON-data — visa bara body
+                invoice_data = None
 
         return V2MailDetailResponse(
             mail=_mail_to_row(m),
             cc_invoice=cc_data,
             salary_slip=salary_data,
+            invoice=invoice_data,
         )
 
 

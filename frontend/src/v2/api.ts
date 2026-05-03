@@ -1502,10 +1502,34 @@ export type V2SalarySlipData = {
   diff_vs_prev: number | null;
 };
 
+export type V2InvoiceRow = {
+  label: string;
+  qty: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  amount: number;
+};
+
+export type V2InvoiceData = {
+  kind: string; // el|mobil|bredband|hyra|brf_avgift|bolan|drift_villa|forsakring|lokaltrafik|annan
+  invoice_number: string;
+  period_start: string | null;
+  period_end: string | null;
+  rows: V2InvoiceRow[];
+  subtotal: number;
+  moms: number;
+  moms_rate: number;
+  total: number;
+  ocr: string | null;
+  bankgiro: string | null;
+  extra: Record<string, unknown>;
+};
+
 export type V2MailDetailData = {
   mail: V2MailItem;
   cc_invoice: V2CcInvoiceData | null;
   salary_slip: V2SalarySlipData | null;
+  invoice: V2InvoiceData | null;
 };
 
 export type V2TeacherMailDetailOverview = {
