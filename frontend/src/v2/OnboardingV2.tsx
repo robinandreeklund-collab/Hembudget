@@ -157,6 +157,9 @@ export function OnboardingV2() {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [step]);
 
+  // Eleven är ensam · ekonomi-delning-steget är inte relevant
+  const isSingle = character?.family_status === "ensam";
+
   async function complete() {
     setSaving(true);
     setError(null);
@@ -165,9 +168,20 @@ export function OnboardingV2() {
     try {
       const result = await v2Api.completeOnboarding({
         spend_profile: "sparsam",
-        fairness_choice: fairness,
-        partner_model: "ai",
+        // Skicka null fairness om eleven är ensam · partner-model
+        // är ändå solo så fairness är meningslös.
+        fairness_choice: isSingle ? null : fairness,
+        partner_model: isSingle ? "solo" : "ai",
       });
+      // Seed:a Konsumentverkets schabloner som start-budget så
+      // eleven har en första-budget-direkt (matchar v1-onboarding-
+      // steg 'Sätt din månadsbudget'). Om något felar är det inte
+      // kritiskt — eleven kan göra det manuellt i /v2/budget.
+      try {
+        await v2Api.resetBudgetToKonsumentverket();
+      } catch {
+        /* fail-soft */
+      }
       nav(result.redirect_to);
     } catch (e) {
       setError(String((e as Error)?.message || e));
@@ -184,14 +198,26 @@ export function OnboardingV2() {
         dur,
         step === 7 && fairness ? `fairness=${fairness}` : undefined,
       );
-      setStep(step + 1);
+      // Skip Step 7 (sambo-fairness) om eleven är ensam — det
+      // är meningslöst att fråga hur ekonomin ska delas om man
+      // bor själv.
+      if (step === 6 && isSingle) {
+        setStep(8);
+      } else {
+        setStep(step + 1);
+      }
     } else complete();
   }
   function back() {
     if (step > 1) {
       const dur = Date.now() - stepEnteredAt.current;
       track(step, "back", dur);
-      setStep(step - 1);
+      // Backa över Step 7 om vi hoppat fram via singel-skip
+      if (step === 8 && isSingle) {
+        setStep(6);
+      } else {
+        setStep(step - 1);
+      }
     }
   }
 
@@ -200,14 +226,19 @@ export function OnboardingV2() {
       <div className="onb-shell">
         <div className="onb-stage">
           <div className="onb-progress">
-            {Array.from({ length: TOTAL }).map((_, i) => (
-              <span
-                key={i}
-                className={
-                  i + 1 < step ? "done" : i + 1 === step ? "now" : ""
-                }
-              />
-            ))}
+            {Array.from({ length: TOTAL }).map((_, i) => {
+              // Hoppa visuellt över Step 7-pricken om eleven är ensam
+              // (steget hoppas ändå över i flow:n).
+              if (i + 1 === 7 && isSingle) return null;
+              return (
+                <span
+                  key={i}
+                  className={
+                    i + 1 < step ? "done" : i + 1 === step ? "now" : ""
+                  }
+                />
+              );
+            })}
           </div>
 
           {step === 1 && <Step1 />}
@@ -252,7 +283,9 @@ export function OnboardingV2() {
                 onClick={next}
                 disabled={
                   saving ||
-                  (step === 7 && !fairness) /* sambo-svar krävs */
+                  // Sambo-fairness krävs bara om eleven faktiskt har
+                  // partner — singlar hoppar över Step 7.
+                  (step === 7 && !isSingle && !fairness)
                 }
               >
                 {saving && step === TOTAL ? "Sparar..." : NEXT_LABELS[step]}
@@ -1283,6 +1316,37 @@ function Step8({
         Din lärare kan när som helst skicka uppdrag som påverkar pentagonen
         — räkna KALP, simulera bolån, förhandla lön.
       </p>
+
+      <div
+        style={{
+          padding: "16px 20px",
+          margin: "18px 0",
+          background: "rgba(220,76,43,0.06)",
+          border: "1px solid var(--accent)",
+          borderRadius: 8,
+          fontFamily: "var(--serif)",
+          fontSize: 14,
+          lineHeight: 1.5,
+          color: "var(--text)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: 9.5,
+            letterSpacing: "1.4px",
+            textTransform: "uppercase",
+            color: "var(--accent)",
+            marginBottom: 6,
+          }}
+        >
+          ● Din första budget
+        </div>
+        Vi sätter automatiskt en startbudget från Konsumentverkets
+        schabloner när du klickar 'Klar'. Belopp för mat, hygien, kläder,
+        transport mm. baserat på ditt hushåll. Du justerar sedan i{" "}
+        <strong>/v2/budget</strong> — ditt val avslöjar dina vanor.
+      </div>
 
       <div className="onb-rules">
         <div className="onb-rule">
