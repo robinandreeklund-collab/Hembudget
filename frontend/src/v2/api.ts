@@ -113,6 +113,7 @@ export type BankUpcoming = {
   autogiro: boolean;
   is_paid: boolean;
   mail_id: number | null;
+  is_signed: boolean;
 };
 
 export type BankSummary = {

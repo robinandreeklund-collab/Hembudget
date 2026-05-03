@@ -18,7 +18,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { v2Api, type BankData } from "./api";
+import { v2Api, type BankData, type BankUpcoming } from "./api";
 import { V2Banner } from "./V2Banner";
 import "./bank.css";
 
@@ -121,11 +121,167 @@ export function BankV2() {
   const { summary, accounts, recent_transactions, upcoming_bills } = bank;
   const accCount = accounts.length;
   const openBills = upcoming_bills.filter((b) => !b.is_paid);
-  const billsToSign = openBills.length;
+  // Osignerade = exporterade från postlådan, väntar på BankID-signering
+  const unsignedBills = openBills.filter((b) => !b.is_signed);
+  // Schemalagda = signerade/autogiro, dras automatiskt
+  const scheduledBills = openBills.filter((b) => b.is_signed);
+  const billsToSign = unsignedBills.length;
 
   // Hitta första akuta open-faktura för aside · "Tandläkaren idag"-kortet
   const urgentBill = openBills.find((b) => DAYS_UNTIL(b.expected_date) <= 7);
   const nextScheduled = openBills[0];
+
+  // Helper · renderar EN rad i Osignerade/Schemalagda-tabellen.
+  function renderBillRow(u: BankUpcoming) {
+    const days = DAYS_UNTIL(u.expected_date);
+    const overdue = !u.is_paid && days < 0;
+    const urgent = !u.is_paid && days >= 0 && days <= 3;
+    const dotColor = overdue
+      ? "#dc4c2b"
+      : urgent
+      ? "var(--warm)"
+      : "var(--accent)";
+    const statusClass = u.is_paid
+      ? "paid"
+      : overdue
+      ? "overdue"
+      : urgent
+      ? "open"
+      : u.is_signed
+      ? "sent"
+      : "open";
+    const statusText = u.is_paid
+      ? "Betald"
+      : overdue
+      ? `${Math.abs(days)} d sen`
+      : !u.is_signed
+      ? "Osignerad"
+      : "Schemalagd";
+    const target = u.mail_id
+      ? `/v2/postladan/${u.mail_id}`
+      : `/v2/postladan`;
+    return (
+      <div
+        key={u.id}
+        className="biz-table-row"
+        style={{
+          gridTemplateColumns:
+            "32px 1.8fr 110px 130px 110px",
+          textDecoration: "none",
+          color: "inherit",
+          ...(urgent || overdue || !u.is_signed
+            ? {
+                background: "rgba(220,76,43,0.06)",
+                borderLeft: "3px solid var(--warm)",
+              }
+            : {}),
+        }}
+      >
+        <Link
+          to={target}
+          style={{
+            display: "contents",
+            textDecoration: "none",
+            color: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: dotColor,
+            }}
+          ></span>
+          <div>
+            <div
+              style={{
+                fontFamily: "var(--serif)",
+                fontSize: 14,
+                color: "#fff",
+                fontWeight: 700,
+              }}
+            >
+              {u.name}
+              {u.kind === "income" && (
+                <em
+                  style={{
+                    color: "#6ee7b7",
+                    fontSize: 10,
+                    marginLeft: 8,
+                  }}
+                >
+                  (inkomst)
+                </em>
+              )}
+            </div>
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 9,
+                color: "var(--text-dim)",
+                marginTop: 2,
+              }}
+            >
+              {u.autogiro
+                ? "Autogiro"
+                : u.bankgiro
+                ? `BG ${u.bankgiro}`
+                : u.plusgiro
+                ? `PG ${u.plusgiro}`
+                : "Faktura"}
+            </div>
+          </div>
+          <span
+            style={{
+              fontFamily: "var(--serif)",
+              fontStyle: urgent || overdue ? "italic" : "normal",
+              fontWeight: 700,
+              color: u.kind === "income" ? "#6ee7b7" : "#fff",
+              textAlign: "right",
+            }}
+          >
+            {u.kind === "income" ? "+ " : ""}
+            {SEK(u.amount)} kr
+          </span>
+        </Link>
+        <input
+          type="date"
+          value={u.expected_date}
+          disabled={savingDate === u.id || u.is_paid}
+          onChange={(e) =>
+            changeUpcomingDate(u.id, e.target.value)
+          }
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border:
+              urgent || overdue || !u.is_signed
+                ? "1px solid var(--warm)"
+                : "1px solid var(--line-strong)",
+            color: "#fff",
+            padding: "5px 7px",
+            borderRadius: 6,
+            fontFamily: "var(--mono)",
+            fontSize: 10.5,
+            width: "100%",
+            cursor: u.is_paid ? "not-allowed" : "pointer",
+          }}
+        />
+        <Link
+          to={target}
+          style={{
+            textDecoration: "none",
+            display: "block",
+          }}
+        >
+          <span className={`biz-status ${statusClass}`}>
+            {statusText}
+          </span>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="v2-bank-root">
@@ -336,29 +492,31 @@ export function BankV2() {
               </div>
             )}
 
-            {/* Kommande dragningar · biz-table */}
+            {/* OSIGNERADE · exporterade från postlådan, väntar BankID */}
             <div className="section-eye" style={{ marginTop: 32 }}>
-              Kommande dragningar &amp; betalningar
+              Osignerade fakturor · väntar BankID-signering
             </div>
-            {upcoming_bills.length === 0 ? (
+            {unsignedBills.length === 0 ? (
               <div
                 style={{
-                  padding: "20px",
+                  padding: "16px 20px",
                   border: "1px solid var(--line)",
                   borderRadius: 6,
                   fontFamily: "var(--serif)",
                   color: "var(--text-mid)",
+                  marginBottom: 16,
                 }}
               >
-                Inga kommande fakturor framåt i tiden. Postlådan triggar nya.
+                Inga osignerade fakturor. Exportera fakturor från postlådan
+                så hamnar de här tills du signerar dem via BankID.
               </div>
             ) : (
-              <div className="biz-table">
+              <div className="biz-table" style={{ marginBottom: 16 }}>
                 <div
                   className="biz-table-row head"
                   style={{
                     gridTemplateColumns:
-                      "32px 1.8fr 110px 110px 110px",
+                      "32px 1.8fr 110px 130px 110px",
                   }}
                 >
                   <span></span>
@@ -367,159 +525,50 @@ export function BankV2() {
                   <span>Datum</span>
                   <span>Status</span>
                 </div>
-                {upcoming_bills.map((u) => {
-                  const days = DAYS_UNTIL(u.expected_date);
-                  const overdue = !u.is_paid && days < 0;
-                  const urgent = !u.is_paid && days >= 0 && days <= 3;
-                  const dotColor = overdue
-                    ? "#dc4c2b"
-                    : urgent
-                    ? "var(--warm)"
-                    : "var(--accent)";
-                  const statusClass = u.is_paid
-                    ? "paid"
-                    : overdue
-                    ? "overdue"
-                    : urgent
-                    ? "open"
-                    : "sent";
-                  const statusText = u.is_paid
-                    ? "Betald"
-                    : overdue
-                    ? `${Math.abs(days)} d sen`
-                    : urgent
-                    ? "Bestäm"
-                    : "Schemalagd";
-                  // Klick på info-cell → brev-detalj. Datum-cellen är
-                  // editerbar — klick där navigerar inte.
-                  const target = u.mail_id
-                    ? `/v2/postladan/${u.mail_id}`
-                    : `/v2/postladan`;
-                  return (
-                    <div
-                      key={u.id}
-                      className="biz-table-row"
-                      style={{
-                        gridTemplateColumns:
-                          "32px 1.8fr 110px 130px 110px",
-                        textDecoration: "none",
-                        color: "inherit",
-                        ...(urgent || overdue
-                          ? {
-                              background: "rgba(220,76,43,0.06)",
-                              borderLeft: "3px solid var(--warm)",
-                            }
-                          : {}),
-                      }}
-                    >
-                      <Link
-                        to={target}
-                        style={{
-                          display: "contents",
-                          textDecoration: "none",
-                          color: "inherit",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "50%",
-                            background: dotColor,
-                          }}
-                        ></span>
-                        <div>
-                          <div
-                            style={{
-                              fontFamily: "var(--serif)",
-                              fontSize: 14,
-                              color: "#fff",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {u.name}
-                            {u.kind === "income" && (
-                              <em
-                                style={{
-                                  color: "#6ee7b7",
-                                  fontSize: 10,
-                                  marginLeft: 8,
-                                }}
-                              >
-                                (inkomst)
-                              </em>
-                            )}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "var(--mono)",
-                              fontSize: 9,
-                              color: "var(--text-dim)",
-                              marginTop: 2,
-                            }}
-                          >
-                            {u.autogiro
-                              ? "Autogiro"
-                              : u.bankgiro
-                              ? `BG ${u.bankgiro}`
-                              : u.plusgiro
-                              ? `PG ${u.plusgiro}`
-                              : "Faktura"}
-                          </div>
-                        </div>
-                        <span
-                          style={{
-                            fontFamily: "var(--serif)",
-                            fontStyle: urgent || overdue ? "italic" : "normal",
-                            fontWeight: 700,
-                            color: u.kind === "income" ? "#6ee7b7" : "#fff",
-                            textAlign: "right",
-                          }}
-                        >
-                          {u.kind === "income" ? "+ " : ""}
-                          {SEK(u.amount)} kr
-                        </span>
-                      </Link>
-                      {/* Datum-cell · editerbar (utanför Link) */}
-                      <input
-                        type="date"
-                        value={u.expected_date}
-                        disabled={savingDate === u.id || u.is_paid}
-                        onChange={(e) =>
-                          changeUpcomingDate(u.id, e.target.value)
-                        }
-                        style={{
-                          background: "rgba(255,255,255,0.04)",
-                          border:
-                            urgent || overdue
-                              ? "1px solid var(--warm)"
-                              : "1px solid var(--line-strong)",
-                          color: "#fff",
-                          padding: "5px 7px",
-                          borderRadius: 6,
-                          fontFamily: "var(--mono)",
-                          fontSize: 10.5,
-                          width: "100%",
-                          cursor: u.is_paid ? "not-allowed" : "pointer",
-                        }}
-                      />
-                      <Link
-                        to={target}
-                        style={{
-                          textDecoration: "none",
-                          display: "block",
-                        }}
-                      >
-                        <span className={`biz-status ${statusClass}`}>
-                          {statusText}
-                        </span>
-                      </Link>
-                    </div>
-                  );
+                {unsignedBills.map((u) => {
+                  return renderBillRow(u);
                 })}
               </div>
             )}
+
+            {/* SCHEMALAGDA · signerade/autogiro */}
+            <div className="section-eye" style={{ marginTop: 24 }}>
+              Kommande dragningar &amp; betalningar
+            </div>
+            {scheduledBills.length === 0 ? (
+              <div
+                style={{
+                  padding: "16px 20px",
+                  border: "1px solid var(--line)",
+                  borderRadius: 6,
+                  fontFamily: "var(--serif)",
+                  color: "var(--text-mid)",
+                }}
+              >
+                Inga schemalagda dragningar. När du signerar fakturor via
+                BankID hamnar de här som autogiro.
+              </div>
+            ) : (
+              <div className="biz-table">
+                <div
+                  className="biz-table-row head"
+                  style={{
+                    gridTemplateColumns:
+                      "32px 1.8fr 110px 130px 110px",
+                  }}
+                >
+                  <span></span>
+                  <span>Mottagare</span>
+                  <span>Belopp</span>
+                  <span>Datum</span>
+                  <span>Status</span>
+                </div>
+                {scheduledBills.map((u) => {
+                  return renderBillRow(u);
+                })}
+              </div>
+            )}
+
             {upcoming_bills.length > 0 && (
               <div
                 style={{

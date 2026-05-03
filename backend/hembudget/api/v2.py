@@ -294,6 +294,30 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             .filter(StudentProfile.student_id == target_sid)
             .one_or_none()
         )
+        # Heal stale net_salary · om en gammal profil har orealistisk
+        # nettolön (< 55 % av brutto, det är teoretiskt omöjligt med
+        # svensk skatt) räknar vi om från gross via compute_net_salary
+        # och uppdaterar permanent. Vanligast scenariot: tidiga
+        # game_engine-profiler där monthly_net råkat sparas som ett
+        # delningsbelopp eller decimal-procentsats.
+        if (
+            profile is not None
+            and profile.gross_salary_monthly
+            and (
+                not profile.net_salary_monthly
+                or float(profile.net_salary_monthly)
+                < 0.55 * float(profile.gross_salary_monthly)
+            )
+        ):
+            try:
+                from ..school.tax import compute_net_salary as _heal_net
+                heal = _heal_net(int(profile.gross_salary_monthly))
+                profile.net_salary_monthly = heal.net_monthly
+                profile.tax_rate_effective = heal.effective_rate
+                mdb.commit()
+            except Exception:
+                pass
+
         # Karaktärsnamn — använd StudentProfile.character_first/last_name
         # om de finns. Fallback till student.display_name så v1-elever
         # eller demo-konton inte får tomt namn. Använder _safe_profile_attr
@@ -362,13 +386,35 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 year_month=ym,
             )
 
-            # 3. Månads-summa från transactions (innevarande månad)
+            # 3. Månads-summa från transactions
+            # Spelmotorn tickar FÖRRA månaden så innevarande månad har
+            # ofta 0 transaktioner i början. Använd den senaste
+            # månaden där det FINNS transaktioner — det är "den
+            # ekonomiska månad" som är pedagogiskt relevant. Faller
+            # tillbaka till innevarande månad om inga tx finns alls.
             today = _date.today()
-            month_start = _date(today.year, today.month, 1)
+            latest_tx = (
+                s.query(Transaction)
+                .order_by(Transaction.date.desc())
+                .first()
+            )
+            if latest_tx is not None:
+                month_anchor = latest_tx.date
+            else:
+                month_anchor = today
+            month_start = _date(month_anchor.year, month_anchor.month, 1)
+            if month_anchor.month == 12:
+                month_end = _date(month_anchor.year + 1, 1, 1)
+            else:
+                month_end = _date(
+                    month_anchor.year, month_anchor.month + 1, 1,
+                )
+            from datetime import timedelta as _td_h
+            month_end_inclusive = month_end - _td_h(days=1)
             txs = (
                 s.query(Transaction)
                 .filter(Transaction.date >= month_start)
-                .filter(Transaction.date <= today)
+                .filter(Transaction.date <= month_end_inclusive)
                 .all()
             )
             income = sum(
@@ -471,6 +517,10 @@ class BankUpcoming(BaseModel):
     # Länk till brev som triggade upcoming (om det finns) — låter
     # frontenden navigera till mail-detalj från bank-tabellen.
     mail_id: Optional[int] = None
+    # True när dragningen är schemalagd via autogiro/BankID. False =
+    # eleven har exporterat fakturan från postlådan men ännu inte
+    # signerat den (BankID-signering eller markera-betald).
+    is_signed: bool = False
 
 
 class BankSummary(BaseModel):
@@ -649,6 +699,10 @@ def get_bank(
                 if not paid:
                     upcoming_open_total += u.amount
                     upcoming_open_count += 1
+                # is_signed = autogiro satt = signerat via BankID
+                # eller pre-konfigurerat. False = exporterat från
+                # postlådan men ännu inte signerat (visas som
+                # 'Osignerade' i banken).
                 upcoming.append(BankUpcoming(
                     id=u.id,
                     name=u.name,
@@ -661,6 +715,7 @@ def get_bank(
                     autogiro=bool(u.autogiro),
                     is_paid=paid,
                     mail_id=mail_by_upcoming.get(u.id),
+                    is_signed=bool(u.autogiro) or paid,
                 ))
 
             # 4. Månads-summa
@@ -1676,6 +1731,7 @@ class V2MailItemRow(BaseModel):
     mail_type: MailType
     subject: str
     body_meta: Optional[str] = None
+    body: Optional[str] = None
     amount: Optional[float] = None
     due_date: Optional[_date] = None
     received_at: datetime
@@ -1685,6 +1741,7 @@ class V2MailItemRow(BaseModel):
     is_recurring: bool
     ocr_reference: Optional[str] = None
     bankgiro: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class V2MailSummary(BaseModel):
@@ -1847,6 +1904,7 @@ def get_mail(
                     mail_type=m.mail_type,  # type: ignore[arg-type]
                     subject=m.subject,
                     body_meta=m.body_meta,
+                    body=m.body,
                     amount=float(m.amount) if m.amount is not None else None,
                     due_date=m.due_date,
                     received_at=m.received_at,
@@ -1856,6 +1914,7 @@ def get_mail(
                     is_recurring=bool(m.is_recurring),
                     ocr_reference=m.ocr_reference,
                     bankgiro=m.bankgiro,
+                    notes=m.notes,
                 ))
 
             return V2MailResponse(
@@ -1959,6 +2018,7 @@ def update_mail_status(
             mail_type=m.mail_type,  # type: ignore[arg-type]
             subject=m.subject,
             body_meta=m.body_meta,
+            body=m.body,
             amount=float(m.amount) if m.amount is not None else None,
             due_date=m.due_date,
             received_at=m.received_at,
@@ -1968,6 +2028,7 @@ def update_mail_status(
             is_recurring=bool(m.is_recurring),
             ocr_reference=m.ocr_reference,
             bankgiro=m.bankgiro,
+            notes=m.notes,
         )
 
 
