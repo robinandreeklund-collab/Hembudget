@@ -2823,6 +2823,50 @@ export const v2Api = {
       method: "POST",
       body: "{}",
     }),
+  // Eleven flyttar pengar mellan egna konton
+  bankenTransfer: (body: {
+    from_account_id: number;
+    to_account_id: number;
+    amount: number;
+    description?: string;
+    transfer_date?: string;
+  }) =>
+    api<{
+      source_tx_id: number;
+      destination_tx_id: number;
+      amount: number;
+      transfer_date: string;
+    }>("/v2/banken/transfer", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // Eleven exporterar en faktura från postlådan till banken
+  postladanExport: (
+    mailId: number,
+    body: {
+      debit_account_id?: number;
+      expected_date?: string;
+      autogiro?: boolean;
+    },
+  ) =>
+    api<{
+      mail_id: number;
+      upcoming_id: number;
+      expected_date: string;
+      amount: number;
+    }>(`/v2/postladan/${mailId}/export-to-bank`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // Ändra förfallodatum på en kommande dragning
+  upcomingUpdate: (
+    upcomingId: number,
+    body: { expected_date?: string; debit_account_id?: number },
+  ) =>
+    api<unknown>(`/upcoming/${upcomingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   teacherBankIDOverview: (studentId: number) =>
     api<V2TeacherBankIDOverview>(
       `/v2/teacher/students/${studentId}/bankid-overview`,

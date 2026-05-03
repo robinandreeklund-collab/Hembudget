@@ -49,14 +49,50 @@ const TYPE_EYE: Record<string, string> = {
 export function BankV2() {
   const [bank, setBank] = useState<BankData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [savingDate, setSavingDate] = useState<number | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  function refresh() {
     v2Api
       .bank(40)
       .then(setBank)
       .catch((e) => setError(String((e as Error)?.message || e)));
+  }
+
+  useEffect(() => {
+    refresh();
   }, []);
+
+  async function startBankID() {
+    if (!bank) return;
+    const openIds = bank.upcoming_bills
+      .filter((b) => !b.is_paid)
+      .map((b) => b.id);
+    if (openIds.length === 0) return;
+    setSigning(true);
+    try {
+      const session = await v2Api.bankidStart(openIds);
+      navigate(`/v2/bankid/${session.id}`);
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  async function changeUpcomingDate(upcomingId: number, newDate: string) {
+    setSavingDate(upcomingId);
+    try {
+      await v2Api.upcomingUpdate(upcomingId, { expected_date: newDate });
+      refresh();
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSavingDate(null);
+    }
+  }
 
   if (error) {
     return (
@@ -208,8 +244,15 @@ export function BankV2() {
                   och kräver ditt val. Signera alla på en gång, eller hantera de
                   nya manuellt.
                 </p>
-                <button className="cta-btn" type="button">
-                  Öppna BankID-signering →
+                <button
+                  className="cta-btn"
+                  type="button"
+                  disabled={signing}
+                  onClick={startBankID}
+                >
+                  {signing
+                    ? "Skapar BankID-session…"
+                    : `Öppna BankID-signering (${billsToSign} st) →`}
                 </button>
               </article>
             )}
@@ -347,21 +390,20 @@ export function BankV2() {
                     : urgent
                     ? "Bestäm"
                     : "Schemalagd";
-                  // Klick på rad → till brev-detalj om vi har länken,
-                  // annars till postlådan i listan.
+                  // Klick på info-cell → brev-detalj. Datum-cellen är
+                  // editerbar — klick där navigerar inte.
                   const target = u.mail_id
                     ? `/v2/postladan/${u.mail_id}`
                     : `/v2/postladan`;
                   return (
-                    <Link
+                    <div
                       key={u.id}
                       className="biz-table-row"
                       style={{
                         gridTemplateColumns:
-                          "32px 1.8fr 110px 110px 110px",
+                          "32px 1.8fr 110px 130px 110px",
                         textDecoration: "none",
                         color: "inherit",
-                        cursor: "pointer",
                         ...(urgent || overdue
                           ? {
                               background: "rgba(220,76,43,0.06)",
@@ -369,84 +411,111 @@ export function BankV2() {
                             }
                           : {}),
                       }}
-                      to={target}
                     >
-                      <span
+                      <Link
+                        to={target}
                         style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: dotColor,
+                          display: "contents",
+                          textDecoration: "none",
+                          color: "inherit",
+                          cursor: "pointer",
                         }}
-                      ></span>
-                      <div>
-                        <div
+                      >
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: dotColor,
+                          }}
+                        ></span>
+                        <div>
+                          <div
+                            style={{
+                              fontFamily: "var(--serif)",
+                              fontSize: 14,
+                              color: "#fff",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {u.name}
+                            {u.kind === "income" && (
+                              <em
+                                style={{
+                                  color: "#6ee7b7",
+                                  fontSize: 10,
+                                  marginLeft: 8,
+                                }}
+                              >
+                                (inkomst)
+                              </em>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: "var(--mono)",
+                              fontSize: 9,
+                              color: "var(--text-dim)",
+                              marginTop: 2,
+                            }}
+                          >
+                            {u.autogiro
+                              ? "Autogiro"
+                              : u.bankgiro
+                              ? `BG ${u.bankgiro}`
+                              : u.plusgiro
+                              ? `PG ${u.plusgiro}`
+                              : "Faktura"}
+                          </div>
+                        </div>
+                        <span
                           style={{
                             fontFamily: "var(--serif)",
-                            fontSize: 14,
-                            color: "#fff",
+                            fontStyle: urgent || overdue ? "italic" : "normal",
                             fontWeight: 700,
+                            color: u.kind === "income" ? "#6ee7b7" : "#fff",
+                            textAlign: "right",
                           }}
                         >
-                          {u.name}
-                          {u.kind === "income" && (
-                            <em
-                              style={{
-                                color: "#6ee7b7",
-                                fontSize: 10,
-                                marginLeft: 8,
-                              }}
-                            >
-                              (inkomst)
-                            </em>
-                          )}
-                        </div>
-                        <div
-                          style={{
-                            fontFamily: "var(--mono)",
-                            fontSize: 9,
-                            color: "var(--text-dim)",
-                            marginTop: 2,
-                          }}
-                        >
-                          {u.autogiro
-                            ? "Autogiro"
-                            : u.bankgiro
-                            ? `BG ${u.bankgiro}`
-                            : u.plusgiro
-                            ? `PG ${u.plusgiro}`
-                            : "Faktura"}
-                        </div>
-                      </div>
-                      <span
+                          {u.kind === "income" ? "+ " : ""}
+                          {SEK(u.amount)} kr
+                        </span>
+                      </Link>
+                      {/* Datum-cell · editerbar (utanför Link) */}
+                      <input
+                        type="date"
+                        value={u.expected_date}
+                        disabled={savingDate === u.id || u.is_paid}
+                        onChange={(e) =>
+                          changeUpcomingDate(u.id, e.target.value)
+                        }
                         style={{
-                          fontFamily: "var(--serif)",
-                          fontStyle: urgent || overdue ? "italic" : "normal",
-                          fontWeight: 700,
-                          color: u.kind === "income" ? "#6ee7b7" : "#fff",
-                          textAlign: "right",
-                        }}
-                      >
-                        {u.kind === "income" ? "+ " : ""}
-                        {SEK(u.amount)} kr
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: "var(--mono)",
-                          fontSize: 10,
-                          color:
+                          background: "rgba(255,255,255,0.04)",
+                          border:
                             urgent || overdue
-                              ? "var(--warm)"
-                              : "var(--text-mid)",
-                          fontWeight: urgent || overdue ? 700 : 400,
+                              ? "1px solid var(--warm)"
+                              : "1px solid var(--line-strong)",
+                          color: "#fff",
+                          padding: "5px 7px",
+                          borderRadius: 6,
+                          fontFamily: "var(--mono)",
+                          fontSize: 10.5,
+                          width: "100%",
+                          cursor: u.is_paid ? "not-allowed" : "pointer",
+                        }}
+                      />
+                      <Link
+                        to={target}
+                        style={{
+                          textDecoration: "none",
+                          display: "block",
                         }}
                       >
-                        {SHORT_DATE(u.expected_date)}
-                      </span>
-                      <span className={`biz-status ${statusClass}`}>
-                        {statusText}
-                      </span>
-                    </Link>
+                        <span className={`biz-status ${statusClass}`}>
+                          {statusText}
+                        </span>
+                      </Link>
+                    </div>
                   );
                 })}
               </div>
@@ -476,8 +545,64 @@ export function BankV2() {
                   </strong>{" "}
                   · {summary.upcoming_open_count} obetalda
                 </div>
+                {billsToSign > 0 && (
+                  <button
+                    type="button"
+                    className="cta-btn"
+                    disabled={signing}
+                    onClick={startBankID}
+                  >
+                    {signing
+                      ? "Skapar BankID-session…"
+                      : `Signera alla schemalagda → BankID`}
+                  </button>
+                )}
               </div>
             )}
+
+            {/* Schemalagda överföringar mellan egna konton */}
+            <div className="section-eye" style={{ marginTop: 32 }}>
+              Flytta pengar mellan dina konton
+            </div>
+            <div
+              style={{
+                padding: "16px 20px",
+                border: "1px solid var(--line)",
+                borderRadius: 6,
+                background: "rgba(15,21,37,0.7)",
+                marginBottom: 22,
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "var(--serif)",
+                  fontSize: 13.5,
+                  color: "var(--text-mid)",
+                  marginTop: 0,
+                }}
+              >
+                Pay yourself first · flytta från lönekontot till
+                sparkontot eller ISK direkt när lönen kommer. Du kan
+                inte ta ut mer än vad som finns på källkontot.
+              </p>
+              <button
+                type="button"
+                className="cta-btn"
+                onClick={() => setTransferOpen(true)}
+              >
+                Ny överföring →
+              </button>
+              {transferOpen && (
+                <TransferForm
+                  accounts={accounts}
+                  onCancel={() => setTransferOpen(false)}
+                  onDone={() => {
+                    setTransferOpen(false);
+                    refresh();
+                  }}
+                />
+              )}
+            </div>
 
             {/* Pedagogik */}
             <div className="peda">
@@ -587,5 +712,183 @@ export function BankV2() {
         </div>
       </div>
     </div>
+  );
+}
+
+import type { BankAccount } from "./api";
+
+function TransferForm({
+  accounts,
+  onCancel,
+  onDone,
+}: {
+  accounts: BankAccount[];
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const checking = accounts.find((a) => a.type === "checking");
+  const savings = accounts.find((a) => a.type === "savings");
+  const [from, setFrom] = useState<number>(
+    checking?.id || accounts[0]?.id || 0,
+  );
+  const [to, setTo] = useState<number>(
+    savings?.id || accounts[1]?.id || accounts[0]?.id || 0,
+  );
+  const [amount, setAmount] = useState<string>("500");
+  const [descr, setDescr] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) {
+      setErr("Beloppet måste vara > 0");
+      return;
+    }
+    if (from === to) {
+      setErr("Från- och till-konto måste vara olika");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await v2Api.bankenTransfer({
+        from_account_id: from,
+        to_account_id: to,
+        amount: amt,
+        description: descr || undefined,
+      });
+      onDone();
+    } catch (e) {
+      setErr(String((e as Error)?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const fieldStyle: React.CSSProperties = {
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--line-strong)",
+    color: "#fff",
+    padding: "8px 10px",
+    borderRadius: 6,
+    fontFamily: "var(--mono)",
+    fontSize: 12,
+    width: "100%",
+  };
+  const labelStyle: React.CSSProperties = {
+    fontFamily: "var(--mono)",
+    fontSize: 9.5,
+    letterSpacing: "1.2px",
+    textTransform: "uppercase",
+    color: "var(--text-mid)",
+    display: "block",
+    marginBottom: 4,
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      style={{
+        marginTop: 16,
+        padding: "16px 18px",
+        border: "1px solid var(--line-strong)",
+        borderRadius: 6,
+        background: "rgba(0,0,0,0.25)",
+        display: "grid",
+        gap: 12,
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 10,
+        }}
+      >
+        <div>
+          <label style={labelStyle}>Från konto</label>
+          <select
+            value={from}
+            onChange={(e) => setFrom(parseInt(e.target.value, 10))}
+            style={fieldStyle}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} · {SEK(a.total_value)} kr
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Till konto</label>
+          <select
+            value={to}
+            onChange={(e) => setTo(parseInt(e.target.value, 10))}
+            style={fieldStyle}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} · {SEK(a.total_value)} kr
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "120px 1fr",
+          gap: 10,
+        }}
+      >
+        <div>
+          <label style={labelStyle}>Belopp (kr)</label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={fieldStyle}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>Beskrivning (valfritt)</label>
+          <input
+            type="text"
+            placeholder="t.ex. 'Buffert maj'"
+            value={descr}
+            onChange={(e) => setDescr(e.target.value)}
+            style={fieldStyle}
+          />
+        </div>
+      </div>
+      {err && (
+        <div
+          style={{
+            color: "#fca5a5",
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+          }}
+        >
+          {err}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button type="submit" className="cta-btn" disabled={busy}>
+          {busy ? "Flyttar…" : "Flytta pengarna"}
+        </button>
+        <button
+          type="button"
+          className="cta-btn ghost"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          Avbryt
+        </button>
+      </div>
+    </form>
   );
 }

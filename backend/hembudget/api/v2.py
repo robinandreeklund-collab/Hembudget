@@ -1780,6 +1780,241 @@ def update_mail_status(
         )
 
 
+# === Exportera brev till banken (skapar UpcomingTransaction) ===
+
+
+class V2MailExportRequest(BaseModel):
+    """Eleven exporterar en faktura från postlådan till banken.
+
+    Skapar en UpcomingTransaction så fakturan dyker upp i bankens
+    'kommande dragningar'-tabell. Läraren kan därefter signera via
+    BankID-flödet."""
+    debit_account_id: Optional[int] = None
+    expected_date: Optional[_date] = None
+    autogiro: bool = False
+
+
+class V2MailExportResponse(BaseModel):
+    mail_id: int
+    upcoming_id: int
+    expected_date: _date
+    amount: float
+
+
+@router.post(
+    "/postladan/{mail_id}/export-to-bank",
+    response_model=V2MailExportResponse,
+)
+def export_mail_to_bank(
+    mail_id: int,
+    body: V2MailExportRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2MailExportResponse:
+    """Konverterar ett invoice-brev till en bokad UpcomingTransaction.
+
+    - Sätter mail.status='exported' så postlådan visar "Exporterad".
+    - Skapar UpcomingTransaction med rätt belopp + förfallodatum + OCR.
+    - Kopplar mail.upcoming_id för cross-länk (banken → postlådan).
+
+    Idempotent: om brevet redan har upcoming_id returneras den utan
+    att skapa duplicat.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast eleven själv kan exportera fakturor.",
+        )
+
+    with session_scope() as s:
+        m = s.get(MailItem, mail_id)
+        if m is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Brevet hittades inte"
+            )
+        if m.mail_type not in ("invoice", "reminder"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Bara fakturor/påminnelser kan exporteras till banken.",
+            )
+        if m.amount is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Brevet saknar belopp — inget att exportera.",
+            )
+
+        # Idempotent · returnera befintlig om redan exporterad
+        if m.upcoming_id is not None:
+            existing = s.get(UpcomingTransaction, m.upcoming_id)
+            if existing is not None:
+                return V2MailExportResponse(
+                    mail_id=m.id,
+                    upcoming_id=existing.id,
+                    expected_date=existing.expected_date,
+                    amount=float(existing.amount),
+                )
+
+        expected = body.expected_date or m.due_date or _date.today()
+        amount_abs = abs(Decimal(str(m.amount)))
+
+        upc = UpcomingTransaction(
+            kind="bill",
+            name=m.sender,
+            amount=amount_abs,
+            expected_date=expected,
+            ocr_reference=m.ocr_reference,
+            bankgiro=m.bankgiro,
+            autogiro=body.autogiro,
+            debit_account_id=body.debit_account_id,
+            recurring_monthly=bool(m.is_recurring),
+            invoice_date=m.received_at.date() if m.received_at else None,
+        )
+        s.add(upc)
+        s.flush()
+
+        m.upcoming_id = upc.id
+        m.status = "exported"
+        s.flush()
+
+        return V2MailExportResponse(
+            mail_id=m.id,
+            upcoming_id=upc.id,
+            expected_date=upc.expected_date,
+            amount=float(upc.amount),
+        )
+
+
+# === Överföring mellan elevens egna konton ===
+
+
+class V2TransferRequest(BaseModel):
+    from_account_id: int
+    to_account_id: int
+    amount: float = Field(..., gt=0)
+    description: Optional[str] = None
+    transfer_date: Optional[_date] = None
+
+
+class V2TransferResponse(BaseModel):
+    source_tx_id: int
+    destination_tx_id: int
+    amount: float
+    transfer_date: _date
+
+
+@router.post("/banken/transfer", response_model=V2TransferResponse)
+def create_v2_transfer(
+    body: V2TransferRequest,
+    info: TokenInfo = Depends(require_token),
+) -> V2TransferResponse:
+    """Eleven flyttar pengar mellan sina egna konton (lönekonto →
+    sparkonto, ISK osv.). Skapar två transaktioner med
+    is_transfer=True och paret kopplat via transfer_pair_id.
+
+    Pedagogisk regel: sparkonto/ISK/pension får inte gå minus.
+    Eleven kan alltså inte 'fylla' sparkontot från ett tomt konto.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Endast elever",
+        )
+    if body.from_account_id == body.to_account_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Från- och till-konto måste vara olika",
+        )
+
+    with session_scope() as s:
+        src = s.get(Account, body.from_account_id)
+        dst = s.get(Account, body.to_account_id)
+        if src is None:
+            raise HTTPException(404, "Avsändarkonto saknas")
+        if dst is None:
+            raise HTTPException(404, "Mottagarkonto saknas")
+
+        amount = Decimal(str(body.amount))
+
+        # Sparkonto/ISK/pension får inte gå minus
+        NEVER_NEG = {"savings", "isk", "pension"}
+        if src.type in NEVER_NEG:
+            from sqlalchemy import func as _func
+            opening = src.opening_balance or Decimal("0")
+            tx_sum = (
+                s.query(_func.coalesce(_func.sum(Transaction.amount), 0))
+                .filter(Transaction.account_id == src.id)
+                .scalar() or Decimal("0")
+            )
+            if not isinstance(tx_sum, Decimal):
+                tx_sum = Decimal(str(tx_sum))
+            balance = opening + tx_sum
+            if balance - amount < 0:
+                kind_sv = {
+                    "savings": "Sparkontot",
+                    "isk": "ISK-kontot",
+                    "pension": "Pensionskontot",
+                }.get(src.type, src.name)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{kind_sv} skulle gå minus. Tillgängligt: "
+                    f"{int(balance)} kr.",
+                )
+
+        tx_date = body.transfer_date or _date.today()
+        descr = (body.description or "").strip() \
+            or f"Överföring till {dst.name}"
+        # Idempotency-hash: säker även om eleven trycker två gånger
+        idem_raw = (
+            f"v2-tx-{body.from_account_id}-{body.to_account_id}-"
+            f"{tx_date.isoformat()}-{amount}"
+        )
+        out_hash = f"transfer-{idem_raw}-out"
+        in_hash = f"transfer-{idem_raw}-in"
+
+        existing = (
+            s.query(Transaction)
+            .filter(Transaction.hash == out_hash)
+            .first()
+        )
+        if existing is not None:
+            pair_id = existing.transfer_pair_id
+            return V2TransferResponse(
+                source_tx_id=existing.id,
+                destination_tx_id=pair_id or 0,
+                amount=float(amount),
+                transfer_date=tx_date,
+            )
+
+        out_tx = Transaction(
+            account_id=src.id,
+            date=tx_date,
+            amount=-amount,
+            raw_description=descr,
+            is_transfer=True,
+            user_verified=True,
+            hash=out_hash,
+        )
+        in_tx = Transaction(
+            account_id=dst.id,
+            date=tx_date,
+            amount=amount,
+            raw_description=f"Överföring från {src.name}",
+            is_transfer=True,
+            user_verified=True,
+            hash=in_hash,
+        )
+        s.add_all([out_tx, in_tx])
+        s.flush()
+        out_tx.transfer_pair_id = in_tx.id
+        in_tx.transfer_pair_id = out_tx.id
+        s.flush()
+
+        return V2TransferResponse(
+            source_tx_id=out_tx.id,
+            destination_tx_id=in_tx.id,
+            amount=float(amount),
+            transfer_date=tx_date,
+        )
+
+
 # === Lärar-seed för postlådan ===
 
 class V2MailSeedItem(BaseModel):

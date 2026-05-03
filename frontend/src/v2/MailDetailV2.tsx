@@ -11,7 +11,7 @@
  * på enskild tx → /v2/tx/{id}.
  */
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   v2Api,
   type V2MailDetailData,
@@ -47,6 +47,9 @@ export function MailDetailV2() {
   const id = mailId ? parseInt(mailId, 10) : 0;
   const [data, setData] = useState<V2MailDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!id) return;
@@ -55,6 +58,23 @@ export function MailDetailV2() {
       .then(setData)
       .catch((e) => setError(String((e as Error)?.message || e)));
   }, [id]);
+
+  async function exportToBank() {
+    if (!data) return;
+    setExporting(true);
+    setExportMsg(null);
+    try {
+      await v2Api.postladanExport(id, {});
+      setExportMsg("✓ Exporterad till banken — gå till BankID för att signera");
+      // Refresh detail vy så status uppdateras
+      const refreshed = await v2Api.mailDetail(id);
+      setData(refreshed);
+    } catch (e) {
+      setExportMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (error && !data) {
     return (
@@ -251,6 +271,27 @@ export function MailDetailV2() {
               </div>
             )}
 
+            {exportMsg && (
+              <div
+                style={{
+                  marginTop: 18,
+                  padding: "10px 16px",
+                  border: exportMsg.startsWith("Fel")
+                    ? "1px solid rgba(252,165,165,0.4)"
+                    : "1px solid rgba(110,231,183,0.4)",
+                  background: exportMsg.startsWith("Fel")
+                    ? "rgba(252,165,165,0.06)"
+                    : "rgba(110,231,183,0.06)",
+                  borderRadius: 6,
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: exportMsg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+                }}
+              >
+                {exportMsg}
+              </div>
+            )}
+
             {/* Actions */}
             <div
               style={{
@@ -262,14 +303,32 @@ export function MailDetailV2() {
                 borderTop: "1px solid var(--line)",
               }}
             >
-              {isCcInvoice && (
-                <Link
-                  to="/v2/banken"
+              {/* Faktura kan exporteras till banken (skapar UpcomingTransaction) */}
+              {(m.mail_type === "invoice" || m.mail_type === "reminder") &&
+                m.amount !== null && (
+                  <button
+                    type="button"
+                    className="cta-btn"
+                    disabled={exporting || m.upcoming_id !== null}
+                    onClick={exportToBank}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    {exporting
+                      ? "Exporterar…"
+                      : m.upcoming_id !== null
+                      ? "✓ Exporterad till banken"
+                      : "Exportera till banken (signera) →"}
+                  </button>
+                )}
+              {m.upcoming_id !== null && (
+                <button
+                  type="button"
                   className="cta-btn"
-                  style={{ textDecoration: "none" }}
+                  onClick={() => navigate("/v2/banken")}
+                  style={{ border: 0, cursor: "pointer" }}
                 >
-                  Exportera till banken (signera) →
-                </Link>
+                  Gå till banken & signera →
+                </button>
               )}
               {isSalarySlip && (
                 <Link
