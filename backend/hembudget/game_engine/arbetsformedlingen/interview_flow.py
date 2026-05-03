@@ -447,7 +447,8 @@ def accept_offer(
     student_id: int,
     application_id: int,
 ) -> JobApplication:
-    """Eleven tar jobbet. Pentagon: +5 economy om högre lön (kommer i M5b)."""
+    """Eleven tar jobbet. Uppdaterar StudentProfile.profession + lön
+    + pentagon-delta baserat på lön-skillnad mot tidigare."""
     app = s.get(JobApplication, application_id)
     if app is None or app.status != "offer_pending":
         raise ValueError("Inget pending erbjudande att acceptera.")
@@ -455,18 +456,69 @@ def accept_offer(
     app.completed_on = date.today()
     s.flush()
 
-    # Pentagon: +3 safety (säkrad inkomst) + ev. +5 economy om mer lön
+    # === Uppdatera StudentProfile · KRITISKT ===
+    # Innan denna fanns triggades pentagon-delta men profile.gross_salary
+    # uppdaterades aldrig. Resultat: tick_month nästa månad använde
+    # gammal lön och eleven såg "accepted" utan löneökning.
+    salary_delta_pct = 0.0
+    try:
+        from ...school.engines import master_session as _ms
+        from ...school.models import StudentProfile as _SP
+        from ...school.tax import compute_net_salary as _net
+        with _ms() as mdb:
+            sp = (
+                mdb.query(_SP)
+                .filter(_SP.student_id == student_id)
+                .first()
+            )
+            if sp is not None and app.monthly_gross_offered:
+                old_gross = int(sp.gross_salary_monthly or 0)
+                new_gross = int(app.monthly_gross_offered)
+                if old_gross > 0:
+                    salary_delta_pct = (
+                        (new_gross - old_gross) / old_gross * 100.0
+                    )
+                sp.profession = app.yrke_display
+                if hasattr(sp, "profession_key"):
+                    sp.profession_key = app.yrke_key
+                sp.gross_salary_monthly = new_gross
+                tax = _net(new_gross)
+                sp.net_salary_monthly = tax.net_monthly
+                sp.tax_rate_effective = tax.effective_rate
+                sp.employer = app.employer_name
+                mdb.commit()
+    except Exception:
+        log.exception(
+            "accept_offer: StudentProfile sync failed för %s", student_id,
+        )
+
+    # Pentagon: +3 safety (säkrad inkomst). Economy-delta proportionerlig
+    # mot löneökning (max +5 vid stor höjning, min -2 vid sänkning).
     deltas = {"safety": +3}
-    # Lön-jämförelse vs nuvarande kommer i Sprint 6b när vi vet
-    # nuvarande lön. För nu antar vi +1 economy.
-    deltas["economy"] = +1
+    if salary_delta_pct >= 15:
+        deltas["economy"] = +5
+    elif salary_delta_pct >= 5:
+        deltas["economy"] = +3
+    elif salary_delta_pct >= 0:
+        deltas["economy"] = +1
+    elif salary_delta_pct >= -10:
+        deltas["economy"] = -1
+    else:
+        deltas["economy"] = -2
+    explain_extra = (
+        f" · lön {salary_delta_pct:+.0f} %"
+        if salary_delta_pct != 0 else ""
+    )
     for axis, delta in deltas.items():
         try:
             apply_pentagon_delta(
                 student_id, axis=axis, requested_delta=delta,
                 reason_kind="decision", reason_id=app.id,
                 reason_table="job_applications",
-                explanation=f"accepterade jobb · {app.employer_name}",
+                explanation=(
+                    f"accepterade jobb · {app.employer_name}"
+                    f"{explain_extra}"
+                ),
             )
         except Exception:
             log.exception("pentagon delta failed for accept_offer")

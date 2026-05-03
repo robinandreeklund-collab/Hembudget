@@ -1521,7 +1521,33 @@ def get_goals(info: TokenInfo = Depends(require_token)) -> V2GoalsResponse:
 
             for g in goals_db:
                 target = g.target_amount or Decimal("0")
-                current = g.current_amount or Decimal("0")
+                # Om mål är kopplat till ett konto: läs verkligt saldo
+                # från transaktioner istället för statisk g.current_amount
+                # (som annars aldrig uppdateras automatiskt). Eleven
+                # ser då sin verkliga sparprogress.
+                if g.account_id is not None:
+                    from sqlalchemy import func as _fn
+                    base_open = (
+                        s.query(Account.opening_balance)
+                        .filter(Account.id == g.account_id)
+                        .scalar()
+                    ) or Decimal("0")
+                    tx_sum = (
+                        s.query(_fn.coalesce(
+                            _fn.sum(Transaction.amount), 0,
+                        ))
+                        .filter(Transaction.account_id == g.account_id)
+                        .scalar() or Decimal("0")
+                    )
+                    if not isinstance(tx_sum, Decimal):
+                        tx_sum = Decimal(str(tx_sum))
+                    current = base_open + tx_sum
+                    if current < 0:
+                        current = Decimal("0")
+                    # Synca tillbaka för historik (men inte krav)
+                    g.current_amount = current
+                else:
+                    current = g.current_amount or Decimal("0")
                 pct = float(current / target * 100) if target > 0 else 0.0
 
                 # Beräkna months_remaining + monthly_pace_target

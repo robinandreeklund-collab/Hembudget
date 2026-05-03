@@ -995,8 +995,14 @@ def complete_negotiation(
             n.final_salary = Decimal(str(new_salary))
             n.final_pct = final_pct
 
-            # Sätt pending_salary på profilen — lönespec-generatorn
-            # applicerar vid nästa månads-rendering
+            # Skriv DIREKT till profilens gross_salary_monthly +
+            # net_salary_monthly. pending_salary fanns tidigare men
+            # ingen läste den någonstans (dead data) — lönen höjdes
+            # aldrig i tick_month nästa månad.
+            #
+            # Behåller pending_effective_from som info till lärare,
+            # men lönen är aktiv från och med direkt.
+            from ..school.tax import compute_net_salary as _maria_net
             profile = (
                 s.query(StudentProfile)
                 .filter(StudentProfile.student_id == student_id)
@@ -1004,7 +1010,6 @@ def complete_negotiation(
             )
             if profile:
                 profile.pending_salary_monthly = new_salary
-                # Default: första dagen i nästa månad
                 today = _date.today()
                 if today.month == 12:
                     pending_effective_from = _date(today.year + 1, 1, 1)
@@ -1013,6 +1018,12 @@ def complete_negotiation(
                         today.year, today.month + 1, 1,
                     )
                 profile.pending_effective_from = pending_effective_from
+                # KRITISKT · realisera lönen direkt så monthly_engine
+                # nästa tick använder den nya nivån.
+                profile.gross_salary_monthly = new_salary
+                tax_after = _maria_net(new_salary)
+                profile.net_salary_monthly = tax_after.net_monthly
+                profile.tax_rate_effective = tax_after.effective_rate
 
             # Auto-genererad lärar-sammanfattning
             avtal_diff = (

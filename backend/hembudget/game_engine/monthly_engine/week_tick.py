@@ -65,6 +65,92 @@ def _ym_first_day(year_month: str) -> "date":
     return _date(y, m, 1)
 
 
+def _run_pension_transfer(
+    s,
+    *,
+    student,
+    lonekonto,
+    isk_account,
+    year_month: str,
+    student_scope: str,
+) -> dict:
+    """Skapar månatlig pension-transfer från lönekonto till ISK om
+    eleven har satt custom_isk_monthly i pension-vyn.
+
+    Två transfers skapas (par via transfer_pair_id) på pay-day (25:e):
+    - Lönekonto: -X kr (is_transfer=True)
+    - ISK: +X kr (is_transfer=True)
+
+    Idempotent via hash. Cash-saldot räknas live i bank-vyn.
+    """
+    if isk_account is None or lonekonto is None:
+        return {"skipped": "no_isk_or_loneconto"}
+    from decimal import Decimal as _D
+    from ...db.models import Transaction as _Tx, PensionAssumption as _PA
+    pa = s.query(_PA).first()
+    if pa is None or not pa.custom_isk_monthly:
+        return {"skipped": "no_assumption"}
+    monthly = int(pa.custom_isk_monthly)
+    if monthly <= 0:
+        return {"skipped": "zero_amount"}
+
+    from datetime import date as _date_t
+    y, m = map(int, year_month.split("-"))
+    # Transfer på 25:e (samma dag som lön)
+    pay_day = _date_t(y, m, min(25, 28))
+
+    base = (
+        f"v2-pension-transfer-{student.id}-{year_month}-{monthly}"
+    )
+    out_hash = f"transfer-{base}-out"
+    in_hash = f"transfer-{base}-in"
+
+    existing = (
+        s.query(_Tx).filter(_Tx.hash == out_hash).first()
+    )
+    if existing is not None:
+        return {
+            "already_done": True, "amount": monthly,
+            "tx_out": existing.id,
+        }
+
+    amount = _D(str(monthly))
+    out_tx = _Tx(
+        account_id=lonekonto.id,
+        date=pay_day,
+        amount=-amount,
+        currency="SEK",
+        raw_description=f"Pension-spar till ISK · {monthly} kr/mån",
+        normalized_merchant="Avanza ISK",
+        is_transfer=True,
+        user_verified=True,
+        hash=out_hash,
+    )
+    in_tx = _Tx(
+        account_id=isk_account.id,
+        date=pay_day,
+        amount=amount,
+        currency="SEK",
+        raw_description=f"Pension-spar från lönekonto · {monthly} kr/mån",
+        normalized_merchant="Lönekonto",
+        is_transfer=True,
+        user_verified=True,
+        hash=in_hash,
+    )
+    s.add_all([out_tx, in_tx])
+    s.flush()
+    out_tx.transfer_pair_id = in_tx.id
+    in_tx.transfer_pair_id = out_tx.id
+    s.flush()
+
+    return {
+        "amount": monthly,
+        "tx_out": out_tx.id,
+        "tx_in": in_tx.id,
+        "pay_day": pay_day.isoformat(),
+    }
+
+
 def _run_legacy_event_tick(
     scope_session,
     *,
@@ -348,6 +434,19 @@ def tick_month(
                     spend_profile=spend_profile,
                     starting_level=starting_level,
                     rng=random.Random(rng_master.random()),
+                )
+
+                # Fas D · automatisk pension-transfer från lönekonto
+                # till ISK om eleven satt custom_isk_monthly i pension-
+                # vyn. Tidigare var custom_isk_monthly bara aspiration —
+                # pengar flyttades aldrig faktiskt.
+                summary["pension_transfer"] = _run_pension_transfer(
+                    s,
+                    student=student,
+                    lonekonto=lonekonto,
+                    isk_account=accounts.get("isk"),
+                    year_month=year_month,
+                    student_scope=scope_key,
                 )
 
                 # Fas E · oväntade händelser (Sprint 3) — försäkrings-
