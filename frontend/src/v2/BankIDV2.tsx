@@ -13,6 +13,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import {
   v2Api,
   type V2BankIDSessionOut,
@@ -255,7 +256,11 @@ export function BankIDV2() {
               marginBottom: 22,
             }}
           >
-            {/* QR-mock */}
+            {/* Riktig QR-kod · använder qrcode.react. Värdet är
+                pedagogisk-meaningful URL till själva sessionen så
+                eleven kan scanna med mobil och hamnar på samma sida.
+                Eftersom det är en simulator gör vi inget riktigt
+                BankID-anrop, men flödet känns äkta. */}
             <div>
               <div
                 style={{
@@ -268,52 +273,18 @@ export function BankIDV2() {
                   placeItems: "center",
                 }}
               >
-                <svg
-                  viewBox="0 0 100 100"
-                  fill="#0a0e1a"
-                  style={{ width: 200, height: 200 }}
-                >
-                  <rect x={0} y={0} width={20} height={20} />
-                  <rect x={80} y={0} width={20} height={20} />
-                  <rect x={0} y={80} width={20} height={20} />
-                  <rect x={32} y={0} width={6} height={6} />
-                  <rect x={44} y={0} width={6} height={6} />
-                  <rect x={56} y={0} width={6} height={6} />
-                  <rect x={32} y={12} width={6} height={6} />
-                  <rect x={56} y={12} width={6} height={6} />
-                  <rect x={68} y={12} width={6} height={6} />
-                  <rect x={0} y={32} width={6} height={6} />
-                  <rect x={12} y={32} width={6} height={6} />
-                  <rect x={32} y={32} width={6} height={6} />
-                  <rect x={44} y={32} width={12} height={6} />
-                  <rect x={62} y={32} width={6} height={6} />
-                  <rect x={80} y={32} width={6} height={6} />
-                  <rect x={92} y={32} width={6} height={6} />
-                  <rect x={0} y={44} width={6} height={6} />
-                  <rect x={20} y={44} width={6} height={12} />
-                  <rect x={32} y={44} width={6} height={6} />
-                  <rect x={50} y={44} width={6} height={6} />
-                  <rect x={68} y={44} width={6} height={12} />
-                  <rect x={80} y={44} width={6} height={6} />
-                  <rect x={92} y={44} width={6} height={6} />
-                  <rect x={32} y={56} width={6} height={12} />
-                  <rect x={44} y={56} width={6} height={6} />
-                  <rect x={56} y={56} width={6} height={6} />
-                  <rect x={80} y={56} width={6} height={6} />
-                  <rect x={44} y={68} width={6} height={6} />
-                  <rect x={56} y={68} width={6} height={6} />
-                  <rect x={68} y={68} width={6} height={6} />
-                  <rect x={92} y={68} width={6} height={6} />
-                  <rect x={32} y={80} width={6} height={6} />
-                  <rect x={56} y={80} width={6} height={6} />
-                  <rect x={68} y={80} width={6} height={6} />
-                  <rect x={80} y={80} width={6} height={6} />
-                  <rect x={92} y={80} width={6} height={6} />
-                  <rect x={32} y={92} width={6} height={6} />
-                  <rect x={44} y={92} width={6} height={6} />
-                  <rect x={68} y={92} width={6} height={6} />
-                  <rect x={80} y={92} width={6} height={6} />
-                </svg>
+                <QRCodeSVG
+                  value={
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/v2/bankid/${session.id}?sign=1&amount=${session.total_amount}`
+                      : `https://ekonomilabbet.org/v2/bankid/${session.id}`
+                  }
+                  size={200}
+                  bgColor="#ffffff"
+                  fgColor="#0a0e1a"
+                  level="M"
+                  includeMargin={false}
+                />
               </div>
               <div
                 style={{

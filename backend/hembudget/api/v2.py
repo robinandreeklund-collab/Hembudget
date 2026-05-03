@@ -14377,6 +14377,18 @@ def _seed_initial_student_data(
                 sp.has_mortgage = profile.housing.type in (
                     "bostadsratt", "villa", "radhus",
                 )
+                # Synca också familje-status så insurance-coverage-gaps,
+                # KALP, hub-text använder samma värde som game_engine.
+                # Annars kan profile_fixtures säga "sambo" medan game_
+                # engine säger "ensam" → 'Har sambo/familj men ingen
+                # livförsäkring' visas felaktigt.
+                if profile.family is not None:
+                    sp.family_status = profile.family.status
+                    if profile.family.partner_gross_monthly:
+                        if hasattr(sp, "partner_gross_salary"):
+                            sp.partner_gross_salary = (
+                                profile.family.partner_gross_monthly
+                            )
                 mdb.commit()
     except Exception:
         import logging

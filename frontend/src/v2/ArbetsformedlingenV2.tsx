@@ -505,30 +505,66 @@ function ActiveInterviewPanel({
   return (
     <section
       style={{
-        border: "2px solid var(--accent, #0066cc)",
-        borderRadius: 12,
-        padding: 18,
-        background: "var(--surface, #fff)",
+        border: "1px solid var(--accent)",
+        borderRadius: 8,
+        padding: "20px 24px",
+        background: "rgba(15,21,37,0.7)",
+        color: "var(--text)",
       }}
     >
-      <header style={{ marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
+      <header
+        style={{
+          marginBottom: 14,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 14,
+        }}
+      >
         <div>
-          <h2 style={{ margin: 0, fontSize: "1.15rem" }}>
-            Aktiv intervju · {app.yrke_display} @ {app.employer_name}
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 9.5,
+              letterSpacing: "1.2px",
+              textTransform: "uppercase",
+              color: "var(--accent)",
+              marginBottom: 6,
+            }}
+          >
+            ● Aktiv intervju
+          </div>
+          <h2
+            style={{
+              margin: 0,
+              fontFamily: "var(--serif)",
+              fontSize: 18,
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
+            {app.yrke_display} <em style={{ color: "var(--text-mid)" }}>@</em>{" "}
+            {app.employer_name}
           </h2>
-          <div style={{ color: "var(--text-mid)", fontSize: "0.9rem", marginTop: 4 }}>
-            {STATUS_LABEL[app.status]} ·{" "}
-            {app.current_round}/5 ronder · match {app.match_score}/100
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 10.5,
+              color: "var(--text-mid)",
+              marginTop: 6,
+              letterSpacing: "0.6px",
+            }}
+          >
+            {STATUS_LABEL[app.status]} · {app.current_round}/5 ronder · match{" "}
+            {app.match_score}/100
           </div>
         </div>
         {app.status !== "offer_pending" && app.status !== "accepted" && (
           <button
+            type="button"
             onClick={handleAbandon}
-            style={{
-              background: "transparent", border: "1px solid var(--border)",
-              padding: "6px 12px", borderRadius: 6, cursor: "pointer",
-              color: "var(--text-mid)",
-            }}
+            className="cta-btn ghost"
+            style={{ padding: "6px 12px", fontSize: 9.5 }}
           >
             Avbryt
           </button>
@@ -547,8 +583,8 @@ function ActiveInterviewPanel({
                 n < app.current_round || app.status === "offer_pending" || app.status === "accepted"
                   ? "var(--accent)"
                   : n === app.current_round
-                    ? "rgba(0, 102, 204, 0.4)"
-                    : "var(--border)",
+                    ? "rgba(220,76,43,0.4)"
+                    : "var(--line-strong)",
               borderRadius: 3,
             }}
           />
@@ -558,10 +594,16 @@ function ActiveInterviewPanel({
       {feedback && (
         <div
           style={{
-            padding: 12, borderRadius: 8, marginBottom: 16,
-            background: "rgba(0, 102, 204, 0.06)",
+            padding: "12px 16px",
+            borderRadius: 6,
+            marginBottom: 16,
+            background: "rgba(110,231,183,0.06)",
+            border: "1px solid rgba(110,231,183,0.4)",
             whiteSpace: "pre-wrap",
-            fontSize: "0.9rem",
+            fontSize: 13,
+            fontFamily: "var(--serif)",
+            lineHeight: 1.5,
+            color: "var(--text)",
           }}
         >
           {feedback}
@@ -570,16 +612,33 @@ function ActiveInterviewPanel({
 
       {app.status === "round_1" && (
         <div>
-          <h3>Rond 1 · CV + personligt brev</h3>
-          <p style={{ color: "var(--text-mid)" }}>
+          <h3 style={ronH3Style}>Rond 1 · CV + personligt brev</h3>
+          <p
+            style={{
+              color: "var(--text-mid)",
+              fontFamily: "var(--serif)",
+              fontSize: 13,
+            }}
+          >
             Hur lång tid vill du lägga på personligt brev? Mer tid = bättre intryck men kostar fritid + relation.
           </p>
           <input
             type="range" min="0.5" max="4" step="0.5" value={coverHours}
             onChange={(e) => setCoverHours(parseFloat(e.target.value))}
+            style={{ width: "100%" }}
           />
-          <div>{coverHours} timmar</div>
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              color: "#fff",
+              marginTop: 4,
+            }}
+          >
+            {coverHours} timmar
+          </div>
           <button
+            type="button"
             disabled={submitting}
             onClick={() => submit({ cover_letter_hours: coverHours })}
             style={btnStyle()}
@@ -591,16 +650,28 @@ function ActiveInterviewPanel({
 
       {app.status === "round_2" && (
         <div>
-          <h3>Rond 2 · Telefonintervju</h3>
-          <label>Ton:&nbsp;
-            <select value={tone} onChange={(e) => setTone(e.target.value as typeof tone)}>
+          <h3 style={ronH3Style}>Rond 2 · Telefonintervju</h3>
+          <label style={ronLabelStyle}>
+            Ton:&nbsp;
+            <select
+              value={tone}
+              onChange={(e) => setTone(e.target.value as typeof tone)}
+              style={ronSelectStyle}
+            >
               <option value="saker">Säker</option>
               <option value="reflekterande">Reflekterande</option>
               <option value="ansprakvol">Anspråksfull</option>
               <option value="arlig">Ärlig</option>
             </select>
           </label>
-          <p style={{ color: "var(--text-mid)", fontSize: "0.85rem" }}>
+          <p
+            style={{
+              color: "var(--text-mid)",
+              fontSize: 12,
+              fontFamily: "var(--serif)",
+              marginTop: 12,
+            }}
+          >
             Svara på 4 frågor (kortfattat går bra):
           </p>
           {[
@@ -609,11 +680,20 @@ function ActiveInterviewPanel({
             "Varför vill du byta jobb?",
             "Vad förväntar du dig för lön?",
           ].map((q, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: "0.85rem", marginBottom: 2 }}>{q}</div>
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div
+                style={{
+                  fontFamily: "var(--serif)",
+                  fontSize: 13,
+                  color: "#fff",
+                  marginBottom: 4,
+                }}
+              >
+                {q}
+              </div>
               <textarea
                 rows={2}
-                style={{ width: "100%" }}
+                style={ronTextareaStyle}
                 value={answers[i] || ""}
                 onChange={(e) => {
                   const next = [...answers];
@@ -624,6 +704,7 @@ function ActiveInterviewPanel({
             </div>
           ))}
           <button
+            type="button"
             disabled={submitting}
             onClick={() => submit({ tone, answers })}
             style={btnStyle()}
@@ -635,9 +716,14 @@ function ActiveInterviewPanel({
 
       {app.status === "round_3" && (
         <div>
-          <h3>Rond 3 · Case</h3>
-          <label>Effort:&nbsp;
-            <select value={effort} onChange={(e) => setEffort(e.target.value as typeof effort)}>
+          <h3 style={ronH3Style}>Rond 3 · Case</h3>
+          <label style={ronLabelStyle}>
+            Effort:&nbsp;
+            <select
+              value={effort}
+              onChange={(e) => setEffort(e.target.value as typeof effort)}
+              style={ronSelectStyle}
+            >
               <option value="lat">Lat (mindre tid)</option>
               <option value="normal">Normal</option>
               <option value="djup">Djup (kostar fritid)</option>
@@ -645,12 +731,13 @@ function ActiveInterviewPanel({
           </label>
           <textarea
             rows={6}
-            style={{ width: "100%", marginTop: 8 }}
+            style={{ ...ronTextareaStyle, marginTop: 10 }}
             placeholder="Skriv ditt case-svar här..."
             value={caseAnswer}
             onChange={(e) => setCaseAnswer(e.target.value)}
           />
           <button
+            type="button"
             disabled={submitting}
             onClick={() => submit({ effort_level: effort, case_answer: caseAnswer })}
             style={btnStyle()}
@@ -662,22 +749,36 @@ function ActiveInterviewPanel({
 
       {app.status === "round_4" && (
         <div>
-          <h3>Rond 4 · Intervju på plats</h3>
-          <label>Klädsel:&nbsp;
-            <select value={dress} onChange={(e) => setDress(e.target.value as typeof dress)}>
+          <h3 style={ronH3Style}>Rond 4 · Intervju på plats</h3>
+          <label style={ronLabelStyle}>
+            Klädsel:&nbsp;
+            <select
+              value={dress}
+              onChange={(e) => setDress(e.target.value as typeof dress)}
+              style={ronSelectStyle}
+            >
               <option value="vardag">Vardags</option>
               <option value="business_casual">Business casual</option>
               <option value="formell">Formell</option>
             </select>
           </label>
-          <div style={{ marginTop: 8 }}>
+          <div
+            style={{
+              marginTop: 10,
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              color: "#fff",
+            }}
+          >
             Företagsforskning: {research} h
             <input
               type="range" min="0" max="2" step="0.5" value={research}
               onChange={(e) => setResearch(parseFloat(e.target.value))}
+              style={{ width: "100%", marginTop: 4 }}
             />
           </div>
           <button
+            type="button"
             disabled={submitting}
             onClick={() => submit({ dress, research_hours: research })}
             style={btnStyle()}
@@ -689,10 +790,22 @@ function ActiveInterviewPanel({
 
       {app.status === "offer_pending" && (
         <div>
-          <h3>Erbjudande mottaget!</h3>
-          <p>
-            Lön: <strong>{SEK(app.monthly_gross_offered || 0)} kr/mån</strong> brutto.
-            Final score: <strong>{app.final_score}/100</strong>.
+          <h3 style={ronH3Style}>Erbjudande mottaget!</h3>
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 14,
+              color: "var(--text)",
+            }}
+          >
+            Lön:{" "}
+            <strong style={{ color: "#6ee7b7" }}>
+              {SEK(app.monthly_gross_offered || 0)} kr/mån
+            </strong>{" "}
+            brutto. Slutpoäng:{" "}
+            <strong style={{ color: "var(--warm)" }}>
+              {app.final_score}/100
+            </strong>.
           </p>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={handleAccept} style={btnStyle({ bg: "#34d399" })}>
@@ -723,13 +836,56 @@ function ActiveInterviewPanel({
 
 function btnStyle(opts: { bg?: string } = {}): React.CSSProperties {
   return {
-    marginTop: 12,
-    padding: "10px 20px",
-    background: opts.bg || "var(--accent, #0066cc)",
-    color: "white",
-    border: "none",
-    borderRadius: 6,
+    marginTop: 14,
+    padding: "10px 18px",
+    background: opts.bg || "var(--accent)",
+    color: "#fff",
+    border: 0,
+    borderRadius: 100,
     cursor: "pointer",
-    fontSize: "0.95rem",
+    fontFamily: "var(--mono)",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "1.2px",
+    textTransform: "uppercase",
   };
 }
+
+const ronTextareaStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid var(--line-strong)",
+  color: "#fff",
+  padding: "8px 10px",
+  borderRadius: 6,
+  fontFamily: "Inter, sans-serif",
+  fontSize: 13,
+  width: "100%",
+  resize: "vertical",
+};
+
+const ronSelectStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid var(--line-strong)",
+  color: "#fff",
+  padding: "6px 10px",
+  borderRadius: 6,
+  fontFamily: "var(--mono)",
+  fontSize: 12,
+};
+
+const ronH3Style: React.CSSProperties = {
+  fontFamily: "var(--serif)",
+  fontSize: 16,
+  fontWeight: 700,
+  color: "#fff",
+  margin: "0 0 8px 0",
+};
+
+const ronLabelStyle: React.CSSProperties = {
+  fontFamily: "var(--mono)",
+  fontSize: 10,
+  letterSpacing: "0.8px",
+  color: "var(--text-mid)",
+  display: "inline-block",
+  marginBottom: 6,
+};
