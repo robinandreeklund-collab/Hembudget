@@ -20,7 +20,7 @@ import hashlib
 import logging
 import random
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -30,6 +30,7 @@ from ...db.models import Account, MailItem, Transaction
 from ..difficulty import get_difficulty
 from ..pentagon import apply_pentagon_delta
 from ..profile_generator.schema import GeneratedProfile
+from ..release_schedule import release_at_for_day
 
 log = logging.getLogger(__name__)
 
@@ -330,6 +331,7 @@ def apply_health_episode(
     rng: random.Random,
     salary_account: Optional[Account] = None,
     idx: int = 0,
+    release_base: Optional[datetime] = None,
 ) -> HealthOccurrence:
     """Applicera en hälso-/VAB-händelse: lön-justering, mail, pentagon, log."""
     is_vab = template.kind == "vab"
@@ -348,6 +350,11 @@ def apply_health_episode(
     # händelsen via löneavdrags-Transaction i banken/bokföringen.
     tx_id: Optional[int] = None
     if salary_account is not None and gross_loss > 0:
+        released_at = (
+            release_at_for_day(release_base, day)
+            if release_base is not None
+            else None
+        )
         tx = Transaction(
             account_id=salary_account.id,
             date=occurred,
@@ -361,6 +368,7 @@ def apply_health_episode(
             ),
             hash=_stable_hash(student_scope, year_month, template.key, idx),
             user_verified=True,
+            released_at=released_at,
         )
         s.add(tx)
         s.flush()
@@ -479,6 +487,7 @@ def roll_monthly_health_events(
     rng: Optional[random.Random] = None,
     salary_account: Optional[Account] = None,
     difficulty_level: int = 2,
+    release_base: Optional[datetime] = None,
 ) -> list[HealthOccurrence]:
     """Huvudfunktion · slumpa sjuk + VAB för månaden, applicera allt."""
     rng = rng or random.Random(f"{student_scope}|{year_month}|health")
@@ -506,6 +515,7 @@ def roll_monthly_health_events(
                 rng=rng,
                 salary_account=salary_account,
                 idx=idx,
+                release_base=release_base,
             )
             occurrences.append(occ)
         except Exception:

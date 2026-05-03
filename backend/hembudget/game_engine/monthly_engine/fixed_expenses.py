@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import random
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from ...db.models import InsurancePolicy, MailItem
 from ..pools.stadspool import STAD_BY_KEY
 from ..profile_generator.schema import GeneratedProfile
+from ..release_schedule import release_at_for_day
 
 
 @dataclass(frozen=True)
@@ -595,8 +596,15 @@ def generate_fixed_expenses(
     year_month: str,
     student_scope: str,
     rng: Optional[random.Random] = None,
+    release_base: Optional[datetime] = None,
 ) -> dict:
-    """Skapar staggered fakturor för spelmånaden. Returnerar summary."""
+    """Skapar staggered fakturor för spelmånaden. Returnerar summary.
+
+    `release_base`: T0 för realtid-projektion. Om satt får varje
+    MailItem ett `released_at = release_base + offset` baserat på
+    bill.day (1-30) så fakturorna dyker upp gradvis i postlådan
+    över 5 real-dagar. None = visa direkt.
+    """
     rng = rng or random.Random(f"{student_scope}|{year_month}|fixed")
 
     bills = _build_bills(rng, profile, year_month)
@@ -711,6 +719,11 @@ def generate_fixed_expenses(
             due=due,
         )
 
+        released_at = (
+            release_at_for_day(release_base, bill.day)
+            if release_base is not None
+            else None
+        )
         mail = MailItem(
             sender=bill.sender,
             sender_short=bill.sender_short,
@@ -727,6 +740,7 @@ def generate_fixed_expenses(
             bankgiro=bill.bankgiro,
             ocr_reference=ocr_val,
             invoice_data=inv,
+            released_at=released_at,
         )
         s.add(mail)
         s.flush()

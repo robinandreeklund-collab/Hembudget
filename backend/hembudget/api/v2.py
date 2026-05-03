@@ -97,6 +97,27 @@ from sqlalchemy import func as _func, or_
 router = APIRouter(prefix="/v2", tags=["v2"])
 
 
+# === Realtid-projektion · spel-tid → real-tid ===
+#
+# Seed-flödet sätter `released_at` på MailItem + Transaction så
+# events sprids över 5 real-dagar (= en spelmånad). Frontend ser
+# bara objekt vars `released_at <= NOW() OR released_at IS NULL`.
+# Helpern nedan används i alla list-endpoints så samma princip
+# håller överallt.
+
+
+def _released_filter(model_class):
+    """Filter-uttryck: är synlig nu?
+
+    `released_at IS NULL` betyder ingen projektion (ex. legacy-data,
+    manuella imports) → alltid synlig. Annars `released_at <= NOW()`.
+    """
+    return or_(
+        model_class.released_at.is_(None),
+        model_class.released_at <= datetime.utcnow(),
+    )
+
+
 # === Schemas ===
 
 SpendProfile = Literal["sparsam", "balanserad", "slosa"]
@@ -395,6 +416,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             today = _date.today()
             latest_tx = (
                 s.query(Transaction)
+                .filter(_released_filter(Transaction))
                 .filter(
                     (Transaction.is_transfer.is_(False))
                     | (Transaction.is_transfer.is_(None))
@@ -408,6 +430,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 # Fallback: senaste tx oavsett typ (kan vara transfer)
                 fallback_tx = (
                     s.query(Transaction)
+                    .filter(_released_filter(Transaction))
                     .order_by(Transaction.date.desc())
                     .first()
                 )
@@ -425,6 +448,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             month_end_inclusive = month_end - _td_h(days=1)
             txs = (
                 s.query(Transaction)
+                .filter(_released_filter(Transaction))
                 .filter(Transaction.date >= month_start)
                 .filter(Transaction.date <= month_end_inclusive)
                 .all()
@@ -463,7 +487,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 q = s.query(_func.coalesce(_func.sum(Transaction.amount), 0)).filter(
                     Transaction.account_id == acc.id,
                     Transaction.date <= today,
-                )
+                ).filter(_released_filter(Transaction))
                 if start is not None:
                     q = q.filter(Transaction.date > start)
                 movement = Decimal(str(q.scalar() or 0))
@@ -630,7 +654,7 @@ def get_bank(
                 ).filter(
                     Transaction.account_id == acc.id,
                     Transaction.date <= today,
-                )
+                ).filter(_released_filter(Transaction))
                 if start is not None:
                     q = q.filter(Transaction.date > start)
                 movement = Decimal(str(q.scalar() or 0))
@@ -656,6 +680,7 @@ def get_bank(
             # 2. Senaste transaktioner
             tx_rows = (
                 s.query(Transaction)
+                .filter(_released_filter(Transaction))
                 .order_by(Transaction.date.desc(), Transaction.id.desc())
                 .limit(max(1, min(limit_transactions, 200)))
                 .all()
@@ -741,6 +766,7 @@ def get_bank(
             # 4. Månads-summa
             month_txs = (
                 s.query(Transaction)
+                .filter(_released_filter(Transaction))
                 .filter(Transaction.date >= month_start)
                 .filter(Transaction.date <= today)
                 .all()
@@ -1864,8 +1890,12 @@ def get_mail(
 
     try:
         with session_scope() as s:
-            q = s.query(MailItem).order_by(
-                MailItem.received_at.desc(), MailItem.id.desc()
+            q = (
+                s.query(MailItem)
+                .filter(_released_filter(MailItem))
+                .order_by(
+                    MailItem.received_at.desc(), MailItem.id.desc()
+                )
             )
             if filter == "unhandled":
                 # 'Ohanterade' = både unhandled OCH viewed.
@@ -1892,8 +1922,11 @@ def get_mail(
 
             # Summary räknar ALLTID på alla mail (inte filtrerade), så
             # tab-counts visas korrekt även när man har en aktiv filter.
+            # Filtrera även här på released_at så pending-events inte
+            # smyger in i counts innan de är synliga.
             all_mails = (
                 s.query(MailItem)
+                .filter(_released_filter(MailItem))
                 .order_by(MailItem.received_at.desc())
                 .all()
                 if filter else mails
@@ -2875,6 +2908,7 @@ def get_employer(
             # netto utan att behöva substring-matcha 'lön' i tx.
             mail_rows = (
                 s.query(MailItem)
+                .filter(_released_filter(MailItem))
                 .filter(MailItem.mail_type == "salary_slip")
                 .filter(MailItem.due_date >= cutoff_d)
                 .order_by(MailItem.due_date.desc())
@@ -2923,6 +2957,7 @@ def get_employer(
             if len(salary_slips) < 4:
                 tx_rows = (
                     s.query(Transaction)
+                    .filter(_released_filter(Transaction))
                     .filter(Transaction.amount > 0)
                     .filter(Transaction.date >= cutoff_d)
                     .filter(
@@ -7894,8 +7929,11 @@ def get_bokforing(
         cats_by_id = {c.id: c.name for c in categories}
 
         # Alla transaktioner i perioden
+        # Filtrera på released_at så pending realtid-projektion inte
+        # smyger in i bokföringen innan den är synlig i banken.
         txs_query = (
             s.query(Transaction)
+            .filter(_released_filter(Transaction))
             .filter(Transaction.date >= period_start)
             .filter(Transaction.date <= period_end)
         )
@@ -11201,6 +11239,12 @@ def get_mail_detail(
         if m is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
 
+        # Realtid-projektion: brevet finns men inte synligt än.
+        # Returnera 404 så frontend behandlar det som ett brev som
+        # ännu inte dykt upp i postlådan.
+        if m.released_at is not None and m.released_at > datetime.utcnow():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
+
         # Markera viewed om unhandled
         if m.status == "unhandled":
             m.status = "viewed"
@@ -11854,6 +11898,69 @@ class V2RosterRow(BaseModel):
     v2_enabled: bool
     v2_onboarding_completed: bool
     v2_level: int
+
+
+class V2TimelineSkipResponse(BaseModel):
+    student_id: int
+    mail_updated: int
+    tx_updated: int
+
+
+@router.post(
+    "/teacher/students/{student_id}/timeline-skip",
+    response_model=V2TimelineSkipResponse,
+)
+def timeline_skip(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> V2TimelineSkipResponse:
+    """Lärar-control: släpp HELA spelmånaden direkt för en elev.
+
+    Sätter `released_at = NOW()` på alla pending MailItem + Transaction
+    så lektionen kan kunna avancera utan att vänta 5 real-dagar. Använd
+    sparsamt — det förstör realtid-känslan, men är värdefullt under
+    demo eller när läraren vill köra igenom hela cykeln på en lektion.
+    """
+    teacher_id = _require_teacher(info)
+
+    with master_session() as db:
+        st = db.get(Student, student_id)
+        if st is None or st.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Eleven hittades inte",
+            )
+
+    from ..school.engines import scope_context, scope_for_student
+    scope_key = scope_for_student(st)
+    now = datetime.utcnow()
+    mail_updated = 0
+    tx_updated = 0
+    with scope_context(scope_key):
+        with session_scope() as s:
+            mail_updated = (
+                s.query(MailItem)
+                .filter(MailItem.released_at.isnot(None))
+                .filter(MailItem.released_at > now)
+                .update(
+                    {MailItem.released_at: now},
+                    synchronize_session=False,
+                )
+            )
+            tx_updated = (
+                s.query(Transaction)
+                .filter(Transaction.released_at.isnot(None))
+                .filter(Transaction.released_at > now)
+                .update(
+                    {Transaction.released_at: now},
+                    synchronize_session=False,
+                )
+            )
+            s.commit()
+    return V2TimelineSkipResponse(
+        student_id=student_id,
+        mail_updated=int(mail_updated),
+        tx_updated=int(tx_updated),
+    )
 
 
 @router.get("/teacher/students/v2-roster", response_model=list[V2RosterRow])
@@ -15139,12 +15246,22 @@ def _seed_initial_student_data(
                 )
 
     try:
+        # Realtid-projektion: T0 = nu (eller student.created_at om den
+        # finns) så att MailItem/Transaction släpps gradvis över 5
+        # real-dagar (= 1 spelmånad). Eleven ser några fakturor direkt
+        # och resten dyker upp varje real-dag — istället för att allt
+        # kommer i en klump.
+        from datetime import datetime as _dt
+        release_base = (
+            getattr(student, "created_at", None) or _dt.utcnow()
+        )
         tick_month(
             student,
             profile,
             year_month,
             spend_profile=spend_profile,
             starting_level=starting_level,
+            release_base=release_base,
         )
     except Exception:
         import logging

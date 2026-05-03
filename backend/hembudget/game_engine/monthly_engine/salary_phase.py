@@ -13,7 +13,7 @@ partnern (också på 25:e).
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -23,6 +23,7 @@ from ...db.models import Account, MailItem, Transaction
 from ...school.tax import compute_net_salary
 from ..pools.yrkespool import YRKE_BY_KEY
 from ..profile_generator.schema import GeneratedProfile
+from ..release_schedule import release_at_for_day
 
 
 SALARY_DAY = 25  # Utbetalningsdag
@@ -77,6 +78,7 @@ def _create_salary_for(
     salary_account: Account,
     student_scope: str,
     is_partner: bool,
+    release_base: Optional[datetime] = None,
 ) -> tuple[MailItem, Transaction, dict]:
     """Skapa lönespec-mail + lön-in-transaktion för en person."""
     tax = compute_net_salary(gross_monthly)
@@ -96,6 +98,12 @@ def _create_salary_for(
         year_month=year_month,
     )
 
+    released_at = (
+        release_at_for_day(release_base, SALARY_DAY)
+        if release_base is not None
+        else None
+    )
+
     sender_label = "Arbetsgivaren" + (" (partner)" if is_partner else "")
     mail = MailItem(
         sender=sender_label,
@@ -109,6 +117,7 @@ def _create_salary_for(
         amount=Decimal(tax.net_monthly),
         due_date=pay_d,
         status="unhandled",
+        released_at=released_at,
     )
     s.add(mail)
 
@@ -127,6 +136,7 @@ def _create_salary_for(
         normalized_merchant=sender_label,
         hash=_tx_hash(student_scope, year_month, tx_kind),
         user_verified=True,
+        released_at=released_at,
     )
     s.add(tx)
     s.flush()
@@ -152,10 +162,14 @@ def generate_salary_phase(
     salary_account: Account,
     student_scope: str,
     student_name: Optional[str] = None,
+    release_base: Optional[datetime] = None,
 ) -> dict:
     """Kör Fas A för en spelmånad. Returnerar summary för WeekTickRun.
 
     Skapar lönespec + lön-in både för huvudspelare och ev. partner.
+
+    `release_base`: T0 för realtid-projektion. Lön släpps på dag 25
+    vilket motsvarar T0 + 96h (≈ fredag morgon). None = visa direkt.
     """
     name = student_name or profile.name
     summaries = []
@@ -169,6 +183,7 @@ def generate_salary_phase(
         salary_account=salary_account,
         student_scope=student_scope,
         is_partner=False,
+        release_base=release_base,
     )
     summaries.append(main_summary)
 
@@ -186,6 +201,7 @@ def generate_salary_phase(
             salary_account=salary_account,
             student_scope=student_scope,
             is_partner=True,
+            release_base=release_base,
         )
         summaries.append(partner_summary)
 

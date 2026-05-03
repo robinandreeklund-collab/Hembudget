@@ -19,7 +19,7 @@ import hashlib
 import logging
 import random
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from ...db.models import InsuranceClaim, InsurancePolicy, MailItem
 from ..difficulty import DifficultyProfile, get_difficulty
 from ..profile_generator.schema import GeneratedProfile
+from ..release_schedule import release_at_for_day
 from .mitigation import MitigationResult, apply_mitigation
 from .templates import EVENT_BY_KEY, EVENT_TEMPLATES, EventTemplate
 
@@ -90,6 +91,7 @@ def _build_mail(
     mit: MitigationResult,
     occurred_on: date,
     year_month: str,
+    released_at: Optional[datetime] = None,
 ) -> MailItem:
     """Bygger MailItem för ett triggat event.
 
@@ -149,6 +151,7 @@ def _build_mail(
         amount=amount,
         due_date=occurred_on if (cost or 0) > 0 else None,
         status="unhandled",
+        released_at=released_at,
     )
 
 
@@ -205,6 +208,7 @@ def apply_event(
     rng: random.Random,
     base_cost_override: Optional[int] = None,
     difficulty_level: int = 2,
+    release_base: Optional[datetime] = None,
 ) -> EventOccurrence:
     """Applicera ETT event för en elev i en spelmånad.
 
@@ -243,11 +247,17 @@ def apply_event(
     day = rng.randint(1, 28)
     occurred = _ym_to_date(year_month, day)
 
+    released_at = (
+        release_at_for_day(release_base, day)
+        if release_base is not None
+        else None
+    )
     mail = _build_mail(
         template=template,
         mit=mit,
         occurred_on=occurred,
         year_month=year_month,
+        released_at=released_at,
     )
     # Stable hash via OCR-ref för pseudo-dedup
     mail.ocr_reference = _stable_hash(
@@ -284,6 +294,7 @@ def roll_monthly_events(
     rng: Optional[random.Random] = None,
     max_events: Optional[int] = None,
     difficulty_level: int = 2,
+    release_base: Optional[datetime] = None,
 ) -> list[EventOccurrence]:
     """Slumpa vilka events som triggas och applicera dem.
 
@@ -327,6 +338,7 @@ def roll_monthly_events(
                 student_scope=student_scope,
                 rng=rng,
                 difficulty_level=difficulty_level,
+                release_base=release_base,
             )
             occurrences.append(occ)
         except Exception:

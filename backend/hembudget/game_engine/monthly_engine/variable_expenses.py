@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 import random
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -31,6 +31,7 @@ from ...school.konsumentverket import (
 from ..difficulty import get_difficulty
 from ..pools.stadspool import STAD_BY_KEY
 from ..profile_generator.schema import GeneratedProfile
+from ..release_schedule import release_at_for_day
 from .scope_seed import get_or_create_category
 
 
@@ -217,6 +218,7 @@ def generate_variable_expenses(
     spend_profile: str = "balanserad",
     starting_level: int = 1,
     rng: Optional[random.Random] = None,
+    release_base: Optional[datetime] = None,
 ) -> dict:
     """Skapa variabla transaktioner sprida över spelmånaden.
 
@@ -265,6 +267,11 @@ def generate_variable_expenses(
             day = rng.randint(1, days_in_month)
             tx_date = date(y, m, day)
             merchant = rng.choice(plan.merchants)
+            released_at = (
+                release_at_for_day(release_base, day)
+                if release_base is not None
+                else None
+            )
             tx = Transaction(
                 account_id=salary_account.id,
                 date=tx_date,
@@ -275,6 +282,7 @@ def generate_variable_expenses(
                 category_id=cat.id,
                 hash=_hash_for_tx(student_scope, year_month, plan.name, idx),
                 user_verified=False,
+                released_at=released_at,
             )
             s.add(tx)
             s.flush()

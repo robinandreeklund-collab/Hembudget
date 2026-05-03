@@ -119,6 +119,12 @@ class Transaction(TenantMixin, Base):
     # en fördelnings-etikett — inte ett separat konto. Hela fakturan
     # betalas från parent-kontot.
     cardholder: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    # Realtid-projektion · transaktionen syns på saldo/listor först
+    # när real-tiden passerar detta datum. NULL = visa direkt
+    # (bakåtkompat med v1 + tester).
+    released_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     account: Mapped[Account] = relationship(back_populates="transactions")
@@ -1718,6 +1724,14 @@ class MailItem(TenantMixin, Base):
         String(20), nullable=True,
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Realtid-projektion (1 spelmånad = 5 skoldagar). Brevet visas
+    # bara när real-tiden passerat detta datum. NULL = visa direkt
+    # (bakåtkompat med gamla mail). Räknas av spel-dag i month_year:
+    # dag 1 → T0, dag 25 (lön) → T0 + 100h ≈ fredag eftermiddag.
+    released_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, index=True,
+    )
 
     # Strukturerad fakturadata · för riktig fakturarendering med rader,
     # moms, subtotal, total. Fakturor genererade av game_engine

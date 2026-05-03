@@ -73,6 +73,7 @@ def _run_pension_transfer(
     isk_account,
     year_month: str,
     student_scope: str,
+    release_base: Optional[datetime] = None,
 ) -> dict:
     """Skapar månatlig pension-transfer från lönekonto till ISK om
     eleven har satt custom_isk_monthly i pension-vyn.
@@ -114,6 +115,11 @@ def _run_pension_transfer(
             "tx_out": existing.id,
         }
 
+    from ..release_schedule import release_at_for_day as _rad
+    released_at = (
+        _rad(release_base, 25) if release_base is not None else None
+    )
+
     amount = _D(str(monthly))
     out_tx = _Tx(
         account_id=lonekonto.id,
@@ -125,6 +131,7 @@ def _run_pension_transfer(
         is_transfer=True,
         user_verified=True,
         hash=out_hash,
+        released_at=released_at,
     )
     in_tx = _Tx(
         account_id=isk_account.id,
@@ -136,6 +143,7 @@ def _run_pension_transfer(
         is_transfer=True,
         user_verified=True,
         hash=in_hash,
+        released_at=released_at,
     )
     s.add_all([out_tx, in_tx])
     s.flush()
@@ -372,12 +380,19 @@ def tick_month(
     *,
     spend_profile: str = "balanserad",
     starting_level: int = 1,
+    release_base: Optional[datetime] = None,
 ) -> TickResult:
     """Kör Monthly Engine för en (student, year_month) idempotent.
 
     `student` måste vara ett detached/attached Student-objekt (vi läser
     bara id + display_name + family_id). `profile` är resultatet från
     Profile Generator.
+
+    `release_base`: T0 för realtid-projektion. När satt får varje
+    seedat MailItem/Transaction ett `released_at` baserat på spel-dagen
+    (1-30) så händelserna dyker upp gradvis i postlådan/banken över
+    5 real-dagar (en skolvecka). None = ingen projektion (allt synligt
+    direkt — passande för retroaktiva ticks i biz-tick eller liknande).
     """
     skipped, run_id = _check_and_create_run(
         student.id, year_month, profile.seed,
@@ -415,6 +430,7 @@ def tick_month(
                     salary_account=lonekonto,
                     student_scope=scope_key,
                     student_name=student.display_name,
+                    release_base=release_base,
                 )
 
                 summary["fixed"] = generate_fixed_expenses(
@@ -423,6 +439,7 @@ def tick_month(
                     year_month=year_month,
                     student_scope=scope_key,
                     rng=random.Random(rng_master.random()),
+                    release_base=release_base,
                 )
 
                 summary["variable"] = generate_variable_expenses(
@@ -434,6 +451,7 @@ def tick_month(
                     spend_profile=spend_profile,
                     starting_level=starting_level,
                     rng=random.Random(rng_master.random()),
+                    release_base=release_base,
                 )
 
                 # Fas D · automatisk pension-transfer från lönekonto
@@ -447,6 +465,7 @@ def tick_month(
                     isk_account=accounts.get("isk"),
                     year_month=year_month,
                     student_scope=scope_key,
+                    release_base=release_base,
                 )
 
                 # Fas E · oväntade händelser (Sprint 3) — försäkrings-
@@ -458,6 +477,7 @@ def tick_month(
                     student_scope=scope_key,
                     rng=random.Random(rng_master.random()),
                     difficulty_level=starting_level,
+                    release_base=release_base,
                 )
                 pentagon_total = {
                     k: 0 for k in ("economy", "safety", "health", "social", "leisure")
@@ -513,6 +533,7 @@ def tick_month(
                     rng=random.Random(rng_master.random()),
                     salary_account=lonekonto,
                     difficulty_level=starting_level,
+                    release_base=release_base,
                 )
                 summary["health"] = {
                     "episodes": len(health_events),
