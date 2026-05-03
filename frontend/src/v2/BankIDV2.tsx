@@ -65,12 +65,7 @@ export function BankIDV2() {
   const navigate = useNavigate();
   const [session, setSession] = useState<V2BankIDSessionOut | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [signing, setSigning] = useState(false);
-  const [pinPromptOpen, setPinPromptOpen] = useState(false);
-  const [pinValue, setPinValue] = useState("");
   const [hasPin, setHasPin] = useState<boolean | null>(null);
-  const [pinSettingMode, setPinSettingMode] = useState(false);
-  const [pinConfirm, setPinConfirm] = useState("");
   const startTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -86,72 +81,44 @@ export function BankIDV2() {
       .catch(() => setHasPin(null));
   }, [sid]);
 
-  function openPinPrompt() {
-    setError(null);
-    setPinValue("");
-    setPinConfirm("");
-    setPinSettingMode(hasPin === false);
-    setPinPromptOpen(true);
-  }
-
-  async function setNewPin() {
-    if (!/^\d{4}$/.test(pinValue)) {
-      setError("PIN måste vara 4 siffror");
-      return;
-    }
-    if (pinValue !== pinConfirm) {
-      setError("PIN-koderna matchar inte");
-      return;
-    }
-    try {
-      await v2Api.bankidSetPin(pinValue);
-      setHasPin(true);
-      setPinSettingMode(false);
-      setPinConfirm("");
-      // PIN är satt — fortsätt direkt till sign med samma värde
-      await doSign(pinValue);
-    } catch (e) {
-      setError(String((e as Error)?.message || e));
-    }
-  }
-
-  async function doSign(pin: string) {
-    if (!session) return;
-    if (!/^\d{4}$/.test(pin)) {
-      setError("PIN måste vara 4 siffror");
-      return;
-    }
-    const dur = Math.round((Date.now() - startTimeRef.current) / 1000);
-    setSigning(true);
-    setError(null);
-    try {
-      const updated = await v2Api.bankidSign(session.id, {
-        duration_seconds: dur,
-        pin,
-      });
-      setSession(updated);
-      setPinPromptOpen(false);
-      setPinValue("");
-      // Efter 1.5s — gå tillbaka till banken
-      setTimeout(() => navigate("/v2/banken"), 1500);
-    } catch (e) {
-      setError(String((e as Error)?.message || e));
-    } finally {
-      setSigning(false);
-    }
-  }
-
-  async function sign() {
-    // Öppna PIN-prompt istället för att direkt signera
-    if (hasPin === null) {
+  // Polling · när desktop visar QR och eleven scannar med mobil,
+  // pollar vi sessionen var 2:a sekund för att upptäcka när mobilens
+  // PIN-bekräftelse går igenom (status ändras pending → signed).
+  useEffect(() => {
+    if (!sid || !session || session.status !== "pending") return;
+    const id = window.setInterval(async () => {
       try {
-        const s = await v2Api.bankidPinStatus();
-        setHasPin(s.has_pin);
+        const fresh = await v2Api.bankidGet(sid);
+        if (fresh.status !== "pending") {
+          setSession(fresh);
+          window.clearInterval(id);
+          if (fresh.status === "signed") {
+            // Visa "signed" i 1.5s, gå sedan till banken
+            setTimeout(() => navigate("/v2/banken"), 1500);
+          }
+        }
       } catch {
-        setHasPin(false);
+        // tyst fel · pollar igen nästa interval
       }
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [sid, session?.status, session, navigate]);
+
+  // Sign-knappen visar instruktioner istället för att signera direkt.
+  // PIN-flödet sker på mobilen efter QR-scan.
+  async function sign() {
+    // Om PIN saknas, hänvisa eleven att sätta en i banken först
+    if (hasPin === false) {
+      setError(
+        "Du måste sätta din 4-siffriga BankID-PIN i banken först. "
+        + "Gå tillbaka till banken och sätt en PIN.",
+      );
+      return;
     }
-    openPinPrompt();
+    setError(
+      "Scanna QR-koden med din mobil för att signera. "
+      + "PIN-frågan kommer upp på mobilen.",
+    );
   }
 
   async function cancel() {
@@ -336,8 +303,10 @@ export function BankIDV2() {
               >
                 <QRCodeSVG
                   value={
-                    typeof window !== "undefined"
-                      ? `${window.location.origin}/v2/bankid/${session.id}?sign=1&amount=${session.total_amount}`
+                    session.confirm_token
+                      ? (typeof window !== "undefined"
+                        ? `${window.location.origin}/v2/bankid/confirm/${session.confirm_token}`
+                        : `https://ekonomilabbet.org/v2/bankid/confirm/${session.confirm_token}`)
                       : `https://ekonomilabbet.org/v2/bankid/${session.id}`
                   }
                   size={200}
@@ -553,13 +522,11 @@ export function BankIDV2() {
             <button
               type="button"
               className="cta-btn"
-              disabled={signing}
+              disabled={false}
               onClick={sign}
               style={{ fontSize: 14, padding: "12px 24px" }}
             >
-              {signing
-                ? "Signerar…"
-                : `Signera alla ${session.invoice_count} fakturor i appen`}
+              {`Signera ${session.invoice_count} fakturor på mobilen →`}
             </button>
             <a
               href="#"
@@ -650,200 +617,6 @@ export function BankIDV2() {
 
         {/* Echo · fråga om vad som ska signeras */}
       </div>
-
-      {/* PIN-MODAL · 4-siffrig signering, ses i prototypens BankID-flöde */}
-      {pinPromptOpen && session && (
-        <div
-          onClick={() => !signing && setPinPromptOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.7)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 9999,
-            padding: 20,
-            backdropFilter: "blur(4px)",
-            WebkitBackdropFilter: "blur(4px)",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: 420,
-              width: "100%",
-              background: "var(--bg-mid)",
-              border: "1px solid var(--accent)",
-              borderRadius: 12,
-              padding: "28px 32px",
-              boxShadow: "0 24px 80px -10px rgba(0,0,0,0.6)",
-            }}
-          >
-            <div
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 9.5,
-                letterSpacing: "1.4px",
-                textTransform: "uppercase",
-                color: "var(--accent)",
-                marginBottom: 6,
-              }}
-            >
-              ● Ekonomilabbet-ID · {pinSettingMode
-                ? "Sätt din 4-siffriga PIN"
-                : "Ange din 4-siffriga PIN"}
-            </div>
-            <div
-              style={{
-                fontFamily: "var(--serif)",
-                fontSize: 18,
-                color: "#fff",
-                fontWeight: 700,
-                marginBottom: 8,
-                letterSpacing: "-0.3px",
-              }}
-            >
-              {pinSettingMode
-                ? "Välj din 4-siffriga PIN"
-                : `Signera ${SEK(session.total_amount)} kr`}
-            </div>
-            <p
-              style={{
-                fontFamily: "var(--serif)",
-                fontSize: 13.5,
-                color: "var(--text-mid)",
-                lineHeight: 1.5,
-                marginTop: 0,
-                marginBottom: 18,
-              }}
-            >
-              {pinSettingMode
-                ? "PIN-koden binder dig till varje signering. Aldrig dela den med någon. Lärare kan nollställa om du glömmer."
-                : `${session.invoice_count} fakturor · totalt ${SEK(session.total_amount)} kr. Ange PIN för att signera autogiro.`}
-            </p>
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={4}
-              autoFocus
-              placeholder="••••"
-              value={pinValue}
-              onChange={(e) => {
-                const v = e.target.value.replace(/[^0-9]/g, "");
-                setPinValue(v);
-                if (!pinSettingMode && v.length === 4) {
-                  // Auto-submit vid 4 siffror i sign-mode
-                  setTimeout(() => doSign(v), 100);
-                }
-              }}
-              style={{
-                width: "100%",
-                padding: "14px 18px",
-                fontSize: 28,
-                textAlign: "center",
-                letterSpacing: "0.5em",
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid var(--line-strong)",
-                borderRadius: 8,
-                color: "#fff",
-                fontFamily: "var(--mono)",
-                fontWeight: 700,
-              }}
-              disabled={signing}
-            />
-            {pinSettingMode && (
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={4}
-                placeholder="•••• (upprepa)"
-                value={pinConfirm}
-                onChange={(e) => setPinConfirm(
-                  e.target.value.replace(/[^0-9]/g, ""),
-                )}
-                style={{
-                  width: "100%",
-                  padding: "14px 18px",
-                  fontSize: 28,
-                  textAlign: "center",
-                  letterSpacing: "0.5em",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid var(--line-strong)",
-                  borderRadius: 8,
-                  color: "#fff",
-                  fontFamily: "var(--mono)",
-                  fontWeight: 700,
-                  marginTop: 10,
-                }}
-              />
-            )}
-            {error && (
-              <div
-                style={{
-                  marginTop: 14,
-                  padding: "8px 14px",
-                  background: "rgba(252,165,165,0.06)",
-                  border: "1px solid rgba(252,165,165,0.4)",
-                  borderRadius: 6,
-                  color: "#fca5a5",
-                  fontFamily: "var(--mono)",
-                  fontSize: 11,
-                }}
-              >
-                {error}
-              </div>
-            )}
-            <div
-              style={{
-                marginTop: 20,
-                display: "flex",
-                gap: 10,
-              }}
-            >
-              <button
-                type="button"
-                className="cta-btn"
-                disabled={signing
-                  || (pinSettingMode
-                    ? pinValue.length !== 4 || pinConfirm.length !== 4
-                    : pinValue.length !== 4)}
-                onClick={() => pinSettingMode ? setNewPin() : doSign(pinValue)}
-                style={{ flex: 1, border: 0, cursor: "pointer" }}
-              >
-                {signing
-                  ? "Signerar…"
-                  : pinSettingMode
-                  ? "Spara PIN och signera →"
-                  : "Signera →"}
-              </button>
-              <button
-                type="button"
-                className="cta-btn ghost"
-                onClick={() => setPinPromptOpen(false)}
-                disabled={signing}
-                style={{ border: 0, cursor: "pointer" }}
-              >
-                Avbryt
-              </button>
-            </div>
-            <div
-              style={{
-                marginTop: 18,
-                fontFamily: "var(--mono)",
-                fontSize: 9,
-                letterSpacing: "1.2px",
-                textTransform: "uppercase",
-                color: "var(--text-dim)",
-                textAlign: "center",
-              }}
-            >
-              Sandbox · ingen riktigt BankID-anrop görs
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1084,6 +1084,17 @@ class BankIDSession(TenantMixin, Base):
         Integer, nullable=True,
     )
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Mobil-confirm-token · scannas via QR-koden, anonym confirm-endpoint
+    # accepterar bara denna token (inte authenticated user). Samma
+    # security-modell som v1 BankSession.token.
+    confirm_token: Mapped[Optional[str]] = mapped_column(
+        String(80), nullable=True, index=True,
+    )
+    # Vilken student-id sessionen tillhör · krävs för anonym confirm-
+    # endpoint som inte vet om token tillhör student utan denna koppling.
+    student_id_for_confirm: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )

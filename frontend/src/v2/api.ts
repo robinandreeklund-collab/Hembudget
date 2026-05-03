@@ -1323,6 +1323,7 @@ export type V2BankIDSessionOut = {
   invoices: V2BankIDInvoiceRow[];
   notes: string | null;
   created_at: string;
+  confirm_token: string | null;
 };
 
 export type V2BankIDListData = {
@@ -2949,6 +2950,34 @@ export const v2Api = {
     api<{ has_pin: boolean }>("/v2/bankid/pin-status"),
   bankidSetPin: (pin: string) =>
     api<{ ok: boolean }>("/v2/bankid/set-pin", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    }),
+  // Mobil-confirm-flöde · token från QR (no auth)
+  bankidConfirmInfo: (token: string) =>
+    api<{
+      session_id: number;
+      invoice_count: number;
+      total_amount: number;
+      status: "pending" | "signed" | "cancelled";
+      invoices: Array<{
+        upcoming_id: number;
+        name: string;
+        amount: number;
+        due_date: string;
+        is_recurring: boolean;
+        is_anomaly: boolean;
+      }>;
+      has_pin: boolean;
+    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}`),
+  bankidConfirmSign: (token: string, pin: string) =>
+    api<{
+      session_id: number;
+      status: "pending" | "signed" | "cancelled";
+      invoice_count: number;
+      total_amount: number;
+      has_pin: boolean;
+    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}`, {
       method: "POST",
       body: JSON.stringify({ pin }),
     }),

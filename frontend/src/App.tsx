@@ -55,6 +55,7 @@ import { FeedbackV2 } from "./v2/FeedbackV2";
 import { TeacherFeedbackOverviewPage } from "./v2/TeacherFeedbackOverviewPage";
 import { MariaV2 } from "./v2/MariaV2";
 import { BankIDV2 } from "./v2/BankIDV2";
+import { BankIDConfirmV2 } from "./v2/BankIDConfirmV2";
 import { TeacherMariaOverviewPage } from "./v2/TeacherMariaOverviewPage";
 import { TeacherBankIDOverviewPage } from "./v2/TeacherBankIDOverviewPage";
 import { TxV2 } from "./v2/TxV2";
@@ -209,6 +210,12 @@ export default function App() {
             Samma route i båda blocken så att inloggade lärare/föräldrar
             också når sign-vyn utan att kicks tillbaka till /dashboard. */}
         <Route path="/bank/sign" element={<Bank />} />
+        {/* V2 BankID-mobil-confirm · samma princip som /bank/sign — */}
+        {/* PUBLIK route, scannas via QR från desktop-bankid-vyn */}
+        <Route
+          path="/v2/bankid/confirm/:token"
+          element={<BankIDConfirmV2 />}
+        />
         <Route path="/docs" element={<Docs />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/faq" element={<Faq />} />
@@ -379,6 +386,10 @@ export default function App() {
           <Route
             path="/v2/bankid/:sessionId"
             element={<BankIDV2 />}
+          />
+          <Route
+            path="/v2/bankid/confirm/:token"
+            element={<BankIDConfirmV2 />}
           />
           <Route path="/v2/tx/:txId" element={<TxV2 />} />
           <Route path="/v2/meddelanden" element={<MeddelandenV2 />} />

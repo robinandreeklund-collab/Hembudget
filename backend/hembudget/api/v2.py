@@ -9357,6 +9357,7 @@ class V2BankIDSessionOut(BaseModel):
     invoices: list[V2BankIDInvoiceRow]
     notes: Optional[str]
     created_at: datetime
+    confirm_token: Optional[str] = None  # för QR-länken
 
 
 class V2BankIDStartIn(BaseModel):
@@ -9368,7 +9369,13 @@ def start_bankid_session(
     body: V2BankIDStartIn,
     info: TokenInfo = Depends(require_token),
 ) -> V2BankIDSessionOut:
-    """Skapa ny signerings-session från lista av upcoming-IDs."""
+    """Skapa ny signerings-session från lista av upcoming-IDs.
+
+    Sätter ett confirm_token (32 tecken url-safe) som används av
+    mobil-confirm-endpoint POST /v2/bankid/confirm/{token}. Token
+    visas via QR-koden på desktop · scannas med mobil → mobil PIN-form.
+    Samma security-modell som v1 BankSession.token.
+    """
     if info.role != "student" or info.student_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Endast elever")
     if not body.upcoming_ids:
@@ -9376,6 +9383,9 @@ def start_bankid_session(
             status.HTTP_400_BAD_REQUEST,
             "Minst 1 faktura krävs",
         )
+
+    import secrets as _sec
+    confirm_token = _sec.token_urlsafe(24)
 
     with session_scope() as s:
         ups = (
@@ -9395,6 +9405,8 @@ def start_bankid_session(
             invoice_count=len(ups),
             status="pending",
             current_step=4,
+            confirm_token=confirm_token,
+            student_id_for_confirm=info.student_id,
         )
         s.add(sess)
         s.flush()
@@ -9417,6 +9429,7 @@ def _bankid_to_out(
         duration_seconds=sess.duration_seconds,
         notes=sess.notes,
         created_at=sess.created_at,
+        confirm_token=sess.confirm_token,
         invoices=[
             V2BankIDInvoiceRow(
                 upcoming_id=u.id,
@@ -9607,6 +9620,243 @@ def cancel_bankid_session(
             .all()
         )
         return _bankid_to_out(sess, ups)
+
+
+# === MOBIL-CONFIRM-FLÖDET (no auth · token-baserad) ===
+# Eleven scannar QR-koden på desktop med mobilen → mobil hamnar på
+# /v2/bankid/confirm/:token → POST hit med PIN för att bekräfta
+# sessionen. Samma security-modell som v1 /bank/session/{token}/confirm.
+
+class V2BankIDConfirmInfo(BaseModel):
+    """Info om sessionen som mobilen visar innan PIN-prompt."""
+    session_id: int
+    invoice_count: int
+    total_amount: float
+    status: Literal["pending", "signed", "cancelled"]
+    invoices: list[V2BankIDInvoiceRow]
+    has_pin: bool
+
+
+@router.get(
+    "/bankid/confirm/{token}",
+    response_model=V2BankIDConfirmInfo,
+)
+def get_bankid_confirm_info(token: str) -> V2BankIDConfirmInfo:
+    """Mobilen hämtar sammanfattning av sessionen via token.
+
+    INTE authenticated · samma som v1 /bank/session/{token}/confirm.
+    Token + bankid_session-rad räcker som security (session_id_for_confirm
+    binder den till student vars PIN behövs).
+    """
+    # Måste söka utanför scope-context eftersom mobilen inte är inloggad
+    # som elev. Vi joinar via student_id_for_confirm + tenant_id för att
+    # hitta sessionen oavsett scope.
+    from sqlalchemy import or_ as _or
+    from ..school.engines import (
+        master_session as _ms_local,
+        get_scope_session as _gss,
+        scope_for_student as _sfs,
+        scope_context as _sctx,
+    )
+    from ..school.models import Student as _Stu
+
+    # Steg 1: hitta vilken student tokenen tillhör. Vi måste loopa scope-DBs
+    # — men det är dyrt. Smartare: lagra scope-key i sessionen, eller
+    # använd en MASTER-tabell för bankid-session-tokens. För att undvika
+    # ny tabell: query alla scopes där detta token kan finnas.
+    #
+    # Praktiskt enklare: vi lagrar student_id_for_confirm direkt på
+    # sessionen, så vi kan slå student → scope → ladda sessionen.
+    with _ms_local() as mdb:
+        # Tyvärr har vi inte ett mapping från token → student utan att
+        # läsa varje scope-DB. Vi får istället loopa alla aktiva students
+        # och slå sessions-tabellen via tenant_id-filtrering. För enkelhet:
+        # vi lagrar token i master-DB i en lookup. Här gör vi en rak
+        # student-loop för MVP.
+        students = mdb.query(_Stu).filter(_Stu.active.is_(True)).all()
+        target_sid: Optional[int] = None
+        target_session: Optional[BankIDSession] = None
+        for stu in students:
+            scope_key = _sfs(stu)
+            try:
+                with _sctx(scope_key):
+                    with _gss(scope_key)() as ss:
+                        sess = (
+                            ss.query(BankIDSession)
+                            .filter(
+                                BankIDSession.confirm_token == token,
+                            )
+                            .first()
+                        )
+                        if sess is not None:
+                            target_sid = stu.id
+                            # Hämta upcoming inom samma session-context
+                            ups = (
+                                ss.query(UpcomingTransaction)
+                                .filter(
+                                    UpcomingTransaction.id.in_(
+                                        sess.upcoming_ids or [],
+                                    ),
+                                )
+                                .all()
+                            )
+                            target_session = sess
+                            invoices_out = [
+                                V2BankIDInvoiceRow(
+                                    upcoming_id=u.id,
+                                    name=u.name or "Faktura",
+                                    amount=float(u.amount or 0),
+                                    due_date=u.expected_date,
+                                    is_recurring=bool(u.recurring_monthly),
+                                    is_anomaly=False,
+                                )
+                                for u in ups
+                            ]
+                            sess_status = sess.status
+                            sess_id = sess.id
+                            sess_count = sess.invoice_count
+                            sess_total = float(sess.total_amount)
+                            break
+            except Exception:
+                continue
+
+        if target_session is None or target_sid is None:
+            raise HTTPException(404, "Sessionen hittades inte")
+
+        st = mdb.get(_Stu, target_sid)
+        has_pin = bool(st and st.bank_pin_hash)
+
+    return V2BankIDConfirmInfo(
+        session_id=sess_id,
+        invoice_count=sess_count,
+        total_amount=sess_total,
+        status=sess_status,  # type: ignore[arg-type]
+        invoices=invoices_out,
+        has_pin=has_pin,
+    )
+
+
+class V2BankIDConfirmIn(BaseModel):
+    pin: str = Field(..., min_length=4, max_length=4)
+
+
+@router.post("/bankid/confirm/{token}", response_model=V2BankIDConfirmInfo)
+def post_bankid_confirm(
+    token: str, body: V2BankIDConfirmIn,
+) -> V2BankIDConfirmInfo:
+    """Mobilen bekräftar sessionen genom att ange PIN.
+
+    INTE authenticated. Token bundlar sig till en specifik elev (via
+    student_id_for_confirm), PIN matchas mot Student.bank_pin_hash.
+    Samma security-modell som v1 /bank/session/{token}/confirm.
+
+    Vid lyckad confirm: session.status='signed', alla relaterade
+    UpcomingTransactions sätts till autogiro=True. Desktop-vyn pollar
+    GET /v2/bankid/sessions/{id} och ser uppdateringen.
+    """
+    if not body.pin or len(body.pin) != 4 or not body.pin.isdigit():
+        raise HTTPException(400, "PIN måste vara exakt 4 siffror")
+
+    from ..security.crypto import verify_password as _vp
+    from ..school.engines import (
+        master_session as _ms_local,
+        get_scope_session as _gss,
+        scope_for_student as _sfs,
+        scope_context as _sctx,
+    )
+    from ..school.models import Student as _Stu
+
+    with _ms_local() as mdb:
+        students = mdb.query(_Stu).filter(_Stu.active.is_(True)).all()
+        target_sid: Optional[int] = None
+        target_session_data: Optional[dict] = None
+        for stu in students:
+            scope_key = _sfs(stu)
+            try:
+                with _sctx(scope_key):
+                    with _gss(scope_key)() as ss:
+                        sess = (
+                            ss.query(BankIDSession)
+                            .filter(
+                                BankIDSession.confirm_token == token,
+                            )
+                            .first()
+                        )
+                        if sess is None:
+                            continue
+                        target_sid = stu.id
+                        if sess.status != "pending":
+                            raise HTTPException(
+                                400,
+                                f"Sessionen är {sess.status}",
+                            )
+
+                        # Verifiera PIN mot master-DB
+                        st = mdb.get(_Stu, target_sid)
+                        if st is None or not st.bank_pin_hash:
+                            raise HTTPException(
+                                400,
+                                "Du har inte satt en BankID-PIN. "
+                                "Sätt en i banken först.",
+                            )
+                        if not _vp(st.bank_pin_hash, body.pin):
+                            raise HTTPException(401, "Fel PIN")
+
+                        # Signera sessionen + sätt autogiro på upcoming
+                        sess.status = "signed"
+                        sess.signed_at = datetime.utcnow()
+                        sess.current_step = 6
+                        ups = (
+                            ss.query(UpcomingTransaction)
+                            .filter(
+                                UpcomingTransaction.id.in_(
+                                    sess.upcoming_ids or [],
+                                ),
+                            )
+                            .all()
+                        )
+                        for u in ups:
+                            if hasattr(u, "autogiro"):
+                                u.autogiro = True
+                        ss.flush()
+                        ss.commit()
+
+                        invoices_out = [
+                            V2BankIDInvoiceRow(
+                                upcoming_id=u.id,
+                                name=u.name or "Faktura",
+                                amount=float(u.amount or 0),
+                                due_date=u.expected_date,
+                                is_recurring=bool(u.recurring_monthly),
+                                is_anomaly=False,
+                            )
+                            for u in ups
+                        ]
+                        target_session_data = {
+                            "id": sess.id,
+                            "status": sess.status,
+                            "count": sess.invoice_count,
+                            "total": float(sess.total_amount),
+                            "invoices": invoices_out,
+                        }
+                        break
+            except HTTPException:
+                raise
+            except Exception:
+                continue
+
+        if target_session_data is None:
+            raise HTTPException(404, "Sessionen hittades inte")
+
+    return V2BankIDConfirmInfo(
+        session_id=target_session_data["id"],
+        invoice_count=target_session_data["count"],
+        total_amount=target_session_data["total"],
+        status=target_session_data["status"],
+        invoices=target_session_data["invoices"],
+        has_pin=True,
+    )
+
 
 
 class V2BankIDListResponse(BaseModel):

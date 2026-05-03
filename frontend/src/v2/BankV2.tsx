@@ -52,6 +52,11 @@ export function BankV2() {
   const [signing, setSigning] = useState(false);
   const [savingDate, setSavingDate] = useState<number | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [hasPin, setHasPin] = useState<boolean | null>(null);
+  const [pinValue, setPinValue] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinMsg, setPinMsg] = useState<string | null>(null);
   const navigate = useNavigate();
 
   function refresh() {
@@ -63,7 +68,34 @@ export function BankV2() {
 
   useEffect(() => {
     refresh();
+    v2Api.bankidPinStatus()
+      .then((s) => setHasPin(s.has_pin))
+      .catch(() => setHasPin(null));
   }, []);
+
+  async function savePin() {
+    if (!/^\d{4}$/.test(pinValue)) {
+      setPinMsg("PIN måste vara 4 siffror");
+      return;
+    }
+    if (pinValue !== pinConfirm) {
+      setPinMsg("PIN-koderna matchar inte");
+      return;
+    }
+    setPinSaving(true);
+    setPinMsg(null);
+    try {
+      await v2Api.bankidSetPin(pinValue);
+      setHasPin(true);
+      setPinValue("");
+      setPinConfirm("");
+      setPinMsg("✓ PIN sparad. Du kan nu signera fakturor via BankID.");
+    } catch (e) {
+      setPinMsg(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setPinSaving(false);
+    }
+  }
 
   async function startBankID() {
     if (!bank) return;
@@ -387,6 +419,129 @@ export function BankV2() {
 
         <div className="act-grid">
           <div>
+            {/* PIN-setup · visas om eleven inte har satt sin BankID-PIN */}
+            {hasPin === false && (
+              <article
+                className="cta-card"
+                style={{
+                  borderColor: "var(--accent)",
+                  background: "rgba(220,76,43,0.06)",
+                }}
+              >
+                <div className="cta-eye">● BankID-PIN saknas</div>
+                <div className="cta-h">
+                  Sätt din <em>4-siffriga PIN</em>.
+                </div>
+                <p className="cta-prose">
+                  PIN är 'något du vet' som binder dig till varje
+                  signering. Den används när du signerar fakturor på
+                  mobilen efter att ha scannat QR-koden i banken.
+                  Aldrig dela den med någon — inte ens läraren.
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    placeholder="•••• (PIN)"
+                    value={pinValue}
+                    onChange={(e) =>
+                      setPinValue(e.target.value.replace(/[^0-9]/g, ""))
+                    }
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: 22,
+                      textAlign: "center",
+                      letterSpacing: "0.4em",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid var(--line-strong)",
+                      borderRadius: 8,
+                      color: "#fff",
+                      fontFamily: "var(--mono)",
+                      fontWeight: 700,
+                    }}
+                  />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    placeholder="•••• (upprepa)"
+                    value={pinConfirm}
+                    onChange={(e) =>
+                      setPinConfirm(e.target.value.replace(/[^0-9]/g, ""))
+                    }
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: 22,
+                      textAlign: "center",
+                      letterSpacing: "0.4em",
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid var(--line-strong)",
+                      borderRadius: 8,
+                      color: "#fff",
+                      fontFamily: "var(--mono)",
+                      fontWeight: 700,
+                    }}
+                  />
+                </div>
+                {pinMsg && (
+                  <div
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      fontFamily: "var(--mono)",
+                      fontSize: 11,
+                      marginBottom: 10,
+                      color: pinMsg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+                      background: pinMsg.startsWith("Fel")
+                        ? "rgba(252,165,165,0.06)"
+                        : "rgba(110,231,183,0.06)",
+                      border: pinMsg.startsWith("Fel")
+                        ? "1px solid rgba(252,165,165,0.4)"
+                        : "1px solid rgba(110,231,183,0.4)",
+                    }}
+                  >
+                    {pinMsg}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="cta-btn"
+                  disabled={pinSaving || pinValue.length !== 4
+                    || pinConfirm.length !== 4}
+                  onClick={savePin}
+                >
+                  {pinSaving ? "Sparar…" : "Spara PIN"}
+                </button>
+              </article>
+            )}
+
+            {hasPin === true && pinMsg && (
+              <div
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 6,
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  marginBottom: 14,
+                  color: "#6ee7b7",
+                  background: "rgba(110,231,183,0.06)",
+                  border: "1px solid rgba(110,231,183,0.4)",
+                }}
+              >
+                {pinMsg}
+              </div>
+            )}
+
             {/* CTA: signera fakturor */}
             {billsToSign > 0 && (
               <article className="cta-card">
