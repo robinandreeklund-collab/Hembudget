@@ -47,6 +47,8 @@ function monthLabel(ym: string): string {
 export function BudgetV2() {
   const [budget, setBudget] = useState<BudgetData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
   const [params] = useSearchParams();
   const monthParam = params.get("month") || undefined;
   const navigate = useNavigate();
@@ -288,14 +290,75 @@ export function BudgetV2() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="cta-btn" type="button">
-                Spara budget
-              </button>
-              <button className="cta-btn ghost" type="button">
-                Återställ till Konsumentverket
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10,
+                  color: "#6ee7b7",
+                  letterSpacing: "1.2px",
+                  textTransform: "uppercase",
+                  alignSelf: "center",
+                }}
+              >
+                ● Auto-sparas per kategori
+              </span>
+              <button
+                className="cta-btn ghost"
+                type="button"
+                disabled={resetting}
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      "Återställ alla planerade belopp till Konsumentverkets schabloner? " +
+                      "Befintliga värden skrivs över.",
+                    )
+                  ) return;
+                  setResetting(true);
+                  setResetMsg(null);
+                  try {
+                    const r = await v2Api.resetBudgetToKonsumentverket(
+                      monthParam,
+                    );
+                    setResetMsg(
+                      `✓ ${r.rows_created} skapade · ${r.rows_updated} uppdaterade · ` +
+                      `${r.categories_with_reference} kategorier har referens-värde`,
+                    );
+                    await refreshBudget();
+                  } catch (e) {
+                    setResetMsg(
+                      `Fel: ${String((e as Error)?.message || e)}`,
+                    );
+                  } finally {
+                    setResetting(false);
+                  }
+                }}
+              >
+                {resetting
+                  ? "Återställer…"
+                  : "Återställ till Konsumentverket"}
               </button>
             </div>
           </div>
+          {resetMsg && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "8px 14px",
+                border: resetMsg.startsWith("Fel")
+                  ? "1px solid rgba(252,165,165,0.4)"
+                  : "1px solid rgba(110,231,183,0.4)",
+                background: resetMsg.startsWith("Fel")
+                  ? "rgba(252,165,165,0.06)"
+                  : "rgba(110,231,183,0.06)",
+                borderRadius: 6,
+                fontFamily: "var(--mono)",
+                fontSize: 11,
+                color: resetMsg.startsWith("Fel") ? "#fca5a5" : "#6ee7b7",
+              }}
+            >
+              {resetMsg}
+            </div>
+          )}
         </div>
 
         {/* KATEGORIER */}

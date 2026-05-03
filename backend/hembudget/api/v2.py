@@ -1266,6 +1266,84 @@ def delete_budget_row(
             s.flush()
 
 
+class V2BudgetResetResponse(BaseModel):
+    month: str
+    rows_updated: int
+    rows_created: int
+    categories_with_reference: int
+
+
+@router.post(
+    "/budget/reset-to-konsumentverket",
+    response_model=V2BudgetResetResponse,
+)
+def reset_budget_to_konsumentverket(
+    month: Optional[str] = None,
+    info: TokenInfo = Depends(require_token),
+) -> V2BudgetResetResponse:
+    """Sätt alla kategoriers planerade belopp till Konsumentverkets
+    referens-värden för perioden. Kategorier utan referens-värde
+    lämnas orörda. Idempotent."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Endast elever kan återställa budgeten.",
+        )
+
+    from ..wellbeing.minimums import (
+        lookup_minimum, CATEGORY_MINIMUMS_SEK_MONTH,
+    )
+    from ..db.models import Budget as _Bd
+
+    def _fuzzy_minimum(category: str) -> Optional[int]:
+        if not category:
+            return None
+        exact = lookup_minimum(category)
+        if exact is not None:
+            return exact
+        lower = category.lower()
+        for key, val in CATEGORY_MINIMUMS_SEK_MONTH.items():
+            if key.lower() in lower:
+                return val
+        return None
+
+    ym = month or _current_year_month()
+    rows_updated = 0
+    rows_created = 0
+    cats_with_ref = 0
+
+    with session_scope() as s:
+        cats = s.query(Category).all()
+        for cat in cats:
+            ref = _fuzzy_minimum(cat.name)
+            if ref is None or ref <= 0:
+                continue
+            cats_with_ref += 1
+            existing = (
+                s.query(_Bd)
+                .filter(_Bd.month == ym, _Bd.category_id == cat.id)
+                .first()
+            )
+            if existing is None:
+                s.add(_Bd(
+                    month=ym,
+                    category_id=cat.id,
+                    planned_amount=Decimal(str(ref)),
+                ))
+                rows_created += 1
+            else:
+                existing.planned_amount = Decimal(str(ref))
+                rows_updated += 1
+        s.flush()
+
+    return V2BudgetResetResponse(
+        month=ym,
+        rows_updated=rows_updated,
+        rows_created=rows_created,
+        categories_with_reference=cats_with_ref,
+    )
+
+
 # === Sparmål (Goal-tabellen) ===
 
 class V2GoalRow(BaseModel):

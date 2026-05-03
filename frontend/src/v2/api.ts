@@ -2331,6 +2331,17 @@ export const v2Api = {
       `/v2/budget/${categoryId}${month ? `?month=${month}` : ""}`,
       { method: "DELETE" },
     ),
+  /** Sätt alla kategoriers planerade belopp till Konsumentverket. */
+  resetBudgetToKonsumentverket: (month?: string) =>
+    api<{
+      month: string;
+      rows_updated: number;
+      rows_created: number;
+      categories_with_reference: number;
+    }>(
+      `/v2/budget/reset-to-konsumentverket${month ? `?month=${month}` : ""}`,
+      { method: "POST", body: "{}" },
+    ),
   goals: () => api<GoalsData>("/v2/mal"),
   arbetsgivaren: () => api<EmployerData>("/v2/arbetsgivaren"),
 
