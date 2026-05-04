@@ -14949,9 +14949,45 @@ def v2_create_student(
             student.onboarding_completed = True
         s.flush()
 
-        _create_profile_for_student(s, student)
-        # Skapa scope-DB direkt så kategorier seedas
-        get_scope_engine(scope_for_student(student))
+        # Defensivt: profile-create kan fail på Postgres om en NOT NULL-
+        # kolumn saknas i prod-schema. Då sparar vi student-raden ändå
+        # och låter profile skapas senare via auto-recovery.
+        try:
+            _create_profile_for_student(s, student)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "v2_create_student: _create_profile_for_student failed "
+                "för student %s — student sparas ändå utan profile",
+                student.id,
+            )
+            # Rollback för att rensa partiellt failed insert
+            s.rollback()
+            # Återskapa student-raden eftersom rollback nuked den
+            student = Student(
+                teacher_id=teacher_id,
+                family_id=payload.family_id,
+                display_name=display,
+                login_code=code,
+            )
+            s.add(student)
+            s.flush()
+            student.v2_enabled = True
+            student.v2_spend_profile = spend
+            student.v2_partner_model = partner
+            student.v2_level = payload.starting_level
+            if payload.starting_level > 1:
+                student.onboarding_completed = True
+            s.flush()
+        # Skapa scope-DB direkt så kategorier seedas (defensivt)
+        try:
+            get_scope_engine(scope_for_student(student))
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "v2_create_student: scope-engine init failed — eleven "
+                "skapas ändå, scope-init försöks igen vid första request",
+            )
 
         # Guardian-mail returneras till klienten men persisteras inte
         # i master-DB (kräver schema-tillägg). Mailar vi till föräldern

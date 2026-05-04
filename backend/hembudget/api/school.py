@@ -3397,9 +3397,31 @@ def student_login(
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, "Invalid code",
             )
-        # Säkerställ profil (för elever skapade innan profile fanns)
+        # Säkerställ profil (för elever skapade innan profile fanns).
+        # Defensivt: om profile-skapande failar (t.ex. NOT NULL-kolumn
+        # som saknas på Postgres) ska login INTE ge 500 — eleven kan
+        # ändå logga in och scope-DB:n hanteras separat.
         if not student.profile:
-            _create_profile_for_student(s, student)
+            try:
+                _create_profile_for_student(s, student)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "student_login: _create_profile_for_student failed "
+                    "för student %s — fortsätter login utan profile",
+                    student.id,
+                )
+                s.rollback()
+                # Återställ student-objektet efter rollback
+                student = (
+                    s.query(Student)
+                    .filter(Student.login_code == code)
+                    .first()
+                )
+                if not student:
+                    raise HTTPException(
+                        status.HTTP_401_UNAUTHORIZED, "Invalid code",
+                    )
         student.last_login_at = datetime.utcnow()
         sid = student.id
         name = student.display_name
@@ -3407,8 +3429,19 @@ def student_login(
         onb = student.onboarding_completed
         fam_id = student.family_id
         scope_key = scope_for_student(student)
-    # Säkerställ att scope-DB:n finns (med seed)
-    get_scope_engine(scope_key)
+    # Säkerställ att scope-DB:n finns (med seed). Defensivt: om
+    # scope-init failar (Cloud SQL connection / migration / index)
+    # logga och fortsätt — eleven får ändå sin token. När hen sedan
+    # gör requests mot scope-data försöker den initieras igen.
+    try:
+        get_scope_engine(scope_key)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "student_login: get_scope_engine failed för scope %s — "
+            "token ges ändå, scope-init kan retry vid första request",
+            scope_key,
+        )
     token = random_token()
     register_token(token, role="student", student_id=sid)
     return StudentAuthOut(
