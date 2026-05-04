@@ -629,6 +629,31 @@ def tick_month(
                     summary["business"] = {"error": str(_biz_exc)[:300]}
 
                 s.commit()
+
+                # Persistera wellbeing-snapshot direkt så lärar-vyer
+                # kan läsa den i en batched query istället för att
+                # räkna om från scratch (20+ queries per elev × N elever
+                # i klass-overview blev 1-3 s; med snapshot blir det
+                # < 100 ms eftersom alla läses i ETT IN-query).
+                try:
+                    from ...wellbeing.calculator import (
+                        calculate_wellbeing as _calc_wb,
+                        persist_wellbeing as _persist_wb,
+                    )
+                    wb_result = _calc_wb(s, year_month)
+                    _persist_wb(s, wb_result)
+                    s.commit()
+                    summary["wellbeing"] = {
+                        "year_month": year_month,
+                        "total_score": wb_result.total_score,
+                        "persisted": True,
+                    }
+                except Exception:
+                    log.exception(
+                        "tick_month: wellbeing-persist failed — "
+                        "klass-overview faller tillbaka på live-beräkning",
+                    )
+                    summary["wellbeing"] = {"persisted": False}
     except Exception as exc:
         log.exception(
             "monthly_engine: tick FAILED för student=%s ym=%s",
