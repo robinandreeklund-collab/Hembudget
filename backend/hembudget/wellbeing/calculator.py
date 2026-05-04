@@ -1245,6 +1245,73 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
             "calculate_wellbeing: portfolio-factor misslyckades",
         )
 
+    # === Event-deltas från master::WellbeingEvent ===
+    # apply_pentagon_delta loggar pentagon-effekter från specifika
+    # händelser (lönesamtal-tone, sjukdom, försenade fakturor, Maria-
+    # minnen, etc.) i master::WellbeingEvent. Tidigare räknades de
+    # bara med via "drift"-passet vid månadsslut — men eleven såg inte
+    # effekten LIVE, och en lyckad lönesamtals-rond +5 social syntes
+    # aldrig på Pentagon förrän hela månaden var klar.
+    #
+    # Vi summerar alla event-deltas senaste 60 dagarna (för att täcka
+    # in både innevarande och förra månads-tickens effekter) per axel
+    # och adderar som en factor — då rör sig pentagon direkt när
+    # eleven förhandlar med Maria, missar en faktura eller är sjuk.
+    try:
+        from ..school.engines import (
+            master_session as _ms_event,
+            get_current_actor_student as _gcas,
+        )
+        from ..school.game_engine_models import (
+            WellbeingEvent as _WE,
+        )
+        actor_id_e = _gcas()
+        if actor_id_e is not None:
+            from datetime import datetime as _dt_e, timedelta as _td_e
+            cutoff = _dt_e.utcnow() - _td_e(days=60)
+            with _ms_event() as mse:
+                rows = (
+                    mse.query(
+                        _WE.axis,
+                        sa_func.coalesce(
+                            sa_func.sum(_WE.applied_delta), 0,
+                        ),
+                    )
+                    .filter(
+                        _WE.student_id == actor_id_e,
+                        _WE.occurred_at >= cutoff,
+                    )
+                    .group_by(_WE.axis)
+                    .all()
+                )
+                for axis_name, sum_delta in rows:
+                    delta_i = int(sum_delta or 0)
+                    if delta_i == 0:
+                        continue
+                    if axis_name == "economy":
+                        economy += delta_i
+                    elif axis_name == "health":
+                        health += delta_i
+                    elif axis_name == "social":
+                        social += delta_i
+                    elif axis_name == "leisure":
+                        leisure += delta_i
+                    elif axis_name == "safety":
+                        safety += delta_i
+                    else:
+                        continue
+                    factors.append(WellbeingFactor(
+                        axis_name, delta_i,
+                        f"Senaste händelser ({delta_i:+d} p) — "
+                        "lönesamtal, sjukdom, försenade fakturor "
+                        "och liknande från senaste 60 dagarna.",
+                    ))
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "calculate_wellbeing: WellbeingEvent-summa misslyckades",
+        )
+
     # --- KLAMP + TOTAL ---
     economy = max(0, min(100, economy))
     health = max(0, min(100, health))
