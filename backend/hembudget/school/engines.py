@@ -167,20 +167,14 @@ def init_master_engine() -> Engine:
         # kunde inte få connection vid startup, container failade
         # listen-on-port → CI rött.
         #
-        # NullPool = ingen pool alls. Varje query öppnar+stänger en
-        # egen connection. ~10-30 ms overhead per query via Cloud SQL
-        # Unix-socket men:
-        # - OMÖJLIGT att läcka connections (varje connection lever ENDAST
-        #   under sin sessions livstid)
-        # - INGEN risk för pool exhaustion ens vid burst-trafik
-        # - GAMLA revisioner kan inte hålla connections under deploy
-        # - Cloud SQL:s 25-cap blir bara en gräns på TILLFÄLLIGA
-        #   parallella requests, inte ackumulerad pool-storlek
-        #
-        # Tidigare försök med pool_size=2+2 → 5+5 visade alla samma
-        # symptom: "checkedout: max, checkedin: 0" → läcka eller
-        # extremt långsamma queries. Hellre lite dyrare per request
-        # än att hela tjänsten 500:ar.
+        # NullPool — se nedan för rationale.
+        # connect_args är minimalt: bara connect_timeout (för att
+        # startup inte ska hänga). statement_timeout togs BORT
+        # eftersom analytical queries (t.ex. budget/_history_median_abs)
+        # legitimt kan ta >30s och killades med "server closed the
+        # connection unexpectedly". Med NullPool finns ingen pool
+        # att skydda från idle-läckor → idle_session_timeout och
+        # idle_in_transaction_session_timeout behövs inte heller.
         from sqlalchemy.pool import NullPool as _NP_master
         import os as _os_pool
         _rev = _os_pool.environ.get("K_REVISION", "local")
@@ -189,10 +183,6 @@ def init_master_engine() -> Engine:
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget@{_rev}",
-                "options": (
-                    "-c statement_timeout=30000 "
-                    "-c idle_in_transaction_session_timeout=15000"
-                ),
             },
         )
     elif not is_sqlite:
@@ -685,10 +675,6 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget-scope@{_rev2}",
-                "options": (
-                    "-c statement_timeout=30000 "
-                    "-c idle_in_transaction_session_timeout=15000"
-                ),
             },
         )
     engine = create_engine(url, **engine_kwargs)

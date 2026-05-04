@@ -185,6 +185,16 @@ def build_demo() -> dict:
                     log.exception(
                         "Failed building batch for %s %s", stu.display_name, ym,
                     )
+                    # KRITISKT: rollback hela sessionen så efterföljande
+                    # elever inte ärver en invalid transaction. Tidigare:
+                    # första batch failar (t.ex. Cloud SQL restart) →
+                    # session blev "PendingRollbackError" → ALLA följande
+                    # elever kraschar med samma fel.
+                    try:
+                        s.rollback()
+                    except Exception:
+                        log.exception("rollback failed too — aborting demo build")
+                        return stats
         stats["batches"] = batches_created
         stats["artifacts"] = artifacts_imported
 
