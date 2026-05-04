@@ -310,9 +310,10 @@ def build_app() -> FastAPI:
         Auth-fri så användaren kan curla från mobilen för att
         omedelbart frigöra Cloud SQL-slots utan gcloud-tillgång.
 
-        Identifierar 'andra revisioner' via application_name som
-        börjar med 'hembudget@' eller 'hembudget-scope@' men inte
-        matchar current K_REVISION.
+        Använder master_engine:s EXISTERANDE pool så vi återanvänder
+        en redan-öppen connection. Om vi öppnade en ny via NullPool
+        skulle den failas när Cloud SQL är fullt — och det är
+        precis då vi behöver detta verktyg.
         """
         import os as _os_clean
         out: dict = {
@@ -321,28 +322,16 @@ def build_app() -> FastAPI:
             "total_killed": 0,
         }
         try:
-            from sqlalchemy import (
-                create_engine as _ce_clean, text as _text_clean,
-            )
-            from sqlalchemy.pool import NullPool as _NP_clean
-            from .school.engines import (
-                _master_engine as _me_clean,
-                _master_db_url as _murl_clean,
-            )
+            from sqlalchemy import text as _text_clean
+            from .school.engines import _master_engine as _me_clean
             if _me_clean is None:
                 out["error"] = "master_engine not initialized"
                 return out
-            _url = _murl_clean()
-            _diag_engine = _ce_clean(
-                _url, poolclass=_NP_clean,
-                connect_args={
-                    "connect_timeout": 3,
-                    "application_name": "hembudget-cleanup",
-                } if _url.startswith("postgresql") else {},
-            )
             current_rev = _os_clean.environ.get("K_REVISION", "")
-            current_marker = f"@{current_rev}" if current_rev else "@local"
-            with _diag_engine.connect() as conn:
+            current_marker = (
+                f"@{current_rev}" if current_rev else "@local"
+            )
+            with _me_clean.connect() as conn:
                 # Lista connections från andra revisioner
                 rows = conn.execute(_text_clean(
                     """
@@ -355,7 +344,7 @@ def build_app() -> FastAPI:
                       AND application_name LIKE 'hembudget%'
                       AND application_name NOT LIKE :current
                     """,
-                ), {"current": f"%{current_marker}"}).fetchall()
+                ), {"current": f"%{current_marker}%"}).fetchall()
                 for pid, app_name, age in rows:
                     try:
                         conn.execute(_text_clean(
