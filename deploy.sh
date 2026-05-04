@@ -27,9 +27,12 @@ REGION="${REGION:-europe-west1}"
 # Default-projekt — används automatiskt om ingen PROJECT_ID är satt och
 # gcloud config saknar projekt. Överstyrs via env: PROJECT_ID=xxx ./deploy.sh
 DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:-hembudget}"
-MEMORY="${MEMORY:-1Gi}"
+MEMORY="${MEMORY:-2Gi}"
 CPU="${CPU:-1}"
-CONCURRENCY="${CONCURRENCY:-40}"
+# Concurrency 40 var för aggressivt: 40 parallella requests delade
+# en pool på 4+4 connections + bygger upp request-state. Vi körde
+# in i både QueuePool-timeouts OCH 1 GiB-minnetaket. Sänk till 20.
+CONCURRENCY="${CONCURRENCY:-20}"
 TIMEOUT="${TIMEOUT:-300}"
 MAX_INSTANCES="${MAX_INSTANCES:-5}"
 MIN_INSTANCES="${MIN_INSTANCES:-0}"

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -15146,6 +15146,7 @@ def _resolve_partner_model(
 )
 def v2_create_student(
     payload: V2CreateStudentIn,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_token),
 ) -> V2CreatedStudentRow:
     """Skapa elev med v2-karaktär · auto-aktiverad v2 + login-kod.
@@ -15272,34 +15273,26 @@ def v2_create_student(
 
     # === Initial-seed så eleven har data att jobba med från dag 1 ===
     #
-    # Tidigare hade en ny elev INGEN data: tomt postlådan, inga konton,
-    # ingen pentagon-historik. Det gjorde att läraren och eleven såg
-    # ett tomt skal och kunde inte börja jobba förrän någon manuellt
-    # körde "Snabbspola månad" på spelmotor-panelen.
+    # Seed:en gör 2 × tick_month (~150-450 INSERTs) + insurance/utility/
+    # pension/rental — totalt ~3-4 sekunder. Tidigare körde vi det
+    # SYNKRONT före response → läraren satt och väntade i 4 s per
+    # skapad elev. Nu schemaläggs det som BackgroundTask: response
+    # returneras direkt med login-koden, seed:en rullar i samma
+    # Cloud-Run-instans (max-instances=1 säkerställer att det är
+    # samma process).
     #
-    # Nu kör vi:
-    #   1. tick_month för förra månaden (lön + fasta utgifter +
-    #      variabla utgifter + events + sjuk + pentagon)
-    #   2. Default-försäkringar (6 standard)
-    #   3. Default-pensionsantaganden (singleton)
-    #   4. Default-låneprodukter (UC-bedömningens katalog)
-    #
-    # Misslyckas tyst — student-skapandet får inte gå sönder om en
-    # seed-funktion krasch:ar.
-    try:
-        _seed_initial_student_data(
-            student_obj,
-            spend_profile=spend,
-            starting_level=payload.starting_level,
-            partner_model=partner,
-        )
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "v2_create_student: initial seed failed for student %s "
-            "— eleven har skapats men saknar data",
-            sid,
-        )
+    # Edge case: om eleven loggar in INNAN seed:en hunnit klart ser
+    # hen tomma vyer. _ensure_student_has_initial_data i
+    # teacher_student_detail (auto-recovery) städar upp om något
+    # failade. För eleven själv finns ingen explicit "förbereder
+    # data..."-state ännu — för 4 s extra första gången är det OK.
+    background_tasks.add_task(
+        _seed_initial_student_data_safe,
+        sid,
+        spend,
+        payload.starting_level,
+        partner,
+    )
 
     return V2CreatedStudentRow(
         student_id=sid,
@@ -15643,6 +15636,41 @@ def _auto_pay_historical_invoices(
                     s.add(tx)
                 m_inv.status = "paid"
             s.commit()
+
+
+def _seed_initial_student_data_safe(
+    student_id: int,
+    spend_profile: str,
+    starting_level: int,
+    partner_model: str,
+) -> None:
+    """Bakgrunds-säker wrapper kring _seed_initial_student_data.
+
+    Hämtar Student-raden från master och delegerar. Tystas helt mot
+    exceptioner — det här körs som FastAPI BackgroundTask, en
+    exception skulle förloras tyst ändå men loggas här så vi ser
+    misslyckanden i Cloud Logging.
+    """
+    try:
+        with master_session() as s:
+            stu = s.get(Student, student_id)
+            if stu is None:
+                return
+            s.expunge(stu)
+        _seed_initial_student_data(
+            stu,
+            spend_profile=spend_profile,
+            starting_level=starting_level,
+            partner_model=partner_model,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "BackgroundTask: _seed_initial_student_data failed för "
+            "student %s — eleven kan ha tomma vyer tills "
+            "auto-recovery i student-detail kör",
+            student_id,
+        )
 
 
 def _seed_initial_student_data(

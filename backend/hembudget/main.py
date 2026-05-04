@@ -103,6 +103,21 @@ def build_app() -> FastAPI:
         )
         from .school.models import Student
 
+        # In-memory TTL-cache för (student_id, teacher_id) → scope_key.
+        # Tidigare gjorde middlewaren EN master-DB-query per
+        # autentiserad request bara för att slå upp scope-nyckeln.
+        # Med Cloud SQL-poolen begränsad till 4+4 connections och
+        # concurrency=40 blev detta en konstant flaskhals — eleven
+        # såg "väntan hela tiden". Nu cachas resultatet 5 min per
+        # (student_id, teacher_id)-kombination. När eleven byter
+        # familj (s_X → f_Y) tar det max 5 min innan middlewaren
+        # plockar upp den nya scope-nyckeln.
+        import time as _time
+        _scope_cache: dict[
+            tuple[int, int | None], tuple[float, str, int]
+        ] = {}
+        _SCOPE_CACHE_TTL = 300.0
+
         class StudentScopeMiddleware(BaseHTTPMiddleware):
             async def dispatch(self, request, call_next):
                 set_current_scope(None)
@@ -121,18 +136,38 @@ def build_app() -> FastAPI:
                             except ValueError:
                                 target_id = None
                         if target_id is not None:
-                            with master_session() as s:
-                                q = s.query(Student).filter(
-                                    Student.id == target_id,
-                                )
-                                if info.role == "teacher":
-                                    q = q.filter(
-                                        Student.teacher_id == info.teacher_id,
+                            now = _time.monotonic()
+                            cache_key = (
+                                target_id,
+                                info.teacher_id
+                                if info.role == "teacher" else None,
+                            )
+                            entry = _scope_cache.get(cache_key)
+                            scope_key: str | None = None
+                            actor_id: int | None = None
+                            if entry is not None and entry[0] > now:
+                                _, scope_key, actor_id = entry
+                            else:
+                                with master_session() as s:
+                                    q = s.query(Student).filter(
+                                        Student.id == target_id,
                                     )
-                                stu = q.first()
-                                if stu:
-                                    set_current_scope(scope_for_student(stu))
-                                    set_current_actor_student(stu.id)
+                                    if info.role == "teacher":
+                                        q = q.filter(
+                                            Student.teacher_id
+                                            == info.teacher_id,
+                                        )
+                                    stu = q.first()
+                                    if stu:
+                                        scope_key = scope_for_student(stu)
+                                        actor_id = stu.id
+                                        _scope_cache[cache_key] = (
+                                            now + _SCOPE_CACHE_TTL,
+                                            scope_key, actor_id,
+                                        )
+                            if scope_key is not None and actor_id is not None:
+                                set_current_scope(scope_key)
+                                set_current_actor_student(actor_id)
                 return await call_next(request)
 
         app.add_middleware(StudentScopeMiddleware)

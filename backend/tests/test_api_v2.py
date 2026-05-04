@@ -8,6 +8,7 @@ Verifierar:
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -7594,18 +7595,18 @@ def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
         other = _T(
             email="annan@skola.se",
             password_hash=hash_password("hemligt12"),
-            display_name="Annan",
+            name="Annan",
             email_verified_at=datetime.utcnow(),
         )
         s.add(other)
         s.commit()
         s.refresh(other)
     login_r = client.post(
-        "/auth/teacher/login",
+        "/teacher/login",
         json={"email": "annan@skola.se", "password": "hemligt12"},
     )
     assert login_r.status_code == 200
-    other_token = login_r.json()["access_token"]
+    other_token = login_r.json()["token"]
     # Försök radera Eva (sid tillhör tch, inte annan)
     r = client.delete(
         f"/v2/teacher/students/{sid}",
