@@ -195,6 +195,21 @@ def init_master_engine() -> Engine:
     _master_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
     )
+    # Logga POOL-CONFIG för verifiering — utan detta kan vi inte
+    # skilja på "fix deployad inte" och "fix räcker inte" när
+    # connections timar ut i prod.
+    try:
+        pool = engine.pool
+        log.info(
+            "MASTER engine initialized · pool_class=%s "
+            "pool_size=%s max_overflow=%s url=%s",
+            type(pool).__name__,
+            getattr(pool, "_pool", None) and pool.size(),
+            getattr(pool, "_max_overflow", None),
+            url.split("@")[-1] if "@" in url else url,
+        )
+    except Exception:
+        pass
     # Cacha kolumn-existens efter migrations. API-lagret konsulterar
     # detta innan deferred-fält accessas så att SELECT inte kraschar
     # mot prod-Postgres där en migration eventuellt failat.
@@ -617,6 +632,10 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
         _shared_scope_session = sessionmaker(
             bind=engine, autoflush=False, expire_on_commit=False,
         )
+        log.info(
+            "SCOPE engine initialized (DELAR master-engine, en pool "
+            "för båda)",
+        )
         return engine, _shared_scope_session
 
     engine_kwargs: dict = {"future": True}
@@ -628,6 +647,10 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
+    log.info(
+        "SCOPE engine initialized SEPARAT (master-engine fanns inte "
+        "när vi initierades — egen pool 4+4)",
+    )
 
     # create_all kan misslyckas mot existerande Postgres-schema (typkonflikt,
     # FK-konflikt, etc). Logga och fortsätt — engine är fortfarande

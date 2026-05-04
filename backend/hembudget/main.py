@@ -238,6 +238,50 @@ def build_app() -> FastAPI:
     def healthz() -> dict:
         return {"ok": True, "version": "0.1.0"}
 
+    @app.get("/healthz/db")
+    def healthz_db() -> dict:
+        """Diagnostik · returnerar pool-config + aktuell användning för
+        master + scope-engines. Används för att VERIFIERA att deployad
+        kod faktiskt har förväntad pool-storlek (annars kan vi inte
+        skilja "fix deployad inte" från "fix räcker inte")."""
+        out: dict = {
+            "school_mode": os.environ.get(
+                "HEMBUDGET_SCHOOL_MODE", "",
+            ),
+            "has_database_url": bool(
+                os.environ.get("HEMBUDGET_DATABASE_URL", "").strip(),
+            ),
+            "engines": {},
+        }
+        try:
+            from .school import engines as _eng
+            for label, engine in (
+                ("master", _eng._master_engine),
+                ("scope_shared", _eng._shared_scope_engine),
+            ):
+                if engine is None:
+                    out["engines"][label] = {"initialized": False}
+                    continue
+                pool = engine.pool
+                out["engines"][label] = {
+                    "initialized": True,
+                    "is_same_as_master": (
+                        engine is _eng._master_engine and label != "master"
+                    ),
+                    "pool_class": type(pool).__name__,
+                    "pool_size": getattr(pool, "size", lambda: None)(),
+                    "checked_out": getattr(
+                        pool, "checkedout", lambda: None,
+                    )(),
+                    "checked_in": getattr(
+                        pool, "checkedin", lambda: None,
+                    )(),
+                    "overflow": getattr(pool, "overflow", lambda: None)(),
+                }
+        except Exception as e:
+            out["engines_error"] = repr(e)
+        return out
+
     # Servera byggd frontend (dist/) när den finns i containern.
     # Aktiveras via HEMBUDGET_SERVE_STATIC=1 (sätts i Dockerfile:n).
     # I desktop-läget är frontend en separat Vite-server → aldrig
