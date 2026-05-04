@@ -685,13 +685,24 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
                     "året — kostnaden ökar snabbare än lön.",
                 ))
         else:
-            # Ingen aktiv bostad alls — registrerat boende saknas
-            factors.append(WellbeingFactor(
-                "safety", -2,
-                "Inget registrerat hyreskontrakt eller bostadsrätt — "
-                "boendet är odefinierat.",
-            ))
-            safety -= 2
+            # Ingen aktiv bostad alls. Vi vill bara straffa elever
+            # som *borde* ha ett kontrakt registrerat — alltså inte
+            # tomma scope-DB:n (nyss skapade elever, tester).
+            # Heuristik: om det finns minst ett konto antar vi att
+            # eleven är onboardad och boende-data saknas på riktigt.
+            try:
+                has_any_account = (
+                    session.query(Account.id).limit(1).first() is not None
+                )
+            except Exception:
+                has_any_account = False
+            if has_any_account:
+                factors.append(WellbeingFactor(
+                    "safety", -2,
+                    "Inget registrerat hyreskontrakt eller bostadsrätt — "
+                    "boendet är odefinierat.",
+                ))
+                safety -= 2
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
