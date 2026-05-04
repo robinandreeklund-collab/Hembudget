@@ -167,29 +167,31 @@ def init_master_engine() -> Engine:
         # kunde inte få connection vid startup, container failade
         # listen-on-port → CI rött.
         #
-        # QueuePool 10+10 = max 20 per Cloud-Run-revision.
-        # Cloud SQL db-g1-small har 50 max_connections → ~45 användbara
-        # → även med deploy-overlap (gammal+ny revision = 40 conn)
-        # finns headroom.
+        # NullPool — kritiskt för att INTE ackumulera idle
+        # connections per revision. Diagnostik visade i prod att
+        # QueuePool 10+10 från GAMLA revisioner som Cloud Run inte
+        # dödat efter deploys håller kvar idle conn → tillsammans
+        # med ny revision sprängs Cloud SQL:s 50-cap → "FATAL:
+        # remaining connection slots are reserved".
         #
-        # NullPool användes som diagnostik tidigare för att bevisa att
-        # det INTE fanns connection-leakar. Det funkade men kostade
-        # 10-30 ms per query för en ny TCP-socket → klass-overview
-        # med 28 elever × ~5 queries kunde bli 1-3 s bara av
-        # connection-setup. QueuePool återanvänder sockets → varje
-        # query betalar bara round-trip-tiden.
+        # NullPool öppnar+stänger en connection per query (~10-30 ms
+        # overhead över Cloud SQL Unix-socket). Trade-off: lite
+        # långsammare per query, men:
+        #  - Gamla revisioner har 0 lingrande connections
+        #  - Endast aktiva queries håller connection (Cloud Run
+        #    concurrency=20 → max 20 conn per revision även vid
+        #    burst)
+        #  - Ingen risk för pool exhaustion
         #
-        # idle_in_transaction_session_timeout=15s skyddar mot
-        # transaktioner som glömts öppna (läcka som annars stannar
-        # connectionen i poolen för evigt).
-        # statement_timeout sätts INTE — analytical queries
-        # (_history_median_abs i budget) kan legitimt ta >30s.
-        # pool_pre_ping=True så stale connections kasseras tyst.
+        # Med /v2/notifications cachat 15 s + klass-overview
+        # prefetch + reducerad polling är connection-overhead
+        # försumbart — typiska sidor kör 5-10 queries (50-300 ms
+        # overhead totalt).
+        from sqlalchemy.pool import NullPool as _NP_master
         import os as _os_pool
         _rev = _os_pool.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=10, max_overflow=10,
-            pool_recycle=300, pool_timeout=10,
+            poolclass=_NP_master,
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget@{_rev}",
@@ -677,13 +679,12 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
 
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Fallback-pool om master-engine inte är initierad än.
-        # Samma config som master.
+        # NullPool — se kommentar i init_master_engine för rationale.
+        from sqlalchemy.pool import NullPool as _NP_scope
         import os as _os_pool2
         _rev2 = _os_pool2.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=10, max_overflow=10,
-            pool_recycle=300, pool_timeout=10,
+            poolclass=_NP_scope,
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget-scope@{_rev2}",
