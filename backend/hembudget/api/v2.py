@@ -16677,6 +16677,71 @@ def _time_label_for(dt: datetime) -> str:
     return f"{dt.day} {months[dt.month - 1]}"
 
 
+class V2NotifMarkReadIn(BaseModel):
+    notif_id: str = Field(min_length=1, max_length=60)
+
+
+@router.post("/notifications/mark-read", status_code=204)
+def mark_v2_notif_read(
+    body: V2NotifMarkReadIn,
+    info: TokenInfo = Depends(require_token),
+) -> Response:
+    """Markera en notif som läst · idempotent.
+
+    Frontend kallar denna när eleven klickar på en notif. Räkningen
+    av olästa minskar omedelbart eftersom nästa GET /v2/notifications
+    filtrerar med read_ids.
+    """
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever kan markera notiser")
+    from ..school.models import V2NotifReadState as _NRS
+    with master_session() as ms:
+        existing = (
+            ms.query(_NRS)
+            .filter(
+                _NRS.student_id == info.student_id,
+                _NRS.notif_id == body.notif_id,
+            )
+            .first()
+        )
+        if existing is None:
+            ms.add(_NRS(
+                student_id=info.student_id,
+                notif_id=body.notif_id,
+            ))
+            ms.commit()
+    return Response(status_code=204)
+
+
+@router.post("/notifications/mark-all-read", status_code=204)
+def mark_all_v2_notifs_read(
+    info: TokenInfo = Depends(require_token),
+) -> Response:
+    """Markera ALLA aktuella notifs som lästa (one-click)."""
+    if info.role != "student" or info.student_id is None:
+        raise HTTPException(403, "Endast elever")
+    # Hämta alla notif-ids genom att kalla aggregeringen igen
+    response = get_v2_notifications(info)  # type: ignore[arg-type]
+    from ..school.models import V2NotifReadState as _NRS
+    with master_session() as ms:
+        existing_ids = {
+            r.notif_id for r in (
+                ms.query(_NRS)
+                .filter(_NRS.student_id == info.student_id)
+                .all()
+            )
+        }
+        for n in response.items:
+            if n.id in existing_ids:
+                continue
+            ms.add(_NRS(
+                student_id=info.student_id,
+                notif_id=n.id,
+            ))
+        ms.commit()
+    return Response(status_code=204)
+
+
 @router.get(
     "/notifications", response_model=V2NotificationsResponse,
 )
@@ -16717,6 +16782,16 @@ def get_v2_notifications(
                 items=[],
             )
 
+        # Hämta vilka notif-IDs eleven REDAN klickat på (= read).
+        # Notif-id är härlett ("uppdrag-42", "modul-7" etc.) så vi
+        # joinar in det per item nedan.
+        from ..school.models import V2NotifReadState as _NRS
+        read_ids = {
+            r.notif_id for r in (
+                ms.query(_NRS).filter(_NRS.student_id == sid).all()
+            )
+        }
+
         # 1. Lärar-meddelanden (olästa = sender_role=teacher + read_at=None)
         from ..school.models import Message as _M
         msgs = (
@@ -16734,15 +16809,16 @@ def get_v2_notifications(
             body = (m.body or "")[:140]
             if len(m.body or "") > 140:
                 body += "…"
+            nid = f"msg-{m.id}"
             notifs.append(V2Notification(
-                id=f"msg-{m.id}",
+                id=nid,
                 kind="teacher",
                 icon="AL",
                 occurred_at=m.created_at,
                 time_label=_time_label_for(m.created_at),
                 title="Meddelande från läraren",
                 body=body,
-                unread=m.read_at is None,
+                unread=(m.read_at is None) and (nid not in read_ids),
                 target_route="/v2/meddelanden",
             ))
 
@@ -16765,9 +16841,13 @@ def get_v2_notifications(
         for a in assignments:
             if a.manually_completed_at is not None:
                 continue
-            unread = (now - a.created_at).total_seconds() < 7 * 24 * 3600
+            nid = f"uppdrag-{a.id}"
+            # Unread om < 7 dagar gammal OCH eleven inte klickat än
+            age_unread = (
+                (now - a.created_at).total_seconds() < 7 * 24 * 3600
+            )
             notifs.append(V2Notification(
-                id=f"uppdrag-{a.id}",
+                id=nid,
                 kind="uppdrag",
                 icon="▷",
                 occurred_at=a.created_at,
@@ -16780,8 +16860,54 @@ def get_v2_notifications(
                         if a.due_date else ""
                     )
                 ),
-                unread=unread,
+                unread=age_unread and (nid not in read_ids),
                 target_route="/v2/uppdrag",
+            ))
+
+        # 2b. Nya modul-tilldelningar (StudentModule, ej started_at).
+        # Visas som "modul"-notif så eleven ser att läraren tilldelat
+        # en modul — inte bara dess underliggande uppdrag.
+        student_modules = (
+            ms.query(_SchoolStudentModule)
+            .filter(
+                _SchoolStudentModule.student_id == sid,
+                _SchoolStudentModule.assigned_at >= cutoff,
+            )
+            .order_by(_SchoolStudentModule.assigned_at.desc())
+            .limit(10)
+            .all()
+        )
+        for sm in student_modules:
+            mod = ms.get(_SchoolModule, sm.module_id)
+            if mod is None:
+                continue
+            nid = f"modul-{sm.id}"
+            age_unread = (
+                (now - sm.assigned_at).total_seconds() < 7 * 24 * 3600
+            )
+            # Antal steg + uppskattad tid (om finns på modulen)
+            n_steps = (
+                ms.query(_SchoolModuleStep)
+                .filter(_SchoolModuleStep.module_id == mod.id)
+                .count()
+            )
+            time_est = getattr(mod, "estimated_minutes", None)
+            time_part = (
+                f" · ~{time_est} min" if time_est else ""
+            )
+            notifs.append(V2Notification(
+                id=nid,
+                kind="modul",
+                icon="M",
+                occurred_at=sm.assigned_at,
+                time_label=_time_label_for(sm.assigned_at),
+                title=f"{teacher_name} tilldelade modul",
+                body=(
+                    f"<em>{mod.title}</em> · {n_steps} steg"
+                    f"{time_part} · rekommenderad"
+                ),
+                unread=age_unread and (nid not in read_ids),
+                target_route=f"/v2/moduler/{mod.id}",
             ))
 
         # 3. Lärar-feedback på reflektioner (senaste 14 dgr · oläst)
@@ -16850,8 +16976,9 @@ def get_v2_notifications(
                         if m.mail_type == "reminder"
                         else "MYNDIGHETSPOST"
                     )
+                    nid = f"mail-{m.id}"
                     notifs.append(V2Notification(
-                        id=f"mail-{m.id}",
+                        id=nid,
                         kind="bank",
                         icon=icon,
                         occurred_at=m.received_at or now,
@@ -16864,7 +16991,7 @@ def get_v2_notifications(
                                 if m.amount is not None else ""
                             )
                         ),
-                        unread=True,
+                        unread=(nid not in read_ids),
                         target_route="/v2/postladan",
                     ))
     except Exception:

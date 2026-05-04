@@ -7614,6 +7614,123 @@ def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
     assert r.status_code == 404
 
 
+def test_v2_notif_mark_read_idempotent(fx) -> None:
+    """POST /v2/notifications/mark-read sätter notif_id som läst.
+    Nästa GET /v2/notifications returnerar unread=False för samma id.
+    Idempotent: kan kallas igen utan duplicerad rad.
+    """
+    from hembudget.school.models import (
+        Message as _M, V2NotifReadState as _NRS,
+    )
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+
+    # Skapa ett lärar-meddelande så det dyker upp som notif
+    with master_session() as s:
+        s.add(_M(
+            student_id=sid,
+            teacher_id=_tid,
+            sender_role="teacher",
+            body="Hej Eva, glöm inte att klassa transaktioner!",
+        ))
+        s.commit()
+
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    msg_notifs = [n for n in items if n["id"].startswith("msg-")]
+    assert len(msg_notifs) >= 1
+    notif_id = msg_notifs[0]["id"]
+    assert msg_notifs[0]["unread"] is True
+
+    # Markera som läst
+    r2 = client.post(
+        "/v2/notifications/mark-read",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"notif_id": notif_id},
+    )
+    assert r2.status_code == 204
+
+    # Nästa GET → unread=False
+    r3 = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    items3 = r3.json()["items"]
+    msg_n = next(n for n in items3 if n["id"] == notif_id)
+    assert msg_n["unread"] is False, (
+        f"Notif ska vara unread=False efter mark-read, fick {msg_n}"
+    )
+
+    # Idempotent · andra mark-read ger samma 204 utan duplicerad rad
+    r4 = client.post(
+        "/v2/notifications/mark-read",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"notif_id": notif_id},
+    )
+    assert r4.status_code == 204
+    with master_session() as s:
+        cnt = (
+            s.query(_NRS)
+            .filter(
+                _NRS.student_id == sid,
+                _NRS.notif_id == notif_id,
+            )
+            .count()
+        )
+        assert cnt == 1
+
+
+def test_v2_notif_module_assignment_creates_notif(fx) -> None:
+    """När lärare tilldelar modul (StudentModule) skapas en
+    "modul"-notif i elevens flöde. Tidigare visades bara underliggande
+    uppdrag, inte själva modul-tilldelningen."""
+    from hembudget.school.models import (
+        Module as _Mod, ModuleStep as _MS, StudentModule as _SM,
+    )
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+
+    with master_session() as s:
+        mod = _Mod(
+            title="Pension om 40 år",
+            summary="Lär dig om ränta-på-ränta",
+            sort_order=99,
+        )
+        s.add(mod)
+        s.flush()
+        # Lägg till två steg
+        s.add(_MS(
+            module_id=mod.id, sort_order=1,
+            kind="read", title="Intro", content="...",
+        ))
+        s.add(_MS(
+            module_id=mod.id, sort_order=2,
+            kind="task", title="Räkna", content="...",
+        ))
+        # Tilldela
+        s.add(_SM(student_id=sid, module_id=mod.id))
+        s.commit()
+        mod_id = mod.id
+
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    modul_notifs = [n for n in items if n["kind"] == "modul"]
+    assert len(modul_notifs) >= 1, (
+        f"Ingen 'modul'-notif hittades. Items: "
+        f"{[(n['kind'], n['id']) for n in items]}"
+    )
+    n = modul_notifs[0]
+    assert "Pension om 40 år" in n["body"]
+    assert n["target_route"] == f"/v2/moduler/{mod_id}"
+    assert n["unread"] is True
+
+
 def test_v2_mail_detail_auto_handles_info_types(fx) -> None:
     """När eleven öppnar ett info/authority/salary_slip-brev ska
     status sättas till "handled" direkt (ej "viewed") — det finns

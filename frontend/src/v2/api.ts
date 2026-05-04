@@ -3295,6 +3295,16 @@ export const v2Api = {
   // === /v2/notifications (Fas 2AB · live-notiser) ===
   notifications: () =>
     api<V2NotificationsResponse>("/v2/notifications"),
+  notifMarkRead: (notifId: string) =>
+    api<void>("/v2/notifications/mark-read", {
+      method: "POST",
+      body: JSON.stringify({ notif_id: notifId }),
+    }),
+  notifMarkAllRead: () =>
+    api<void>("/v2/notifications/mark-all-read", {
+      method: "POST",
+      body: "{}",
+    }),
   // === Fas 2AF · skapa uppdrag från lärar-elev-detalj ===
   teacherCreateAssignment: (
     studentId: number,
