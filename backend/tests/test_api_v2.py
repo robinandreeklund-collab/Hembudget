@@ -29,14 +29,58 @@ def fx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from hembudget.security import rate_limit as rl_mod
     rl_mod.reset_all_for_testing()
     from hembudget.school import engines as eng_mod
+    # Postgres-mode: TRUNCATE alla tabeller mellan tester så de inte
+    # kolliderar (SQLite får ny tmp_path per test, Postgres delas).
+    # Vi öppnar en ENGÅNGS-connection direkt via psycopg2 så vi inte
+    # är beroende av SQLAlchemy-engine-state (som är None just nu).
+    import os as _os_test
+    _pg_url = _os_test.environ.get(
+        "HEMBUDGET_DATABASE_URL", "",
+    ).strip()
+    if _pg_url.startswith("postgresql"):
+        try:
+            import psycopg2 as _psy_truncate
+            from urllib.parse import urlparse as _urlparse
+            _parsed = _urlparse(
+                _pg_url.replace("postgresql+psycopg2://", "postgresql://"),
+            )
+            _conn_t = _psy_truncate.connect(
+                host=_parsed.hostname,
+                port=_parsed.port or 5432,
+                user=_parsed.username,
+                password=_parsed.password,
+                dbname=_parsed.path.lstrip("/"),
+                connect_timeout=5,
+            )
+            _conn_t.autocommit = True
+            with _conn_t.cursor() as _cur:
+                _cur.execute(
+                    "SELECT tablename FROM pg_tables "
+                    "WHERE schemaname = 'public'",
+                )
+                _names = [r[0] for r in _cur.fetchall()]
+                if _names:
+                    _cur.execute(
+                        f"TRUNCATE {', '.join(_names)} "
+                        f"RESTART IDENTITY CASCADE",
+                    )
+            _conn_t.close()
+        except Exception:
+            pass
     if eng_mod._master_engine is not None:
         eng_mod._master_engine.dispose()
     eng_mod._master_engine = None
     eng_mod._master_session = None
+    if hasattr(eng_mod, "_shared_scope_engine") and eng_mod._shared_scope_engine is not None:
+        eng_mod._shared_scope_engine.dispose()
+        eng_mod._shared_scope_engine = None
+        eng_mod._shared_scope_session = None
     for e in list(eng_mod._scope_engines.values()):
         e.dispose()
     eng_mod._scope_engines.clear()
     eng_mod._scope_sessions.clear()
+    if hasattr(eng_mod, "_seeded_tenants"):
+        eng_mod._seeded_tenants.clear()
     from hembudget.school import demo_seed as demo_seed_mod
     monkeypatch.setattr(demo_seed_mod, "build_demo", lambda: {"skipped": True})
 

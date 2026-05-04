@@ -238,6 +238,69 @@ def build_app() -> FastAPI:
     def healthz() -> dict:
         return {"ok": True, "version": "0.1.0"}
 
+    # === In-memory ring-buffer för senaste exceptions ===
+    # Auth-fri exposure via /healthz/errors. Eliminerar behovet av
+    # gcloud logging read när vi behöver felsöka prod snabbt.
+    # Begränsat till 50 senaste, max ~50 KB minne.
+    from collections import deque as _deque_err
+    import threading as _threading_err
+    import traceback as _tb_err
+    from datetime import datetime as _dt_err
+    _error_buffer: _deque_err = _deque_err(maxlen=50)
+    _error_lock = _threading_err.Lock()
+
+    def _record_exception(
+        request: "Request | None", exc: BaseException,
+    ) -> None:
+        try:
+            with _error_lock:
+                _error_buffer.append({
+                    "ts": _dt_err.utcnow().isoformat() + "Z",
+                    "type": type(exc).__name__,
+                    "message": str(exc)[:500],
+                    "path": (
+                        str(request.url.path) if request is not None
+                        else None
+                    ),
+                    "method": (
+                        request.method if request is not None else None
+                    ),
+                    "traceback": "".join(
+                        _tb_err.format_exception(
+                            type(exc), exc, exc.__traceback__,
+                        ),
+                    )[-2000:],  # sista 2 KB av traceback räcker
+                })
+        except Exception:
+            pass
+
+    # Globalexception-handler som loggar in errors EFTER att
+    # FastAPI:s default-handler kört.
+    from fastapi import Request as _RequestFastAPI
+    from fastapi.responses import JSONResponse as _JSONResponseFastAPI
+
+    @app.exception_handler(Exception)
+    async def _capture_exception(
+        request: _RequestFastAPI, exc: Exception,
+    ):
+        _record_exception(request, exc)
+        # Re-raise vanlig 500 så FastAPI:s default-error-page visas
+        return _JSONResponseFastAPI(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
+        )
+
+    @app.get("/healthz/errors")
+    def healthz_errors(limit: int = 20) -> dict:
+        """Senaste exceptions in-memory (för snabb felsökning utan
+        gcloud logging). Auth-fri."""
+        with _error_lock:
+            items = list(_error_buffer)[-limit:]
+        return {
+            "count": len(items),
+            "errors": list(reversed(items)),  # nyast först
+        }
+
     @app.get("/healthz/db")
     def healthz_db() -> dict:
         """Diagnostik · pool-config + aktuell användning + Cloud SQL
