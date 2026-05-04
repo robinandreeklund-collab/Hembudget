@@ -332,33 +332,48 @@ def build_app() -> FastAPI:
                 f"@{current_rev}" if current_rev else "@local"
             )
             with _me_clean.connect() as conn:
-                # Lista connections från andra revisioner
+                # Lista connections som är "stale":
+                # - andra revisioner (application_name börjar med
+                #   'hembudget' men matchar inte current)
+                # - ELLER application_name är NULL/tom OCH connection
+                #   är "idle in transaction" eller "idle" + > 60s gammal
+                #   (gamla revisioners glömda connections)
                 rows = conn.execute(_text_clean(
                     """
-                    SELECT pid, application_name,
+                    SELECT pid, application_name, state,
                            extract(epoch from now() - backend_start)::int
                              as age_seconds
                     FROM pg_stat_activity
                     WHERE datname = current_database()
                       AND pid <> pg_backend_pid()
-                      AND application_name LIKE 'hembudget%'
-                      AND application_name NOT LIKE :current
+                      AND (
+                        (application_name LIKE 'hembudget%'
+                         AND application_name NOT LIKE :current)
+                        OR (
+                          (application_name IS NULL
+                           OR application_name = '')
+                          AND state IN ('idle', 'idle in transaction')
+                          AND extract(epoch from now() - backend_start) > 60
+                        )
+                      )
                     """,
                 ), {"current": f"%{current_marker}%"}).fetchall()
-                for pid, app_name, age in rows:
+                for pid, app_name, state, age in rows:
                     try:
                         conn.execute(_text_clean(
                             "SELECT pg_terminate_backend(:p)",
                         ), {"p": pid})
                         out["killed"].append({
                             "pid": int(pid),
-                            "application": app_name,
+                            "application": app_name or "(unset)",
+                            "state": state,
                             "age_seconds": int(age) if age else None,
                         })
                     except Exception as e:
                         out["killed"].append({
                             "pid": int(pid),
-                            "application": app_name,
+                            "application": app_name or "(unset)",
+                            "state": state,
                             "error": str(e)[:200],
                         })
                 conn.commit()

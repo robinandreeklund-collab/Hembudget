@@ -119,6 +119,47 @@ class EmailToken(MasterBase):
     )
 
 
+class AuthToken(MasterBase):
+    """Persistent session-token (lärare/elev) — DB-backat så det
+    funkar över flera Cloud Run-instanser.
+
+    Tidigare lagrat i process-lokal `_ACTIVE_TOKENS`-dict. Det fungerade
+    bara med max-instances=1 — när vi skalar horisontellt måste tokens
+    delas mellan instanser så att login på instans A funkar på instans B.
+
+    Kolumnerna speglar TokenInfo-dataclass i api/deps.py:
+      role: 'teacher' | 'student' | 'demo'
+      teacher_id / student_id: en av dem populerad beroende på role
+      last_seen_at: uppdateras vid varje request → används för
+        sliding-window expiration (settings.session_timeout_minutes)
+    """
+    __tablename__ = "auth_tokens"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_auth_token"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token: Mapped[str] = mapped_column(
+        String(80), nullable=False, index=True,
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True,
+    )
+    teacher_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, index=True,
+    )
+    student_id: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+        nullable=False, index=True,
+    )
+
+
 class Family(MasterBase):
     """En "familj" = grupp av elever som delar hushållsekonomi (samma
     student-DB). Används pedagogiskt: två elever kan vara sambo/föräldrar
