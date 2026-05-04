@@ -5,23 +5,27 @@ inte elev-data och student-DB:ar innehåller inte lärare/elever.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
     JSON,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase, Mapped, mapped_column, deferred, relationship,
+)
 
 
 class MasterBase(DeclarativeBase):
@@ -55,6 +59,12 @@ class Teacher(MasterBase):
     ai_requests_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     ai_output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Dagsgräns för AI-chatt-meddelanden per elev. Super-admin kan höja.
+    # 0 = AI-chatt avstängd även om ai_enabled=True. Default 10 = lagom
+    # för en lektion utan att eleven kan "kosta ihjäl" Anthropic-kontot.
+    ai_chat_daily_quota: Mapped[int] = mapped_column(
+        Integer, default=10, nullable=False,
+    )
     # NULL = ej verifierad (open-signup-lärare som inte klickat länk än).
     # Bootstrap-läraren + demo-läraren sätts verifierade direkt vid skapelse.
     # Login blockeras för lärare med NULL (förutom super-admin).
@@ -152,6 +162,52 @@ class Student(MasterBase):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
+    # Bank-PIN för BankID-simulering på /bank (idé 3 i dev_v1.md).
+    # 4-siffrig PIN som eleven sätter vid första bank-inlogg, hashad
+    # med bcrypt. Lärare kan resetta via /teacher/students/:id/reset-pin.
+    bank_pin_hash: Mapped[Optional[str]] = mapped_column(
+        String(120), nullable=True,
+    )
+    # === V2-fält (parallell migration · ny dashboard) ===
+    # Per-elev-toggle: läraren bestämmer vilka elever som ska se v2.
+    # Default False — eleven får v1 tills läraren aktiverar v2.
+    # Super-admin är alltid v2-eligible oavsett denna flagga.
+    v2_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    # Sätts under v2-onboardingen och styr nya UI:t. Saknas värde →
+    # eleven har inte gått v2-onboardingen och hänvisas till v1.
+    v2_onboarding_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Spelets svårighetsgrad. 1 = Sparsam (start), 2 = Balanserad
+    # (lärare aktiverar), 3 = Slösa (fortsättning). Ändras enbart av
+    # läraren via /v2/teacher/students/:id/level.
+    v2_level: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Spenderprofil: "sparsam" / "balanserad" / "slosa". Styr hur
+    # förra-månadens-data genereras (kreditkortsfakturor, postlådan).
+    # Default "sparsam" eftersom alla börjar på Nivå 1.
+    v2_spend_profile: Mapped[str] = mapped_column(
+        String(20), default="sparsam", nullable=False,
+    )
+    # Värderingsval om sambo-ekonomi (50/50, proportionellt, pool).
+    # Sparas innan AI-partnern avslöjas så svaret inte rationaliseras.
+    # NULL om inte besvarat eller om karaktären är solo.
+    v2_fairness_choice: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+    )
+    # Partner-modell: "solo" / "ai" / "klasskompis". Sätts vid karaktärs-
+    # generering. "klasskompis" kräver att läraren aktiverar paret.
+    v2_partner_model: Mapped[str] = mapped_column(
+        String(20), default="solo", nullable=False,
+    )
+    # Bug #7-utbyggnad · läraren aktiverar företagsläget per elev.
+    # När True kan eleven flippa dashboarden till business-mode och
+    # driva enskild firma eller AB. Eget företag blir då huvudsakligt
+    # 'jobb' — Maria-lönesamtal pausas, intäkter genereras via fakturor.
+    business_mode_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
@@ -179,6 +235,18 @@ class StudentProfile(MasterBase):
         ForeignKey("students.id", ondelete="CASCADE"),
         primary_key=True,
     )
+
+    # Karaktärsnamn — den persona eleven får. Skiljer sig från
+    # student.display_name som är inloggningsnamnet/elevkontot.
+    # Används i v2-vyer ("Sara", "Hennes vardag", etc.). deferred()
+    # så lazy-load inte kraschar innan migrationen hunnit lägga till
+    # kolumnerna i prod-Postgres.
+    character_first_name: Mapped[Optional[str]] = deferred(mapped_column(
+        String(60), nullable=True,
+    ))
+    character_last_name: Mapped[Optional[str]] = deferred(mapped_column(
+        String(60), nullable=True,
+    ))
 
     # Karriär
     profession: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -216,15 +284,84 @@ class StudentProfile(MasterBase):
 
     # Partnerns ålder (för 2-vuxen-hushåll). None om family_status == "ensam".
     partner_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Partnerns yrke och bruttolön — krävs för att hushållsekonomin ska gå
+    # ihop. Sätts vid profilgenerering om family_status != "ensam".
+    # deferred() = exkludera från default-SELECT så att lazy-load av
+    # student.profile inte kraschar när migration ännu inte hunnit lägga
+    # till kolumnen i prod-Postgres. Värdet hämtas först vid explicit
+    # access (cost-split-endpoint, generator).
+    partner_profession: Mapped[Optional[str]] = deferred(mapped_column(
+        String(80), nullable=True,
+    ))
+    partner_gross_salary: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    # Hushållets fördelningsmodell — eleven väljer vid onboarding INNAN
+    # hen ser sin egen profil ('veil of ignorance' — pedagogiskt ärligt
+    # val). Påverkar generatorn: vilken andel av gemensamma kostnader
+    # eleven får på sitt konto.
+    # "even_50_50" | "pro_rata" | "all_shared" | None (ej onboardad/ensam)
+    cost_split_preference: Mapped[Optional[str]] = deferred(mapped_column(
+        String(20), nullable=True,
+    ))
+    cost_split_decided_at: Mapped[Optional[datetime]] = deferred(mapped_column(
+        DateTime, nullable=True,
+    ))
 
     # Backstory som visas i onboardingen
     backstory: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Lönesamtals-resultat: ny lön committas inte direkt — den lagras
+    # här tills lönespec-generatorn körs för en månad >= effective_from,
+    # då skrivs gross_salary_monthly om och pending-fälten nollas. Det
+    # speglar verkligheten där samtalet sker en månad och nya lönen syns
+    # på nästa lönespec.
+    pending_salary_monthly: Mapped[Optional[int]] = deferred(mapped_column(
+        Integer, nullable=True,
+    ))
+    pending_effective_from: Mapped[Optional[date]] = deferred(mapped_column(
+        Date, nullable=True,
+    ))
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(),
     )
 
     student: Mapped[Student] = relationship(back_populates="profile")
+
+
+class V2OnboardingEvent(MasterBase):
+    """Per-stegs-loggning för v2-onboardingen.
+
+    Läraren behöver komplett insyn i elevens onboarding-resa: vilka
+    steg eleven sett, hur länge hen var på varje, eventuella backsteg
+    och avhopp. Frontend loggar event vid varje stegväxling.
+
+    Event-typer:
+      "viewed"     — eleven visade ett steg (skickas vid mount/byte)
+      "back"       — klickade ← Tillbaka
+      "next"       — klickade Nästa →
+      "completed"  — hela onboardingen klar (sista stegets next)
+      "abandoned"  — eleven stängde fönstret (skickas via beacon vid unload)
+
+    `payload` är frivillig JSON (t.ex. fairness-svar i steg 7).
+    """
+
+    __tablename__ = "v2_onboarding_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id"), nullable=False, index=True,
+    )
+    step: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    duration_ms: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    payload: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
 
 
 class StudentDataGenerationRun(MasterBase):
@@ -322,6 +459,17 @@ class BatchArtifact(MasterBase):
     # rätt fil och kontrollera matchning.
     meta: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     imported_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True,
+    )
+    # Bank-flödet (idé 3 i dev_v1.md): bank-relaterade artefakter
+    # (kontoutdrag, kreditkort_faktura, lan_besked) syns FÖRST i banken.
+    # Eleven måste exportera dem ur banken → då sätts denna flagga →
+    # de blir synliga i /my-batches. Lönespec hör inte till bank-flödet
+    # (synlig direkt på /arbetsgivare) — flaggan är NULL på dem.
+    exported_to_my_batches: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False,
+    )
+    exported_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -670,6 +818,40 @@ class PeerFeedback(MasterBase):
     )
 
 
+class FeedbackRead(MasterBase):
+    """Tracking av lästa lärar-feedback-items per elev.
+
+    Aggregator-vyn /v2/feedback samlar feedback från flera källor
+    (Message, StudentStepProgress.teacher_feedback, Assignment.
+    teacher_feedback). För att markera enskilda items som lästa per
+    elev har vi en separat tabell istället för att lägga read-fält
+    på respektive källa.
+
+    UNIQUE per (student, kind, source_id) — items markeras som lästa
+    en gång och består.
+    """
+    __tablename__ = "feedback_reads"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "kind", "source_id",
+            name="uq_feedback_read",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # "module_step" | "assignment" | "message" (även om message har
+    # eget read_at — vi speglar för konsekvent UI)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    source_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    read_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False,
+    )
+
+
 class Competency(MasterBase):
     """En inlärningsfärdighet, t.ex. 'läsa lönespec', 'förstå skatteavdrag'.
 
@@ -714,6 +896,45 @@ class ModuleStepCompetency(MasterBase):
     )
     # 0.0-1.0 — hur mycket detta steg räknar mot kompetensen
     weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
+
+
+class StudentCompetencyOverride(MasterBase):
+    """Lärarens manuella nivå-höjning/sänkning av en kompetens för en elev.
+
+    När den finns vinner den över mastery-beräkning. Pedagogiskt vill
+    läraren kunna säga "Sara har visat fördjupning genom klassrum-
+    diskussion även om mastery-talet inte hunnit klättra dit än".
+    """
+    __tablename__ = "student_competency_overrides"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "competency_id",
+            name="uq_student_competency_override",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    competency_id: Mapped[int] = mapped_column(
+        ForeignKey("competencies.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # "B" | "G" | "F"
+    level: Mapped[str] = mapped_column(String(1), nullable=False)
+    motivation: Mapped[str] = mapped_column(Text, nullable=False)
+    teacher_id: Mapped[int] = mapped_column(
+        ForeignKey("teachers.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(),
+    )
 
 
 class AskAiThread(MasterBase):
@@ -880,3 +1101,29 @@ class StudentActivity(MasterBase):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), index=True,
     )
+
+
+# Aktie-master-modeller (StockMaster, StockQuote, LatestStockQuote,
+# MarketCalendar) — importeras här så att MasterBase.metadata känner
+# till dem vid create_all.
+from . import stock_models as _stock_models  # noqa: E402, F401
+
+# EventTemplate (delade event-mallar för Wellbeing-events) — samma
+# import-trick.
+from . import event_models as _event_models  # noqa: E402, F401
+
+# Sociala mekanismer (ClassEventInvite, ClassDisplaySettings).
+from . import social_models as _social_models  # noqa: E402, F401
+
+# Arbetsgivar-dynamik (CollectiveAgreement, ProfessionAgreement,
+# EmployerSatisfaction[+Event], WorkplaceQuestion[+Answer]) — idé 1
+# i dev_v1.md.
+from . import employer_models as _employer_models  # noqa: E402, F401
+
+# Bank-flöde (BankSession för BankID-simulering) — idé 3 i dev_v1.md.
+# ScheduledPayment + PaymentReminder ligger i scope-DB.
+from . import bank_models as _bank_models  # noqa: E402, F401
+
+# Spelmotor-tabeller (ClassCalendar driver Monthly Engine-tickarna).
+# Spec: dev/game-motor/12-data-modeller.md
+from . import game_engine_models as _game_engine_models  # noqa: E402, F401

@@ -39,7 +39,17 @@ type StepProgress = {
   auto_progress?: string | null;
 };
 
+// Bug #12 · ModuleView används både som v1 (default export) och som
+// inner-component i v2-wrapper. v2 lägger till V2Banner-shell.
+export function ModuleViewInner() {
+  return <ModuleViewBody />;
+}
+
 export default function ModuleView() {
+  return <ModuleViewBody />;
+}
+
+function ModuleViewBody() {
   const { moduleId } = useParams<{ moduleId: string }>();
   const mid = parseInt(moduleId || "0", 10);
   const [mod, setMod] = useState<ModuleDetail | null>(null);

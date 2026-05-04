@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banken · Vol. 01 · Ekonomilabbet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+.cover {
+  border-bottom: 1px solid var(--rule);
+  padding: 64px clamp(24px, 6vw, 80px) 56px;
+  background: linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+}
+.cover-shell { max-width: 1200px; margin: 0 auto; }
+.cover-meta {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 26px;
+  display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+}
+.cover-meta::before { content: "● "; }
+.cover-title {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(48px, 7vw, 96px);
+  letter-spacing: -3px; line-height: 0.95;
+  margin-bottom: 22px;
+}
+.cover-title em { font-style: italic; color: var(--accent); font-weight: 500; }
+.cover-lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(17px, 1.5vw, 20px); line-height: 1.5;
+  color: #334155; max-width: 56ch;
+}
+
+.section-band {
+  display: flex; align-items: center; gap: 18px;
+  padding: 18px clamp(24px, 6vw, 80px);
+  background: #fff; border-bottom: 1px solid var(--rule);
+  position: sticky; top: 0; z-index: 30;
+  backdrop-filter: blur(18px);
+}
+.section-band-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase; color: var(--accent);
+}
+.section-band-eye::before { content: "● "; }
+.section-band-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.section-band-tab {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 6px 12px; border-radius: 100px;
+  border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); text-decoration: none;
+  transition: all .2s var(--ease);
+}
+.section-band-tab.active { background: var(--fg); color: #fff; border-color: var(--fg); }
+.section-band-tab:hover:not(.active) { border-color: var(--fg); color: var(--fg); }
+
+.spread {
+  max-width: 1200px; margin: 0 auto;
+  padding: 56px clamp(24px, 6vw, 80px);
+}
+
+/* Konto-spread — magazine layout */
+.account-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 18px; margin-bottom: 56px;
+}
+@media (max-width: 1000px) { .account-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px)  { .account-grid { grid-template-columns: 1fr; } }
+
+.account-card {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: #fff;
+  padding: 22px 22px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: all .25s var(--ease);
+  cursor: pointer;
+}
+.account-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.account-card.is-primary {
+  background: linear-gradient(135deg, var(--fg) 0%, #1e293b 100%);
+  color: #fff; border-color: var(--fg);
+}
+.account-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent);
+}
+.account-card.is-primary .account-eye { color: var(--gold); }
+.account-name {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.account-meta {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted);
+}
+.account-card.is-primary .account-meta { color: rgba(255,255,255,0.6); }
+.account-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 32px; letter-spacing: -0.8px;
+  font-variant-numeric: tabular-nums;
+  margin-top: auto;
+}
+.account-num em {
+  font-style: italic; color: var(--accent); font-weight: 500;
+}
+.account-card.is-primary .account-num em { color: var(--gold); }
+
+/* Story-block */
+.story-block {
+  margin-bottom: 56px;
+}
+.story-eye {
+  display: flex; gap: 14px; align-items: center;
+  margin-bottom: 18px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+}
+.story-eye-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 22px; color: var(--accent);
+  letter-spacing: -0.4px; text-transform: none;
+}
+.story-h2 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(28px, 3.4vw, 42px);
+  letter-spacing: -1.2px; line-height: 1.05;
+  margin-bottom: 14px;
+}
+.story-h2 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.story-lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: 17px; line-height: 1.55; color: #334155;
+  max-width: 56ch; margin-bottom: 22px;
+}
+
+/* Transaktionsrad */
+.tx-list {
+  border: 1px solid var(--rule); border-radius: 6px; background: #fff;
+  overflow: hidden;
+}
+.tx {
+  display: grid; grid-template-columns: 80px 1fr auto auto;
+  gap: 16px; padding: 14px 18px;
+  border-bottom: 1px solid var(--rule);
+  align-items: center;
+  font-size: 14px;
+}
+.tx:last-child { border-bottom: 0; }
+.tx-day {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted);
+}
+.tx-day strong {
+  display: block;
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  letter-spacing: -0.3px; color: var(--fg);
+  margin-top: 1px;
+}
+.tx-name {
+  font-family: var(--serif); font-weight: 600; font-size: 15.5px;
+  color: var(--fg);
+}
+.tx-cat {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 100px;
+  background: rgba(220, 76, 43, 0.06);
+  color: var(--accent);
+  border: 1px solid rgba(220, 76, 43, 0.2);
+}
+.tx-num {
+  font-family: var(--serif); font-weight: 700; font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
+}
+.tx-num.is-out { color: #b91c1c; }
+.tx-num.is-in  { color: #047857; }
+
+/* Pull-quote stort */
+.pull {
+  margin: 48px 0;
+  padding: 28px 32px;
+  border-left: 3px solid var(--accent);
+  border-right: 3px solid var(--rule);
+  background: rgba(220, 76, 43, 0.04);
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(20px, 2.4vw, 28px);
+  line-height: 1.4; color: var(--fg);
+  letter-spacing: -0.4px;
+  max-width: 56ch;
+}
+.pull cite {
+  display: block; margin-top: 16px;
+  font-family: var(--mono); font-size: 10px; font-style: normal;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 01 · Pengar</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="dashboard.html">Idag</a>
+  <a href="#" class="logout">Logga ut</a>
+</nav>
+
+<header class="cover">
+  <div class="cover-shell">
+    <div class="cover-meta">
+      <span>Pengar · Banken</span>
+      <span>·</span>
+      <span>Saldon uppdaterade 14:32</span>
+      <span>·</span>
+      <span>3 konton · 2 sparmål</span>
+    </div>
+    <h1 class="cover-title">Allt på <em>en sida</em>.</h1>
+    <p class="cover-lead">
+      Konton, sparmål, kommande in- och utbetalningar. Banken är inte
+      ett separat universum — det är bokförings­data, översatt till
+      verkligt språk.
+    </p>
+  </div>
+</header>
+
+<div class="section-band">
+  <span class="section-band-eye">Mina utrymmen</span>
+  <div class="section-band-tabs">
+    <a href="dashboard.html" class="section-band-tab">Idag</a>
+    <a href="#" class="section-band-tab">Bokföring</a>
+    <a href="banken.html" class="section-band-tab active">Pengar</a>
+    <a href="#" class="section-band-tab">Avtal</a>
+    <a href="#" class="section-band-tab">Utveckling</a>
+  </div>
+</div>
+
+<main class="spread">
+
+  <article class="story-block">
+    <div class="story-eye">
+      <span class="story-eye-num">01</span>
+      <span>Tre konton · saldo · ränta · sparmål</span>
+    </div>
+    <h2 class="story-h2">Var ligger <em>pengarna</em>?</h2>
+    <p class="story-lead">
+      Tre konton hos två banker. Lönen kommer in på SEB:s lönekonto,
+      buffert i Nordeas sparkonto, ISK i Avanza. Lönekortet är
+      första-bland-likar — det är där livet händer.
+    </p>
+
+    <div class="account-grid">
+      <div class="account-card is-primary">
+        <span class="account-eye">SEB · Lönekonto</span>
+        <div class="account-name">Vardagskonto</div>
+        <div class="account-meta">Räntefri · OCR slutar på 12</div>
+        <div class="account-num">27 <em>795</em></div>
+      </div>
+      <div class="account-card">
+        <span class="account-eye">Nordea · Sparkonto</span>
+        <div class="account-name">Buffert</div>
+        <div class="account-meta">2,0 % ränta · 18 700 → 15 500</div>
+        <div class="account-num">15 <em>500</em></div>
+      </div>
+      <div class="account-card">
+        <span class="account-eye">Avanza · ISK</span>
+        <div class="account-name">Investeringar</div>
+        <div class="account-meta">Schablon 3,8 % · YTD +12,4 %</div>
+        <div class="account-num">128 <em>650</em></div>
+      </div>
+    </div>
+  </article>
+
+  <article class="story-block">
+    <div class="story-eye">
+      <span class="story-eye-num">02</span>
+      <span>Senaste rörelser · 7 dagar</span>
+    </div>
+    <h2 class="story-h2">Veckan i <em>siffror</em>.</h2>
+    <p class="story-lead">
+      Sju dagar, fjorton transaktioner. Plattformen kategoriserar 12 av
+      dem automatiskt — du har taggat 2 manuellt (en okänd butik och en
+      återbetalning).
+    </p>
+
+    <div class="tx-list">
+      <div class="tx">
+        <div class="tx-day">Idag<strong>14:22</strong></div>
+        <div class="tx-name">Folktandvården Vasastan</div>
+        <span class="tx-cat">Hälsa</span>
+        <div class="tx-num is-out">−3 200</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">Idag<strong>09:14</strong></div>
+        <div class="tx-name">ICA Maxi · veckohandling</div>
+        <span class="tx-cat">Mat</span>
+        <div class="tx-num is-out">−872</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">Tis<strong>16:00</strong></div>
+        <div class="tx-name">Visma Lön AB · maj-utbetalning</div>
+        <span class="tx-cat">Lön</span>
+        <div class="tx-num is-in">+27 795</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">Tis<strong>06:02</strong></div>
+        <div class="tx-name">Akavia · medlemsavgift</div>
+        <span class="tx-cat">Avgift</span>
+        <div class="tx-num is-out">−298</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">Mån<strong>20:14</strong></div>
+        <div class="tx-name">Spotify Premium · Familj</div>
+        <span class="tx-cat">Underhållning</span>
+        <div class="tx-num is-out">−169</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">Mån<strong>12:32</strong></div>
+        <div class="tx-name">Avanza · ISK månadsspar</div>
+        <span class="tx-cat">Sparande</span>
+        <div class="tx-num is-out">−5 000</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">Sön<strong>18:00</strong></div>
+        <div class="tx-name">SL · månadskort</div>
+        <span class="tx-cat">Transport</span>
+        <div class="tx-num is-out">−995</div>
+      </div>
+    </div>
+  </article>
+
+  <blockquote class="pull">
+    "27 795 in på lönedagen, 6 200 ute samma kväll. Det är inte ekonomi
+    — det är ett mönster. Echo räknar ut det åt dig."
+    <cite>— Plattformens auto-insikter · vecka 18</cite>
+  </blockquote>
+
+  <article class="story-block">
+    <div class="story-eye">
+      <span class="story-eye-num">03</span>
+      <span>Kommande · nästa 30 dagar</span>
+    </div>
+    <h2 class="story-h2">Vad <em>väntar</em>?</h2>
+    <p class="story-lead">
+      Plattformen har tittat på dina autogiron, månads-prenumerationer
+      och säsongsutgifter. Här är de elva som kommer ticka in före nästa
+      lönedag.
+    </p>
+
+    <div class="tx-list">
+      <div class="tx">
+        <div class="tx-day">25 maj<strong>kl 06:00</strong></div>
+        <div class="tx-name">Hyra · Stockholmsbostäder</div>
+        <span class="tx-cat">Boende</span>
+        <div class="tx-num is-out">−8 200</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">25 maj<strong>kl 06:00</strong></div>
+        <div class="tx-name">Vattenfall · El maj</div>
+        <span class="tx-cat">El</span>
+        <div class="tx-num is-out">−742</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">28 maj<strong>kl 16:00</strong></div>
+        <div class="tx-name">Folksam · hemförsäkring</div>
+        <span class="tx-cat">Försäkring</span>
+        <div class="tx-num is-out">−189</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">1 jun<strong>kl 06:00</strong></div>
+        <div class="tx-name">ISK månadsspar · Avanza</div>
+        <span class="tx-cat">Sparande</span>
+        <div class="tx-num is-out">−5 000</div>
+      </div>
+      <div class="tx">
+        <div class="tx-day">12 jun<strong>kl 16:00</strong></div>
+        <div class="tx-name">Skatteåterbäring · estimat</div>
+        <span class="tx-cat">Skatt</span>
+        <div class="tx-num is-in">+1 240</div>
+      </div>
+    </div>
+  </article>
+
+</main>
+
+</body>
+</html>

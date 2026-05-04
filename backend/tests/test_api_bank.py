@@ -1,0 +1,349 @@
+"""Smoke-tester för /bank/* (idé 3, PR 5b).
+
+Verifierar:
+- /bank/me visar has_pin=False initialt
+- /bank/set-pin sätter PIN
+- /bank/session/init kräver PIN, skapar token
+- /bank/session/{token}/confirm med rätt PIN sätter confirmed_at
+- /bank/session/{token} returnerar status
+- Lärar-reset av PIN
+- 403 vid annan elev
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from hembudget.api.deps import register_token
+from hembudget.school.engines import init_master_engine, master_session
+from hembudget.school.models import Student, StudentProfile, Teacher
+from hembudget.security.crypto import hash_password, random_token
+
+
+@pytest.fixture
+def fx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("HEMBUDGET_SCHOOL_MODE", "1")
+    monkeypatch.delenv("TURNSTILE_SECRET", raising=False)
+    from hembudget.config import settings
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    from hembudget.security import rate_limit as rl_mod
+    rl_mod.reset_all_for_testing()
+    from hembudget.school import engines as eng_mod
+    if eng_mod._master_engine is not None:
+        eng_mod._master_engine.dispose()
+    eng_mod._master_engine = None
+    eng_mod._master_session = None
+    for e in list(eng_mod._scope_engines.values()):
+        e.dispose()
+    eng_mod._scope_engines.clear()
+    eng_mod._scope_sessions.clear()
+    from hembudget.school import demo_seed as demo_seed_mod
+    monkeypatch.setattr(demo_seed_mod, "build_demo", lambda: {"skipped": True})
+
+    import importlib
+    import hembudget.main as main_mod
+    importlib.reload(main_mod)
+    app = main_mod.build_app()
+    init_master_engine()
+
+    with master_session() as s:
+        t = Teacher(
+            email="t@x.se", name="T",
+            password_hash=hash_password("Abcdef12!"),
+        )
+        s.add(t); s.flush()
+        tid = t.id
+        stu = Student(
+            teacher_id=tid, display_name="Eva", login_code="EVA00001",
+        )
+        s.add(stu); s.flush()
+        sid = stu.id
+        s.add(StudentProfile(
+            student_id=sid,
+            profession="Undersköterska", employer="Region Stockholm",
+            gross_salary_monthly=30000, net_salary_monthly=24000,
+            tax_rate_effective=0.2, age=22, city="Sthlm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=8000, personality="blandad",
+        ))
+
+    tch_tok = random_token()
+    stu_tok = random_token()
+    register_token(tch_tok, role="teacher", teacher_id=tid)
+    register_token(stu_tok, role="student", student_id=sid)
+    return TestClient(app), tch_tok, stu_tok, tid, sid
+
+
+def test_bank_me_no_pin_initially(fx) -> None:
+    client, _, stu, *_ = fx
+    r = client.get("/bank/me", headers={"Authorization": f"Bearer {stu}"})
+    assert r.status_code == 200
+    assert r.json()["has_pin"] is False
+
+
+def test_set_pin_then_me_shows_has_pin(fx) -> None:
+    client, _, stu, *_ = fx
+    r = client.post(
+        "/bank/set-pin",
+        json={"pin": "1234"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    r2 = client.get("/bank/me", headers={"Authorization": f"Bearer {stu}"})
+    assert r2.json()["has_pin"] is True
+
+
+def test_set_pin_requires_4_digits(fx) -> None:
+    client, _, stu, *_ = fx
+    r = client.post(
+        "/bank/set-pin",
+        json={"pin": "abcd"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 400
+
+
+def test_init_session_requires_pin_first(fx) -> None:
+    client, _, stu, *_ = fx
+    r = client.post(
+        "/bank/session/init",
+        json={"purpose": "login"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 400
+
+
+def test_full_session_flow_init_confirm_status(fx) -> None:
+    client, _, stu, *_ = fx
+    # Sätt PIN
+    client.post(
+        "/bank/set-pin",
+        json={"pin": "5678"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    # Init session
+    r = client.post(
+        "/bank/session/init",
+        json={"purpose": "login"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    token = r.json()["token"]
+    assert r.json()["qr_url"].startswith("/bank/sign?token=")
+
+    # Status: inte confirmed än
+    s = client.get(
+        f"/bank/session/{token}",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    assert s["confirmed"] is False
+    assert s["expired"] is False
+
+    # Confirm med fel PIN
+    r = client.post(
+        f"/bank/session/{token}/confirm",
+        json={"pin": "0000"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 401
+
+    # Confirm med rätt PIN
+    r = client.post(
+        f"/bank/session/{token}/confirm",
+        json={"pin": "5678"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200
+
+    # Status nu confirmed
+    s2 = client.get(
+        f"/bank/session/{token}",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    assert s2["confirmed"] is True
+
+
+def test_teacher_reset_bank_pin(fx) -> None:
+    client, tch, stu, _tid, sid = fx
+    client.post(
+        "/bank/set-pin",
+        json={"pin": "1111"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    # Reset
+    r = client.post(
+        f"/teacher/employer/{sid}/reset-bank-pin",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert r.status_code == 200
+    # /bank/me visar has_pin=False igen
+    me = client.get(
+        "/bank/me",
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    assert me["has_pin"] is False
+
+
+def test_wrong_pin_cannot_confirm_session(fx) -> None:
+    """Säkerhetsmodellen efter att confirm gjordes publik (för att
+    matcha riktig BankID där appen inte 'loggar in' på webben):
+    PIN-verifiering mot sess.student_id:s bank_pin_hash är det enda
+    lagret. Fel PIN → 401, oavsett om den som ringer endpointen är
+    inloggad som en annan elev, läraren, eller helt oautentiserad.
+
+    Den här testen verifierar att en annan elev — även med sin egen
+    giltiga PIN '3333' — inte kan bekräfta originalelevens session
+    eftersom den ursprungliga eleven har PIN '2222'."""
+    client, _, stu, tid, _sid = fx
+    # Originalelevens PIN
+    client.post(
+        "/bank/set-pin",
+        json={"pin": "2222"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    init = client.post(
+        "/bank/session/init",
+        json={"purpose": "login"},
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    token = init["token"]
+    # Skapa annan elev med EGEN PIN
+    with master_session() as s:
+        other = Student(
+            teacher_id=tid, display_name="Bob", login_code="BOB00001",
+        )
+        s.add(other); s.flush()
+        oid = other.id
+        s.add(StudentProfile(
+            student_id=oid,
+            profession="Frisör", employer="Cutters",
+            gross_salary_monthly=27000, net_salary_monthly=22000,
+            tax_rate_effective=0.2, age=20, city="Sthlm",
+            family_status="ensam", housing_type="hyresratt",
+            housing_monthly=7000, personality="blandad",
+        ))
+    other_tok = random_token()
+    register_token(other_tok, role="student", student_id=oid)
+    client.post(
+        "/bank/set-pin",
+        json={"pin": "3333"},
+        headers={"Authorization": f"Bearer {other_tok}"},
+    )
+    # Andra elevens PIN matchar inte originalelevens hash → 401.
+    r = client.post(
+        f"/bank/session/{token}/confirm",
+        json={"pin": "3333"},
+    )
+    assert r.status_code == 401, r.text
+
+
+def test_anyone_with_correct_pin_can_confirm_session(fx) -> None:
+    """Efter publik confirm-endpoint: vem som helst som har sessionstoken
+    och korrekt PIN kan bekräfta. Det är det vi vill — telefonen som
+    skannar QR-koden är typiskt INTE inloggad som eleven på webben.
+
+    Det här flödet är även det som låter en lärare som impersonerar en
+    elev på desktop scanna QR:en med sin egen telefon utan att behöva
+    logga in som eleven på telefonen."""
+    client, _, stu, _tid, _sid = fx
+    client.post(
+        "/bank/set-pin",
+        json={"pin": "2222"},
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    init = client.post(
+        "/bank/session/init",
+        json={"purpose": "login"},
+        headers={"Authorization": f"Bearer {stu}"},
+    ).json()
+    token = init["token"]
+    # Anropet inkluderar INGEN Authorization-header — bara token + rätt PIN.
+    r = client.post(
+        f"/bank/session/{token}/confirm",
+        json={"pin": "2222"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+
+
+def test_sign_payment_batch_validation_rejects_empty(fx) -> None:
+    """Sign-endpointen ska 422 med tydligt fel om upcoming_ids är tom
+    eller account_id är 0/null. Den här testen lades till efter att
+    en användare fick generic 'HTTP 422' utan insikt vad som var fel."""
+    client, _, stu, *_ = fx
+    # Tom upcoming_ids → 422 med tydlig pekare
+    r = client.post(
+        "/bank/upcoming-payments/sign",
+        json={
+            "upcoming_ids": [],
+            "account_id": 1,
+            "bank_session_token": "fake-token-here-1234",
+        },
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 422, r.text
+    body = r.json()
+    # Pydantic v2: detail-listan har fältnamn
+    assert any(
+        "upcoming_ids" in str(err.get("loc", []))
+        for err in body.get("detail", [])
+    ), body
+    # account_id <= 0 → 422
+    r = client.post(
+        "/bank/upcoming-payments/sign",
+        json={
+            "upcoming_ids": [1],
+            "account_id": 0,
+            "bank_session_token": "fake-token-here-1234",
+        },
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_statements_excludes_already_imported(fx) -> None:
+    """/bank/statements ska INTE visa redan-importerade artefakter
+    by default (de hör i bokföringen, inte bank-vyn).
+    include_imported=true ger fortfarande hela listan för historik."""
+    from datetime import datetime
+    from hembudget.school.models import ScenarioBatch, BatchArtifact
+    client, _, stu, _tid, sid = fx
+    with master_session() as s:
+        b = ScenarioBatch(
+            student_id=sid, year_month="2026-11", seed=1, meta={},
+        )
+        s.add(b); s.flush()
+        s.add(BatchArtifact(
+            batch_id=b.id,
+            kind="kontoutdrag",
+            title="Kontoutdrag 2026-11",
+            filename="kontoutdrag_2026-11.pdf",
+            sort_order=0,
+            pdf_bytes=b"%PDF-fake",
+        ))
+        s.add(BatchArtifact(
+            batch_id=b.id,
+            kind="kreditkort_faktura",
+            title="Kreditkortsfaktura 2026-11",
+            filename="kk_2026-11.pdf",
+            sort_order=1,
+            pdf_bytes=b"%PDF-fake",
+            imported_at=datetime.utcnow(),  # redan importerad
+        ))
+    # Default: bara den ej-importerade
+    r = client.get(
+        "/bank/statements",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    arts = r.json()
+    assert len(arts) == 1
+    assert arts[0]["kind"] == "kontoutdrag"
+    # include_imported=true: bägge
+    r = client.get(
+        "/bank/statements?include_imported=true",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert len(r.json()) == 2

@@ -44,7 +44,7 @@ export default function Tax() {
   });
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-4 max-w-4xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="serif text-3xl leading-tight">Skatt</h1>
         <input

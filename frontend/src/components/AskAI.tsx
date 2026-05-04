@@ -30,16 +30,52 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
   const [threadId, setThreadId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const nextIdRef = useRef(1);
 
   useEffect(() => {
-    api<{ ai_enabled: boolean }>("/admin/ai/me")
-      .then((r) => setVisible(Boolean(r.ai_enabled)))
+    // /ai/chat/status funkar både för elev OCH lärare och returnerar
+    // dagskvot. Tidigare användes /admin/ai/me som krävde lärar-token
+    // → eleven såg ALDRIG AI-knappen (bug #4 i bugglistan).
+    api<{
+      ai_enabled: boolean;
+      available: boolean;
+      daily_quota: number;
+      used_today: number;
+      remaining_today: number;
+    }>("/ai/chat/status")
+      .then((r) => {
+        setVisible(Boolean(r.ai_enabled && r.available));
+        setQuota({ used: r.used_today, limit: r.daily_quota });
+      })
       .catch(() => setVisible(false));
   }, []);
+
+  // Bug 3 · Topbar-knappen i v2 dispatchar "echo-open" → öppna direkt
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("echo-open", handler);
+    return () => window.removeEventListener("echo-open", handler);
+  }, []);
+
+  // V2-läge: dölj FAB:en (topbarens Echo-knapp triggar oss istället),
+  // och visa modal som right-side drawer.
+  const isV2 =
+    typeof window !== "undefined" &&
+    (window.location.pathname.startsWith("/v2") ||
+      window.location.pathname.startsWith("/teacher/v2"));
+
+  const refreshQuota = () => {
+    api<{
+      used_today: number;
+      daily_quota: number;
+    }>("/ai/chat/status")
+      .then((r) => setQuota({ used: r.used_today, limit: r.daily_quota }))
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
@@ -159,6 +195,7 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
     } finally {
       setBusy(false);
       abortRef.current = null;
+      refreshQuota();
     }
   }
 
@@ -171,23 +208,35 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-20 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg px-4 py-3 flex items-center gap-2 text-sm font-medium"
-        aria-label="Fråga AI"
-      >
-        <HelpCircle className="w-4 h-4" />
-        Fråga Ekon
-      </button>
+      {/* FAB · visas BARA på v1-routes (v2 har topbar-knapp istället) */}
+      {!isV2 && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          data-guide="echo-button"
+          className="fixed bottom-4 right-4 z-20 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg px-4 py-3 flex items-center gap-2 text-sm font-medium"
+          aria-label="Fråga AI"
+        >
+          <HelpCircle className="w-4 h-4" />
+          Fråga Ekon
+        </button>
+      )}
 
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/40 flex items-end md:items-center justify-center p-0 md:p-4"
+          className={
+            isV2
+              ? "fixed inset-0 z-30 bg-slate-900/40"
+              : "fixed inset-0 z-30 bg-slate-900/40 flex items-end md:items-center justify-center p-0 md:p-4"
+          }
           onClick={close}
         >
           <div
-            className="bg-white w-full md:max-w-lg md:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]"
+            className={
+              isV2
+                ? "fixed top-0 right-0 bottom-0 w-full md:w-[440px] bg-white shadow-2xl flex flex-col"
+                : "bg-white w-full md:max-w-lg md:rounded-xl rounded-t-2xl shadow-xl flex flex-col max-h-[90vh]"
+            }
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 pt-4 pb-2 border-b">
@@ -197,6 +246,32 @@ export function AskAI({ moduleId, stepId, contextLabel }: Props) {
                 {threadId && (
                   <span className="text-xs text-slate-400">
                     (tråd #{threadId})
+                  </span>
+                )}
+                {quota && quota.limit > 0 && (
+                  <span
+                    className="text-xs"
+                    style={{
+                      marginLeft: 8,
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      background:
+                        quota.used >= quota.limit
+                          ? "rgba(220,76,43,0.15)"
+                          : quota.used >= quota.limit * 0.8
+                            ? "rgba(251,191,36,0.15)"
+                            : "rgba(110,231,183,0.15)",
+                      color:
+                        quota.used >= quota.limit
+                          ? "#dc4c2b"
+                          : quota.used >= quota.limit * 0.8
+                            ? "#b58410"
+                            : "#0d9b6b",
+                      fontWeight: 600,
+                    }}
+                    title="Antal AI-meddelanden idag"
+                  >
+                    {Math.max(0, quota.limit - quota.used)} / {quota.limit} kvar idag
                   </span>
                 )}
               </div>

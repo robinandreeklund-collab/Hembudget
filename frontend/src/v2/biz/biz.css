@@ -1,0 +1,350 @@
+/**
+ * Biz-mode styling · indigo-variant av v2 privat-designen.
+ *
+ * Alla biz-sidor använder dessa klasser för konsekvent design.
+ * Speglar privat-temats stilar (kompass, hub-eye, char-card) men med
+ * indigo accent (#6366f1 / #818cf8 / #c7d2fe) istället för warm/accent.
+ */
+
+.v2-biz-root {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 70% 50% at 30% 35%, rgba(99, 102, 241, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(168, 85, 247, 0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 80%, rgba(14, 165, 233, 0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #0a0e1a 0%, #0d1226 60%, #0a0e1a 100%);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.v2-biz-root::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255, 255, 255, 0.022) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255, 255, 255, 0.022) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.5;
+}
+
+/* === BIZ-shell layout (matchar .shell i privat) === */
+.biz-shell {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 32px clamp(20px, 5vw, 60px) 80px;
+  position: relative;
+  z-index: 1;
+}
+
+/* === Tillbaka-länk === */
+.biz-back {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  font-weight: 700;
+  transition: color 0.2s ease;
+}
+.biz-back:hover {
+  color: #c7d2fe;
+}
+
+/* === Biz-eye (rubrik-prefix) === */
+.biz-eye {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: #818cf8;
+  letter-spacing: 1.6px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.biz-eye::before {
+  content: "● ";
+}
+
+/* === Biz-h1 (matchar .hub-h1 i privat) === */
+.biz-h1 {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -1.2px;
+  line-height: 1.1;
+  color: #fff;
+  margin: 8px 0 0;
+}
+.biz-h1 em {
+  font-style: italic;
+  color: #c7d2fe;
+  font-weight: 500;
+}
+
+.biz-lead {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 12px;
+  max-width: 600px;
+}
+.biz-lead em {
+  color: #c7d2fe;
+  font-style: italic;
+}
+.biz-lead strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+/* === Biz-card (för paneler i biz-pages) === */
+.biz-card {
+  background: rgba(15, 21, 37, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.20);
+  border-top: 2px solid #818cf8;
+  border-radius: 6px;
+  padding: 22px 24px;
+  backdrop-filter: blur(8px);
+}
+.biz-card.alert {
+  border-top-color: #fbbf24;
+}
+.biz-card.danger {
+  border-top-color: #fda594;
+}
+
+.biz-card-eye {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: #818cf8;
+  margin-bottom: 10px;
+}
+.biz-card-eye::before {
+  content: "● ";
+}
+
+.biz-card-h {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  color: #fff;
+}
+
+/* === Biz-pill (filter-knappar, taggar) === */
+.biz-pill {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 100px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.biz-pill:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: #818cf8;
+}
+.biz-pill.active {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: #6366f1;
+  color: #fff;
+}
+
+/* === Biz-knappar (primär indigo + sekundär ghost) === */
+.biz-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.biz-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: #6366f1;
+  color: #fff;
+}
+.biz-btn.solid {
+  background: #6366f1;
+  color: #fff;
+  border-color: #6366f1;
+}
+.biz-btn.solid:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+.biz-btn.danger {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: #fda594;
+}
+.biz-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.25);
+}
+
+/* === Biz tabell-stil === */
+.biz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.biz-table thead tr {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.25);
+}
+.biz-table th {
+  text-align: left;
+  padding: 10px 8px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+}
+.biz-table tbody tr {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+  transition: background 0.15s ease;
+}
+.biz-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.04);
+}
+.biz-table td {
+  padding: 12px 8px;
+  color: rgba(255, 255, 255, 0.92);
+}
+.biz-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* === Modaler i biz-tema === */
+.biz-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.biz-modal {
+  background: linear-gradient(180deg, #0f1525, #0c1120);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px -10px rgba(0, 0, 0, 0.6);
+}
+.biz-modal-h {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 700;
+  font-size: 22px;
+  color: #fff;
+  margin: 0 0 16px;
+}
+.biz-modal-meta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+/* === Form-fält i biz-tema === */
+.biz-field {
+  display: block;
+  margin-top: 14px;
+  color: #fff;
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+}
+.biz-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+.biz-input,
+.biz-textarea,
+.biz-select {
+  width: 100%;
+  background: rgba(15, 21, 37, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  transition: border-color 0.2s ease;
+}
+.biz-input:focus,
+.biz-textarea:focus,
+.biz-select:focus {
+  outline: none;
+  border-color: #818cf8;
+}
+.biz-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.biz-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1L6 6L11 1' stroke='rgba(199,210,254,0.7)' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  color-scheme: dark;
+}
+.biz-select option {
+  background-color: #0f1525;
+  color: #fff;
+}
+
+.biz-error {
+  color: #fda594;
+  font-size: 12px;
+  font-family: "Inter", sans-serif;
+  margin-top: 8px;
+}
+
+.biz-empty {
+  color: rgba(255, 255, 255, 0.5);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+  padding: 40px 20px;
+}

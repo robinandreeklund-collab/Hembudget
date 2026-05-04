@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strömmen · Elev · Vol. 05</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+.shell {
+  max-width: 1320px; margin: 0 auto;
+  padding: 88px clamp(20px, 5vw, 60px) 80px;
+}
+
+.head {
+  margin-bottom: 32px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 32px; align-items: end;
+}
+.head h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(36px, 4.6vw, 56px);
+  letter-spacing: -1.6px; line-height: 1.02;
+}
+.head h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.head .h-eyebrow { margin-bottom: 14px; }
+.head-meta {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); text-align: right; line-height: 1.7;
+}
+.head-meta strong { color: var(--fg); }
+
+/* Top totals strip */
+.totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  margin-bottom: 30px;
+}
+@media (max-width: 800px) { .totals { grid-template-columns: repeat(2, 1fr); } }
+.totals .stat {
+  padding: 18px 22px;
+  border-right: 1px solid var(--rule);
+}
+.totals .stat:last-child { border-right: 0; }
+.totals .stat-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.totals .stat-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 26px; letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums;
+}
+.totals .stat-num em { font-style: italic; color: var(--accent); font-weight: 500; }
+.totals .stat-sub {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); margin-top: 3px; letter-spacing: 0.6px;
+}
+.totals .stat-num.green { color: #15803d; }
+.totals .stat-num.green em { color: #15803d; }
+
+/* Sankey container */
+.sankey-card {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 28px 32px 18px;
+  margin-bottom: 28px;
+  position: relative;
+}
+.sankey-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.sankey-eye::before { content: "● "; }
+.sankey-title {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 18px;
+}
+.sankey-title em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+#sankey { width: 100%; height: 540px; display: block; }
+.sankey-stream { transition: opacity .25s var(--ease); }
+.sankey-stream:hover { opacity: 1 !important; }
+.sankey-node-rect { transition: opacity .25s var(--ease); }
+
+.sankey-node-label {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 700;
+  fill: var(--fg);
+  letter-spacing: -0.2px;
+}
+.sankey-node-amount {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--muted);
+  letter-spacing: 0.4px;
+}
+.sankey-node-amount-strong {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 20px; fill: var(--fg);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.4px;
+}
+
+/* Cat grid below sankey */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 30px;
+}
+@media (max-width: 1000px) { .cat-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .cat-grid { grid-template-columns: 1fr; } }
+
+.cat-cell {
+  background: #fff;
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: end;
+  position: relative;
+  overflow: hidden;
+}
+.cat-cell::after {
+  content: ""; position: absolute; left: 0; bottom: 0; height: 3px;
+  background: var(--cat-color, var(--accent));
+  width: var(--cat-pct, 0%);
+  transition: width 1.2s var(--ease);
+}
+.cat-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.cat-budget {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); margin-top: 2px;
+  letter-spacing: 0.4px;
+}
+.cat-amt {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+  text-align: right;
+}
+.cat-amt em { font-style: italic; color: var(--accent); font-weight: 500; }
+.cat-pct {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); letter-spacing: 0.6px;
+  text-align: right;
+}
+
+/* Echo prompt */
+.echo {
+  background: rgba(15, 23, 42, 0.97);
+  color: #fff;
+  padding: 26px 30px;
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 22px;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.echo::before {
+  content: ""; position: absolute; right: -60px; top: -60px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(251,191,36,0.2), transparent 70%);
+}
+.echo-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 8px;
+}
+.echo-eye::before { content: "● "; }
+.echo-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: 18px; line-height: 1.45;
+  position: relative; z-index: 2;
+}
+.echo-actions { display: flex; gap: 10px; flex-shrink: 0; position: relative; z-index: 2; }
+.echo-btn {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 9px 14px; border-radius: 100px;
+  border: 1px solid var(--gold); color: var(--gold);
+  background: transparent; cursor: pointer;
+  text-decoration: none;
+}
+.echo-btn.solid { background: var(--gold); color: #422006; }
+
+/* Footer */
+.foot {
+  margin-top: 56px;
+  padding-top: 32px;
+  border-top: 1px solid var(--rule);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}
+.foot a {
+  font-family: var(--serif); font-weight: 700; font-size: 15px;
+  color: var(--accent); text-decoration: none;
+}
+.foot-meta {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<a href="/" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Forskning · 2026</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="./larare.html">Lärar-vyn →</a>
+</nav>
+
+<div class="shell">
+
+  <header class="head">
+    <div>
+      <div class="h-eyebrow">Förslag 05 · Strömmar · Elev</div>
+      <h1>Sara, så här gick <em>aprils pengar</em>.</h1>
+    </div>
+    <div class="head-meta">
+      April 2026 · 30 dagar · stängd<br>
+      <strong>Klassningsgrad</strong> 81 % (97 av 120 transaktioner)<br>
+      <strong>Avvikelse mot budget</strong> +840 kr
+    </div>
+  </header>
+
+  <div class="totals">
+    <div class="stat">
+      <div class="stat-eye">In</div>
+      <div class="stat-num"><em>23 734</em> kr</div>
+      <div class="stat-sub">Lön · bidrag · utdelning</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Ut</div>
+      <div class="stat-num">20 372 kr</div>
+      <div class="stat-sub">11 kategorier</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Sparat</div>
+      <div class="stat-num green"><em>+3 362</em> kr</div>
+      <div class="stat-sub">14 % av inkomsten</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Mot mars</div>
+      <div class="stat-num green">+ 720 kr</div>
+      <div class="stat-sub">Mat -180 · nöje +290 · spar +610</div>
+    </div>
+  </div>
+
+  <div class="sankey-card">
+    <div class="sankey-eye">Strömmen</div>
+    <div class="sankey-title">23 734 kr in — 11 strömmar <em>ut</em>.</div>
+    <svg id="sankey" viewBox="0 0 1100 540" preserveAspectRatio="xMidYMid meet" aria-label="Sankey-diagram över aprils pengar">
+    </svg>
+  </div>
+
+  <div class="cat-grid" id="catgrid"></div>
+
+  <div class="echo">
+    <div>
+      <div class="echo-eye">Echo · noterar</div>
+      <div class="echo-text">
+        "Restaurang ligger på 2 100 — du satte budgeten till 1 200. Det är
+        andra månaden i rad. Är budgeten fel, eller är något annat fel?"
+      </div>
+    </div>
+    <div class="echo-actions">
+      <a href="#" class="echo-btn solid">Reflektera</a>
+      <a href="#" class="echo-btn">Senare</a>
+    </div>
+  </div>
+
+  <div class="foot">
+    <a href="../index.html">← Tillbaka till förslagen</a>
+    <span class="foot-meta">Strömmar · Elev · Vol. 05</span>
+    <a href="./larare.html">Se lärarens vy →</a>
+  </div>
+
+</div>
+
+<script>
+// === Sankey-data ===
+const incomes = [
+  { name: "Lön efter skatt",     amount: 22400, color: "#dc4c2b" },
+  { name: "Studiebidrag (CSN)",  amount:  1250, color: "#fbbf24" },
+  { name: "Avanza utdelning",    amount:    84, color: "#0f172a" },
+];
+const cats = [
+  { name: "Kvar (sparat)",   amount: 3362, color: "#15803d", budget: 2500, group: "spar" },
+  { name: "Hyra",            amount: 7240, color: "#0f172a", budget: 7240, group: "fast"  },
+  { name: "Mat & livsmedel", amount: 3880, color: "#dc4c2b", budget: 4000, group: "rörlig" },
+  { name: "Restaurang",      amount: 2100, color: "#dc4c2b", budget: 1200, group: "rörlig" },
+  { name: "Sparmål",         amount: 1800, color: "#fbbf24", budget: 1800, group: "spar"  },
+  { name: "Nöje & kultur",   amount: 1540, color: "#dc4c2b", budget: 1500, group: "rörlig" },
+  { name: "Transport (SL)",  amount: 1100, color: "#475569", budget: 1100, group: "fast"  },
+  { name: "Reserv / övrigt", amount:  980, color: "#475569", budget:  800, group: "rörlig" },
+  { name: "El (Tibber)",     amount:  812, color: "#475569", budget:  900, group: "fast"  },
+  { name: "Avanza ISK",      amount:  600, color: "#fbbf24", budget:  600, group: "spar"  },
+  { name: "Försäkringar",    amount:  320, color: "#475569", budget:  320, group: "fast"  },
+];
+
+const total = incomes.reduce((s,n)=>s+n.amount,0);
+
+// === SVG render ===
+const svg = document.getElementById("sankey");
+const NS = "http://www.w3.org/2000/svg";
+
+const W = 1100, H = 540;
+const PAD_TOP = 30, PAD_BOTTOM = 30;
+const NODE_W = 16;
+const LEFT_X = 60, RIGHT_X = W - 60;
+const STREAM_PAD = 3;     // px mellan höger-noder
+
+const usable = H - PAD_TOP - PAD_BOTTOM - (cats.length-1)*STREAM_PAD;
+const px = usable / total;  // px per kr
+
+// Höger-noder
+let rY = PAD_TOP;
+const rightNodes = cats.map(c => {
+  const h = c.amount * px;
+  const node = { ...c, y: rY, h };
+  rY += h + STREAM_PAD;
+  return node;
+});
+
+// Vänster-noder (inkomster)
+const leftPad = 4;
+const leftUsable = H - PAD_TOP - PAD_BOTTOM - (incomes.length-1)*leftPad;
+const leftPx = leftUsable / total;
+let lY = PAD_TOP;
+const leftNodes = incomes.map(i => {
+  const h = i.amount * leftPx;
+  const node = { ...i, y: lY, h };
+  lY += h + leftPad;
+  return node;
+});
+
+// === Strömmar: varje kategori tar proportionerligt från varje inkomst ===
+function appendEl(parent, tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  parent.appendChild(el);
+  return el;
+}
+
+// Track current y-offset i varje vänsternod
+const leftCursors = leftNodes.map(n => n.y);
+
+cats.forEach((cat, ci) => {
+  const right = rightNodes[ci];
+  // För varje vänsternod, ta proportion av kategorin
+  let consumedRight = right.y;
+  leftNodes.forEach((left, li) => {
+    const portion = (left.amount / total) * cat.amount;
+    const segH = portion * px;
+    if (segH < 0.1) return;
+    const lTop = leftCursors[li];
+    const lBot = lTop + portion * leftPx;
+    const rTop = consumedRight;
+    const rBot = consumedRight + segH;
+
+    const xL = LEFT_X + NODE_W;
+    const xR = RIGHT_X;
+    const cp = (xL + xR) / 2;
+
+    const d = `
+      M ${xL} ${lTop}
+      C ${cp} ${lTop}, ${cp} ${rTop}, ${xR} ${rTop}
+      L ${xR} ${rBot}
+      C ${cp} ${rBot}, ${cp} ${lBot}, ${xL} ${lBot}
+      Z
+    `;
+
+    const path = appendEl(svg, "path", {
+      d, fill: cat.color, "fill-opacity": 0.32, "class": "sankey-stream",
+      style: "mix-blend-mode: multiply;"
+    });
+
+    leftCursors[li] = lBot;
+    consumedRight = rBot;
+  });
+});
+
+// === Vänster-noder ===
+leftNodes.forEach((n, i) => {
+  appendEl(svg, "rect", {
+    x: LEFT_X, y: n.y, width: NODE_W, height: n.h,
+    fill: n.color, rx: 1, "class": "sankey-node-rect"
+  });
+  // Label
+  appendEl(svg, "text", {
+    x: LEFT_X - 10, y: n.y + 14,
+    "text-anchor": "end", "class": "sankey-node-label"
+  }).textContent = n.name;
+  appendEl(svg, "text", {
+    x: LEFT_X - 10, y: n.y + 30,
+    "text-anchor": "end", "class": "sankey-node-amount"
+  }).textContent = n.amount.toLocaleString("sv-SE") + " kr";
+});
+
+// Total under vänster-blocket
+const totalLabelY = leftNodes[leftNodes.length-1].y + leftNodes[leftNodes.length-1].h + 22;
+appendEl(svg, "text", {
+  x: LEFT_X - 10, y: totalLabelY,
+  "text-anchor": "end", "class": "sankey-node-amount-strong"
+}).textContent = total.toLocaleString("sv-SE") + " kr";
+appendEl(svg, "text", {
+  x: LEFT_X - 10, y: totalLabelY + 14,
+  "text-anchor": "end", "class": "sankey-node-amount"
+}).textContent = "TOTAL IN";
+
+// === Höger-noder ===
+rightNodes.forEach((n) => {
+  appendEl(svg, "rect", {
+    x: RIGHT_X, y: n.y, width: NODE_W, height: n.h,
+    fill: n.color, rx: 1, "class": "sankey-node-rect"
+  });
+  // Label rakt höger
+  const yMid = n.y + n.h/2;
+  appendEl(svg, "text", {
+    x: RIGHT_X + NODE_W + 12, y: yMid - 1,
+    "text-anchor": "start", "class": "sankey-node-label"
+  }).textContent = n.name;
+  appendEl(svg, "text", {
+    x: RIGHT_X + NODE_W + 12, y: yMid + 14,
+    "text-anchor": "start", "class": "sankey-node-amount"
+  }).textContent = n.amount.toLocaleString("sv-SE") + " kr  ·  " +
+                   ((n.amount/total)*100).toFixed(1) + " %";
+});
+
+// === Cat grid below ===
+const grid = document.getElementById("catgrid");
+cats.forEach((c) => {
+  const cell = document.createElement("div");
+  cell.className = "cat-cell";
+  const pct = ((c.amount / total) * 100).toFixed(1);
+  cell.style.setProperty("--cat-color", c.color);
+  cell.style.setProperty("--cat-pct", pct + "%");
+  const overUnder = c.amount - c.budget;
+  const ouTxt = overUnder === 0 ? "i fas" :
+                overUnder > 0 ? `+${overUnder} kr över` : `${overUnder} kr under`;
+  const ouCol = overUnder > 0 ? "#dc4c2b" : "#15803d";
+  cell.innerHTML = `
+    <div>
+      <div class="cat-name">${c.name}</div>
+      <div class="cat-budget">Budget ${c.budget.toLocaleString("sv-SE")} kr · ${c.group}</div>
+      <div class="cat-budget" style="color:${ouCol};font-weight:700;">${ouTxt}</div>
+    </div>
+    <div>
+      <div class="cat-amt">${c.amount.toLocaleString("sv-SE")}<em> kr</em></div>
+      <div class="cat-pct">${pct} %</div>
+    </div>
+  `;
+  grid.appendChild(cell);
+});
+</script>
+
+</body>
+</html>

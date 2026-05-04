@@ -39,6 +39,8 @@ export function useAuth() {
   const [teacherMeta, setTeacherMeta] = useState<{
     is_family_account: boolean;
     name: string;
+    ai_enabled: boolean;
+    ai_chat_daily_quota: number;
   } | null>(null);
 
   // Hämta /student/me när token+role finns för att veta onboarding-status
@@ -61,11 +63,18 @@ export function useAuth() {
 
   useEffect(() => {
     if (token && role === "teacher") {
-      api<{ is_family_account: boolean; name: string }>("/teacher/me")
+      api<{
+        is_family_account: boolean;
+        name: string;
+        ai_enabled?: boolean;
+        ai_chat_daily_quota?: number;
+      }>("/teacher/me")
         .then((m) =>
           setTeacherMeta({
             is_family_account: Boolean(m.is_family_account),
             name: m.name,
+            ai_enabled: Boolean(m.ai_enabled),
+            ai_chat_daily_quota: Number(m.ai_chat_daily_quota ?? 0),
           }),
         )
         .catch(() => undefined);

@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Budget, Category, Transaction, TransactionSplit
+from ..db.sql_compat import month_str
 
 
 @dataclass
@@ -133,7 +134,7 @@ class MonthlyBudgetService:
         }
         plain_q = (
             select(
-                func.strftime("%Y-%m", Transaction.date).label("m"),
+                month_str(self.session, Transaction.date).label("m"),
                 Transaction.category_id,
                 func.sum(Transaction.amount).label("total"),
             )
@@ -151,7 +152,7 @@ class MonthlyBudgetService:
 
         split_rows = self.session.execute(
             select(
-                func.strftime("%Y-%m", Transaction.date).label("m"),
+                month_str(self.session, Transaction.date).label("m"),
                 TransactionSplit.category_id,
                 func.sum(TransactionSplit.amount).label("total"),
             )
@@ -464,7 +465,7 @@ class MonthlyBudgetService:
         }
         plain_q = (
             select(
-                func.strftime("%Y-%m", Transaction.date).label("m"),
+                month_str(self.session, Transaction.date).label("m"),
                 Transaction.category_id,
                 func.sum(Transaction.amount).label("total"),
             )
@@ -482,7 +483,7 @@ class MonthlyBudgetService:
 
         split_rows = self.session.execute(
             select(
-                func.strftime("%Y-%m", Transaction.date).label("m"),
+                month_str(self.session, Transaction.date).label("m"),
                 TransactionSplit.category_id,
                 func.sum(TransactionSplit.amount).label("total"),
             )
@@ -527,7 +528,7 @@ class MonthlyBudgetService:
         }
         plain_q = (
             select(
-                func.strftime("%Y-%m", Transaction.date).label("m"),
+                month_str(self.session, Transaction.date).label("m"),
                 Transaction.category_id,
                 func.sum(Transaction.amount).label("total"),
             )
@@ -544,7 +545,7 @@ class MonthlyBudgetService:
         plain_rows = self.session.execute(plain_q).all()
         split_rows = self.session.execute(
             select(
-                func.strftime("%Y-%m", Transaction.date).label("m"),
+                month_str(self.session, Transaction.date).label("m"),
                 TransactionSplit.category_id,
                 func.sum(TransactionSplit.amount).label("total"),
             )

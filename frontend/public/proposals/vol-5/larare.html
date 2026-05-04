@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strömmen · Lärare · Vol. 05</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+.shell {
+  max-width: 1400px; margin: 0 auto;
+  padding: 88px clamp(20px, 4vw, 56px) 80px;
+}
+
+.head {
+  margin-bottom: 32px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 32px; align-items: end;
+}
+.head h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(32px, 4vw, 48px);
+  letter-spacing: -1.4px; line-height: 1.02;
+}
+.head h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.head .h-eyebrow { margin-bottom: 14px; }
+.head-meta {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); text-align: right; line-height: 1.7;
+}
+.head-meta strong { color: var(--fg); }
+
+.totals {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; margin-bottom: 28px;
+}
+@media (max-width: 900px) { .totals { grid-template-columns: repeat(2, 1fr); } }
+.stat {
+  padding: 16px 20px; border-right: 1px solid var(--rule);
+}
+.stat:last-child { border-right: 0; }
+.stat-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+.stat-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 24px; letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-num em { font-style: italic; color: var(--accent); font-weight: 500; }
+.stat-sub {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); margin-top: 3px; letter-spacing: 0.6px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 28px;
+  align-items: start;
+}
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+.card {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 26px 30px;
+}
+.card-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 6px;
+}
+.card-eye::before { content: "● "; }
+.card-title {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; margin-bottom: 18px;
+}
+.card-title em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+#sankey { width: 100%; height: 460px; display: block; }
+.sankey-node-label {
+  font-family: var(--serif); font-size: 13px; font-weight: 700;
+  fill: var(--fg); letter-spacing: -0.2px;
+}
+.sankey-node-amount {
+  font-family: var(--mono); font-size: 10.5px;
+  fill: var(--muted); letter-spacing: 0.4px;
+}
+
+/* Klassens 28 staplar */
+.classband {
+  margin-top: 24px;
+}
+.classband-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 14px;
+}
+.classband-eye::before { content: "● "; }
+
+.bandlist { display: flex; flex-direction: column; gap: 6px; }
+.band {
+  display: grid;
+  grid-template-columns: 130px 1fr 90px;
+  gap: 12px;
+  align-items: center;
+  text-decoration: none; color: var(--fg);
+  padding: 6px 0;
+  transition: background .2s var(--ease);
+  border-radius: 4px;
+}
+.band:hover { background: rgba(220, 76, 43, 0.04); }
+.band-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+  letter-spacing: -0.3px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.band-name span {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  color: var(--muted); letter-spacing: 0.6px;
+}
+.band-bar {
+  height: 18px;
+  display: flex; border-radius: 2px; overflow: hidden;
+  background: #f1f5f9;
+}
+.band-seg { height: 100%; }
+.band-tail {
+  font-family: var(--mono); font-size: 11px;
+  text-align: right; color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4px;
+}
+.band-tail em { font-family: var(--serif); font-style: italic; color: var(--accent); }
+
+.legend {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.8px; color: var(--muted);
+  margin-bottom: 14px;
+}
+.legend-dot {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 2px; margin-right: 6px; vertical-align: -1px;
+}
+
+/* Side cards */
+.panel { display: flex; flex-direction: column; gap: 18px; }
+.outl { list-style: none; padding: 0; margin: 0; }
+.outl li {
+  padding: 11px 0;
+  border-bottom: 1px dashed var(--rule);
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px; align-items: center;
+}
+.outl li:last-child { border-bottom: 0; }
+.outl-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+}
+.outl-why {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.4px; color: var(--muted); margin-top: 2px;
+}
+.outl-num {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--accent); letter-spacing: 0.4px;
+  text-align: right;
+}
+.outl-num.green { color: #15803d; }
+
+.foot {
+  margin-top: 56px; padding-top: 32px;
+  border-top: 1px solid var(--rule);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}
+.foot a {
+  font-family: var(--serif); font-weight: 700; font-size: 15px;
+  color: var(--accent); text-decoration: none;
+}
+.foot-meta {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<a href="/" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Forskning · 2026</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="./elev.html">← Elev-vyn</a>
+</nav>
+
+<div class="shell">
+
+  <header class="head">
+    <div>
+      <div class="h-eyebrow">Förslag 05 · Strömmar · Lärare</div>
+      <h1>Klass <em>9C</em> — alla strömmar i en bild.</h1>
+    </div>
+    <div class="head-meta">
+      Nordstjärnan gymnasium · 28 elever · april 2026<br>
+      <strong>Klass-snitt in</strong> 21 480 kr/mån · <strong>ut</strong> 18 320 kr<br>
+      <strong>Klass-snitt sparkvot</strong> 14,7 %
+    </div>
+  </header>
+
+  <div class="totals">
+    <div class="stat">
+      <div class="stat-eye">Klass · in totalt</div>
+      <div class="stat-num"><em>601 440</em> kr</div>
+      <div class="stat-sub">28 elever · april</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Klass · sparkvot</div>
+      <div class="stat-num">14,7 %</div>
+      <div class="stat-sub">Mål 15 % · −0,3 %</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Avvikare över</div>
+      <div class="stat-num"><em>4</em> elever</div>
+      <div class="stat-sub">+15 % nöje vs klass</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Avvikare under</div>
+      <div class="stat-num"><em>3</em> elever</div>
+      <div class="stat-sub">Sparkvot &lt; 5 %</div>
+    </div>
+    <div class="stat">
+      <div class="stat-eye">Klassningsgrad</div>
+      <div class="stat-num">73 %</div>
+      <div class="stat-sub">Snitt klassen</div>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <div>
+      <div class="card">
+        <div class="card-eye">Klassens aggregerade ström</div>
+        <div class="card-title">601 440 kr <em>genom klassen</em> i april</div>
+        <svg id="sankey" viewBox="0 0 1100 460" preserveAspectRatio="xMidYMid meet"></svg>
+
+        <div class="classband">
+          <div class="classband-eye">28 elever · staplade efter sparkvot</div>
+          <div class="legend">
+            <span><span class="legend-dot" style="background:#0f172a;"></span> Fast (hyra/el/försäkring/transport)</span>
+            <span><span class="legend-dot" style="background:#dc4c2b;"></span> Rörlig (mat/restaurang/nöje)</span>
+            <span><span class="legend-dot" style="background:#fbbf24;"></span> Sparmål / ISK</span>
+            <span><span class="legend-dot" style="background:#15803d;"></span> Sparat / kvar</span>
+          </div>
+          <div class="bandlist" id="bandlist"></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel">
+
+      <div class="card">
+        <div class="card-eye">Outliers · över snittet</div>
+        <div class="card-title">Restaurang <em>+15 %</em></div>
+        <ul class="outl">
+          <li>
+            <div>
+              <div class="outl-name">Hassan O.</div>
+              <div class="outl-why">3 480 kr restaurang · 16 % av inkomst</div>
+            </div>
+            <div class="outl-num">+ 1 380 kr</div>
+          </li>
+          <li>
+            <div>
+              <div class="outl-name">Adam B.</div>
+              <div class="outl-why">2 920 kr restaurang · pizzabudget</div>
+            </div>
+            <div class="outl-num">+ 1 720 kr</div>
+          </li>
+          <li>
+            <div>
+              <div class="outl-name">Sara A.</div>
+              <div class="outl-why">2 100 kr restaurang · andra mån i rad</div>
+            </div>
+            <div class="outl-num">+ 900 kr</div>
+          </li>
+          <li>
+            <div>
+              <div class="outl-name">Mira S.</div>
+              <div class="outl-why">1 980 kr restaurang · överskred budget</div>
+            </div>
+            <div class="outl-num">+ 780 kr</div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-eye">Outliers · under snittet</div>
+        <div class="card-title">Sparkvot <em>under 5 %</em></div>
+        <ul class="outl">
+          <li>
+            <div>
+              <div class="outl-name">Filip Ö.</div>
+              <div class="outl-why">Sparkvot 1,2 % · överdrag konto x2</div>
+            </div>
+            <div class="outl-num">−13,5 %</div>
+          </li>
+          <li>
+            <div>
+              <div class="outl-name">Noah J.</div>
+              <div class="outl-why">Sparkvot 2,8 % · CSN-fördröjning</div>
+            </div>
+            <div class="outl-num">−11,9 %</div>
+          </li>
+          <li>
+            <div>
+              <div class="outl-name">Jamil A.</div>
+              <div class="outl-why">Sparkvot 4,4 % · stora kontantuttag</div>
+            </div>
+            <div class="outl-num">−10,3 %</div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="card" style="background:rgba(15,23,42,0.97);color:#fff;border:0;">
+        <div class="card-eye" style="color:var(--gold);">Anna · klassanalys</div>
+        <div style="font-family:var(--serif);font-style:italic;font-size:16px;line-height:1.45;color:rgba(255,255,255,0.92);margin-bottom:14px;">
+          "Klassen ligger 0,3 procentenheter under sparkvot-mål. Restaurang-
+          budgeten överskrids hos 11 av 28 elever — kanske dags för en
+          gemensam reflektion?"
+        </div>
+        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);">
+          Anna · 03:42 idag · 1 200 tokens
+        </div>
+      </div>
+
+    </aside>
+
+  </div>
+
+  <div class="foot">
+    <a href="../index.html">← Tillbaka till förslagen</a>
+    <span class="foot-meta">Strömmar · Lärare · Vol. 05</span>
+    <a href="./elev.html">← Elev-vyn</a>
+  </div>
+
+</div>
+
+<script>
+// === Klassens aggregerade Sankey ===
+const incomes = [
+  { name: "Lön & löneersättning", amount: 478000, color: "#dc4c2b" },
+  { name: "Studiebidrag (CSN)",   amount: 105000, color: "#fbbf24" },
+  { name: "Sommarjobb / extra",   amount:  18440, color: "#0f172a" },
+];
+const cats = [
+  { name: "Hyra & boende",     amount: 192000, color: "#0f172a" },
+  { name: "Mat & livsmedel",   amount: 108000, color: "#dc4c2b" },
+  { name: "Sparmål totalt",    amount:  62800, color: "#fbbf24" },
+  { name: "Restaurang",        amount:  47200, color: "#dc4c2b" },
+  { name: "Sparkvot kvar",     amount:  88560, color: "#15803d" },
+  { name: "Nöje & kultur",     amount:  35400, color: "#dc4c2b" },
+  { name: "Transport",         amount:  31000, color: "#475569" },
+  { name: "El & värme",        amount:  20800, color: "#475569" },
+  { name: "Avanza ISK / fond", amount:  11200, color: "#fbbf24" },
+  { name: "Försäkringar",      amount:   4480, color: "#475569" },
+];
+const total = incomes.reduce((s,n)=>s+n.amount,0);
+
+const svg = document.getElementById("sankey");
+const NS = "http://www.w3.org/2000/svg";
+const W = 1100, H = 460;
+const PAD_TOP = 24, PAD_BOTTOM = 24;
+const NODE_W = 14, LEFT_X = 70, RIGHT_X = W - 60, STREAM_PAD = 3;
+
+const usable = H - PAD_TOP - PAD_BOTTOM - (cats.length-1)*STREAM_PAD;
+const px = usable / total;
+let rY = PAD_TOP;
+const rightNodes = cats.map(c => { const h = c.amount*px; const n = {...c,y:rY,h}; rY += h+STREAM_PAD; return n; });
+
+const leftPad = 4;
+const leftUsable = H - PAD_TOP - PAD_BOTTOM - (incomes.length-1)*leftPad;
+const leftPx = leftUsable / total;
+let lY = PAD_TOP;
+const leftNodes = incomes.map(i => { const h = i.amount*leftPx; const n = {...i,y:lY,h}; lY += h+leftPad; return n; });
+
+function el(parent, tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+}
+
+const leftCursors = leftNodes.map(n => n.y);
+cats.forEach((cat, ci) => {
+  const right = rightNodes[ci];
+  let consumed = right.y;
+  leftNodes.forEach((left, li) => {
+    const portion = (left.amount/total) * cat.amount;
+    const segH = portion * px;
+    if (segH < 0.1) return;
+    const lTop = leftCursors[li];
+    const lBot = lTop + portion*leftPx;
+    const rTop = consumed;
+    const rBot = consumed + segH;
+    const xL = LEFT_X + NODE_W, xR = RIGHT_X, cp = (xL+xR)/2;
+    const d = `M ${xL} ${lTop} C ${cp} ${lTop}, ${cp} ${rTop}, ${xR} ${rTop} L ${xR} ${rBot} C ${cp} ${rBot}, ${cp} ${lBot}, ${xL} ${lBot} Z`;
+    el(svg, "path", { d, fill: cat.color, "fill-opacity": 0.3, style: "mix-blend-mode: multiply;" });
+    leftCursors[li] = lBot;
+    consumed = rBot;
+  });
+});
+
+leftNodes.forEach(n => {
+  el(svg, "rect", { x: LEFT_X, y: n.y, width: NODE_W, height: n.h, fill: n.color, rx: 1 });
+  el(svg, "text", { x: LEFT_X-10, y: n.y+13, "text-anchor": "end", "class": "sankey-node-label" }).textContent = n.name;
+  el(svg, "text", { x: LEFT_X-10, y: n.y+27, "text-anchor": "end", "class": "sankey-node-amount" }).textContent = (n.amount/1000).toFixed(0) + " tkr";
+});
+
+rightNodes.forEach(n => {
+  el(svg, "rect", { x: RIGHT_X, y: n.y, width: NODE_W, height: n.h, fill: n.color, rx: 1 });
+  const ym = n.y + n.h/2;
+  el(svg, "text", { x: RIGHT_X+NODE_W+10, y: ym-1, "text-anchor": "start", "class": "sankey-node-label" }).textContent = n.name;
+  el(svg, "text", { x: RIGHT_X+NODE_W+10, y: ym+13, "text-anchor": "start", "class": "sankey-node-amount" }).textContent = (n.amount/1000).toFixed(0) + " tkr · " + ((n.amount/total)*100).toFixed(1) + " %";
+});
+
+// === Klassens 28 band ===
+const students = [
+  { n: "Ida P.",   in: 22800, fast: 9200,  rorl: 4400, spar: 2800, kvar: 6400 },
+  { n: "Alma K.",  in: 24100, fast: 9600,  rorl: 5100, spar: 3200, kvar: 6200 },
+  { n: "Lisa N.",  in: 21200, fast: 8800,  rorl: 4800, spar: 2400, kvar: 5200 },
+  { n: "Hanna L.", in: 23400, fast: 9100,  rorl: 5600, spar: 2800, kvar: 5900 },
+  { n: "Sara A.",  in: 23700, fast: 8900,  rorl: 8240, spar: 2400, kvar: 4160 },
+  { n: "Adam B.",  in: 22000, fast: 8400,  rorl: 7900, spar: 1800, kvar: 3900 },
+  { n: "Mira S.",  in: 20800, fast: 8200,  rorl: 7200, spar: 2200, kvar: 3200 },
+  { n: "Hassan O.",in: 21400, fast: 8500,  rorl: 8100, spar: 2000, kvar: 2800 },
+  { n: "Elias R.", in: 20200, fast: 8000,  rorl: 6800, spar: 1800, kvar: 3600 },
+  { n: "Isak T.",  in: 19800, fast: 7800,  rorl: 6500, spar: 1900, kvar: 3600 },
+  { n: "Ayan H.",  in: 19200, fast: 7900,  rorl: 6300, spar: 1500, kvar: 3500 },
+  { n: "Jamil A.", in: 21000, fast: 8200,  rorl: 9100, spar: 950,  kvar: 2750 },
+  { n: "Filip Ö.", in: 19400, fast: 7600,  rorl: 9800, spar: 250,  kvar: 1750 },
+  { n: "Noah J.",  in: 18800, fast: 7400,  rorl: 9200, spar: 530,  kvar: 1670 },
+];
+const bandTotal = 24500;
+const bandlist = document.getElementById("bandlist");
+students.forEach(s => {
+  const a = document.createElement("a");
+  a.className = "band"; a.href = "#";
+  const sparkvot = ((s.spar + s.kvar) / s.in * 100).toFixed(1);
+  const segs = [
+    { c: "#0f172a", v: s.fast },
+    { c: "#dc4c2b", v: s.rorl },
+    { c: "#fbbf24", v: s.spar },
+    { c: "#15803d", v: s.kvar },
+  ];
+  const segHTML = segs.map(seg =>
+    `<div class="band-seg" style="width:${(seg.v/bandTotal*100).toFixed(2)}%;background:${seg.c};"></div>`
+  ).join("");
+  a.innerHTML = `
+    <div class="band-name">${s.n}<span>${(s.in/1000).toFixed(1)} tkr</span></div>
+    <div class="band-bar">${segHTML}</div>
+    <div class="band-tail">spar <em>${sparkvot}%</em></div>
+  `;
+  bandlist.appendChild(a);
+});
+const more = document.createElement("a");
+more.className = "band"; more.href = "#";
+more.innerHTML = `
+  <div class="band-name">+ 14 elever till<span>klicka för full lista</span></div>
+  <div class="band-bar"></div>
+  <div class="band-tail" style="color:var(--muted);">expandera</div>
+`;
+bandlist.appendChild(more);
+</script>
+
+</body>
+</html>

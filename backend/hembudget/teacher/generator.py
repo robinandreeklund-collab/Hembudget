@@ -103,6 +103,9 @@ class MonthlyDataGenerator:
         for spec in DEFAULT_ACCOUNTS:
             acc = existing_by_name.get(spec["name"])
             if acc is None:
+                # Eleven ska ha en realistisk startposition (se DEFAULT_ACCOUNTS-
+                # kommentaren) — annars går lönekontot minus innan lönen kommer.
+                opening = Decimal(str(spec.get("opening_balance", 0) or 0))
                 acc = Account(
                     name=spec["name"],
                     bank=spec["bank"],
@@ -110,7 +113,7 @@ class MonthlyDataGenerator:
                     currency="SEK",
                     credit_limit=Decimal(str(spec.get("credit_limit", 0) or 0))
                         if spec.get("credit_limit") else None,
-                    opening_balance=Decimal("0"),
+                    opening_balance=opening,
                     opening_balance_date=date(self.year, 1, 1),
                 )
                 session.add(acc)
@@ -203,6 +206,82 @@ class MonthlyDataGenerator:
             stats=stats,
             idempotency=("salary", self.year_month, employer_name),
         )
+
+        # Partner-lön — läs StudentProfile från master-DB. Om eleven
+        # har sambo/familj OCH har gjort cost-split-valet skapas en
+        # partner-lön-Transaction så hushållsekonomin faktiskt går
+        # ihop. Pedagogiskt synlig på kontoutdraget som egen rad.
+        self._maybe_generate_partner_income(
+            session, lonekonto_id, salary_date, stats,
+        )
+
+    def _maybe_generate_partner_income(
+        self, session, lonekonto_id, salary_date, stats,
+    ) -> None:
+        """Skapa partner-lön-Transaction om StudentProfile har partner-data.
+
+        Pedagogiskt: vi VÄNTAR med att skapa partner-inkomsten tills
+        eleven har gjort cost_split-valet ('veil of ignorance'). Innan
+        valet existerar inte partnerns ekonomi i kontoutdraget — det
+        blir en explicit konsekvens av elevens beslut.
+        """
+        try:
+            from ..school.engines import master_session
+            from ..school.models import Student, StudentProfile
+            from ..school.tax import compute_net_salary
+
+            with master_session() as ms:
+                student = ms.query(Student).filter(
+                    Student.id == self.student_id
+                ).first()
+                if not student or not student.profile:
+                    return
+                p = student.profile
+                # Bara om hushåll OCH cost-split-beslut är gjort
+                if p.family_status == "ensam":
+                    return
+                if not p.cost_split_preference:
+                    return
+                if not p.partner_gross_salary or p.partner_gross_salary <= 0:
+                    return
+
+                partner_gross = p.partner_gross_salary
+                partner_profession = p.partner_profession or "sambo"
+                # Lite slump-variation månad för månad (samma som elevens)
+                variation = self.rng.uniform(-0.03, 0.03)
+                partner_gross_this_month = round(
+                    partner_gross * (1 + variation), 0,
+                )
+                tax = compute_net_salary(int(partner_gross_this_month))
+                partner_net = tax.net_monthly
+
+                # I 'all_shared'-modellen har båda gemensam ekonomi —
+                # partnerns hela nettolön kommer in på elevens (gemen-
+                # samma) konto. I 'pro_rata' och 'even_50_50' kommer
+                # bara partnerns BIDRAG till hushållskostnader in
+                # (vi förenklar: hela nettolönen kommer in, och
+                # gemensamma utgifter dras därefter — pedagogiskt
+                # tydligast kontoutdrag).
+                self._add_transaction(
+                    session,
+                    account_id=lonekonto_id,
+                    date_=salary_date,
+                    amount=Decimal(str(partner_net)),
+                    description=f"LÖN SAMBO ({partner_profession.upper()})",
+                    category_name="Lön",
+                    stats_key="transactions_created",
+                    stats=stats,
+                    idempotency=(
+                        "partner_salary", self.year_month, partner_profession,
+                    ),
+                )
+        except Exception:
+            # Fail-soft — generatorn ska aldrig krascha pga partner-data
+            import logging
+            logging.getLogger(__name__).exception(
+                "partner-income-generation misslyckades för student %s",
+                self.student_id,
+            )
 
     # ---------- Fakturor (UpcomingTransaction) ----------
 

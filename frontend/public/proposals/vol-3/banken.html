@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banken · Vol. 03 · Pentagon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body {
+  background: #0c1426;
+  color: rgba(255,255,255,0.92);
+  position: relative; min-height: 100vh;
+}
+body::before {
+  content: ""; position: fixed; inset: -10% -5%;
+  background:
+    radial-gradient(ellipse 50% 40% at 20% 30%, rgba(220,76,43,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 35% at 80% 20%, rgba(251,191,36,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #0c1426 0%, #0f172a 50%, #0c1426 100%);
+  z-index: 0;
+}
+.brand-tag, .top-nav a { color: #fff; }
+.brand-tag-meta { color: rgba(255,255,255,0.55) !important; }
+
+/* Drawer-stil — ekonomi-axeln expanderas in. Pentagon visas mini i header. */
+.shell {
+  max-width: 1240px; margin: 0 auto;
+  padding: 88px clamp(24px, 6vw, 80px) 80px;
+  position: relative; z-index: 2;
+}
+
+.crumb {
+  display: flex; gap: 14px; align-items: center;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55); margin-bottom: 18px;
+}
+.crumb a {
+  color: rgba(255,255,255,0.55); text-decoration: none;
+  transition: color .2s var(--ease);
+}
+.crumb a:hover { color: #fff; }
+.crumb-sep { color: rgba(255,255,255,0.25); }
+.crumb-now { color: var(--accent); }
+
+.header-band {
+  display: grid; grid-template-columns: 1fr 200px;
+  gap: 48px; align-items: end;
+  margin-bottom: 56px;
+}
+@media (max-width: 800px) { .header-band { grid-template-columns: 1fr; } }
+
+.header-eye {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 18px;
+}
+.header-eye::before { content: "● "; }
+
+.header-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(40px, 5.6vw, 72px);
+  letter-spacing: -2px; line-height: 1; color: #fff;
+  margin-bottom: 18px;
+}
+.header-h1 em { font-style: italic; color: var(--gold); font-weight: 500; }
+
+.header-lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.5;
+  color: rgba(255,255,255,0.78);
+  max-width: 60ch;
+}
+
+.mini-pent {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 14px;
+  text-align: center;
+}
+.mini-pent svg { display: block; margin: 0 auto; }
+.mini-pent-label {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--gold); margin-top: 8px;
+}
+.mini-pent-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 24px; color: #fff;
+  letter-spacing: -0.5px;
+}
+.mini-pent-num em { font-style: italic; color: var(--gold); font-weight: 500; }
+
+/* Kort-grid med saldon */
+.balance-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 16px; margin-bottom: 56px;
+}
+@media (max-width: 1000px) { .balance-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px)  { .balance-grid { grid-template-columns: 1fr; } }
+
+.bal-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: all .25s var(--ease);
+}
+.bal-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.bal-card.is-primary {
+  background: linear-gradient(135deg, rgba(220,76,43,0.15) 0%, rgba(251,191,36,0.08) 100%);
+  border-color: rgba(220,76,43,0.4);
+}
+.bal-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--gold);
+}
+.bal-name {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff;
+}
+.bal-meta {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+.bal-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 38px; letter-spacing: -1px;
+  font-variant-numeric: tabular-nums; color: #fff;
+  margin-top: 6px;
+}
+.bal-num em { font-style: italic; color: var(--gold); font-weight: 500; }
+.bal-trend {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.bal-trend.up { color: #34d399; }
+.bal-trend.down { color: #fca5a5; }
+
+/* Subspaces inom Pengar */
+.sub-spaces {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; margin-bottom: 48px;
+}
+@media (max-width: 900px) { .sub-spaces { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 600px) { .sub-spaces { grid-template-columns: 1fr; } }
+
+.sub-tab {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: #fff;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: all .2s var(--ease);
+}
+.sub-tab:hover { border-color: var(--gold); transform: translateY(-2px); }
+.sub-tab.active { background: var(--accent); border-color: var(--accent); }
+.sub-tab-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--gold);
+}
+.sub-tab.active .sub-tab-eye { color: rgba(255,255,255,0.7); }
+.sub-tab-name {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.sub-tab-meta {
+  font-family: var(--mono); font-size: 10px;
+  color: rgba(255,255,255,0.55); letter-spacing: 0.6px;
+}
+
+/* Tx-list som mörk tablett */
+.section-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 14px;
+}
+.section-eye::before { content: "● "; }
+.section-h2 {
+  font-family: var(--serif); font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 700; letter-spacing: -1.2px; line-height: 1.05;
+  color: #fff; margin-bottom: 28px;
+}
+.section-h2 em { font-style: italic; color: var(--gold); font-weight: 500; }
+
+.tx-list {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tx {
+  display: grid; grid-template-columns: 90px 1fr auto auto;
+  gap: 16px; padding: 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  align-items: center;
+}
+.tx:last-child { border-bottom: 0; }
+.tx-day {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+.tx-day strong {
+  display: block;
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  color: #fff; margin-top: 2px; letter-spacing: -0.3px;
+}
+.tx-name {
+  font-family: var(--serif); font-weight: 600; font-size: 15.5px;
+  color: #fff;
+}
+.tx-cat {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 100px;
+  background: rgba(220, 76, 43, 0.18);
+  color: #fca5a5;
+  border: 1px solid rgba(220, 76, 43, 0.3);
+}
+.tx-cat.eko { background: rgba(220,76,43,0.18); border-color: rgba(220,76,43,0.3); color: #fca5a5; }
+.tx-num {
+  font-family: var(--serif); font-weight: 700; font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
+}
+.tx-num.is-out { color: #fca5a5; }
+.tx-num.is-in  { color: #34d399; }
+
+/* Echo-modul */
+.echo-band {
+  margin-top: 56px;
+  padding: 26px 30px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 6px;
+}
+.echo-band-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.echo-band-eye::before { content: "● "; }
+.echo-band-text {
+  font-family: var(--serif); font-style: italic;
+  font-size: 19px; line-height: 1.45;
+  color: rgba(255,255,255,0.92);
+  max-width: 60ch;
+}
+.echo-band-cite {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-top: 14px;
+}
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 03 · Pengar</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="dashboard.html">Pentagon</a>
+</nav>
+
+<div class="shell">
+
+  <div class="crumb">
+    <a href="dashboard.html">Pentagon</a>
+    <span class="crumb-sep">/</span>
+    <span class="crumb-now">Ekonomi-axeln · Pengar</span>
+  </div>
+
+  <div class="header-band">
+    <div>
+      <div class="header-eye">Ekonomi-axeln · 78 av 100</div>
+      <h1 class="header-h1">Allt som <em>flyttar saldot</em>.</h1>
+      <p class="header-lead">
+        Banken, sparmål, investeringar, pension, lön. Hela ekonomi-axelns
+        komponenter. Klicka in i en undersektion för att fördjupa dig
+        eller justera.
+      </p>
+    </div>
+
+    <a href="dashboard.html" class="mini-pent">
+      <svg width="120" height="100" viewBox="0 0 240 200">
+        <polygon points="120,20 220,80 185,180 55,180 20,80" fill="none" stroke="rgba(255,255,255,0.18)" stroke-dasharray="2 3"/>
+        <polygon points="120,38 196,90 168,170 70,170 42,90" fill="rgba(220,76,43,0.18)" stroke="#dc4c2b" stroke-width="1.5"/>
+        <circle cx="120" cy="38" r="4" fill="#fbbf24"/>
+      </svg>
+      <div class="mini-pent-label">Du är här</div>
+      <div class="mini-pent-num">78<em>↑</em></div>
+    </a>
+  </div>
+
+  <div class="balance-grid">
+    <div class="bal-card is-primary">
+      <span class="bal-eye">SEB · Lönekonto</span>
+      <span class="bal-name">Vardagskonto</span>
+      <span class="bal-meta">Räntefri · OCR slutar 12</span>
+      <span class="bal-num">27 <em>795</em></span>
+      <span class="bal-trend up">+ 27 497 från lönedagen</span>
+    </div>
+    <div class="bal-card">
+      <span class="bal-eye">Nordea · Sparkonto</span>
+      <span class="bal-name">Buffert</span>
+      <span class="bal-meta">2,0 % ränta · sparmål 18 000</span>
+      <span class="bal-num">15 <em>500</em></span>
+      <span class="bal-trend down">− 3 200 efter tandläkaren</span>
+    </div>
+    <div class="bal-card">
+      <span class="bal-eye">Avanza · ISK</span>
+      <span class="bal-name">Investeringar</span>
+      <span class="bal-meta">Schablon 3,8 % · YTD +12,4 %</span>
+      <span class="bal-num">128 <em>650</em></span>
+      <span class="bal-trend up">+ 14 240 sedan jan</span>
+    </div>
+  </div>
+
+  <!-- Sub-spaces inuti Pengar -->
+  <div class="sub-spaces">
+    <a href="#" class="sub-tab active">
+      <span class="sub-tab-eye">01</span>
+      <span class="sub-tab-name">Banken</span>
+      <span class="sub-tab-meta">3 konton · senaste 14:32</span>
+    </a>
+    <a href="#" class="sub-tab">
+      <span class="sub-tab-eye">02</span>
+      <span class="sub-tab-name">Budget</span>
+      <span class="sub-tab-meta">Konsumentverket 2026</span>
+    </a>
+    <a href="#" class="sub-tab">
+      <span class="sub-tab-eye">03</span>
+      <span class="sub-tab-name">Investeringar</span>
+      <span class="sub-tab-meta">ISK · fonder · krasch</span>
+    </a>
+    <a href="#" class="sub-tab">
+      <span class="sub-tab-eye">04</span>
+      <span class="sub-tab-name">Lön &amp; pension</span>
+      <span class="sub-tab-meta">ITP1 · 2,2 mkr vid 67</span>
+    </a>
+  </div>
+
+  <!-- Senaste rörelser -->
+  <div class="section-eye">Senaste rörelser · 7 dagar</div>
+  <h2 class="section-h2">Veckan i <em>flöde</em>.</h2>
+
+  <div class="tx-list">
+    <div class="tx">
+      <div class="tx-day">Idag<strong>14:22</strong></div>
+      <div class="tx-name">Folktandvården Vasastan</div>
+      <span class="tx-cat eko">Hälsa-tipp</span>
+      <div class="tx-num is-out">−3 200</div>
+    </div>
+    <div class="tx">
+      <div class="tx-day">Idag<strong>09:14</strong></div>
+      <div class="tx-name">ICA Maxi · veckohandel</div>
+      <span class="tx-cat eko">Mat</span>
+      <div class="tx-num is-out">−872</div>
+    </div>
+    <div class="tx">
+      <div class="tx-day">Tis<strong>16:00</strong></div>
+      <div class="tx-name">Visma Lön AB · maj-utbetalning</div>
+      <span class="tx-cat eko">Lön</span>
+      <div class="tx-num is-in">+27 795</div>
+    </div>
+    <div class="tx">
+      <div class="tx-day">Tis<strong>06:02</strong></div>
+      <div class="tx-name">Akavia · medlemsavgift</div>
+      <span class="tx-cat eko">Avgift</span>
+      <div class="tx-num is-out">−298</div>
+    </div>
+    <div class="tx">
+      <div class="tx-day">Mån<strong>20:14</strong></div>
+      <div class="tx-name">Spotify Premium · Familj</div>
+      <span class="tx-cat eko">Underhållning</span>
+      <div class="tx-num is-out">−169</div>
+    </div>
+    <div class="tx">
+      <div class="tx-day">Mån<strong>12:32</strong></div>
+      <div class="tx-name">Avanza · ISK månadsspar</div>
+      <span class="tx-cat eko">Sparande</span>
+      <div class="tx-num is-out">−5 000</div>
+    </div>
+    <div class="tx">
+      <div class="tx-day">Sön<strong>18:00</strong></div>
+      <div class="tx-name">SL · månadskort</div>
+      <span class="tx-cat eko">Transport</span>
+      <div class="tx-num is-out">−995</div>
+    </div>
+  </div>
+
+  <div class="echo-band">
+    <div class="echo-band-eye">Echo · pentagon-koppling</div>
+    <div class="echo-band-text">
+      Tandläkaren ändrade ekonomi-axeln med <strong>−2 punkter</strong>
+      men hälsa-axeln med <strong>−6</strong>. Det är inte bara pengar
+      som rör sig — pentagonen tippar mer åt hälsa-hållet. Vill du se
+      hur det påverkar veckans helhet?
+    </div>
+    <div class="echo-band-cite">— Onsdag 14:32 · efter tandläkaren</div>
+  </div>
+
+</div>
+
+</body>
+</html>

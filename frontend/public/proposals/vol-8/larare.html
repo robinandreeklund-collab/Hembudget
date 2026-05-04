@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veckans val · Lärare · Vol. 08</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+:root {
+  --bg-deep: #0a0e1a; --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --line: rgba(255,255,255,0.1); --line-strong: rgba(255,255,255,0.18);
+  --text: rgba(255,255,255,0.92); --text-mid: rgba(255,255,255,0.6); --text-dim: rgba(255,255,255,0.4);
+}
+body { background: var(--bg-deep); color: var(--text); position: relative; min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 30%, rgba(220,76,43,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 75% 70%, rgba(251,191,36,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 60%, var(--bg-deep) 100%);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.018) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.018) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.4;
+}
+
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 80;
+  background: rgba(10,14,26,0.88); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 22px; gap: 22px;
+}
+.tb-brand { font-family: var(--serif); font-weight: 700; font-size: 16px; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 9px; }
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-dim); margin-left: 4px; }
+.tb-role { background: var(--warm); color: #422006; font-family: var(--mono); font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 100px; letter-spacing: 1.4px; text-transform: uppercase; }
+.tb-meta { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; color: var(--text-dim); text-transform: uppercase; }
+.tb-meta strong { color: #fff; }
+.tb-spacer { flex: 1; }
+.tb-action { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; padding: 7px 12px; border-radius: 100px; background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong); color: var(--text); cursor: pointer; text-decoration: none; }
+.tb-action:hover { background: rgba(251,191,36,0.12); border-color: var(--warm); color: var(--warm); }
+.tb-user { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #1e293b, #475569); color: #fff; font-family: var(--serif); font-weight: 700; font-size: 13px; display: grid; place-items: center; text-decoration: none; }
+
+.app { padding-top: 56px; position: relative; z-index: 5; }
+.shell { max-width: 1380px; margin: 0 auto; padding: 32px clamp(20px, 5vw, 60px) 80px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  padding: 7px 14px; border-radius: 100px;
+  background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.pill::before { content: "●"; color: var(--accent); font-size: 10px; }
+
+.head { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: end; margin-bottom: 28px; }
+.head-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(36px, 5vw, 56px);
+  letter-spacing: -1.6px; line-height: 1; color: #fff;
+  margin-top: 14px;
+}
+.head-h1 em { font-style: italic; color: var(--warm); font-weight: 500; }
+.head-meta { font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-mid); text-align: right; line-height: 1.7; }
+.head-meta strong { color: #fff; }
+
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 30px; overflow: hidden; }
+@media (max-width: 1000px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { padding: 16px 20px; border-right: 1px solid var(--line); }
+.stat:last-child { border-right: 0; }
+.stat-eye { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 5px; }
+.stat-num { font-family: var(--serif); font-weight: 700; font-size: 24px; letter-spacing: -0.7px; font-variant-numeric: tabular-nums; color: #fff; }
+.stat-num em { font-style: italic; color: var(--warm); font-weight: 500; }
+.stat-sub { font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 2px; letter-spacing: 0.4px; }
+
+.section-eye { font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--warm); margin-bottom: 14px; }
+.section-eye::before { content: "● "; }
+
+/* === BIBLIOTEKET — bokhylla === */
+.bookshelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(15,21,37,0.4), rgba(10,14,26,0.4));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 22px;
+  margin-bottom: 28px;
+  position: relative;
+}
+.book {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--warm);
+  border-radius: 4px;
+  padding: 14px 14px 16px;
+  text-decoration: none; color: var(--text);
+  cursor: pointer;
+  transition: all .25s var(--ease);
+  position: relative;
+  display: flex; flex-direction: column;
+}
+.book:hover {
+  transform: translateY(-6px) scale(1.02);
+  border-color: var(--accent);
+  box-shadow: 0 14px 30px -10px rgba(0,0,0,0.5);
+  z-index: 2;
+}
+.book.alert {
+  border-top-color: var(--accent);
+  background: linear-gradient(180deg, rgba(220,76,43,0.10), rgba(15,21,37,0.85));
+}
+.book.done {
+  border-top-color: #6ee7b7;
+}
+.book-eye {
+  font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 6px;
+}
+.book-eye::before { content: "● "; }
+.book.alert .book-eye { color: var(--accent); }
+.book.done .book-eye { color: #6ee7b7; }
+.book-name {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  letter-spacing: -0.3px; color: #fff;
+  margin-bottom: 6px;
+}
+.book-vol {
+  font-family: var(--mono); font-size: 9px; color: var(--text-dim);
+  letter-spacing: 0.8px; margin-bottom: 12px;
+}
+.book-prog {
+  margin-top: auto;
+  padding-top: 10px; border-top: 1px dashed var(--line);
+}
+.book-chap {
+  font-family: var(--mono); font-size: 9.5px; color: var(--text-mid);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px; display: flex; justify-content: space-between;
+}
+.book-chap em { color: var(--warm); font-family: var(--serif); font-style: italic; font-weight: 700; }
+.book-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 100px; overflow: hidden; }
+.book-bar-fill { height: 100%; background: var(--warm); border-radius: 100px; }
+.book.done .book-bar-fill { background: #6ee7b7; }
+.book.alert .book-bar-fill { background: var(--accent); }
+.book-pent {
+  position: absolute; top: 12px; right: 10px;
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 13px; color: var(--warm);
+}
+
+/* sidopanel */
+.layout { display: grid; grid-template-columns: 1fr 360px; gap: 28px; align-items: start; }
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+.s-card { background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; margin-bottom: 14px; }
+.s-card-eye { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--warm); margin-bottom: 8px; }
+.s-card-eye::before { content: "● "; }
+.s-card-h { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: -0.4px; color: #fff; margin-bottom: 10px; }
+.s-card-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+
+.write-scene { background: rgba(220,76,43,0.08); border: 1px solid rgba(220,76,43,0.3); border-radius: 6px; padding: 18px 20px; }
+.write-scene-eye { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.write-scene-eye::before { content: "● "; }
+.write-scene-h { font-family: var(--serif); font-size: 18px; font-weight: 700; letter-spacing: -0.4px; color: #fff; margin-bottom: 10px; }
+.write-scene-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.write-scene textarea { width: 100%; min-height: 80px; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 12px 14px; border-radius: 6px; font-family: "Inter", sans-serif; font-size: 13px; line-height: 1.5; resize: vertical; }
+.write-scene-targets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.write-scene-target { font-family: var(--mono); font-size: 9.5px; padding: 4px 9px; border-radius: 100px; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--text-mid); cursor: pointer; }
+.write-scene-target.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.write-scene-btn { background: var(--accent); color: #fff; border: 0; padding: 10px 14px; border-radius: 100px; font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer; margin-top: 12px; }
+
+.attn-list { list-style: none; padding: 0; margin: 0; }
+.attn-list li { padding: 9px 0; border-bottom: 1px dashed var(--line); display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.attn-list li:last-child { border-bottom: 0; }
+.attn-name { font-family: var(--serif); font-size: 13.5px; font-weight: 700; color: #fff; }
+.attn-why { font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px; }
+.attn-go { font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--warm); text-decoration: none; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+  <span class="tb-role">Lärare</span>
+  <div class="tb-meta">9C · <strong>28 utgåvor</strong> · vecka 18</div>
+  <div class="tb-spacer"></div>
+  <a href="../vol-7/larare.html" class="tb-action">Pentagon-vy</a>
+  <a href="#" class="tb-action">Skapa scen</a>
+  <a href="#" class="tb-user">AL</a>
+</header>
+
+<main class="app">
+  <div class="shell">
+
+    <header class="head">
+      <div>
+        <span class="pill">Veckans val · biblioteket · 9C</span>
+        <h1 class="head-h1">28 elever, <em>28 berättelser</em>.</h1>
+      </div>
+      <div class="head-meta">
+        Anders Lind · onsdag 29 april<br>
+        <strong>3</strong> elever stannade i kap. 2<br>
+        <strong>14</strong> reflektioner att läsa
+      </div>
+    </header>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-eye">Klart kap. 6</div><div class="stat-num"><em>11</em>/28</div><div class="stat-sub">veckan slutförd</div></div>
+      <div class="stat"><div class="stat-eye">Mitt i veckan</div><div class="stat-num">14</div><div class="stat-sub">kap. 3-5</div></div>
+      <div class="stat"><div class="stat-eye">Stannade tidigt</div><div class="stat-num"><em>3</em></div><div class="stat-sub">i kap. 2 (val)</div></div>
+      <div class="stat"><div class="stat-eye">Nya scener</div><div class="stat-num">0</div><div class="stat-sub">denna vecka</div></div>
+      <div class="stat"><div class="stat-eye">Maria-token</div><div class="stat-num">28 %</div><div class="stat-sub">av månadsbudget</div></div>
+    </div>
+
+    <div class="layout">
+
+      <div>
+        <div class="section-eye">Bokhyllan · klicka för utgåva</div>
+
+        <div class="bookshelf" id="shelf"></div>
+      </div>
+
+      <aside>
+
+        <div class="write-scene">
+          <div class="write-scene-eye">Skriv ny scen i veckans bok</div>
+          <h2 class="write-scene-h">Lägg in en <em>oväntad händelse</em>.</h2>
+          <textarea placeholder="Ex: 'Tandläkaren ringer — 4 200 kr akut, 30 dagars förfall.' Eleverna får 3 val. Echo guidar i bakgrunden."></textarea>
+          <div style="margin-top: 10px; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase;">Skicka till:</div>
+          <div class="write-scene-targets">
+            <span class="write-scene-target on">Hela 9C</span>
+            <span class="write-scene-target">5 i fördjupning</span>
+            <span class="write-scene-target">Bara Sara A.</span>
+            <span class="write-scene-target">+ välj manuellt</span>
+          </div>
+          <button class="write-scene-btn">Spridd i 28 böcker →</button>
+        </div>
+
+        <div class="s-card">
+          <div class="s-card-eye">Stannade i kap. 2 · valet</div>
+          <div class="s-card-h">3 <em>elever</em></div>
+          <ul class="attn-list">
+            <li>
+              <div><div class="attn-name">Filip Ö.</div><div class="attn-why">öppnade 22 apr · läst kap. 1 · ej valt</div></div>
+              <a href="#" class="attn-go">öppna →</a>
+            </li>
+            <li>
+              <div><div class="attn-name">Noah J.</div><div class="attn-why">öppnade 15 apr · har inte valt</div></div>
+              <a href="#" class="attn-go">öppna →</a>
+            </li>
+            <li>
+              <div><div class="attn-name">Ayan H.</div><div class="attn-why">öppnade 14:22 idag · på val-skärmen</div></div>
+              <a href="#" class="attn-go">öppna →</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="s-card">
+          <div class="s-card-eye">Klassens snittval · kap. 2</div>
+          <div class="s-card-h">Tandläkar-frågan</div>
+          <div style="font-family: "Inter", sans-serif; font-size: 13px;">
+            <div style="display: grid; grid-template-columns: 1fr 50px; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">A · Betala nu</span><span style="font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--warm); text-align: right;">14</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 50px; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">B · Delbetala</span><span style="font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--warm); text-align: right;">7</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 50px; gap: 10px; padding: 6px 0;"><span style="color: var(--text);">C · Skjut upp</span><span style="font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--warm); text-align: right;">4</span></div>
+          </div>
+          <div style="margin-top: 10px; font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); letter-spacing: 0.4px;">+ 3 har inte valt än. Användbart för helklassreflektion: <em style="color: var(--warm);">vad skiljer val A från val C?</em></div>
+        </div>
+
+        <div class="s-card">
+          <div class="s-card-eye">14 reflektioner · kap. 6</div>
+          <div class="s-card-h">Vill <em>läsas</em> innan onsdag</div>
+          <ul class="attn-list">
+            <li><div><div class="attn-name">Sara A.</div><div class="attn-why">"Restaurang igen — varför är det så lätt?"</div></div><a class="attn-go">läs →</a></li>
+            <li><div><div class="attn-name">Ida P.</div><div class="attn-why">"Pension kändes overkligt tills jag räknade…"</div></div><a class="attn-go">läs →</a></li>
+            <li><div><div class="attn-name">Hassan O.</div><div class="attn-why">"Maria höll inte med mig om friskvård."</div></div><a class="attn-go">läs →</a></li>
+            <li><div><div class="attn-name">Ayan H.</div><div class="attn-why" style="color: #fca5a5;">⚠ "Vet inte hur jag deklarerar."</div></div><a class="attn-go">läs →</a></li>
+          </ul>
+          <div style="margin-top: 10px; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px;">+ 10 till — visa alla →</div>
+        </div>
+
+      </aside>
+
+    </div>
+  </div>
+</main>
+
+<script>
+const STUDENTS = [
+  { n:"Adam B.",   chap: 5, status: "alert", pent: 78, vol: 18, lastEvent: "Maria R1" },
+  { n:"Alma K.",   chap: 6, status: "done",  pent: 92, vol: 18, lastEvent: "klar" },
+  { n:"Ayan H.",   chap: 2, status: "alert", pent: 54, vol: 18, lastEvent: "vid val" },
+  { n:"Bilal R.",  chap: 4, status: "",      pent: 81, vol: 18, lastEvent: "banken" },
+  { n:"Cleo M.",   chap: 5, status: "",      pent: 73, vol: 18, lastEvent: "Maria R1" },
+  { n:"Edgar P.",  chap: 6, status: "done",  pent: 79, vol: 18, lastEvent: "klar" },
+  { n:"Elias R.",  chap: 4, status: "",      pent: 76, vol: 18, lastEvent: "banken" },
+  { n:"Felicia D.",chap: 6, status: "done",  pent: 84, vol: 18, lastEvent: "klar" },
+  { n:"Filip Ö.",  chap: 1, status: "alert", pent: 31, vol: 18, lastEvent: "stannat" },
+  { n:"Gusti N.",  chap: 3, status: "",      pent: 62, vol: 18, lastEvent: "konsekvens" },
+  { n:"Hanna L.",  chap: 5, status: "",      pent: 88, vol: 18, lastEvent: "Maria R4" },
+  { n:"Hassan O.", chap: 6, status: "done",  pent: 68, vol: 18, lastEvent: "klar" },
+  { n:"Ida P.",    chap: 6, status: "done",  pent: 95, vol: 18, lastEvent: "klar" },
+  { n:"Iris B.",   chap: 6, status: "done",  pent: 90, vol: 18, lastEvent: "klar" },
+  { n:"Isak T.",   chap: 4, status: "",      pent: 65, vol: 18, lastEvent: "banken" },
+  { n:"Jakob S.",  chap: 3, status: "",      pent: 58, vol: 18, lastEvent: "konsekvens" },
+  { n:"Jamil A.",  chap: 2, status: "alert", pent: 48, vol: 18, lastEvent: "stannat" },
+  { n:"Klara H.",  chap: 6, status: "done",  pent: 87, vol: 18, lastEvent: "klar" },
+  { n:"Liam V.",   chap: 5, status: "",      pent: 70, vol: 18, lastEvent: "Maria R3" },
+  { n:"Lisa N.",   chap: 6, status: "done",  pent: 86, vol: 18, lastEvent: "klar" },
+  { n:"Maja F.",   chap: 4, status: "",      pent: 82, vol: 18, lastEvent: "banken" },
+  { n:"Mira S.",   chap: 5, status: "",      pent: 75, vol: 18, lastEvent: "Maria R2" },
+  { n:"Nelly W.",  chap: 4, status: "",      pent: 67, vol: 18, lastEvent: "banken" },
+  { n:"Noah J.",   chap: 1, status: "alert", pent: 28, vol: 18, lastEvent: "stannat" },
+  { n:"Otto L.",   chap: 4, status: "",      pent: 74, vol: 18, lastEvent: "banken" },
+  { n:"Petra G.",  chap: 6, status: "done",  pent: 89, vol: 18, lastEvent: "klar" },
+  { n:"Robin Z.",  chap: 5, status: "",      pent: 71, vol: 18, lastEvent: "Maria R2" },
+  { n:"Sara A.",   chap: 5, status: "",      pent: 72, vol: 18, lastEvent: "Maria R2" },
+];
+
+const shelf = document.getElementById("shelf");
+shelf.innerHTML = STUDENTS.map(s => `
+  <a class="book ${s.status}" href="../vol-8/elev.html">
+    <div class="book-pent">${s.pent}</div>
+    <div class="book-eye">${s.status === "alert" ? "Stannat" : s.status === "done" ? "Klar" : "Pågår"}</div>
+    <div class="book-name">${s.n}</div>
+    <div class="book-vol">Vol. ${s.vol} · onsdag</div>
+    <div class="book-prog">
+      <div class="book-chap"><span>${s.lastEvent}</span><em>${s.chap}/6</em></div>
+      <div class="book-bar"><div class="book-bar-fill" style="width: ${(s.chap/6*100).toFixed(0)}%;"></div></div>
+    </div>
+  </a>
+`).join("");
+</script>
+</body>
+</html>

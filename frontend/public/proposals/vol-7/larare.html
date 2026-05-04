@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pentagonen · Lärare · Vol. 07</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+:root {
+  --bg-deep: #0a0e1a; --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --line: rgba(255,255,255,0.1); --line-strong: rgba(255,255,255,0.18);
+  --text: rgba(255,255,255,0.92); --text-mid: rgba(255,255,255,0.6); --text-dim: rgba(255,255,255,0.4);
+}
+body { background: var(--bg-deep); color: var(--text); position: relative; min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse 70% 50% at 25% 35%, rgba(220,76,43,0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(251,191,36,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 60%, var(--bg-deep) 100%);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.022) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.022) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.5;
+}
+
+/* TOPBAR */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 80;
+  background: rgba(10,14,26,0.88); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 22px; gap: 22px;
+}
+.tb-brand { font-family: var(--serif); font-weight: 700; font-size: 16px; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 9px; }
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-dim); margin-left: 4px; }
+.tb-role {
+  background: var(--warm); color: #422006;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 3px 9px; border-radius: 100px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+}
+.tb-crumbs {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px;
+  color: var(--text-dim); text-transform: uppercase;
+  display: flex; align-items: center; gap: 8px;
+}
+.tb-crumbs a { color: var(--text-dim); text-decoration: none; cursor: pointer; }
+.tb-crumbs a:hover { color: var(--warm); }
+.tb-crumbs strong { color: #fff; }
+.tb-crumbs .sep { color: rgba(255,255,255,0.25); }
+.tb-spacer { flex: 1; }
+.tb-imp {
+  background: rgba(220,76,43,0.12); color: var(--accent);
+  border: 1px solid rgba(220,76,43,0.35);
+  padding: 7px 12px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer; text-decoration: none;
+}
+.tb-imp:hover { background: rgba(220,76,43,0.22); }
+.tb-user {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #1e293b, #475569);
+  color: #fff; font-family: var(--serif); font-weight: 700; font-size: 13px;
+  display: grid; place-items: center; text-decoration: none;
+}
+
+/* SHELL */
+.app { padding-top: 56px; position: relative; z-index: 5; }
+.panel { display: none; }
+.panel.active { display: block; animation: fadein .35s var(--ease); }
+@keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.shell { max-width: 1380px; margin: 0 auto; padding: 32px clamp(20px, 5vw, 60px) 80px; }
+
+/* PILL */
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  padding: 6px 14px; border-radius: 100px;
+  background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.pill::before { content: "●"; color: var(--accent); font-size: 10px; }
+.pill.warm::before { color: var(--warm); }
+
+/* Nivå-badge */
+.level-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 4px 10px; border-radius: 100px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+.level-badge.l1 { background: rgba(110,231,183,0.18); border: 1px solid rgba(110,231,183,0.35); color: #6ee7b7; }
+.level-badge.l1::before { content: "▰▱▱"; font-size: 7px; }
+.level-badge.l2 { background: rgba(251,191,36,0.18); border: 1px solid rgba(251,191,36,0.35); color: var(--warm); }
+.level-badge.l2::before { content: "▰▰▱"; font-size: 7px; }
+.level-badge.l3 { background: rgba(220,76,43,0.18); border: 1px solid rgba(220,76,43,0.35); color: #fda594; }
+.level-badge.l3::before { content: "▰▰▰"; font-size: 7px; }
+
+.level-activate-btn {
+  background: var(--warm); color: #422006; border: 0;
+  padding: 8px 14px; border-radius: 100px;
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer;
+}
+.level-activate-btn:hover { background: #f59e0b; }
+
+/* === LÄRAR-HUB === */
+.head {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 28px; align-items: end; margin-bottom: 28px;
+}
+.head-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(36px, 5vw, 56px);
+  letter-spacing: -1.6px; line-height: 1; color: #fff;
+  margin-top: 14px;
+}
+.head-h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.head-meta {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-mid); text-align: right; line-height: 1.7;
+}
+.head-meta strong { color: #fff; }
+
+.stats {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px; margin-bottom: 30px; overflow: hidden;
+}
+@media (max-width: 1000px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { padding: 16px 20px; border-right: 1px solid var(--line); }
+.stat:last-child { border-right: 0; }
+.stat-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 5px;
+}
+.stat-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 24px; letter-spacing: -0.7px;
+  font-variant-numeric: tabular-nums; color: #fff;
+}
+.stat-num em { font-style: italic; color: var(--warm); font-weight: 500; }
+.stat-sub {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--text-mid); margin-top: 2px; letter-spacing: 0.4px;
+}
+
+/* Klass-pentagon centrerad */
+.class-stage {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 36px;
+  align-items: start;
+  margin-bottom: 36px;
+}
+@media (max-width: 1100px) { .class-stage { grid-template-columns: 1fr; } }
+
+.class-pent {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 28px;
+  position: relative;
+}
+.class-pent-eye {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 10px;
+}
+.class-pent-eye::before { content: "● "; }
+.class-pent-h {
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  letter-spacing: -0.6px; color: #fff;
+  margin-bottom: 24px;
+}
+.class-pent-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+
+.pent-svg {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  display: block;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.p-axis-line { fill: rgba(255,255,255,0.05); stroke: rgba(255,255,255,0.18); stroke-width: 1; stroke-dasharray: 2 3; }
+.p-class { fill: rgba(220,76,43,0.20); stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 18px rgba(220,76,43,0.4)); }
+.p-class-prev { fill: none; stroke: rgba(255,255,255,0.4); stroke-width: 1.2; stroke-dasharray: 4 4; }
+
+.axis-tags {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  margin-top: 18px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.6px; text-transform: uppercase;
+  color: var(--text-mid); text-align: center;
+}
+.axis-tags span { padding: 6px 4px; background: rgba(255,255,255,0.03); border-radius: 4px; }
+.axis-tags strong { display: block; color: var(--warm); font-family: var(--serif); font-style: italic; font-size: 14px; margin-top: 3px; }
+
+/* 28 mini-pentagons */
+.mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+@media (max-width: 700px) { .mini-grid { grid-template-columns: repeat(4, 1fr); } }
+.mini {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px 6px 6px;
+  cursor: pointer;
+  text-decoration: none; color: #fff;
+  transition: all .2s var(--ease);
+  text-align: center;
+  position: relative;
+}
+.mini:hover { border-color: var(--warm); transform: translateY(-2px); }
+.mini.alert { border-color: rgba(220,76,43,0.4); background: rgba(220,76,43,0.06); }
+.mini-svg { width: 100%; aspect-ratio: 1; display: block; }
+.mini-name {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.6px; color: var(--text); margin-top: 4px;
+}
+.mini-num { font-family: var(--mono); font-size: 8px; color: var(--text-dim); margin-top: 1px; letter-spacing: 0.4px; }
+
+.mini-pent { fill: rgba(220,76,43,0.20); stroke: var(--accent); stroke-width: 1.5; }
+.mini-pent.green { fill: rgba(110,231,183,0.18); stroke: #6ee7b7; }
+.mini-pent.amber { fill: rgba(251,191,36,0.20); stroke: var(--warm); }
+.mini-pent.red { fill: rgba(220,76,43,0.30); stroke: var(--accent); }
+.mini-axes { fill: none; stroke: rgba(255,255,255,0.15); stroke-width: 0.6; }
+
+/* Sidopanel */
+.side-stack { display: flex; flex-direction: column; gap: 12px; }
+.s-card {
+  background: rgba(15,21,37,0.7);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px 20px;
+}
+.s-card-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 8px;
+}
+.s-card-eye::before { content: "● "; }
+.s-card-h {
+  font-family: var(--serif); font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; color: #fff;
+  margin-bottom: 10px;
+}
+.s-card-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+
+.attn-list { list-style: none; padding: 0; margin: 0; }
+.attn-list li {
+  padding: 10px 0; border-bottom: 1px dashed var(--line);
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px; align-items: center;
+}
+.attn-list li:last-child { border-bottom: 0; }
+.attn-name { font-family: var(--serif); font-size: 14px; font-weight: 700; color: #fff; }
+.attn-why { font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.4px; }
+.attn-go {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--warm); text-decoration: none;
+  cursor: pointer;
+}
+.attn-go:hover { color: var(--accent); }
+
+.tok-meter { height: 7px; background: rgba(255,255,255,0.06); border-radius: 100px; overflow: hidden; margin: 8px 0 6px; position: relative; }
+.tok-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--warm), var(--accent)); border-radius: 100px; }
+.tok-meta { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); letter-spacing: 0.4px; }
+
+.maria-mini {
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 6px;
+  padding: 11px 13px;
+  margin-bottom: 8px;
+  text-decoration: none; color: #fff; display: block;
+  cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.maria-mini:hover { border-color: #818cf8; }
+.maria-mini-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+}
+.maria-mini-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  color: rgba(148,163,184,0.9); margin-top: 3px; letter-spacing: 0.4px;
+}
+
+.section-title {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 14px;
+}
+.section-title::before { content: "● "; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+  <span class="tb-role">Lärare</span>
+  <div class="tb-crumbs" id="crumbs"></div>
+  <div class="tb-spacer"></div>
+  <a href="#" class="tb-imp" onclick="alert('Senaste impersonation: Sara A. — klicka för att återgå till hennes vy.'); return false;">Senast: Sara A. ↩</a>
+  <a href="#" class="tb-user">AL</a>
+</header>
+
+<main class="app">
+  <!-- HUB -->
+  <section class="panel active" id="p-hub">
+    <div class="shell">
+
+      <header class="head">
+        <div>
+          <span class="pill">9C · 28 elever · onsdag 29 april</span>
+          <h1 class="head-h1">Klassens <em>pentagon</em> i rörelse.</h1>
+          <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="#" class="tb-imp" onclick="go('skapa'); return false;" style="background: var(--accent); color: #fff; border-color: var(--accent);">+ Skapa elev / generera kod</a>
+            <a href="#" class="tb-imp" onclick="go('peda'); return false;">Pedagogik-paket ✦</a>
+          </div>
+        </div>
+        <div class="head-meta">
+          Anders Lind · Nordstjärnan gymnasium<br>
+          21 / 28 <strong>aktiva idag</strong><br>
+          14 reflektioner att läsa
+        </div>
+      </header>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-eye">Klass-balans</div><div class="stat-num"><em>68</em>/100</div><div class="stat-sub">−4 sedan förra v</div></div>
+        <div class="stat"><div class="stat-eye">Sparkvot snitt</div><div class="stat-num">14,7 %</div><div class="stat-sub">mål 15 %</div></div>
+        <div class="stat"><div class="stat-eye">Pågående moduler</div><div class="stat-num">3</div><div class="stat-sub">Bolån · Skatt · Lön</div></div>
+        <div class="stat"><div class="stat-eye">Lönesamtal i Maria</div><div class="stat-num"><em>3</em></div><div class="stat-sub">runda 1, 2, 4</div></div>
+        <div class="stat"><div class="stat-eye">AI-budget april</div><div class="stat-num">62 %</div><div class="stat-sub">av månadstak</div></div>
+      </div>
+
+      <div class="class-stage">
+
+        <article class="class-pent">
+          <div class="class-pent-eye">Klassens aggregerade pentagon · v18</div>
+          <h2 class="class-pent-h">68 av 100 — <em>tippad</em> mot karriär &amp; fritid.</h2>
+
+          <svg class="pent-svg" viewBox="0 0 600 600">
+            <g transform="translate(300,300)">
+              <polygon points="0,-260 247,-80 153,210 -153,210 -247,-80" class="p-axis-line"/>
+              <polygon points="0,-195 185,-60 115,158 -115,158 -185,-60" class="p-axis-line"/>
+              <polygon points="0,-130 124,-40 76,105 -76,105 -124,-40" class="p-axis-line"/>
+              <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="0" y2="-260" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="247" y2="-80" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-247" y2="-80" class="p-axis-line"/>
+              <polygon points="0,-180 175,-55 95,150 -110,140 -195,-65" class="p-class-prev"/>
+              <polygon points="0,-160 215,-70 135,180 -110,165 -200,-70" class="p-class"/>
+              <text x="0" y="6" text-anchor="middle" font-family="Source Serif 4" font-style="italic" font-weight="700" font-size="64" fill="#fbbf24">68</text>
+              <text x="0" y="26" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.55)" letter-spacing="2">AV 100</text>
+            </g>
+          </svg>
+
+          <div class="axis-tags">
+            <span>Ekonomi<strong>72</strong></span>
+            <span>Karriär<strong>75</strong></span>
+            <span>Hälsa<strong>61</strong></span>
+            <span>Relation<strong>69</strong></span>
+            <span>Fritid<strong>63</strong></span>
+          </div>
+        </article>
+
+        <aside class="side-stack">
+          <div class="s-card">
+            <div class="s-card-eye">Behöver stöd nu</div>
+            <div class="s-card-h">4 <em>elever</em> idag</div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Filip Ö.</div><div class="attn-why">Inloggad senast 7 dgr · pent 31</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Noah J.</div><div class="attn-why">14 dgr · pent 28 · 3 röda axlar</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Jamil A.</div><div class="attn-why">Skattedeklaration förfaller 3 dgr</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Ayan H.</div><div class="attn-why">Reflektion: "vet inte hur jag deklarerar"</div></div>
+                <a class="attn-go" onclick="go('elev'); return false;" href="#">öppna →</a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">AI-budget · april</div>
+            <div class="s-card-h">62 % av <em>månadstaket</em></div>
+            <div class="tok-meter"><div class="tok-fill" style="width:62%;"></div></div>
+            <div class="tok-meta"><span>1,4M tokens</span><span>2,3M tak</span></div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); margin-top: 8px; letter-spacing: 0.4px;">
+              Echo 64 % · Maria 28 % · Anna 8 %
+            </div>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Pågående lönesamtal</div>
+            <div class="s-card-h">3 elever <em>i Maria</em></div>
+            <a class="maria-mini" onclick="go('maria'); return false;" href="#">
+              <div class="maria-mini-name">Hanna L. · runda 4 / 5</div>
+              <div class="maria-mini-meta">yrkat 28 500 · senaste bud 27 200 · nära mål</div>
+            </a>
+            <a class="maria-mini" onclick="go('maria'); return false;" href="#">
+              <div class="maria-mini-name">Sara A. · runda 2 / 5</div>
+              <div class="maria-mini-meta">yrkat 27 500 · pågår · Maria nära smärtgräns</div>
+            </a>
+            <a class="maria-mini" onclick="go('maria'); return false;" href="#">
+              <div class="maria-mini-name">Adam B. · runda 1 / 5</div>
+              <div class="maria-mini-meta">KALP klar · 24 800 utgångsbud · just startat</div>
+            </a>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Reflektioner att läsa</div>
+            <div class="s-card-h">14 <em>nya</em> sedan 22 april</div>
+            <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('refl'); return false;" href="#">öppna alla 14 reflektioner →</a>
+          </div>
+
+          <div class="s-card" style="background: rgba(110,231,183,0.04); border-color: rgba(110,231,183,0.25);">
+            <div class="s-card-eye" style="color: #6ee7b7;">Klassens nivå-progression</div>
+            <div class="s-card-h">28 elever · <em>3 nivåer</em></div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; text-align: center;">
+              <div style="background: rgba(110,231,183,0.10); padding: 10px; border-radius: 6px; border: 1px solid rgba(110,231,183,0.25);">
+                <div style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700; font-size: 22px;">22</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 1px;">▰▱▱ NIVÅ 1</div>
+              </div>
+              <div style="background: rgba(251,191,36,0.10); padding: 10px; border-radius: 6px; border: 1px solid rgba(251,191,36,0.25);">
+                <div style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700; font-size: 22px;">5</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--warm); letter-spacing: 1px;">▰▰▱ NIVÅ 2</div>
+              </div>
+              <div style="background: rgba(220,76,43,0.08); padding: 10px; border-radius: 6px; border: 1px solid rgba(220,76,43,0.25);">
+                <div style="font-family: var(--serif); font-style: italic; color: #fda594; font-weight: 700; font-size: 22px;">1</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: #fda594; letter-spacing: 1px;">▰▰▰ NIVÅ 3</div>
+              </div>
+            </div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Sara A. · klar för Nivå 2</div><div class="attn-why">12 v på Nivå 1 · 65 % progression · 8 mål uppnådda</div></div>
+                <button class="level-activate-btn">Aktivera N2</button>
+              </li>
+              <li>
+                <div><div class="attn-name">Hassan O. · klar för Nivå 2</div><div class="attn-why">10 v · 72 % · 7 av 8 mål</div></div>
+                <button class="level-activate-btn">Aktivera N2</button>
+              </li>
+              <li>
+                <div><div class="attn-name">Adam B. · nästan klar</div><div class="attn-why">8 v · 48 % · saknar 3 mål</div></div>
+                <a href="#" class="attn-go">se →</a>
+              </li>
+            </ul>
+            <div style="margin-top: 10px; font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.5px;">Aktivering kräver: 50 %+ progression, 1+ kompetens på G, 1+ avslutad modul.</div>
+          </div>
+
+          <div class="s-card" style="background: rgba(99,102,241,0.05); border-color: rgba(99,102,241,0.2);">
+            <div class="s-card-eye" style="color: #a5b4fc;">Pedagogik-paket ✦</div>
+            <div class="s-card-h">62 begrepp · <em>14</em> kompetenser</div>
+            <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">47 ✦-pedagogik-boxar genom systemet. Begrepp som klassen stött på, vilka är gap, vilka kompetensnivåer eleverna har.</p>
+            <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('peda'); return false;" href="#">öppna pedagogik-paketet →</a>
+          </div>
+
+          <div class="s-card" style="border-color: rgba(220,76,43,0.35); background: rgba(220,76,43,0.05);">
+            <div class="s-card-eye" style="color: var(--accent);">Postlådor · 9C</div>
+            <div class="s-card-h">62 <em>ohanterade</em> brev</div>
+            <ul class="attn-list">
+              <li><div><div class="attn-name">Filip Ö.</div><div class="attn-why">9 ohanterade · äldsta 18 dgr · risk för inkasso</div></div><a class="attn-go" href="#">→</a></li>
+              <li><div><div class="attn-name">Noah J.</div><div class="attn-why">11 ohanterade · 1 påminnelse · CSN brev oöppnat</div></div><a class="attn-go" href="#">→</a></li>
+              <li><div><div class="attn-name">Jamil A.</div><div class="attn-why">7 ohanterade · skattedeklaration ej granskad</div></div><a class="attn-go" href="#">→</a></li>
+            </ul>
+            <a class="attn-go" style="display: block; padding-top: 6px;" onclick="go('mail'); return false;" href="#">Se alla 28 postlådor →</a>
+          </div>
+        </aside>
+
+      </div>
+
+      <!-- 28 mini-pentagoner -->
+      <div class="section-title">28 elever · klicka för att zooma</div>
+      <div class="mini-grid" id="miniGrid"></div>
+
+    </div>
+  </section>
+  <!-- ELEVDETALJ -->
+  <section class="panel" id="p-elev">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Elev · 14 av 28</span> <span class="level-badge l1" style="margin-left: 6px;">Nivå 1 · Sparsam</span>
+          <h1 class="head-h1">Sara A. — <em>balans 72</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Solo-elev · klassningsgrad april 81 % · pågående 3 moduler · <em style="color: #6ee7b7;">redo för Nivå 2</em></p>
+        </div>
+        <div class="head-meta">
+          Senast inloggad <strong>nu</strong><br>
+          Lönesamtal med Maria · <strong>runda 2/5</strong><br>
+          14 reflektioner · 4 ej kommenterade
+        </div>
+      </header>
+
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px;">
+        <a href="../vol-7/elev.html" class="tb-imp" style="background: var(--accent); color: #fff; border-color: var(--accent);">Impersonera Sara →</a>
+        <a href="#" class="tb-imp" onclick="go('historik'); return false;" style="background: rgba(99,102,241,0.18); color: #c7d2fe; border-color: rgba(99,102,241,0.45);">📊 Komplett aktivitets-historik (312 events) →</a>
+        <a href="#" class="tb-imp" style="background: rgba(251,191,36,0.18); color: var(--warm); border-color: rgba(251,191,36,0.45);">▰▰▱ Aktivera Nivå 2 →</a>
+        <a href="#" class="tb-imp">Skicka uppdrag →</a>
+        <a href="#" class="tb-imp" onclick="go('refl'); return false;">Läs reflektioner →</a>
+        <a href="#" class="tb-imp">Höj kompetens →</a>
+      </div>
+
+      <!-- Nivå-progression-status -->
+      <article class="s-card" style="background: linear-gradient(135deg, rgba(110,231,183,0.06), rgba(15,21,37,0.5)); border-color: rgba(110,231,183,0.25); margin-bottom: 24px;">
+        <div class="s-card-eye" style="color: #6ee7b7;">Nivå-progression</div>
+        <div class="s-card-h">Sara är <em style="color: #6ee7b7;">redo för Nivå 2</em>.</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text-mid); line-height: 1.5; margin-bottom: 12px;">12 veckor på Nivå 1 (Sparsam). Klassningsgrad stabil &gt; 80 %. 3 kompetenser till GRUND. Bolån-modulen aktiv. Pentagon-balans 72.</p>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">12 v</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">på Nivå 1</div></div>
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">3 G</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">kompetenser</div></div>
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">2 / 3</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">moduler klara</div></div>
+          <div style="text-align: center; padding: 10px; background: rgba(110,231,183,0.10); border-radius: 6px;"><div style="font-family: var(--serif); font-style: italic; font-weight: 700; color: #6ee7b7; font-size: 18px;">81 %</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid);">klassningsgrad</div></div>
+        </div>
+        <p style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; margin-bottom: 0;">Vid aktivering: <strong style="color: #fff;">Sara behåller karaktären</strong> men får svårare ekonomi. Spenderprofilen byts till <em style="color: var(--warm); font-style: italic;">Balanserad</em> · fler oväntade brev · restaurang-budget överskrids oftare · sambo-utgifter delas annorlunda.</p>
+      </article>
+
+      <div class="class-stage">
+        <article class="class-pent">
+          <div class="class-pent-eye">Saras pentagon · v18 vs v17</div>
+          <h2 class="class-pent-h">Tippad <em>−5 i hälsa</em> efter tandläkaren.</h2>
+          <svg class="pent-svg" viewBox="0 0 600 600">
+            <g transform="translate(300,300)">
+              <polygon points="0,-260 247,-80 153,210 -153,210 -247,-80" class="p-axis-line"/>
+              <polygon points="0,-195 185,-60 115,158 -115,158 -185,-60" class="p-axis-line"/>
+              <polygon points="0,-130 124,-40 76,105 -76,105 -124,-40" class="p-axis-line"/>
+              <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="0" y2="-260" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="247" y2="-80" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-153" y2="210" class="p-axis-line"/>
+              <line x1="0" y1="0" x2="-247" y2="-80" class="p-axis-line"/>
+              <polygon points="0,-180 175,-55 95,150 -110,140 -195,-65" class="p-class-prev"/>
+              <polygon points="0,-150 220,-72 130,180 -100,160 -210,-72" class="p-class"/>
+              <text x="0" y="6" text-anchor="middle" font-family="Source Serif 4" font-style="italic" font-weight="700" font-size="64" fill="#fbbf24">72</text>
+            </g>
+          </svg>
+          <div class="axis-tags">
+            <span>Ekonomi<strong>70</strong></span>
+            <span>Karriär<strong>78</strong></span>
+            <span>Hälsa<strong>60</strong></span>
+            <span>Relation<strong>75</strong></span>
+            <span>Fritid<strong>65</strong></span>
+          </div>
+        </article>
+
+        <aside class="side-stack">
+          <div class="s-card">
+            <div class="s-card-eye">Pågående moduler</div>
+            <div class="s-card-h">3 i <em>arbete</em></div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Ditt första bolån</div><div class="attn-why">steg 4 av 12 · KALP · 14 min kvar</div></div>
+                <a class="attn-go" href="#">öppna →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Lönesamtalet</div><div class="attn-why">runda 2 av 5 · pågår · Maria nära smärtgräns</div></div>
+                <a class="attn-go" onclick="go('maria'); return false;" href="#">se →</a>
+              </li>
+              <li>
+                <div><div class="attn-name">Skatten i april</div><div class="attn-why">steg 7 av 9 · ränteavdrag granskning</div></div>
+                <a class="attn-go" href="#">öppna →</a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Senaste händelser i Saras vy</div>
+            <div class="s-card-h">14:22 idag</div>
+            <ul class="attn-list">
+              <li>
+                <div><div class="attn-name">Tandläkaren ringde</div><div class="attn-why">4 200 kr · 30 dgr · pent tippade</div></div>
+              </li>
+              <li>
+                <div><div class="attn-name">Echo öppnad</div><div class="attn-why">320 tokens · diskuterar konsekvens</div></div>
+              </li>
+              <li>
+                <div><div class="attn-name">23 fakturor signerade</div><div class="attn-why">via BankID 14:18</div></div>
+              </li>
+              <li>
+                <div><div class="attn-name">Lönesamtal R2 motbud</div><div class="attn-why">27 100 kr · väntar Maria</div></div>
+              </li>
+            </ul>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Kompetenser · 12</div>
+            <div class="s-card-h">Nivå <em>grund</em> i 7 av 12</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px;">
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Bokföring · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Budget · <span style="color: #6ee7b7;">fördj</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Sparande · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Skatt · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lön · <span style="color: var(--accent);">grund</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Lån · <span style="color: var(--text-dim);">basis</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Investering · <span style="color: var(--text-dim);">basis</span></div>
+              <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">Pension · <span style="color: var(--text-dim);">basis</span></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+  <!-- MARIA TABLET -->
+  <section class="panel" id="p-maria">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill warm">Maria · 3 lönesamtal pågår</span>
+          <h1 class="head-h1">Klassens <em>förhandlingar</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">AI-Maria spelar 3 olika roller (HR-chef, butikschef, IT-chef) parallellt — samma motor, olika smärtgränser och avtal.</p>
+        </div>
+        <div class="head-meta">
+          Tokens april · Maria <strong>28 %</strong><br>
+          Snitt-runda klassen: <strong>2,3 av 5</strong><br>
+          Avslutade: 2 av 5 elever
+        </div>
+      </header>
+
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;">
+
+        <!-- Samtal 1: Hanna -->
+        <div class="s-card" style="padding: 0; overflow: hidden;">
+          <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); background: rgba(99,102,241,0.08);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: grid; place-items: center; font-family: var(--serif); font-weight: 700; color: #fff; font-size: 14px;">M</div>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14px; font-weight: 700;">Maria → Hanna L.</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); letter-spacing: 1px;">RESTAURANG · BUTIKSBITRÄDE</div>
+              </div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--warm); letter-spacing: 1.2px; text-transform: uppercase;">Runda 4 av 5 · nära avslut</div>
+          </div>
+
+          <div style="padding: 14px 18px;">
+            <div style="font-family: var(--serif); font-size: 12.5px; color: var(--text); padding: 10px 12px; background: rgba(99,102,241,0.06); border-radius: 6px; margin-bottom: 8px; line-height: 1.45;">
+              <em style="color: var(--text-dim); font-size: 9px; display: block; margin-bottom: 4px; letter-spacing: 1px;">MARIA</em>
+              "27 200 är vad jag kan erbjuda. Du har varit duktig men jag måste hålla ramen."
+            </div>
+            <div style="font-family: var(--serif); font-size: 12.5px; color: var(--text); padding: 10px 12px; background: rgba(220,76,43,0.08); border-radius: 6px; margin-bottom: 8px; line-height: 1.45;">
+              <em style="color: var(--text-dim); font-size: 9px; display: block; margin-bottom: 4px; letter-spacing: 1px;">HANNA</em>
+              "Då vill jag minst 28 000 — det är fortfarande under marknadssnittet."
+            </div>
+          </div>
+
+          <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,0.02);">
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 6px;">BUD-HISTORIK</div>
+            <div style="font-family: var(--mono); font-size: 10px; color: var(--text);">
+              <div>R1 Hanna 28 500 · Maria 26 800</div>
+              <div>R2 Hanna 28 200 · Maria 27 000</div>
+              <div>R3 Hanna 28 000 · Maria 27 200</div>
+              <div style="color: var(--accent);">R4 Hanna 28 000 · Maria väntar...</div>
+            </div>
+            <div style="margin-top: 10px;">
+              <div class="round-track" style="display: flex; gap: 4px;">
+                <div style="flex: 1; height: 5px; background: var(--warm); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: var(--warm); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: var(--warm); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: var(--accent); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Samtal 2: Sara -->
+        <div class="s-card" style="padding: 0; overflow: hidden; border-color: rgba(220,76,43,0.4);">
+          <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); background: rgba(99,102,241,0.08);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: grid; place-items: center; font-family: var(--serif); font-weight: 700; color: #fff; font-size: 14px;">M</div>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14px; font-weight: 700;">Maria → Sara A.</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); letter-spacing: 1px;">VÅRD · UNDERSKÖTERSKA</div>
+              </div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); letter-spacing: 1.2px; text-transform: uppercase;">Runda 2 av 5 · spän</div>
+          </div>
+
+          <div style="padding: 14px 18px;">
+            <div style="font-family: var(--serif); font-size: 12.5px; color: var(--text); padding: 10px 12px; background: rgba(99,102,241,0.06); border-radius: 6px; margin-bottom: 8px; line-height: 1.45;">
+              <em style="color: var(--text-dim); font-size: 9px; display: block; margin-bottom: 4px; letter-spacing: 1px;">MARIA</em>
+              "26 200 är vad budgeten ger. Vi tog in fyra nya i januari."
+            </div>
+            <div style="font-family: var(--serif); font-size: 12.5px; color: var(--text); padding: 10px 12px; background: rgba(220,76,43,0.08); border-radius: 6px; line-height: 1.45;">
+              <em style="color: var(--text-dim); font-size: 9px; display: block; margin-bottom: 4px; letter-spacing: 1px;">SARA</em>
+              "Mitt motbud: 27 100 — eller 26 800 + en utbildningsdag i höst."
+            </div>
+          </div>
+
+          <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,0.02);">
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 6px;">BUD-HISTORIK</div>
+            <div style="font-family: var(--mono); font-size: 10px; color: var(--text);">
+              <div>R1 Sara 27 500 · Maria 26 200</div>
+              <div style="color: var(--accent);">R2 Sara 27 100 · Maria väntar...</div>
+            </div>
+            <div style="margin-top: 10px;">
+              <div style="display: flex; gap: 4px;">
+                <div style="flex: 1; height: 5px; background: var(--warm); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: var(--accent); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+              </div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 1px; margin-top: 8px;">⚠ MARIA NÄRA SMÄRTGRÄNS</div>
+          </div>
+        </div>
+
+        <!-- Samtal 3: Adam -->
+        <div class="s-card" style="padding: 0; overflow: hidden;">
+          <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); background: rgba(99,102,241,0.08);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: grid; place-items: center; font-family: var(--serif); font-weight: 700; color: #fff; font-size: 14px;">M</div>
+              <div>
+                <div style="font-family: var(--serif); font-size: 14px; font-weight: 700;">Maria → Adam B.</div>
+                <div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); letter-spacing: 1px;">IT-KONSULT · JUNIOR</div>
+              </div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1.2px; text-transform: uppercase;">Runda 1 av 5 · just startat</div>
+          </div>
+
+          <div style="padding: 14px 18px;">
+            <div style="font-family: var(--serif); font-size: 12.5px; color: var(--text); padding: 10px 12px; background: rgba(99,102,241,0.06); border-radius: 6px; line-height: 1.45;">
+              <em style="color: var(--text-dim); font-size: 9px; display: block; margin-bottom: 4px; letter-spacing: 1px;">MARIA</em>
+              "Hej Adam. KALP-räkningen ser bra ut. Vad har du tänkt dig?"
+            </div>
+          </div>
+
+          <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: rgba(255,255,255,0.02);">
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 6px;">BUD-HISTORIK</div>
+            <div style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">
+              <div>Förberedelse · KALP klar</div>
+              <div>Utgångsbud: 24 800</div>
+            </div>
+            <div style="margin-top: 10px;">
+              <div style="display: flex; gap: 4px;">
+                <div style="flex: 1; height: 5px; background: var(--accent); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+                <div style="flex: 1; height: 5px; background: rgba(255,255,255,0.08); border-radius: 100px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="s-card" style="margin-top: 20px;">
+        <div class="s-card-eye">Avslutade lönesamtal · 2 av 5</div>
+        <ul class="attn-list">
+          <li>
+            <div><div class="attn-name">Ida P.</div><div class="attn-why">avslutad runda 5/5 · landade 28 100 · +4,2 % från start</div></div>
+            <a class="attn-go" href="#">se utfallet →</a>
+          </li>
+          <li>
+            <div><div class="attn-name">Lisa N.</div><div class="attn-why">avslutad runda 4/5 · landade 27 600 · +3,1 % · friskvård som extra</div></div>
+            <a class="attn-go" href="#">se utfallet →</a>
+          </li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+  <!-- REFLEKTIONER -->
+  <section class="panel" id="p-refl">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill warm">Reflektioner · 14 nya · 9C</span>
+          <h1 class="head-h1">Klassens <em>tankar</em> denna vecka.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Echo har samlat in. AI har redan gjort en första rubrik-sortering. Du läser och kommenterar.</p>
+        </div>
+        <div class="head-meta">
+          14 nya · 4 i kö för svar<br>
+          AI-rubrik <strong>klar</strong><br>
+          Snitt-längd: 92 ord
+        </div>
+      </header>
+
+      <div style="display: grid; grid-template-columns: 1fr; gap: 14px; max-width: 880px;">
+
+        <article class="s-card" style="border-left: 3px solid var(--accent);">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+            <div>
+              <div class="s-card-eye" style="margin-bottom: 4px;">Sara A. · 29 april 14:48</div>
+              <div class="s-card-h" style="margin-bottom: 0;">"Restaurang igen — varför är det så <em>lätt</em>?"</div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); letter-spacing: 1px;">RUBRIK · BUDGETMEDVETENHET</div>
+          </div>
+          <p style="font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--text); font-style: italic;">
+            "Echo frågade vad som hände den 17:e och jag insåg att jag inte ens minns. Det är 600 kr på en kväll med fyra på Max efter laxsim-träning, och det känns inte som ett 'beslut' när jag är där. Men det är det ju. Hyran är ett 'nej' redan när den dras. Restaurang är ett 'kanske' varje gång."
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Skriv kommentar</a>
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Lyft till klassen</a>
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Höj kompetens · Reflektion</a>
+          </div>
+        </article>
+
+        <article class="s-card">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+            <div>
+              <div class="s-card-eye" style="margin-bottom: 4px;">Ida P. · 28 april 19:14</div>
+              <div class="s-card-h" style="margin-bottom: 0;">"Pension kändes <em>overkligt</em> tills jag räknade…"</div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--warm); letter-spacing: 1px;">RUBRIK · LÅNGSIKT</div>
+          </div>
+          <p style="font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--text); font-style: italic;">
+            "Pensionsverktyget visade 12 800 kr/mån vid 67. I dagens pengar. Min mamma har hyra 9 200, mat 4 000, el 1 200. Det går inte ihop. Plötsligt förstod jag varför hon säger att jag ska börja ISK NU. Jag dubblerar månadssparet från 600 till 1 200."
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Skriv kommentar</a>
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Lyft till klassen</a>
+          </div>
+        </article>
+
+        <article class="s-card">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+            <div>
+              <div class="s-card-eye" style="margin-bottom: 4px;">Hassan O. · 27 april 22:08</div>
+              <div class="s-card-h" style="margin-bottom: 0;">"Maria <em>höll inte med</em> mig om friskvård."</div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--warm); letter-spacing: 1px;">RUBRIK · FÖRHANDLING</div>
+          </div>
+          <p style="font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--text); font-style: italic;">
+            "Jag försökte byta lön mot 5 000 i friskvård men hon sa att det inte var en valuta. Det är ALLA som har friskvård enligt avtalet. Jag förstod att jag missförstått hela förhandlingen — jag försökte sälja något jag redan har. Det stack lite men det var en bra lärdom."
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Skriv kommentar</a>
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Höj kompetens · Lön</a>
+          </div>
+        </article>
+
+        <article class="s-card" style="border-left: 3px solid #fca5a5;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+            <div>
+              <div class="s-card-eye" style="margin-bottom: 4px; color: #fca5a5;">Ayan H. · 26 april 17:22 · MÅR INTE BRA</div>
+              <div class="s-card-h" style="margin-bottom: 0;">"Vet inte hur jag <em>deklarerar</em>."</div>
+            </div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: #fca5a5; letter-spacing: 1px;">FLAGGA · STÖD BEHÖVS</div>
+          </div>
+          <p style="font-family: var(--serif); font-size: 15px; line-height: 1.55; color: var(--text); font-style: italic;">
+            "Skatteverket-grejen blir bara mer förvirrande. Försökte med Echo men det blev fyra svar i rad där jag inte förstod något. Det går trögt. Jag tror jag behöver hjälp innan deadline 2 maj — kan jag boka en stund med dig?"
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+            <a href="#" class="attn-go" style="border: 1px solid var(--accent); padding: 7px 12px; border-radius: 100px; background: rgba(220,76,43,0.1); color: var(--accent);">Boka stund · DM</a>
+            <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 7px 12px; border-radius: 100px;">Skicka resurs</a>
+          </div>
+        </article>
+
+        <div style="text-align: center; padding: 20px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">
+          + 10 reflektioner till — visa alla →
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PEDAGOGIK-PAKET -->
+  <section class="panel" id="p-peda">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Pedagogik-paket · 9C · ✦</span>
+          <h1 class="head-h1">Det <em>osynliga</em> innehållet.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Varje aktör och verktyg har en pedagogik-box som introducerar begreppen i kontext. Här ser du vilka koncept klassen har stött på — och kan justera djup, slå på/av, ändra texter.</p>
+        </div>
+        <div class="head-meta">
+          47 ✦-boxar i systemet<br>
+          <strong>62</strong> begrepp totalt<br>
+          AI-paketerade
+        </div>
+      </header>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-eye">Begrepp i klassen</div><div class="stat-num"><em>62</em></div><div class="stat-sub">14 kompetenser · 4–6 begrepp/komp</div></div>
+        <div class="stat"><div class="stat-eye">Mest stötta</div><div class="stat-num">42</div><div class="stat-sub">≥ 20 elever har sett</div></div>
+        <div class="stat"><div class="stat-eye">Sällan stötta</div><div class="stat-num"><em>8</em></div><div class="stat-sub">≤ 5 elever · ev. modulgap</div></div>
+        <div class="stat"><div class="stat-eye">Quiz-klarade</div><div class="stat-num">34 %</div><div class="stat-sub">av begreppen testade</div></div>
+        <div class="stat"><div class="stat-eye">Reflektion-länkade</div><div class="stat-num">19</div><div class="stat-sub">begrepp eleverna refererat</div></div>
+      </div>
+
+      <div class="layout">
+        <div>
+          <div class="section-eye">Pedagogik-boxarna · per aktör/verktyg</div>
+
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;">
+
+            <div class="s-card">
+              <div class="s-card-eye">Aktör · Banken</div>
+              <div class="s-card-h">5 begrepp · <em>27</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">Likviditet · sparkvot · buffert · räntenetto · disponibel inkomst</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+            <div class="s-card">
+              <div class="s-card-eye">Aktör · Arbetsgivaren</div>
+              <div class="s-card-h">6 begrepp · <em>27</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">Brutto · netto · ITP1 · kollektivavtal · IBB · marginalskatt</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+            <div class="s-card">
+              <div class="s-card-eye">Aktör · Maria (lönesamtal)</div>
+              <div class="s-card-h">5 begrepp · <em>14</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">Centralavtal · marknadssnitt · BATNA · förhandlingsutrymme · kompensation</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+            <div class="s-card">
+              <div class="s-card-eye">Aktör · Postlådan</div>
+              <div class="s-card-h">6 begrepp · <em>26</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">Förfallodatum · dröjsmålsränta · bestrida · betalningsanmärkning · inkasso · Kronofogden</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+            <div class="s-card">
+              <div class="s-card-eye">Aktör · Avanza</div>
+              <div class="s-card-h">6 begrepp · <em>22</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">ISK · KF · indexfond · schablonskatt · spridning · TER</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+            <div class="s-card" style="border-color: rgba(220,76,43,0.3); background: rgba(220,76,43,0.04);">
+              <div class="s-card-eye" style="color: var(--accent);">Aktör · Skatteverket</div>
+              <div class="s-card-h">6 begrepp · <em>5</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">Inkomstdeklaration · förifyllt · avdrag · kvarskatt · återbäring · kontrolluppgift</p>
+              <p style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); margin-top: 8px; letter-spacing: 0.5px;">⚠ FÅ HAR STÖTT — överväg helklass-introduktion</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--accent); padding: 6px 10px; border-radius: 100px; color: var(--accent);">Skicka som modul</a>
+              </div>
+            </div>
+
+            <div class="s-card">
+              <div class="s-card-eye">Modul · Bolån</div>
+              <div class="s-card-h">6 begrepp · <em>9</em> elever (modulen igång)</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">KALP · belåningsgrad · skuldkvot · amorteringskrav · räntebindning · bunden vs rörlig</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+            <div class="s-card">
+              <div class="s-card-eye">Verktyg · BankID</div>
+              <div class="s-card-h">5 begrepp · <em>21</em> elever</div>
+              <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">Elektronisk signatur · autogiro · bankgiro · förfallodatum · OCR-nummer</p>
+              <div style="display: flex; gap: 8px; margin-top: 12px;">
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Förhandsvisa</a>
+                <a href="#" class="attn-go" style="border: 1px solid var(--line-strong); padding: 6px 10px; border-radius: 100px;">Editera</a>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <aside>
+          <div class="s-card">
+            <div class="s-card-eye">14 systemkompetenser</div>
+            <div class="s-card-h">Klassens <em>nivå-fördelning</em></div>
+            <ul style="list-style: none; padding: 0; margin: 0; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Bokföring</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">B 4 · G 18 · F 6</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Budget</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">B 2 · G 16 · F 10</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Lön</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">B 3 · G 21 · F 4</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Lån &amp; ränta</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); color: var(--accent);">B 19 · G 8 · F 1</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Skatte-grund</span><span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">B 23 · G 5 · F 0</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Investering</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">B 6 · G 18 · F 4</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line);"><span>Pension</span><span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">B 24 · G 4 · F 0</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 6px 0;"><span>Reflektion</span><span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">B 1 · G 19 · F 8</span></li>
+            </ul>
+            <div style="margin-top: 10px; font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.4px;">B = basis · G = grund · F = fördjupning</div>
+          </div>
+
+          <div class="s-card" style="background: rgba(99,102,241,0.05); border-color: rgba(99,102,241,0.2);">
+            <div class="s-card-eye" style="color: #a5b4fc;">Föreslagen åtgärd</div>
+            <div class="s-card-h">Skatte-modul i <em>nästa vecka</em></div>
+            <p style="font-family: var(--serif); font-size: 13.5px; color: var(--text-mid); line-height: 1.5;">23 av 28 ligger på <em>basis</em> i Skatte-grund och bara 5 elever har stött Skatteverkets pedagogik-box. Deklaration förfaller 2 maj — perfekt timing.</p>
+            <a href="#" class="attn-go" style="display: block; margin-top: 12px; border: 1px solid #a5b4fc; padding: 8px 12px; border-radius: 100px; text-align: center; color: #a5b4fc;">Skapa skatte-modul →</a>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-eye">Interaktiva guider</div>
+            <div class="s-card-h">28 elever · alla <em>klarade</em> dag-1-guiden</div>
+            <p style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); margin-top: 6px; letter-spacing: 0.5px;">Snitt-tid: 4 min 12 sek<br>Avhopp: 0<br>Återupprepad: 7 elever</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- POSTLÅDOR -->
+  <section class="panel" id="p-mail">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Postlådor · 9C · meta-aktör</span>
+          <h1 class="head-h1">28 postlådor — <em>62 ohanterade</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Var och en har sin egen inkorg. Här ser du klassens hanteringsmönster — vem är ifatt, vem släpar, vem håller på att få sina första påminnelser.</p>
+        </div>
+        <div class="head-meta">
+          Snitt-ohanterade · <strong>2,2 brev</strong><br>
+          Spridning · <strong>0 till 11</strong><br>
+          Påminnelser denna v · 1
+        </div>
+      </header>
+
+      <!-- Statistik-rad -->
+      <div class="stats">
+        <div class="stat"><div class="stat-eye">Genererade brev april</div><div class="stat-num"><em>392</em></div><div class="stat-sub">14 per elev i snitt</div></div>
+        <div class="stat"><div class="stat-eye">Hanterade i tid</div><div class="stat-num">82 %</div><div class="stat-sub">320 av 392</div></div>
+        <div class="stat"><div class="stat-eye">Försenade</div><div class="stat-num">10</div><div class="stat-sub">öppnade men ej åtgärdade</div></div>
+        <div class="stat"><div class="stat-eye">Påminnelser ute</div><div class="stat-num"><em>1</em></div><div class="stat-sub">Filip Ö. · CSN</div></div>
+        <div class="stat"><div class="stat-eye">Spenderprofiler</div><div class="stat-num">3</div><div class="stat-sub">12 sparsam · 11 bal · 5 slösa</div></div>
+      </div>
+
+      <!-- Skicka brev-verktyg -->
+      <div class="write-scene" style="margin-bottom: 22px;">
+        <div class="write-scene-eye">Skicka brev till postlådorna</div>
+        <h2 class="write-scene-h">Spräng in en <em>oväntad faktura</em>.</h2>
+        <p style="font-family: var(--serif); font-size: 14.5px; color: var(--text); line-height: 1.5; margin-bottom: 14px;">
+          Det här är lärar-leverantörsfaktura-flödet. Du fyller i en räkning,
+          väljer mottagare, sätter förfallodatum — brevet dyker upp i elevernas
+          postlådor som "ohanterad". Effekten ackumuleras i deras pentagon
+          beroende på vad de gör med den.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Avsändare</div>
+            <select style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Folktandvården (försenad bokning)</option>
+              <option>Skatteverket (kvarskatt)</option>
+              <option>Stockholm parkering (p-böter)</option>
+              <option>Rådhus tingsrätten (delgivning)</option>
+              <option>Klarna (faktura)</option>
+              <option>+ Egen avsändare…</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Belopp</div>
+            <input type="text" value="850 kr" style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 13px;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Förfallodatum</div>
+            <input type="text" value="14 maj" style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px;">Brevtyp</div>
+            <select style="width: 100%; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Faktura (kräver export till banken)</option>
+              <option>Påminnelse (försenad räkning)</option>
+              <option>Myndighetsbrev (info)</option>
+              <option>Marknadsföring (kan ignoreras)</option>
+            </select>
+          </div>
+        </div>
+        <textarea placeholder="Fritext-meddelande i brevet..." style="margin-bottom: 12px;">Du har en obetald karies-bokning från 14 mars som inte avbokats. Avgift 850 kr enligt avtalsvillkor. Förfaller 14 maj.</textarea>
+        <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px;">Skicka till:</div>
+        <div class="write-scene-targets">
+          <span class="write-scene-target on">Hela 9C (28)</span>
+          <span class="write-scene-target">5 i fördjupning</span>
+          <span class="write-scene-target">Slumpa 4 elever</span>
+          <span class="write-scene-target">Bara Sara A.</span>
+          <span class="write-scene-target">+ välj manuellt</span>
+        </div>
+        <button class="write-scene-btn">Skicka till 28 postlådor →</button>
+      </div>
+
+      <!-- Tabell över alla 28 postlådor -->
+      <div class="section-eye">28 postlådor · status</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); align-items: center;">
+          <span>#</span><span>Elev</span><span>Profil</span><span>Brev</span><span>Ohanterade</span><span>Äldsta</span><span>Påminn.</span><span>Status</span>
+        </div>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">01</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Adam B.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Balanserad</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">2</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; text-align: center; letter-spacing: 1px; font-weight: 700;">I FAS</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">02</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Alma K.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Sparsam</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">0</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; text-align: center; letter-spacing: 1px; font-weight: 700;">KLAR</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; background: rgba(220,76,43,0.05);">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">05</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Filip Ö.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Slösa</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 700;">9</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">18 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">1 (CSN)</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(220,76,43,0.18); color: #fda594; text-align: center; letter-spacing: 1px; font-weight: 700;">RISK</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">06</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Hanna L.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Sparsam</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: #6ee7b7; font-weight: 700;">0</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(110,231,183,0.16); color: #6ee7b7; text-align: center; letter-spacing: 1px; font-weight: 700;">KLAR</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">10</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Jamil A.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Slösa</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">7</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--warm);">12 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(251,191,36,0.18); color: var(--warm); text-align: center; letter-spacing: 1px; font-weight: 700;">SLÄPER</span>
+        </a>
+        <a href="#" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; background: rgba(220,76,43,0.05);">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">13</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Noah J.</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Slösa</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--accent); font-weight: 700;">11</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 700;">21 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(220,76,43,0.18); color: #fda594; text-align: center; letter-spacing: 1px; font-weight: 700;">RISK</span>
+        </a>
+        <a href="#" onclick="go('elev'); return false;" style="display: grid; grid-template-columns: 30px 1.5fr 1fr 70px 80px 80px 90px 100px; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center; text-decoration: none; color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-dim);">14</span>
+          <span style="font-family: var(--serif); font-weight: 700; color: #fff;">Sara A. <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 1px; padding: 2px 6px; background: rgba(220,76,43,0.1); border-radius: 3px; margin-left: 5px;">VISAS</span></span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid); letter-spacing: 0.5px; text-transform: uppercase;">Balanserad</span>
+          <span style="font-family: var(--mono); font-size: 11px;">14</span>
+          <span style="font-family: var(--serif); font-style: italic; color: var(--warm); font-weight: 700;">4</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">3 dgr</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">—</span>
+          <span style="font-family: var(--mono); font-size: 9px; padding: 3px 8px; border-radius: 100px; background: rgba(251,191,36,0.18); color: var(--warm); text-align: center; letter-spacing: 1px; font-weight: 700;">SLÄPER</span>
+        </a>
+        <div style="text-align: center; padding: 16px; font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 1px;">+ 21 elever till — visa alla 28 →</div>
+      </div>
+
+      <!-- Slösar-info -->
+      <div class="s-card" style="margin-top: 22px; background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(15,21,37,0.5)); border-color: rgba(99,102,241,0.2);">
+        <div class="s-card-eye" style="color: #a5b4fc;">Hur breven genereras</div>
+        <div class="s-card-h">Spenderprofiler styr <em>brev-volym</em>.</div>
+        <p style="font-family: var(--serif); font-size: 14.5px; line-height: 1.55; color: var(--text);">
+          Konsumentverkets schabloner × elevens spenderprofil ger antalet brev,
+          beloppen och frekvensen. Sparsam-elever får ~10 brev/månad,
+          balanserad ~14, slösa ~18 (fler kreditkort, fler aviseringar). Alla brev
+          har <strong style="color: var(--warm);">slumpade datum</strong> inom månaden — ingen får alla 14 brev på samma dag.
+          Ohanterade brev → påminnelse efter <em style="color: var(--warm);">14 dagar</em> →
+          inkassovarning efter <em style="color: var(--warm);">30</em>. Det är samma loop som i verkligheten.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ SKAPA ELEV / KODER ============ -->
+  <section class="panel" id="p-skapa">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('hub'); return false;" href="#">← Tillbaka till klassen</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Lärar-admin · Skapa elever</span>
+          <h1 class="head-h1">Lägg till <em>nya elever</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Karaktärsgenerering · 6-teckens-kod · partner-modell · Nivå 1 default · vårdnadshavar-mejl</p>
+        </div>
+        <div class="head-meta">
+          Klassen 9C · 28 / 30 platser<br>
+          Lediga: <strong>2</strong><br>
+          Aktiva koder oanvända: <strong>3</strong>
+        </div>
+      </header>
+
+      <!-- Snabb-skapa formulär -->
+      <article class="s-card" style="margin-bottom: 22px;">
+        <div class="s-card-eye">Snabb-skapa · en elev</div>
+        <div class="s-card-h">Auto-genererad <em>karaktär</em> + 6-teckens-kod.</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 14px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Förnamn</div>
+            <input type="text" placeholder="ex: Ida" style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Efternamn-initial</div>
+            <input type="text" placeholder="ex: P." maxlength="2" style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Karaktärs-arketyp</div>
+            <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Slumpa karaktär</option>
+              <option>Vård-undersköterska (som Sara)</option>
+              <option>IT-konsult junior</option>
+              <option>Butiksbiträde</option>
+              <option>Kassörska</option>
+              <option>Lärar-vikarie</option>
+              <option>Anställd i kommun</option>
+              <option>Studerande gymnasium</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Partner-modell</div>
+            <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>Slumpa (60% solo · 35% AI · 5% par)</option>
+              <option>Solo (ingen partner)</option>
+              <option>AI-genererad partner</option>
+              <option>Par med klasskompis (välj sen)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Vårdnadshavar-mejl (för kod-utskick)</div>
+            <input type="email" placeholder="förälder@exempel.se" style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;">Startnivå</div>
+            <select style="width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+              <option>▰▱▱ Nivå 1 · Sparsam (default · alla börjar här)</option>
+              <option>▰▰▱ Nivå 2 · Balanserad (om elev erfaren)</option>
+              <option>▰▰▰ Nivå 3 · Slösa (specialfall)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;">
+          <button class="level-activate-btn" style="background: var(--accent); color: #fff;">Skapa elev + skicka kod</button>
+          <button style="background: transparent; border: 1px solid var(--line-strong); color: #fff; padding: 8px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Spara utkast</button>
+          <a href="#" class="attn-go" style="margin-left: auto; align-self: center;">eller massimport CSV ↗</a>
+        </div>
+      </article>
+
+      <!-- Skapade elever (ej aktiverade) -->
+      <div class="section-eye" style="margin-top: 26px;">3 koder skapade · ej aktiverade än</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 22px;">
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 11px 16px; background: rgba(0,0,0,0.15); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim);">
+          <span>Kod</span><span>Karaktär</span><span>Modell</span><span>Vårdnadshavare</span><span>Skickad</span><span></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--warm); letter-spacing: 2px;">7K3M9P</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Maja F. (kassör)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">21 år · solo · Sthlm</div></div>
+          <span class="level-badge l1">Nivå 1</span>
+          <span style="font-family: var(--mono); font-size: 10.5px; color: var(--text-mid);">erik.fredriksson@gmail.com</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">22 apr · ✓</span>
+          <a href="#" class="attn-go">skicka igen</a>
+        </div>
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--warm); letter-spacing: 2px;">B2X8H4</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Robin Z. (IT-konsult)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">19 år · AI-partner Petra · Sthlm</div></div>
+          <span class="level-badge l1">Nivå 1</span>
+          <span style="font-family: var(--mono); font-size: 10.5px; color: var(--text-mid);">anna.zandberg@hotmail.se</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: #6ee7b7;">28 apr · ✓</span>
+          <a href="#" class="attn-go">skicka igen</a>
+        </div>
+        <div style="display: grid; grid-template-columns: 100px 1.5fr 110px 1fr 110px 110px; gap: 12px; padding: 12px 16px; align-items: center;">
+          <span style="font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--warm); letter-spacing: 2px;">N9F3C1</span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Otto L. (lager)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">22 år · solo · Sthlm</div></div>
+          <span class="level-badge l1">Nivå 1</span>
+          <span style="font-family: var(--mono); font-size: 10.5px; color: var(--text-mid);">karin.lindgren@gmail.com</span>
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--accent);">28 apr · väntar</span>
+          <a href="#" class="attn-go">skicka igen</a>
+        </div>
+      </div>
+
+      <!-- Par-aktivering · Modell C -->
+      <article class="s-card" style="background: rgba(110,231,183,0.05); border-color: rgba(110,231,183,0.25); margin-bottom: 22px;">
+        <div class="s-card-eye" style="color: #6ee7b7;">Par med klasskompis · Modell C</div>
+        <div class="s-card-h">Aktivera <em>klasskompis-paring</em> för 2 elever.</div>
+        <p style="font-family: var(--serif); font-size: 14px; line-height: 1.5; color: var(--text-mid); margin-bottom: 14px;">Två elever pairas och delar ekonomi-modell. Användbart för diskussionsövningar och fördelningsfrågor. Båda elever måste bekräfta innan paret aktiveras.</p>
+        <div style="display: grid; grid-template-columns: 1fr 32px 1fr 120px; gap: 12px; align-items: center;">
+          <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+            <option>Välj elev 1...</option>
+            <option>Sara A. (för närvarande AI-partner Linus)</option>
+            <option>Hassan O. (solo)</option>
+            <option>Adam B. (solo)</option>
+          </select>
+          <div style="text-align: center; font-family: var(--mono); color: var(--warm); font-size: 18px;">↔</div>
+          <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 9px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 13px;">
+            <option>Välj elev 2...</option>
+            <option>Hanna L. (solo)</option>
+            <option>Mira S. (solo)</option>
+            <option>Lisa N. (solo)</option>
+          </select>
+          <button style="background: #6ee7b7; color: #064e3b; border: 0; padding: 10px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Föreslå par</button>
+        </div>
+        <div style="margin-top: 12px; font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); letter-spacing: 0.5px;">När du föreslår får båda elever en notis. När båda accepterat aktiveras paret. AI-partner ersätts. Kan när som helst avaktiveras.</div>
+      </article>
+
+      <!-- Aktiva par -->
+      <div class="section-eye">Aktiva par i klassen · 1 av 14 möjliga</div>
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 110px 110px 110px; gap: 12px; padding: 12px 16px; align-items: center;">
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Hanna L.</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Restaurang-anställd</div></div>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Adam B.</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">IT-konsult</div></div>
+          <span style="font-family: var(--mono); font-size: 9.5px; color: #6ee7b7; letter-spacing: 1px;">SEDAN 12 mar</span>
+          <span style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid);">Konflikter: 2</span>
+          <a href="#" class="attn-go">se →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AKTIVITETS-HISTORIK · SARA ============ -->
+  <section class="panel" id="p-historik">
+    <div class="shell">
+      <div style="margin-bottom: 22px;">
+        <a class="attn-go" onclick="go('elev'); return false;" href="#">← Tillbaka till Sara A.</a>
+      </div>
+
+      <header class="head">
+        <div>
+          <span class="pill">Sara A. · Aktivitets-historik · komplett insyn</span>
+          <h1 class="head-h1">Allt Sara <em>gjort</em>.</h1>
+          <p style="font-family: var(--serif); font-size: 16px; color: var(--text-mid); margin-top: 12px;">Onboarding · 142 transaktioner · 8 reflektioner · 3 modul-steg · 14 lönesamtal-rundor · varje val sparat</p>
+        </div>
+        <div class="head-meta">
+          Sedan signup: <strong>14 jan 2026</strong><br>
+          15 v aktiv · <strong>312 events</strong><br>
+          Lägst aktivitet: 8-12 feb (ferier)
+        </div>
+      </header>
+
+      <!-- Filter -->
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; padding: 14px 18px; background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px;">
+        <span style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; color: var(--text-mid); text-transform: uppercase; align-self: center;">Filter:</span>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Alla typer</option><option>Onboarding</option><option>Bokföring</option><option>Banken</option><option>Maria-rundor</option><option>Modul-steg</option><option>Reflektioner</option><option>Aktiehandel</option><option>Skatt</option><option>Lån</option></select>
+        <select style="background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12px;"><option>Senaste veckan</option><option>Senaste månaden</option><option>Hela 2026</option><option>Sedan signup</option></select>
+        <input type="text" placeholder="Sök händelse..." style="flex: 1; min-width: 180px; background: rgba(255,255,255,0.04); border: 1px solid var(--line-strong); color: #fff; padding: 7px 12px; border-radius: 6px; font-family: 'Inter', sans-serif; font-size: 12px;">
+        <button style="background: var(--warm); color: #422006; border: 0; padding: 7px 14px; border-radius: 100px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;">Exportera CSV</button>
+      </div>
+
+      <!-- Stat-rad -->
+      <div class="stats" style="margin-bottom: 24px;">
+        <div class="stat"><div class="stat-eye">Onboarding</div><div class="stat-num">8/8</div><div class="stat-sub">klar 14 jan 09:42</div></div>
+        <div class="stat"><div class="stat-eye">Transaktioner</div><div class="stat-num"><em>142</em></div><div class="stat-sub">89 % klassade</div></div>
+        <div class="stat"><div class="stat-eye">Modul-steg</div><div class="stat-num">14</div><div class="stat-sub">av 26 möjliga</div></div>
+        <div class="stat"><div class="stat-eye">Reflektioner</div><div class="stat-num"><em>8</em></div><div class="stat-sub">snitt 217 ord</div></div>
+        <div class="stat"><div class="stat-eye">Aktivitet i app</div><div class="stat-num">82 h</div><div class="stat-sub">15 v aktiv</div></div>
+      </div>
+
+      <!-- KOMPLETT TIDSLINJE -->
+      <div class="section-eye">Komplett tidslinje · sorterat efter senaste</div>
+
+      <div style="background: rgba(15,21,37,0.7); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;">
+
+        <!-- Senaste 24h -->
+        <div style="padding: 10px 18px; background: rgba(220,76,43,0.08); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--accent); border-bottom: 1px solid var(--line);">● ONSDAG 29 APRIL · IDAG</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:32</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Maria-lönesamtal · runda 2 · motbud 27 100 kr</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Karriär +2 · BATNA stark</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.8px;">MARIA-RUNDA</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:24</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Tandläkar-faktura betald · 4 200 kr</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Val: betala nu · Hälsa +4 · Ekonomi −8</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.8px;">VAL · BANKEN</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:22</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c084fc;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Tandläkare ringde · faktura mottagen</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">System-event · trigger</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c084fc; letter-spacing: 0.8px;">EVENT-TRIGGER</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:18</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">BankID-signering · 23 fakturor</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Total: 4 822 kr · alla 6 steg</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">BANKID</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">11:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #93c5fd;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Chat: "26 200 högre än min · 27 100 motbud" · till Anders</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Diskussion · CSN-räntor</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #93c5fd; letter-spacing: 0.8px;">CHAT</span>
+        </div>
+
+        <!-- 28 april -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● TIS 28 APRIL</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">18:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Coop Konsum 312 kr · klassad "Mat"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">AI-förslag accepterad · konfidens 84 %</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.8px;">BOKFÖRING</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">17:08</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Max 168 kr · klassad "Restaurang"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Manuellt val · efter regelmotor</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); letter-spacing: 0.8px;">BOKFÖRING</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">10:32</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Bolån-modul · steg 4 öppnad (KALP)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Time-on-task: 14 min hittills</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--warm); letter-spacing: 0.8px;">MODUL-STEG</span>
+        </div>
+
+        <!-- 25 april -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● FRE 25 APRIL · LÖNEDAG</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">07:00</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Lön 22 400 kr inbetald · auto-överföringar</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">→ buffert 600 · ISK 600 · körkort 600 · interrail 600</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">SYSTEM</span>
+        </div>
+
+        <!-- 22 april -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● TIS 22 APRIL</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">17:32</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Reflektion höjd till FÖRDJUPNING (av Anders)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Motivering: "djup som går utöver prompten"</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">KOMP-HÖJN</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">14:18</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c084fc;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Sambo-fråga besvarad: "proportionellt"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Linus AI-partner inställd på "50/50"</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c084fc; letter-spacing: 0.8px;">VÄRDERING</span>
+        </div>
+
+        <!-- 8-14 april sammanfogad -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● V14 · 4–10 APRIL · 18 events</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">9 apr 14:48</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #6ee7b7;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Bokföring höjd till GRUND (av Anders)</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">"från regelmotor till manuell klassning"</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #6ee7b7; letter-spacing: 0.8px;">KOMP-HÖJN</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">8 apr 13:02</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Uppdrag "Klassa 12 ovettade tx" · klart</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Godkänt av Anders 17 apr</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--accent); letter-spacing: 0.8px;">UPPDRAG</span>
+        </div>
+
+        <!-- Februari · ferier -->
+        <div style="padding: 10px 18px; background: rgba(255,255,255,0.03); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--line);">● 8–12 FEB · ÖVERSPRING (lov · ferier)</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">28 feb 16:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--warm);"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">ISK-modul klar · 4/5 stjärnor</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">6 steg · 32 min · höjt Investering till GRUND</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: var(--warm); letter-spacing: 0.8px;">MODUL-KLAR</span>
+        </div>
+
+        <!-- Onboarding -->
+        <div style="padding: 10px 18px; background: rgba(99,102,241,0.06); font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: #c7d2fe; border-bottom: 1px solid var(--line);">● 14 JAN 2026 · ONBOARDING</div>
+
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">09:42</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c7d2fe;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Onboarding klar · 8 steg · 11 min</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Profil: Nivå 1 Sparsam · Värdering: proportionellt · AI-partner: Linus B.</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c7d2fe; letter-spacing: 0.8px;">ONBOARDING</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; border-bottom: 1px solid var(--line); align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">09:35</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c7d2fe;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Onboarding · steg 7 · sambo-fråga · "proportionellt"</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Innan Linus avslöjades · värderingsval låst</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c7d2fe; letter-spacing: 0.8px;">VÄRDERING-LÅS</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 90px 30px 1fr 100px; gap: 14px; padding: 11px 18px; align-items: center;">
+          <span style="font-family: var(--mono); font-size: 10px; color: var(--text-mid);">09:31</span>
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #c7d2fe;"></span>
+          <div><div style="font-family: var(--serif); font-size: 13.5px; color: #fff;">Karaktär genererad · AI-partner Linus B. tilldelad</div><div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim);">Modell B (35 % sannolikhet) · IT-konsult 26 år · 27 800/mån</div></div>
+          <span style="font-family: var(--mono); font-size: 9px; color: #c7d2fe; letter-spacing: 0.8px;">SYSTEM-GEN</span>
+        </div>
+
+      </div>
+      <div style="text-align: center; padding: 18px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px;">+ 287 events till sedan signup · scrolla eller exportera CSV</div>
+
+      <!-- Vad lärar-vyn också ger access till -->
+      <div class="s-card" style="margin-top: 24px; background: rgba(255,255,255,0.03);">
+        <div class="s-card-eye">Lärar-insyn · vad du har access till</div>
+        <div class="s-card-h">Allt sparas · <em>inga undantag</em></div>
+        <ul style="list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family: var(--serif); font-size: 13.5px; color: var(--text-mid);">
+          <li>● 142 transaktioner med klassningar</li>
+          <li>● 8 reflektioner · ord, AI-rubriker, dina svar</li>
+          <li>● 14 Maria-rundor · alla bud, alla pauser</li>
+          <li>● 23 BankID-signeringar · vad signerades</li>
+          <li>● 312 system-events (inloggningar, klick, scroll)</li>
+          <li>● 9 modul-steg · time-on-task, quiz-resultat</li>
+          <li>● 18 Echo-konversationer · alla tokens räknade</li>
+          <li>● Pentagon-värden vecka för vecka (15 v)</li>
+          <li>● Onboarding-svar (värdering, profil, partner-modell)</li>
+          <li>● Aktiehandel · varje köp/sälj · varje klick</li>
+          <li>● Lån-historik · CSN-amorteringar, ev. nya lån</li>
+          <li>● Skattedeklaration · alla godkännanden/avvisningar</li>
+        </ul>
+        <p style="font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 14px; letter-spacing: 0.5px;">GDPR-medvetenhet: eleven (och vårdnadshavare) har rätt att se exakt samma data. Du behöver inte be om lov — det är ett pedagogiskt verktyg, inte övervakning.</p>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<script>
+const PANELS = {
+  hub:   { crumb: ["● KLASSEN 9C"] },
+  elev:  { crumb: ["KLASSEN 9C", "● SARA A."] },
+  maria: { crumb: ["KLASSEN 9C", "● MARIA · 3 LÖNESAMTAL"] },
+  refl:  { crumb: ["KLASSEN 9C", "● REFLEKTIONER"] },
+  mail:  { crumb: ["KLASSEN 9C", "● POSTLÅDOR"] },
+  peda:  { crumb: ["KLASSEN 9C", "● PEDAGOGIK"] },
+  skapa: { crumb: ["KLASSEN 9C", "● SKAPA ELEV"] },
+  historik: { crumb: ["KLASSEN 9C", "SARA A.", "● AKTIVITETS-HISTORIK"] },
+};
+function go(view) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  const p = document.getElementById("p-" + view);
+  if (p) p.classList.add("active");
+  renderCrumbs(view);
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+function renderCrumbs(view) {
+  const meta = PANELS[view]; if (!meta) return;
+  const box = document.getElementById("crumbs");
+  const parts = meta.crumb.map((c, i, arr) => {
+    if (i === arr.length - 1) return `<strong>${c}</strong>`;
+    return `<a onclick="go('hub'); return false;" href="#">${c}</a>`;
+  });
+  box.innerHTML = parts.join('<span class="sep">›</span>');
+}
+renderCrumbs("hub");
+window.go = go;
+
+// === 28 mini-pentagoner ===
+const STUDENTS = [
+  { n: "Adam B.",    score: 78, status: "green", axes: [80, 88, 70, 72, 78] },
+  { n: "Alma K.",    score: 92, status: "green", axes: [95, 92, 88, 95, 90] },
+  { n: "Ayan H.",    score: 54, status: "amber", axes: [60, 50, 45, 65, 50] },
+  { n: "Elias R.",   score: 76, status: "green", axes: [78, 75, 72, 80, 75] },
+  { n: "Filip Ö.",   score: 31, status: "red",   axes: [25, 35, 30, 40, 25] },
+  { n: "Hanna L.",   score: 88, status: "green", axes: [90, 92, 82, 88, 88] },
+  { n: "Hassan O.",  score: 68, status: "green", axes: [70, 65, 60, 75, 70] },
+  { n: "Ida P.",     score: 95, status: "green", axes: [96, 95, 92, 98, 94] },
+  { n: "Isak T.",    score: 65, status: "amber", axes: [68, 70, 60, 65, 62] },
+  { n: "Jamil A.",   score: 48, status: "red",   axes: [40, 45, 50, 55, 50] },
+  { n: "Lisa N.",    score: 86, status: "green", axes: [88, 85, 82, 90, 85] },
+  { n: "Mira S.",    score: 75, status: "amber", axes: [78, 80, 70, 72, 75] },
+  { n: "Noah J.",    score: 28, status: "red",   axes: [22, 30, 25, 35, 28] },
+  { n: "Sara A.",    score: 72, status: "amber", axes: [70, 78, 60, 75, 65], current: true },
+  { n: "Bilal R.",   score: 81, status: "green", axes: [82, 80, 78, 85, 80] },
+  { n: "Cleo M.",    score: 73, status: "amber", axes: [75, 70, 68, 78, 72] },
+  { n: "Edgar P.",   score: 79, status: "green", axes: [80, 82, 75, 78, 80] },
+  { n: "Felicia D.", score: 84, status: "green", axes: [86, 88, 78, 85, 83] },
+  { n: "Gusti N.",   score: 62, status: "amber", axes: [60, 70, 55, 65, 60] },
+  { n: "Iris B.",    score: 90, status: "green", axes: [92, 88, 90, 92, 88] },
+  { n: "Jakob S.",   score: 58, status: "amber", axes: [55, 60, 50, 65, 60] },
+  { n: "Klara H.",   score: 87, status: "green", axes: [88, 85, 82, 92, 88] },
+  { n: "Liam V.",    score: 70, status: "amber", axes: [72, 68, 65, 75, 70] },
+  { n: "Maja F.",    score: 82, status: "green", axes: [85, 80, 78, 85, 82] },
+  { n: "Nelly W.",   score: 67, status: "amber", axes: [65, 72, 60, 70, 68] },
+  { n: "Otto L.",    score: 74, status: "amber", axes: [75, 78, 70, 72, 75] },
+  { n: "Petra G.",   score: 89, status: "green", axes: [90, 85, 88, 92, 90] },
+  { n: "Robin Z.",   score: 71, status: "amber", axes: [72, 75, 65, 75, 70] },
+];
+
+function renderMiniPent(axes, status) {
+  // 5 hörn på enhet -1..1, axes 0-100
+  const corners = [
+    [0,    -1],
+    [0.95, -0.31],
+    [0.59,  0.81],
+    [-0.59, 0.81],
+    [-0.95, -0.31]
+  ];
+  const pts = corners.map((c,i) => {
+    const r = (axes[i] / 100);
+    return [c[0]*r*40, c[1]*r*40];
+  });
+  const polyPts = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const axisLines = corners.map(c => `<line x1="0" y1="0" x2="${(c[0]*40).toFixed(1)}" y2="${(c[1]*40).toFixed(1)}" class="mini-axes"/>`).join("");
+  const ringPts = corners.map(c => `${(c[0]*40).toFixed(1)},${(c[1]*40).toFixed(1)}`).join(" ");
+  return `
+    <svg class="mini-svg" viewBox="-50 -50 100 100">
+      <polygon points="${ringPts}" class="mini-axes" fill="none"/>
+      ${axisLines}
+      <polygon points="${polyPts}" class="mini-pent ${status}"/>
+    </svg>
+  `;
+}
+
+const grid = document.getElementById("miniGrid");
+grid.innerHTML = STUDENTS.map(s => {
+  const cls = "mini" + (s.status === "red" ? " alert" : "") + (s.current ? " current" : "");
+  return `<a class="${cls}" onclick="go('elev'); return false;" href="#">
+    ${renderMiniPent(s.axes, s.status)}
+    <div class="mini-name">${s.n.split(" ")[0]}</div>
+    <div class="mini-num">${s.score}/100</div>
+  </a>`;
+}).join("");
+</script>
+</body>
+</html>

@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Turnstile } from "@/components/Turnstile";
-import { AuthShell, PaperButton, PaperInput } from "@/components/paper";
+import { EditorialAuthShell } from "@/components/editorial/EditorialAuthShell";
+import { AuthAwareTopLinks } from "@/components/editorial/AuthAwareTopLinks";
+import { LiveTime, LiveCountdown } from "@/components/editorial/LiveClock";
 
 type Mode = "login" | "bootstrap";
 
@@ -18,9 +20,6 @@ export default function TeacherLogin() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  // När login avvisas pga email_unverified visar vi en knapp för att
-  // skicka om verifieringsmailet (utan att användaren behöver gå till
-  // en separat sida).
   const [unverified, setUnverified] = useState(false);
   const [resendMsg, setResendMsg] = useState<string | null>(null);
   const siteKey = schoolStatus?.turnstile_site_key ?? "";
@@ -56,8 +55,6 @@ export default function TeacherLogin() {
       }
       window.location.reload();
     } catch (e: unknown) {
-      // Backend returnerar 403 med detail="email_unverified" om kontot
-      // finns men inte har bekräftats. Vi erbjuder då att skicka om.
       if (
         e instanceof ApiError &&
         e.status === 403 &&
@@ -97,113 +94,146 @@ export default function TeacherLogin() {
     }
   }
 
+  const isBootstrap = mode === "bootstrap";
+
   return (
-    <AuthShell
-      eyebrow="Ekonomilabbet"
-      title={mode === "bootstrap" ? "Skapa första lärarkontot" : "Lärarinloggning"}
-      intro={
-        mode === "bootstrap"
-          ? schoolStatus?.bootstrap_requires_secret
-            ? "Första gången — ange bootstrap-koden som administratören gav dig."
-            : "Första gången — skapa ditt lärarkonto. Du blir super-admin för klassen."
-          : "Logga in med e-post och lösenord."
-      }
-    >
-      <form onSubmit={handle} className="space-y-3">
-        {mode === "bootstrap" && schoolStatus?.bootstrap_requires_secret && (
-          <PaperInput
-            type="text"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            placeholder="Bootstrap-kod"
-          />
-        )}
-        <PaperInput
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="E-post"
-          autoFocus
-        />
-        {mode === "bootstrap" && (
-          <PaperInput
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Namn"
-          />
-        )}
-        <PaperInput
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Lösenord"
-        />
-        {mode === "bootstrap" && (
-          <PaperInput
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Bekräfta lösenord"
-          />
-        )}
-        <Turnstile
-          siteKey={siteKey}
-          onToken={setTurnstileToken}
-          onExpire={() => setTurnstileToken(null)}
-        />
-        {err && (
-          <div className="text-sm text-[#b91c1c] border-l-2 border-[#b91c1c] pl-3 py-1">
-            {err}
-          </div>
-        )}
-        {unverified && (
-          <div className="flex flex-col gap-2 text-sm">
-            <PaperButton
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={resendVerify}
-              className="w-full justify-center"
-            >
-              Skicka nytt bekräftelsemail
-            </PaperButton>
-            {resendMsg && (
-              <div className="text-[#555] text-center">{resendMsg}</div>
-            )}
-          </div>
-        )}
-        <PaperButton
-          type="submit"
-          disabled={busy || (Boolean(siteKey) && !turnstileToken)}
-          className="w-full justify-center disabled:opacity-50"
-        >
-          {busy ? "Arbetar…" : mode === "bootstrap" ? "Skapa lärarkonto" : "Logga in"}
-        </PaperButton>
+    <EditorialAuthShell topNavRight={<AuthAwareTopLinks />}>
+      <div className="ed-eyebrow">
+        {isBootstrap ? "Skapa första lärarkontot · Bootstrap" : "Lärarinloggning · Vol. 01"}
+      </div>
 
-        {mode === "login" && (
-          <div className="flex flex-col gap-1 text-center text-sm pt-3 border-t border-rule">
-            <Link to="/forgot-password" className="nav-link inline-block">
-              Glömt lösenord?
-            </Link>
-            {!schoolStatus?.bootstrap_ready && (
-              <div className="text-[#666]">
-                Inget konto än?{" "}
-                <Link to="/signup/teacher" className="nav-link">
-                  Skapa lärarkonto
-                </Link>
-              </div>
-            )}
-          </div>
-          )}
-
-        <div className="text-center text-sm text-[#666] pt-3 border-t border-rule">
-          Är du elev?{" "}
-          <Link to="/login/student" className="nav-link">
-            Elevinloggning
-          </Link>
+      <div className="ed-clock">
+        <div className="ed-clock-time">
+          Klockan är <LiveTime />.
         </div>
-      </form>
-    </AuthShell>
+        <LiveCountdown minutes={1} />
+      </div>
+
+      <p className="ed-subhead">
+        {isBootstrap
+          ? schoolStatus?.bootstrap_requires_secret
+            ? "Du blir super-admin för klassen. Ange bootstrap-koden från administratören och skapa kontot — under en minut till klassens första elev."
+            : "Du blir super-admin för klassen. Skapa kontot — under en minut till klassens första elev kan logga in."
+          : "Välkommen tillbaka. Logga in så ser du vem som behöver prat innan provet — inte efter."}
+      </p>
+
+      <div className="ed-card">
+        <form onSubmit={handle} className="ed-form" noValidate>
+          {isBootstrap && schoolStatus?.bootstrap_requires_secret && (
+            <input
+              className="ed-input"
+              type="text"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              placeholder="Bootstrap-kod"
+              autoFocus
+              required
+            />
+          )}
+          <input
+            className="ed-input"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={isBootstrap ? "E-post · skola eller jobb" : "E-post"}
+            autoFocus={!isBootstrap || !schoolStatus?.bootstrap_requires_secret}
+            required
+          />
+          {isBootstrap && (
+            <input
+              className="ed-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ditt namn"
+            />
+          )}
+          <input
+            className="ed-input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={isBootstrap ? "Lösenord (minst 8 tecken)" : "Lösenord"}
+            required
+          />
+          {isBootstrap && (
+            <input
+              className="ed-input"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Bekräfta lösenord"
+              required
+            />
+          )}
+          <Turnstile
+            siteKey={siteKey}
+            onToken={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+          />
+          {err && <div className="ed-error">{err}</div>}
+          {unverified && (
+            <>
+              <button
+                type="button"
+                onClick={resendVerify}
+                className="ed-btn"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  boxShadow: "none",
+                }}
+              >
+                Skicka nytt bekräftelsemail
+              </button>
+              {resendMsg && (
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "rgba(255,255,255,0.7)",
+                    fontStyle: "italic",
+                    textAlign: "center",
+                  }}
+                >
+                  {resendMsg}
+                </div>
+              )}
+            </>
+          )}
+          <button
+            type="submit"
+            className="ed-btn"
+            disabled={busy || (Boolean(siteKey) && !turnstileToken)}
+          >
+            {busy
+              ? "Arbetar…"
+              : isBootstrap
+                ? "Skapa lärarkonto"
+                : "Logga in"}
+            <span className="ed-btn-arrow">→</span>
+          </button>
+
+          {!isBootstrap && (
+            <div className="ed-foot-note">
+              <Link to="/forgot-password" className="ed-foot-link">
+                Glömt lösenord?
+              </Link>
+              {!schoolStatus?.bootstrap_ready && (
+                <>
+                  {" · "}
+                  <Link to="/signup/teacher" className="ed-foot-link">
+                    Skapa lärarkonto
+                  </Link>
+                </>
+              )}
+              {" · "}
+              <Link to="/login/student" className="ed-foot-link">
+                Elevinloggning
+              </Link>
+            </div>
+          )}
+        </form>
+      </div>
+    </EditorialAuthShell>
   );
 }

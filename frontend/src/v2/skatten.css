@@ -1,0 +1,439 @@
+/**
+ * V2 Skatten · CSS som matchar /proposals/vol-7/elev.html#p-skatt.
+ *
+ * Återanvänder .actor-head, .pill, .cta-card, .tx-list, .tx-row, .peda
+ * från shared mönster. Namespacat under .v2-skatt-root.
+ */
+
+.v2-skatt-root {
+  --bg-deep: #0a0e1a;
+  --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --warm-soft: #f59e0b;
+  --accent: #dc4c2b;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --text: rgba(255, 255, 255, 0.92);
+  --text-mid: rgba(255, 255, 255, 0.6);
+  --text-dim: rgba(255, 255, 255, 0.4);
+  --serif: "Source Serif 4", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --ease: cubic-bezier(0.77, 0, 0.175, 1);
+
+  background: var(--bg-deep);
+  color: var(--text);
+  min-height: 100vh;
+  position: relative;
+  font-family: "Inter", "Helvetica Neue", system-ui, sans-serif;
+  padding-top: 44px;
+  overflow-x: hidden;
+}
+.v2-skatt-root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 25% 35%, rgba(220, 76, 43, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 78% 25%, rgba(251, 191, 36, 0.10) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 60%, var(--bg-deep) 100%);
+}
+
+.v2-skatt-root .bank-loading {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+  position: relative;
+  z-index: 5;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+}
+
+.v2-skatt-root .shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px clamp(20px, 5vw, 60px) 80px;
+  position: relative;
+  z-index: 5;
+}
+
+.v2-skatt-root .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: 100px;
+  background: rgba(15, 21, 37, 0.7);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.v2-skatt-root .pill::before {
+  content: "●";
+  color: var(--accent);
+  font-size: 10px;
+}
+
+.v2-skatt-root .actor-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 28px;
+  align-items: end;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.v2-skatt-root .actor-back {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.v2-skatt-root .actor-back::before {
+  content: "←";
+}
+.v2-skatt-root .actor-back:hover {
+  color: var(--warm);
+}
+.v2-skatt-root .actor-name {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(38px, 5vw, 60px);
+  letter-spacing: -1.6px;
+  line-height: 1;
+  color: #fff;
+}
+.v2-skatt-root .actor-name em {
+  font-style: italic;
+  color: var(--warm);
+  font-weight: 500;
+}
+.v2-skatt-root .actor-sub {
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--text-mid);
+  margin-top: 10px;
+}
+.v2-skatt-root .actor-meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-mid);
+  text-align: right;
+  line-height: 1.7;
+}
+.v2-skatt-root .actor-meta strong {
+  color: #fff;
+}
+
+.v2-skatt-root .section-eye {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--warm);
+  margin-bottom: 14px;
+  margin-top: 18px;
+}
+.v2-skatt-root .section-eye::before {
+  content: "● ";
+}
+
+/* CTA-card · förslag att granska */
+.v2-skatt-root .cta-card {
+  background: linear-gradient(135deg, rgba(220, 76, 43, 0.18), rgba(15, 21, 37, 0.5));
+  border: 1px solid rgba(220, 76, 43, 0.45);
+  border-radius: 6px;
+  padding: 22px 24px;
+  margin-bottom: 16px;
+}
+.v2-skatt-root .cta-eye {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.v2-skatt-root .cta-eye::before {
+  content: "● ";
+}
+.v2-skatt-root .cta-h {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #fff;
+}
+.v2-skatt-root .cta-h em {
+  font-style: italic;
+  color: var(--warm);
+  font-weight: 500;
+}
+.v2-skatt-root .cta-prose {
+  font-family: var(--serif);
+  font-size: 14.5px;
+  color: var(--text-mid);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.v2-skatt-root .cta-btn {
+  display: inline-block;
+  margin-top: 14px;
+  margin-right: 8px;
+  background: var(--accent);
+  color: #fff;
+  padding: 11px 18px;
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.2s var(--ease);
+}
+.v2-skatt-root .cta-btn:hover {
+  background: #c43a1c;
+}
+.v2-skatt-root .cta-btn.ghost {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.v2-skatt-root .cta-btn.ghost:hover {
+  border-color: var(--warm);
+  color: var(--warm);
+  background: transparent;
+}
+
+/* TX-LIST (förifyllt underlag) */
+.v2-skatt-root .tx-list {
+  background: rgba(15, 21, 37, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.v2-skatt-root .tx-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 100px 120px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line);
+  font-family: "Inter", sans-serif;
+  font-size: 13.5px;
+}
+.v2-skatt-root .tx-row:last-child {
+  border-bottom: 0;
+}
+.v2-skatt-root .tx-row.proposal-row {
+  background: rgba(220, 76, 43, 0.04);
+  border-left: 3px solid var(--accent);
+}
+.v2-skatt-root .tx-row.diff-row {
+  background: rgba(110, 231, 183, 0.04);
+  border-top: 1px solid var(--line);
+}
+.v2-skatt-root .tx-date {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.v2-skatt-root .tx-name {
+  color: #fff;
+  font-weight: 500;
+}
+.v2-skatt-root .tx-name em {
+  font-style: italic;
+  color: var(--warm);
+}
+.v2-skatt-root .tx-name-sub {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  letter-spacing: 0.4px;
+}
+.v2-skatt-root .tx-cat {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 3px 8px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-mid);
+  letter-spacing: 0.5px;
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.v2-skatt-root .tx-cat.unset {
+  color: var(--accent);
+  border: 1px dashed rgba(220, 76, 43, 0.4);
+  background: transparent;
+}
+.v2-skatt-root .tx-amt {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: #fff;
+}
+.v2-skatt-root .tx-amt.in {
+  color: #6ee7b7;
+}
+.v2-skatt-root .tx-amt em {
+  font-style: italic;
+  color: var(--warm);
+  font-weight: 500;
+}
+
+/* PEDAGOGIK */
+.v2-skatt-root .peda {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(15, 21, 37, 0.5));
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-left: 3px solid #a5b4fc;
+  border-radius: 6px;
+  padding: 18px 22px;
+  margin: 22px 0;
+}
+.v2-skatt-root .peda-eye {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #a5b4fc;
+  margin-bottom: 8px;
+}
+.v2-skatt-root .peda-eye::before {
+  content: "✦";
+  font-size: 11px;
+  margin-right: 6px;
+}
+.v2-skatt-root .peda-h {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.v2-skatt-root .peda-h em {
+  font-style: italic;
+  color: var(--warm);
+  font-weight: 500;
+}
+.v2-skatt-root .peda-prose {
+  font-family: var(--serif);
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.v2-skatt-root .peda-prose em {
+  font-style: italic;
+  color: var(--warm);
+}
+.v2-skatt-root .peda-prose strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+.v2-skatt-root .peda-prose code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--warm);
+}
+.v2-skatt-root .peda-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.v2-skatt-root .peda-bullet {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-family: "Inter", sans-serif;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.v2-skatt-root .peda-bullet strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #a5b4fc;
+  margin-bottom: 4px;
+}
+.v2-skatt-root .peda-concepts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.v2-skatt-root .peda-concept {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: rgba(99, 102, 241, 0.10);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.v2-skatt-root .peda-tip {
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px dashed rgba(251, 191, 36, 0.35);
+  border-radius: 4px;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-mid);
+}
+.v2-skatt-root .peda-tip::before {
+  content: "Tips · ";
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: var(--warm);
+  text-transform: uppercase;
+}

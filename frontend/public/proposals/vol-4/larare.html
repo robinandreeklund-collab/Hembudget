@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Korridoren · Lärare · Vol. 04</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body { background: #f6f5f3; }
+
+.app {
+  display: grid;
+  grid-template-columns: 256px 1fr 340px;
+  grid-template-rows: 56px 1fr;
+  grid-template-areas: "topbar topbar topbar" "side main right";
+  min-height: 100vh;
+}
+@media (max-width: 1300px) { .app { grid-template-columns: 240px 1fr 0; } .right { display: none; } }
+@media (max-width: 900px)  { .app { grid-template-columns: 1fr; grid-template-areas: "topbar" "main"; } .side, .right { display: none; } }
+
+.topbar {
+  grid-area: topbar; background: #fff;
+  border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center;
+  padding: 0 22px; gap: 22px;
+  position: sticky; top: 0; z-index: 50;
+}
+.tb-brand {
+  font-family: var(--serif); font-weight: 700; font-size: 16px;
+  color: var(--fg); text-decoration: none;
+  display: flex; align-items: center; gap: 9px;
+}
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted);
+  margin-left: 4px;
+}
+.tb-brand-role {
+  background: var(--fg); color: #fff;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 3px 8px; border-radius: 100px;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  margin-left: 8px;
+}
+.tb-crumbs {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 1px; color: var(--muted);
+  text-transform: uppercase;
+}
+.tb-crumbs strong { color: var(--fg); font-weight: 700; }
+.tb-spacer { flex: 1; }
+.tb-meter {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.6px; color: var(--muted);
+}
+.tb-meter-bar { width: 80px; height: 5px; background: #f1f5f9; border-radius: 100px; overflow: hidden; position: relative; }
+.tb-meter-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
+  border-radius: 100px;
+}
+.tb-imp {
+  background: rgba(220,76,43,0.1); color: var(--accent);
+  border: 1px solid rgba(220,76,43,0.3);
+  padding: 7px 12px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  cursor: pointer; text-decoration: none;
+}
+.tb-user {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #1e293b, #475569);
+  color: #fff; font-family: var(--serif); font-weight: 700;
+  font-size: 13px; display: grid; place-items: center;
+  text-decoration: none;
+}
+
+/* SIDEBAR */
+.side {
+  grid-area: side; background: #fff;
+  border-right: 1px solid var(--rule);
+  padding: 18px 12px 24px;
+  overflow-y: auto;
+}
+.dock-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 8px 6px;
+}
+.dock-eye:first-child { margin-top: 0; }
+.dock-link {
+  display: flex; align-items: center;
+  padding: 7px 10px; margin: 1px 0;
+  border-radius: 5px;
+  font-family: "Inter", sans-serif;
+  font-size: 13.5px; font-weight: 500;
+  color: #334155; text-decoration: none;
+  gap: 10px;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.dock-link .ic {
+  font-family: var(--mono); font-size: 10px;
+  width: 18px; text-align: center; color: var(--muted);
+}
+.dock-link .nm { flex: 1; }
+.dock-link .badge {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 100px;
+  background: rgba(220,76,43,0.1); color: var(--accent);
+  letter-spacing: 0.4px;
+}
+.dock-link .badge.gold { background: rgba(251,191,36,0.18); color: #92400e; }
+.dock-link .badge.gray { background: #f1f5f9; color: var(--muted); }
+.dock-link:hover { background: rgba(220,76,43,0.05); color: var(--fg); }
+.dock-link:hover .ic { color: var(--accent); }
+.dock-link.active { background: var(--fg); color: #fff; }
+.dock-link.active .ic { color: var(--gold); }
+.dock-link.active .badge { background: rgba(255,255,255,0.18); color: #fff; }
+
+/* MAIN */
+.main { grid-area: main; padding: 28px 32px 60px; overflow-y: auto; }
+.head {
+  margin-bottom: 22px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 24px; align-items: end;
+}
+.head h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(28px, 3.4vw, 40px);
+  letter-spacing: -1.2px; line-height: 1.04;
+}
+.head h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.head .h-eyebrow { margin-bottom: 10px; }
+.head-meta {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 1.3px; text-transform: uppercase;
+  color: var(--muted); text-align: right; line-height: 1.7;
+}
+.head-meta strong { color: var(--fg); }
+
+.stats {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; margin-bottom: 22px; overflow: hidden;
+}
+@media (max-width: 1100px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat {
+  padding: 14px 18px; border-right: 1px solid var(--rule);
+}
+.stat:last-child { border-right: 0; }
+.stat-eye {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 5px;
+}
+.stat-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 22px; letter-spacing: -0.6px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-num em { font-style: italic; color: var(--accent); font-weight: 500; }
+.stat-sub {
+  font-family: var(--mono); font-size: 9.5px;
+  color: var(--muted); margin-top: 2px; letter-spacing: 0.4px;
+}
+
+/* Building grid */
+.col-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.col-eye::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
+
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.8px; color: var(--muted); margin-bottom: 12px;
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.building {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; overflow: hidden;
+}
+.building-head {
+  display: grid;
+  grid-template-columns: 22px 1.4fr repeat(8, 1fr) 1fr;
+  padding: 10px 16px;
+  background: #f8f8f7; border-bottom: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.1px; text-transform: uppercase;
+  color: var(--muted);
+}
+.building-head span { text-align: center; }
+.building-head span:nth-child(1), .building-head span:nth-child(2) { text-align: left; }
+.building-head span:last-child { text-align: right; }
+
+.row {
+  display: grid;
+  grid-template-columns: 22px 1.4fr repeat(8, 1fr) 1fr;
+  padding: 10px 16px; align-items: center;
+  border-bottom: 1px solid var(--rule);
+  text-decoration: none; color: var(--fg);
+  transition: background .2s var(--ease);
+}
+.row:last-child { border-bottom: 0; }
+.row:hover { background: rgba(220, 76, 43, 0.04); }
+.row-num {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  color: var(--muted);
+}
+.row-name {
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.row-name-sub {
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.5px; color: var(--muted); margin-top: 1px;
+}
+.dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  margin: 0 auto;
+  background: #d1d5db; border: 1px solid #c0c4ca;
+}
+.dot.green { background: #4ade80; border-color: #16a34a; }
+.dot.amber { background: #fbbf24; border-color: #d97706; }
+.dot.red   { background: #ef4444; border-color: #b91c1c; }
+.dot.gray  { background: transparent; border-style: dashed; }
+.row-tail {
+  font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: 0.4px; text-align: right; color: var(--fg);
+}
+.row-tail em { font-family: var(--serif); font-style: italic; color: var(--accent); }
+.row-tail.muted { color: var(--muted); }
+
+/* RIGHT */
+.right { grid-area: right; background: #fff; border-left: 1px solid var(--rule); padding: 22px 22px 24px; overflow-y: auto; }
+.rp-eye {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px;
+}
+.rp-eye::before { content: "● "; }
+.rp-section { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--rule); }
+.rp-section:last-child { border-bottom: 0; padding-bottom: 0; }
+.rp-title {
+  font-family: var(--serif); font-size: 16px; font-weight: 700;
+  letter-spacing: -0.3px; margin-bottom: 8px;
+}
+.rp-title em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+.attn-list { list-style: none; padding: 0; margin: 0; }
+.attn-list li {
+  padding: 9px 0; border-bottom: 1px dashed var(--rule);
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px; align-items: center;
+}
+.attn-list li:last-child { border-bottom: 0; }
+.attn-name { font-family: var(--serif); font-size: 13.5px; font-weight: 700; }
+.attn-why { font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 2px; letter-spacing: 0.4px; }
+.attn-go {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--accent); text-decoration: none;
+}
+
+.tok-meter { height: 7px; background: #f1f5f9; border-radius: 100px; overflow: hidden; margin: 8px 0 6px; position: relative; }
+.tok-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--gold), var(--accent)); border-radius: 100px; }
+.tok-meta { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; color: var(--muted); letter-spacing: 0.4px; }
+
+.maria-card { background: #0f172a; color: #fff; border-radius: 6px; padding: 14px 16px; margin-bottom: 8px; text-decoration: none; display: block; position: relative; overflow: hidden; }
+.maria-card::after { content: ""; position: absolute; right: -25px; top: -25px; width: 90px; height: 90px; background: radial-gradient(circle, rgba(251,191,36,0.18), transparent 70%); }
+.maria-name { font-family: var(--serif); font-size: 14px; font-weight: 700; }
+.maria-meta { font-family: var(--mono); font-size: 9.5px; color: var(--gold); margin-top: 3px; letter-spacing: 0.5px; }
+.maria-progress { font-family: var(--mono); font-size: 9px; color: rgba(255,255,255,0.55); margin-top: 5px; letter-spacing: 0.4px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+    <span class="tb-brand-role">Lärare</span>
+    <div class="tb-crumbs"><strong>Anders Lind</strong> · klass 9C · 28 elever · onsdag <strong>29 april</strong></div>
+    <div class="tb-spacer"></div>
+    <div class="tb-meter" title="AI-tokens april">
+      <span>AI</span>
+      <div class="tb-meter-bar"><div class="tb-meter-fill" style="width:62%;"></div></div>
+      <span>62 % av tak</span>
+    </div>
+    <a href="#" class="tb-imp">Senast: Sara A. ↩</a>
+    <a href="#" class="tb-user">AL</a>
+  </header>
+
+  <aside class="side" id="side"></aside>
+
+  <main class="main">
+    <header class="head">
+      <div>
+        <div class="h-eyebrow">Översikt · 9C</div>
+        <h1>Klass <em>9C</em> — byggnaden, alla rum.</h1>
+      </div>
+      <div class="head-meta">
+        Nordstjärnan gymnasium · vecka 18<br>
+        <strong>21/28</strong> aktiva idag<br>
+        <strong>14</strong> reflektioner att läsa
+      </div>
+    </header>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-eye">Aktiva idag</div><div class="stat-num"><em>21</em>/28</div><div class="stat-sub">2 missar 7 dagar</div></div>
+      <div class="stat"><div class="stat-eye">Klassningsgrad</div><div class="stat-num">73 %</div><div class="stat-sub">Snitt klassen</div></div>
+      <div class="stat"><div class="stat-eye">Pågående moduler</div><div class="stat-num">3</div><div class="stat-sub">Bolån · Skatt · Lön</div></div>
+      <div class="stat"><div class="stat-eye">Reflektioner</div><div class="stat-num"><em>14</em></div><div class="stat-sub">Att läsa</div></div>
+      <div class="stat"><div class="stat-eye">AI-tak april</div><div class="stat-num">62 %</div><div class="stat-sub">av månadsbudget</div></div>
+    </div>
+
+    <div class="col-eye">28 elever · 8 rum</div>
+    <div class="legend">
+      <span><span class="dot green"></span> i fas</span>
+      <span><span class="dot amber"></span> begynnande släp</span>
+      <span><span class="dot red"></span> behöver stöd</span>
+      <span><span class="dot gray"></span> rummet inaktivt för eleven</span>
+    </div>
+
+    <div class="building" id="building"></div>
+  </main>
+
+  <aside class="right" id="right"></aside>
+
+</div>
+
+<script>
+// === Lärar-sidomeny: 13 routes ===
+const NAV = {
+  oversikt: [
+    { ic: "▤",  nm: "Klassöversikt",   badge: "",       active: true, href: "#" },
+    { ic: "▷",  nm: "Alla uppdrag",    badge: "12",     href: "#" },
+    { ic: "▦",  nm: "Uppdragsmatris",  badge: "",       href: "#" },
+  ],
+  innehall: [
+    { ic: "✦",  nm: "Modulbibliotek",  badge: "23",     href: "#" },
+    { ic: "❝",  nm: "Reflektioner",    badge: "14 nya", badgeKind: "gold", href: "#" },
+    { ic: "▣",  nm: "Bedömningsmatriser", badge: "",     href: "#" },
+  ],
+  insikt: [
+    { ic: "◷",  nm: "Tid på uppgift",  badge: "",       href: "#" },
+    { ic: "Mₐ", nm: "Lönesamtal (Maria)", badge: "3",   href: "#" },
+    { ic: "↗",  nm: "Investeringar",   badge: "",       href: "#" },
+    { ic: "%",  nm: "Kreditprövning",  badge: "",       href: "#" },
+    { ic: "♥",  nm: "Mående & balans", badge: "2",      badgeKind: "gold", href: "#" },
+  ],
+  admin: [
+    { ic: "AI", nm: "AI & token-budget", badge: "62 %", href: "#" },
+    { ic: "✉",  nm: "Meddelanden",     badge: "3",      href: "#" },
+  ],
+};
+
+function renderNav() {
+  const box = document.getElementById("side");
+  const sections = [
+    { eye: "Översikt", items: NAV.oversikt },
+    { eye: "Innehåll", items: NAV.innehall },
+    { eye: "Insikt",   items: NAV.insikt },
+    { eye: "Admin",    items: NAV.admin },
+  ];
+  let html = "";
+  sections.forEach(s => {
+    html += `<div class="dock-eye">${s.eye}</div>`;
+    s.items.forEach(it => {
+      const cls = it.active ? "dock-link active" : "dock-link";
+      const badgeCls = it.badgeKind ? "badge " + it.badgeKind : "badge";
+      const badge = it.badge ? `<span class="${badgeCls}">${it.badge}</span>` : "";
+      html += `<a class="${cls}" href="${it.href}"><span class="ic">${it.ic}</span><span class="nm">${it.nm}</span>${badge}</a>`;
+    });
+  });
+  box.innerHTML = html;
+}
+renderNav();
+
+// === BYGGNADEN: 14 elever (resten kollapsade) ===
+const STUDENTS = [
+  { num:"01", n:"Adam B.",   sub:"Solo · 84 %", d:["green","green","amber","gray","green","green","green","green"], t:"14:22" },
+  { num:"02", n:"Alma K.",   sub:"Solo · 91 %", d:["green","green","green","green","green","green","green","green"], t:"15:40" },
+  { num:"03", n:"Ayan H.",   sub:"Solo · 62 %", d:["amber","green","gray","gray","amber","red","amber","green"], t:"<em>nu</em>" },
+  { num:"04", n:"Elias R.",  sub:"Familj 03 · 78 %", d:["green","green","green","amber","green","amber","green","green"], t:"11:08" },
+  { num:"05", n:"Filip Ö.",  sub:"Solo · 41 %", d:["red","amber","gray","gray","red","gray","amber","red"], t:"22 apr", muted:true },
+  { num:"06", n:"Hanna L.",  sub:"Solo · 88 %", d:["green","green","green","gray","green","green","green","green"], t:"14:51" },
+  { num:"07", n:"Hassan O.", sub:"Solo · 73 %", d:["green","amber","green","green","amber","green","green","green"], t:"12:30" },
+  { num:"08", n:"Ida P.",    sub:"Solo · 95 %", d:["green","green","green","green","green","green","green","green"], t:"09:14" },
+  { num:"09", n:"Isak T.",   sub:"Familj 03 · 67 %", d:["amber","green","gray","gray","green","amber","amber","green"], t:"11:08" },
+  { num:"10", n:"Jamil A.",  sub:"Solo · 54 %", d:["amber","red","gray","gray","amber","red","amber","amber"], t:"25 apr", muted:true },
+  { num:"11", n:"Lisa N.",   sub:"Solo · 86 %", d:["green","green","green","gray","green","green","green","green"], t:"13:19" },
+  { num:"12", n:"Mira S.",   sub:"Solo · 79 %", d:["green","green","amber","gray","green","green","amber","green"], t:"10:02" },
+  { num:"13", n:"Noah J.",   sub:"Solo · 38 %", d:["red","amber","gray","gray","red","gray","red","red"], t:"15 apr", muted:true },
+  { num:"14", n:"Sara A.",   sub:"Solo · 81 %", d:["green","green","green","green","green","amber","green","green"], t:"<em>nu</em>", impersonated:true },
+];
+
+function renderBuilding() {
+  const box = document.getElementById("building");
+  const head = `<div class="building-head"><span>#</span><span>Elev</span><span>Bank</span><span>Arbg</span><span>Avanza</span><span>Lån</span><span>Tibber</span><span>Skatt</span><span>Pension</span><span>Hyra</span><span>Senast</span></div>`;
+  const rows = STUDENTS.map(s => {
+    const dots = s.d.map(c => `<span class="dot ${c}"></span>`).join("");
+    const impFlag = s.impersonated ? ' <span style="font-family:var(--mono);font-size:8.5px;color:var(--accent);letter-spacing:1px;margin-left:5px;background:rgba(220,76,43,0.1);padding:2px 5px;border-radius:3px;">VISAS</span>' : '';
+    const tCls = s.muted ? "row-tail muted" : "row-tail";
+    return `<a href="#" class="row"><span class="row-num">${s.num}</span><div><div class="row-name">${s.n}${impFlag}</div><div class="row-name-sub">${s.sub}</div></div>${dots}<span class="${tCls}">${s.t}</span></a>`;
+  }).join("");
+  const more = `<a href="#" class="row" style="background:#fafaf9;"><span class="row-num">···</span><div><div class="row-name" style="color:var(--muted);">+ 14 elever till</div><div class="row-name-sub">snitt 71 % · klicka för att expandera</div></div><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="dot gray"></span><span class="row-tail muted">expandera</span></a>`;
+  box.innerHTML = head + rows + more;
+}
+renderBuilding();
+
+// === HÖGER PANEL ===
+function renderRight() {
+  const box = document.getElementById("right");
+  box.innerHTML = `
+    <div class="rp-section">
+      <div class="rp-eye">Behöver stöd nu</div>
+      <div class="rp-title">4 <em>elever</em> idag</div>
+      <ul class="attn-list">
+        <li>
+          <div><div class="attn-name">Filip Ö.</div><div class="attn-why">Senast inloggad 7 dgr · klassning 41 %</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Noah J.</div><div class="attn-why">Senast 14 dgr · 3 röda rum</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Jamil A.</div><div class="attn-why">Skattedeklaration förfaller 3 dgr</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Ayan H.</div><div class="attn-why">Reflektion: "vet inte hur jag deklarerar"</div></div>
+          <a href="#" class="attn-go">öppna →</a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">AI-budget · april</div>
+      <div class="rp-title">62 % av <em>månadstaket</em></div>
+      <div class="tok-meter"><div class="tok-meter-fill" style="width:62%;"></div></div>
+      <div class="tok-meta"><span>1,4M tokens</span><span>2,3M tak</span></div>
+      <div style="font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:8px;letter-spacing:0.4px;">
+        Echo 64 % · Maria 28 % · Anna 8 %
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Pågående lönesamtal</div>
+      <div class="rp-title">3 elever <em>i Maria</em></div>
+      <a class="maria-card" href="#">
+        <div class="maria-name">Hanna L. · runda 4/5</div>
+        <div class="maria-meta">Yrkat 28 500 · senaste bud 27 200</div>
+        <div class="maria-progress">Maria nära smärtgräns</div>
+      </a>
+      <a class="maria-card" href="#">
+        <div class="maria-name">Mira S. · runda 2/5</div>
+        <div class="maria-meta">Yrkat 27 500 · pågår</div>
+        <div class="maria-progress">förberedande argument</div>
+      </a>
+      <a class="maria-card" href="#">
+        <div class="maria-name">Adam B. · runda 1/5</div>
+        <div class="maria-meta">KALP klar · 24 800 utgångsbud</div>
+        <div class="maria-progress">just startat</div>
+      </a>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-eye">Senaste reflektioner</div>
+      <div class="rp-title">3 av <em>14</em> nya</div>
+      <ul class="attn-list">
+        <li>
+          <div><div class="attn-name">Sara A.</div><div class="attn-why">"Restaurang igen — varför är det så lätt?"</div></div>
+          <a href="#" class="attn-go">läs →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Ida P.</div><div class="attn-why">"Pension kändes overkligt tills jag räknade…"</div></div>
+          <a href="#" class="attn-go">läs →</a>
+        </li>
+        <li>
+          <div><div class="attn-name">Hassan O.</div><div class="attn-why">"Maria höll inte med mig om friskvård"</div></div>
+          <a href="#" class="attn-go">läs →</a>
+        </li>
+      </ul>
+    </div>
+  `;
+}
+renderRight();
+</script>
+</body>
+</html>

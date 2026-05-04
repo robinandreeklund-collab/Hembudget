@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+import hashlib
+from datetime import date as _date_type, date, timedelta
 from decimal import Decimal
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import or_
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..db.models import Account, DismissedTransferSuggestion, Transaction
@@ -554,4 +556,153 @@ def create_counterpart(
         "account_id": account_id,
         "amount": float(counterpart_amount),
         "paired_as_transfer": True,
+    }
+
+
+class CreateTransferIn(BaseModel):
+    """Proaktiv elev-överföring mellan egna konton.
+
+    Skapar två länkade Transactions i samma DB-transaktion. Saldot
+    uppdateras direkt eftersom api/balances.py räknar live."""
+
+    from_account_id: int
+    to_account_id: int
+    amount: Decimal = Field(gt=0)
+    date: Optional[_date_type] = None
+    description: Optional[str] = None
+    idempotency_key: Optional[str] = None
+
+
+def _balance_for(session: Session, account_id: int) -> Decimal:
+    """Live saldo: opening_balance (om satt) + summa transaktioner från
+    opening_balance_date och framåt. Speglar logiken i api/balances.py
+    men hålls lokal för att undvika cyklisk import."""
+    acc = session.get(Account, account_id)
+    if acc is None:
+        return Decimal("0")
+    base = acc.opening_balance or Decimal("0")
+    q = session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
+        Transaction.account_id == account_id,
+    )
+    if acc.opening_balance_date is not None:
+        q = q.filter(Transaction.date >= acc.opening_balance_date)
+    total = q.scalar() or Decimal("0")
+    if not isinstance(total, Decimal):
+        total = Decimal(str(total))
+    return base + total
+
+
+@router.post("/create")
+def create_transfer(payload: CreateTransferIn, session: Session = Depends(db)) -> dict:
+    """Skapa en proaktiv överföring mellan två egna konton.
+
+    Två Transaction-rader skapas i samma session:
+      - avsändaren: amount = -X, is_transfer=True
+      - mottagaren: amount = +X, is_transfer=True
+    transfer_pair_id sätts korsvis. Saldot räknas live i balances.py."""
+    if payload.from_account_id == payload.to_account_id:
+        raise HTTPException(400, "Från- och till-konto måste vara olika")
+
+    src = session.get(Account, payload.from_account_id)
+    dst = session.get(Account, payload.to_account_id)
+    if src is None:
+        raise HTTPException(404, "Avsändarkonto saknas")
+    if dst is None:
+        raise HTTPException(404, "Mottagarkonto saknas")
+
+    amount = payload.amount
+    if amount <= 0:
+        raise HTTPException(400, "Belopp måste vara större än noll")
+
+    # Konton som aldrig får gå minus via elev-aktioner. Pedagogisk
+    # regel — eleven kan inte fylla sparkontot med fiktiva pengar.
+    # Lönekonto (checking) och Kreditkort (credit) får gå minus
+    # eftersom kreditflödet (privatlån / SMS-lån) tar över där.
+    NEVER_NEGATIVE_KINDS = {"savings", "isk", "pension"}
+    if src.type in NEVER_NEGATIVE_KINDS:
+        balance = _balance_for(session, src.id)
+        if balance - amount < 0:
+            kind_sv = {
+                "savings": "Sparkontot",
+                "isk": "ISK-kontot",
+                "pension": "Pensionskontot",
+            }.get(src.type, src.name)
+            raise HTTPException(
+                400,
+                f"{kind_sv} skulle gå minus ({balance - amount} kr). "
+                f"Du kan inte ta ut mer än vad som finns där.",
+            )
+
+    tx_date = payload.date or date.today()
+    description = (payload.description or "").strip()
+    if not description:
+        description = f"Överföring till {dst.name}"
+
+    # Idempotency: samma key får aldrig skapa två överföringar. Lagra som
+    # del av hash-strängen så UNIQUE-constrain på (tenant_id, hash) fångar
+    # dubblar utan ny tabell.
+    idem = (payload.idempotency_key or "").strip()
+    if idem:
+        existing = (
+            session.query(Transaction)
+            .filter(Transaction.hash == f"transfer-{idem}-out")
+            .first()
+        )
+        if existing is not None:
+            pair = (
+                session.get(Transaction, existing.transfer_pair_id)
+                if existing.transfer_pair_id
+                else None
+            )
+            if existing.amount < 0:
+                src_tx, dst_tx = existing, pair
+            else:
+                src_tx, dst_tx = pair, existing
+            return {
+                "ok": True,
+                "idempotent": True,
+                "source_tx_id": src_tx.id if src_tx else None,
+                "destination_tx_id": dst_tx.id if dst_tx else None,
+            }
+
+    # Hash som är queryable för idempotency. Lagras direkt — inte sha256:at.
+    # UNIQUE (tenant_id, hash) garanterar unikhet per scope.
+    key = idem or f"{tx_date.isoformat()}-{src.id}-{dst.id}-{amount}"
+    src_hash = f"transfer-{key}-out"
+    dst_hash = f"transfer-{key}-in"
+
+    src_tx = Transaction(
+        account_id=src.id,
+        date=tx_date,
+        amount=-amount,
+        currency=src.currency or "SEK",
+        raw_description=description,
+        is_transfer=True,
+        hash=src_hash,
+    )
+    dst_tx = Transaction(
+        account_id=dst.id,
+        date=tx_date,
+        amount=amount,
+        currency=dst.currency or "SEK",
+        raw_description=f"Överföring från {src.name}",
+        is_transfer=True,
+        hash=dst_hash,
+    )
+    session.add_all([src_tx, dst_tx])
+    session.flush()
+    src_tx.transfer_pair_id = dst_tx.id
+    dst_tx.transfer_pair_id = src_tx.id
+    session.flush()
+
+    return {
+        "ok": True,
+        "source_tx_id": src_tx.id,
+        "destination_tx_id": dst_tx.id,
+        "amount": float(amount),
+        "from_account_id": src.id,
+        "to_account_id": dst.id,
+        "from_balance_after": float(_balance_for(session, src.id)),
+        "to_balance_after": float(_balance_for(session, dst.id)),
+        "date": tx_date.isoformat(),
     }

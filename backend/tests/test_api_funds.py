@@ -150,6 +150,66 @@ def test_summary_aggregates_multiple_funds(client):
     assert float(points[0]["market_value"]) == pytest.approx(float(expected_total))
 
 
+def test_available_cash_includes_transfers_in(client):
+    """Regression: när eleven flyttat 10 000 kr till ISK och INTE köpt
+    fonder ännu ska /funds/{acc} visa available_cash=10000, inte 0.
+    Tidigare returnerades bara opening_balance (eller None när det
+    fanns holdings) — det missade insättningar/överföringar."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Transaction
+    c, SessionLocal = client
+    acc_id = _make_isk_account(SessionLocal)
+
+    # Simulera elevens överföring: +10 000 kr in på ISK (transfer-sidan)
+    with SessionLocal() as s:
+        s.add(Transaction(
+            account_id=acc_id,
+            date=_d(2026, 4, 26),
+            amount=_D("10000"),
+            raw_description="Överföring från Lönekonto",
+            hash="t1",
+            is_transfer=True,
+        ))
+        s.commit()
+
+    # Inga holdings ännu — pengarna ligger som cash på ISK:n
+    r = c.get(f"/funds/{acc_id}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["fund_count"] == 0
+    assert float(body["available_cash"]) == pytest.approx(10000.0)
+    # total_value = cash + funds(0) = 10 000
+    assert float(body["total_value"]) == pytest.approx(10000.0)
+
+
+def test_available_cash_with_opening_balance_and_transfers(client):
+    """opening_balance + transactions = total cash. Tidigare hoppades
+    transactions över helt."""
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account, Transaction
+    c, SessionLocal = client
+    with SessionLocal() as s:
+        acc = Account(
+            name="ISK NORDEA", bank="nordea", type="isk", currency="SEK",
+            opening_balance=_D("5000"),
+        )
+        s.add(acc); s.commit(); s.refresh(acc)
+        acc_id = acc.id
+        s.add(Transaction(
+            account_id=acc_id, date=_d(2026, 4, 26),
+            amount=_D("3000"), raw_description="Insättning",
+            hash="t2",
+        ))
+        s.commit()
+
+    r = c.get(f"/funds/{acc_id}")
+    body = r.json()
+    # 5000 (opening) + 3000 (deposit) = 8000 cash
+    assert float(body["available_cash"]) == pytest.approx(8000.0)
+
+
 def test_unknown_account_returns_404(client):
     c, _ = client
     r = c.get("/funds/9999")

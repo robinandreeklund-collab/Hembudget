@@ -20,7 +20,9 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..db.models import Account, FundHolding, FundHoldingSnapshot
+from sqlalchemy import func as sa_func
+
+from ..db.models import Account, FundHolding, FundHoldingSnapshot, Transaction
 from ..llm.client import LMStudioClient, LLMUnavailable
 from .deps import db, llm_client, require_auth
 from .upcoming import _file_to_images
@@ -62,6 +64,23 @@ class FundHoldingIn(BaseModel):
     snapshot_date: Optional[date] = None
 
 
+class StockHoldingSummary(BaseModel):
+    """Aktieposition på ett ISK-konto, värderad mot senaste kurs.
+    Visas i /funds-vyn så eleven ser ALLA tillgångar (cash + fonder
+    + aktier) på samma plats."""
+    ticker: str
+    name: str
+    quantity: int
+    avg_cost: Decimal
+    last_price: Optional[Decimal] = None
+    market_value: Decimal
+    market_value_native: Decimal  # i affärsvalutan
+    cost_basis: Decimal
+    unrealized_pnl: Decimal
+    currency: str
+    sector: str
+
+
 class FundsSummaryOut(BaseModel):
     account_id: int
     account_name: str
@@ -70,6 +89,8 @@ class FundsSummaryOut(BaseModel):
     fund_count: int
     last_update_date: Optional[date]
     holdings: list[FundHoldingOut]
+    stocks: list[StockHoldingSummary] = []
+    stocks_value: Decimal = Decimal("0")
 
 
 @router.get("/{account_id}", response_model=FundsSummaryOut)
@@ -83,16 +104,96 @@ def get_holdings(account_id: int, session: Session = Depends(db)) -> FundsSummar
         .order_by(FundHolding.market_value.desc())
         .all()
     )
-    total = sum((r.market_value for r in rows), Decimal("0"))
+    fund_total = sum((r.market_value for r in rows), Decimal("0"))
     latest = max((r.last_update_date for r in rows), default=None)
+    # Cash på kontot = opening_balance + summa av alla transaktioner.
+    # Tidigare returnerades bara opening_balance (eller None när det fanns
+    # holdings) — det missade alla insättningar/överföringar in på ISK:n
+    # så en elev som flyttat 10 000 kr fick "0 kr tillgängligt". Räkna
+    # nu korrekt så cash-saldot stämmer mot Dashboard/Saldo-per-konto.
+    ob = acc.opening_balance or Decimal("0")
+    tx_sum = (
+        session.query(sa_func.coalesce(sa_func.sum(Transaction.amount), 0))
+        .filter(Transaction.account_id == account_id)
+        .scalar() or 0
+    )
+    cash_balance = ob + Decimal(str(tx_sum))
+
+    # Hämta aktieinnehav på samma konto + värdera mot senaste kurser.
+    # Pedagogiskt: eleven ska se ISK-kontots ALLA tillgångar samlat
+    # — cash, fonder, aktier — så hen förstår portföljens helhet.
+    from ..db.models import StockHolding
+    from ..school.engines import master_session
+    from ..school.stock_models import LatestFxRate, LatestStockQuote, StockMaster
+
+    stock_holdings = (
+        session.query(StockHolding)
+        .filter(StockHolding.account_id == account_id)
+        .all()
+    )
+    stocks_out: list[StockHoldingSummary] = []
+    stocks_value_sek = Decimal("0")
+    if stock_holdings:
+        tickers = {h.ticker for h in stock_holdings}
+        with master_session() as ms:
+            latest_map = {
+                l.ticker: l for l in ms.query(LatestStockQuote)
+                .filter(LatestStockQuote.ticker.in_(tickers)).all()
+            }
+            stock_map = {
+                s.ticker: s for s in ms.query(StockMaster)
+                .filter(StockMaster.ticker.in_(tickers)).all()
+            }
+            fx_row = (
+                ms.query(LatestFxRate)
+                .filter(LatestFxRate.base == "USD",
+                        LatestFxRate.quote == "SEK")
+                .first()
+            )
+            usd_to_sek = Decimal(str(fx_row.rate)) if fx_row else Decimal("1")
+
+        for h in stock_holdings:
+            stock = stock_map.get(h.ticker)
+            currency = stock.currency if stock else "SEK"
+            sector = stock.sector if stock else "Okänd"
+            name = stock.name if stock else h.ticker
+            latest_q = latest_map.get(h.ticker)
+            last_price = (
+                Decimal(str(latest_q.last)) if latest_q else Decimal(h.avg_cost)
+            )
+            market_native = (last_price * h.quantity).quantize(Decimal("0.01"))
+            cost_native = (Decimal(h.avg_cost) * h.quantity).quantize(
+                Decimal("0.01"),
+            )
+            if currency == "USD":
+                market_sek = (market_native * usd_to_sek).quantize(Decimal("0.01"))
+                cost_sek = (cost_native * usd_to_sek).quantize(Decimal("0.01"))
+            else:
+                market_sek = market_native
+                cost_sek = cost_native
+            unrealized = (market_sek - cost_sek).quantize(Decimal("0.01"))
+            stocks_value_sek += market_sek
+            stocks_out.append(StockHoldingSummary(
+                ticker=h.ticker, name=name, quantity=h.quantity,
+                avg_cost=Decimal(h.avg_cost), last_price=last_price,
+                market_value=market_sek,
+                market_value_native=market_native,
+                cost_basis=cost_sek,
+                unrealized_pnl=unrealized,
+                currency=currency, sector=sector,
+            ))
+
+    # Total-värde = cash + fond-värde + aktie-värde
     return FundsSummaryOut(
         account_id=acc.id,
         account_name=acc.name,
-        total_value=total,
-        available_cash=acc.opening_balance if not rows else None,
+        total_value=fund_total + cash_balance + stocks_value_sek,
+        available_cash=cash_balance,
         fund_count=len(rows),
         last_update_date=latest,
         holdings=[FundHoldingOut.model_validate(r) for r in rows],
+        stocks=stocks_out,
+        stocks_value=stocks_value_sek,
     )
 
 

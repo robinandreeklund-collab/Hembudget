@@ -43,7 +43,7 @@ PROFESSIONS: list[Profession] = [
     ]),
     Profession("Frisör", 26_500, 33_000, [
         "Cutters", "Klippoteket", "Hairdo Sthlm",
-        "Egen verksamhet", "Frisörsalong Lockigt",
+        "Frisörsalong Lockigt", "BarberShop North",
     ]),
     Profession("Bilmekaniker", 30_500, 37_500, [
         "Mekonomen", "AD Bildelar", "Bilia AB", "Volvo Cars Service",
@@ -75,7 +75,7 @@ PROFESSIONS: list[Profession] = [
     ]),
     Profession("Kock", 28_500, 36_500, [
         "Operakällaren", "Sturehof", "Tre Små Rum", "Restaurang Volt",
-        "Ekstedt", "Egen verksamhet",
+        "Ekstedt", "Restaurang Mat",
     ]),
     Profession("Barnskötare", 26_500, 31_500, [
         "Stockholms Stad förskola", "Göteborgs Stad förskola",
@@ -124,6 +124,51 @@ PERSONALITIES = ["sparsam", "blandad", "blandad", "slosaktig"]
 # blandad x2 → 50% chans, sparsam/slösaktig vardera 25%
 
 
+# Svenska för- och efternamn — för karaktärsnamn-generering.
+# Slumpas deterministiskt på student_id så samma elev alltid får
+# samma karaktär. Listor som speglar SCB:s vanliga namn 2020-2025.
+FIRST_NAMES_F = [
+    "Sara", "Emma", "Alice", "Maja", "Ella", "Wilma", "Ebba", "Lilly",
+    "Olivia", "Astrid", "Saga", "Alma", "Selma", "Vera", "Klara",
+    "Linnea", "Stella", "Ines", "Nellie", "Iris", "Tuva", "Hedda",
+    "Märta", "Ester", "Ronja", "Sigrid", "Alva", "Tilde", "Freja",
+    "Liv",
+]
+FIRST_NAMES_M = [
+    "Lucas", "William", "Liam", "Noah", "Oliver", "Hugo", "Elias",
+    "Adam", "Vincent", "Walter", "Leon", "Theo", "Axel", "Charlie",
+    "Anton", "Ivar", "Edvin", "Frans", "Albin", "Olle", "Viggo",
+    "Sigge", "Otto", "Algot", "Loke", "Folke", "Melker", "Vidar",
+    "Arvid", "Kasper",
+]
+LAST_NAMES = [
+    "Andersson", "Johansson", "Karlsson", "Nilsson", "Eriksson",
+    "Larsson", "Olsson", "Persson", "Svensson", "Gustafsson",
+    "Pettersson", "Jonsson", "Jansson", "Hansson", "Bengtsson",
+    "Jönsson", "Lindberg", "Jakobsson", "Magnusson", "Olofsson",
+    "Lindström", "Lindqvist", "Lindgren", "Berg", "Axelsson",
+    "Bergström", "Lundberg", "Lundgren", "Lundqvist", "Mattsson",
+    "Berglund", "Fredriksson", "Sandberg", "Henriksson", "Forsberg",
+    "Sjöberg", "Wallin", "Engström", "Eklund", "Danielsson",
+    "Håkansson", "Lundin", "Björk", "Bergman", "Gunnarsson", "Holm",
+    "Wikström", "Samuelsson", "Isaksson", "Fransson",
+]
+
+
+def _generate_character_name(rng: random.Random) -> tuple[str, str]:
+    """Slumpa ett svenskt karaktärsnamn (förnamn + efternamn).
+
+    Könet på förnamnet slumpas 50/50 — eleven kan få vilket som helst.
+    Efternamnet är könsneutralt (svensk konvention).
+    """
+    if rng.random() < 0.5:
+        first = rng.choice(FIRST_NAMES_F)
+    else:
+        first = rng.choice(FIRST_NAMES_M)
+    last = rng.choice(LAST_NAMES)
+    return first, last
+
+
 @dataclass
 class GeneratedProfile:
     profession: str
@@ -142,10 +187,24 @@ class GeneratedProfile:
     backstory: str
     children_ages: list[int]
     partner_age: int | None
+    # Partnerns yrke + bruttolön. None om family_status == "ensam".
+    # Slumpas oberoende av elevens egna yrke för realistisk variation —
+    # eleven kan tjäna mer eller mindre än sin partner. Det här är
+    # poängen i 'veil of ignorance'-onboardingen.
+    partner_profession: str | None
+    partner_gross_salary: int | None
+    # Karaktärsnamn — separat från elevens login-namn. Sätts vid
+    # profilgenerering, deterministiskt på student_id.
+    character_first_name: str = ""
+    character_last_name: str = ""
 
 
 def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
     rng = random.Random(_seed_for_student(student_id))
+
+    # Generera karaktärsnamn FÖRST så samma seed alltid → samma namn
+    # även när andra fält ändras nedanför.
+    first_name, last_name = _generate_character_name(rng)
 
     prof = rng.choice(PROFESSIONS)
     employer = rng.choice(prof.employers)
@@ -199,9 +258,31 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
 
     # Partner — om sambo eller familj_med_barn
     partner_age: int | None = None
+    partner_profession: str | None = None
+    partner_gross_salary: int | None = None
     if family_status in ("sambo", "familj_med_barn"):
         partner_age = age + rng.randint(-4, 4)
         partner_age = max(20, min(60, partner_age))
+        # Partnerns yrke slumpas oberoende av elevens. Realism + variation:
+        # ibland tjänar partnern mer, ibland mindre.
+        partner_prof = rng.choice(PROFESSIONS)
+        partner_profession = partner_prof.title
+        # Partnerns lön mellan low och high baserat på ålder (samma logik
+        # som elevens — fast ny rng-draw)
+        if partner_age <= 25:
+            p_factor = 0.0
+        elif partner_age <= 35:
+            p_factor = (partner_age - 25) / 10
+        else:
+            p_factor = 1.0
+        partner_gross_salary = int(
+            partner_prof.salary_low
+            + (partner_prof.salary_high - partner_prof.salary_low) * p_factor
+        )
+        # Lite extra variation ±5 %
+        partner_gross_salary = int(
+            partner_gross_salary * (0.95 + rng.random() * 0.10)
+        )
 
     # Barn — endast om family_med_barn
     children_ages: list[int] = []
@@ -236,6 +317,10 @@ def generate_profile(student_id: int, display_name: str) -> GeneratedProfile:
         backstory=backstory,
         children_ages=children_ages,
         partner_age=partner_age,
+        partner_profession=partner_profession,
+        partner_gross_salary=partner_gross_salary,
+        character_first_name=first_name,
+        character_last_name=last_name,
     )
 
 

@@ -203,13 +203,14 @@ def test_seed_is_idempotent(fx) -> None:
     assert len(rows1) == len(rows2) == 6
 
 
-def test_variant_default_is_default(fx) -> None:
+def test_variant_default_is_c(fx) -> None:
     """Innan någon super-admin toggar ska /landing/variant returnera
-    'default' så frontend renderar den klassiska paper-sidan."""
+    'c' (Ekonomilabbet v5-rebuild). Super-admin kan toggla tillbaka
+    till 'default' om paper-stilen behövs."""
     client, _, _ = fx
     r = client.get("/landing/variant")
     assert r.status_code == 200
-    assert r.json() == {"variant": "default"}
+    assert r.json() == {"variant": "c"}
 
 
 def test_super_admin_can_toggle_variant(fx) -> None:

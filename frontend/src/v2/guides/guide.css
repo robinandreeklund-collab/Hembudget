@@ -1,0 +1,223 @@
+/* === Interaktiv guide / spotlight (matchar prototypen) === */
+
+.guide-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 9000;
+  display: none;
+  pointer-events: auto;
+}
+.guide-scrim.on {
+  display: block;
+  animation: guide-fadein 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes guide-fadein {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.guide-spotlight {
+  position: fixed;
+  z-index: 9001;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65),
+    0 0 0 3px var(--warm, #fbbf24),
+    0 0 30px rgba(251, 191, 36, 0.45);
+  pointer-events: none;
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  background: transparent;
+}
+
+.guide-tip {
+  position: fixed;
+  z-index: 9002;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  background: rgba(15, 21, 37, 0.98);
+  border: 1px solid var(--warm, #fbbf24);
+  border-radius: 8px;
+  padding: 18px 22px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.guide-tip-eye {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--warm, #fbbf24);
+}
+.guide-tip-eye::before {
+  content: "✦ ";
+}
+
+.guide-tip-h {
+  font-family: var(--serif, "Source Serif 4", Georgia, serif);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  margin: 8px 0 10px;
+  line-height: 1.2;
+  color: #fff;
+}
+.guide-tip-h em {
+  font-style: italic;
+  color: var(--warm, #fbbf24);
+  font-weight: 500;
+}
+
+.guide-tip-prose {
+  font-family: var(--serif, "Source Serif 4", Georgia, serif);
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0 0 16px;
+}
+.guide-tip-prose em {
+  font-style: italic;
+  color: var(--warm, #fbbf24);
+}
+.guide-tip-prose strong {
+  color: var(--accent, #dc4c2b);
+  font-weight: 700;
+}
+.guide-tip-prose code {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.guide-tip-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+}
+
+.guide-tip-prog {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.5px;
+}
+.guide-tip-prog strong {
+  color: #fff;
+}
+
+.guide-tip-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.guide-tip-btn {
+  font-family: var(--mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.guide-tip-btn.solid {
+  background: var(--warm, #fbbf24);
+  color: #422006;
+  border: 1px solid var(--warm, #fbbf24);
+}
+.guide-tip-btn.solid:hover {
+  background: #f59e0b;
+}
+.guide-tip-btn.ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.guide-tip-btn.ghost:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+.guide-tip-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Guide-dropdown (i sidebar / topbar) — speglar prototypens
+   .guide-dropdown */
+.guide-dropdown {
+  display: none;
+  position: absolute;
+  z-index: 9100;
+}
+.guide-dropdown.show {
+  display: block;
+  z-index: 9100;
+}
+
+/* === MOBILE FALLBACK · Fas 2AD === */
+/* På smala skärmar är smart placement omöjlig — tip-cardet ankrar
+ * istället till botten av skärmen och sträcker sig hela bredden.
+ * GuideOverlay sätter klassen guide-tip-mobile när vw < 700. */
+.guide-tip.guide-tip-mobile {
+  position: fixed;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: 60px;
+  top: auto !important;
+  width: auto;
+  max-width: none;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 700px) {
+  .guide-tip {
+    width: auto;
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 60px !important;
+    top: auto !important;
+    max-width: none;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  .guide-tip-h {
+    font-size: 18px;
+  }
+  .guide-tip-prose {
+    font-size: 13.5px;
+  }
+  .guide-tip-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .guide-tip-btn {
+    padding: 7px 12px;
+    font-size: 9.5px;
+  }
+}
+
+@media (max-width: 400px) {
+  .guide-tip-prog {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  .guide-tip-actions .guide-tip-btn.ghost:nth-child(1) {
+    /* "Hoppa över" tar mycket plats — göm på riktigt små skärmar */
+    display: none;
+  }
+}

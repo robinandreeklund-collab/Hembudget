@@ -63,12 +63,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "matplotlib>=3.8" \
         "qrcode[pil]>=8.0" \
         "anthropic>=0.40" \
-        "psycopg2-binary>=2.9"
+        "psycopg2-binary>=2.9" \
+        "yfinance>=0.2"
 # OBS: sqlcipher3-binary hoppas över i demo — backend faller tillbaka på
 # plain SQLite automatiskt. pytesseract/tesseract skippas också eftersom
 # vision-import inte används i demo.
 # email-validator krävs av pydantic.EmailStr (används av school-routerns
 # lärar-login-schemas).
+# yfinance: aktiekurser för Stockholm-börsen (Finnhub free saknar XSTO)
+# och USD/SEK-växelkurs.
 
 # Kopiera backend-källkoden
 COPY backend/ /app/backend/

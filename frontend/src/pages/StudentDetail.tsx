@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -325,6 +326,8 @@ export default function StudentDetail() {
           />
         </div>
       </section>
+
+      <EmployerStatusCard studentId={sid} onView={viewAs} />
 
       {/* Rekommendationer */}
       {recommendations.length > 0 && (
@@ -934,6 +937,90 @@ function AiStudentSummarySection({ studentId }: { studentId: number }) {
           nästa steg. Baserad på mastery, reflektioner och uppdrag.
         </p>
       )}
+    </section>
+  );
+}
+
+
+interface ClassEmployerRow {
+  student_id: number;
+  display_name: string;
+  score: number;
+  trend: "rising" | "falling" | "stable";
+  agreement_code: string | null;
+  flag: "low" | "critical" | null;
+}
+
+
+function EmployerStatusCard({
+  studentId,
+  onView,
+}: {
+  studentId: number;
+  onView: () => void;
+}) {
+  const q = useQuery({
+    queryKey: ["teacher-employer-class"],
+    queryFn: () => api<{ rows: ClassEmployerRow[] }>(
+      "/teacher/employer/class",
+    ),
+  });
+  const row = q.data?.rows.find((r) => r.student_id === studentId);
+  if (q.isLoading) {
+    return (
+      <section className="bg-white border rounded-xl p-4">
+        <div className="text-sm text-slate-600">Laddar arbetsgivar-status…</div>
+      </section>
+    );
+  }
+  if (!row) {
+    return null; // ingen status än, eller fel — tyst
+  }
+  const tone = row.flag === "critical"
+    ? "border-rose-300 bg-rose-50/50"
+    : row.flag === "low"
+      ? "border-amber-300 bg-amber-50/50"
+      : "border-slate-200 bg-white";
+  const trendArrow =
+    row.trend === "rising" ? "↑" :
+    row.trend === "falling" ? "↓" : "→";
+  return (
+    <section className={`border rounded-xl p-4 ${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            🏢 Arbetsgivar-nöjdhet
+          </h2>
+          <div className="text-sm text-slate-600 mt-0.5">
+            {row.agreement_code
+              ? <>Avtal: <code className="bg-white border px-1 rounded">{row.agreement_code}</code></>
+              : "Småföretag utan avtal"}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl serif font-semibold">{row.score}</div>
+          <div className="text-xs text-slate-500">
+            {trendArrow} {row.trend}
+          </div>
+        </div>
+      </div>
+      {row.flag && (
+        <div className={`text-xs mt-2 ${
+          row.flag === "critical" ? "text-rose-700" : "text-amber-700"
+        }`}>
+          {row.flag === "critical"
+            ? "Kritisk nivå — boka uppföljningssamtal"
+            : "Låg nivå — håll utkik"}
+        </div>
+      )}
+      <div className="mt-3">
+        <button
+          onClick={onView}
+          className="text-xs text-brand-700 hover:underline"
+        >
+          Öppna /arbetsgivare som denna elev →
+        </button>
+      </div>
     </section>
   );
 }

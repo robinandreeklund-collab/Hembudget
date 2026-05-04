@@ -2,7 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/api/client";
 import { Card } from "@/components/Card";
-import { ChevronDown, ChevronRight, Send, Wrench } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Bot, ChevronDown, ChevronRight, Lock, Send, Wrench } from "lucide-react";
 
 interface ToolCallMeta {
   tool_calls?: Array<{
@@ -145,6 +146,266 @@ const EXAMPLE_QUESTIONS = [
 ];
 
 export default function Chat() {
+  const { schoolMode } = useAuth();
+  if (schoolMode) return <SchoolChat />;
+  return <DesktopChat />;
+}
+
+
+// ---------- School-mode AI-chatt: extern Claude + rate-limit ----------
+
+interface ChatStatus {
+  ai_enabled: boolean;
+  available: boolean;
+  daily_quota: number;
+  used_today: number;
+  remaining_today: number;
+  role: string;
+}
+
+interface ChatMsg {
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+const SCHOOL_EXAMPLES = [
+  "Vad är en sparkvot och hur räknar jag ut den?",
+  "Hur funkar ISK-skatten egentligen?",
+  "Vad är skillnaden mellan ränta och avgift på ett lån?",
+  "Hur tänker man kring att spara vs betala av lån?",
+];
+
+
+function SchoolChat() {
+  const [input, setInput] = useState("");
+  const endRef = useRef<HTMLDivElement>(null);
+
+  const statusQ = useQuery({
+    queryKey: ["chat-status"],
+    queryFn: () => api<ChatStatus>("/ai/chat/status"),
+    refetchInterval: 30_000,
+  });
+
+  const messagesQ = useQuery({
+    queryKey: ["chat-messages"],
+    queryFn: () => api<{ messages: ChatMsg[]; thread_id: number }>(
+      "/ai/chat/messages",
+    ),
+    enabled: !!statusQ.data?.ai_enabled,
+  });
+
+  const sendMut = useMutation({
+    mutationFn: (content: string) =>
+      api<{ answer: string; used_today: number; remaining_today: number }>(
+        "/ai/chat/send",
+        { method: "POST", body: JSON.stringify({ content }) },
+      ),
+    onSuccess: () => {
+      messagesQ.refetch();
+      statusQ.refetch();
+    },
+  });
+
+  const clearMut = useMutation({
+    mutationFn: () =>
+      api<{ deleted: number }>("/ai/chat/messages", { method: "DELETE" }),
+    onSuccess: () => messagesQ.refetch(),
+  });
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messagesQ.data, sendMut.isPending]);
+
+  const status = statusQ.data;
+  const msgs = messagesQ.data?.messages ?? [];
+  const isTeacher = status?.role === "teacher";
+
+  // Inte aktiverat → visa låsbild (ingen klickbar kontroll).
+  if (status && !status.ai_enabled) {
+    return (
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
+        <h1 className="serif text-3xl leading-tight mb-4 flex items-center gap-2">
+          <Bot className="w-7 h-7" /> AI-chatt
+        </h1>
+        <Card>
+          <div className="flex items-start gap-3">
+            <Lock className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-medium text-slate-800 mb-1">
+                Ej aktiverat
+              </div>
+              <div className="text-sm text-slate-600 leading-relaxed">
+                AI-chatten är inte påslagen för{" "}
+                {isTeacher ? "ditt lärarkonto" : "din klass"}.
+                {isTeacher
+                  ? " Be super-admin att aktivera AI-funktioner under /admin/ai."
+                  : " Be din lärare att slå på den."}
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Kvot 0 → aktiverat men avstängt för chatten specifikt
+  if (status && status.daily_quota === 0) {
+    return (
+      <div className="p-4 md:p-6 max-w-3xl mx-auto">
+        <h1 className="serif text-3xl leading-tight mb-4 flex items-center gap-2">
+          <Bot className="w-7 h-7" /> AI-chatt
+        </h1>
+        <Card>
+          <div className="text-sm text-slate-700">
+            AI-chatten är inte aktiv just nu — dagskvoten är satt till 0.
+            {isTeacher
+              ? " Höj värdet under /admin/ai för att slå på."
+              : " Be din lärare att höja dagskvoten."}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const remaining = status?.remaining_today ?? 0;
+  const limit = status?.daily_quota ?? 0;
+  const used = status?.used_today ?? 0;
+  const sendDisabled = sendMut.isPending || remaining <= 0;
+
+  return (
+    <div className="p-4 md:p-6 flex flex-col h-full max-w-3xl mx-auto w-full">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="serif text-3xl leading-tight flex items-center gap-2">
+          <Bot className="w-7 h-7" /> AI-chatt
+        </h1>
+        <div className="flex items-center gap-3 text-sm">
+          {msgs.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm("Rensa hela chatten? Går inte att ångra.")) {
+                  clearMut.mutate();
+                }
+              }}
+              disabled={clearMut.isPending}
+              className="px-2.5 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 text-xs disabled:opacity-50"
+            >
+              {clearMut.isPending ? "Rensar…" : "Rensa chatt"}
+            </button>
+          )}
+          <div
+            className={`text-xs px-2 py-1 rounded ${
+              remaining <= 2
+                ? "bg-amber-100 text-amber-800"
+                : "bg-slate-100 text-slate-700"
+            }`}
+            title={isTeacher
+              ? "Lärare får 3× elevkvoten för testning"
+              : "Antal frågor du har kvar idag"}
+          >
+            {remaining} av {limit} kvar idag
+          </div>
+        </div>
+      </div>
+
+      <Card className="flex-1 flex flex-col min-h-[420px]">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+          {msgs.length === 0 && (
+            <div className="text-sm text-slate-700">
+              <div className="mb-3">
+                Fråga om personlig ekonomi — budget, lön, skatt, lån, sparande,
+                investeringar. Modellen ser inte din egen data, så för
+                personliga siffror titta i Dashboard eller Kontoutdrag.
+              </div>
+              <div className="space-y-1.5">
+                {SCHOOL_EXAMPLES.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => !sendDisabled && sendMut.mutate(q)}
+                    disabled={sendDisabled}
+                    className="block text-left w-full px-3 py-1.5 rounded border border-slate-200 hover:border-brand-400 hover:bg-paper text-slate-700 transition disabled:opacity-50"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {msgs.map((m, i) => {
+            if (m.role === "user") {
+              return (
+                <div
+                  key={i}
+                  className="max-w-2xl rounded-lg p-3 text-sm ml-auto bg-brand-600 text-white"
+                >
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={i}
+                className="max-w-2xl rounded-lg p-3 text-sm bg-slate-50 border border-slate-200"
+              >
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              </div>
+            );
+          })}
+          {sendMut.isPending && (
+            <div className="text-sm text-slate-600">Claude funderar…</div>
+          )}
+          {sendMut.error && (
+            <div className="text-sm text-rose-700 border-l-2 border-rose-400 pl-2">
+              {(sendMut.error as Error).message}
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!input.trim() || sendDisabled) return;
+            sendMut.mutate(input);
+            setInput("");
+          }}
+        >
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={
+              remaining <= 0
+                ? "Dagskvoten är slut — försök igen i morgon"
+                : "Skriv en fråga…"
+            }
+            disabled={sendDisabled}
+            className="flex-1 border rounded-lg px-3 py-2 disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={sendDisabled || !input.trim()}
+            className="bg-brand-600 text-white rounded-lg px-4 flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Send className="w-4 h-4" /> Skicka
+          </button>
+        </form>
+      </Card>
+      <div className="text-[10px] text-slate-500 mt-2 leading-snug">
+        Du har {used} fråga{used === 1 ? "" : "or"} idag av maxgränsen{" "}
+        {limit}. {isTeacher
+          ? "Som lärare har du 3× elevkvoten."
+          : "Be din lärare höja kvoten om du behöver fler."}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Desktop-chat: lokal LM Studio (Nemotron) ----------
+
+function DesktopChat() {
   const [sessionId] = useState(() => {
     const s = sessionStorage.getItem("chat_session");
     if (s) return s;

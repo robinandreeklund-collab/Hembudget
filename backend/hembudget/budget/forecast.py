@@ -5,10 +5,11 @@ from datetime import date
 from decimal import Decimal
 from statistics import mean
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ..db.models import Transaction
+from ..db.sql_compat import month_str
 
 
 @dataclass
@@ -37,28 +38,50 @@ class CashflowForecaster:
         lookback_start = _add_months(today.replace(day=1), -self.lookback)
         end = today.replace(day=1)
 
+        _m_expr = month_str(self.session, Transaction.date)
+        # Bug-fix: aggregera inkomst (positiva belopp) och utgift
+        # (negativa belopp) SEPARAT per månad. Tidigare aggregerade vi
+        # alla transaktioner till ett netto per månad och sorterade
+        # månaden som "inkomst-månad" eller "utgift-månad" beroende på
+        # nettots tecken — vilket är fel: en typisk månad har både
+        # inkomst (+30000) och utgift (−25000) men klassificerades som
+        # bara den ena baserat på +5000 netto.
         rows = self.session.execute(
             select(
-                func.strftime("%Y-%m", Transaction.date).label("month"),
-                func.sum(Transaction.amount).label("total"),
+                _m_expr.label("month"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.amount > 0, Transaction.amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("income"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.amount < 0, -Transaction.amount),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("expenses"),
             )
             .where(
                 Transaction.date >= lookback_start,
                 Transaction.date < end,
                 Transaction.is_transfer.is_(False),
             )
-            .group_by("month")
-            .order_by("month")
+            .group_by(_m_expr)
+            .order_by(_m_expr)
         ).all()
 
         incomes: list[float] = []
         expenses: list[float] = []
-        for _, total in rows:
-            t = float(total or 0)
-            if t > 0:
-                incomes.append(t)
-            else:
-                expenses.append(-t)
+        for _, inc, exp in rows:
+            incomes.append(float(inc or 0))
+            expenses.append(float(exp or 0))
         avg_income = Decimal(str(mean(incomes))) if incomes else Decimal("0")
         avg_expenses = Decimal(str(mean(expenses))) if expenses else Decimal("0")
 

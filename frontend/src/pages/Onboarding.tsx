@@ -1,7 +1,51 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink, Sparkles } from "lucide-react";
 import { api } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
+
+// Personlighets-quiz: 3 frågor som styr event-mix + Wellbeing-trösklar.
+// Sparas via POST /wellbeing/personality. Inget "rätt" svar.
+const PERSONALITY_QUESTIONS = [
+  {
+    key: "introvert_score" as const,
+    question: "Vad ger dig energi?",
+    answers: [
+      { value: 10, text: "Att hänga med många människor — ju fler desto bättre" },
+      { value: 30, text: "Att umgås med några kompisar i taget" },
+      { value: 50, text: "Mix av båda — beror på dagen" },
+      { value: 70, text: "Mest tid själv eller med en eller två" },
+      { value: 90, text: "Ensam tid — fest dränerar mig snabbt" },
+    ],
+  },
+  {
+    key: "thrill_seeker_score" as const,
+    question: "Hur tänker du om risker?",
+    answers: [
+      { value: 10, text: "Säkra val — buffert framför nöje" },
+      { value: 30, text: "Mest säkert men någon impulskonsumtion" },
+      { value: 50, text: "Beror på — jag väger för och emot" },
+      { value: 70, text: "Jag chansar gärna när det är värt det" },
+      { value: 90, text: "Livet är kort — gör grejer som känns rätt nu" },
+    ],
+  },
+  {
+    key: "family_oriented_score" as const,
+    question: "Hur viktigt är familjeevenemang?",
+    answers: [
+      { value: 10, text: "Familj är viktigt men separat från mitt liv" },
+      { value: 30, text: "Jag deltar i de flesta men inte alla" },
+      { value: 50, text: "Mix — beror på vem och vad" },
+      { value: 70, text: "Familj är viktigt — försöker alltid vara med" },
+      { value: 90, text: "Familjen kommer först, alltid" },
+    ],
+  },
+];
+
+type PersonalityScores = {
+  introvert_score: number;
+  thrill_seeker_score: number;
+  family_oriented_score: number;
+};
 
 type Profile = {
   student_id: number;
@@ -84,6 +128,13 @@ export default function Onboarding() {
   const [edited, setEdited] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [personalityStep, setPersonalityStep] = useState(0);
+  const [personalityScores, setPersonalityScores] = useState<PersonalityScores>({
+    introvert_score: 50,
+    thrill_seeker_score: 50,
+    family_oriented_score: 50,
+  });
+  const [personalitySaving, setPersonalitySaving] = useState(false);
 
   // Onboarding renderas av App.tsx oavsett URL för elever som inte
   // är klara med onboarding. Om eleven försökte gå till en specifik
@@ -187,8 +238,9 @@ export default function Onboarding() {
         <div className="flex items-center gap-3">
           {[
             { i: 0, label: "Profil" },
-            { i: 1, label: "Skatt" },
-            { i: 2, label: "Budget" },
+            { i: 1, label: "Personlighet" },
+            { i: 2, label: "Skatt" },
+            { i: 3, label: "Budget" },
           ].map((s) => (
             <div key={s.i} className="flex-1 flex items-center gap-2">
               <span
@@ -253,11 +305,105 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Steg 2: Skatt */}
+        {/* Steg 2: Personlighet (3 frågor) */}
         {step === 1 && (
           <div className="space-y-5">
             <div>
-              <div className="eyebrow mb-1">Steg 2 av 3</div>
+              <div className="eyebrow mb-1">Steg 2 av 4</div>
+              <h2 className="serif text-2xl leading-tight flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-600" />
+                Lär systemet känna dig
+              </h2>
+            </div>
+            <p className="body-prose text-sm">
+              Tre korta frågor — det finns inga rätta svar. Det här påverkar
+              vilka events och nudges du får, men aldrig om du "lyckas". Du kan
+              ändra senare.
+            </p>
+            {(() => {
+              const q = PERSONALITY_QUESTIONS[personalityStep];
+              const isLast =
+                personalityStep === PERSONALITY_QUESTIONS.length - 1;
+              const pickAnswer = (value: number) => {
+                const next = { ...personalityScores, [q.key]: value };
+                setPersonalityScores(next);
+                if (isLast) {
+                  setPersonalitySaving(true);
+                  api("/wellbeing/personality", {
+                    method: "POST",
+                    body: JSON.stringify(next),
+                  })
+                    .then(() => setStep(2))
+                    .catch((e) =>
+                      setErr(e instanceof Error ? e.message : String(e)),
+                    )
+                    .finally(() => setPersonalitySaving(false));
+                } else {
+                  setPersonalityStep(personalityStep + 1);
+                }
+              };
+              return (
+                <div className="bg-paper border-[1.5px] border-rule p-5 space-y-3">
+                  <div className="text-xs uppercase tracking-eyebrow text-[#999]">
+                    Fråga {personalityStep + 1} / {PERSONALITY_QUESTIONS.length}
+                  </div>
+                  <div className="font-medium text-ink text-lg">{q.question}</div>
+                  <div className="space-y-1.5">
+                    {q.answers.map((a) => (
+                      <button
+                        key={a.value}
+                        onClick={() => pickAnswer(a.value)}
+                        disabled={personalitySaving}
+                        className="w-full text-left p-3 border-[1.5px] border-rule bg-white hover:border-ink text-sm disabled:opacity-50"
+                      >
+                        {a.text}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="flex justify-between pt-3">
+              <button
+                onClick={() => {
+                  if (personalityStep > 0) {
+                    setPersonalityStep(personalityStep - 1);
+                  } else {
+                    setStep(0);
+                  }
+                }}
+                className="text-sm nav-link inline-flex items-center"
+              >
+                ← Tillbaka
+              </button>
+              <button
+                onClick={() => {
+                  // Hoppa över med default-värden (50 över hela linjen)
+                  setPersonalitySaving(true);
+                  api("/wellbeing/personality", {
+                    method: "POST",
+                    body: JSON.stringify(personalityScores),
+                  })
+                    .then(() => setStep(2))
+                    .catch((e) =>
+                      setErr(e instanceof Error ? e.message : String(e)),
+                    )
+                    .finally(() => setPersonalitySaving(false));
+                }}
+                disabled={personalitySaving}
+                className="text-sm text-[#888] hover:text-ink"
+              >
+                Hoppa över — använd default
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Steg 3: Skatt */}
+        {step === 2 && (
+          <div className="space-y-5">
+            <div>
+              <div className="eyebrow mb-1">Steg 3 av 4</div>
               <h2 className="serif text-2xl leading-tight">Vad händer med din lön?</h2>
             </div>
             <p className="body-prose text-sm">
@@ -288,13 +434,13 @@ export default function Onboarding() {
             </details>
             <div className="flex justify-between pt-3">
               <button
-                onClick={() => setStep(0)}
+                onClick={() => setStep(1)}
                 className="text-sm nav-link inline-flex items-center"
               >
                 ← Tillbaka
               </button>
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(3)}
                 className="btn-dark rounded-md px-5 py-2.5 flex items-center gap-2"
               >
                 Sätt en budget <ArrowRight className="w-4 h-4" />
@@ -303,11 +449,11 @@ export default function Onboarding() {
           </div>
         )}
 
-        {/* Steg 3: Budget */}
-        {step === 2 && (
+        {/* Steg 4: Budget */}
+        {step === 3 && (
           <div className="space-y-5">
             <div>
-              <div className="eyebrow mb-1">Steg 3 av 3</div>
+              <div className="eyebrow mb-1">Steg 4 av 4</div>
               <h2 className="serif text-2xl leading-tight">Sätt din månadsbudget</h2>
             </div>
             <p className="body-prose text-sm">
@@ -375,7 +521,7 @@ export default function Onboarding() {
             </div>
             <div className="flex justify-between pt-3 flex-wrap gap-2">
               <button
-                onClick={() => setStep(1)}
+                onClick={() => setStep(2)}
                 className="text-sm nav-link inline-flex items-center"
               >
                 ← Tillbaka

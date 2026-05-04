@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Brain, Check, Image, Key, Loader2, Mail, Send, ShieldCheck,
-  Trash2, Upload, X, Zap,
+  ArrowLeft, Brain, Check, Database, Image, Key, Loader2, Mail, Send, ShieldCheck,
+  Trash2, Upload, Wrench, X, Zap,
 } from "lucide-react";
 import { api, ApiError, getApiBase, getToken } from "@/api/client";
 
@@ -17,6 +17,7 @@ type TeacherRow = {
   ai_requests_count: number;
   ai_input_tokens: number;
   ai_output_tokens: number;
+  ai_chat_daily_quota: number;
 };
 
 type Status = { client_available: boolean };
@@ -127,6 +128,25 @@ export default function AdminAI() {
         {
           method: "POST",
           body: JSON.stringify({ enabled: !t.ai_enabled }),
+        },
+      );
+      setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setToggling(null);
+    }
+  }
+
+  async function setChatQuota(t: TeacherRow, value: number) {
+    const key = `quota-${t.id}`;
+    setToggling(key);
+    try {
+      const updated = await api<TeacherRow>(
+        `/admin/ai/teachers/${t.id}/chat-quota`,
+        {
+          method: "POST",
+          body: JSON.stringify({ daily_quota: value }),
         },
       );
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
@@ -301,6 +321,12 @@ export default function AdminAI() {
         </div>
       </section>
 
+      {/* Finnhub-nyckel för aktiekurser */}
+      <FinnhubSection />
+
+      {/* Klassdisplay-toggles per lärare */}
+      <ClassDisplaySection />
+
       {/* SMTP-konfiguration */}
       <SmtpSection />
 
@@ -329,6 +355,9 @@ export default function AdminAI() {
               <th className="text-right px-4 py-2">Anrop</th>
               <th className="text-right px-4 py-2">In / Ut</th>
               <th className="text-center px-4 py-2">AI</th>
+              <th className="text-center px-4 py-2" title="AI-chatt frågor/dag per elev">
+                Chat-kvot
+              </th>
               <th className="text-center px-4 py-2">Super</th>
             </tr>
           </thead>
@@ -361,6 +390,13 @@ export default function AdminAI() {
                   />
                 </td>
                 <td className="px-4 py-2 text-center">
+                  <ChatQuotaInput
+                    value={t.ai_chat_daily_quota}
+                    busy={toggling === `quota-${t.id}`}
+                    onChange={(v) => setChatQuota(t, v)}
+                  />
+                </td>
+                <td className="px-4 py-2 text-center">
                   <ToggleButton
                     active={t.is_super_admin}
                     loading={toggling === `super-${t.id}`}
@@ -386,9 +422,303 @@ export default function AdminAI() {
           lärare. Din egen super-status kan du inte ta bort själv.
         </p>
       </div>
+
+      <DbMigrationsCard />
+
+      <StocksDiagnosticsCard />
     </div>
   );
 }
+
+
+function StocksDiagnosticsCard() {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<Record<string, unknown> | null>(null);
+  const [pollResult, setPollResult] = useState<Record<string, unknown> | null>(null);
+  const [yfTest, setYfTest] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function loadStatus() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await api<Record<string, unknown>>("/admin/ai/db/stocks-status");
+      setStatus(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pollNow() {
+    setBusy(true);
+    setErr(null);
+    setPollResult(null);
+    try {
+      const res = await api<Record<string, unknown>>("/admin/ai/db/stocks-poll-now", {
+        method: "POST",
+      });
+      setPollResult(res);
+      await loadStatus();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testYf() {
+    setBusy(true);
+    setErr(null);
+    setYfTest(null);
+    try {
+      const res = await api<Record<string, unknown>>("/admin/ai/db/yfinance-test", {
+        method: "POST",
+      });
+      setYfTest(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const [studentId, setStudentId] = useState("");
+  const [tradeInspect, setTradeInspect] = useState<Record<string, unknown> | null>(null);
+
+  async function inspectTrades() {
+    if (!studentId) return;
+    setBusy(true);
+    setErr(null);
+    setTradeInspect(null);
+    try {
+      const res = await api<Record<string, unknown>>(
+        `/admin/ai/db/inspect-stock-trades?student_id=${studentId}`,
+      );
+      setTradeInspect(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Database className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">Aktiekurs-diagnostik</h2>
+      </div>
+      <p className="text-sm text-slate-700">
+        Visa pollerstatus + tvinga manuell hämtning av kurser. Användbart
+        om eleven ser tomma kurser eller "marknaden stängd"-banner när
+        börsen borde vara öppen.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={loadStatus}
+          disabled={busy}
+          className="border border-slate-300 hover:bg-slate-50 rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Hämta status"}
+        </button>
+        <button
+          onClick={pollNow}
+          disabled={busy}
+          className="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Polla kurser nu"}
+        </button>
+        <button
+          onClick={testYf}
+          disabled={busy}
+          className="border border-amber-300 hover:bg-amber-50 text-amber-800 rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testa YFinance"}
+        </button>
+        <input
+          value={studentId}
+          onChange={(e) => setStudentId(e.target.value)}
+          placeholder="Elev-ID"
+          className="border rounded px-2 py-1 text-sm w-24"
+        />
+        <button
+          onClick={inspectTrades}
+          disabled={busy || !studentId}
+          className="border border-purple-300 hover:bg-purple-50 text-purple-800 rounded-md px-3 py-2 text-sm disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Inspektera trades för elev"}
+        </button>
+      </div>
+      {err && (
+        <div className="text-sm text-rose-600 border-l-2 border-rose-300 pl-3 py-1">
+          {err}
+        </div>
+      )}
+      {pollResult && (
+        <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          Poll-resultat: {JSON.stringify(pollResult, null, 2)}
+        </pre>
+      )}
+      {yfTest && (
+        <pre className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          YFinance-test: {JSON.stringify(yfTest, null, 2)}
+        </pre>
+      )}
+      {tradeInspect && (
+        <pre className="bg-purple-50 border border-purple-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          Trade-inspektion: {JSON.stringify(tradeInspect, null, 2)}
+        </pre>
+      )}
+      {status && (
+        <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto">
+          {JSON.stringify(status, null, 2)}
+        </pre>
+      )}
+    </section>
+  );
+}
+
+
+function DbMigrationsCard() {
+  const [busy, setBusy] = useState<"master" | "scope" | null>(null);
+  const [log, setLog] = useState<string[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [columns, setColumns] = useState<Record<string, string[]> | null>(null);
+
+  async function runMaster() {
+    if (!confirm(
+      "Tvinga master-DB-migrationerna att köra direkt mot databasen?\n\n" +
+      "Idempotent — säker att köra om en migration tidigare failat. " +
+      "Loggen visar exakt vad som hände.",
+    )) return;
+    setBusy("master");
+    setErr(null);
+    setLog(null);
+    try {
+      const res = await api<{ ok: boolean; log: string[] }>(
+        "/admin/ai/db/run-migrations",
+        { method: "POST" },
+      );
+      setLog(res.log);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runScope() {
+    if (!confirm(
+      "Tvinga SCOPE-DB-migrationerna att köra (loans.loan_kind etc.)?\n\n" +
+      "Behövs efter en deploy om Postgres-loggar visar t.ex. " +
+      "'column loans.loan_kind does not exist'. Idempotent.",
+    )) return;
+    setBusy("scope");
+    setErr(null);
+    setLog(null);
+    try {
+      const res = await api<{ ok: boolean; log: string[] }>(
+        "/admin/ai/db/run-scope-migrations",
+        { method: "POST" },
+      );
+      setLog(res.log);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function loadColumns() {
+    try {
+      const res = await api<{ tables: Record<string, string[]> }>(
+        "/admin/ai/db/scope-columns",
+      );
+      setColumns(res.tables);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Database className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">DB-migrationer</h2>
+      </div>
+      <p className="text-sm text-slate-700">
+        Tvinga DB-migrationerna att köra. Master-migrationerna gäller
+        teachers/students/profiles, scope-migrationerna gäller alla
+        elevdata-tabeller (loans, transactions, accounts osv).
+        Idempotent.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={runMaster}
+          disabled={busy !== null}
+          className="bg-brand-600 hover:bg-brand-700 text-white rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+        >
+          {busy === "master" ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Wrench className="w-4 h-4" />
+          )}
+          Master-migrationer
+        </button>
+        <button
+          onClick={runScope}
+          disabled={busy !== null}
+          className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+        >
+          {busy === "scope" ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Wrench className="w-4 h-4" />
+          )}
+          Scope-migrationer (loans, transactions…)
+        </button>
+        <button
+          onClick={loadColumns}
+          disabled={busy !== null}
+          className="border border-slate-300 hover:bg-slate-50 rounded-md px-3 py-2 text-sm"
+        >
+          Visa scope-kolumner
+        </button>
+        {log && (
+          <span className="text-xs text-emerald-700">
+            Klart — {log.length} log-rader
+          </span>
+        )}
+      </div>
+      {err && (
+        <div className="text-sm text-rose-600 border-l-2 border-rose-300 pl-3 py-1">
+          {err}
+        </div>
+      )}
+      {log && log.length > 0 && (
+        <pre className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-700 overflow-x-auto whitespace-pre-wrap max-h-80">
+          {log.join("\n")}
+        </pre>
+      )}
+      {columns && (
+        <div className="text-xs space-y-2">
+          <div className="font-semibold">Scope-DB-kolumner per tabell:</div>
+          {Object.entries(columns).map(([tbl, cols]) => (
+            <div key={tbl} className="border-l-2 border-slate-200 pl-2">
+              <div className="font-medium text-slate-800">{tbl}</div>
+              <div className="text-slate-500 break-all">
+                {cols.length === 0 ? "(tabell finns inte)" : cols.join(", ")}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -398,6 +728,44 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function ChatQuotaInput({
+  value, busy, onChange,
+}: {
+  value: number;
+  busy: boolean;
+  onChange: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState<string>(String(value));
+  useEffect(() => { setDraft(String(value)); }, [value]);
+  function commit() {
+    const n = parseInt(draft, 10);
+    if (Number.isNaN(n) || n < 0 || n > 200) {
+      setDraft(String(value));
+      return;
+    }
+    if (n !== value) onChange(n);
+  }
+  return (
+    <input
+      type="number"
+      min={0}
+      max={200}
+      value={draft}
+      disabled={busy}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className={`w-16 text-center border rounded px-1 py-0.5 text-xs ${
+        busy ? "opacity-50" : ""
+      }`}
+      title="Frågor/dag per elev (0 = chatt avstängd)"
+    />
+  );
+}
+
 
 function ToggleButton({
   active, loading, onClick, labelOn, labelOff,
@@ -1097,6 +1465,386 @@ function LandingVariantSection() {
         Tips: öppna ekonomilabbet.org i en privat flik efter byte för
         att slippa cachning.
       </p>
+    </section>
+  );
+}
+
+// ---------- Finnhub (aktiekurser) ----------
+
+type FinnhubKeyStatus = {
+  configured: boolean;
+  source: string;     // "db" | "env" | ""
+  preview: string;
+};
+
+type FinnhubTestResult = {
+  ok: boolean;
+  ticker?: string;
+  last?: number;
+  change_pct?: number | null;
+  ts?: string;
+  error?: string;
+};
+
+function FinnhubSection() {
+  const [status, setStatus] = useState<FinnhubKeyStatus | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<FinnhubTestResult | null>(null);
+
+  async function reload() {
+    try {
+      const r = await api<FinnhubKeyStatus>("/admin/ai/finnhub-key");
+      setStatus(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  async function save() {
+    if (!newKey.trim() || newKey.trim().length < 10) {
+      setMsg("Nyckeln ser för kort ut. Hämta från finnhub.io/dashboard.");
+      return;
+    }
+    setBusy(true); setMsg(null); setTestResult(null);
+    try {
+      const r = await api<FinnhubKeyStatus>("/admin/ai/finnhub-key", {
+        method: "POST",
+        body: JSON.stringify({ key: newKey.trim() }),
+      });
+      setStatus(r);
+      setNewKey("");
+      setMsg("Nyckel sparad. Klicka 'Testa nyckel' för att verifiera.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm(
+      "Radera Finnhub-nyckeln? Aktiekurserna faller tillbaka till mock-" +
+      "providern (slumpgenererade testpriser) tills en ny nyckel " +
+      "läggs in eller FINNHUB_API_KEY-env är satt.",
+    )) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api<FinnhubKeyStatus>("/admin/ai/finnhub-key", {
+        method: "DELETE",
+      });
+      setStatus(r);
+      setMsg("Nyckeln raderad.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testKey() {
+    setBusy(true); setMsg(null); setTestResult(null);
+    try {
+      const r = await api<FinnhubTestResult>("/admin/ai/finnhub-test", {
+        method: "POST",
+      });
+      setTestResult(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Key className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">Finnhub API-nyckel (aktiekurser)</h2>
+      </div>
+      <div className="text-sm text-slate-700 space-y-1">
+        <div>
+          Status:{" "}
+          {status?.configured ? (
+            <span className="font-medium text-emerald-700">
+              Konfigurerad {status.preview && `(${status.preview})`}
+            </span>
+          ) : (
+            <span className="font-medium text-amber-700">
+              Saknas — kurser visas från mock-data tills nyckel läggs in
+            </span>
+          )}
+        </div>
+        {status?.source && (
+          <div className="text-xs text-slate-500">
+            Källa:{" "}
+            {status.source === "db"
+              ? "sparad via detta formulär"
+              : "FINNHUB_API_KEY (miljövariabel)"}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-slate-600">
+          {status?.configured ? "Byt nyckel" : "Lägg in nyckel"}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder="t.ex. cnp9j8pr01qkvl4t1l3gcnp9j8pr01qkvl4t1l40"
+            className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm font-mono"
+            disabled={busy}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button
+            onClick={save}
+            disabled={busy || !newKey.trim()}
+            className="btn-dark rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+          >
+            {busy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            Spara
+          </button>
+        </div>
+        <p className="text-xs text-slate-500">
+          Skapa gratis konto på{" "}
+          <a
+            href="https://finnhub.io/register"
+            target="_blank" rel="noreferrer"
+            className="underline text-brand-700"
+          >
+            finnhub.io
+          </a>
+          {" "}— gratis nivå räcker (60 anrop/min, vi använder ~30/poll).
+          Nyckeln lagras i master-DB och används av aktiepollern.
+        </p>
+        <div className="flex gap-2 items-center flex-wrap">
+          {status?.configured && (
+            <button
+              onClick={testKey}
+              disabled={busy}
+              className="text-xs bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 px-3 py-1.5 rounded-md disabled:opacity-50"
+            >
+              Testa nyckel (hämta VOLV-B.ST)
+            </button>
+          )}
+          {status?.source === "db" && (
+            <button
+              onClick={remove}
+              disabled={busy}
+              className="text-xs text-rose-600 hover:text-rose-800 flex items-center gap-1 disabled:opacity-50"
+            >
+              <Trash2 className="w-3 h-3" />
+              Radera sparad nyckel
+            </button>
+          )}
+        </div>
+        {testResult && (
+          <div className={`text-xs rounded p-2 ${
+            testResult.ok
+              ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+              : "bg-rose-50 border border-rose-200 text-rose-900"
+          }`}>
+            {testResult.ok ? (
+              <>
+                ✓ Fungerar! {testResult.ticker} = {testResult.last} SEK
+                {testResult.change_pct !== null && testResult.change_pct !== undefined && (
+                  <> ({testResult.change_pct >= 0 ? "+" : ""}{testResult.change_pct.toFixed(2)} %)</>
+                )}
+                {testResult.ts && <> · {new Date(testResult.ts).toLocaleString("sv-SE")}</>}
+              </>
+            ) : (
+              <>✗ {testResult.error}</>
+            )}
+          </div>
+        )}
+        {msg && (
+          <div className="text-xs bg-slate-50 border border-slate-200 rounded p-2 text-slate-700">
+            {msg}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ---------- Klassdisplay-inställningar (Wellbeing-events) ----------
+
+type ClassDisplaySettings = {
+  teacher_id: number;
+  teacher_email: string;
+  teacher_name: string;
+  class_list_enabled: boolean;
+  show_full_names: boolean;
+  invite_classmates_enabled: boolean;
+  cost_split_model: string;
+  class_event_creation_enabled: boolean;
+  max_invites_per_week: number;
+};
+
+function ClassDisplaySection() {
+  const [rows, setRows] = useState<ClassDisplaySettings[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function reload() {
+    setLoading(true);
+    try {
+      const r = await api<ClassDisplaySettings[]>("/admin/ai/class-display");
+      setRows(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { reload(); }, []);
+
+  async function update(teacherId: number, patch: Partial<ClassDisplaySettings>) {
+    setBusyId(teacherId);
+    setMsg(null);
+    try {
+      await api<ClassDisplaySettings>("/admin/ai/class-display", {
+        method: "POST",
+        body: JSON.stringify({ teacher_id: teacherId, ...patch }),
+      });
+      await reload();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="w-5 h-5 text-brand-600" />
+        <h2 className="font-medium">Klass-funktioner (Wellbeing &amp; events)</h2>
+      </div>
+      <div className="text-xs text-slate-600">
+        Per-lärar-toggles för Wellbeing-events. Default: minimal exponering
+        — bara klasskompis-bjudningar är på, klasslista och fullständiga
+        namn är av. Eleverna kan inte se varandras Wellbeing förrän
+        läraren explicit slår på det.
+      </div>
+
+      {loading && <div className="text-sm text-slate-500">Laddar…</div>}
+      {msg && (
+        <div className="text-xs bg-rose-50 border border-rose-200 rounded p-2 text-rose-900">
+          {msg}
+        </div>
+      )}
+
+      {!loading && rows.length === 0 && (
+        <div className="text-sm text-slate-500">Inga lärare hittade.</div>
+      )}
+
+      {rows.map((r) => (
+        <div key={r.teacher_id} className="border rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="font-medium text-sm">{r.teacher_name}</div>
+              <div className="text-xs text-slate-500">{r.teacher_email}</div>
+            </div>
+            {busyId === r.teacher_id && (
+              <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.invite_classmates_enabled}
+                onChange={(e) =>
+                  update(r.teacher_id, { invite_classmates_enabled: e.target.checked })
+                }
+                disabled={busyId === r.teacher_id}
+              />
+              Klasskompis-bjudningar tillåtna
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.class_list_enabled}
+                onChange={(e) =>
+                  update(r.teacher_id, { class_list_enabled: e.target.checked })
+                }
+                disabled={busyId === r.teacher_id}
+              />
+              Anonymiserad klasslista (Wellbeing-rangordning)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.show_full_names}
+                onChange={(e) =>
+                  update(r.teacher_id, { show_full_names: e.target.checked })
+                }
+                disabled={busyId === r.teacher_id || !r.class_list_enabled}
+              />
+              <span className={!r.class_list_enabled ? "text-slate-400" : ""}>
+                Visa namn (kräver elev-opt-in)
+              </span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={r.class_event_creation_enabled}
+                onChange={(e) =>
+                  update(r.teacher_id, {
+                    class_event_creation_enabled: e.target.checked,
+                  })
+                }
+                disabled={busyId === r.teacher_id}
+              />
+              Klassgemensamma events (V2)
+            </label>
+            <label className="flex items-center gap-2">
+              Kostnadsmodell:
+              <select
+                value={r.cost_split_model}
+                onChange={(e) =>
+                  update(r.teacher_id, { cost_split_model: e.target.value })
+                }
+                disabled={busyId === r.teacher_id}
+                className="border rounded px-2 py-1 text-xs"
+              >
+                <option value="split">Dela jämnt</option>
+                <option value="inviter_pays">Bjudaren betalar</option>
+                <option value="each_pays_own">Var och en betalar sig själv</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              Max bjudningar/vecka:
+              <input
+                type="number"
+                min={0} max={50}
+                value={r.max_invites_per_week}
+                onChange={(e) =>
+                  update(r.teacher_id, {
+                    max_invites_per_week: parseInt(e.target.value || "0"),
+                  })
+                }
+                disabled={busyId === r.teacher_id}
+                className="border rounded px-2 py-1 text-xs w-16"
+              />
+            </label>
+          </div>
+        </div>
+      ))}
     </section>
   );
 }

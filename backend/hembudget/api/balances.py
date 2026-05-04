@@ -1,16 +1,25 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..chat import tools as chat_tools
 from ..db.models import Account, FundHolding, Transaction
 from .deps import db, require_auth
+
+
+def _released_filter():
+    """Realtid-projektion · samma princip som /v2/bank — exkludera
+    transaktioner som ännu inte släppts till eleven."""
+    return or_(
+        Transaction.released_at.is_(None),
+        Transaction.released_at <= datetime.utcnow(),
+    )
 
 router = APIRouter(prefix="/balances", tags=["balances"], dependencies=[Depends(require_auth)])
 
@@ -52,7 +61,7 @@ def list_balances(
         q = session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
             Transaction.account_id == acc.id,
             Transaction.date <= target_date,
-        )
+        ).filter(_released_filter())
         if start is not None:
             q = q.filter(Transaction.date > start)
         movement = Decimal(str(q.scalar() or 0))
@@ -130,12 +139,29 @@ def net_worth_timeline(
     session: Session = Depends(db),
 ) -> dict:
     """Nettoförmögenhet = sum(alla kontosaldon) - sum(alla lånesaldon),
-    per månad. Negativa kontotyper (credit) räknas som skuld redan."""
+    per månad. Negativa kontotyper (credit) räknas som skuld redan.
+
+    Genererar alltid `months` punkter (slutet av varje historisk
+    månad). Om eleven inte har några konton ännu blir assets=0 men
+    widgeten kan ändå rendera. Om lånesaldo är 0 och inga konton finns
+    blir alla punkter (0, 0, 0) — frontend kan välja att visa eller
+    dölja widgeten utifrån det.
+    """
+    from datetime import date, timedelta
     from ..db.models import Loan
     from ..loans.matcher import LoanMatcher
 
+    # Bygg först alla 12 datumpunkter (sista dagen i varje historisk månad).
+    today = date.today().replace(day=1)
+    cur = today
+    timeline: list[date] = []
+    for _ in range(months):
+        timeline.append(cur - timedelta(days=1))
+        cur = (cur - timedelta(days=1)).replace(day=1)
+    timeline = sorted(timeline)
+
+    # Plocka tillgångar per punkt — fallback 0 om kontot saknas.
     history = chat_tools.get_balance_history(session, months=months)
-    # history.series är per konto; summera per tidpunkt
     totals: dict[str, float] = {}
     for serie in history.get("series", []):
         for p in serie["points"]:
@@ -152,11 +178,11 @@ def net_worth_timeline(
 
     points = [
         {
-            "date": d,
-            "assets": round(totals[d], 2),
+            "date": d.isoformat(),
+            "assets": round(totals.get(d.isoformat(), 0.0), 2),
             "debt": round(debt, 2),
-            "net_worth": round(totals[d] - debt, 2),
+            "net_worth": round(totals.get(d.isoformat(), 0.0) - debt, 2),
         }
-        for d in sorted(totals)
+        for d in timeline
     ]
     return {"points": points, "current_debt": round(debt, 2)}

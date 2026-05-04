@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veckans val · Elev · Vol. 08</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+:root {
+  --bg-deep: #0a0e1a; --bg-mid: #0f1525;
+  --warm: #fbbf24;
+  --line: rgba(255,255,255,0.1); --line-strong: rgba(255,255,255,0.18);
+  --text: rgba(255,255,255,0.92); --text-mid: rgba(255,255,255,0.6); --text-dim: rgba(255,255,255,0.4);
+}
+body { background: var(--bg-deep); color: var(--text); position: relative; min-height: 100vh; overflow-x: hidden; }
+
+/* Scen-bakgrunder förändrar atmosfär per scen */
+body[data-scene="kitchen-morning"]::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 75% 25%, rgba(251,191,36,0.16) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 30% 70%, rgba(220,76,43,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #1a1410 0%, var(--bg-deep) 50%, var(--bg-mid) 100%);
+}
+body[data-scene="phone-call"]::before {
+  background:
+    radial-gradient(ellipse 50% 60% at 80% 30%, rgba(220,76,43,0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 70% at 25% 75%, rgba(15,21,37,0.6) 0%, transparent 60%),
+    linear-gradient(180deg, #1a0f0c 0%, var(--bg-deep) 60%, #1a0f0c 100%);
+}
+body[data-scene="bank-evening"]::before {
+  background:
+    radial-gradient(ellipse 65% 55% at 50% 30%, rgba(99,102,241,0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 70% at 50% 100%, rgba(15,21,37,0.6) 0%, transparent 60%),
+    linear-gradient(180deg, #0f1a26 0%, var(--bg-deep) 60%, #0f1525 100%);
+}
+body[data-scene="reflection"]::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 50%, rgba(251,191,36,0.10) 0%, transparent 60%),
+    linear-gradient(180deg, #14110a 0%, var(--bg-deep) 100%);
+}
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0;
+  transition: background 1.2s var(--ease);
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,0.018) 50%, transparent 50.5%),
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,0.018) 50%, transparent 50.5%);
+  background-size: 96px 96px;
+  mask-image: radial-gradient(ellipse 70% 60% at center, black 0%, transparent 80%);
+  opacity: 0.4;
+}
+
+/* TOPBAR */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 80;
+  background: rgba(10,14,26,0.85); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 22px; gap: 22px;
+}
+.tb-brand { font-family: var(--serif); font-weight: 700; font-size: 16px; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 9px; }
+.tb-brand::before { content: "●"; color: var(--accent); font-size: 11px; }
+.tb-brand-meta { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--text-dim); margin-left: 4px; }
+.tb-progress { font-family: var(--mono); font-size: 10px; letter-spacing: 1.4px; color: var(--text-dim); text-transform: uppercase; }
+.tb-progress strong { color: #fff; }
+.tb-spacer { flex: 1; }
+.tb-bookmark {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 7px 12px; border-radius: 100px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--line-strong);
+  color: var(--text); cursor: pointer; text-decoration: none;
+}
+.tb-bookmark:hover { background: rgba(251,191,36,0.12); border-color: var(--warm); color: var(--warm); }
+.tb-echo {
+  background: var(--warm); color: #422006; border: 0;
+  padding: 8px 14px; border-radius: 100px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tb-echo::before { content: "●"; }
+.tb-user { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a83817); color: #fff; font-family: var(--serif); font-weight: 700; font-size: 14px; display: grid; place-items: center; text-decoration: none; }
+
+/* SCEN-SYSTEM */
+.app { padding-top: 56px; position: relative; z-index: 5; min-height: 100vh; }
+.scene { display: none; min-height: calc(100vh - 56px); }
+.scene.active { display: flex; flex-direction: column; animation: scenefade .5s var(--ease); }
+@keyframes scenefade { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+.shell { max-width: 1100px; margin: 0 auto; padding: 56px clamp(20px, 5vw, 60px) 80px; width: 100%; }
+
+/* PILL */
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  padding: 7px 14px; border-radius: 100px;
+  background: rgba(15,21,37,0.7); border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.pill::before { content: "●"; color: var(--accent); font-size: 10px; }
+.pill.warm::before { color: var(--warm); }
+
+/* === SCEN-LAYOUT === */
+.scene-eyebrow {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.scene-eyebrow::before { content: "●"; }
+.scene-eyebrow .sep { color: var(--text-dim); }
+
+.scene-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(40px, 6vw, 80px);
+  letter-spacing: -2px; line-height: 1;
+  color: #fff; margin-bottom: 22px;
+}
+.scene-h1 em { font-style: italic; color: var(--warm); font-weight: 500; }
+.scene-h1 strong { color: var(--accent); font-weight: 700; }
+
+.scene-lead {
+  font-family: var(--serif); font-size: clamp(17px, 2vw, 22px);
+  line-height: 1.45; color: var(--text);
+  max-width: 760px; margin-bottom: 28px;
+}
+.scene-lead em { font-style: italic; color: var(--warm); }
+.scene-lead strong { color: var(--accent); font-weight: 700; }
+
+/* Karaktärs-kort i topp av scen */
+.char-card {
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--warm);
+  border-radius: 6px;
+  padding: 18px 22px;
+  max-width: 460px;
+  margin-bottom: 32px;
+  backdrop-filter: blur(8px);
+}
+.char-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 6px;
+}
+.char-eye::before { content: "● "; }
+.char-line {
+  font-family: var(--serif); font-size: 16px; line-height: 1.5;
+  color: var(--text);
+}
+.char-line em { font-style: italic; color: var(--warm); }
+.char-line strong { color: var(--accent); font-weight: 700; }
+.char-meta {
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 10px;
+}
+
+/* Konsekvens-kort (val) */
+.choices {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; margin-top: 24px;
+}
+@media (max-width: 900px) { .choices { grid-template-columns: 1fr; } }
+
+.choice {
+  background: rgba(15,21,37,0.8);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: 22px 24px;
+  text-decoration: none; color: var(--text);
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: all .3s var(--ease);
+  position: relative; overflow: hidden;
+  min-height: 240px;
+}
+.choice:hover {
+  border-color: var(--warm);
+  background: rgba(15,21,37,1);
+  transform: translateY(-4px);
+}
+.choice::after {
+  content: ""; position: absolute; right: -50px; top: -50px;
+  width: 140px; height: 140px;
+  background: radial-gradient(circle, rgba(251,191,36,0.10), transparent 70%);
+  opacity: 0; transition: opacity .3s var(--ease);
+}
+.choice:hover::after { opacity: 1; }
+.choice-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm);
+}
+.choice-eye::before { content: "● "; }
+.choice-h {
+  font-family: var(--serif); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.5px; color: #fff; line-height: 1.15;
+}
+.choice-h em { font-style: italic; color: var(--warm); font-weight: 500; }
+.choice-prose {
+  font-family: var(--serif); font-size: 14.5px; line-height: 1.5;
+  color: var(--text-mid); flex: 1;
+}
+.choice-prose strong { color: var(--text); font-weight: 700; }
+
+.consequence {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.consequence-line {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: 0.6px; color: var(--text-mid);
+}
+.consequence-line strong { font-family: var(--serif); font-style: italic; }
+.consequence-line.up strong { color: #6ee7b7; }
+.consequence-line.down strong { color: #fca5a5; }
+.consequence-line.flat strong { color: var(--text-mid); }
+
+/* Mini pentagon i kortet */
+.mini-pent-svg {
+  width: 60px; height: 60px;
+  position: absolute; bottom: 16px; right: 16px;
+  opacity: 0.7;
+}
+.mini-pent-svg .axes { fill: none; stroke: rgba(255,255,255,0.18); stroke-width: 0.6; }
+.mini-pent-svg .now { fill: rgba(220,76,43,0.25); stroke: var(--accent); stroke-width: 1.4; }
+.mini-pent-svg .now.up { fill: rgba(110,231,183,0.20); stroke: #6ee7b7; }
+.mini-pent-svg .now.flat { fill: rgba(251,191,36,0.20); stroke: var(--warm); }
+
+/* Cinema panel — scen-lager med fotorealistisk bild-suggestion */
+.scene-panel {
+  background: rgba(15,21,37,0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 32px 36px;
+  margin-bottom: 22px;
+  position: relative;
+}
+
+/* Echo-cue under scen */
+.echo-cue {
+  margin-top: 28px;
+  padding: 18px 22px;
+  background: linear-gradient(135deg, rgba(251,191,36,0.08), rgba(15,21,37,0.5));
+  border-left: 3px solid var(--warm);
+  border-radius: 4px;
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 16px; align-items: center;
+}
+.echo-cue-label {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--warm); margin-bottom: 4px;
+}
+.echo-cue-text {
+  font-family: var(--serif); font-style: italic; font-size: 15px;
+  line-height: 1.4; color: var(--text);
+}
+.echo-cue-btn {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 9px 14px; border-radius: 100px;
+  background: var(--warm); color: #422006;
+  border: 0; text-decoration: none; cursor: pointer;
+}
+
+/* Pinned info */
+.scene-foot {
+  margin-top: auto;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.scene-foot a { color: var(--text-mid); text-decoration: none; cursor: pointer; }
+.scene-foot a:hover { color: var(--warm); }
+
+/* Special: tandläkar-call illustration */
+.phone-illust {
+  display: flex; align-items: center; gap: 22px;
+  padding: 22px 26px;
+  background: rgba(220,76,43,0.10);
+  border: 1px solid rgba(220,76,43,0.3);
+  border-radius: 6px;
+  margin-bottom: 26px;
+}
+.phone-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(220,76,43,0.2);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.phone-icon::before {
+  content: ""; position: absolute; inset: -4px;
+  border-radius: 50%; border: 2px solid var(--accent);
+  animation: ring 1.6s ease-out infinite;
+  opacity: 0;
+}
+@keyframes ring {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.phone-icon svg { width: 24px; height: 24px; fill: var(--accent); }
+.phone-text {
+  font-family: var(--serif); font-size: 17px; line-height: 1.4;
+  color: var(--text);
+}
+.phone-text strong { color: var(--accent); font-weight: 700; }
+
+/* Pentagon-mini i hörnet visar nuläge */
+.pent-corner {
+  position: absolute; top: 22px; right: 30px;
+  background: rgba(15,21,37,0.85);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex; align-items: center; gap: 10px;
+  backdrop-filter: blur(8px);
+}
+.pent-corner svg { width: 50px; height: 50px; }
+.pent-corner-num {
+  font-family: var(--serif); font-style: italic; font-weight: 700;
+  font-size: 22px; color: var(--warm);
+  line-height: 1;
+}
+.pent-corner-meta {
+  font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-mid); margin-top: 2px;
+}
+
+/* Nästa-knapp */
+.scene-next {
+  margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap;
+}
+.scene-btn {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 12px 22px; border-radius: 100px;
+  border: 1px solid var(--line-strong);
+  color: #fff; background: rgba(255,255,255,0.04);
+  cursor: pointer; text-decoration: none;
+  transition: all .25s var(--ease);
+}
+.scene-btn.solid {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.scene-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--warm); }
+.scene-btn.solid:hover { background: #c43a1c; }
+</style>
+</head>
+<body data-scene="kitchen-morning">
+
+<header class="topbar">
+  <a href="/" class="tb-brand">Ekonomilabbet <span class="tb-brand-meta">Forskning · 2026</span></a>
+  <div class="tb-progress" id="progress">SARA · VOL. 18 · KAP. <strong>1 / 6</strong></div>
+  <div class="tb-spacer"></div>
+  <a href="#" class="tb-bookmark" id="modulesBtn">Mina moduler · 3</a>
+  <a href="#" class="tb-bookmark" id="hubBtn">Hubben</a>
+  <button class="tb-echo" id="echoBtn">Echo</button>
+  <a href="#" class="tb-user">SA</a>
+</header>
+
+<main class="app">
+  <!-- SCEN 1 — Onsdag morgon -->
+  <section class="scene active" id="s-1">
+    <div class="shell">
+
+      <article class="char-card">
+        <div class="char-eye">Onsdag · 07:42 · Vol. 18 · Kap. 01</div>
+        <div class="char-line">
+          <strong>Sara A.</strong>, 16, gymnasium Stockholm. Klockan ringer. Hyran kommer
+          om <em>två dagar</em>. Lönen <em>om 22</em>. Det är en helt vanlig morgon.
+          Hon häller upp kaffe och öppnar appen.
+        </div>
+        <div class="char-meta">Inloggad 07:42 · Pentagon 76 / 100 · läge stabilt</div>
+      </article>
+
+      <div class="scene-eyebrow">
+        Veckans val · 6 kapitel <span class="sep">·</span> du läser kap. 1
+      </div>
+
+      <h1 class="scene-h1">En vecka <em>full av val</em>.</h1>
+
+      <p class="scene-lead">
+        Det här är inte en dashboard. Det är <em>din vecka</em> — sex kapitel,
+        ett val per kapitel, varje val rör pentagonen. Ekonomi tippar ner när
+        du betalar. Hälsa tippar upp när du tar hand om dig. Karriär tippar när
+        Maria föreslår. Eleven <strong>fattar besluten</strong> — appen visar
+        konsekvenserna.
+      </p>
+
+      <div class="scene-panel" style="display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center;">
+        <div>
+          <div class="scene-eyebrow" style="margin-bottom: 10px;">Pentagonen idag · 76 / 100</div>
+          <p style="font-family: var(--serif); font-size: 16px; line-height: 1.5; color: var(--text);">
+            Veckan startar bra. <em>Avanza +2,1 %</em> i april, lönen i fas, sparmål
+            håller. Inget dramatiskt har hänt — än.
+          </p>
+        </div>
+        <svg viewBox="0 0 200 200" style="width: 180px; height: 180px;">
+          <g transform="translate(100,100)">
+            <polygon points="0,-86 82,-27 51,69 -51,69 -82,-27" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-65 62,-20 38,53 -38,53 -62,-20" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-43 41,-13 25,35 -25,35 -41,-13" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-65 70,-22 42,55 -45,53 -68,-23" fill="rgba(220,76,43,0.22)" stroke="#dc4c2b" stroke-width="2" filter="drop-shadow(0 0 12px rgba(220,76,43,0.4))"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="echo-cue">
+        <div>
+          <div class="echo-cue-label">Echo · väntar i kanten</div>
+          <div class="echo-cue-text">
+            "Vill du att jag följer med genom veckan? Jag stör bara när det är
+            <em>läge att tänka</em>."
+          </div>
+        </div>
+        <a href="#" class="echo-cue-btn" id="echoCue1">Aktivera</a>
+      </div>
+
+      <div class="scene-next">
+        <button class="scene-btn solid" onclick="goScene(2)">Fortsätt till kap. 2 →</button>
+        <a href="#" class="scene-btn" id="hubBtn1">Eller hoppa till hubben</a>
+      </div>
+
+      <div class="scene-foot">
+        <span>Vol. 08 · Veckans val · Sara A. · 9C</span>
+        <a id="modulesLink1">Mina moduler · 3 pågår</a>
+      </div>
+    </div>
+  </section>
+  <!-- SCEN 2 — Tandläkaren ringer · 3 val -->
+  <section class="scene" id="s-2">
+    <div class="shell">
+
+      <div class="scene-eyebrow">
+        Kapitel 2 · 14:22 onsdag <span class="sep">·</span> händelse · pågår
+      </div>
+
+      <h1 class="scene-h1">Tandläkaren <em>ringer</em>.</h1>
+
+      <div class="phone-illust">
+        <div class="phone-icon">
+          <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </div>
+        <div class="phone-text">
+          <strong>Folktandvården Hökarängen</strong> ringer. Du har en cariesfyllning
+          som måste göras inom 30 dagar. <strong>4 200 kr</strong>, faktura kommer
+          imorgon med 30 dagars förfall.
+        </div>
+      </div>
+
+      <p class="scene-lead">
+        Du har <em>14 282 kr</em> på lönekontot. Hyran på <em>7 240</em> dras
+        på fredag (1 maj). Bufferten ligger på <em>1 800</em>. Lönen kommer den
+        25:e — <em>26 dagar bort</em>. Vad gör du?
+      </p>
+
+      <div class="choices">
+
+        <a class="choice" onclick="goScene(3); return false;" href="#" data-pick="now">
+          <div class="choice-eye">Val A · betala nu</div>
+          <h3 class="choice-h">Betala från <em>lönekontot</em>.</h3>
+          <p class="choice-prose">
+            Klart, bekymmer borta. Men: efter hyra och tandvård har du
+            <strong>2 842 kr</strong> kvar för 26 dagar. Det är cirka <strong>110 kr/dag</strong>.
+            Mat, transport, allt.
+          </p>
+          <div class="consequence">
+            <div class="consequence-line down"><span>Ekonomi</span><strong>− 8 pkt</strong></div>
+            <div class="consequence-line up"><span>Hälsa</span><strong>+ 4 pkt</strong></div>
+            <div class="consequence-line down"><span>Fritid</span><strong>− 3 pkt</strong></div>
+          </div>
+          <svg class="mini-pent-svg" viewBox="-50 -50 100 100">
+            <polygon points="0,-40 38,-13 24,33 -24,33 -38,-13" class="axes"/>
+            <line x1="0" y1="0" x2="0" y2="-40" class="axes"/>
+            <line x1="0" y1="0" x2="38" y2="-13" class="axes"/>
+            <line x1="0" y1="0" x2="24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-38" y2="-13" class="axes"/>
+            <polygon points="0,-25 36,-13 16,28 -22,30 -32,-13" class="now"/>
+          </svg>
+        </a>
+
+        <a class="choice" onclick="goScene(3); return false;" href="#" data-pick="split">
+          <div class="choice-eye">Val B · delbetala</div>
+          <h3 class="choice-h">Delbetalning <em>6 mån</em>.</h3>
+          <p class="choice-prose">
+            <strong>720 kr/mån</strong> — bekvämt nu, dyrare totalt (ränta 14 %
+            ger <strong>+ 380 kr</strong>). Hyran och bufferten orörd. Men en
+            ny månadskostnad i sex månader.
+          </p>
+          <div class="consequence">
+            <div class="consequence-line flat"><span>Ekonomi</span><strong>− 1 pkt</strong></div>
+            <div class="consequence-line up"><span>Hälsa</span><strong>+ 4 pkt</strong></div>
+            <div class="consequence-line down"><span>Karriär</span><strong>− 1 pkt</strong></div>
+          </div>
+          <svg class="mini-pent-svg" viewBox="-50 -50 100 100">
+            <polygon points="0,-40 38,-13 24,33 -24,33 -38,-13" class="axes"/>
+            <line x1="0" y1="0" x2="0" y2="-40" class="axes"/>
+            <line x1="0" y1="0" x2="38" y2="-13" class="axes"/>
+            <line x1="0" y1="0" x2="24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-38" y2="-13" class="axes"/>
+            <polygon points="0,-32 36,-13 22,30 -22,30 -36,-13" class="now flat"/>
+          </svg>
+        </a>
+
+        <a class="choice" onclick="goScene(3); return false;" href="#" data-pick="wait">
+          <div class="choice-eye">Val C · skjut upp</div>
+          <h3 class="choice-h">Vänta tills <em>efter lönen</em>.</h3>
+          <p class="choice-prose">
+            30 dagars förfall räcker — du betalar runt 5 maj efter lönen. Men:
+            tandvärken kan förvärras. Och du <strong>missar tidsfönstret</strong>
+            för förebyggande om du skjuter mer.
+          </p>
+          <div class="consequence">
+            <div class="consequence-line up"><span>Ekonomi</span><strong>± 0 pkt</strong></div>
+            <div class="consequence-line down"><span>Hälsa</span><strong>− 8 pkt</strong></div>
+            <div class="consequence-line flat"><span>Fritid</span><strong>± 0 pkt</strong></div>
+          </div>
+          <svg class="mini-pent-svg" viewBox="-50 -50 100 100">
+            <polygon points="0,-40 38,-13 24,33 -24,33 -38,-13" class="axes"/>
+            <line x1="0" y1="0" x2="0" y2="-40" class="axes"/>
+            <line x1="0" y1="0" x2="38" y2="-13" class="axes"/>
+            <line x1="0" y1="0" x2="24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-24" y2="33" class="axes"/>
+            <line x1="0" y1="0" x2="-38" y2="-13" class="axes"/>
+            <polygon points="0,-30 28,-9 22,30 -22,30 -36,-13" class="now"/>
+          </svg>
+        </a>
+
+      </div>
+
+      <div class="echo-cue">
+        <div>
+          <div class="echo-cue-label">Echo · innan du väljer</div>
+          <div class="echo-cue-text">
+            "Du har varit här förut — i mars sköt du upp en räkning. Hur kändes
+            det <em>när det var dags att betala</em>? Och vad <em>kostade</em> det
+            i tankar däremellan?"
+          </div>
+        </div>
+        <a href="#" class="echo-cue-btn" onclick="document.getElementById('echoBtn').click(); return false;">Öppna chatten</a>
+      </div>
+
+      <div class="scene-foot">
+        <a onclick="goScene(1); return false;" href="#">← Tillbaka till kap. 1</a>
+        <span>Pentagon påverkas på <strong>nästa scen</strong></span>
+      </div>
+    </div>
+  </section>
+  <!-- SCEN 3 — Saras val: konsekvens på pentagon -->
+  <section class="scene" id="s-3">
+    <div class="shell">
+
+      <div class="scene-eyebrow">
+        Kapitel 3 · 14:32 onsdag <span class="sep">·</span> konsekvens
+      </div>
+
+      <h1 class="scene-h1">Du valde att <em>betala nu</em>.</h1>
+
+      <p class="scene-lead">
+        Pentagonen <em>tippar</em>. Hälsa upp <strong>+ 4</strong>. Ekonomi ner
+        <strong>− 8</strong>. Fritid backar lite eftersom marginalerna krymper.
+        Det här är inte en värdering — det är vad <em>val A</em> gör mot
+        balansen.
+      </p>
+
+      <div class="scene-panel" style="display: grid; grid-template-columns: 320px 1fr; gap: 36px; align-items: center;">
+        <svg viewBox="0 0 280 280" style="width: 280px; height: 280px;">
+          <g transform="translate(140,140)">
+            <!-- bakgrund -->
+            <polygon points="0,-122 116,-38 72,98 -72,98 -116,-38" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-92 87,-29 54,73 -54,73 -87,-29" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-61 58,-19 36,49 -36,49 -58,-19" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <polygon points="0,-30 29,-10 18,24 -18,24 -29,-10" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="0.8" stroke-dasharray="2 3"/>
+            <!-- ute -->
+            <line x1="0" y1="0" x2="0" y2="-122" stroke="rgba(255,255,255,0.12)" stroke-dasharray="2 3"/>
+            <line x1="0" y1="0" x2="116" y2="-38" stroke="rgba(255,255,255,0.12)" stroke-dasharray="2 3"/>
+            <line x1="0" y1="0" x2="72" y2="98" stroke="rgba(255,255,255,0.12)" stroke-dasharray="2 3"/>
+            <line x1="0" y1="0" x2="-72" y2="98" stroke="rgba(255,255,255,0.12)" stroke-dasharray="2 3"/>
+            <line x1="0" y1="0" x2="-116" y2="-38" stroke="rgba(255,255,255,0.12)" stroke-dasharray="2 3"/>
+            <!-- före (igår) -->
+            <polygon points="0,-90 100,-32 60,76 -65,73 -100,-30" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.4" stroke-dasharray="4 4"/>
+            <!-- efter (nu) -->
+            <polygon points="0,-65 92,-30 50,68 -68,70 -98,-30" fill="rgba(220,76,43,0.22)" stroke="#dc4c2b" stroke-width="2" filter="drop-shadow(0 0 16px rgba(220,76,43,0.45))"/>
+
+            <!-- axel-etiketter -->
+            <text x="0" y="-130" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.6)" letter-spacing="1">EKONOMI</text>
+            <text x="124" y="-32" text-anchor="start" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.6)" letter-spacing="1">RELATION</text>
+            <text x="78" y="116" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.6)" letter-spacing="1">HÄLSA</text>
+            <text x="-78" y="116" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.6)" letter-spacing="1">FRITID</text>
+            <text x="-124" y="-32" text-anchor="end" font-family="JetBrains Mono" font-size="9" fill="rgba(255,255,255,0.6)" letter-spacing="1">KARRIÄR</text>
+
+            <text x="0" y="6" text-anchor="middle" font-family="Source Serif 4" font-style="italic" font-weight="700" font-size="38" fill="#fbbf24">72</text>
+            <text x="0" y="22" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="rgba(255,255,255,0.55)" letter-spacing="1.5">FRÅN 76</text>
+          </g>
+        </svg>
+
+        <div>
+          <div class="scene-eyebrow" style="margin-bottom: 10px;">Före → efter</div>
+          <div style="display: grid; grid-template-columns: 80px 1fr 60px; gap: 14px; align-items: center;">
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--text-mid); letter-spacing: 0.6px;">Ekonomi</div>
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; position: relative;">
+              <div style="height: 100%; background: var(--accent); width: 70%; border-radius: 100px;"></div>
+              <div style="position: absolute; left: 78%; top: -3px; bottom: -3px; width: 2px; background: rgba(255,255,255,0.5);"></div>
+            </div>
+            <div style="font-family: var(--serif); font-style: italic; color: #fca5a5; text-align: right;">−8</div>
+
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--text-mid); letter-spacing: 0.6px;">Karriär</div>
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; position: relative;">
+              <div style="height: 100%; background: var(--warm); width: 78%; border-radius: 100px;"></div>
+            </div>
+            <div style="font-family: var(--serif); font-style: italic; color: var(--text-mid); text-align: right;">±0</div>
+
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--text-mid); letter-spacing: 0.6px;">Hälsa</div>
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; position: relative;">
+              <div style="height: 100%; background: #6ee7b7; width: 65%; border-radius: 100px;"></div>
+              <div style="position: absolute; left: 61%; top: -3px; bottom: -3px; width: 2px; background: rgba(255,255,255,0.5);"></div>
+            </div>
+            <div style="font-family: var(--serif); font-style: italic; color: #6ee7b7; text-align: right;">+4</div>
+
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--text-mid); letter-spacing: 0.6px;">Relation</div>
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; position: relative;">
+              <div style="height: 100%; background: var(--warm); width: 75%; border-radius: 100px;"></div>
+            </div>
+            <div style="font-family: var(--serif); font-style: italic; color: var(--text-mid); text-align: right;">±0</div>
+
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--text-mid); letter-spacing: 0.6px;">Fritid</div>
+            <div style="height: 6px; background: rgba(255,255,255,0.06); border-radius: 100px; position: relative;">
+              <div style="height: 100%; background: var(--accent); width: 65%; border-radius: 100px;"></div>
+              <div style="position: absolute; left: 68%; top: -3px; bottom: -3px; width: 2px; background: rgba(255,255,255,0.5);"></div>
+            </div>
+            <div style="font-family: var(--serif); font-style: italic; color: #fca5a5; text-align: right;">−3</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scene-panel" style="margin-top: 0;">
+        <div class="scene-eyebrow">Vad händer nu i appen</div>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px;">
+          <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line);">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220,76,43,0.2); border: 1px solid var(--accent); display: grid; place-items: center; font-family: var(--mono); font-size: 10px; color: #fff; font-weight: 700;">1</div>
+            <div style="font-family: var(--serif); font-size: 14.5px; color: var(--text);">
+              <strong style="color: #fff;">4 200 kr dras</strong> från lönekontot — saldo går från 14 282 till
+              <em style="color: var(--warm);">10 082 kr</em>. Bokförs som "Folktandvården" i kategori Hälsa.
+            </div>
+          </li>
+          <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line);">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220,76,43,0.2); border: 1px solid var(--accent); display: grid; place-items: center; font-family: var(--mono); font-size: 10px; color: #fff; font-weight: 700;">2</div>
+            <div style="font-family: var(--serif); font-size: 14.5px; color: var(--text);">
+              <strong style="color: #fff;">Budget Hälsa</strong> går från 0 till <em style="color: var(--warm);">4 200 kr</em>
+              april — oväntad post, ej i ursprungsbudget.
+            </div>
+          </li>
+          <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line);">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220,76,43,0.2); border: 1px solid var(--accent); display: grid; place-items: center; font-family: var(--mono); font-size: 10px; color: #fff; font-weight: 700;">3</div>
+            <div style="font-family: var(--serif); font-size: 14.5px; color: var(--text);">
+              <strong style="color: #fff;">Sparmål "buffert"</strong> får varning — buffertkvot dyker till 0,17 månader,
+              under riktvärde på 0,5.
+            </div>
+          </li>
+          <li style="display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 10px 0;">
+            <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220,76,43,0.2); border: 1px solid var(--accent); display: grid; place-items: center; font-family: var(--mono); font-size: 10px; color: #fff; font-weight: 700;">4</div>
+            <div style="font-family: var(--serif); font-size: 14.5px; color: var(--text);">
+              <strong style="color: #fff;">Maria-lönesamtalet</strong> får ny kontext — du har <em style="color: var(--warm);">+1 295 kr/mån</em>
+              i sikte men hälsobufferten är trasig. Kan användas i argumenten.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="echo-cue">
+        <div>
+          <div class="echo-cue-label">Echo · efter valet</div>
+          <div class="echo-cue-text">
+            "Bra — du tog hand om dig. Men buffertvarningen är värd att titta på.
+            <em>Vad kunde gjort att du haft 5 000 kr extra i april?</em>"
+          </div>
+        </div>
+        <a href="#" class="echo-cue-btn" onclick="document.getElementById('echoBtn').click(); return false;">Reflektera nu</a>
+      </div>
+
+      <div class="scene-next">
+        <button class="scene-btn solid" onclick="goScene(4)">Gå till banken — signera 23 fakturor →</button>
+        <button class="scene-btn" onclick="goScene(2)">← Ändra valet</button>
+      </div>
+    </div>
+  </section>
+  <!-- SCEN 4 — Banken · signera 23 fakturor -->
+  <section class="scene" id="s-4">
+    <div class="shell">
+
+      <div class="scene-eyebrow">
+        Kapitel 4 · 19:14 onsdag kväll <span class="sep">·</span> banken
+      </div>
+
+      <h1 class="scene-h1">Banken har <em>23 fakturor</em>.</h1>
+
+      <p class="scene-lead">
+        Bankgirot har samlat in månadens räkningar. <em>18 är vanor</em> du
+        redan klassat — hyra, el, abonnemang. <em>5 är nya</em> och kräver din
+        blick. Tandläkar-fakturan ligger där, redan på väg in. Du signerar via
+        BankID-simulatorn — samma flöde som i verkligheten.
+      </p>
+
+      <div class="scene-panel">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 36px;">
+
+          <div>
+            <div class="scene-eyebrow" style="margin-bottom: 14px;">18 vana fakturor · auto-klassade</div>
+            <ul style="list-style: none; padding: 0; margin: 0; font-family: "Inter", sans-serif; font-size: 13.5px;">
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Stockholmshem · hyra</span><span style="font-family: var(--mono); color: var(--text-mid);">7 240 kr · 1 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Tibber · el</span><span style="font-family: var(--mono); color: var(--text-mid);">812 kr · 4 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Telia · mobil</span><span style="font-family: var(--mono); color: var(--text-mid);">249 kr · 27 apr</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Spotify Premium</span><span style="font-family: var(--mono); color: var(--text-mid);">119 kr · 29 apr</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">SL · reskassa autoladd</span><span style="font-family: var(--mono); color: var(--text-mid);">320 kr · 30 apr</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Folksam · hemförsäkring</span><span style="font-family: var(--mono); color: var(--text-mid);">189 kr · 5 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; color: var(--text-dim);"><span>+ 12 till</span><span style="font-family: var(--mono);">2 234 kr · varierat</span></li>
+            </ul>
+          </div>
+
+          <div>
+            <div class="scene-eyebrow" style="margin-bottom: 14px;">5 nya · klassa själv</div>
+            <ul style="list-style: none; padding: 0; margin: 0; font-family: "Inter", sans-serif; font-size: 13.5px;">
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--accent); border-left: 3px solid var(--accent); padding-left: 12px; background: rgba(220,76,43,0.06); margin-bottom: 6px;"><span style="color: #fff; font-weight: 600;">Folktandvården <em style="font-style: italic; color: var(--warm);">(NY)</em></span><span style="font-family: var(--mono); color: var(--accent);">4 200 kr · 30 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Apoteket · receptmedicin</span><span style="font-family: var(--mono); color: var(--text-mid);">142 kr · 8 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">IKEA · sänglinne</span><span style="font-family: var(--mono); color: var(--text-mid);">498 kr · 12 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line);"><span style="color: var(--text);">Friskis &amp; Svettis</span><span style="font-family: var(--mono); color: var(--text-mid);">295 kr · 14 maj</span></li>
+              <li style="display: flex; justify-content: space-between; padding: 9px 0;"><span style="color: var(--text);">Foodora · 17 apr</span><span style="font-family: var(--mono); color: var(--text-mid);">187 kr · 20 maj</span></li>
+            </ul>
+          </div>
+
+        </div>
+
+        <div style="margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim);">Total summa att signera</div>
+            <div style="font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 36px; color: var(--warm); margin-top: 4px;">15 405 kr</div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid); letter-spacing: 0.5px; margin-top: 2px;">23 fakturor · spridd betalning april–maj</div>
+          </div>
+
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <a href="../vol-7/elev.html#bankid" class="scene-btn solid" style="text-decoration: none;">Öppna BankID-flödet →</a>
+            <a href="#" class="scene-btn">Klassa de 5 nya först</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="scene-panel" style="background: rgba(99,102,241,0.06); border-color: rgba(99,102,241,0.2);">
+        <div class="scene-eyebrow" style="color: #818cf8;">Vad BankID-simulatorn gör</div>
+        <p style="font-family: var(--serif); font-size: 15px; line-height: 1.5; color: var(--text); margin-bottom: 14px;">
+          När du klickar "Öppna BankID" händer exakt det som i verkligheten:
+          en QR-kod dyker upp, du skannar med Ekonomilabbet-ID-appen, läser
+          sammandraget, anger din 6-siffriga PIN. Då signeras alla 23 fakturor
+          på en gång och betalas <em>automatiskt på sina förfallodatum</em>.
+        </p>
+        <p style="font-family: var(--serif); font-size: 14px; font-style: italic; color: var(--text-mid);">
+          Friktionen är inte ett misstag — det är hela poängen. Eleven ska <strong style="color: var(--warm);">känna</strong> att hen
+          signerar 15 405 kr.
+        </p>
+      </div>
+
+      <div class="scene-next">
+        <button class="scene-btn solid" onclick="goScene(5)">Fortsätt — Maria väntar →</button>
+        <button class="scene-btn" onclick="goScene(3)">← Tillbaka till konsekvensen</button>
+      </div>
+    </div>
+  </section>
+  <!-- SCEN 5 — Maria-lönesamtal -->
+  <section class="scene" id="s-5">
+    <div class="shell">
+
+      <div class="scene-eyebrow">
+        Kapitel 5 · Torsdag 15:00 <span class="sep">·</span> arbetsplatsen
+      </div>
+
+      <h1 class="scene-h1">Maria <em>väntar</em>.</h1>
+
+      <p class="scene-lead">
+        Du sitter i konferensrummet på Sthlm Sjukhus AB. Maria — HR-chefen —
+        är inte verklig, hon är AI. Men hon spelar realistiskt: hon har en
+        budget, en smärtgräns, kunskap om kollektivavtalet, och hon kommer
+        <em>inte</em> ge sig om du argumenterar löst.
+      </p>
+
+      <div class="scene-panel" style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px;">
+
+        <div>
+          <div class="scene-eyebrow" style="margin-bottom: 14px;">Var du står · runda 2 av 5</div>
+
+          <div style="background: rgba(99,102,241,0.10); border: 1px solid rgba(99,102,241,0.25); padding: 14px 16px; border-radius: 6px; margin-bottom: 10px; font-family: var(--serif); font-size: 14.5px; line-height: 1.5;">
+            <em style="font-family: var(--mono); font-size: 9px; letter-spacing: 1px; color: var(--text-dim); text-transform: uppercase;">MARIA · R2</em><br>
+            "26 200 är vad budgeten ger — vi tog in fyra nya i januari, det binder mycket. Det här är ett <em style="color: var(--warm); font-style: italic;">seriöst bud</em>."
+          </div>
+
+          <div style="background: rgba(220,76,43,0.10); border: 1px solid rgba(220,76,43,0.30); padding: 14px 16px; border-radius: 6px; font-family: var(--serif); font-size: 14.5px; line-height: 1.5; color: #fff;">
+            <em style="font-family: var(--mono); font-size: 9px; letter-spacing: 1px; color: var(--text-dim); text-transform: uppercase;">SARA · R2 · DITT MOTBUD</em><br>
+            "Mitt motbud: <em style="color: var(--warm); font-style: italic;">27 100</em> — eller 26 800 + en utbildningsdag i höst."
+          </div>
+
+          <div style="margin-top: 14px; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.5px;">
+            Maria läser ditt motbud. Modellen tar ~ 3 sek att svara.
+          </div>
+        </div>
+
+        <div>
+          <div class="scene-eyebrow" style="margin-bottom: 14px;">Maria · approximerad smärtgräns</div>
+          <div style="background: rgba(15,21,37,0.6); border: 1px solid var(--line); padding: 18px 22px; border-radius: 6px;">
+            <div style="font-family: var(--serif); font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 12px;">Du är <em style="color: var(--warm); font-style: italic;">nära mål</em>.</div>
+            <div style="height: 8px; background: rgba(255,255,255,0.06); border-radius: 100px; overflow: hidden; position: relative; margin-bottom: 8px;">
+              <div style="height: 100%; background: linear-gradient(90deg, #6ee7b7, #fbbf24, #dc4c2b); border-radius: 100px; width: 65%;"></div>
+              <div style="position: absolute; top: -2px; bottom: -2px; left: 78%; width: 2px; background: var(--accent); box-shadow: 0 0 8px rgba(220,76,43,0.6);"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.5px; color: var(--text-mid);">
+              <span>nytt bud</span>
+              <span style="color: var(--accent); font-style: italic; font-family: var(--serif);">smärtgräns</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px; padding: 16px; background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.2); border-radius: 6px;">
+            <div style="font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--warm); margin-bottom: 6px;">Echo · taktiskt</div>
+            <div style="font-family: var(--serif); font-style: italic; font-size: 13.5px; color: var(--text); line-height: 1.45;">
+              Du är nära mål — sänk inte mer. Stå kvar och vänta på Marias respons.
+              Om hon föreslår 26 800 kan friskvård eller utbildning vara <em style="color: var(--warm);">extra valuta</em>.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scene-panel">
+        <div class="scene-eyebrow">Bud-historik · alla 4 som finns kvar</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
+          <div style="text-align: center; padding: 14px; background: rgba(255,255,255,0.04); border-radius: 6px;">
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px;">RUNDA 1</div>
+            <div style="font-family: var(--serif); font-size: 17px; font-weight: 700; color: #fff; margin-top: 4px;">27 500 → 26 200</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-mid); margin-top: 2px;">öppnat högt</div>
+          </div>
+          <div style="text-align: center; padding: 14px; background: rgba(220,76,43,0.10); border: 1px solid rgba(220,76,43,0.3); border-radius: 6px;">
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--accent); letter-spacing: 1px;">RUNDA 2 · NU</div>
+            <div style="font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--warm); margin-top: 4px; font-style: italic;">27 100 → ?</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--accent); margin-top: 2px;">väntar svar</div>
+          </div>
+          <div style="text-align: center; padding: 14px; background: rgba(255,255,255,0.02); border: 1px dashed var(--line); border-radius: 6px;">
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px;">RUNDA 3</div>
+            <div style="font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--text-dim); margin-top: 4px;">— · —</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">kommande</div>
+          </div>
+          <div style="text-align: center; padding: 14px; background: rgba(255,255,255,0.02); border: 1px dashed var(--line); border-radius: 6px;">
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 1px;">RUNDA 4 + 5</div>
+            <div style="font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--text-dim); margin-top: 4px;">— · —</div>
+            <div style="font-family: var(--mono); font-size: 9px; color: var(--text-dim); margin-top: 2px;">avslut + reflektion</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scene-next">
+        <a href="../vol-7/elev.html#maria" class="scene-btn solid" style="text-decoration: none;">Öppna full Maria-vy →</a>
+        <button class="scene-btn" onclick="goScene(6)">Hoppa till reflektionen →</button>
+      </div>
+    </div>
+  </section>
+  <!-- SCEN 6 — Echo · reflektion -->
+  <section class="scene" id="s-6">
+    <div class="shell">
+
+      <div class="scene-eyebrow">
+        Kapitel 6 · Söndag 21:14 <span class="sep">·</span> reflektion
+      </div>
+
+      <h1 class="scene-h1">Veckan är <em>slut</em>.</h1>
+
+      <p class="scene-lead">
+        Söndag kväll. Pentagonen är på <em>72 av 100</em> — fyra ner från
+        måndag. Du har signerat 23 fakturor, betalat tandläkaren, lagt motbud
+        till Maria, sparat <em>3 362 kr</em> trots avgiften. Echo har en sista
+        fråga innan veckan stängs.
+      </p>
+
+      <div class="scene-panel" style="background: rgba(251,191,36,0.05); border-color: rgba(251,191,36,0.2);">
+        <div style="display: grid; grid-template-columns: 64px 1fr; gap: 18px; align-items: start;">
+          <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, var(--warm), var(--accent)); display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700; color: #422006; font-size: 24px;">E</div>
+          <div>
+            <div class="scene-eyebrow" style="margin-bottom: 8px; color: var(--warm);">Echo · veckans avslutande fråga</div>
+            <p style="font-family: var(--serif); font-size: 22px; line-height: 1.4; color: #fff; font-style: italic;">
+              "Du har stått här förut — i mars sköt du upp en räkning, och du
+              skrev efteråt att det <em style="color: var(--warm);">kostade dig tankar</em>. Idag valde du att betala
+              direkt, trots att du <em style="color: var(--warm);">visste</em> det skulle krympa marginalen. <em style="color: var(--warm);">Vad lärde du
+              dig om dig själv?</em>"
+            </p>
+            <textarea placeholder="Skriv din reflektion till Anders..." style="width: 100%; min-height: 120px; margin-top: 18px; background: rgba(15,21,37,0.6); border: 1px solid var(--line-strong); color: #fff; padding: 14px 16px; border-radius: 6px; font-family: var(--serif); font-size: 15px; line-height: 1.5; resize: vertical;"></textarea>
+            <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;">
+              <button class="scene-btn solid">Skicka reflektion till Anders Lind</button>
+              <button class="scene-btn">Spara utkast</button>
+            </div>
+            <div style="margin-top: 14px; font-family: var(--mono); font-size: 9.5px; color: var(--text-dim); letter-spacing: 0.6px;">
+              Reflektionen sparas i din portfolio · läraren får notis · AI gör en första rubricering
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scene-panel">
+        <div class="scene-eyebrow">Veckosammanfattning · Vol. 18</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;">In · ut</div>
+            <div style="font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 22px; color: var(--warm);">23 734</div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid);">−20 372 kr</div>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;">Sparat</div>
+            <div style="font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 22px; color: #6ee7b7;">+ 3 362</div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid);">14 % av in</div>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;">Pent · slut</div>
+            <div style="font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 22px; color: var(--warm);">72 / 100</div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: #fca5a5;">−4 från start</div>
+          </div>
+          <div>
+            <div style="font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;">Modul-progress</div>
+            <div style="font-family: var(--serif); font-style: italic; font-weight: 700; font-size: 22px; color: var(--warm);">2 / 12</div>
+            <div style="font-family: var(--mono); font-size: 9.5px; color: var(--text-mid);">Bolån-modulen</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scene-panel">
+        <div class="scene-eyebrow">Nästa vecka · Vol. 19</div>
+        <ul style="list-style: none; padding: 0; margin: 0; font-family: var(--serif); font-size: 15px; line-height: 1.6;">
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--line);">Lönen <em style="color: var(--warm); font-style: italic;">25 maj</em> · 22 400 kr — eller mer om Maria-samtalet landar bra</li>
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--line);">Skatteverkets förslag på <em style="color: var(--warm); font-style: italic;">ränteavdrag</em> ska godkännas innan 2 maj</li>
+          <li style="padding: 8px 0; border-bottom: 1px solid var(--line);">Bolån-modulen steg 5/12 · <em style="color: var(--warm); font-style: italic;">kreditprövningen</em></li>
+          <li style="padding: 8px 0;">Ny tandläkar-faktura kommer i brevlådan — 30 dagars förfall</li>
+        </ul>
+      </div>
+
+      <div class="scene-next">
+        <button class="scene-btn solid" onclick="goScene(1)">Börja om Vol. 18 ↻</button>
+        <a href="../vol-7/elev.html" class="scene-btn" style="text-decoration: none;">Öppna pentagon-hubben →</a>
+      </div>
+
+      <div class="scene-foot">
+        <span>Vol. 08 · Veckans val · Kap. 6 av 6 · slut</span>
+        <span>Reflektion sparas till portfolio</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const SCENES = {
+  1: { bg: "kitchen-morning", title: "1 / 6 · Onsdag morgon" },
+  2: { bg: "phone-call",      title: "2 / 6 · Tandläkaren ringer" },
+  3: { bg: "kitchen-morning", title: "3 / 6 · Saras val" },
+  4: { bg: "bank-evening",    title: "4 / 6 · Banken · 23 fakturor" },
+  5: { bg: "phone-call",      title: "5 / 6 · Maria väntar (lönesamtal)" },
+  6: { bg: "reflection",      title: "6 / 6 · Echo · reflektion" },
+};
+function goScene(n) {
+  document.querySelectorAll(".scene").forEach(s => s.classList.remove("active"));
+  const s = document.getElementById("s-" + n);
+  if (s) s.classList.add("active");
+  const meta = SCENES[n];
+  if (meta) {
+    document.body.setAttribute("data-scene", meta.bg);
+    document.getElementById("progress").innerHTML = "SARA · VOL. 18 · KAP. <strong>" + meta.title.split(" · ")[0] + "</strong>";
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+window.goScene = goScene;
+</script>
+</body>
+</html>

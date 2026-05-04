@@ -1,0 +1,369 @@
+/* Light editorial — content-pages (Docs, Villkor, FAQ).
+   Speglar demo-landing/index.html "about"-sektionen: cream-bg,
+   serif-rubriker, accent-line under eyebrows, body-prose-stil.
+   Scopas till .edl-* så det inte krockar med Tailwind/Spectral. */
+
+.edl-root {
+  --edl-bg: #fafaf9;
+  --edl-fg: #0f172a;
+  --edl-muted: #64748b;
+  --edl-accent: #dc4c2b;
+  --edl-gold: #fbbf24;
+  --edl-rule: #e5e7eb;
+  --edl-serif: "Source Serif 4", Georgia, serif;
+  --edl-mono: "JetBrains Mono", ui-monospace, monospace;
+  --edl-ease: cubic-bezier(.77, 0, .175, 1);
+
+  background: var(--edl-bg);
+  color: var(--edl-fg);
+  min-height: 100vh;
+  font-family: "Inter", "Helvetica Neue", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  line-height: 1.55;
+}
+
+/* Top-nav — vit text på mörka, mörk text på ljust (här alltid mörk) */
+.edl-top-nav {
+  position: fixed; top: 22px; right: 28px; z-index: 70;
+  display: inline-flex; align-items: baseline; gap: 28px;
+}
+.edl-top-link {
+  display: inline-block;
+  font-family: var(--edl-serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
+  color: var(--edl-fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  text-shadow: 0 0 0.4px currentColor;
+  transform-origin: right center;
+  transition:
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1),
+    color .25s var(--edl-ease);
+  cursor: pointer;
+}
+.edl-top-link:hover {
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+.edl-top-link.is-primary { color: var(--edl-accent); }
+
+.edl-home-link {
+  position: fixed; top: 22px; left: 28px; z-index: 70;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--edl-serif);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1;
+  color: var(--edl-fg);
+  text-decoration: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-variation-settings: "opsz" 24;
+  text-shadow: 0 0 0.4px currentColor;
+  transform-origin: left center;
+  transition:
+    font-size .45s cubic-bezier(.34, 1.56, .64, 1),
+    letter-spacing .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+.edl-home-arrow { display: inline-block; transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+.edl-home-link:hover { font-size: 22px; letter-spacing: -0.5px; }
+.edl-home-link:hover .edl-home-arrow { transform: translateX(-6px); }
+
+@media (max-width: 600px) {
+  .edl-top-nav { top: 16px; right: 18px; gap: 16px; }
+  .edl-home-link { top: 16px; left: 18px; }
+  .edl-top-link, .edl-home-link { font-size: 14px; }
+  .edl-top-link:hover, .edl-home-link:hover { font-size: 18px; }
+}
+
+.edl-shell {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 96px clamp(24px, 6vw, 80px) 72px;
+}
+
+/* Sid-header — eyebrow + serif headline + intro */
+.edl-head {
+  max-width: 760px;
+  margin: 0 auto clamp(48px, 7vh, 80px);
+  text-align: center;
+}
+.edl-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--edl-mono);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--edl-accent);
+  margin-bottom: 22px;
+}
+.edl-eyebrow::before {
+  content: "●"; color: var(--edl-accent); font-size: 12px;
+}
+.edl-headline {
+  font-family: var(--edl-serif);
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 700; letter-spacing: -1.6px;
+  line-height: 1.02;
+  color: var(--edl-fg);
+  margin: 0 0 22px;
+}
+.edl-headline em {
+  font-style: italic; font-weight: 500;
+  color: var(--edl-accent);
+}
+.edl-headline strong {
+  font-weight: 700; color: var(--edl-accent);
+}
+.edl-lead {
+  font-family: var(--edl-serif);
+  font-size: clamp(17px, 1.5vw, 20px);
+  line-height: 1.6;
+  color: #334155;
+  font-style: italic;
+  max-width: 60ch; margin: 0 auto;
+}
+
+/* Sektion-rubriker (h2, h3) */
+.edl-section h2,
+.edl-h2 {
+  font-family: var(--edl-serif);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700; letter-spacing: -0.8px;
+  line-height: 1.1;
+  color: var(--edl-fg);
+  margin: 0 0 20px;
+  padding-top: clamp(14px, 2vh, 18px);
+  position: relative;
+}
+.edl-section h2 em,
+.edl-h2 em {
+  font-family: var(--edl-serif); font-style: italic;
+  color: var(--edl-accent); font-weight: 500;
+}
+.edl-h3 {
+  font-family: var(--edl-serif);
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 700; letter-spacing: -0.4px;
+  line-height: 1.15;
+  color: var(--edl-fg);
+  margin: 28px 0 12px;
+}
+
+/* Body-prose */
+.edl-prose {
+  font-size: 15.5px; line-height: 1.7;
+  color: #1f2937;
+  max-width: 65ch;
+}
+.edl-prose p { margin: 0 0 16px; }
+.edl-prose p:last-child { margin-bottom: 0; }
+.edl-prose strong { color: var(--edl-fg); font-weight: 700; }
+.edl-prose em {
+  font-family: var(--edl-serif); font-style: italic;
+  color: var(--edl-fg);
+}
+.edl-prose a {
+  color: var(--edl-accent); text-decoration: none;
+  border-bottom: 1px solid rgba(220, 76, 43, 0.4);
+  transition: border-color .2s var(--edl-ease);
+}
+.edl-prose a:hover { border-bottom-color: var(--edl-accent); }
+.edl-prose ul, .edl-prose ol {
+  margin: 0 0 18px 22px; padding: 0;
+}
+.edl-prose ul li, .edl-prose ol li { margin: 6px 0; }
+.edl-prose ul { list-style: disc; }
+.edl-prose ol { list-style: decimal; }
+.edl-prose blockquote {
+  margin: 22px 0;
+  padding: 14px 0 14px 22px;
+  border-left: 3px solid var(--edl-accent);
+  font-family: var(--edl-serif);
+  font-style: italic;
+  font-size: 17px; line-height: 1.55;
+  color: #334155;
+}
+.edl-prose code {
+  font-family: var(--edl-mono);
+  font-size: 13.5px;
+  padding: 2px 6px;
+  background: rgba(220, 76, 43, 0.06);
+  border: 1px solid rgba(220, 76, 43, 0.18);
+  border-radius: 3px;
+  color: var(--edl-fg);
+}
+.edl-prose hr {
+  border: 0; border-top: 1px solid var(--edl-rule);
+  margin: 32px 0;
+}
+
+/* Sidomeny för Docs */
+.edl-with-aside {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: clamp(40px, 6vw, 80px);
+}
+@media (max-width: 900px) {
+  .edl-with-aside { grid-template-columns: 1fr; gap: 36px; }
+}
+.edl-aside {
+  position: sticky; top: 96px; align-self: start;
+}
+@media (max-width: 900px) {
+  .edl-aside { position: static; }
+}
+.edl-aside-group { margin-bottom: 28px; }
+.edl-aside-eye {
+  font-family: var(--edl-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--edl-muted);
+  margin-bottom: 10px;
+}
+.edl-aside-list {
+  list-style: none; padding: 0; margin: 0;
+  border-left: 1px solid var(--edl-rule);
+}
+.edl-aside-list a {
+  display: block;
+  padding: 6px 14px;
+  margin-left: -1px;
+  border-left: 2px solid transparent;
+  font-size: 13.5px;
+  color: #475569;
+  text-decoration: none;
+  transition: color .2s var(--edl-ease), border-color .2s var(--edl-ease);
+}
+.edl-aside-list a:hover { color: var(--edl-fg); }
+.edl-aside-list a.is-active {
+  border-left-color: var(--edl-accent);
+  color: var(--edl-fg);
+  font-weight: 600;
+}
+
+/* Sektioner med top-rule */
+.edl-section {
+  scroll-margin-top: 100px;
+  padding-top: clamp(20px, 3vh, 28px);
+  margin-bottom: clamp(32px, 5vh, 48px);
+  border-top: 1px solid var(--edl-rule);
+}
+.edl-section::before {
+  content: ""; display: block;
+  width: 32px; height: 2px;
+  background: var(--edl-accent);
+  margin-bottom: 14px;
+  margin-top: -1px;
+}
+
+/* FAQ-stil — accordion-liknande sektioner */
+.edl-faq-item {
+  padding: 22px 0;
+  border-top: 1px solid var(--edl-rule);
+}
+.edl-faq-item:last-child {
+  border-bottom: 1px solid var(--edl-rule);
+}
+.edl-faq-q {
+  font-family: var(--edl-serif);
+  font-size: clamp(17px, 1.7vw, 20px);
+  font-weight: 700; letter-spacing: -0.3px;
+  line-height: 1.25;
+  color: var(--edl-fg);
+  margin: 0 0 10px;
+}
+.edl-faq-q em {
+  font-family: var(--edl-serif); font-style: italic;
+  color: var(--edl-accent); font-weight: 500;
+}
+
+/* Footer-band — credits, tillbaka-länk */
+.edl-foot {
+  margin-top: clamp(64px, 10vh, 96px);
+  padding-top: clamp(28px, 4vh, 40px);
+  border-top: 1px solid var(--edl-rule);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 14px;
+  font-family: var(--edl-mono); font-size: 10px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--edl-muted);
+}
+.edl-foot-vol {
+  font-family: var(--edl-serif); font-style: italic;
+  font-size: 13px; text-transform: none; letter-spacing: 0;
+  color: #475569;
+}
+
+/* Brand top-center (samma som dark editorial) */
+.edl-brand {
+  position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+  z-index: 4; text-align: center;
+  pointer-events: none;
+}
+.edl-brand-name {
+  font-family: var(--edl-serif);
+  font-size: clamp(18px, 1.8vw, 22px); font-weight: 700;
+  letter-spacing: -0.3px; color: var(--edl-fg);
+}
+.edl-brand-tagline {
+  font-family: var(--edl-mono); font-size: 9.5px;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--edl-muted);
+  margin-top: 4px;
+}
+@media (max-width: 700px) { .edl-brand { display: none; } }
+
+/* Kallout-block — användbart i Villkor (varningar, simulering) */
+.edl-callout {
+  margin: 24px 0;
+  padding: 22px 26px;
+  background: rgba(251, 191, 36, 0.08);
+  border-left: 3px solid var(--edl-gold);
+  border-radius: 0 4px 4px 0;
+}
+.edl-callout-eye {
+  font-family: var(--edl-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: #92400e;
+  margin-bottom: 8px;
+}
+.edl-callout-eye::before { content: "● "; }
+.edl-callout p {
+  font-size: 14.5px; line-height: 1.6; color: #422006;
+  margin: 0;
+}
+.edl-callout p + p { margin-top: 10px; }
+.edl-callout strong { color: #422006; font-weight: 700; }
+
+.edl-callout.is-accent {
+  background: rgba(220, 76, 43, 0.06);
+  border-left-color: var(--edl-accent);
+}
+.edl-callout.is-accent .edl-callout-eye { color: #991b1b; }
+.edl-callout.is-accent p { color: #1e293b; }
+.edl-callout.is-accent strong { color: var(--edl-accent); }
+
+/* Entry-anim */
+.edl-eyebrow, .edl-headline, .edl-lead, .edl-with-aside, .edl-prose {
+  opacity: 0; transform: translateY(14px);
+  animation: edl-fade-up .8s cubic-bezier(.34, 1.18, .64, 1) forwards;
+}
+.edl-eyebrow  { animation-delay: 0.05s; }
+.edl-headline { animation-delay: 0.18s; }
+.edl-lead     { animation-delay: 0.32s; }
+.edl-with-aside, .edl-prose { animation-delay: 0.42s; }
+@keyframes edl-fade-up {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edl-eyebrow, .edl-headline, .edl-lead, .edl-with-aside, .edl-prose {
+    opacity: 1; transform: none; animation: none;
+  }
+}

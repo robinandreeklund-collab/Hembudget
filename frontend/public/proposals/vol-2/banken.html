@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banken · Vol. 02 · Tidslinje</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_shared.css">
+<style>
+body { background: #fff; }
+
+/* Date strip & hero — samma som dashboard */
+.date-strip {
+  position: sticky; top: 0; z-index: 30;
+  background: #fff; border-bottom: 1px solid var(--rule);
+  padding: 18px clamp(24px, 6vw, 80px);
+  display: flex; gap: 14px; align-items: center;
+  flex-wrap: wrap;
+}
+.date-strip-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase; color: var(--accent);
+}
+.date-strip-eye::before { content: "● "; }
+.date-tabs { display: flex; gap: 4px; }
+.date-tab {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 6px 11px; border-radius: 100px;
+  border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); text-decoration: none; cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.date-tab.active { background: var(--fg); color: #fff; border-color: var(--fg); }
+.date-strip-spaces { margin-left: auto; display: flex; gap: 6px; }
+.space-tab {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 6px 11px; border-radius: 100px;
+  border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); text-decoration: none; cursor: pointer;
+  transition: all .2s var(--ease);
+}
+.space-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Hero */
+.hero {
+  padding: 56px clamp(24px, 6vw, 80px) 40px;
+  background: linear-gradient(180deg, #fafaf9 0%, #fff 100%);
+  border-bottom: 1px solid var(--rule);
+}
+.hero-shell { max-width: 1200px; margin: 0 auto; }
+.hero-eye {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 22px;
+  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+}
+.hero-eye::before { content: "● "; }
+.hero-h1 {
+  font-family: var(--serif); font-weight: 700;
+  font-size: clamp(40px, 5.6vw, 72px);
+  letter-spacing: -2px; line-height: 1; margin-bottom: 22px;
+}
+.hero-h1 em { font-style: italic; color: var(--accent); font-weight: 500; }
+.hero-lead {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(17px, 1.5vw, 19px);
+  line-height: 1.55; color: #334155;
+  max-width: 60ch;
+}
+
+/* Saldo-kort i raderna */
+.balance-strip {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; max-width: 1200px; margin: 32px auto 0;
+  padding: 0 clamp(24px, 6vw, 80px);
+}
+@media (max-width: 800px) { .balance-strip { grid-template-columns: 1fr; } }
+.bal-card {
+  background: #fff; border: 1px solid var(--rule); border-radius: 6px;
+  padding: 18px 20px;
+}
+.bal-card.is-primary {
+  background: var(--fg); color: #fff; border-color: var(--fg);
+}
+.bal-card-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent);
+}
+.bal-card.is-primary .bal-card-eye { color: var(--gold); }
+.bal-card-num {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 32px; letter-spacing: -0.8px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+}
+.bal-card-num em { font-style: italic; color: var(--accent); font-weight: 500; }
+.bal-card.is-primary .bal-card-num em { color: var(--gold); }
+.bal-card-meta {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted); margin-top: 6px;
+}
+.bal-card.is-primary .bal-card-meta { color: rgba(255,255,255,0.6); }
+
+/* Tidslinje för en månad */
+.timeline-section {
+  padding: 56px clamp(24px, 6vw, 80px) 80px;
+  max-width: 1280px; margin: 0 auto;
+}
+.timeline-eye {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 14px;
+}
+.timeline-eye::before { content: "● "; }
+.timeline-h2 {
+  font-family: var(--serif); font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 700; letter-spacing: -1.2px; line-height: 1.05;
+  margin-bottom: 32px;
+}
+.timeline-h2 em { font-style: italic; color: var(--accent); font-weight: 500; }
+
+.month-rail {
+  position: relative;
+  margin: 32px 0;
+}
+.month-rail-axis {
+  position: absolute;
+  left: 0; right: 0; top: 18px;
+  height: 2px; background: var(--rule);
+}
+.month-rail-fill {
+  position: absolute;
+  left: 0; top: 18px;
+  width: 65%;
+  height: 2px;
+  background: var(--accent);
+}
+.month-rail-now {
+  position: absolute;
+  left: 65%; top: 8px;
+  transform: translateX(-50%);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px rgba(220,76,43,0.3); }
+  50%      { box-shadow: 0 0 0 2px var(--accent), 0 0 0 9px rgba(220,76,43,0); }
+}
+
+.month-events {
+  display: grid; grid-template-columns: repeat(31, 1fr); gap: 2px;
+  margin-top: 56px;
+}
+.event-cell {
+  height: 40px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: background .2s var(--ease);
+}
+.event-cell:hover { background: rgba(220,76,43,0.18); }
+.event-cell.in { background: rgba(16, 185, 129, 0.25); }
+.event-cell.in:hover { background: rgba(16, 185, 129, 0.45); }
+.event-cell.out { background: rgba(220, 76, 43, 0.20); }
+.event-cell.out:hover { background: rgba(220, 76, 43, 0.45); }
+.event-cell.big { background: rgba(220, 76, 43, 0.50); }
+
+.event-rail-label {
+  display: grid; grid-template-columns: repeat(31, 1fr);
+  margin-top: 6px; gap: 2px;
+}
+.event-rail-label span {
+  font-family: var(--mono); font-size: 8px;
+  text-align: center; color: var(--muted);
+}
+.event-rail-label span:nth-child(odd) { display: none; }
+
+/* Lista — månadens transaktioner i tidsordning */
+.tx-section {
+  padding: 0 clamp(24px, 6vw, 80px) 80px;
+  max-width: 1200px; margin: 0 auto;
+}
+.day-group {
+  margin-bottom: 36px;
+}
+.day-h {
+  font-family: var(--serif); font-weight: 700; font-size: 24px;
+  letter-spacing: -0.6px; line-height: 1;
+  margin-bottom: 8px;
+  display: flex; align-items: baseline; gap: 14px;
+}
+.day-h em { font-style: italic; color: var(--accent); font-weight: 500; }
+.day-h .meta {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--muted);
+}
+.day-net {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 16px; font-variant-numeric: tabular-nums;
+  margin-bottom: 14px;
+  color: var(--muted); letter-spacing: -0.3px;
+}
+.day-net strong { color: var(--fg); }
+
+.tx-row {
+  display: grid; grid-template-columns: 80px 1fr auto auto;
+  gap: 16px; padding: 12px 16px; align-items: center;
+  border: 1px solid var(--rule); border-radius: 6px;
+  margin-bottom: 6px; background: #fff;
+  transition: border-color .2s var(--ease);
+  cursor: pointer;
+  text-decoration: none; color: var(--fg);
+}
+.tx-row:hover { border-color: var(--accent); }
+.tx-row .time {
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--muted);
+}
+.tx-row .name {
+  font-family: var(--serif); font-weight: 600; font-size: 15px;
+  letter-spacing: -0.2px;
+}
+.tx-row .name span {
+  display: block;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); margin-top: 2px;
+  text-transform: uppercase; letter-spacing: 1.2px;
+}
+.tx-row .cat {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 1.4px; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 100px;
+  background: rgba(220, 76, 43, 0.06);
+  color: var(--accent);
+  border: 1px solid rgba(220, 76, 43, 0.2);
+}
+.tx-row .num {
+  font-family: var(--serif); font-weight: 700; font-size: 18px;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.3px;
+}
+.tx-row .num.in  { color: #047857; }
+.tx-row .num.out { color: #b91c1c; }
+</style>
+</head>
+<body>
+
+<a href="../index.html" class="brand-tag">Ekonomilabbet <span class="brand-tag-meta">Vol. 02 · Pengar</span></a>
+<nav class="top-nav">
+  <a href="../index.html">Förslag</a>
+  <a href="dashboard.html">Idag</a>
+</nav>
+
+<div class="date-strip">
+  <span class="date-strip-eye">Tidslinje</span>
+  <div class="date-tabs">
+    <a href="#" class="date-tab">Idag</a>
+    <a href="#" class="date-tab">Veckan</a>
+    <a href="#" class="date-tab active">Månaden</a>
+    <a href="#" class="date-tab">Året</a>
+  </div>
+  <div class="date-strip-spaces">
+    <a href="dashboard.html" class="space-tab">Idag</a>
+    <a href="#" class="space-tab">Bokföring</a>
+    <a href="banken.html" class="space-tab active">Pengar</a>
+    <a href="#" class="space-tab">Avtal</a>
+    <a href="#" class="space-tab">Utveckling</a>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="hero-shell">
+    <div class="hero-eye">
+      <span>Pengar · Banken</span>
+      <span>·</span>
+      <span>Maj 2026 · ackumulerat</span>
+    </div>
+    <h1 class="hero-h1">Månaden i <em>flöde</em>.</h1>
+    <p class="hero-lead">
+      Fjorton transaktioner hittills, sju kvar att vänta. Lönen kom 16:00
+      i tisdags, autogirona dras 25:e. Tidslinjen visar exakt när
+      pengarna rör sig — och varför.
+    </p>
+  </div>
+</section>
+
+<div class="balance-strip">
+  <div class="bal-card is-primary">
+    <div class="bal-card-eye">SEB · Lönekonto</div>
+    <div class="bal-card-num">27 <em>795</em></div>
+    <div class="bal-card-meta">+ 2 670 sen lönedag · 25:e nästa</div>
+  </div>
+  <div class="bal-card">
+    <div class="bal-card-eye">Nordea · Buffert</div>
+    <div class="bal-card-num">15 <em>500</em></div>
+    <div class="bal-card-meta">−3 200 efter tandläkare · 2,0 %</div>
+  </div>
+  <div class="bal-card">
+    <div class="bal-card-eye">Avanza · ISK</div>
+    <div class="bal-card-num">128 <em>650</em></div>
+    <div class="bal-card-meta">YTD +12,4 % · 5 000 kr nästa månad</div>
+  </div>
+</div>
+
+<section class="timeline-section">
+  <div class="timeline-eye">Maj månad · 31 dagar</div>
+  <h2 class="timeline-h2">Idag är dag <em>20 av 31</em>.</h2>
+
+  <div class="month-rail">
+    <div class="month-rail-axis"></div>
+    <div class="month-rail-fill"></div>
+    <div class="month-rail-now">!</div>
+  </div>
+
+  <div class="month-events">
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out big"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out big"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell in big"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell out"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+    <span class="event-cell"></span>
+  </div>
+  <div class="event-rail-label">
+    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span>
+    <span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span>
+    <span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span><span>21</span>
+    <span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span><span>28</span>
+    <span>29</span><span>30</span><span>31</span>
+  </div>
+</section>
+
+<section class="tx-section">
+
+  <div class="day-group">
+    <h3 class="day-h">Idag <em>onsdag 20 maj</em> <span class="meta">14:32 · live</span></h3>
+    <div class="day-net">Netto <strong>−4 072</strong> · 2 transaktioner</div>
+
+    <a href="#" class="tx-row">
+      <span class="time">14:22<br>nu</span>
+      <span class="name">Folktandvården Vasastan<span>akut · rotfyllning</span></span>
+      <span class="cat">Hälsa</span>
+      <span class="num out">−3 200</span>
+    </a>
+    <a href="#" class="tx-row">
+      <span class="time">09:14</span>
+      <span class="name">ICA Maxi · veckohandel<span>14 varor</span></span>
+      <span class="cat">Mat</span>
+      <span class="num out">−872</span>
+    </a>
+  </div>
+
+  <div class="day-group">
+    <h3 class="day-h">Tisdag <em>19 maj</em> <span class="meta">igår · lönedag</span></h3>
+    <div class="day-net">Netto <strong>+27 497</strong> · 2 transaktioner</div>
+
+    <a href="#" class="tx-row">
+      <span class="time">16:00</span>
+      <span class="name">Visma Lön AB · maj-utbetalning<span>OCR 4587 12 · ITP1</span></span>
+      <span class="cat">Lön</span>
+      <span class="num in">+27 795</span>
+    </a>
+    <a href="#" class="tx-row">
+      <span class="time">06:02</span>
+      <span class="name">Akavia · medlemsavgift<span>månatlig</span></span>
+      <span class="cat">Avgift</span>
+      <span class="num out">−298</span>
+    </a>
+  </div>
+
+  <div class="day-group">
+    <h3 class="day-h">Måndag <em>18 maj</em></h3>
+    <div class="day-net">Netto <strong>−6 164</strong> · 3 transaktioner</div>
+
+    <a href="#" class="tx-row">
+      <span class="time">20:14</span>
+      <span class="name">Spotify Premium · Familj<span>månads-prenumeration</span></span>
+      <span class="cat">Underhållning</span>
+      <span class="num out">−169</span>
+    </a>
+    <a href="#" class="tx-row">
+      <span class="time">12:32</span>
+      <span class="name">Avanza · ISK månadsspar<span>autogiro</span></span>
+      <span class="cat">Sparande</span>
+      <span class="num out">−5 000</span>
+    </a>
+    <a href="#" class="tx-row">
+      <span class="time">18:00</span>
+      <span class="name">SL · månadskort<span>30 dagar Sthlm</span></span>
+      <span class="cat">Transport</span>
+      <span class="num out">−995</span>
+    </a>
+  </div>
+
+</section>
+
+</body>
+</html>

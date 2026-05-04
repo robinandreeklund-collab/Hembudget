@@ -1704,6 +1704,7 @@ def monthly_forecast(
     # representerar kända återkommande fakturor som räknas separat via
     # upcoming_bills för kommande månad — annars dubbelräknar vi dem).
     from sqlalchemy import func as sql_func
+    from ..db.sql_compat import month_str as _month_str
 
     # Räkna ut lookback-fönstret korrekt över årsgräns
     lookback_month = mon - 3
@@ -1737,9 +1738,10 @@ def monthly_forecast(
     )
     loan_tx_ids_subq = session.query(_LoanPayment.transaction_id).subquery()
 
+    _m_expr = _month_str(session, Transaction.date)
     monthly_exp = (
         session.query(
-            sql_func.strftime("%Y-%m", Transaction.date).label("m"),
+            _m_expr.label("m"),
             sql_func.sum(Transaction.amount).label("tot"),
         )
         .join(_Acc, _Acc.id == Transaction.account_id)
@@ -1753,7 +1755,7 @@ def monthly_forecast(
             Transaction.id.not_in(legacy_matched_subq.select()),
             Transaction.id.not_in(loan_tx_ids_subq.select()),
         )
-        .group_by("m")
+        .group_by(_m_expr)
         .all()
     )
 

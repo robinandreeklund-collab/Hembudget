@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { api, formatSEK, getToken } from "@/api/client";
 import { Card } from "@/components/Card";
+import { useAuth } from "@/hooks/useAuth";
 import type { Account, Category } from "@/types/models";
 
 interface UpcomingLine {
@@ -100,6 +101,7 @@ interface ParseState {
 
 export default function Upcoming() {
   const qc = useQueryClient();
+  const { schoolMode } = useAuth();
   const [month, setMonth] = useState(currentMonth());
   const [parseJobs, setParseJobs] = useState<ParseState[]>([]);
   const [textInput, setTextInput] = useState("");
@@ -232,7 +234,7 @@ export default function Upcoming() {
   const paidIncomes = items.filter((i) => i.kind === "income" && isFullyPaid(i));
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-5xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="serif text-3xl leading-tight">
@@ -345,17 +347,29 @@ export default function Upcoming() {
         </Card>
       )}
 
-      <CreditCardInvoiceCard onDone={invalidate} />
+      <CreditCardInvoiceCard onDone={invalidate} schoolMode={schoolMode} />
 
       <Card title="Tolka fakturor automatiskt">
         <div className="text-sm text-slate-700 mb-3">
-          Dra och släpp fakturabilder. Systemet skickar varje bild till din lokala
-          LM Studio-modell som extraherar betalningsmottagare, belopp och förfallodag
-          helt automatiskt.{" "}
-          <strong>
-            Byt till en vision-kapabel modell i LM Studio först (t.ex. Qwen2.5-VL, Llava, Pixtral)
-          </strong>
-          .
+          {schoolMode ? (
+            <>
+              Dra och släpp Ekonomilabbets fakturor (Hjo Energi för el,
+              Telinet för bredband, demo-faktura för kreditkort osv.) — du
+              hittar dem under <strong>Dina dokument</strong>. Systemet
+              extraherar mottagare, belopp och förfallodag automatiskt.
+              Andra dokument än kursens stöds inte.
+            </>
+          ) : (
+            <>
+              Dra och släpp fakturabilder. Systemet skickar varje bild till din lokala
+              LM Studio-modell som extraherar betalningsmottagare, belopp och förfallodag
+              helt automatiskt.{" "}
+              <strong>
+                Byt till en vision-kapabel modell i LM Studio först (t.ex. Qwen2.5-VL, Llava, Pixtral)
+              </strong>
+              .
+            </>
+          )}
         </div>
 
         <div
@@ -425,35 +439,39 @@ export default function Upcoming() {
         )}
       </Card>
 
-      <Card title="Snabbinmatning via text">
-        <div className="text-sm text-slate-700 mb-2">
-          Skriv fritt, LM Studio tolkar: <em>"Vattenfall 1 420 kr förfaller 30 april"</em> eller
-          <em> "Lön Robin 42 000 kr den 25:e"</em>. Bra för räkningar utan bild.
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={textKind}
-            onChange={(e) => setTextKind(e.target.value as "bill" | "income")}
-            className="border rounded px-2 py-1.5"
-          >
-            <option value="bill">Faktura</option>
-            <option value="income">Lön/Inkomst</option>
-          </select>
-          <input
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="T.ex. SBAB bolåneränta 8 500 kr förfaller 25 april"
-            className="flex-1 border rounded px-3 py-1.5"
-          />
-          <button
-            onClick={() => textInput && textMut.mutate()}
-            disabled={!textInput || textMut.isPending}
-            className="bg-brand-600 text-white px-4 py-1.5 rounded disabled:opacity-40"
-          >
-            {textMut.isPending ? "Tolkar…" : "Lägg till"}
-          </button>
-        </div>
-      </Card>
+      {/* Snabbinmatning via text — döljs i school-läget eftersom Ekonomilabbet
+          inte använder lokal LM Studio och eleven lär sig manuellt formulär. */}
+      {!schoolMode && (
+        <Card title="Snabbinmatning via text">
+          <div className="text-sm text-slate-700 mb-2">
+            Skriv fritt, LM Studio tolkar: <em>"Vattenfall 1 420 kr förfaller 30 april"</em> eller
+            <em> "Lön Robin 42 000 kr den 25:e"</em>. Bra för räkningar utan bild.
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={textKind}
+              onChange={(e) => setTextKind(e.target.value as "bill" | "income")}
+              className="border rounded px-2 py-1.5"
+            >
+              <option value="bill">Faktura</option>
+              <option value="income">Lön/Inkomst</option>
+            </select>
+            <input
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="T.ex. SBAB bolåneränta 8 500 kr förfaller 25 april"
+              className="flex-1 border rounded px-3 py-1.5"
+            />
+            <button
+              onClick={() => textInput && textMut.mutate()}
+              disabled={!textInput || textMut.isPending}
+              className="bg-brand-600 text-white px-4 py-1.5 rounded disabled:opacity-40"
+            >
+              {textMut.isPending ? "Tolkar…" : "Lägg till"}
+            </button>
+          </div>
+        </Card>
+      )}
 
       <Card title={`Kommande fakturor (${openBills.length})`}>
         <ItemList
@@ -1242,7 +1260,13 @@ interface PdfDiagnostic {
   textLength: number;
 }
 
-function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
+function CreditCardInvoiceCard({
+  onDone,
+  schoolMode = false,
+}: {
+  onDone: () => void;
+  schoolMode?: boolean;
+}) {
   const [jobs, setJobs] = useState<
     { file: File; status: "uploading" | "done" | "error"; message?: string }[]
   >([]);
@@ -1402,17 +1426,30 @@ function CreditCardInvoiceCard({ onDone }: { onDone: () => void }) {
   return (
     <Card title="Läs in kreditkortsfaktura (PDF/bild)">
       <div className="text-sm text-slate-700 mb-3">
-        Dra in en eller flera Amex- eller SEB Kort-fakturor. Systemet läser BÅDE:
-        <ul className="list-disc pl-5 mt-1 space-y-0.5">
-          <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
-          <li>Alla enskilda köp → läggs in som transaktioner på kortkontot
-            (skapas automatiskt om det inte finns), kategoriseras av regelmotorn</li>
-        </ul>
-        <div className="mt-2 text-xs text-emerald-700">
-          <strong>PDF-fakturor (Amex, SEB Kort):</strong> parse:as deterministiskt
-          direkt från textlagret — ingen LLM, snabbt och exakt. Bilder och okända
-          PDF-format faller tillbaka på vision AI (Qwen2.5-VL, Pixtral).
-        </div>
+        {schoolMode ? (
+          <>
+            Dra in Ekonomilabbets demo-fakturor för kreditkort. Systemet
+            läser fakturasumma + förfallodag (hamnar under Kommande
+            fakturor) samt alla enskilda köp (läggs in som transaktioner
+            på kortkontot och kategoriseras automatiskt). Bara kursens
+            egna PDF-fakturor stöds — ladda ner dem från
+            {" "}<strong>Dina dokument</strong>.
+          </>
+        ) : (
+          <>
+            Dra in en eller flera Amex- eller SEB Kort-fakturor. Systemet läser BÅDE:
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              <li>Fakturasumma + förfallodag → hamnar under Kommande fakturor</li>
+              <li>Alla enskilda köp → läggs in som transaktioner på kortkontot
+                (skapas automatiskt om det inte finns), kategoriseras av regelmotorn</li>
+            </ul>
+            <div className="mt-2 text-xs text-emerald-700">
+              <strong>PDF-fakturor (Amex, SEB Kort):</strong> parse:as deterministiskt
+              direkt från textlagret — ingen LLM, snabbt och exakt. Bilder och okända
+              PDF-format faller tillbaka på vision AI (Qwen2.5-VL, Pixtral).
+            </div>
+          </>
+        )}
       </div>
 
       <div

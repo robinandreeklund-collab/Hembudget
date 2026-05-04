@@ -1,0 +1,2562 @@
+"""Idempotent seedare för kollektivavtal + yrke→avtal-mappningar.
+
+Avtals-summaries är pedagogiska utkast — siffrorna baseras på publika
+avtals-PDF:er men ska faktagranskas av domänkunnig innan release.
+`verified_at` lämnas tom tills granskning skett; UI:n visar disclaimer
+"Senast verifierat: —" så elever förstår att det är preliminärt.
+
+Idé 1 i dev_v1.md. Anropas vid uppstart från main.py likt
+seed_event_templates.
+"""
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy.orm import Session
+
+from .employer_models import (
+    CollectiveAgreement,
+    ProfessionAgreement,
+    WorkplaceQuestion,
+)
+
+
+# Avtals-data. Varje rad är ett dict — vi tar inte med id (auto-PK).
+# `meta` följer schemat:
+#   revision_pct_year: dict[year_str, pct_float]
+#   vacation_days: int (lagstadgat 25 är default)
+#   overtime_pct: int (procentpåslag på OB/övertid)
+#   sick_pay_steps: list[{days, pct}]
+#   pension_system: str ("ITP1" | "KAP-KL" | "AKAP-KR" | "SAF-LO" | "BTP" | None)
+#   pension_pct: float (% av brutto under 7,5 IBB)
+#   notes_md: str (interna kommentarer för faktagranskning)
+AGREEMENTS: list[dict] = [
+    {
+        "code": "hok_kommunal_2026",
+        "name": "HÖK 24 — Kommunal",
+        "union": "Kommunal",
+        "employer_org": "SKR + Sobona",
+        "valid_from": date(2024, 5, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.kommunal.se/avtal2024",
+        "summary_md": (
+            "## HÖK 24 — Kommunal\n\n"
+            "Ditt avtal som anställd inom kommun, region eller kommunalt "
+            "bolag. Löper 2024-05-01 till 2027-03-31. Förbund: Kommunal. "
+            "Motpart: SKR (Sveriges Kommuner och Regioner) och Sobona.\n\n"
+            "**Lönerevision.** Avtalet ger generella påslag varje år: "
+            "2025 ~3,3 %, 2026 ~3,1 %. Det finns både en lägstanivå "
+            "(individgaranti) och ett potten-utrymme för fördelning "
+            "som chefen sätter utifrån prestation. Du kan alltså få "
+            "mer ELLER mindre än snittet beroende på samtalet.\n\n"
+            "**Semester.** 25 dagar grundregel; 31 dagar från det år du "
+            "fyller 40, 32 dagar från 50. Lagen ger 25 minst.\n\n"
+            "**Sjuklön.** Dag 1 = karensavdrag (motsvarar ~20 % av en "
+            "veckas lön). Dag 2–14 betalar arbetsgivaren 80 %. "
+            "Dag 15+ tar Försäkringskassan över.\n\n"
+            "**Övertid.** Vardagar 50 % påslag; helger och natt 100 %. "
+            "OB-tillägg gäller utöver schemalagd tid.\n\n"
+            "**Tjänstepension.** AKAP-KR (för dig född 1986 eller "
+            "senare) eller KAP-KL (äldre). Arbetsgivaren betalar "
+            "6 % av brutto upp till 7,5 IBB, 31,5 % över. Den växer "
+            "till en pension du får från ~65 år."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.3, "2026": 3.1},
+            "vacation_days": 25,
+            "vacation_days_age_40": 31,
+            "vacation_days_age_50": 32,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "AKAP-KR",
+            "pension_pct": 6.0,
+            "pension_pct_above_75ibb": 31.5,
+        },
+        "verified_at": None,  # AVVAKTAR FAKTAGRANSKNING
+    },
+    {
+        "code": "tjm_it_2026",
+        "name": "Tjänstemannaavtalet IT — Unionen + Akavia",
+        "union": "Unionen + Akavia + Sveriges Ingenjörer",
+        "employer_org": "IT&Telekomföretagen (Almega)",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.unionen.se/avtal/it-telekom",
+        "summary_md": (
+            "## Tjänstemannaavtalet IT — Unionen / Akavia\n\n"
+            "Ditt avtal som tjänsteman inom IT- och telekomsektorn. "
+            "Avtalsförbund: Unionen, Akavia, Sveriges Ingenjörer. "
+            "Motpart: IT&Telekomföretagen (del av Almega).\n\n"
+            "**Lönerevision.** Sifferlöst på principen: "
+            "marknadsmässiga löner sätts lokalt mellan chef och "
+            "medarbetare. Industri-märket (~3 %/år) brukar vara "
+            "riktmärket. Inga centrala individgaranti — det är ditt "
+            "lönesamtal som avgör.\n\n"
+            "**Semester.** 25 dagar; många bolag erbjuder 30 efter "
+            "viss anställningstid (kollektivavtalad förmån utöver "
+            "lagen).\n\n"
+            "**Sjuklön.** Dag 1 = karensavdrag. Dag 2–14 = 80 %. "
+            "Dag 15+ Försäkringskassan; många IT-bolag fyller på "
+            "till ~90 % under en period (företagsförmån, ej avtal).\n\n"
+            "**Övertid.** I praktiken är de flesta IT-tjänstemän "
+            "övertidsbefriade — du har 'fri arbetstid' med högre "
+            "grundlön i utbyte (typiskt +3-5 dagar extra semester).\n\n"
+            "**Tjänstepension.** ITP1 standard. Arbetsgivaren betalar "
+            "4,5 % av brutto upp till 7,5 IBB, 30 % över. Du väljer "
+            "själv förvaltare via Collectum (max 50 % av summan får "
+            "vara aktiefond)."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "revision_note": "sifferlöst — riktmärke industri-märket",
+            "vacation_days": 25,
+            "vacation_days_common_extra": 30,
+            "overtime_pct": 50,
+            "overtime_typically_waived": True,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "ITP1",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "hok_larare_2026",
+        "name": "HÖK 21 — Lärarna",
+        "union": "Lärarförbundet + Lärarnas Riksförbund (Sveriges Lärare)",
+        "employer_org": "SKR + Sobona",
+        "valid_from": date(2024, 4, 1),
+        "valid_to": date(2026, 3, 31),
+        "source_url": "https://www.sverigeslarare.se/avtal",
+        "summary_md": (
+            "## HÖK — Lärarna (Sveriges Lärare)\n\n"
+            "Ditt avtal som lärare i kommunal eller regional grund-, "
+            "gymnasie- eller särskola. Förbund: Sveriges Lärare "
+            "(sammanslagningen av Lärarförbundet och LR sedan 2023). "
+            "Motpart: SKR och Sobona.\n\n"
+            "**Lönerevision.** Generellt påslag + lokal pott. 2025 "
+            "~3,4 %, 2026 ~3,0 %. För lärare finns en uttalad "
+            "ambition att lyfta läraryrkets snittlön — ditt "
+            "lönesamtal kan ge mer än potten om du visar "
+            "professionell utveckling, kollegialt ledarskap eller "
+            "ämnesfördjupning.\n\n"
+            "**Semester.** 25 dagar grund; 31 dagar från 40 års "
+            "ålder; 32 dagar från 50. Lärarens semester ligger "
+            "till stor del förlagd över sommaren.\n\n"
+            "**Arbetstid.** Reglerad arbetstid: ca 1 360 h/år "
+            "(ferieanställning) eller 1 700 h/år (semester-"
+            "anställning). Förtroendetid utöver det.\n\n"
+            "**Sjuklön.** Identisk med Kommunal HÖK: dag 1 karens, "
+            "dag 2–14 80 %, FK från dag 15.\n\n"
+            "**Tjänstepension.** AKAP-KR (yngre) / KAP-KL (äldre). "
+            "6 % av brutto under 7,5 IBB; 31,5 % över."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.4, "2026": 3.0},
+            "vacation_days": 25,
+            "vacation_days_age_40": 31,
+            "vacation_days_age_50": 32,
+            "annual_hours_ferie": 1360,
+            "annual_hours_semester": 1700,
+            "overtime_pct": 50,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "AKAP-KR",
+            "pension_pct": 6.0,
+            "pension_pct_above_75ibb": 31.5,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "hok_vard_2026",
+        "name": "HÖK 22 — Vårdförbundet",
+        "union": "Vårdförbundet",
+        "employer_org": "SKR + Sobona",
+        "valid_from": date(2022, 4, 1),
+        "valid_to": date(2025, 3, 31),
+        "source_url": "https://www.vardforbundet.se/avtal",
+        "summary_md": (
+            "## HÖK — Vårdförbundet\n\n"
+            "Ditt avtal som sjuksköterska, barnmorska, biomedicinsk "
+            "analytiker eller röntgensjuksköterska anställd i region "
+            "eller kommunal vård. Förbund: Vårdförbundet. Motpart: "
+            "SKR och Sobona.\n\n"
+            "**Lönerevision.** Generellt + lokal pott. 2025 ~3,2 %, "
+            "2026 ~3,0 %. Avtalet har långsiktig löneutveckling "
+            "som mål — chefer kan ge tydliga lönelyft för "
+            "specialistutbildning eller nattens svåraste pass.\n\n"
+            "**Semester.** 25 dagar grund; 31 från 40; 32 från 50.\n\n"
+            "**OB-tillägg.** För kvällar, nätter, helger och röda "
+            "dagar tillkommer OB-tillägg utöver grundlön — kan "
+            "vara 10–100 % av timlönen beroende på tid. Här tjänar "
+            "många nattsjuksköterskor en betydande del av total-"
+            "lönen.\n\n"
+            "**Sjuklön.** Som övriga HÖK-avtal: karens dag 1, "
+            "80 % dag 2–14.\n\n"
+            "**Tjänstepension.** AKAP-KR / KAP-KL. 6 % under 7,5 "
+            "IBB, 31,5 % över."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.2, "2026": 3.0},
+            "vacation_days": 25,
+            "vacation_days_age_40": 31,
+            "vacation_days_age_50": 32,
+            "ob_evening_pct": 22,
+            "ob_night_pct": 50,
+            "ob_weekend_pct": 100,
+            "overtime_pct": 50,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "AKAP-KR",
+            "pension_pct": 6.0,
+            "pension_pct_above_75ibb": 31.5,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "tjm_general_2026",
+        "name": "Tjänstemannaavtalet (generellt) — Unionen / Almega",
+        "union": "Unionen + Akademikerförbunden",
+        "employer_org": "Almega",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.unionen.se/avtal",
+        "summary_md": (
+            "## Tjänstemannaavtalet (generellt)\n\n"
+            "Det breda tjänstemanna-avtalet för privatanställda inom "
+            "tjänstesektorn — projektledare, ekonomiassistent, "
+            "marknadsförare, säljare med tjänstemannaroll. Förbund: "
+            "Unionen, Akavia, Sveriges Ingenjörer. Motpart: Almega.\n\n"
+            "**Lönerevision.** Sifferlöst (eller siffersatt med ~3 % "
+            "i centrala potten). Lokal förhandling avgör hur fördelas. "
+            "Ditt lönesamtal är där höjningen sätts.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14, sedan FK.\n\n"
+            "**Övertid.** 50 % vardagar, 100 % helger. Många "
+            "tjänstemän är övertidsbefriade mot extra semester "
+            "(typiskt 3–5 dagar).\n\n"
+            "**Tjänstepension.** ITP1: 4,5 % av brutto under 7,5 "
+            "IBB, 30 % över. Du väljer förvaltare via Collectum."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "revision_note": "sifferlöst eller centralt ~3%",
+            "vacation_days": 25,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "ITP1",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "byggavtalet_2026",
+        "name": "Byggavtalet — Byggnads",
+        "union": "Byggnads",
+        "employer_org": "Byggföretagen",
+        "valid_from": date(2025, 5, 1),
+        "valid_to": date(2027, 4, 30),
+        "source_url": "https://www.byggnads.se/avtal/",
+        "summary_md": (
+            "## Byggavtalet — Byggnads / Byggföretagen\n\n"
+            "Ditt avtal som anställd i bygg-, anläggnings- eller "
+            "snickeriföretag. Förbund: Byggnads. Motpart: Bygg-"
+            "företagen.\n\n"
+            "**Lön.** Du tjänar antingen på prestationslön (ackord) "
+            "eller månadslön. Ackord betalar mer om du är snabb och "
+            "noggrann men är osäkrare. Centralt sätts grundlön och "
+            "ackordsnormer; lokala förhandlingar avgör potten.\n\n"
+            "**Lönerevision.** ~3,2 % 2025; ~3,0 % 2026 i centrala "
+            "påslag, plus prestationsbaserade lönelyft.\n\n"
+            "**Semester.** 25 dagar; särskild semesterersättning "
+            "12 % av lönen utbetalas i juni (eftersom byggjobb varierar "
+            "från år till år).\n\n"
+            "**Övertid.** 50 % första två timmar; 100 % därefter, "
+            "samt helger. Restidsersättning för resor till "
+            "arbetsplats utanför hemorten.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** Avtalspension SAF-LO: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över. Du väljer förvaltare "
+            "via Fora."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.2, "2026": 3.0},
+            "wage_form": "ackord eller månadslön",
+            "vacation_days": 25,
+            "vacation_pay_pct": 12,
+            "overtime_pct": 50,
+            "overtime_pct_extra": 100,
+            "travel_compensation": True,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "motorbranschen_2026",
+        "name": "Motorbranschavtalet — IF Metall",
+        "union": "IF Metall",
+        "employer_org": "Motorbranschens Arbetsgivareförbund",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.ifmetall.se/avtal",
+        "summary_md": (
+            "## Motorbranschavtalet — IF Metall\n\n"
+            "Ditt avtal som bilmekaniker, lackerare eller bilplåts"
+            "lagare. Förbund: IF Metall. Motpart: Motorbranschens "
+            "Arbetsgivareförbund (MAF).\n\n"
+            "**Lönerevision.** Industri-märket sätter taket: ~3,0 % "
+            "2025 och 2026. Generellt påslag + lokal pott.\n\n"
+            "**Semester.** 25 dagar grundregel.\n\n"
+            "**Övertid.** 50 % vardagar de första två timmarna; "
+            "100 % därefter och helger. OB-tillägg för kvällar "
+            "och nätter.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över. Förvaltas via Fora."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "vacation_days": 25,
+            "overtime_pct": 50,
+            "overtime_pct_extra": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "detaljhandel_2026",
+        "name": "Detaljhandelsavtalet — Handels",
+        "union": "Handelsanställdas Förbund",
+        "employer_org": "Svensk Handel",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.handels.se/avtal",
+        "summary_md": (
+            "## Detaljhandelsavtalet — Handels\n\n"
+            "Ditt avtal som butiksmedarbetare, säljare eller "
+            "lagerarbetare i detaljhandeln. Förbund: Handels. "
+            "Motpart: Svensk Handel.\n\n"
+            "**Lönerevision.** ~3,0 % 2025 och 2026 i centrala "
+            "påslag. Lokala förhandlingar fördelar.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**OB-tillägg.** Stort i detaljhandeln eftersom "
+            "öppettider sträcker sig över kvällar och helger. "
+            "Kvällar +50 %; lördagar +100 %; söndagar och röda "
+            "dagar +100 %. Dessa tillägg utgör ofta 10–20 % av "
+            "totala lönen.\n\n"
+            "**Övertid.** 50 % vardagar; 100 % helger.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över. Förvaltas via Fora."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "vacation_days": 25,
+            "ob_evening_pct": 50,
+            "ob_saturday_pct": 100,
+            "ob_sunday_pct": 100,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "installation_2026",
+        "name": "Installationsavtalet — Elektrikerna",
+        "union": "Svenska Elektrikerförbundet",
+        "employer_org": "Installatörsföretagen",
+        "valid_from": date(2025, 5, 1),
+        "valid_to": date(2027, 4, 30),
+        "source_url": "https://www.sef.se/avtal",
+        "summary_md": (
+            "## Installationsavtalet — Elektrikerna\n\n"
+            "Ditt avtal som installations-elektriker. Förbund: "
+            "Svenska Elektrikerförbundet (SEF). Motpart: "
+            "Installatörsföretagen.\n\n"
+            "**Lön.** Liknande Bygg: ackord eller månadslön. "
+            "Höga grundlöner relativt andra LO-avtal eftersom "
+            "yrket kräver certifiering.\n\n"
+            "**Lönerevision.** ~3,0 % 2025 och 2026.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**Övertid.** 50 % första två timmar; 100 % därefter "
+            "och helger. Restidsersättning för resor utanför "
+            "hemorten.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB, 30 % över."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "wage_form": "ackord eller månadslön",
+            "vacation_days": 25,
+            "overtime_pct": 50,
+            "overtime_pct_extra": 100,
+            "travel_compensation": True,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "grona_riks_2026",
+        "name": "Gröna Riks — HRF",
+        "union": "Hotell- och Restaurang Facket (HRF)",
+        "employer_org": "Visita",
+        "valid_from": date(2025, 4, 1),
+        "valid_to": date(2027, 3, 31),
+        "source_url": "https://www.hrf.net/avtal",
+        "summary_md": (
+            "## Gröna Riks — HRF / Visita\n\n"
+            "Ditt avtal som kock, servitör eller barista i hotell- "
+            "och restaurangbranschen. Förbund: HRF. Motpart: "
+            "Visita.\n\n"
+            "**Lön.** Branschen har låga grundlöner men höga OB-"
+            "tillägg eftersom restauranger har sena kvällar och "
+            "helger.\n\n"
+            "**Lönerevision.** ~3,0 % 2025; 2026 förhandlas.\n\n"
+            "**Semester.** 25 dagar.\n\n"
+            "**OB-tillägg.** Vardagar efter 18.00 +25 %; nätter "
+            "+50 %; helger +75–100 %. Kan utgöra 15–25 % av "
+            "totallönen.\n\n"
+            "**Övertid.** 50 % vardagar; 100 % helger och natt.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14.\n\n"
+            "**Tjänstepension.** SAF-LO Avtalspension: 4,5 % av "
+            "brutto under 7,5 IBB."
+        ),
+        "meta": {
+            "revision_pct_year": {"2025": 3.0, "2026": 3.0},
+            "vacation_days": 25,
+            "ob_evening_pct": 25,
+            "ob_night_pct": 50,
+            "ob_weekend_pct": 100,
+            "overtime_pct": 50,
+            "overtime_pct_weekend": 100,
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag"},
+                {"days": "2-14", "pct": 80},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": "SAF-LO",
+            "pension_pct": 4.5,
+            "pension_pct_above_75ibb": 30.0,
+        },
+        "verified_at": None,
+    },
+    {
+        "code": "smaforetag_inget_avtal",
+        "name": "Småföretag utan kollektivavtal",
+        "union": "—",
+        "employer_org": "—",
+        "valid_from": date(2025, 1, 1),
+        "valid_to": None,
+        "source_url": None,
+        "summary_md": (
+            "## Småföretag utan kollektivavtal\n\n"
+            "Du jobbar på en arbetsplats som inte har tecknat "
+            "kollektivavtal. Det betyder att din lön och dina "
+            "förmåner regleras av lagen — inte av ett avtal "
+            "förhandlat mellan facket och arbetsgivar-"
+            "organisationen.\n\n"
+            "**Lön.** Inget centralt revisionsutrymme. Höjningar "
+            "förhandlas direkt med din chef. Du har rätt att veta "
+            "vad jobbet betalar — men ingen avtalsmodell håller "
+            "lönen i takt med branschen.\n\n"
+            "**Semester.** 25 dagar enligt semesterlagen — det "
+            "är minimum. Inga extra dagar för ålder.\n\n"
+            "**Sjuklön.** Karens + 80 % dag 2–14 enligt sjuk"
+            "lönelagen. Dag 15 tar Försäkringskassan över.\n\n"
+            "**Övertid.** Du har rätt till övertidsersättning "
+            "enligt arbetstidslagen, men nivån är inte avtalad. "
+            "Förhandla själv med chefen.\n\n"
+            "**Tjänstepension.** **Ingen tjänstepension** utöver "
+            "den allmänna pensionen. Det är en stor skillnad: en "
+            "kollektiv-anställd får ~4,5 % av lönen extra varje "
+            "månad in på pensionen som du inte ser. På 30 års "
+            "arbete blir det hundratusentals kronor.\n\n"
+            "**Vad kan du göra?** Pensionsspara själv (ISK eller "
+            "kapitalförsäkring) — det rekommenderas särskilt för "
+            "anställda utan tjänstepension. Eller kräva att "
+            "arbetsgivaren betalar in motsvarande belopp."
+        ),
+        "meta": {
+            "revision_pct_year": {},
+            "revision_note": "ingen central revision — individuell förhandling",
+            "vacation_days": 25,
+            "overtime_pct": None,
+            "overtime_note": "lagstadgad rätt, ingen avtalsnivå",
+            "sick_pay_steps": [
+                {"days": "1", "pct": 0, "note": "karensavdrag (lag)"},
+                {"days": "2-14", "pct": 80, "note": "sjuklönelagen"},
+                {"days": "15+", "pct": 0, "note": "FK tar över"},
+            ],
+            "pension_system": None,
+            "pension_pct": 0.0,
+            "pension_note": "saknas — viktig att kompensera privat",
+        },
+        "verified_at": None,
+    },
+]
+
+
+def seed_collective_agreements(session: Session) -> int:
+    """Idempotent seed av kollektivavtal. Returnerar antal nya rader."""
+    existing = {a.code for a in session.query(CollectiveAgreement).all()}
+    added = 0
+    for ag in AGREEMENTS:
+        if ag["code"] in existing:
+            continue
+        session.add(CollectiveAgreement(
+            code=ag["code"],
+            name=ag["name"],
+            union=ag["union"],
+            employer_org=ag["employer_org"],
+            valid_from=ag["valid_from"],
+            valid_to=ag.get("valid_to"),
+            source_url=ag.get("source_url"),
+            summary_md=ag["summary_md"],
+            meta=ag["meta"],
+            verified_at=ag.get("verified_at"),
+        ))
+        added += 1
+    session.flush()
+    return added
+
+
+# Yrke → avtal-mappning. Måste matcha Profession.title i
+# profile_fixtures.PROFESSIONS exakt. employer_pattern är substring som
+# matchas mot StudentProfile.employer; tom = default för yrket.
+# Specifika patterns kommer först (mer specifikt vinner — vi sorterar
+# i seedaren så att längre pattern matchas först).
+PROFESSION_MAPPINGS: list[dict] = [
+    # Vård och omsorg → Kommunal HÖK
+    {"profession": "Undersköterska", "agreement_code": "hok_kommunal_2026"},
+    {"profession": "Barnskötare", "agreement_code": "hok_kommunal_2026"},
+
+    # Lärare → Lärar-HÖK
+    {"profession": "Lärare F-3", "agreement_code": "hok_larare_2026"},
+    {"profession": "Förskollärare", "agreement_code": "hok_larare_2026"},
+
+    # Sjukvård → Vårdförbundet HÖK
+    {"profession": "Sjuksköterska", "agreement_code": "hok_vard_2026"},
+
+    # IT-konsult → IT-tjänstemannaavtalet
+    {"profession": "IT-konsult", "agreement_code": "tjm_it_2026"},
+
+    # Bygg → Byggavtalet
+    {"profession": "Snickare", "agreement_code": "byggavtalet_2026"},
+
+    # El → Installationsavtalet
+    {"profession": "Elektriker", "agreement_code": "installation_2026"},
+
+    # Bil → Motorbranschavtalet
+    {"profession": "Bilmekaniker", "agreement_code": "motorbranschen_2026"},
+
+    # Detaljhandel → Handels (default), några employers helt utan avtal
+    {"profession": "Butiksmedarbetare", "agreement_code": "detaljhandel_2026"},
+
+    # Säljare: tjänstemanna-default; ICA/Bauhaus etc. har detaljhandel
+    {"profession": "Säljare", "agreement_code": "tjm_general_2026"},
+    {
+        "profession": "Säljare",
+        "employer_pattern": "ICA",
+        "agreement_code": "detaljhandel_2026",
+    },
+    {
+        "profession": "Säljare",
+        "employer_pattern": "Bauhaus",
+        "agreement_code": "detaljhandel_2026",
+    },
+    {
+        "profession": "Säljare",
+        "employer_pattern": "Elgiganten",
+        "agreement_code": "detaljhandel_2026",
+    },
+    {
+        "profession": "Säljare",
+        "employer_pattern": "Mediamarkt",
+        "agreement_code": "detaljhandel_2026",
+    },
+
+    # HRF — Kock + Barista (några specifika utan avtal)
+    {"profession": "Kock", "agreement_code": "grona_riks_2026"},
+    {
+        "profession": "Kock",
+        "employer_pattern": "Egen verksamhet",
+        "agreement_code": "smaforetag_inget_avtal",
+    },
+    {"profession": "Barista", "agreement_code": "grona_riks_2026"},
+
+    # Frisör — Cutters/Klippoteket har avtal, "Egen verksamhet" inte
+    {
+        "profession": "Frisör",
+        "agreement_code": "detaljhandel_2026",
+        "notes": "Frisörföretagarna ansluter till Handels-/Detaljhandelsavtalet",
+    },
+    {
+        "profession": "Frisör",
+        "employer_pattern": "Egen verksamhet",
+        "agreement_code": "smaforetag_inget_avtal",
+    },
+
+    # Tjänstemanna-yrken (Almega-area)
+    {"profession": "Ekonomiassistent", "agreement_code": "tjm_general_2026"},
+    {"profession": "Projektledare", "agreement_code": "tjm_general_2026"},
+    {"profession": "Marknadsassistent", "agreement_code": "tjm_general_2026"},
+]
+
+
+def seed_profession_agreements(session: Session) -> int:
+    """Idempotent seed av yrke→avtal-mappningar.
+
+    Sorterar mappningar så längre employer_pattern kommer först — gör
+    inga skillnad i seedningen i sig (vi adderar alla rader), men
+    läsare av tabellen som vill matcha 'mest specifik först' kan
+    sortera på `LENGTH(employer_pattern) DESC`.
+
+    Returnerar antal nya rader.
+    """
+    # Bygg lookup code → CollectiveAgreement.id
+    code_to_id: dict[str, int] = {
+        ag.code: ag.id for ag in session.query(CollectiveAgreement).all()
+    }
+
+    existing = {
+        (pa.profession, pa.employer_pattern)
+        for pa in session.query(ProfessionAgreement).all()
+    }
+    added = 0
+    for m in PROFESSION_MAPPINGS:
+        prof = m["profession"]
+        pattern = m.get("employer_pattern", "")
+        key = (prof, pattern)
+        if key in existing:
+            continue
+        agreement_id = code_to_id.get(m["agreement_code"])
+        # Defensivt: om koden saknas (t.ex. seedet kördes innan
+        # avtalen) — hoppa över, kör om vid nästa boot.
+        if agreement_id is None and m["agreement_code"] != "smaforetag_inget_avtal":
+            continue
+        # För "småföretag" sätter vi agreement_id om den finns, annars
+        # behåller vi NULL — pedagogiskt OK eftersom UI:n hanterar
+        # båda fallen.
+        if m["agreement_code"] == "smaforetag_inget_avtal":
+            agreement_id = code_to_id.get("smaforetag_inget_avtal")
+        # Pension-rate: läs default från avtalets meta om finns
+        pension_pct = None
+        for ag in session.query(CollectiveAgreement).filter(
+            CollectiveAgreement.code == m["agreement_code"],
+        ).all():
+            pp = ag.meta.get("pension_pct") if ag.meta else None
+            if pp is not None:
+                pension_pct = Decimal(str(pp))
+                break
+        session.add(ProfessionAgreement(
+            profession=prof,
+            employer_pattern=pattern,
+            agreement_id=agreement_id,
+            pension_rate_pct=pension_pct,
+            notes=m.get("notes"),
+        ))
+        added += 1
+    session.flush()
+    return added
+
+
+# Slumpade arbetsplats-frågor som skickas till eleven från
+# arbetsgivaren. Pedagogiskt fokus: konkreta vardagssituationer där
+# eleven får träna omdöme. Inga politiska frågor, inga åldersolämpliga
+# ämnen. Varje option har ett delta som speglar HUR arbetsgivaren
+# typiskt skulle reagera — inte vad som är "moraliskt rätt".
+WORKPLACE_QUESTIONS: list[dict] = [
+    {
+        "code": "sick_call_in_001",
+        "scenario_md": (
+            "Du vaknar med halsont och feber. Klockan är 06:30 och ditt "
+            "arbetspass börjar 07:30. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": "Ringer chefen direkt och sjukanmäler dig.",
+                "delta": 2,
+                "explanation": (
+                    "Tidig sjukanmälan ger chefen tid att ordna ersättare. "
+                    "Det visar respekt för verksamheten och dina kollegor."
+                ),
+            },
+            {
+                "text": "Skickar ett SMS strax innan passet börjar.",
+                "delta": -2,
+                "explanation": (
+                    "Sent meddelande gör det svårt att ordna ersättning — "
+                    "kollegor blir överbelastade. Ring tidigt nästa gång."
+                ),
+            },
+            {
+                "text": "Går till jobbet ändå för att inte verka svag.",
+                "delta": -3,
+                "explanation": (
+                    "Smitta sprids till kollegor och kunder. Sjukfrånvaro "
+                    "är inte ett karaktärsfel — det är att skydda andra."
+                ),
+            },
+            {
+                "text": "Säger inget och hoppas att ingen märker.",
+                "delta": -5,
+                "explanation": (
+                    "Olovlig frånvaro är allvarligt. Det förstör tillit "
+                    "och kan leda till skriftlig varning eller uppsägning."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Bra praxis: ring (inte SMS) chefen så tidigt som möjligt. "
+            "Säg kort vad som hänt och när du tror du kan vara tillbaka. "
+            "Om du är borta över sju dagar krävs läkarintyg enligt "
+            "sjuklönelagen — då hör Försäkringskassan av sig."
+        ),
+        "tags": ["sjukfrånvaro", "kommunikation"],
+        "difficulty": 1,
+    },
+    {
+        "code": "vab_001",
+        "scenario_md": (
+            "Ditt barn på fyra år har magsjuka och kan inte gå till "
+            "förskolan. Du har ett viktigt möte 09:00 där du ska "
+            "presentera kvartalsrapporten. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Ringer chefen, förklarar situationen och föreslår "
+                    "att en kollega tar mötet eller att det skjuts upp."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "VAB är en lagstadgad rätt för dig som förälder. "
+                    "Att proaktivt föreslå lösning visar ansvar."
+                ),
+            },
+            {
+                "text": (
+                    "Lämnar barnet hos en granne du knappt känner och "
+                    "går till mötet."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Dåligt omdöme — barnet är sjukt och behöver dig. "
+                    "Och om grannen ringer dig under mötet ändå förlorar "
+                    "du fokus."
+                ),
+            },
+            {
+                "text": (
+                    "Sjukanmäler dig själv istället för att VAB:a, "
+                    "eftersom det 'ser bättre ut'."
+                ),
+                "delta": -5,
+                "explanation": (
+                    "Det är försäkringsbedrägeri — Försäkringskassan "
+                    "betalar ut fel ersättning. Kan leda till "
+                    "polisanmälan."
+                ),
+            },
+            {
+                "text": (
+                    "VAB:ar och skickar i förväg en utförlig skriftlig "
+                    "sammanfattning + alla siffror till chefen."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Bästa praxis: dokumentera så någon annan kan ta "
+                    "över. Visar professionalism trots oplanerad frånvaro."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "VAB (vård av barn) ger ersättning från Försäkringskassan upp "
+            "till 120 dagar per år och barn under 12. Du anmäler själv "
+            "till FK och berättar för chefen. Det är inte sjukfrånvaro — "
+            "det är en helt separat rätt."
+        ),
+        "tags": ["VAB", "föräldraskap", "kommunikation"],
+        "difficulty": 2,
+    },
+    {
+        "code": "late_meeting_001",
+        "scenario_md": (
+            "Tunnelbanan står stilla och du inser att du kommer 15 "
+            "minuter sent till ett team-möte. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Skickar ett snabbt meddelande i Teams: 'T-bana står, "
+                    "är där om 15 min.' Hoppar in när det går."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Förvarning gör att kollegorna kan börja utan dig "
+                    "eller skjuta upp dina punkter."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — slipper det krångliga och hoppas "
+                    "ingen märker."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Tystnad signalerar slarv. Mötesdeltagare väntar "
+                    "och blir frustrerade."
+                ),
+            },
+            {
+                "text": (
+                    "Skyller på kollegan när du kommer fram för att "
+                    "dölja förseningen."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att skylla på andra för egna förseningar är "
+                    "tillitskrossande. Kollegor noterar."
+                ),
+            },
+            {
+                "text": (
+                    "Tar en taxi på företagets kort utan att fråga."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Personliga utlägg på företagets pengar utan "
+                    "godkännande är gråzon — fråga först."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Punktlighet är en signal: 'jag respekterar din tid'. När "
+            "tåg eller buss står är det inte ditt fel — men det är ditt "
+            "ansvar att meddela. Kort SMS eller chatt-meddelande räcker."
+        ),
+        "tags": ["punktlighet", "kommunikation"],
+        "difficulty": 1,
+    },
+    {
+        "code": "honest_mistake_001",
+        "scenario_md": (
+            "Du har skickat fel siffror till en viktig kund. Det märks "
+            "först nästa dag, och bara du har sett felet. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Berättar för chefen direkt och föreslår en plan "
+                    "för att rätta till det."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Att äga sina misstag är en av de mest värdefulla "
+                    "egenskaperna. Chefer minns vem som är ärlig."
+                ),
+            },
+            {
+                "text": (
+                    "Försöker rätta till det själv utan att säga något, "
+                    "i hopp om att kunden inte märker."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Risken är att felet upptäcks ändå — och då blir "
+                    "du också den som dolde det. Dubbel förlust."
+                ),
+            },
+            {
+                "text": (
+                    "Skyller felet på en kollega som råkade kontrollera "
+                    "siffrorna."
+                ),
+                "delta": -6,
+                "explanation": (
+                    "Att skylla på oskyldiga är allvarligt. Om det "
+                    "kommer fram kan du sägas upp av personliga skäl."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och hoppas att kunden inte hör av sig."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Passivitet vid fel är samma sak som dölja. Det "
+                    "blir värre ju längre tid som går."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Ingen är felfri. Den som äger sina misstag tidigt får "
+            "förtroende. 'Jag har gjort fel — så här tänker jag rätta "
+            "det' är en mening som lyfter dig i chefens ögon."
+        ),
+        "tags": ["ärlighet", "ansvar"],
+        "difficulty": 2,
+    },
+    {
+        "code": "cover_for_colleague_001",
+        "scenario_md": (
+            "En kollega ber dig täcka för henom under hennes pass nästa "
+            "vecka — hon säger att hon är 'lite trött' och vill ta "
+            "ledigt utan att sjukanmäla sig. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger nej men föreslår att hon tar en semesterdag "
+                    "eller pratar med chefen istället."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Att hjälpa en kollega är fint — men inte genom "
+                    "att medverka till oärlighet mot arbetsgivaren."
+                ),
+            },
+            {
+                "text": (
+                    "Ja, du täcker för henne. Kollegial solidaritet är "
+                    "viktigt."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Du blir medskyldig till olovlig frånvaro. Om det "
+                    "uppdagas drabbas båda — och chefen tappar tillit "
+                    "till dig."
+                ),
+            },
+            {
+                "text": (
+                    "Säger ja och tar 500 kr av henne för besväret."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Du sätter dig i en utpressningsbar position och "
+                    "har dessutom medverkat till bedrägeri mot "
+                    "arbetsgivaren."
+                ),
+            },
+            {
+                "text": (
+                    "Skvallrar för chefen utan att prata med kollegan "
+                    "först."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Bättre att först säga till kollegan: 'jag tänker "
+                    "inte täcka för dig, prata med chefen'. Skvaller "
+                    "utan förvarning skadar relationen i onödan."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Lojalitet mot kollegor är viktigt — men inte gränslös. "
+            "Att hjälpa någon att ljuga gör dig medskyldig. Bättre att "
+            "vägledning: 'jag förstår att du behöver vila, men prata "
+            "med chefen om en ledig dag'."
+        ),
+        "tags": ["lojalitet", "ärlighet", "konflikt"],
+        "difficulty": 3,
+    },
+    {
+        "code": "missed_deadline_001",
+        "scenario_md": (
+            "Du inser måndag morgon att du inte hinner med en deadline "
+            "som ligger på onsdag — du hade underskattat hur lång tid "
+            "uppgiften skulle ta. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger till chefen direkt på morgonen och föreslår "
+                    "ny deadline torsdag, plus en plan för hur du tar igen tiden."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Tidig signalering ger tid för chefen att omplanera. "
+                    "Att komma med lösning, inte bara problem, är guld."
+                ),
+            },
+            {
+                "text": (
+                    "Tystar ner det och kör på övertid för att hinna ändå."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Du klarar kanske deadline men bränner ut dig. "
+                    "Bättre att förvarna; chefen kanske inte ens behöver "
+                    "det onsdag."
+                ),
+            },
+            {
+                "text": (
+                    "Lämnar in en halvfärdig version på onsdag utan "
+                    "att flagga att den inte är klar."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att leverera halvfärdigt utan förvarning är värre "
+                    "än sen leverans. Mottagaren tror att det är klart."
+                ),
+            },
+            {
+                "text": (
+                    "Skyller på att du inte fått tillräckligt med "
+                    "information från en kollega."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Att skylla ifrån sig vid första tecken på problem "
+                    "noteras snabbt. Chefer minns vem som tar ansvar."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tidiga varningar är gratis. Sen är dyra. Säg så fort du "
+            "vet: 'jag hinner inte X, kan vi flytta till Y, eller "
+            "minska scopet?'"
+        ),
+        "tags": ["tidshantering", "kommunikation", "ansvar"],
+        "difficulty": 2,
+    },
+    {
+        "code": "conflict_with_colleague_001",
+        "scenario_md": (
+            "En kollega kritiserar ditt arbete på ett möte inför hela "
+            "teamet — på ett sätt du upplever som orättvist. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bemöter sakligt på mötet utan att höja rösten, "
+                    "och tar upp det enskilt med kollegan efteråt."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Saklig respons + privat samtal är vuxet "
+                    "konflikthantering. Du försvarar dig utan att skapa "
+                    "drama."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget på mötet och pratar bakom ryggen på "
+                    "kollegan med andra efteråt."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Skvaller skadar teamet. Konflikten blir kvar och "
+                    "fördjupas — andra dras in."
+                ),
+            },
+            {
+                "text": (
+                    "Höjer rösten och säger ifrån direkt på mötet på "
+                    "ett aggressivt sätt."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Aggressivt försvar gör mötet otrevligt och chefen "
+                    "ser dig som svår att jobba med."
+                ),
+            },
+            {
+                "text": (
+                    "Går direkt till chefen och kräver att kollegan "
+                    "tillrättavisas."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Att hoppa över ett enskilt samtal med kollegan "
+                    "först visar att du inte själv kan lösa konflikter. "
+                    "Chefen vill att vuxna pratar med varandra."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Konflikter är oundvikliga. Bra konflikthantering: bemöt "
+            "sakligt i stunden, ta upp det enskilt efter, eskalera till "
+            "chef bara om det inte löser sig."
+        ),
+        "tags": ["konflikt", "kommunikation"],
+        "difficulty": 3,
+    },
+    {
+        "code": "alcohol_at_work_event_001",
+        "scenario_md": (
+            "Företaget har en after-work-fest med fri bar. Din chef "
+            "och kunder är där. Vad är ditt drickande?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tar 1–2 drinkar och håller dig nykter nog att "
+                    "småprata professionellt."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Sociala företagsevent är fortfarande arbete. "
+                    "Måttfullt drickande visar omdöme."
+                ),
+            },
+            {
+                "text": (
+                    "Avstår helt — alkohol är inte din grej."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Helt OK. Ingen kommer ifrågasätta dig. Drick "
+                    "alkoholfritt eller vatten."
+                ),
+            },
+            {
+                "text": (
+                    "Tar så mycket som de andra — det är fri bar."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "På företagsevent ska du minnas allt du säger. "
+                    "Berusning kan kosta dig professionellt rykte."
+                ),
+            },
+            {
+                "text": (
+                    "Dricker mycket och säger högt vad du tycker om "
+                    "din chef."
+                ),
+                "delta": -6,
+                "explanation": (
+                    "Klassiskt karriärsslut. Det du säger berusad kan "
+                    "kollegor minnas i åratal."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Företagsfester är inte privatliv. Andra ser dig och "
+            "dömer. Tumregel: drick max hälften av vad du skulle dricka "
+            "med vänner. Och ät något."
+        ),
+        "tags": ["omdöme", "social"],
+        "difficulty": 2,
+    },
+    {
+        "code": "confidential_data_001",
+        "scenario_md": (
+            "En vän från en annan bransch frågar dig vid en middag: "
+            "'vem är er största kund? Jag undrar bara, gör en analys.' "
+            "Vad svarar du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "'Det är inte info jag kan dela — företaget har "
+                    "sekretess på kundlistor.' Byter ämne."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Klassisk sekretessreflex. Även om det inte står "
+                    "uttryckligt så är kunddata typiskt konfidentiellt."
+                ),
+            },
+            {
+                "text": (
+                    "Berättar — det är ju ingen i din bransch och "
+                    "det märks ändå offentligt vad ni gör."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Du kan inte säkert veta vem vännen pratar med. "
+                    "Brott mot sekretess kan ge varning eller "
+                    "uppsägning. GDPR finns också att tänka på."
+                ),
+            },
+            {
+                "text": (
+                    "Berättar med en muntlig 'OBS, säg det inte vidare'-"
+                    "klausul."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "En verbal varning skyddar inte mot vidareföring. "
+                    "Du har redan brutit sekretessen i samma sekund "
+                    "du sagt det."
+                ),
+            },
+            {
+                "text": (
+                    "Säger 'jag svarar inte på det' utan att förklara, "
+                    "och blir lite tyst."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Funkar — du läcker inget. Lite avig socialt men "
+                    "professionellt korrekt."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tumregel: kunduppgifter, kontrakt, prissättning, "
+            "kompetenslistor och anställningsuppgifter är default "
+            "konfidentiella. Om du tvekar — säg 'jag kollar med chefen'."
+        ),
+        "tags": ["sekretess", "GDPR", "omdöme"],
+        "difficulty": 2,
+    },
+    {
+        "code": "private_use_company_pc_001",
+        "scenario_md": (
+            "Du behöver beställa en julklapp till din partner och har "
+            "inte tid att gå hem. Får du använda jobbets dator?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Ja under lunchpausen, men du undviker streamingtjänster "
+                    "och privata sociala medier resten av dagen."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "De flesta arbetsgivare tillåter måttlig privat "
+                    "användning på pauser. Beställa en julklapp är OK."
+                ),
+            },
+            {
+                "text": (
+                    "Säger till chefen först och frågar om det är OK."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Helt rätt om du är osäker. Lite formellt, men "
+                    "uppskattat — ingen blir arg."
+                ),
+            },
+            {
+                "text": (
+                    "Spenderar en timme på att shoppa under arbetstid."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Det är arbetstidsstöld. Och loggar visar oftast "
+                    "vad du gör — IT-avdelningen ser."
+                ),
+            },
+            {
+                "text": (
+                    "Loggar in på partnerns Netflix-konto och kollar "
+                    "lite TV under väntetiden."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Streaming på arbetsgivarens nätverk är förbjudet i "
+                    "många bolag och kan trigga IT-säkerhetslarm."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Privat användning av jobbets utrustning på paus är oftast "
+            "OK om det är måttligt. Streamtjänster, fildelning eller "
+            "att handla under mötestid är inte OK."
+        ),
+        "tags": ["omdöme", "tidshantering"],
+        "difficulty": 1,
+    },
+    {
+        "code": "angry_email_001",
+        "scenario_md": (
+            "En kund har skrivit ett otrevligt mejl klockan 22:30. Du "
+            "är arg. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Skriver inget i kväll. Sover på det och svarar "
+                    "lugnt nästa morgon."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "24-timmars-regeln: vrede + tangentbord = saker "
+                    "du ångrar. Att vänta är professionalism."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver tillbaka direkt och säger ifrån — kunden "
+                    "ska inte tro hen kan tala såhär."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Argt mejl kvällstid är klassiskt karriärsskott. "
+                    "Tonen kan bli fel och svaret hamnar i kundens "
+                    "skrivbordlåda för all framtid."
+                ),
+            },
+            {
+                "text": (
+                    "Vidarebefordrar mejlet till chefen utan kommentar."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "OK, men bättre att visa att du själv kan hantera. "
+                    "Skriv 'tar tag i det imorgon, ville du veta'."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver ett utkast i kväll men låter det ligga "
+                    "i utkast-mappen tills imorgon morgon."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Funkar — energi avladdad, men formulering granskas "
+                    "i klart huvud. Kom ihåg att läsa om innan skick."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Arga mejl bör aldrig skickas i affekt. Skriv utkast om du "
+            "måste för att lugna dig — men skicka först nästa morgon, "
+            "efter en granskning."
+        ),
+        "tags": ["kommunikation", "omdöme", "kund"],
+        "difficulty": 2,
+    },
+    {
+        "code": "boss_made_mistake_001",
+        "scenario_md": (
+            "Du upptäcker att din chef gjort ett räknefel som påverkar "
+            "ett kundförslag. Felet är inte upptäckt än. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger det enskilt till chefen så hen kan rätta "
+                    "själv: 'jag tror jag hittat ett fel, kan jag visa?'"
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Diskret + respektfullt. Chefen får rätta innan "
+                    "fel sprids vidare."
+                ),
+            },
+            {
+                "text": (
+                    "Påpekar felet på nästa team-möte inför alla."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Att korrigera chefen offentligt skadar deras "
+                    "auktoritet onödigt. Bättre privat först."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — chefen får ta konsekvenserna själv."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Du har sett felet — om det går till kund och "
+                    "kraschar är du också ansvarig. Att vara tyst är "
+                    "inte neutralt."
+                ),
+            },
+            {
+                "text": (
+                    "Rättar felet själv utan att säga något."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "OK om det är trivialt och chefen har bett dig "
+                    "kontrollera. Annars: säg till så hen ser sin "
+                    "egen blind spot."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Att hjälpa chefen rätta ett misstag är gränsen mellan "
+            "junior och senior. Diskret, respektfullt, lösningsfokus."
+        ),
+        "tags": ["feedback", "kommunikation", "ansvar"],
+        "difficulty": 3,
+    },
+    {
+        "code": "time_reporting_001",
+        "scenario_md": (
+            "Du jobbade 6 timmar idag men din kollega säger 'rapportera "
+            "8 — alla gör det när vi har slack'. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Rapporterar 6 timmar. Det är vad du jobbat."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Tidsrapporten är ett dokument. Felaktig rapportering "
+                    "är bedrägeri mot arbetsgivaren — på riktigt."
+                ),
+            },
+            {
+                "text": (
+                    "Rapporterar 8 — du har för avsikt att kompensera "
+                    "med extra tid nästa vecka."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Avsikt räknas inte. Rapporten är fel idag och "
+                    "stämmer inte med faktiskt arbete."
+                ),
+            },
+            {
+                "text": (
+                    "Pratar med chefen om kollegans förslag — du tycker "
+                    "det är fel."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Modigt och rätt om kulturen blivit dålig. Men "
+                    "fråga inte ut kollegan — adressera systemet."
+                ),
+            },
+            {
+                "text": (
+                    "Rapporterar 7 som kompromiss — varken sant eller "
+                    "lika fult som 8."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "En halv lögn är fortfarande en lögn. Tidsrapporter "
+                    "har juridisk vikt."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tidsrapporter är arbetsgivarens bokföringsunderlag. Falsk "
+            "rapportering kan leda till uppsägning av personliga skäl "
+            "och i värsta fall polisanmälan vid större belopp."
+        ),
+        "tags": ["ärlighet", "tidsrapportering"],
+        "difficulty": 2,
+    },
+    {
+        "code": "wfh_request_001",
+        "scenario_md": (
+            "Du behöver ta in ett paket nästa onsdag som bara levereras "
+            "klockan 13:00. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Frågar chefen i god tid om att jobba hemifrån "
+                    "onsdag — kort förklaring."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Förvarning ger chefen kontroll. Få chefer säger nej "
+                    "om det är en sällsynt händelse."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och stannar hemma onsdag — chefen "
+                    "märker inte ändå."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Olovlig hemifrån-arbete utan godkännande är "
+                    "olovlig frånvaro. Du bryter förtroende i smyg."
+                ),
+            },
+            {
+                "text": (
+                    "Tar en halvdag semester och planerar runt det."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Funkar — semester är din egen tid. Lite onödigt "
+                    "kanske om hemifrån-jobb är vanligt på företaget."
+                ),
+            },
+            {
+                "text": (
+                    "Ber en granne ta paketet."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Smart — ingen krockar med jobbet alls. Förutsätter "
+                    "att grannen vill."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Privata ärenden under arbetsdagar händer alla. Hantera dem "
+            "transparent: fråga, semestra, eller flytta tiden. "
+            "Smyga-bort är genvägen som kostar i längden."
+        ),
+        "tags": ["kommunikation", "tidshantering"],
+        "difficulty": 1,
+    },
+    {
+        "code": "bullying_001",
+        "scenario_md": (
+            "Du märker att en kollega systematiskt blir utesluten — "
+            "hen får inte mejl-trådar, inte inbjudningar till luncher, "
+            "blir avbruten på möten. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar enskilt med kollegan: 'jag har märkt det "
+                    "här — hur har du det?' och inkluderar aktivt själv."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Att se och fråga är ofta första steget. Många "
+                    "utestängda upplever sig osynliga; en allierad gör "
+                    "stor skillnad."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — du vill inte 'lägga dig i' "
+                    "gruppdynamiken."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Tystnad i mobbing är medverkan. Arbetsmiljölagen "
+                    "kräver att alla medverkar till god arbetsmiljö."
+                ),
+            },
+            {
+                "text": (
+                    "Eskalerar till HR med skriftlig dokumentation "
+                    "om mönstret du sett."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Mycket bra. Mobbing/kränkande särbehandling är "
+                    "ett arbetsmiljöansvar (AFS 2015:4). HR har "
+                    "skyldighet att utreda."
+                ),
+            },
+            {
+                "text": (
+                    "Hänger på de andra för att inte själv hamna utanför."
+                ),
+                "delta": -5,
+                "explanation": (
+                    "Klassiskt grupptryck-svar. Det gör dig till "
+                    "del av problemet och du tappar självaktning på köpet."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Mobbing på arbetsplatsen är allvarligt. Allmänna handlingar "
+            "som hjälper: fråga den drabbade, inkludera aktivt, "
+            "dokumentera mönster, anmäl till HR/skyddsombud. "
+            "Visselblåsarlagen skyddar dig om du anmäler i god tro."
+        ),
+        "tags": ["arbetsmiljö", "mobbing", "ledarskap"],
+        "difficulty": 4,
+    },
+    {
+        "code": "social_media_post_001",
+        "scenario_md": (
+            "Du har haft en jobbig dag på jobbet. Du vill skriva ett "
+            "Instagram-inlägg om hur dålig din chef är. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Skriver inget. Ringer en vän och pratar av dig "
+                    "muntligt istället."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Social media är permanent. En arg post idag kan "
+                    "kosta dig nästa jobb om 5 år. Muntlig avlastning "
+                    "lämnar inga spår."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver om det utan att namnge företaget — bara "
+                    "vänner ser det ändå."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Vänner screenshot:ar. Algoritmer indexerar. "
+                    "'Bara vänner' blir publikt fortare än du tror."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver i en privat chat med kollegan — vi måste "
+                    "kunna ventilera någonstans."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Ventilering är OK om det stannar privat. Men om "
+                    "chatten loggas eller delas vidare drabbas du."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver inlägget med chefens namn och bolagets "
+                    "namn så alla förstår."
+                ),
+                "delta": -6,
+                "explanation": (
+                    "Förtal + brott mot lojalitetsplikt. Direkt grund "
+                    "för uppsägning + risk för stämning."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Sociala medier är aldrig privat sfär när det gäller "
+            "arbetsgivare. Tumregel: skriv aldrig något om jobbet du "
+            "inte kan stå för i 10 år."
+        ),
+        "tags": ["sociala medier", "lojalitet", "omdöme"],
+        "difficulty": 2,
+    },
+    {
+        "code": "boss_calls_sunday_001",
+        "scenario_md": (
+            "Din chef ringer på söndag kväll och vill diskutera ett "
+            "icke-akut projekt. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tar samtalet kort: 'jag är ledig nu, kan vi "
+                    "ta det måndag morgon?'"
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Tydlig + respektfull gränssättning. Chefer "
+                    "respekterar oftast — det är dem som glömt att "
+                    "det är söndag."
+                ),
+            },
+            {
+                "text": (
+                    "Ignorerar samtalet helt utan att svara."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Stum-ignorering är passiv-aggressivt. Bättre att "
+                    "svara kort och hänvisa till nästa dag."
+                ),
+            },
+            {
+                "text": (
+                    "Tar samtalet och pratar i 45 minuter — det "
+                    "förväntas väl?"
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Du tänjer dina egna gränser och lär chefen att "
+                    "söndagar är OK. Mönstret växer."
+                ),
+            },
+            {
+                "text": (
+                    "Skickar SMS: 'jag är ledig — söker mig på telefon "
+                    "om det är akut, annars måndag'."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bästa svaret: säger att akut-fall är OK men "
+                    "icke-akut väntar. Klar och vänlig."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Work-life balance är ditt eget ansvar att försvara. "
+            "Vänligt och tydligt nej är en kunskap. Om chefen ofta "
+            "ringer ledig tid: prata om det i lönesamtalet."
+        ),
+        "tags": ["gränser", "work-life", "kommunikation"],
+        "difficulty": 2,
+    },
+    {
+        "code": "vacation_overlap_001",
+        "scenario_md": (
+            "Du och en kollega vill båda ha vecka 28 i juli. Företaget "
+            "behöver att en av er är på plats. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar med kollegan först: 'kan vi hitta en "
+                    "lösning innan chefen får välja?'"
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Mogen problemlösning. Ofta hittar två kollegor "
+                    "en kompromiss som chefen aldrig hade tänkt på."
+                ),
+            },
+            {
+                "text": (
+                    "Anmäler din semester först, snabbast först "
+                    "vinner."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "OK formellt, men dåligt för kollegial relation. "
+                    "Kollegan minns att du tävlade istället för att prata."
+                ),
+            },
+            {
+                "text": (
+                    "Hänvisar till semesterlagen och kräver att få "
+                    "din vecka."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Lagen ger dig rätt till 4 sammanhängande veckor "
+                    "men inte vilka veckor. Hård juridik = sliten "
+                    "atmosfär."
+                ),
+            },
+            {
+                "text": (
+                    "Erbjuder att alternera — du tar 28, kollegan tar "
+                    "bästa veckan nästa år."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Konkret kompromiss. Visar långsiktighet och "
+                    "fairness — det chefen vill se i seniora "
+                    "medarbetare."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Semestern är emotionell — folk planerar resor, släkt-"
+            "träffar. Lös det med samtal, inte med kapprustning. "
+            "Om ni inte kan komma överens: chefen avgör enligt "
+            "verksamhetens behov."
+        ),
+        "tags": ["semester", "konflikt", "kollegial"],
+        "difficulty": 2,
+    },
+    {
+        "code": "overworking_001",
+        "scenario_md": (
+            "Du har jobbat 50+ timmar varje vecka i sex veckor. Du "
+            "är trött och börjar göra fel. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bokar ett möte med chefen och säger 'jag behöver "
+                    "antingen mindre arbete eller mer hjälp — annars "
+                    "blir det fler fel'."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Att signalera utbrändhet TIDIGT är professionellt. "
+                    "Chefer minns vem som tar hand om sig — och tappar "
+                    "förtroende för den som kraschar utan varning."
+                ),
+            },
+            {
+                "text": (
+                    "Fortsätter köra på — 'man ska tåla', det är bara "
+                    "en period."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Klassisk väg till utbrändhet. När du kraschar "
+                    "blir frånvaron lång och kostsam för alla."
+                ),
+            },
+            {
+                "text": (
+                    "Sjukanmäler dig en vecka utan att förklara."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Du löser symptomet men inte orsaken. Nästa månad "
+                    "är du tillbaka i samma situation."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver ner allt du gör i en lista och visar "
+                    "chefen så hen själv kan prioritera bort."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Konkret + lösningsinriktat. Många chefer vet inte "
+                    "hur mycket du har på listan."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Utbrändhet är inte ett tecken på styrka eller "
+            "engagemang — det är en signal att systemet inte funkar. "
+            "Tidiga samtal förebygger långa frånvaro. Arbetsgivare "
+            "har lagstadgat ansvar för psykosocial arbetsmiljö."
+        ),
+        "tags": ["arbetsmiljö", "kommunikation", "gränser"],
+        "difficulty": 3,
+    },
+    {
+        "code": "new_colleague_001",
+        "scenario_md": (
+            "En ny person börjar i teamet idag. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tar initiativ att hälsa, visar runt på "
+                    "fikarummet och bjuder med på lunch."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Inkluderande beteende är guld. Den nya minns dig, "
+                    "och chefen ser att du bidrar till kulturen."
+                ),
+            },
+            {
+                "text": (
+                    "Nickar artigt men håller dig till ditt."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Inte negativt, men du missar en chans att bygga "
+                    "team. Senior-medarbetare aktivt välkomnar."
+                ),
+            },
+            {
+                "text": (
+                    "Ignorerar tills den nya kommer fram själv."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Att lägga ansvar på nya att 'krångla in sig' är "
+                    "kall kultur. Många slutar pga sånt."
+                ),
+            },
+            {
+                "text": (
+                    "Skämtar om svårighetsgraden i jobbet för att "
+                    "skrämma personen lite."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Klassisk hierarki-rit som inte hör hemma 2026. "
+                    "Skapar oönskad stress hos nya."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Första veckan formar känslan av en arbetsplats. Att aktivt "
+            "välkomna kostar 5 minuter och bygger lojalitet — både för "
+            "den nya och för dig som visat ledarskap."
+        ),
+        "tags": ["lojalitet", "ledarskap", "social"],
+        "difficulty": 1,
+    },
+    {
+        "code": "whistleblow_001",
+        "scenario_md": (
+            "Du ser att företaget systematiskt fakturerar kunder för "
+            "tjänster som inte levererats. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Dokumenterar exempel skriftligt och rapporterar "
+                    "till chefen + ekonomichefen. Ber om åtgärd."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Internt larm är första steget enligt "
+                    "visselblåsarlagen. Skriftlig dokumentation "
+                    "skyddar dig juridiskt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — det är inte din avdelning."
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att veta om bedrägeri och vara passiv kan göra "
+                    "dig medskyldig juridiskt. Lagen kräver inte "
+                    "anmälan, men starkt rekommenderat."
+                ),
+            },
+            {
+                "text": (
+                    "Anmäler direkt till Skatteverket eller polisen "
+                    "utan att försöka internt först."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "OK i extrema fall. Visselblåsarlagen skyddar dig, "
+                    "men intern eskalering är oftast bättre — "
+                    "snabbare och mindre konflikt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger upp dig och letar nytt jobb istället."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Du löser inte problemet — kunderna fortsätter "
+                    "luras. Och du förlorar rätten till skydd som "
+                    "visselblåsare när du sagt upp dig."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Visselblåsarlagen (2021:890) skyddar dig från repressalier "
+            "när du i god tro rapporterar oegentligheter. Steg: "
+            "intern kanal → tillsynsmyndighet → media (sista utvägen). "
+            "Företag med 50+ anställda måste ha visselblåsar-funktion."
+        ),
+        "tags": ["ärlighet", "juridik", "ansvar"],
+        "difficulty": 5,
+    },
+    {
+        "code": "new_boss_001",
+        "scenario_md": (
+            "Du har fått ny chef. På första mötet vill hen göra "
+            "stora förändringar i hur ditt team jobbar. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Lyssnar nyfiket, ställer frågor, ger fakta om "
+                    "varför nuvarande sätt funkar — utan att bli "
+                    "defensiv."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bra första intryck: visar att du är samarbets-"
+                    "villig men har egna kunskaper att bidra med."
+                ),
+            },
+            {
+                "text": (
+                    "Säger 'såhär gör vi' och förklarar att förändringen "
+                    "inte behövs."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Defensiv start ger nya chefen intryck att teamet "
+                    "är förändringsobenäget. Hen kan börja byta ut folk."
+                ),
+            },
+            {
+                "text": (
+                    "Håller med om allt, även det du tycker är dåligt."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Slätt ja-säjeri är värdelöst för chefen — hen "
+                    "behöver veta vad som funkar och inte."
+                ),
+            },
+            {
+                "text": (
+                    "Bokar ett enskilt möte efter och delar långt skriftligt "
+                    "PM med dina synpunkter."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Mycket bra. Privat samtal + skriftlig argumentation "
+                    "ger chefen det hen behöver för att fatta ett klokt "
+                    "beslut."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Ny chef = osäkerhet på båda håll. Bästa strategin: visa "
+            "kompetens och samarbetsvilja samtidigt. Dela kunskap utan "
+            "att blockera."
+        ),
+        "tags": ["ledarskap", "kommunikation", "förändring"],
+        "difficulty": 3,
+    },
+    {
+        "code": "customer_overstep_001",
+        "scenario_md": (
+            "En kund kräver något utanför vad ni avtalat — och hotar "
+            "att gå någon annanstans om hen inte får det. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger 'jag kollar med min chef och återkommer' "
+                    "och eskalerar internt."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bra. Du fattar inte stora beslut själv på "
+                    "kundens hot. Köper tid + lägger ansvaret rätt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger ja för att inte tappa kunden — du löser "
+                    "det internt sen."
+                ),
+                "delta": -3,
+                "explanation": (
+                    "Du lovar något företaget kanske inte kan hålla. "
+                    "Slutar dåligt för alla."
+                ),
+            },
+            {
+                "text": (
+                    "Säger nej direkt och tackar för affären."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Förlorar kunden i onödan. Hot är ofta förhandling "
+                    "— eskalera, prata, hitta lösning."
+                ),
+            },
+            {
+                "text": (
+                    "Säger 'jag förstår — låt mig se vad vi kan göra "
+                    "inom avtalet, så återkommer jag senast i morgon'."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Klassisk kundhantering: validera känslan, klargör "
+                    "ramen, leverera tidssatt återkoppling."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Aldrig fatta stora beslut under kundhot. 'Jag återkommer' "
+            "är en magisk fras. Eskalera till chef, hitta lösning som "
+            "alla kan stå för."
+        ),
+        "tags": ["kund", "kommunikation", "gränser"],
+        "difficulty": 3,
+    },
+    {
+        "code": "quiet_colleague_001",
+        "scenario_md": (
+            "En kollega har blivit tystare på sista tiden — kommer "
+            "till möten men säger inget, gör jobbet men ler aldrig. "
+            "Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bjuder ut på en kort fikapaus och frågar 'jag har "
+                    "märkt det här — hur har du det?'"
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Att fråga utan att tränga sig på är guld. Många "
+                    "som mår dåligt bara behöver en allierad."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget — det är inte din sak att lägga sig i."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "OK om ni inte är nära. Men passivitet kan göra att "
+                    "kollegan blir mer isolerad."
+                ),
+            },
+            {
+                "text": (
+                    "Skvallrar med andra: 'har du märkt hur konstig X "
+                    "blivit?'"
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Att prata om någon som mår dåligt bakom hens rygg "
+                    "är direkt skadligt. Skvaller är giftigt."
+                ),
+            },
+            {
+                "text": (
+                    "Säger till chefen att kollegan kanske mår dåligt."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "OK om du sett tydliga tecken på arbetsmiljö-"
+                    "problem. Bättre att först prata med kollegan själv."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Att se att en kollega inte mår bra är en gåva — om du "
+            "agerar omtänksamt. Mått av närhet + 'är allt OK?' kan vara "
+            "vad som behövs. Skyldighet finns: arbetsmiljölagen ser "
+            "även till psykisk hälsa."
+        ),
+        "tags": ["arbetsmiljö", "kollegial", "social"],
+        "difficulty": 2,
+    },
+    {
+        "code": "email_tone_customer_001",
+        "scenario_md": (
+            "Du ska skicka en faktura till en kund som är två månader "
+            "sen med betalning. Hur formulerar du mejlet?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Hej X, jag bifogar fakturan från oktober som ännu "
+                    "inte är betald. Hör av dig om något är oklart."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Sakligt + neutralt + öppnar för dialog. Funkar "
+                    "i 90 % av fallen — folk har ofta bara glömt."
+                ),
+            },
+            {
+                "text": (
+                    "DENNA FAKTURA ÄR FÖRSENAD! BETALA OMGÅENDE!"
+                ),
+                "delta": -5,
+                "explanation": (
+                    "Versaler + utropstecken förstör relationen. "
+                    "Och kunden kan klaga till din chef."
+                ),
+            },
+            {
+                "text": (
+                    "Hej, ber så mycket om ursäkt om jag stör — bara "
+                    "ifall du kanske har glömt fakturan från oktober?"
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Övertydlig artighet signalerar svaghet och osäkerhet. "
+                    "Sakligt > underdånigt."
+                ),
+            },
+            {
+                "text": (
+                    "Påminner via SMS istället eftersom det är "
+                    "snabbare."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Ofta mer påträngande än mejl. Skriftlig kanal "
+                    "ger spårbarhet — skriv mejl först."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Affärsmejl är saklig prosa — varken arg eller "
+            "underdånig. 'Hej, här är fakturan, hör av dig om något "
+            "är oklart' är en formel som funkar nästan alltid."
+        ),
+        "tags": ["kommunikation", "kund", "ton"],
+        "difficulty": 1,
+    },
+    {
+        "code": "training_request_001",
+        "scenario_md": (
+            "Du vill gå en kurs som kostar 18 000 kr som skulle göra "
+            "dig bättre på jobbet. Hur tar du upp det med chefen?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Bokar möte, presenterar kursen + hur den hjälper "
+                    "dina arbetsuppgifter, och frågar om budget."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Strukturerad förfrågan med business case. Chefer "
+                    "säger oftare ja när kopplingen till jobbet är "
+                    "tydlig."
+                ),
+            },
+            {
+                "text": (
+                    "Skickar ett snabbt mejl: 'jag vill gå denna kurs, "
+                    "OK?'"
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Funkar för billiga kurser men 18 000 kr kräver "
+                    "förklaring. Chefen får jobba mer för att fatta "
+                    "beslut → större risk för nej."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och går kursen privat på din semester."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Du missar både ekonomiskt stöd och möjligheten att "
+                    "kursen räknas som arbetstid. Många bolag betalar "
+                    "gärna när det syns."
+                ),
+            },
+            {
+                "text": (
+                    "Kräver kursen som villkor för att stanna kvar."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Hot funkar sällan om du inte är extremt svår "
+                    "att ersätta. Kan ge nej och försämrad relation."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Fortbildning är en investering — för dig OCH företaget. "
+            "Visa kopplingen och chansen ökar markant. Föreslå även "
+            "gärna 'bunden tid' (du stannar minst X månader efter)."
+        ),
+        "tags": ["fortbildning", "kommunikation", "förhandling"],
+        "difficulty": 2,
+    },
+    {
+        "code": "lost_motivation_001",
+        "scenario_md": (
+            "Du har tappat lust för jobbet. Gör fortfarande dina "
+            "uppgifter men kreativiteten är borta. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar med chefen och föreslår att få göra något "
+                    "nytt — projekt, område eller utbildning."
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Ärligt + lösningsfokuserat. Chefer vill behålla "
+                    "engagerade medarbetare och brukar hitta saker."
+                ),
+            },
+            {
+                "text": (
+                    "Säger upp dig och hoppas hitta något bättre."
+                ),
+                "delta": -1,
+                "explanation": (
+                    "Ibland rätt — men prova internlösning först. "
+                    "Många byter jobb innan de provat förändring "
+                    "internt."
+                ),
+            },
+            {
+                "text": (
+                    "Fortsätter på som vanligt, kör på tills det "
+                    "blir bättre."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Tappad motivation går sällan över av sig själv. "
+                    "Risken: prestationen sjunker så mycket att "
+                    "chefen agerar först."
+                ),
+            },
+            {
+                "text": (
+                    "Bokar med företagshälsovård för att kolla att "
+                    "det inte är utbrändhet."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Bra om du känner dig trött eller nedstämd — "
+                    "tidig kontakt förebygger sjukskrivning. "
+                    "Företagshälsovården är gratis för dig."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Tappad motivation är en signal, inte ett karaktärsfel. "
+            "Möjliga orsaker: fel uppgifter, dålig chef, privatlivet, "
+            "begynnande utbrändhet. Prata, prova förändring, sök hjälp."
+        ),
+        "tags": ["motivation", "arbetsmiljö", "kommunikation"],
+        "difficulty": 3,
+    },
+    {
+        "code": "noisy_colleague_001",
+        "scenario_md": (
+            "En kollega pratar i hög volym i telefon vid sitt skrivbord — "
+            "och du sitter mittemot. Det stör koncentrationen. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Säger lugnt: 'hej, kan du ta dina samtal i mötesrummet? "
+                    "Det är svårt att fokusera.'"
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Direkt + vänligt. De flesta inser direkt och "
+                    "går iväg. Konflikten blir inte en konflikt."
+                ),
+            },
+            {
+                "text": (
+                    "Skickar passiv-aggressivt SMS från jobbtelefonen: "
+                    "'kan du sänka rösten?'"
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Att skicka SMS i samma rum är konstigt. Personen "
+                    "blir förvirrad och kanske kränkt."
+                ),
+            },
+            {
+                "text": (
+                    "Klagar för chefen utan att först prata med kollegan."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Eskalerar i onödan. Liknande problem brukar lösas "
+                    "med ett kort samtal — försök först."
+                ),
+            },
+            {
+                "text": (
+                    "Sätter på hörlurar och låter det vara."
+                ),
+                "delta": 1,
+                "explanation": (
+                    "Funkar kortsiktigt. Men problemet kvarstår och "
+                    "andra kollegor blir nog också störda."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Småirritationer på kontoret löses med korta vänliga samtal. "
+            "Reglen: 'fråga först, eskalera om det inte hjälper'. "
+            "Vänd inte direkt till chefen för småsaker."
+        ),
+        "tags": ["kommunikation", "kollegial", "kontoret"],
+        "difficulty": 1,
+    },
+    {
+        "code": "meeting_changed_001",
+        "scenario_md": (
+            "Du har förberett en presentation i två dagar. På morgonen "
+            "skriver chefen i Teams att mötet flyttats två veckor — "
+            "nytt datum och delvis ny inriktning. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Tackar för informationen, frågar kort vad som "
+                    "ändrats i inriktningen, och hanterar ändringen."
+                ),
+                "delta": 3,
+                "explanation": (
+                    "Smidigt + proffsigt. Förändringar är vardag i "
+                    "arbetslivet — den som inte tar dem personligt "
+                    "uppfattas som senior."
+                ),
+            },
+            {
+                "text": (
+                    "Skriver tillbaka argt: 'jag har lagt två dagar "
+                    "på det här, oacceptabelt!'"
+                ),
+                "delta": -4,
+                "explanation": (
+                    "Ditt arbete är inte bortkastat — du presenterar "
+                    "samma material senare. Att gå i taket signalerar "
+                    "låg stresshantering."
+                ),
+            },
+            {
+                "text": (
+                    "Säger inget och gör om hela presentationen från "
+                    "noll utan att fråga vad som faktiskt ändrats."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Onödigt arbete. En kort fråga 'vad är de viktigaste "
+                    "ändringarna?' sparar dig timmar."
+                ),
+            },
+            {
+                "text": (
+                    "Tackar och föreslår 'kan vi ta en kort avstämning "
+                    "imorgon så jag förstår nya inriktningen?'"
+                ),
+                "delta": 4,
+                "explanation": (
+                    "Bästa svaret: visar både samarbetsvilja och "
+                    "tydlig planering. Du tar dialog till handling."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Förändringar i schema och scope sker hela tiden. Den som "
+            "tar dem som personliga affronter blir tröttsam att jobba "
+            "med. Den som ser dem som information och planerar om "
+            "blir uppskattad."
+        ),
+        "tags": ["kommunikation", "förändring", "professionalism"],
+        "difficulty": 1,
+    },
+    {
+        "code": "skyddsombud_001",
+        "scenario_md": (
+            "Du och flera kollegor lider av nackvärk — stolarna är dåliga. "
+            "Chefen säger 'vi har inte budget i år'. Vad gör du?"
+        ),
+        "options": [
+            {
+                "text": (
+                    "Pratar med skyddsombudet — det är dem som har "
+                    "mandat att kräva utredning av arbetsmiljön."
+                ),
+                "delta": 5,
+                "explanation": (
+                    "Helt rätt. Skyddsombudet har juridisk makt att "
+                    "kräva åtgärd och kan ringa Arbetsmiljöverket "
+                    "om chefen inte agerar."
+                ),
+            },
+            {
+                "text": (
+                    "Ger upp — chefen har bestämt."
+                ),
+                "delta": -2,
+                "explanation": (
+                    "Arbetsmiljöansvaret är arbetsgivarens enligt "
+                    "AML. 'Ingen budget' är inte ett giltigt skäl "
+                    "att strunta i ergonomiska brister."
+                ),
+            },
+            {
+                "text": (
+                    "Köper en egen stol och tar med till jobbet."
+                ),
+                "delta": 0,
+                "explanation": (
+                    "Löser DITT problem men inte de andras. Och "
+                    "avlastar chefen från sitt ansvar."
+                ),
+            },
+            {
+                "text": (
+                    "Anmäler direkt till Arbetsmiljöverket utan att "
+                    "kontakta skyddsombud först."
+                ),
+                "delta": 2,
+                "explanation": (
+                    "Du kan göra det, men skyddsombudet är effektivare "
+                    "första steget. AMV är myndighet — eskalering."
+                ),
+            },
+        ],
+        "correct_path_md": (
+            "Skyddsombud finns på alla arbetsplatser med 5+ anställda "
+            "och är facklig representant för arbetsmiljön. Hen kan "
+            "kräva åtgärd, stoppa farligt arbete (skyddsstopp) och "
+            "kontakta Arbetsmiljöverket. Använd dem!"
+        ),
+        "tags": ["arbetsmiljö", "skyddsombud", "rättigheter"],
+        "difficulty": 3,
+    },
+]
+
+
+def seed_workplace_questions(session: Session) -> int:
+    """Idempotent seed av arbetsplats-frågor. Returnerar antal nya rader."""
+    existing = {q.code for q in session.query(WorkplaceQuestion).all()}
+    added = 0
+    for q in WORKPLACE_QUESTIONS:
+        if q["code"] in existing:
+            continue
+        session.add(WorkplaceQuestion(
+            code=q["code"],
+            scenario_md=q["scenario_md"],
+            options=q["options"],
+            correct_path_md=q["correct_path_md"],
+            tags=q.get("tags"),
+            difficulty=q.get("difficulty", 1),
+        ))
+        added += 1
+    session.flush()
+    return added
+
+
+def seed_all(session: Session) -> dict:
+    """Seedare för hela arbetsgivar-paketet. Kör i rätt ordning:
+    avtal först, sedan mappningar (som behöver avtals-IDn), sedan
+    arbetsplats-frågor (oberoende av övriga).
+    """
+    n_ag = seed_collective_agreements(session)
+    n_pm = seed_profession_agreements(session)
+    n_q = seed_workplace_questions(session)
+    return {
+        "agreements_added": n_ag,
+        "profession_mappings_added": n_pm,
+        "workplace_questions_added": n_q,
+    }

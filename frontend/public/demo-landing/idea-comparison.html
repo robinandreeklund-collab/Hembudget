@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ekonomilabbet · Landing-demos</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #dc4c2b;
+  --gold: #fbbf24;
+  --rule: #e2e8f0;
+  --serif: 'Source Serif 4', Georgia, serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+.shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 64px 24px 96px;
+}
+.eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+h1 {
+  font-size: clamp(34px, 5vw, 54px);
+  font-weight: 700;
+  letter-spacing: -1.4px;
+  line-height: 1.05;
+  margin-bottom: 18px;
+  max-width: 720px;
+}
+.lede {
+  font-size: 17px;
+  line-height: 1.55;
+  color: #475569;
+  max-width: 600px;
+  margin-bottom: 48px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 28px 26px;
+  transition: all .15s;
+}
+.card:hover {
+  border-color: var(--fg);
+  box-shadow: 0 6px 20px rgba(15,23,42,0.08);
+  transform: translateY(-2px);
+}
+.card-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  color: var(--accent);
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+.card h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  margin-bottom: 12px;
+}
+.card-desc {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: #475569;
+  margin-bottom: 18px;
+}
+.card-tag {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.preview-strip {
+  display: flex;
+  gap: 4px;
+  margin: 16px 0 4px;
+  height: 38px;
+}
+.preview-strip span {
+  flex: 1;
+  border-radius: 4px;
+}
+.note {
+  margin-top: 56px;
+  padding: 20px 22px;
+  background: #fef3c7;
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #78350f;
+}
+.note strong { color: #0f172a; }
+</style>
+</head>
+<body>
+<main class="shell">
+  <div class="eyebrow">● Demo · Tre koncept för Ekonomilabbets landningssida</div>
+  <h1>Tre röda trådar att välja mellan.</h1>
+  <p class="lede">
+    Klicka på ett kort för att se hela landningssidan rendered. Alla tre använder
+    samma elev (Linda, IT-konsult, 22) och samma plattform-funktioner — men
+    presenterar dem på radikalt olika sätt.
+  </p>
+
+  <div class="grid">
+    <a class="card" href="./1-en-vecka.html">
+      <div class="card-num">IDÉ 01 · NARRATIV</div>
+      <h2>En vecka i Lindas liv</h2>
+      <p class="card-desc">
+        Hela sidan är en kalender — måndag till söndag, plus läraren som tar över
+        på måndag morgon. Användaren ser systemet via Lindas ögon, dag för dag.
+      </p>
+      <div class="preview-strip">
+        <span style="background:#fef3c7"></span>
+        <span style="background:#fef3c7"></span>
+        <span style="background:#fef3c7"></span>
+        <span style="background:#fef3c7"></span>
+        <span style="background:#fef3c7"></span>
+        <span style="background:#fef3c7"></span>
+        <span style="background:#0f172a"></span>
+      </div>
+      <div class="card-tag">EMOTIONELL · DIREKT BEGRIPLIG</div>
+    </a>
+
+    <a class="card" href="./2-tre-lager.html">
+      <div class="card-num">IDÉ 02 · KONCEPTUELL</div>
+      <h2>Tre lager: Liv → Ekonomi → Välmående</h2>
+      <p class="card-desc">
+        Tre parallella spår löper genom hela sidan. Varje val plottas samtidigt i
+        alla tre — visar pedagogiken (Wellbeing över saldo) på 5 sekunder.
+      </p>
+      <div class="preview-strip">
+        <span style="background:#dbeafe"></span>
+        <span style="background:#fef3c7"></span>
+        <span style="background:#d1fae5"></span>
+      </div>
+      <div class="card-tag">VISUELLT UNIK · KONCEPTUELLT DJUP</div>
+    </a>
+
+    <a class="card" href="./3-sidan-vid-sidan.html">
+      <div class="card-num">IDÉ 03 · KONTRAST</div>
+      <h2>Sidan vid sidan: lärobok vs Ekonomilabbet</h2>
+      <p class="card-desc">
+        Två kolumner som löper hela sidan. Vänster: dagens privatekonomi-undervisning.
+        Höger: vad eleven faktiskt upplever. Direkt jämförelse med status quo.
+      </p>
+      <div class="preview-strip">
+        <span style="background:#e2e8f0; flex:1"></span>
+        <span style="background:#fef3c7; flex:1"></span>
+      </div>
+      <div class="card-tag">KONVERTERAR · MARKNADSFÖRINGS-VINKEL</div>
+    </a>
+  </div>
+
+  <div class="note">
+    <strong>Note:</strong> alla tre demos är statiska HTML — de visar layout, copy
+    och visuella riktningar. Riktiga animationer (GSAP scrub, pinned scroll) görs i
+    React-versionen efter du valt riktning. Ge feedback per kort så går vi vidare med
+    en av dem.
+  </div>
+</main>
+</body>
+</html>

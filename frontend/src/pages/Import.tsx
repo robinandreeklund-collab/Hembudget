@@ -108,7 +108,7 @@ export default function ImportPage() {
   const payerAccounts = accounts.filter((a) => isPayer(a.type));
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-5 max-w-3xl">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       <h1 className="serif text-3xl leading-tight">Importera CSV</h1>
 
       {accounts.length > 0 && (

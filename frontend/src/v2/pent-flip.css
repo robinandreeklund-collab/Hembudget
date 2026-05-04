@@ -1,0 +1,337 @@
+/**
+ * Pentagon flip-card · 3D-flip när läraren/eleven klickar på en axel.
+ * Mobile-first: faller tillbaka till en enkel toggle-display istället
+ * för 3D-rotation på små skärmar (där 3D-rotation gör det svårt att
+ * läsa).
+ */
+
+.pent-flip-stage {
+  perspective: 2400px;
+  position: relative;
+  width: 100%;
+}
+
+.pent-flip-inner {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-areas: "stack";
+  transform-style: preserve-3d;
+  transform: translateZ(0);
+  transition: transform 0.85s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pent-flip-stage.is-flipped .pent-flip-inner {
+  transform: rotateY(180deg) translateZ(0);
+}
+
+.pent-front,
+.pent-back {
+  grid-area: stack;
+  width: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.pent-front {
+  z-index: 2;
+}
+
+.pent-flip-stage.is-flipped .pent-front {
+  z-index: 1;
+}
+
+.pent-back {
+  transform: rotateY(180deg);
+  z-index: 1;
+  display: none;
+  background: rgba(15, 21, 37, 0.92);
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.18));
+  border-top: 3px solid var(--warm, #fbbf24);
+  border-radius: 8px;
+  padding: 28px 32px;
+  min-height: 540px;
+  position: relative;
+}
+
+.pent-back.show {
+  display: block;
+}
+
+.pent-flip-stage.is-flipped .pent-back {
+  z-index: 2;
+}
+
+.pent-back-close {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  background: transparent;
+  border: 1px solid var(--line-strong, rgba(255, 255, 255, 0.18));
+  color: var(--text, rgba(255, 255, 255, 0.92));
+  cursor: pointer;
+  padding: 7px 14px;
+  border-radius: 100px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.pent-back-close:hover {
+  border-color: var(--warm, #fbbf24);
+  color: var(--warm, #fbbf24);
+}
+
+.pent-back-loading {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pent-back-eye {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--warm, #fbbf24);
+  margin-bottom: 12px;
+}
+
+.pent-back-eye::before {
+  content: "● ";
+}
+
+.pent-back-h {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(28px, 3.5vw, 40px);
+  letter-spacing: -1px;
+  line-height: 1.05;
+  color: #fff;
+  margin: 0 0 8px;
+}
+
+.pent-back-h em {
+  font-style: italic;
+  color: var(--warm, #fbbf24);
+  font-weight: 500;
+}
+
+.pent-back-score {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 64px;
+  color: var(--warm, #fbbf24);
+  line-height: 1;
+  margin-bottom: 4px;
+  text-shadow: 0 4px 24px rgba(251, 191, 36, 0.4);
+}
+
+.pent-back-score-meta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 24px;
+}
+
+.pent-back-score-meta strong {
+  color: #fff;
+}
+
+.pent-back-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 800px) {
+  .pent-back-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .pent-back {
+    padding: 22px 18px;
+    min-height: auto;
+  }
+  .pent-back-close {
+    top: 12px;
+    right: 14px;
+    font-size: 9px;
+    padding: 6px 12px;
+  }
+  .pent-back-h {
+    font-size: 26px;
+    margin-top: 6px;
+  }
+  .pent-back-score {
+    font-size: 48px;
+  }
+}
+
+.pent-history {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pent-history-head {
+  padding: 10px 16px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.pent-event {
+  display: grid;
+  grid-template-columns: 80px 1fr 70px;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.05));
+  align-items: center;
+}
+
+.pent-event:last-child {
+  border-bottom: 0;
+}
+
+.pent-event-date {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.pent-event-name {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 13.5px;
+  color: #fff;
+}
+
+.pent-event-meta {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+  letter-spacing: 0.4px;
+}
+
+.pent-event-delta {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: right;
+}
+
+.pent-event-delta.up {
+  color: #6ee7b7;
+}
+
+.pent-event-delta.down {
+  color: #fca5a5;
+}
+
+.pent-event-delta.flat {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pent-side-card {
+  background: rgba(15, 21, 37, 0.6);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  border-left: 3px solid var(--warm, #fbbf24);
+  border-radius: 6px;
+  padding: 18px 20px;
+}
+
+.pent-side-card-eye {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--warm, #fbbf24);
+  margin-bottom: 8px;
+}
+
+.pent-side-card-eye::before {
+  content: "● ";
+}
+
+.pent-side-card-h {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.3px;
+  color: #fff;
+  margin-bottom: 10px;
+  line-height: 1.25;
+}
+
+.pent-side-card-h em {
+  font-style: italic;
+  color: var(--warm, #fbbf24);
+  font-weight: 500;
+}
+
+.pent-side-card-meta {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.55;
+}
+
+/* Klickbara axis-tags */
+.axis-clickable {
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.axis-clickable:hover {
+  background: rgba(251, 191, 36, 0.1) !important;
+  transform: translateY(-1px);
+}
+
+.axis-clickable:focus-visible {
+  outline: 2px solid var(--warm, #fbbf24);
+  outline-offset: 2px;
+}
+
+/* Mobile fallback: ingen 3D-rotation, bara byt visning. På mobil
+ * är det bättre att se en stor list-vy direkt än rotera ett
+ * kort som är hälften så stort som skärmen. */
+@media (max-width: 600px) {
+  .pent-flip-stage {
+    perspective: none;
+  }
+  .pent-flip-inner {
+    transform-style: flat;
+    transform: none !important;
+    transition: none;
+  }
+  .pent-front,
+  .pent-back {
+    -webkit-backface-visibility: visible;
+    backface-visibility: visible;
+    transform: none !important;
+  }
+  .pent-flip-stage.is-flipped .pent-front {
+    display: none;
+  }
+}

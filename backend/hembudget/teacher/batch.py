@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,7 @@ from ..parsers.ekonomilabbet import (
     EkonomilabbetParseResult,
     parse_ekonomilabbet,
 )
+from ..config import settings
 from ..school.engines import scope_context
 from ..school.models import (
     BatchArtifact,
@@ -44,6 +46,24 @@ from .scenario import build_scenario, MonthScenario
 log = logging.getLogger(__name__)
 
 
+def _save_artifact_to_disk(artifact: BatchArtifact) -> str:
+    """Spara en artefakts PDF-bytes till data_dir/invoices/ och returnera
+    sökvägen. Behövs för att UpcomingTransaction.source_image_path ska
+    kunna peka på en fil som /upcoming/{id}/source kan servera.
+
+    Idempotent — om filen redan finns för samma artefakt återanvänds den.
+    """
+    import hashlib as _h
+    invoice_dir = settings.data_dir / "invoices"
+    invoice_dir.mkdir(parents=True, exist_ok=True)
+    short = _h.sha1(artifact.pdf_bytes or b"").hexdigest()[:8]
+    safe = (artifact.filename or f"artifact_{artifact.id}.pdf").replace("/", "_")
+    p = invoice_dir / f"batch_{artifact.id}_{short}_{safe}"
+    if not p.exists():
+        p.write_bytes(artifact.pdf_bytes or b"")
+    return str(p)
+
+
 def create_batch_for_student(
     master_session: Session,
     student: Student,
@@ -56,8 +76,33 @@ def create_batch_for_student(
     overwrite=False → returnerar den befintliga. Med overwrite=True
     raderas den gamla batchen + skapas en ny med samma seed.
     """
+    # Profile saknas → försök auto-skapa istället för att kasta. Detta
+    # händer när batch-flödet körs INNAN profile hunnit committas (race),
+    # eller när en orphan-elev (Student utan StudentProfile) genereras
+    # mot. _create_profile_for_student är idempotent + defensiv mot
+    # saknade master-DB-kolumner.
     if not student.profile:
-        raise ValueError("Student saknar profil")
+        from ..api.school import _create_profile_for_student
+        try:
+            _create_profile_for_student(master_session, student)
+            master_session.flush()
+            master_session.refresh(student)
+        except Exception as exc:
+            raise ValueError(
+                f"Student saknar profil och auto-create misslyckades: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        if not student.profile:
+            raise ValueError(
+                "Student saknar profil — auto-create returnerade utan att "
+                "rad commitades. Reparera via /teacher/students/{id}/repair-profile."
+            )
+
+    # Hämta lärarens email till PDF:erna (t.ex. "Frågor om din lön: ...")
+    # — annars hamnar en påhittad lon@arbetsgivare.se i lönespecen.
+    from .. school.models import Teacher as _Teacher
+    teacher = master_session.get(_Teacher, student.teacher_id)
+    teacher_email = teacher.email if teacher and teacher.email else "lärare@ekonomilabbet.org"
 
     existing = (
         master_session.query(ScenarioBatch)
@@ -72,6 +117,13 @@ def create_batch_for_student(
     if existing and overwrite:
         master_session.delete(existing)
         master_session.flush()
+
+    # Lönesamtals-commit (idé 2 i dev_v1.md): om eleven avslutat ett
+    # samtal med ny lön och effective_from <= första dagen i year_month,
+    # applicera nya lönen på profilen INNAN scenariot byggs. Lönespecen
+    # för månaden visar då den nya lönen — pedagogiskt synkat med
+    # verkligheten där samtalet sker en månad och lönen kommer nästa.
+    _commit_pending_salary_if_due(master_session, student.profile, year_month)
 
     seed = abs(hash((student.id, year_month, "batch_v1"))) & 0xFFFFFFFF
     scenario = build_scenario(
@@ -111,104 +163,134 @@ def create_batch_for_student(
     master_session.add(batch)
     master_session.flush()
 
-    # Skapa UpcomingTransaction för lön + återkommande fakturor i
-    # elevens scope-DB — så att /upcoming visar "kommande poster" innan
-    # eleven importerar bank-PDF:n. Dessa matchas sedan automatiskt mot
-    # motsvarande bank-tx vid import.
+    # Skapa UpcomingTransactions i elevens scope-DB enligt Rolling N+1:
+    # batchen för month N skapar fakturor som FÖRFALLER under month N+1.
+    # Tidigare skapades fakturor för month N (samma som batchen) vilket
+    # gjorde att kontoutdraget redan visade dem som dragna innan eleven
+    # signerat — fel mot verkligheten där bankens kontoutdrag visar
+    # historik, inte framtid.
+    #
+    # Specialfall: om elevens scope-DB saknar bill-upcomings för
+    # CURRENT month (typiskt en ny elev där detta är första batchen),
+    # genererar vi även för current month så eleven har omedelbara
+    # fakturor att signera. Annars rolling N+1.
     from ..school.engines import scope_context, scope_for_student
+    from .upcoming_planner import plan_upcomings_for_month, next_year_month
     scope_key = scope_for_student(student)
-    BILL_DESCRIPTIONS_TO_UPCOMING = {
-        "HYRA", "BRF AVGIFT", "DRIFT VILLA",
-        "VATTENFALL", "FORTUM", "ELLEVIO", "TIBBER",
-        "TELIA", "BAHNHOF", "COM HEM", "TELE2",
-        "TELENOR ABONNEMANG", "TELIA MOBIL", "TRE",
-        "IF FORSAKRING", "TRYGG HANSA", "FOLKSAM", "LANSFORSAKRINGAR",
-        "BOLÅN", "BILLÅN", "CSN",
-    }
     with scope_context(scope_key):
         with session_scope() as s:
+            # Säkerställ att eleven finns som User i scope-DB:n så hens
+            # ägarskap kan resolvas till user_<id>. Utan detta hamnar
+            # genererad data under "gemensamt" eftersom owner-strängen
+            # inte matchar någon User-rad.
+            from ..db.models import User as _User
+            student_user = s.query(_User).filter(
+                _User.name == student.display_name
+            ).first()
+            if not student_user:
+                student_user = _User(name=student.display_name)
+                s.add(student_user)
+                s.flush()
+            student_owner = student.display_name
+
             # Säkerställ lönekonto finns (för debit_account_id)
             lonekonto = s.query(Account).filter(
                 Account.name == "Lönekonto"
             ).first()
             if not lonekonto:
                 from decimal import Decimal as _Dec
+                # Realistisk startposition så hyran kan dras innan lönen kommer.
+                # Matchar DEFAULT_ACCOUNTS i fixtures.py.
                 lonekonto = Account(
                     name="Lönekonto", bank="ekonomilabbet",
                     type="checking", currency="SEK",
-                    opening_balance=_Dec("0"),
+                    opening_balance=_Dec("25000"),
+                    owner_id=student_user.id,
                 )
                 s.add(lonekonto)
                 s.flush()
+            elif lonekonto.owner_id is None:
+                # Befintligt konto utan ägare — koppla till eleven så
+                # dashboard slutar visa det som "Gemensamt".
+                lonekonto.owner_id = student_user.id
 
-            # Lön som planerad "income"
-            if scenario.salary:
-                sal = scenario.salary
-                if not s.query(UpcomingTransaction).filter(
-                    UpcomingTransaction.kind == "income",
-                    UpcomingTransaction.expected_date == sal.pay_date,
-                    UpcomingTransaction.amount == sal.net,
-                ).first():
-                    s.add(UpcomingTransaction(
-                        kind="income",
-                        name=f"Lön {sal.employer}",
-                        amount=sal.net,
-                        expected_date=sal.pay_date,
-                        recurring_monthly=True,
-                        source="scenario",
-                        debit_account_id=lonekonto.id,
-                        debit_date=sal.pay_date,
-                    ))
+            # Self-healing: har eleven INGA bill-upcomings än är detta
+            # första batchen → seed också CURRENT month så hen har
+            # något att signera direkt.
+            has_any_bill = (
+                s.query(UpcomingTransaction)
+                .filter(UpcomingTransaction.kind == "bill")
+                .first()
+                is not None
+            )
+            if not has_any_bill:
+                plan_upcomings_for_month(
+                    s, student, student.profile, year_month,
+                    debit_account=lonekonto, owner=student_owner,
+                )
 
-            # Bills — identifiera via description-prefix
-            for t in scenario.transactions:
-                desc_u = t.description.upper()
-                if not any(k in desc_u for k in BILL_DESCRIPTIONS_TO_UPCOMING):
-                    continue
-                if t.amount >= 0:
-                    continue
-                amount_pos = abs(t.amount)
-                # Idempotens: skippa om redan finns
-                if s.query(UpcomingTransaction).filter(
-                    UpcomingTransaction.name == t.description,
-                    UpcomingTransaction.expected_date == t.date,
-                    UpcomingTransaction.amount == amount_pos,
-                ).first():
-                    continue
-                s.add(UpcomingTransaction(
-                    kind="bill",
-                    name=t.description,
-                    amount=amount_pos,
-                    expected_date=t.date,
-                    recurring_monthly=True,
-                    source="scenario",
-                    debit_account_id=lonekonto.id,
-                    debit_date=t.date,
-                    autogiro=True,
-                ))
+            # Rolling N+1: skapa upcomings för NÄSTA månad
+            plan_upcomings_for_month(
+                s, student, student.profile,
+                next_year_month(year_month),
+                debit_account=lonekonto, owner=student_owner,
+            )
 
     sort_order = 0
 
     # 1. Lönespec (alltid)
     if scenario.salary:
-        pdf = render_lonespec(scenario.salary, scenario)
+        pdf = render_lonespec(
+            scenario.salary, scenario,
+            student_name=student.display_name,
+            teacher_email=teacher_email,
+        )
+        # Spara hela skattefördelningen så lönespec-importen kan skriva
+        # den till UpcomingTransaction.notes (JSON) för /tax-vyn.
+        sal = scenario.salary
         master_session.add(BatchArtifact(
             batch_id=batch.id,
             kind="lonespec",
-            title=f"Lönespec {year_month} – {scenario.salary.employer}",
+            title=f"Lönespec {year_month} – {sal.employer}",
             filename=f"lonespec_{year_month}.pdf",
             sort_order=sort_order,
             pdf_bytes=pdf,
             meta={
-                "employer": scenario.salary.employer,
-                "net": float(scenario.salary.net),
-                "gross": float(scenario.salary.gross),
+                "employer": sal.employer,
+                "profession": sal.profession,
+                "gross": float(sal.gross),
+                "grundavdrag": float(sal.grundavdrag),
+                "kommunal_tax": float(sal.kommunal_tax),
+                "statlig_tax": float(sal.statlig_tax),
+                "net": float(sal.net),
+                "pay_date": sal.pay_date.isoformat(),
             },
         ))
         sort_order += 1
 
-    # 2. Kontoutdrag (alltid)
-    pdf = render_kontoutdrag(scenario)
+    # 2. Kontoutdrag (alltid) — DYNAMISKT byggt från elevens faktiska
+    # Transaction-ledger för månaden istället för från scenario.
+    # Om ledgern är tom (första batchen för en ny elev) faller vi
+    # tillbaka till scenario så PDF:en inte blir helt tom.
+    from .ledger_statement import build_ledger_scenario
+    with scope_context(scope_key):
+        with session_scope() as scope_s:
+            ledger_scenario = build_ledger_scenario(
+                scope_s,
+                student_id=student.id,
+                year_month=year_month,
+                bank_name=scenario.bank_name,
+                card_name=scenario.card_name,
+            )
+    statement_scenario = ledger_scenario
+    if not ledger_scenario.transactions:
+        # Tom ledger → fall tillbaka till scenario så första batchen
+        # för en ny elev inte ger ett blankt kontoutdrag. Behåller
+        # opening_balance från scenariot.
+        statement_scenario = scenario
+    pdf = render_kontoutdrag(
+        statement_scenario, student_name=student.display_name,
+    )
     master_session.add(BatchArtifact(
         batch_id=batch.id,
         kind="kontoutdrag",
@@ -217,8 +299,9 @@ def create_batch_for_student(
         sort_order=sort_order,
         pdf_bytes=pdf,
         meta={
-            "tx_count": len(scenario.transactions),
-            "account_no": scenario.bank_account_no,
+            "tx_count": len(statement_scenario.transactions),
+            "account_no": statement_scenario.bank_account_no,
+            "source": "ledger" if statement_scenario is ledger_scenario else "scenario_fallback",
         },
     ))
     sort_order += 1
@@ -244,7 +327,10 @@ def create_batch_for_student(
 
     # 4. Kreditkortsfaktura (om kortköp finns)
     if scenario.card_events:
-        pdf = render_kreditkort(scenario.card_events, scenario)
+        pdf = render_kreditkort(
+            scenario.card_events, scenario,
+            student_name=student.display_name,
+        )
         master_session.add(BatchArtifact(
             batch_id=batch.id,
             kind="kreditkort_faktura",
@@ -297,16 +383,26 @@ def import_artifact(
     }
     with scope_context(scope_key):
         with session_scope() as s:
+            # Säkerställ User-rad så ägarskapet kan skrivas och resolvas.
+            from ..db.models import User as _User
+            student_user = s.query(_User).filter(
+                _User.name == student.display_name
+            ).first()
+            if not student_user:
+                student_user = _User(name=student.display_name)
+                s.add(student_user)
+                s.flush()
+            student_owner = student.display_name
             if parsed.kind == "kontoutdrag":
                 _import_kontoutdrag(s, parsed, stats, facit)
                 _auto_match_upcoming(s)
             elif parsed.kind == "lonespec":
-                _import_lonespec(s, parsed, stats, artifact)
+                _import_lonespec(s, parsed, stats, artifact, student_owner)
             elif parsed.kind == "lan_besked":
                 _import_lan(s, parsed, stats, artifact)
             elif parsed.kind == "kreditkort_faktura":
                 _import_kreditkort(s, parsed, stats, artifact, facit)
-                _create_credit_invoice_upcoming(s, parsed, artifact)
+                _create_credit_invoice_upcoming(s, parsed, artifact, student_owner)
 
     artifact.imported_at = datetime.utcnow()
     return {"ok": True, **stats}
@@ -325,6 +421,7 @@ def _auto_match_upcoming(s: Session) -> None:
 
 def _create_credit_invoice_upcoming(
     s: Session, parsed: EkonomilabbetParseResult, artifact: BatchArtifact,
+    student_owner: Optional[str] = None,
 ) -> None:
     """Skapa en UpcomingTransaction för kreditkortsfakturan så eleven
     ser förfallodagen i /upcoming. Beloppet = totalsumman."""
@@ -348,10 +445,17 @@ def _create_credit_invoice_upcoming(
         from datetime import date as _date, timedelta
         due = _date.today() + timedelta(days=20)
     name = f"Kreditkortsfaktura {parsed.period or ''}".strip()
-    if s.query(UpcomingTransaction).filter(
+    existing = s.query(UpcomingTransaction).filter(
         UpcomingTransaction.name == name,
         UpcomingTransaction.expected_date == due,
-    ).first():
+    ).first()
+    # Spara fakturans PDF till disk så /attachments kan visa den
+    path = _save_artifact_to_disk(artifact)
+    if existing:
+        # Berika befintlig rad med path om den saknades (idempotent
+        # uppgradering vid re-import).
+        if existing.source_image_path is None:
+            existing.source_image_path = path
         return
     s.add(UpcomingTransaction(
         kind="bill",
@@ -359,25 +463,42 @@ def _create_credit_invoice_upcoming(
         amount=parsed.total_amount,
         expected_date=due,
         source="scenario",
+        source_image_path=path,
         debit_account_id=lonekonto.id,
         debit_date=due,
         autogiro=True,
+        owner=student_owner,
     ))
 
 
 def _ensure_account(
     s: Session, name: str, type_: str, bank: str = "ekonomilabbet",
     credit_limit: int | None = None, account_no: str | None = None,
+    opening_balance: Decimal | int = 0,
+    owner_id: Optional[int] = None,
 ) -> Account:
+    # Auto-koppla mot enda User-raden om scope-DB:n har exakt en (= solo
+    # elev). Detta säkerställer att genererad data hamnar under elevens
+    # ägarskap istället för "Gemensamt". Familje-scopes med flera users
+    # lämnas oförändrade — där måste ägarskap väljas explicit.
+    if owner_id is None:
+        from ..db.models import User as _User
+        users = s.query(_User).limit(2).all()
+        if len(users) == 1:
+            owner_id = users[0].id
     acc = s.query(Account).filter(Account.name == name).first()
     if acc:
+        # Om kontot redan finns men saknar ägare, koppla in eleven.
+        if owner_id is not None and acc.owner_id is None:
+            acc.owner_id = owner_id
         return acc
     acc = Account(
         name=name, bank=bank, type=type_,
         currency="SEK",
         account_number=account_no,
         credit_limit=Decimal(credit_limit) if credit_limit else None,
-        opening_balance=Decimal("0"),
+        opening_balance=Decimal(str(opening_balance or 0)),
+        owner_id=owner_id,
     )
     s.add(acc)
     s.flush()
@@ -395,21 +516,34 @@ def _import_kontoutdrag(
     acc = _ensure_account(
         s, "Lönekonto", "checking",
         account_no=parsed.account_no,
+        opening_balance=25_000,
     )
     stats["accounts_touched"].append(acc.name)
+    # Försäkra att Sparkonto + Kreditkort också existerar — matchar
+    # DEFAULT_ACCOUNTS i fixtures.py. Behövs eftersom kontoutdraget har
+    # 'ÖVERFÖRING SPARKONTO'-rader (vi parar dem på Sparkonto nedan) och
+    # kreditkortsfakturan vid senare import behöver Kreditkort att
+    # landa på.
+    sparkonto = _ensure_account(
+        s, "Sparkonto", "savings", opening_balance=5_000,
+    )
+    _ensure_account(
+        s, "Kreditkort", "credit", credit_limit=40_000, opening_balance=0,
+    )
 
     existing_hashes = {
         h for (h,) in s.query(Transaction.hash).filter(
             Transaction.account_id == acc.id
         ).all()
     }
+    new_transfer_txs: list[Transaction] = []
     for raw in parsed.transactions:
         h = raw.stable_hash(acc.id)
         if h in existing_hashes:
             stats["skipped_tx"] += 1
             continue
         existing_hashes.add(h)
-        s.add(Transaction(
+        tx = Transaction(
             account_id=acc.id,
             date=raw.date,
             amount=raw.amount,
@@ -419,25 +553,74 @@ def _import_kontoutdrag(
                 if raw.description else None,
             hash=h,
             user_verified=False,
-        ))
+        )
+        s.add(tx)
         stats["imported_tx"] += 1
+        # Spara referens om det är en sparkonto-överföring så vi kan
+        # para den nedan
+        if (
+            raw.description
+            and "ÖVERFÖRING SPARKONTO" in raw.description.upper()
+            and raw.amount < 0
+        ):
+            new_transfer_txs.append(tx)
+    s.flush()
+
+    # Para sparkonto-överföringar: skapa motsvarande +rad på Sparkonto
+    # och länka via transfer_pair_id. Annars försvinner pengarna —
+    # Lönekonto -2000 utan motpar = ledger ur balans.
+    sparkonto_existing = {
+        h for (h,) in s.query(Transaction.hash).filter(
+            Transaction.account_id == sparkonto.id
+        ).all()
+    }
+    for src_tx in new_transfer_txs:
+        # Idempotent hash baserat på (sparkonto, datum, belopp, src-id)
+        pair_hash = f"transfer_pair_{sparkonto.id}_{src_tx.id}"[:64]
+        if pair_hash in sparkonto_existing:
+            continue
+        pair = Transaction(
+            account_id=sparkonto.id,
+            date=src_tx.date,
+            amount=-src_tx.amount,  # spegelvänd belopp
+            currency="SEK",
+            raw_description="ÖVERFÖRING FRÅN LÖNEKONTO",
+            normalized_merchant="Överföring",
+            hash=pair_hash,
+            user_verified=False,
+            is_transfer=True,
+            transfer_pair_id=src_tx.id,
+        )
+        s.add(pair)
+        s.flush()
+        # Bind tillbaka från src till pair
+        src_tx.is_transfer = True
+        src_tx.transfer_pair_id = pair.id
+        stats["imported_tx"] += 1
+        if "Sparkonto" not in stats["accounts_touched"]:
+            stats["accounts_touched"].append("Sparkonto")
 
 
 def _import_lonespec(
     s: Session, parsed: EkonomilabbetParseResult, stats: dict,
     artifact: BatchArtifact,
+    student_owner: Optional[str] = None,
 ) -> None:
     """Lönespec sätter ingen ny tx i sig — kontoutdraget innehåller
     redan löneutbetalningen. Vi använder istället metadata för att
-    upplysa eleven om bruttolön och berika lön-tx med kategori."""
+    upplysa eleven om bruttolön och berika lön-tx med kategori.
+
+    Skapar dessutom en UpcomingTransaction(kind=income) med PDF:en
+    sparad till disk + source_image_path satt — så lönespecen syns
+    under /attachments (Bildunderlag) som en riktig bilaga."""
     acc = _ensure_account(s, "Lönekonto", "checking")
     cat = s.query(Category).filter(Category.name == "Lön").first()
-    if not cat:
-        return
     if not parsed.transactions:
         return
     target_date = parsed.transactions[0].date
     target_amount = parsed.total_amount or parsed.transactions[0].amount
+
+    # Berika existerande lön-tx med kategori
     matched = (
         s.query(Transaction)
         .filter(
@@ -447,11 +630,82 @@ def _import_lonespec(
         )
         .first()
     )
-    if matched:
-        if matched.category_id != cat.id:
-            matched.category_id = cat.id
-            matched.user_verified = True
-            stats["imported_tx"] += 1
+    if matched and cat and matched.category_id != cat.id:
+        matched.category_id = cat.id
+        matched.user_verified = True
+        stats["imported_tx"] += 1
+
+    # Skapa Upcoming-bilaga så PDF:en syns i /attachments (Bildunderlag),
+    # OCH skriv hela skattefördelningen till .notes (JSON) så
+    # /tax/salary-summary kan visa Lön & skatt-kortet.
+    import json as _json
+    artifact_meta = artifact.meta or {}
+    employer = artifact_meta.get("employer", "Arbetsgivare")
+    name = f"Lönespec {employer}"
+    gross = artifact_meta.get("gross")
+    kommunal = artifact_meta.get("kommunal_tax", 0)
+    statlig = artifact_meta.get("statlig_tax", 0)
+    total_tax = float(kommunal or 0) + float(statlig or 0)
+    notes_json = _json.dumps({
+        "gross": gross,
+        "tax": total_tax,
+        "extra_tax": 0,
+        "benefit": 0,
+        "kommunal_tax": float(kommunal or 0),
+        "statlig_tax": float(statlig or 0),
+        "grundavdrag": float(artifact_meta.get("grundavdrag") or 0),
+        "profession": artifact_meta.get("profession"),
+    })
+
+    existing = s.query(UpcomingTransaction).filter(
+        UpcomingTransaction.kind == "income",
+        UpcomingTransaction.expected_date == target_date,
+        UpcomingTransaction.amount == target_amount,
+        UpcomingTransaction.source == "salary_pdf",
+    ).first()
+    if existing is None:
+        path = _save_artifact_to_disk(artifact)
+        s.add(UpcomingTransaction(
+            kind="income",
+            name=name,
+            amount=target_amount,
+            expected_date=target_date,
+            recurring_monthly=True,
+            source="salary_pdf",
+            source_image_path=path,
+            debit_account_id=acc.id,
+            debit_date=target_date,
+            matched_transaction_id=matched.id if matched else None,
+            notes=notes_json,
+            owner=student_owner,
+        ))
+    else:
+        # Berika befintlig rad (idempotent uppgradering vid re-import)
+        if existing.source_image_path is None:
+            existing.source_image_path = _save_artifact_to_disk(artifact)
+        if not existing.notes:
+            existing.notes = notes_json
+
+    # Skapa även en TaxEvent (type=salary_tax) för månaden — så /tax/events
+    # och de framtida prognos-vyerna kan se inbetalda skatter över tid.
+    from ..db.models import TaxEvent as _TaxEvent
+    if total_tax > 0 and not s.query(_TaxEvent).filter(
+        _TaxEvent.type == "salary_tax",
+        _TaxEvent.date == target_date,
+        _TaxEvent.amount == Decimal(str(total_tax)),
+    ).first():
+        s.add(_TaxEvent(
+            type="salary_tax",
+            amount=Decimal(str(total_tax)),
+            date=target_date,
+            transaction_id=matched.id if matched else None,
+            meta={
+                "kommunal": float(kommunal or 0),
+                "statlig": float(statlig or 0),
+                "employer": employer,
+            },
+        ))
+
     stats["accounts_touched"].append(acc.name)
 
 
@@ -564,3 +818,40 @@ def _import_kreditkort(
             user_verified=False,
         ))
         stats["imported_tx"] += 1
+
+
+def _commit_pending_salary_if_due(
+    master_session: Session,
+    profile,
+    year_month: str,
+) -> None:
+    """Apply lönesamtals-höjning: om profile.pending_effective_from
+    <= första dagen i `year_month`, kopierar pending_salary_monthly
+    över till gross_salary_monthly + räknar om net + nollar
+    pending_*-fälten.
+
+    Idempotent: körs vid varje batch-render. Om pending saknas eller
+    inte hunnit aktiveras → ingen ändring.
+    """
+    pending = getattr(profile, "pending_salary_monthly", None)
+    eff_from = getattr(profile, "pending_effective_from", None)
+    if pending is None or eff_from is None:
+        return
+    from datetime import date
+    y, m = year_month.split("-")
+    month_first = date(int(y), int(m), 1)
+    if eff_from > month_first:
+        return  # Inte hunnit aktiveras än
+
+    # Nya bruttolönen tar över. Net räknas approximativt med samma
+    # effektiva skattesats — onboardingen körs inte om bara för en
+    # höjning. Skattekartan på /tax räknar exakt vid behov.
+    new_gross = int(pending)
+    tax_rate = float(getattr(profile, "tax_rate_effective", 0.27) or 0.27)
+    new_net = int(new_gross * (1 - tax_rate))
+
+    profile.gross_salary_monthly = new_gross
+    profile.net_salary_monthly = new_net
+    profile.pending_salary_monthly = None
+    profile.pending_effective_from = None
+    master_session.flush()

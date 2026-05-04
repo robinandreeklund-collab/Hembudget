@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AssignmentSummary } from "@/components/AssignmentList";
 import { FamilyManager, Family } from "@/components/FamilyManager";
 import {
+  AlertTriangle,
   Eye,
   Loader2,
   Pencil,
@@ -14,6 +15,7 @@ import {
   RotateCcw,
   Trash2,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 
@@ -30,6 +32,14 @@ type Student = {
   last_login_at: string | null;
   created_at: string;
   months_generated: string[];
+  has_profile: boolean;
+};
+
+type PulseRow = {
+  student_id: number;
+  flag: "good" | "watch" | "alert" | "no_data";
+  month_balance: number;
+  savings_rate_pct: number;
 };
 
 type GenerateRow = {
@@ -91,6 +101,7 @@ export default function Teacher() {
   const [generating, setGenerating] = useState(false);
   const [lastRun, setLastRun] = useState<GenerateRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [pulse, setPulse] = useState<Record<number, PulseRow>>({});
 
   async function reload() {
     setLoading(true);
@@ -101,6 +112,15 @@ export default function Teacher() {
       ]);
       setStudents(list);
       setFamilies(fams);
+      // Ekonomi-puls — körs separat och fail-soft så listan visas
+      // även om pulse-endpointen ger 500.
+      api<PulseRow[]>("/teacher/students/pulse")
+        .then((rows) => {
+          const m: Record<number, PulseRow> = {};
+          for (const r of rows) m[r.student_id] = r;
+          setPulse(m);
+        })
+        .catch(() => setPulse({}));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -157,6 +177,15 @@ export default function Teacher() {
     if (!confirm("Ta bort eleven och all data?")) return;
     await api(`/teacher/students/${id}`, { method: "DELETE" });
     reload();
+  }
+
+  async function repairProfile(id: number) {
+    try {
+      await api(`/teacher/students/${id}/repair-profile`, { method: "POST" });
+      reload();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function resetStudent(id: number) {
@@ -231,31 +260,9 @@ export default function Teacher() {
             {isFamily ? "Dina barn." : "Din klass."}
           </h1>
         </div>
+        {/* Lärar-verktyg har flyttats till sidebaren — här kvar bara
+            klassrelaterade snabbåtgärder. */}
         <div className="flex gap-2 flex-wrap">
-          <Link
-            to="/teacher/modules"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            🎓 Kursmoduler
-          </Link>
-          <Link
-            to="/teacher/reflections"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            ✍️ Reflektioner
-          </Link>
-          <Link
-            to="/teacher/rubrics"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📋 Rubric-mallar
-          </Link>
-          <Link
-            to="/teacher/time-on-task"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            ⏱ Time on task
-          </Link>
           <button
             onClick={async () => {
               const { getApiBase, getToken } = await import("@/api/client");
@@ -282,42 +289,9 @@ export default function Teacher() {
           >
             📦 Klass-portfolio (ZIP)
           </button>
-          <Link
-            to="/docs"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📖 Guide
-          </Link>
-          <Link
-            to="/messages"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            💬 Meddelanden
-          </Link>
-          <Link
-            to="/teacher/matrix"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📊 Klassöversikt
-          </Link>
-          <Link
-            to="/teacher/all-batches"
-            className="btn-outline rounded-md px-4 py-2 text-sm"
-          >
-            📄 Alla PDF:er
-          </Link>
-          {isSuperAdmin && (
-            <Link
-              to="/teacher/admin-ai"
-              className="border-[1.5px] border-ink bg-paper hover:bg-[#fffef5] rounded-md px-4 py-2 flex items-center gap-2 text-ink"
-              title="Super-admin · AI, lärar-toggel, SMTP/Gmail, API-nyckel"
-            >
-              ⚙ Inställningar
-            </Link>
-          )}
           <button
             onClick={() => setShowFamilies(!showFamilies)}
-            className="btn-outline rounded-md px-4 py-2 text-sm"
+            className="btn-outline rounded-md px-4 py-2 text-sm flex items-center gap-2"
           >
             <Users className="w-4 h-4" /> Familjer
           </button>
@@ -388,10 +362,10 @@ export default function Teacher() {
             <div className="font-medium mb-2">Resultat:</div>
             <ul className="space-y-1">
               {lastRun.map((r) => (
-                <li key={r.student_id} className="flex gap-3">
-                  <span className="font-medium w-40">{r.display_name}</span>
+                <li key={r.student_id} className="flex gap-3 items-start">
+                  <span className="font-medium w-40 shrink-0">{r.display_name}</span>
                   <span
-                    className={`px-2 rounded text-xs ${
+                    className={`px-2 rounded text-xs shrink-0 ${
                       r.status === "created"
                         ? "bg-emerald-100 text-emerald-700"
                         : r.status === "overwritten"
@@ -403,12 +377,12 @@ export default function Teacher() {
                   >
                     {r.status}
                   </span>
-                  <span className="text-slate-600 text-xs">
+                  <span className="text-slate-600 text-xs break-all font-mono">
                     {r.stats
                       ? Object.entries(r.stats)
                           .map(([k, v]) => `${k.replace("_created", "")}:${v}`)
                           .join(" · ")
-                      : r.error}
+                      : r.error || "(inget felmeddelande från servern — kolla Cloud Run-loggar)"}
                   </span>
                 </li>
               ))}
@@ -466,12 +440,36 @@ export default function Teacher() {
                     />
                   </td>
                   <td className="p-3 font-medium">
-                    <Link
-                      to={`/teacher/students/${s.id}`}
-                      className="text-brand-700 hover:underline"
-                    >
-                      {s.display_name}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <PulseDot pulse={pulse[s.id]} />
+                      <Link
+                        to={`/teacher/students/${s.id}`}
+                        className="text-brand-700 hover:underline"
+                      >
+                        {s.display_name}
+                      </Link>
+                    </div>
+                    {pulse[s.id] && pulse[s.id].flag !== "no_data" && (
+                      <div className="mt-1 text-[11px] text-slate-500 ml-5">
+                        Netto denna mån:{" "}
+                        <span className={
+                          pulse[s.id].month_balance >= 0
+                            ? "text-emerald-700 font-medium"
+                            : "text-rose-700 font-medium"
+                        }>
+                          {pulse[s.id].month_balance >= 0 ? "+" : ""}
+                          {pulse[s.id].month_balance.toLocaleString("sv-SE")} kr
+                        </span>
+                        {" · sparkvot "}
+                        {pulse[s.id].savings_rate_pct.toFixed(0)} %
+                      </div>
+                    )}
+                    {!s.has_profile && (
+                      <div className="mt-1 inline-flex items-center gap-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                        <AlertTriangle className="w-3 h-3" />
+                        Saknar profil — reparera eller ta bort
+                      </div>
+                    )}
                     <div className="mt-1">
                       <AssignmentSummary studentId={s.id} />
                     </div>
@@ -505,6 +503,15 @@ export default function Teacher() {
                       : "Aldrig"}
                   </td>
                   <td className="p-3 text-right space-x-1">
+                    {!s.has_profile && (
+                      <button
+                        onClick={() => repairProfile(s.id)}
+                        title="Reparera saknad profil"
+                        className="p-1.5 hover:bg-amber-100 rounded text-amber-700"
+                      >
+                        <Wrench className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => viewAs(s.id)}
                       title="Titta som elev"
@@ -788,5 +795,42 @@ function SmtpStatusCallout() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+function PulseDot({ pulse }: { pulse?: PulseRow }) {
+  if (!pulse) {
+    return (
+      <span
+        className="w-2.5 h-2.5 rounded-full bg-slate-200 shrink-0"
+        title="Beräknar..."
+      />
+    );
+  }
+  const colors: Record<string, { bg: string; title: string }> = {
+    good: {
+      bg: "bg-emerald-500",
+      title: `Bra: sparkvot ${pulse.savings_rate_pct.toFixed(0)} % · netto +${pulse.month_balance.toLocaleString("sv-SE")} kr`,
+    },
+    watch: {
+      bg: "bg-amber-400",
+      title: `Bevakas: låg sparkvot (${pulse.savings_rate_pct.toFixed(0)} %) men netto positivt`,
+    },
+    alert: {
+      bg: "bg-rose-500",
+      title: `Behöver hjälp: utgifter > inkomster (${pulse.month_balance.toLocaleString("sv-SE")} kr)`,
+    },
+    no_data: {
+      bg: "bg-slate-200",
+      title: "Ingen data för månaden",
+    },
+  };
+  const c = colors[pulse.flag] ?? colors.no_data;
+  return (
+    <span
+      className={`w-2.5 h-2.5 rounded-full ${c.bg} shrink-0`}
+      title={c.title}
+    />
   );
 }
