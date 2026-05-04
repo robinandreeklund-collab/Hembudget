@@ -533,6 +533,46 @@ def _run_master_migrations(engine: Engine) -> None:
     if sn_cols and "opening_message" not in sn_cols:
         _add("salary_negotiations", "opening_message TEXT")
 
+    # V2NotifReadState · ny tabell. create_all() borde skapa den
+    # automatiskt, men vid race med samtidiga requests vid cold-
+    # start kan den saknas vid första anropet. Skapa explicit om
+    # frånvarande.
+    if not _table_exists_master(engine, "v2_notif_read_state"):
+        try:
+            with engine.begin() as conn:
+                conn.execute(_text(
+                    "CREATE TABLE IF NOT EXISTS v2_notif_read_state ("
+                    "  id SERIAL PRIMARY KEY,"
+                    "  student_id INTEGER NOT NULL REFERENCES students(id) "
+                    "    ON DELETE CASCADE,"
+                    "  notif_id VARCHAR(60) NOT NULL,"
+                    "  read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+                    "  CONSTRAINT uq_v2_notif_read UNIQUE (student_id, notif_id)"
+                    ")"
+                    if is_postgres else
+                    "CREATE TABLE IF NOT EXISTS v2_notif_read_state ("
+                    "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    "  student_id INTEGER NOT NULL REFERENCES students(id) "
+                    "    ON DELETE CASCADE,"
+                    "  notif_id VARCHAR(60) NOT NULL,"
+                    "  read_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                    "  CONSTRAINT uq_v2_notif_read UNIQUE (student_id, notif_id)"
+                    ")"
+                ))
+        except Exception:
+            _log.exception(
+                "migration: kunde inte skapa v2_notif_read_state",
+            )
+
+
+def _table_exists_master(engine: Engine, table: str) -> bool:
+    """Snabb existens-check för master-tabeller."""
+    from sqlalchemy import inspect as _inspect
+    try:
+        return _inspect(engine).has_table(table)
+    except Exception:
+        return False
+
 
 @contextmanager
 def master_session() -> Iterator[Session]:
