@@ -159,10 +159,13 @@ def init_master_engine() -> Engine:
         # Postgres: pre-ping så stale connections från Cloud SQL inte
         # smäller. Cloud SQL db-f1-micro har max ~25 connections totalt.
         # Vi delar mellan master + shared-scope + Postgres internal, så
-        # håll pools små: 2+3=5 per engine = 10 totalt med headroom.
+        # håll pools rimliga: 5+5=10 per engine = 20 totalt med
+        # headroom 5. (Tidigare 2+3=5 räckte inte: en aktiv elev gör
+        # 5-10 parallella requests vid sidladdning → pool slut →
+        # "remaining connection slots are reserved" på prod.)
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=3,
-            pool_recycle=1800,
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
 
@@ -588,10 +591,12 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Cloud SQL har låg connection-limit. Håll båda engines små.
+        # Cloud SQL db-f1-micro har max ~25 connections totalt. Vi
+        # håller master + shared-scope under 20 totalt med headroom.
+        # 5+5=10 per engine räcker för ~5 samtidiga aktiva elever.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=3,
-            pool_recycle=1800,
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
 

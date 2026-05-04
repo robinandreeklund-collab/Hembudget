@@ -162,8 +162,51 @@ def session_scope() -> Iterator[Session]:
                 session.close()
             return
 
+        # School-mode UTAN scope_key → använd shared-scope-engine
+        # (Postgres när HEMBUDGET_DATABASE_URL satt, annars en
+        # gemensam SQLite). Det är BUGG om en endpoint kallar
+        # session_scope() utan scope_context i school-mode — men
+        # tidigare fallback till _SessionLocal (oinitialiserad lokal
+        # SQLite) gav "no such table: users/transactions" på prod.
+        #
+        # Vi använder shared-scope-engine eftersom den har
+        # tenant-tabellerna skapade. Tenant-id-isolering blir noll,
+        # vilket betyder att data är tom istället för att krascha.
+        try:
+            import os
+            if os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+                from ..school.engines import _init_shared_scope_engine
+                _engine_shared, session_maker = _init_shared_scope_engine()
+                session = session_maker()
+                try:
+                    yield session
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+                finally:
+                    session.close()
+                return
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "session_scope: shared-scope-fallback failed",
+            )
+
     if _SessionLocal is None:
         init_engine()
+        # Säkerställ att SQLite-fallback har alla tabeller skapade.
+        # Tidigare initierades den utan create_all → "no such table"
+        # vid varje query. Idempotent: bara skapar tabeller som
+        # saknas.
+        if _engine is not None:
+            try:
+                Base.metadata.create_all(_engine)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "session_scope: SQLite-fallback create_all failed",
+                )
     assert _SessionLocal is not None
     session = _SessionLocal()
     try:
