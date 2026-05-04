@@ -170,10 +170,19 @@ def init_master_engine() -> Engine:
         # connect_timeout=5: om Cloud SQL inte svarar inom 5s ska vi
         # ge upp och returnera ett fel uppåt — INTE hänga startup-
         # hooken. Tidigare hängde vi förbi Cloud Run:s 240s timeout.
+        #
+        # statement_timeout=30000 (30s): hård gräns på QUERY-tid också,
+        # inte bara connect-tid. Utan detta kan en enskild query mot
+        # överbelastad Cloud SQL hänga oändligt och blockera hela
+        # request-handlern (startup-hook eller user request) — tester
+        # i prod visar att deploy:en fastnade exakt här.
         engine_kwargs.update(
             pool_pre_ping=True, pool_size=3, max_overflow=3,
             pool_recycle=1800, pool_timeout=10,
-            connect_args={"connect_timeout": 5},
+            connect_args={
+                "connect_timeout": 5,
+                "options": "-c statement_timeout=30000",
+            },
         )
     elif not is_sqlite:
         # Annan dialekt (MySQL, etc.) — sätt bara generella pool-args.

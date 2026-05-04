@@ -441,29 +441,44 @@ async def _demo_seed_and_scheduler() -> None:
         from .school.engines import init_master_engine
         from .school.demo_seed import build_demo
         init_master_engine()
-        # Första build
-        stats = build_demo()
-        next_demo_reset_at = datetime.utcnow() + timedelta(
-            seconds=DEMO_RESET_INTERVAL_SECONDS,
-        )
-        logging.getLogger(__name__).info("demo seed: %s", stats)
 
-        async def _reset_loop():
+        # build_demo() är TUNG (rensar + återskapar lärare + 5 elever +
+        # 15 batchar + 69 artefakter på ~6 s lokalt, längre på Cloud Run
+        # där varje DB-rundtur kostar mer). Synkron i startup-hook
+        # spränger Cloud Run:s 240 s startup-probe-timeout.
+        # Lösning: kör först-bygget i background-tråd. Eleverna har
+        # redan data från förra deployens reset-loop, så det är OK
+        # att vänta in 5-10 s tills bakgrunden klar.
+        async def _initial_build_then_loop():
             global next_demo_reset_at
+            import asyncio as _aio
+            try:
+                stats = await _aio.to_thread(build_demo)
+                next_demo_reset_at = datetime.utcnow() + timedelta(
+                    seconds=DEMO_RESET_INTERVAL_SECONDS,
+                )
+                logging.getLogger(__name__).info("demo seed: %s", stats)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "demo seed (initial) misslyckades"
+                )
+
             while True:
                 try:
-                    await asyncio.sleep(DEMO_RESET_INTERVAL_SECONDS)
-                    s = build_demo()
+                    await _aio.sleep(DEMO_RESET_INTERVAL_SECONDS)
+                    s = await _aio.to_thread(build_demo)
                     next_demo_reset_at = datetime.utcnow() + timedelta(
                         seconds=DEMO_RESET_INTERVAL_SECONDS,
                     )
                     logging.getLogger(__name__).info("demo reset: %s", s)
-                except asyncio.CancelledError:
+                except _aio.CancelledError:
                     break
                 except Exception:
-                    logging.getLogger(__name__).exception("demo reset misslyckades")
+                    logging.getLogger(__name__).exception(
+                        "demo reset misslyckades"
+                    )
 
-        asyncio.create_task(_reset_loop())
+        asyncio.create_task(_initial_build_then_loop())
     except Exception:
         logging.getLogger(__name__).exception("demo seed misslyckades")
 
@@ -582,20 +597,37 @@ def _school_bootstrap() -> None:
             # har seedats, kör en force-poll så det finns kursdata direkt
             # vid boot — annars visar frontend tomma rader tills nästa
             # marknadsöppning.
+            #
+            # OBS: poll_quotes anropar yfinance/finnhub som kan blockera
+            # i flera SEKUNDER per ticker. På Cloud Run hängde detta
+            # förbi startup-probe-timeouten (240 s) → containern
+            # bands aldrig till port 8080 → CI rött. Lösning: trigga
+            # i en bakgrundstråd så startup-hooken returnerar direkt.
             from .school.stock_models import LatestStockQuote
             from .stocks.poller import poll_quotes
             if s.query(LatestStockQuote).count() == 0:
-                try:
-                    pr = poll_quotes(s, force=True)
-                    logging.getLogger(__name__).info(
-                        "school: bootstrap-pollade %d kursrader (provider %s)",
-                        pr["fetched"],
-                        s.bind.dialect.name if s.bind else "?",
-                    )
-                except Exception:
-                    logging.getLogger(__name__).exception(
-                        "school: bootstrap-poll misslyckades — fortsätter ändå"
-                    )
+                def _bg_stock_poll():
+                    import logging as _log
+                    try:
+                        from .school.engines import master_session as _ms
+                        with _ms() as _s:
+                            pr = poll_quotes(_s, force=True)
+                            _log.getLogger(__name__).info(
+                                "school: bootstrap-pollade %d "
+                                "kursrader (background)",
+                                pr["fetched"],
+                            )
+                    except Exception:
+                        _log.getLogger(__name__).exception(
+                            "school: bootstrap-poll misslyckades "
+                            "(background) — fortsätter ändå"
+                        )
+                import threading as _threading
+                _threading.Thread(
+                    target=_bg_stock_poll,
+                    name="bootstrap-stock-poll",
+                    daemon=True,
+                ).start()
     except Exception:
         logging.getLogger(__name__).exception("school bootstrap failed")
 
