@@ -158,6 +158,23 @@ export function PostladanV2() {
     const d = new Date(iso);
     return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
   }
+  // Relativ tid framåt — "om 14 min", "om 2 h", "om 1 d 4 h" — för
+  // realtid-projektion ("nästa brev släpps om …"). null = inget pending.
+  function fmtRelFuture(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const target = new Date(iso).getTime();
+    const diffSec = Math.round((target - Date.now()) / 1000);
+    if (diffSec <= 0) return "strax";
+    if (diffSec < 60) return `om ${diffSec} s`;
+    const m = Math.round(diffSec / 60);
+    if (m < 60) return `om ${m} min`;
+    const h = Math.round(diffSec / 3600);
+    if (h < 24) return `om ${h} h`;
+    const d = Math.floor(diffSec / 86400);
+    const remH = Math.round((diffSec - d * 86400) / 3600);
+    return remH > 0 ? `om ${d} d ${remH} h` : `om ${d} d`;
+  }
+  const nextRel = fmtRelFuture(summary.next_release_at);
   const spendLabel =
     summary.spend_profile === "sparsam"
       ? "sparsam"
@@ -200,7 +217,17 @@ export function PostladanV2() {
             Senaste utskick{" "}
             <strong>{fmtDateTime(summary.last_received_at)}</strong>
             <br />
-            Nästa väntat {fmtDate(summary.next_due_date)}
+            Nästa väntat{" "}
+            {nextRel ? (
+              <strong style={{ color: "var(--accent, #dc4c2b)" }}>
+                {nextRel}
+                {summary.pending_count > 1
+                  ? ` · ${summary.pending_count} kvar`
+                  : ""}
+              </strong>
+            ) : (
+              fmtDate(summary.next_due_date)
+            )}
           </div>
         </header>
 

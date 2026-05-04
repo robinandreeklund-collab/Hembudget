@@ -847,6 +847,156 @@ def negotiate_salary_round(
         return None
 
 
+NEGOTIATION_OPENING_TEMPLATE = """Du är HR-chefen Maria på {employer}. \
+{student_name} har just kommit in på lönesamtal — {profession}, anställd \
+i {years} år, nuvarande lön {salary} kr/mån. \
+Senaste tre arbetsplats-events: {events_summary}. Satisfaction-score: {score}/100 ({trend}).
+
+Skriv DITT öppningsmeddelande till {student_name} — det första du säger \
+när hen kommer in. Skriv 2-4 meningar. Var trevlig men professionell. \
+Hänvisa kort till något konkret från senaste tiden (events) om det finns. \
+Avsluta med en öppen fråga som ger eleven utrymme att börja argumentera. \
+Avslöja INTE avtalets revisionsutrymme — det ska eleven själv föra in. \
+Ingen markdown, ingen rubrik, ingen punktlista."""
+
+
+def negotiate_salary_opening(
+    *,
+    student_name: str,
+    profession: str,
+    employer: str,
+    salary: int,
+    years: int,
+    satisfaction_score: int,
+    satisfaction_trend: str,
+    recent_events: list[str],
+    teacher_id: int | None = None,
+    max_tokens: int = 220,
+) -> Optional[AIResult]:
+    """Genererar Marias dynamiska öppningsmeddelande.
+
+    Anropas en gång per samtal när eleven trycker 'Starta lönesamtal'.
+    Resultatet sparas på SalaryNegotiation.opening_message så vi inte
+    behöver anropa AI igen om eleven återvänder."""
+    client = _get_client()
+    if client is None:
+        _set_last_error("AI-klienten är inte konfigurerad")
+        return None
+    events_summary = "; ".join(recent_events[-3:]) if recent_events else "inga"
+    system = NEGOTIATION_OPENING_TEMPLATE.format(
+        student_name=student_name,
+        profession=profession,
+        employer=employer,
+        salary=salary,
+        years=max(0, years),
+        score=satisfaction_score,
+        trend=satisfaction_trend,
+        events_summary=events_summary,
+    )
+    try:
+        resp = client.messages.create(
+            model=MODEL_HAIKU,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system}],
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Skriv ditt öppningsmeddelande nu — 2-4 meningar."
+                ),
+            }],
+        )
+        text_parts: list[str] = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        text = "\n".join(text_parts).strip()
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        _record_usage(teacher_id, in_tok, out_tok)
+        _set_last_error(None)
+        return AIResult(
+            text=text, input_tokens=in_tok, output_tokens=out_tok,
+        )
+    except Exception as exc:
+        log.exception("ai: negotiate_salary_opening misslyckades")
+        _set_last_error(f"{type(exc).__name__}: {exc}")
+        return None
+
+
+NEGOTIATION_TONE_TEMPLATE = """Du är observatör i ett lönesamtal mellan \
+{student_name} (eleven) och Maria (HR-chef). Bedöm enbart elevens \
+TON och PROFESSIONALISM i senaste meddelandet — INTE substansen.
+
+Skala: -15 (otrevlig, hotfull, illa förberedd, känslomässig utbrytning) \
+till +15 (väl-formulerad, saklig, lugn, respektfull, väl förberedd).
+
+Skicka tillbaka en JSON med exakta fält:
+{{"score": INTEGER, "reason": "kort förklaring (max 90 tecken)"}}
+
+Inga andra fält. Inga rader utanför JSON. Score är ett heltal mellan \
+-15 och +15. 0 = neutralt."""
+
+
+def evaluate_negotiation_tone(
+    *,
+    student_name: str,
+    student_message: str,
+    teacher_id: int | None = None,
+    max_tokens: int = 120,
+) -> tuple[Optional[int], Optional[str]]:
+    """Bedömer elevens kommunikationsstil i en rond.
+
+    Returnerar (score, reason). None vid AI-fel — då hoppas tone-
+    bedömning över för rondsen och ingen pentagon-effekt sker.
+    """
+    client = _get_client()
+    if client is None:
+        return None, None
+    system = NEGOTIATION_TONE_TEMPLATE.format(student_name=student_name)
+    try:
+        resp = client.messages.create(
+            model=MODEL_HAIKU,
+            max_tokens=max_tokens,
+            system=[{"type": "text", "text": system}],
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Elevens meddelande:\n\n{student_message[:1500]}"
+                ),
+            }],
+        )
+        text_parts: list[str] = []
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        raw = "\n".join(text_parts).strip()
+        usage = getattr(resp, "usage", None)
+        in_tok = getattr(usage, "input_tokens", 0) if usage else 0
+        out_tok = getattr(usage, "output_tokens", 0) if usage else 0
+        _record_usage(teacher_id, in_tok, out_tok)
+        # Plocka ut JSON robust — modellen kan lägga till
+        # förklaringstext före/efter trots prompten.
+        import json as _json, re as _re
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if not m:
+            return None, None
+        try:
+            data = _json.loads(m.group(0))
+        except Exception:
+            return None, None
+        score = data.get("score")
+        reason = data.get("reason")
+        if not isinstance(score, (int, float)):
+            return None, None
+        score_i = int(max(-15, min(15, round(score))))
+        reason_s = str(reason)[:120] if reason is not None else None
+        return score_i, reason_s
+    except Exception:
+        log.exception("ai: evaluate_negotiation_tone misslyckades")
+        return None, None
+
+
 def extract_proposed_pct(text: str) -> float | None:
     """Heuristisk extraktion av AI:ns bud i procent.
 

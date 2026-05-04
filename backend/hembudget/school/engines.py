@@ -520,6 +520,19 @@ def _run_master_migrations(engine: Engine) -> None:
                     table, col,
                 )
 
+    # NegotiationRound · tone_score + tone_reason (Maria-AI evaluering
+    # av elevens kommunikationsstil per rond, -15..+15).
+    nr_cols = _cols("negotiation_rounds")
+    if nr_cols and "tone_score" not in nr_cols:
+        _add("negotiation_rounds", "tone_score INTEGER")
+    if nr_cols and "tone_reason" not in nr_cols:
+        _add("negotiation_rounds", "tone_reason TEXT")
+    # SalaryNegotiation · opening_message (Maria öppnar samtalet
+    # dynamiskt baserat på elevens karaktär)
+    sn_cols = _cols("salary_negotiations")
+    if sn_cols and "opening_message" not in sn_cols:
+        _add("salary_negotiations", "opening_message TEXT")
+
 
 @contextmanager
 def master_session() -> Iterator[Session]:

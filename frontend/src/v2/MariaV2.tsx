@@ -26,18 +26,54 @@ import { V2Banner } from "./V2Banner";
 import "./lan.css";
 
 
+type AcceptPreview = Awaited<ReturnType<typeof v2Api.mariaAcceptPreview>>;
+type CompleteResult = Awaited<ReturnType<typeof v2Api.mariaComplete>>;
+type RoundTone = { roundNo: number; score: number | null; reason: string | null };
+
 export function MariaV2() {
   const [data, setData] = useState<V2MariaData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [starting, setStarting] = useState(false);
+  // Maria öppnar samtalet · cachad i komponent-state mellan refreshes
+  const [openingMessage, setOpeningMessage] = useState<string | null>(null);
+  // AI-tonbedömning per rond — visas som liten badge i UI:n.
+  // Bakåtkompat: bygger map från active.rounds + senaste send-svar.
+  const [toneByRound, setToneByRound] = useState<Record<number, RoundTone>>({});
+  // Konsekvens-modal innan eleven trycker Acceptera/Avsluta
+  const [preview, setPreview] = useState<AcceptPreview | null>(null);
+  const [previewMode, setPreviewMode] =
+    useState<"accept" | "abandon" | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  // Slutskärm efter complete()
+  const [completeResult, setCompleteResult] =
+    useState<CompleteResult | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
 
   function refresh() {
     return v2Api
       .maria()
-      .then(setData)
+      .then((d) => {
+        setData(d);
+        // Hydrera tone-cache från befintliga ronder (om endpointen
+        // hämtar tone_score från DB ska vi visa det också efter reload)
+        const next: Record<number, RoundTone> = {};
+        d.active?.rounds.forEach((r) => {
+          const tone = (r as unknown as {
+            tone_score?: number | null;
+            tone_reason?: string | null;
+          });
+          if (tone?.tone_score != null) {
+            next[r.round_no] = {
+              roundNo: r.round_no,
+              score: tone.tone_score,
+              reason: tone.tone_reason ?? null,
+            };
+          }
+        });
+        setToneByRound((prev) => ({ ...prev, ...next }));
+      })
       .catch((e) => setError(String((e as Error)?.message || e)));
   }
 
@@ -56,7 +92,8 @@ export function MariaV2() {
     setStarting(true);
     setError(null);
     try {
-      await v2Api.mariaStart();
+      const r = await v2Api.mariaStart();
+      setOpeningMessage(r.opening_message);
       await refresh();
     } catch (e) {
       setError(String((e as Error)?.message || e));
@@ -70,8 +107,51 @@ export function MariaV2() {
     setSending(true);
     setError(null);
     try {
-      await v2Api.mariaSendMessage(data.active.id, message.trim());
+      const r = await v2Api.mariaSendMessage(data.active.id, message.trim());
       setMessage("");
+      // Spara tone-feedback från svaret för aktuell rond
+      setToneByRound((prev) => ({
+        ...prev,
+        [r.round_no]: {
+          roundNo: r.round_no,
+          score: r.tone_score,
+          reason: r.tone_reason,
+        },
+      }));
+      await refresh();
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function openPreview(mode: "accept" | "abandon") {
+    if (!data?.active) return;
+    setPreviewMode(mode);
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      const p = await v2Api.mariaAcceptPreview(data.active.id);
+      setPreview(p);
+    } catch (e) {
+      setError(String((e as Error)?.message || e));
+      setPreviewMode(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function confirmComplete() {
+    if (!data?.active || !previewMode) return;
+    setSending(true);
+    try {
+      const r = await v2Api.mariaComplete(
+        data.active.id, previewMode === "accept",
+      );
+      setCompleteResult(r);
+      setPreview(null);
+      setPreviewMode(null);
       await refresh();
     } catch (e) {
       setError(String((e as Error)?.message || e));
@@ -268,6 +348,41 @@ export function MariaV2() {
                   maxHeight: 500,
                 }}
               >
+                {/* Maria öppnar samtalet — visas före alla ronder */}
+                {openingMessage && (
+                  <div
+                    style={{
+                      background: "rgba(251,191,36,0.06)",
+                      borderLeft: "3px solid var(--warm)",
+                      padding: "12px 16px",
+                      borderRadius: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: "var(--mono)",
+                        fontSize: 9.5,
+                        letterSpacing: "1.2px",
+                        textTransform: "uppercase",
+                        color: "var(--warm)",
+                        marginBottom: 4,
+                      }}
+                    >
+                      Maria · öppnar samtalet
+                    </div>
+                    <p
+                      style={{
+                        fontFamily: "var(--serif)",
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                        margin: 0,
+                        fontStyle: "italic",
+                      }}
+                    >
+                      {openingMessage}
+                    </p>
+                  </div>
+                )}
                 {active.rounds.map((r) => (
                   <div key={r.round_no}>
                     <div
@@ -302,6 +417,35 @@ export function MariaV2() {
                       >
                         {r.student_message}
                       </p>
+                      {(() => {
+                        const tone = toneByRound[r.round_no];
+                        if (!tone || tone.score == null) return null;
+                        const positive = tone.score > 0;
+                        const neutral = tone.score === 0;
+                        const color = positive
+                          ? "#6ee7b7"
+                          : neutral
+                          ? "rgba(255,255,255,0.55)"
+                          : "#fda594";
+                        return (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              fontFamily: "var(--mono)",
+                              fontSize: 10,
+                              color,
+                              letterSpacing: "0.4px",
+                            }}
+                          >
+                            ● Marias intryck:{" "}
+                            <strong>
+                              {positive ? "+" : ""}
+                              {tone.score}
+                            </strong>
+                            {tone.reason ? ` · ${tone.reason}` : ""}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div
                       style={{
@@ -403,7 +547,7 @@ export function MariaV2() {
                   </div>
                 )}
 
-              {/* Bug #8 · 'Acceptera bud'-knapp som v1 hade */}
+              {/* Acceptera + Avsluta-knappar med konsekvens-preview */}
               {active.status === "active" && active.rounds.length > 0 && (
                 <div
                   style={{
@@ -413,51 +557,56 @@ export function MariaV2() {
                     border: "1px solid rgba(110,231,183,0.25)",
                     borderRadius: 10,
                     display: "flex",
+                    gap: 10,
                     justifyContent: "space-between",
                     alignItems: "center",
+                    flexWrap: "wrap",
                   }}
                 >
-                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: "0.9rem" }}>
-                    Nöjd med Marias senaste bud? Avsluta förhandlingen och
-                    aktivera nya lönen från nästa månads lönespec.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!confirm("Acceptera senaste bud och avsluta förhandlingen?")) return;
-                      try {
-                        const r = await fetch(
-                          `/employer/negotiation/${active.id}/complete`,
-                          {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                              Authorization: `Bearer ${sessionStorage.getItem("hembudget_token") || ""}`,
-                            },
-                            body: JSON.stringify({ accept_offer: true }),
-                          },
-                        );
-                        if (r.ok) {
-                          window.location.reload();
-                        } else {
-                          alert(`Fel: ${await r.text()}`);
-                        }
-                      } catch (e) {
-                        alert(`Fel: ${String((e as Error).message || e)}`);
-                      }
-                    }}
+                  <div
                     style={{
-                      background: "#34d399",
-                      color: "#0a3326",
-                      padding: "10px 20px",
-                      border: "none",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      fontWeight: 700,
+                      color: "rgba(255,255,255,0.85)",
+                      fontSize: "0.9rem",
+                      flex: "1 1 240px",
                     }}
                   >
-                    Acceptera bud →
-                  </button>
+                    Klar med samtalet? Se konsekvenserna innan du
+                    bestämmer dig.
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      disabled={previewLoading}
+                      onClick={() => openPreview("abandon")}
+                      style={{
+                        background: "transparent",
+                        color: "#fda594",
+                        border: "1px solid #fda594",
+                        padding: "10px 16px",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Avsluta utan ändring
+                    </button>
+                    <button
+                      type="button"
+                      disabled={previewLoading}
+                      onClick={() => openPreview("accept")}
+                      style={{
+                        background: "#34d399",
+                        color: "#0a3326",
+                        padding: "10px 20px",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Acceptera bud →
+                    </button>
+                  </div>
                 </div>
               )}
               {active.status !== "active" && (
@@ -666,6 +815,489 @@ export function MariaV2() {
 
         {/* Echo · taktiskt råd när som helst */}
       </div>
+
+      {/* === Konsekvens-preview-modal innan Acceptera/Avsluta === */}
+      {preview && previewMode && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => {
+            setPreview(null);
+            setPreviewMode(null);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.7)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 100,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: 520,
+              width: "100%",
+              background: "#0f1525",
+              border: "1px solid var(--accent, #dc4c2b)",
+              borderRadius: 12,
+              padding: "26px 24px",
+              fontFamily: "var(--serif)",
+              color: "#fff",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 9.5,
+                letterSpacing: "1.4px",
+                textTransform: "uppercase",
+                color: "var(--accent)",
+                marginBottom: 8,
+              }}
+            >
+              ● Förhandsvisning
+            </div>
+            <h2 style={{ fontSize: 22, margin: "0 0 14px 0" }}>
+              {previewMode === "accept"
+                ? "Om du accepterar nu"
+                : "Om du avslutar utan ändring"}
+            </h2>
+            {preview.warning_md && (
+              <div
+                style={{
+                  padding: "10px 14px",
+                  background: "rgba(252,165,165,0.08)",
+                  border: "1px solid rgba(252,165,165,0.4)",
+                  borderRadius: 6,
+                  color: "#fca5a5",
+                  fontSize: 13,
+                  marginBottom: 14,
+                }}
+              >
+                {preview.warning_md}
+              </div>
+            )}
+            <ul
+              style={{
+                listStyle: "none",
+                padding: 0,
+                margin: 0,
+                fontSize: 14,
+                lineHeight: 1.7,
+              }}
+            >
+              {previewMode === "accept" && preview.salary_delta_per_month != null && (
+                <li>
+                  <strong>
+                    {preview.salary_delta_per_month >= 0 ? "+" : ""}
+                    {Math.round(preview.salary_delta_per_month)
+                      .toLocaleString("sv-SE")} kr/månad
+                  </strong>{" "}
+                  ({preview.salary_delta_per_year != null
+                    ? `${(preview.salary_delta_per_year >= 0 ? "+" : "")}${
+                        Math.round(preview.salary_delta_per_year).toLocaleString("sv-SE")
+                      } kr/år`
+                    : "—"})
+                  · ny lön{" "}
+                  <strong>
+                    {preview.new_salary_if_accepted != null
+                      ? Math.round(preview.new_salary_if_accepted).toLocaleString("sv-SE")
+                      : "—"}{" "}
+                    kr
+                  </strong>
+                </li>
+              )}
+              <li>
+                Ekonomi{" "}
+                <strong style={{ color: previewMode === "accept" && preview.accept_ekonomi_delta >= 0 ? "#6ee7b7" : "#fda594" }}>
+                  {previewMode === "accept"
+                    ? `${preview.accept_ekonomi_delta >= 0 ? "+" : ""}${preview.accept_ekonomi_delta}`
+                    : "0"}
+                </strong>
+              </li>
+              <li>
+                Sociala band{" "}
+                <strong style={{ color: previewMode === "accept" ? "#6ee7b7" : "#fda594" }}>
+                  {previewMode === "accept"
+                    ? `+${preview.accept_social_delta}`
+                    : preview.abandon_social_delta}
+                </strong>
+              </li>
+              <li>
+                Karriär/Trygghet{" "}
+                <strong style={{ color: previewMode === "accept" ? "#6ee7b7" : "#fda594" }}>
+                  {previewMode === "accept"
+                    ? `+${preview.accept_safety_delta}`
+                    : preview.abandon_safety_delta}
+                </strong>
+              </li>
+              <li>
+                Marias nöjdhet{" "}
+                <strong style={{ color: previewMode === "accept" ? "#6ee7b7" : "#fda594" }}>
+                  {previewMode === "accept"
+                    ? `+${preview.accept_employer_sat_delta}`
+                    : preview.abandon_employer_sat_delta}
+                </strong>
+                {previewMode === "accept" && preview.accept_employer_sat_delta > 0 && (
+                  <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
+                    {" "}· bättre projekt nästa kvartal
+                  </span>
+                )}
+              </li>
+            </ul>
+            <div
+              style={{
+                marginTop: 22,
+                display: "flex",
+                gap: 10,
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setPreview(null);
+                  setPreviewMode(null);
+                }}
+                style={{
+                  background: "transparent",
+                  color: "rgba(255,255,255,0.7)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  padding: "9px 16px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                }}
+              >
+                Tillbaka
+              </button>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={confirmComplete}
+                style={{
+                  background:
+                    previewMode === "accept" ? "#34d399" : "#fbbf24",
+                  color: previewMode === "accept" ? "#0a3326" : "#422006",
+                  padding: "9px 20px",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                {sending
+                  ? "Avslutar…"
+                  : previewMode === "accept"
+                  ? "Bekräfta"
+                  : "Avsluta ändå"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === Slutskärm efter complete() — betyg + minne + pentagon === */}
+      {completeResult && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 110,
+            padding: 20,
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 620,
+              width: "100%",
+              background: "linear-gradient(180deg, #0f1525 0%, #0a0e1a 100%)",
+              border: "1px solid var(--warm, #fbbf24)",
+              borderRadius: 14,
+              padding: "32px 28px",
+              fontFamily: "var(--serif)",
+              color: "#fff",
+              boxShadow: "0 30px 80px -10px rgba(0,0,0,0.8)",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                letterSpacing: "1.6px",
+                textTransform: "uppercase",
+                color: "var(--warm)",
+                marginBottom: 10,
+              }}
+            >
+              ● Slutresultat · {completeResult.grade_label}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 26,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginBottom: 18,
+              }}
+            >
+              {/* Förhandlingsbetyg */}
+              <div
+                style={{
+                  width: 130, height: 130,
+                  borderRadius: "50%",
+                  display: "grid", placeItems: "center",
+                  background: `conic-gradient(var(--warm) 0 ${completeResult.grade * 3.6}deg, rgba(255,255,255,0.08) ${completeResult.grade * 3.6}deg 360deg)`,
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  style={{
+                    width: 110, height: 110,
+                    borderRadius: "50%",
+                    background: "#0f1525",
+                    display: "grid", placeItems: "center",
+                  }}
+                >
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 30, fontWeight: 700 }}>
+                      {completeResult.grade}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "rgba(255,255,255,0.55)",
+                        fontFamily: "var(--mono)",
+                        letterSpacing: "1px",
+                      }}
+                    >
+                      AV 100
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                {completeResult.final_pct != null && (
+                  <div
+                    style={{
+                      fontSize: 28,
+                      fontWeight: 700,
+                      lineHeight: 1.1,
+                      marginBottom: 4,
+                    }}
+                  >
+                    +{completeResult.final_pct.toFixed(1)} %
+                    {completeResult.salary_delta_per_month != null && (
+                      <span
+                        style={{
+                          fontSize: 18,
+                          color: "var(--warm)",
+                          marginLeft: 10,
+                        }}
+                      >
+                        +{Math.round(completeResult.salary_delta_per_month)
+                          .toLocaleString("sv-SE")} kr/mån
+                      </span>
+                    )}
+                  </div>
+                )}
+                {completeResult.final_salary != null && (
+                  <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>
+                    Ny lön:{" "}
+                    <strong>
+                      {Math.round(completeResult.final_salary)
+                        .toLocaleString("sv-SE")} kr/mån
+                    </strong>
+                  </div>
+                )}
+                {completeResult.salary_delta_per_year != null && (
+                  <div
+                    style={{
+                      color: "rgba(255,255,255,0.55)",
+                      fontSize: 12,
+                      fontFamily: "var(--mono)",
+                    }}
+                  >
+                    {completeResult.salary_delta_per_year >= 0 ? "+" : ""}
+                    {Math.round(completeResult.salary_delta_per_year)
+                      .toLocaleString("sv-SE")} kr/år
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pentagon-deltar */}
+            {Object.keys(completeResult.pentagon_deltas || {}).length > 0 && (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 8,
+                  marginBottom: 14,
+                  display: "flex",
+                  gap: 16,
+                  flexWrap: "wrap",
+                  fontSize: 13,
+                }}
+              >
+                {Object.entries(completeResult.pentagon_deltas).map(
+                  ([axis, delta]) => (
+                    <div key={axis} style={{ display: "flex", gap: 6 }}>
+                      <span style={{ color: "rgba(255,255,255,0.55)" }}>
+                        {axis === "economy" ? "Ekonomi"
+                          : axis === "social" ? "Sociala band"
+                          : axis === "safety" ? "Karriär"
+                          : axis === "health" ? "Hälsa"
+                          : axis === "leisure" ? "Fritid"
+                          : axis}
+                      </span>
+                      <strong
+                        style={{
+                          color: (delta as number) >= 0 ? "#6ee7b7" : "#fda594",
+                        }}
+                      >
+                        {(delta as number) >= 0 ? "+" : ""}
+                        {delta as number}
+                      </strong>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+
+            {/* Maria minns */}
+            {completeResult.maria_memory_md && (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background:
+                    completeResult.maria_memory_polarity === "positive"
+                      ? "rgba(110,231,183,0.06)"
+                      : completeResult.maria_memory_polarity === "negative"
+                      ? "rgba(252,165,165,0.06)"
+                      : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${
+                    completeResult.maria_memory_polarity === "positive"
+                      ? "rgba(110,231,183,0.4)"
+                      : completeResult.maria_memory_polarity === "negative"
+                      ? "rgba(252,165,165,0.4)"
+                      : "rgba(255,255,255,0.15)"
+                  }`,
+                  borderRadius: 8,
+                  marginBottom: 14,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 9.5,
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color:
+                      completeResult.maria_memory_polarity === "positive"
+                        ? "#6ee7b7"
+                        : completeResult.maria_memory_polarity === "negative"
+                        ? "#fda594"
+                        : "rgba(255,255,255,0.7)",
+                    marginBottom: 6,
+                  }}
+                >
+                  ● Maria kommer ihåg det här
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  {completeResult.maria_memory_md}
+                </div>
+              </div>
+            )}
+
+            {/* Strengths / Improvements */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 9.5,
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color: "#6ee7b7",
+                    marginBottom: 6,
+                  }}
+                >
+                  ✓ Du gjorde bra
+                </div>
+                <ul style={{ paddingLeft: 18, fontSize: 13, margin: 0 }}>
+                  {completeResult.grade_strengths.map((s, i) => (
+                    <li key={i} style={{ marginBottom: 4 }}>{s}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 9.5,
+                    letterSpacing: "1.2px",
+                    textTransform: "uppercase",
+                    color: "#fbbf24",
+                    marginBottom: 6,
+                  }}
+                >
+                  → Tänk på till nästa gång
+                </div>
+                <ul style={{ paddingLeft: 18, fontSize: 13, margin: 0 }}>
+                  {completeResult.grade_improvements.map((s, i) => (
+                    <li key={i} style={{ marginBottom: 4 }}>{s}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setCompleteResult(null)}
+                style={{
+                  background: "var(--accent, #dc4c2b)",
+                  color: "#fff",
+                  padding: "10px 22px",
+                  border: "none",
+                  borderRadius: 100,
+                  cursor: "pointer",
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "1.2px",
+                  textTransform: "uppercase",
+                }}
+              >
+                Stäng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

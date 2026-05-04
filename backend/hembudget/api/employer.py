@@ -554,6 +554,9 @@ class NegotiationOut(BaseModel):
 class StartNegotiationOut(BaseModel):
     negotiation: NegotiationOut
     briefing_md: str  # Pedagogisk text till eleven inför rond 1
+    # Maria öppnar samtalet · dynamiskt AI-genererat hälsningsmeddelande
+    # baserat på elevens karaktär + senaste arbetsplats-events.
+    opening_message: Optional[str] = None
 
 
 class SendMessageIn(BaseModel):
@@ -566,6 +569,10 @@ class SendMessageOut(BaseModel):
     proposed_pct: Optional[float]
     is_final_round: bool
     negotiation_status: str
+    # Tone-bedömning · Maria observerar elevens stil per rond.
+    # -15..+15. None om AI inte är tillgängligt.
+    tone_score: Optional[int] = None
+    tone_reason: Optional[str] = None
 
 
 class CompleteNegotiationIn(BaseModel):
@@ -578,6 +585,22 @@ class CompleteNegotiationOut(BaseModel):
     avtal_norm_pct: Optional[float]
     pending_effective_from: Optional[str]
     summary_md: str
+    # Förhandlingsbetyg 0-100 + bryt-ned
+    grade: int = 0
+    grade_label: str = ""
+    grade_strengths: list[str] = []
+    grade_improvements: list[str] = []
+    # Pentagon-deltar som applicerades vid avslut (för animation)
+    pentagon_deltas: dict = {}
+    # "Maria kommer ihåg" — påverkar framtida events. Polaritet:
+    # "positive" | "negative" | "neutral"
+    maria_memory_polarity: str = "neutral"
+    maria_memory_md: Optional[str] = None
+    # Total ton-summering (ackumulerat över alla ronder)
+    tone_total: int = 0
+    # Lönedelta · per månad + per år (för animation/UI)
+    salary_delta_per_month: Optional[float] = None
+    salary_delta_per_year: Optional[float] = None
 
 
 def _get_or_create_config() -> NegotiationConfig:
@@ -771,9 +794,47 @@ def start_negotiation(
             profile, agreement, active.avtal_norm_pct, sat.score,
         ) if profile else "Profil saknas."
 
+        # Maria öppnar samtalet · genereras EN gång per session och
+        # cachas på SalaryNegotiation.opening_message så återbesök
+        # inte triggar nya AI-anrop.
+        opening = active.opening_message
+        if not opening and profile is not None:
+            from ..school.models import Student as _Stu
+            stu = s.get(_Stu, student_id)
+            student_name = (
+                stu.display_name if stu else "eleven"
+            )
+            recent_events = [
+                e.kind for e in (
+                    s.query(EmployerSatisfactionEvent)
+                    .filter(
+                        EmployerSatisfactionEvent.student_id == student_id,
+                    )
+                    .order_by(EmployerSatisfactionEvent.ts.desc())
+                    .limit(3)
+                    .all()
+                )
+            ]
+            from ..school import ai as ai_core
+            opening_res = ai_core.negotiate_salary_opening(
+                student_name=student_name,
+                profession=active.profession,
+                employer=active.employer,
+                salary=int(float(active.starting_salary)),
+                years=2,
+                satisfaction_score=sat.score,
+                satisfaction_trend=sat.trend,
+                recent_events=recent_events,
+            )
+            if opening_res is not None:
+                opening = opening_res.text
+                active.opening_message = opening
+                s.flush()
+
         return StartNegotiationOut(
             negotiation=_negotiation_to_out(s, active, cfg.max_rounds),
             briefing_md=briefing,
+            opening_message=opening,
         )
 
 
@@ -881,12 +942,85 @@ def send_negotiation_message(
 
         proposed = ai_core.extract_proposed_pct(result.text)
         round_no = len(existing_rounds) + 1
+
+        # Maria-AI bedömer ton/professionalism · -15..+15. Påverkar
+        # pentagon (social/safety) och EmployerSatisfaction direkt.
+        # Misslyckas tyst — då gör vi ingen pentagon-effekt.
+        tone_score, tone_reason = ai_core.evaluate_negotiation_tone(
+            student_name=student_name,
+            student_message=payload.message,
+        )
+        if tone_score is not None:
+            try:
+                # Pentagon: ton påverkar social (samtalskänsla) och
+                # safety (anställningsförhållande). Skala ned från
+                # -15..+15 till -5..+5 (max-tröghet per event).
+                from ..game_engine.pentagon import (
+                    apply_pentagon_delta as _apd,
+                )
+                axis_delta = max(-5, min(5, round(tone_score / 3)))
+                if axis_delta != 0:
+                    _apd(
+                        n.student_id,
+                        axis="social",
+                        requested_delta=axis_delta,
+                        reason_kind="event",
+                        explanation=(
+                            f"Lönesamtal rond {round_no} · ton: "
+                            f"{tone_reason or 'AI-bedömning'}"
+                        ),
+                    )
+                    _apd(
+                        n.student_id,
+                        axis="safety",
+                        requested_delta=axis_delta,
+                        reason_kind="event",
+                        explanation=(
+                            f"Lönesamtal rond {round_no} · ton: "
+                            f"{tone_reason or 'AI-bedömning'}"
+                        ),
+                    )
+            except Exception:
+                import logging as _logging
+                _logging.getLogger(__name__).exception(
+                    "tone-pentagon failed",
+                )
+
+            # EmployerSatisfaction: skala -15..+15 till -3..+3 så ett
+            # otrevligt samtal sänker satisfaction märkbart men inte
+            # förödande, och ett välhanterat höjer det.
+            try:
+                sat_delta = max(-3, min(3, round(tone_score / 5)))
+                if sat_delta != 0:
+                    sat.score = max(0, min(100, sat.score + sat_delta))
+                    s.add(EmployerSatisfactionEvent(
+                        student_id=n.student_id,
+                        kind="negotiation_tone",
+                        delta_score=sat_delta,
+                        reason_md=(
+                            f"Lönesamtal rond {round_no}: "
+                            f"{tone_reason or 'AI-bedömning av ton'}"
+                        ),
+                        meta={
+                            "negotiation_id": n.id,
+                            "round_no": round_no,
+                            "tone_score": tone_score,
+                        },
+                    ))
+            except Exception:
+                import logging as _logging
+                _logging.getLogger(__name__).exception(
+                    "tone-satisfaction failed",
+                )
+
         s.add(NegotiationRound(
             negotiation_id=n.id,
             round_no=round_no,
             student_message=payload.message,
             employer_response=result.text,
             proposed_pct=proposed,
+            tone_score=tone_score,
+            tone_reason=tone_reason,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
         ))
@@ -900,6 +1034,8 @@ def send_negotiation_message(
             proposed_pct=proposed,
             is_final_round=is_final,
             negotiation_status=n.status,
+            tone_score=tone_score,
+            tone_reason=tone_reason,
         )
 
 
@@ -920,6 +1056,137 @@ def get_negotiation(
         if n is None or n.student_id != student_id:
             raise HTTPException(404, "Samtalet finns inte")
         return _negotiation_to_out(s, n, cfg.max_rounds)
+
+
+class AcceptPreviewOut(BaseModel):
+    """Förhandsvisning av konsekvenser INNAN eleven trycker Acceptera/Avsluta.
+
+    Beräknar utifrån sista bud + avtals-norm + tone-historik så eleven
+    ser exakt vad valet ger innan det sker. Helt deterministiskt — ingen
+    AI-anrop. Endpoints är POST för att matcha REST-konventionen att
+    sida-effektsfri preview kan ändå ha stor data, men implementation
+    är read-only.
+    """
+    final_pct: Optional[float]
+    avtal_norm_pct: Optional[float]
+    starting_salary: float
+    new_salary_if_accepted: Optional[float]
+    salary_delta_per_month: Optional[float]
+    salary_delta_per_year: Optional[float]
+    # Pentagon-effekter om man accepterar / avslutar
+    accept_ekonomi_delta: int
+    accept_social_delta: int
+    accept_safety_delta: int
+    abandon_social_delta: int
+    abandon_safety_delta: int
+    # Arbetsgivar-nöjdhet
+    accept_employer_sat_delta: int
+    abandon_employer_sat_delta: int
+    # Sammanfattning av tone-historiken (ackumulerad effekt redan
+    # applicerad rond-för-rond, visas här som referens).
+    tone_history_total: int
+    # Pedagogisk text · risk-varning eller positiv signal
+    warning_md: Optional[str] = None
+
+
+@router.get(
+    "/negotiation/{negotiation_id}/accept-preview",
+    response_model=AcceptPreviewOut,
+)
+def accept_negotiation_preview(
+    negotiation_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> AcceptPreviewOut:
+    """Visa konsekvenser av Acceptera/Avsluta innan eleven trycker."""
+    _require_school()
+    student_id = _resolve_student_id(info)
+    cfg = _get_or_create_config()
+    with master_session() as s:
+        n = s.get(SalaryNegotiation, negotiation_id)
+        if n is None or n.student_id != student_id:
+            raise HTTPException(404, "Samtalet finns inte")
+
+        rounds = (
+            s.query(NegotiationRound)
+            .filter(NegotiationRound.negotiation_id == n.id)
+            .order_by(NegotiationRound.round_no.desc())
+            .all()
+        )
+        final_pct: Optional[float] = None
+        for r in rounds:
+            if r.proposed_pct is not None:
+                final_pct = r.proposed_pct
+                break
+
+        starting = float(n.starting_salary or 0)
+        new_salary: Optional[float] = None
+        delta_m: Optional[float] = None
+        delta_y: Optional[float] = None
+        if final_pct is not None and starting > 0:
+            new_salary = round(starting * (1 + final_pct / 100), 2)
+            delta_m = round(new_salary - starting, 2)
+            delta_y = round(delta_m * 12, 2)
+
+        # Ekonomi-pentagon: skalar löneökningen mot inkomst-schablonen
+        # 0,5 % av brutto = +1 ekonomi-poäng (klampat -10..+10).
+        accept_ekonomi = 0
+        if delta_m is not None and starting > 0:
+            pct = (delta_m / starting) * 100
+            accept_ekonomi = max(-10, min(10, round(pct * 2)))
+
+        # Avtals-jämförelse · ger pedagogisk varning om bud är under
+        # avtals-norm
+        warning: Optional[str] = None
+        avtal = n.avtal_norm_pct
+        if final_pct is None:
+            warning = (
+                "AI har inte lagt något konkret bud än — om du avslutar nu "
+                "är lönen oförändrad."
+            )
+        elif avtal is not None and final_pct < avtal - 0.3:
+            warning = (
+                f"Budet ({final_pct:.1f} %) ligger UNDER avtals-norm "
+                f"({avtal:.1f} %). Du kan be om mer eller avbryta och "
+                "förhandla igen senare."
+            )
+        elif avtal is not None and final_pct > avtal + 0.5:
+            warning = (
+                f"Budet ({final_pct:.1f} %) ligger ÖVER avtals-norm "
+                f"({avtal:.1f} %). Bra prestation — Maria är nöjd."
+            )
+
+        # Pentagon-deltar för accept/abandon
+        accept_social = 3 if final_pct is not None else 0
+        accept_safety = 2 if final_pct is not None else 0
+        abandon_social = -2
+        abandon_safety = -1
+        accept_emp_sat = (
+            3 if (avtal is not None and final_pct is not None and final_pct >= avtal)
+            else (1 if final_pct is not None else 0)
+        )
+        abandon_emp_sat = -2
+
+        tone_total = sum(
+            (r.tone_score or 0) for r in rounds
+        )
+
+        return AcceptPreviewOut(
+            final_pct=final_pct,
+            avtal_norm_pct=avtal,
+            starting_salary=starting,
+            new_salary_if_accepted=new_salary,
+            salary_delta_per_month=delta_m,
+            salary_delta_per_year=delta_y,
+            accept_ekonomi_delta=accept_ekonomi,
+            accept_social_delta=accept_social,
+            accept_safety_delta=accept_safety,
+            abandon_social_delta=abandon_social,
+            abandon_safety_delta=abandon_safety,
+            accept_employer_sat_delta=accept_emp_sat,
+            abandon_employer_sat_delta=abandon_emp_sat,
+            tone_history_total=tone_total,
+            warning_md=warning,
+        )
 
 
 @router.post(
@@ -1116,6 +1383,162 @@ def complete_negotiation(
             except Exception:
                 pass
 
+        # === Förhandlingsbetyg + minne (Maria kommer ihåg) ===
+        # Räkna ihop totalt och bryt ned till strengths/improvements
+        # som visas i slutskärmen.
+        tone_total = sum((r.tone_score or 0) for r in rounds)
+        n_rounds = len(rounds)
+        avtal_norm = n.avtal_norm_pct or 3.0
+        diff_to_norm = (
+            (final_pct - avtal_norm) if final_pct is not None else None
+        )
+
+        # Bas-betyg 50 + bonus för bra ton + bonus för bud över avtal
+        grade = 50
+        if tone_total > 0:
+            grade += min(25, tone_total)  # +1 per +1 ton, cap 25
+        else:
+            grade += max(-25, tone_total)  # -1 per -1 ton, floor -25
+        if diff_to_norm is not None:
+            if diff_to_norm > 0:
+                grade += min(20, int(diff_to_norm * 8))
+            else:
+                grade += max(-15, int(diff_to_norm * 6))
+        # Engagemang · 3+ ronder ger små bonusar
+        if n_rounds >= 3:
+            grade += 5
+        if n_rounds >= 5:
+            grade += 5
+        grade = max(0, min(100, grade))
+
+        if grade >= 85:
+            grade_label = "Mästerlig förhandling"
+        elif grade >= 70:
+            grade_label = "Stark förhandling"
+        elif grade >= 50:
+            grade_label = "Solid förhandling"
+        elif grade >= 30:
+            grade_label = "Mer förberedelse nästa gång"
+        else:
+            grade_label = "Tuff lärdom"
+
+        strengths: list[str] = []
+        improvements: list[str] = []
+        if tone_total >= 5:
+            strengths.append(
+                "Du höll en saklig och respektfull ton genom samtalet — "
+                "Maria uppfattade dig som professionell."
+            )
+        elif tone_total <= -5:
+            improvements.append(
+                "Tonen blev tidvis konfliktdriven. Sakliga argument och "
+                "lugn röst öppnar fler bud än press."
+            )
+        if diff_to_norm is not None and diff_to_norm > 0.5:
+            strengths.append(
+                f"Slutbudet ({final_pct:.1f} %) ligger över avtals-norm "
+                f"({avtal_norm:.1f} %) — det är resultatet av god "
+                "argumentation."
+            )
+        elif diff_to_norm is not None and diff_to_norm < -0.5:
+            improvements.append(
+                f"Slutbudet hamnade under avtals-norm "
+                f"({avtal_norm:.1f} %). Hänvisa explicit till avtalet "
+                "i nästa samtal — det är din rätt."
+            )
+        if n_rounds <= 2 and n.status == "completed":
+            improvements.append(
+                "Samtalet avslutades efter få ronder. Att ankra om och "
+                "be om mer brukar ge 0,5–1 procentenhet extra."
+            )
+        if not strengths:
+            strengths.append(
+                "Du tog steget och förhandlade — många gör aldrig det."
+            )
+        if not improvements:
+            improvements.append(
+                "Förbered konkret marknadsdata och din BATNA till nästa "
+                "samtal — det stärker varje argument."
+            )
+
+        # Pentagon-deltar för animation (de faktiska deltarna applicerades
+        # ovan men vi vill kunna visa dem i slutskärmen).
+        pentagon_deltas: dict = {}
+        if n.status == "completed" and final_pct is not None:
+            norm = n.avtal_norm_pct or 3.0
+            diff = final_pct - norm
+            if diff >= 1.5:
+                pentagon_deltas = {"economy": 4, "social": 2}
+            elif diff >= 0.5:
+                pentagon_deltas = {"economy": 2, "social": 1}
+            elif diff >= -0.5:
+                pentagon_deltas = {"economy": 1, "social": 0}
+            elif diff >= -1.5:
+                pentagon_deltas = {"economy": -1, "social": -1}
+            else:
+                pentagon_deltas = {"economy": -2, "social": -2}
+        elif n.status == "abandoned":
+            pentagon_deltas = {"social": -1}
+
+        # "Maria kommer ihåg" · läggs som EmployerSatisfactionEvent
+        # med kind="maria_memory" så framtida arbetsplats-events kan
+        # peka tillbaka. Polariteten avgör om Maria är välvilligt
+        # inställd nästa gång.
+        if n.status == "completed" and tone_total >= 5 and (
+            diff_to_norm is None or diff_to_norm >= -0.5
+        ):
+            memory_polarity = "positive"
+            memory_md = (
+                f"Maria minns dig som välförberedd och saklig. "
+                f"Det öppnar dörrar för bättre projekt och nästa "
+                f"lönesamtal."
+            )
+            sat_delta = +5
+        elif tone_total <= -5 or (
+            diff_to_norm is not None and diff_to_norm < -1.5
+        ) or n.status == "abandoned":
+            memory_polarity = "negative"
+            memory_md = (
+                "Maria minns samtalet som ansträngt. Räkna med att "
+                "hon håller en hårdare linje vid nästa tillfälle."
+            )
+            sat_delta = -4
+        else:
+            memory_polarity = "neutral"
+            memory_md = (
+                "Maria minns samtalet som professionellt och OK. "
+                "Inget som påverkar framtida bud nämnvärt."
+            )
+            sat_delta = 0
+
+        try:
+            sat = _ensure_satisfaction(s, student_id)
+            sat.score = max(0, min(100, sat.score + sat_delta))
+            s.add(EmployerSatisfactionEvent(
+                student_id=student_id,
+                kind="maria_memory",
+                delta_score=sat_delta,
+                reason_md=memory_md,
+                meta={
+                    "negotiation_id": n.id,
+                    "polarity": memory_polarity,
+                    "final_pct": final_pct,
+                    "tone_total": tone_total,
+                    "grade": grade,
+                },
+            ))
+        except Exception:
+            pass
+
+        # Lönedeltar för slutskärmen
+        delta_m: Optional[float] = None
+        delta_y: Optional[float] = None
+        if new_salary is not None and float(n.starting_salary) > 0:
+            delta_m = round(
+                float(new_salary) - float(n.starting_salary), 2,
+            )
+            delta_y = round(delta_m * 12, 2)
+
         s.flush()
 
         return CompleteNegotiationOut(
@@ -1127,4 +1550,14 @@ def complete_negotiation(
                 if pending_effective_from else None
             ),
             summary_md=summary,
+            grade=grade,
+            grade_label=grade_label,
+            grade_strengths=strengths,
+            grade_improvements=improvements,
+            pentagon_deltas=pentagon_deltas,
+            maria_memory_polarity=memory_polarity,
+            maria_memory_md=memory_md,
+            tone_total=tone_total,
+            salary_delta_per_month=delta_m,
+            salary_delta_per_year=delta_y,
         )

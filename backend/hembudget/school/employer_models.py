@@ -372,6 +372,13 @@ class SalaryNegotiation(MasterBase):
     teacher_summary_md: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True,
     )
+    # Maria öppnar samtalet — dynamiskt AI-genererat första meddelande
+    # baserat på elevens karaktär + senaste arbetsplats-events.
+    # Används av frontend för att visa Marias hälsning innan eleven
+    # ens skrivit något.
+    opening_message: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
 
 
 class NegotiationRound(MasterBase):
@@ -397,6 +404,15 @@ class NegotiationRound(MasterBase):
     employer_response: Mapped[str] = mapped_column(Text, nullable=False)
     # AI:ns aktuella bud i procent efter denna rond
     proposed_pct: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # AI-evaluering av elevens kommunikationsstil i denna rond.
+    # Skala -15..+15. Förklaring sparas i tone_reason för transparens.
+    # Påverkar pentagon (social/safety) + EmployerSatisfaction.
+    tone_score: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True,
+    )
+    tone_reason: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+    )
     # Token-räkning per rond (för kostnads-spårning)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -1836,6 +1836,10 @@ class V2MailSummary(BaseModel):
     spend_profile: str
     last_received_at: Optional[datetime] = None
     next_due_date: Optional[_date] = None
+    # Realtid-projektion: när nästa pending event "släpps" till postlådan.
+    # Frontend kan visa "nästa brev kommer 14:32" eller liknande.
+    next_release_at: Optional[datetime] = None
+    pending_count: int = 0
 
 
 class V2MailResponse(BaseModel):
@@ -2012,6 +2016,24 @@ def get_mail(
                     notes=m.notes,
                 ))
 
+            # Realtid-projektion: hitta tidigaste pending mail som
+            # ännu inte är synlig (released_at > NOW). Frontend
+            # visar countdown till nästa "leverans".
+            now_utc = datetime.utcnow()
+            next_pending = (
+                s.query(MailItem.released_at)
+                .filter(MailItem.released_at.isnot(None))
+                .filter(MailItem.released_at > now_utc)
+                .order_by(MailItem.released_at.asc())
+                .first()
+            )
+            pending_count = (
+                s.query(MailItem.id)
+                .filter(MailItem.released_at.isnot(None))
+                .filter(MailItem.released_at > now_utc)
+                .count()
+            )
+
             return V2MailResponse(
                 student_id=info.student_id,
                 summary=V2MailSummary(
@@ -2028,6 +2050,10 @@ def get_mail(
                     spend_profile=spend_profile,
                     last_received_at=last_received,
                     next_due_date=next_due,
+                    next_release_at=(
+                        next_pending[0] if next_pending else None
+                    ),
+                    pending_count=int(pending_count or 0),
                 ),
                 items=items,
             )
@@ -9793,7 +9819,7 @@ class V2BankIDConfirmInfo(BaseModel):
 
 
 @router.get(
-    "/bankid/confirm/{token}",
+    "/bankid/confirm-info/{token}",
     response_model=V2BankIDConfirmInfo,
 )
 def get_bankid_confirm_info(
@@ -9895,7 +9921,7 @@ class V2BankIDConfirmIn(BaseModel):
     pin: str = Field(..., min_length=4, max_length=4)
 
 
-@router.post("/bankid/confirm/{token}", response_model=V2BankIDConfirmInfo)
+@router.post("/bankid/confirm-info/{token}", response_model=V2BankIDConfirmInfo)
 def post_bankid_confirm(
     token: str,
     body: V2BankIDConfirmIn,

@@ -251,6 +251,9 @@ export type V2MailSummary = {
   spend_profile: string;
   last_received_at: string | null;
   next_due_date: string | null;
+  // Realtid-projektion · när nästa pending mail "släpps" till postlådan.
+  next_release_at: string | null;
+  pending_count: number;
 };
 
 export type MailData = {
@@ -2910,10 +2913,30 @@ export const v2Api = {
   maria: () => api<V2MariaData>("/v2/maria"),
   mariaStart: () =>
     api<{
-      negotiation_id: number;
-      profession: string;
-      employer: string;
-      starting_salary: number;
+      negotiation: {
+        id: number;
+        profession: string;
+        employer: string;
+        starting_salary: number;
+        status: string;
+        avtal_norm_pct: number | null;
+        avtal_code: string | null;
+        rounds: Array<{
+          round_no: number;
+          student_message: string;
+          employer_response: string;
+          proposed_pct: number | null;
+          tone_score: number | null;
+          tone_reason: string | null;
+        }>;
+        max_rounds: number;
+        final_pct: number | null;
+        final_salary: number | null;
+        teacher_summary_md: string | null;
+        completed_at: string | null;
+      };
+      briefing_md: string;
+      opening_message: string | null;
     }>("/employer/negotiation/start", {
       method: "POST",
       body: "{}",
@@ -2925,9 +2948,50 @@ export const v2Api = {
       proposed_pct: number | null;
       is_final_round: boolean;
       negotiation_status: string;
+      tone_score: number | null;
+      tone_reason: string | null;
     }>(`/employer/negotiation/${negotiationId}/message`, {
       method: "POST",
       body: JSON.stringify({ message }),
+    }),
+  mariaAcceptPreview: (negotiationId: number) =>
+    api<{
+      final_pct: number | null;
+      avtal_norm_pct: number | null;
+      starting_salary: number;
+      new_salary_if_accepted: number | null;
+      salary_delta_per_month: number | null;
+      salary_delta_per_year: number | null;
+      accept_ekonomi_delta: number;
+      accept_social_delta: number;
+      accept_safety_delta: number;
+      abandon_social_delta: number;
+      abandon_safety_delta: number;
+      accept_employer_sat_delta: number;
+      abandon_employer_sat_delta: number;
+      tone_history_total: number;
+      warning_md: string | null;
+    }>(`/employer/negotiation/${negotiationId}/accept-preview`),
+  mariaComplete: (negotiationId: number, accept_offer: boolean) =>
+    api<{
+      final_pct: number | null;
+      final_salary: number | null;
+      avtal_norm_pct: number | null;
+      pending_effective_from: string | null;
+      summary_md: string;
+      grade: number;
+      grade_label: string;
+      grade_strengths: string[];
+      grade_improvements: string[];
+      pentagon_deltas: Record<string, number>;
+      maria_memory_polarity: string;
+      maria_memory_md: string | null;
+      tone_total: number;
+      salary_delta_per_month: number | null;
+      salary_delta_per_year: number | null;
+    }>(`/employer/negotiation/${negotiationId}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ accept_offer }),
     }),
   teacherMariaOverview: (studentId: number) =>
     api<V2TeacherMariaOverview>(
@@ -2973,7 +3037,7 @@ export const v2Api = {
         is_anomaly: boolean;
       }>;
       has_pin: boolean;
-    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}${q}`);
+    }>(`/v2/bankid/confirm-info/${encodeURIComponent(token)}${q}`);
   },
   bankidConfirmSign: (token: string, pin: string, sid?: number) => {
     const q = sid != null ? `?sid=${sid}` : "";
@@ -2983,7 +3047,7 @@ export const v2Api = {
       invoice_count: number;
       total_amount: number;
       has_pin: boolean;
-    }>(`/v2/bankid/confirm/${encodeURIComponent(token)}${q}`, {
+    }>(`/v2/bankid/confirm-info/${encodeURIComponent(token)}${q}`, {
       method: "POST",
       body: JSON.stringify({ pin }),
     });

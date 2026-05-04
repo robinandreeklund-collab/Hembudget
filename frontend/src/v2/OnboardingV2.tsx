@@ -366,7 +366,7 @@ function Step1() {
             Pedagogik
           </div>
           <div className="onb-rule-h">
-            Vad du <em>lär dig</em> i Vol. 18
+            Vad du <em>lär dig</em> i Ekonomilabbet
           </div>
           <div className="onb-rule-prose">
             14 systemkompetenser: bokföring, budget, sparande, lån, ränta,
