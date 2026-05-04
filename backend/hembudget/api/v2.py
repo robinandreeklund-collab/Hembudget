@@ -12794,58 +12794,159 @@ class V2KlassOverview(BaseModel):
     mini_pentagons: list[V2KlassMiniPentagon]
 
 
+# Per-process TTL-cache för dyra per-elev-beräkningar i lärar-hubben.
+# Klass-överblicken itererar 20-30 elever och varje wellbeing-beräkning
+# gör ~20 DB-queries i scope-DB. Utan cache → 60-120 s laddtid per klick.
+# 60 s freshness är OK för en lärar-dashboard; alternativet (eventer som
+# invaliderar exakt) är komplext och behövs inte här.
+_TEACHER_METRICS_TTL_SECONDS = 60.0
+# scope_key → (expires_at, (total, eco, safe, health, social, leisure))
+_wellbeing_cache: dict[
+    str, tuple[float, tuple[int, int, int, int, int, int]]
+] = {}
+# scope_key → (expires_at, (unhandled_count, oldest_days, has_authority))
+_mailcount_cache: dict[
+    str, tuple[float, tuple[int, Optional[int], bool]]
+] = {}
+
+
+def _cache_get(cache: dict, key: str):
+    import time
+    entry = cache.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if expires_at < time.monotonic():
+        cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(cache: dict, key: str, value) -> None:
+    import time
+    cache[key] = (time.monotonic() + _TEACHER_METRICS_TTL_SECONDS, value)
+
+
+def invalidate_teacher_metrics_cache(scope_key: Optional[str] = None) -> None:
+    """Töm TTL-cachen — anropas av tester och kan användas av endpoints
+    som vet att en elevs scope-data ändrats kraftigt."""
+    if scope_key is None:
+        _wellbeing_cache.clear()
+        _mailcount_cache.clear()
+    else:
+        _wellbeing_cache.pop(scope_key, None)
+        _mailcount_cache.pop(scope_key, None)
+
+
+def _collect_student_metrics(
+    student: Student,
+) -> tuple[
+    Optional[tuple[int, int, int, int, int, int]],
+    tuple[int, Optional[int], bool],
+]:
+    """Hämtar wellbeing + ohanterad-post i ETT scope-context per elev.
+
+    Tidigare gjordes detta i två separata helpers, var och en med eget
+    `scope_context` + `session_scope`. Klass-hubben med 28 elever
+    triggade då 56 session-öppningar mot scope-DB:n. Här delar de en.
+    """
+    from ..school.engines import scope_context, scope_for_student
+
+    scope_key = scope_for_student(student)
+    cached_wb = _cache_get(_wellbeing_cache, scope_key)
+    cached_mail = _cache_get(_mailcount_cache, scope_key)
+    if cached_wb is not None and cached_mail is not None:
+        return cached_wb, cached_mail
+
+    wb_tuple: Optional[tuple[int, int, int, int, int, int]] = cached_wb
+    mail_tuple: tuple[int, Optional[int], bool] = cached_mail or (
+        0, None, False,
+    )
+
+    try:
+        with scope_context(scope_key):
+            with session_scope() as s:
+                if cached_wb is None:
+                    try:
+                        ym = _current_year_month()
+                        wb = calculate_wellbeing(s, ym)
+                        wb_tuple = (
+                            wb.total_score, wb.economy, wb.safety,
+                            wb.health, wb.social, wb.leisure,
+                        )
+                    except Exception:
+                        wb_tuple = None
+                if cached_mail is None:
+                    try:
+                        items = (
+                            s.query(
+                                MailItem.received_at, MailItem.mail_type,
+                            )
+                            .filter(MailItem.status == "unhandled")
+                            .order_by(MailItem.received_at.asc())
+                            .all()
+                        )
+                        unhandled_count = len(items)
+                        oldest_days: Optional[int] = None
+                        has_authority = False
+                        if items:
+                            oldest = items[0][0]
+                            if oldest is not None:
+                                delta = datetime.utcnow() - oldest
+                                oldest_days = max(0, delta.days)
+                            has_authority = any(
+                                row[1] == "authority" for row in items
+                            )
+                        mail_tuple = (
+                            unhandled_count, oldest_days, has_authority,
+                        )
+                    except Exception:
+                        mail_tuple = (0, None, False)
+    except Exception:
+        # Hela scope-öppningen failade — returnera defaults så hubben
+        # inte kraschar för en enskild elev.
+        if wb_tuple is None and cached_wb is None:
+            wb_tuple = None
+        if cached_mail is None:
+            mail_tuple = (0, None, False)
+
+    if wb_tuple is not None:
+        _cache_set(_wellbeing_cache, scope_key, wb_tuple)
+    _cache_set(_mailcount_cache, scope_key, mail_tuple)
+    return wb_tuple, mail_tuple
+
+
 def _safe_calc_wellbeing_for(
     student: Student,
 ) -> Optional[tuple[int, int, int, int, int, int]]:
     """Returnerar (total, economy, safety, health, social, leisure) eller
     None om wellbeing inte kan beräknas (fallar tyst — lärar-hub får
-    inte krascha för en enskild elev)."""
-    from ..school.engines import scope_context, scope_for_student
+    inte krascha för en enskild elev). Cachead 60 s per scope-key."""
+    from ..school.engines import scope_for_student
 
     scope_key = scope_for_student(student)
-    try:
-        with scope_context(scope_key):
-            with session_scope() as s:
-                ym = _current_year_month()
-                wb = calculate_wellbeing(s, ym)
-                return (
-                    wb.total_score, wb.economy, wb.safety, wb.health,
-                    wb.social, wb.leisure,
-                )
-    except Exception:
-        return None
+    cached = _cache_get(_wellbeing_cache, scope_key)
+    if cached is not None:
+        return cached
+
+    wb_tuple, _ = _collect_student_metrics(student)
+    return wb_tuple
 
 
 def _safe_count_unhandled_mail(student: Student) -> tuple[
     int, Optional[int], bool,
 ]:
-    """Returnerar (unhandled_count, oldest_days, has_authority)."""
-    from ..school.engines import scope_context, scope_for_student
+    """Returnerar (unhandled_count, oldest_days, has_authority).
+    Cachead 60 s per scope-key."""
+    from ..school.engines import scope_for_student
 
     scope_key = scope_for_student(student)
-    try:
-        with scope_context(scope_key):
-            with session_scope() as s:
-                items = (
-                    s.query(MailItem)
-                    .filter(MailItem.status == "unhandled")
-                    .order_by(MailItem.received_at.asc())
-                    .all()
-                )
-                unhandled_count = len(items)
-                oldest_days: Optional[int] = None
-                has_authority = False
-                if items:
-                    oldest = items[0].received_at
-                    if oldest is not None:
-                        delta = datetime.utcnow() - oldest
-                        oldest_days = max(0, delta.days)
-                    has_authority = any(
-                        m.mail_type == "authority" for m in items
-                    )
-                return unhandled_count, oldest_days, has_authority
-    except Exception:
-        return 0, None, False
+    cached = _cache_get(_mailcount_cache, scope_key)
+    if cached is not None:
+        return cached
+
+    _, mail_tuple = _collect_student_metrics(student)
+    return mail_tuple
 
 
 def _days_since(dt: Optional[datetime]) -> Optional[int]:
@@ -12919,7 +13020,8 @@ def teacher_klass_overview(
 
     for d in students_data:
         st = d["obj"]
-        wb = _safe_calc_wellbeing_for(st)
+        # Hämta wellbeing + post i ETT scope-context-pass, cachat 60 s.
+        wb, mail_tuple = _collect_student_metrics(st)
         if wb is None:
             wb = (50, 50, 50, 50, 50, 50)
         total, eco, safe, health, social, leisure = wb
@@ -12958,7 +13060,7 @@ def teacher_klass_overview(
             ))
 
         # Postlåda
-        unhandled, oldest_days, has_auth = _safe_count_unhandled_mail(st)
+        unhandled, oldest_days, has_auth = mail_tuple
         mailbox_total_unhandled += unhandled
         if unhandled > 0:
             mailbox_items.append(V2KlassMailboxItem(
@@ -13016,25 +13118,46 @@ def teacher_klass_overview(
             )
             cfg = ms.query(_NegotiationConfig).first()
             max_rounds = cfg.max_rounds if cfg else 5
-            for neg in negs:
-                last_round = (
-                    ms.query(_NegotiationRound)
-                    .filter(_NegotiationRound.negotiation_id == neg.id)
-                    .order_by(_NegotiationRound.round_no.desc())
-                    .first()
+            # Batcha alla rundor i en enda query istället för en per
+            # förhandling. För varje förhandling håller vi den högsta
+            # round_no (senaste budet).
+            neg_ids = [n.id for n in negs]
+            last_round_by_neg: dict[
+                int, tuple[int, Optional[float]]
+            ] = {}
+            if neg_ids:
+                rounds = (
+                    ms.query(
+                        _NegotiationRound.negotiation_id,
+                        _NegotiationRound.round_no,
+                        _NegotiationRound.proposed_pct,
+                    )
+                    .filter(
+                        _NegotiationRound.negotiation_id.in_(neg_ids),
+                    )
+                    .all()
                 )
+                for neg_id, round_no, proposed_pct in rounds:
+                    existing = last_round_by_neg.get(neg_id)
+                    if existing is None or round_no > existing[0]:
+                        last_round_by_neg[neg_id] = (
+                            round_no, proposed_pct,
+                        )
+            for neg in negs:
+                last = last_round_by_neg.get(neg.id)
                 # NegotiationRound har proposed_pct (delta), bygg
                 # konkret SEK-bud genom starting_salary × (1 + pct/100).
                 last_proposed: Optional[float] = None
-                if (
-                    last_round
-                    and last_round.proposed_pct is not None
-                    and neg.starting_salary is not None
-                ):
-                    last_proposed = float(
-                        neg.starting_salary,
-                    ) * (1.0 + (last_round.proposed_pct / 100.0))
-                round_no = last_round.round_no if last_round else 0
+                round_no = 0
+                if last is not None:
+                    round_no, proposed_pct = last
+                    if (
+                        proposed_pct is not None
+                        and neg.starting_salary is not None
+                    ):
+                        last_proposed = float(
+                            neg.starting_salary,
+                        ) * (1.0 + (proposed_pct / 100.0))
                 pending_negotiations.append(V2KlassNegotiationItem(
                     negotiation_id=neg.id,
                     student_id=neg.student_id,

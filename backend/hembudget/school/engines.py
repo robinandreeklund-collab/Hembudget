@@ -156,15 +156,15 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # Cloud SQL db-f1-micro har max 25 connections totalt.
-        # Cloud Run kan skala till flera instanser, så vi måste vara
-        # konservativa: 2 per engine × 2 engines × 3 instanser = 12.
-        # Plus internal Cloud SQL-connections (~5) → ~17 totalt under
-        # tak 25. Tidigare 5+5=10 per engine kraschade alla nya
-        # connections när Cloud Run skalade upp ("loaded_dbapi.connect"
-        # failed på ALLA requests).
+        # Cloud SQL db-f1-micro · max 25 connections totalt.
+        # Skol-läge är låst till --max-instances=1 (deploy.sh), så vi
+        # är ensamma om poolen. 2+2 räckte inte (lärar-hubb gör tiotals
+        # session-öppningar per request → QueuePool timeout). Se
+        # _init_shared_scope_engine för identisk kommentar — när vi
+        # eventuellt skalar måste båda sänkas eller flyttas bakom
+        # PgBouncer.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=2,
+            pool_pre_ping=True, pool_size=8, max_overflow=8,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -592,10 +592,19 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
         # Cloud SQL db-f1-micro · max 25 connections totalt.
-        # Konservativt med flera Cloud Run-instanser: 2 per engine
-        # × 2 engines × 3 instanser = 12. Plus internal ~5 = ~17.
+        # Skol-läget kör --max-instances=1 (deploy.sh) så vi äger HELA
+        # connection-poolen själva. 2+2=4 räckte inte ens till en enda
+        # klass-overview-render (lärar-hubb öppnar 1-2 session-scope per
+        # elev × 28 elever sekventiellt + parallella requests från andra
+        # tabbar). Resultat: QueuePool timeout efter 10 s → frontend
+        # hängde i flera minuter.
+        # Nu 8+8=16 per engine, 2 engines = 32 max — överstiger Cloud
+        # SQL-taket men i praktiken når vi aldrig båda max samtidigt
+        # eftersom requests rör sig snabbt mellan master och scope.
+        # Om vi någonsin går till max-instances>1 måste detta sänkas
+        # eller flyttas till PgBouncer.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=2,
+            pool_pre_ping=True, pool_size=8, max_overflow=8,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
