@@ -588,10 +588,25 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Cloud SQL har låg connection-limit. Håll båda engines små.
+        # Scope-engine bär all dashboard-trafik (V1-endpoints
+        # /budget/*, /balances/*, /events/* m.fl. — frontend fyrar
+        # 13+ parallella requests vid dashboard-load). Master-engine
+        # är knappt använd (verifierat via /healthz/db: master.checkedout=0
+        # medan scope.checkedout=5+overflow=3 är fullt).
+        # 8+8 = max 16 per revision på Cloud SQL db-g1-small (50 cap).
+        # Med pool_pre_ping fångar vi stale connections och med
+        # pool_recycle=300 (5 min) cyklas connections regelbundet så
+        # idle-in-transaction från gammal revision släpper.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=3,
-            pool_recycle=1800,
+            pool_pre_ping=True, pool_size=8, max_overflow=8,
+            pool_recycle=300, pool_timeout=10,
+            connect_args={
+                "connect_timeout": 5,
+                "application_name": (
+                    f"hembudget-scope@"
+                    f"{__import__('os').environ.get('K_REVISION', 'local')}"
+                ),
+            },
         )
     engine = create_engine(url, **engine_kwargs)
 
