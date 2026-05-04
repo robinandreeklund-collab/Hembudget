@@ -9,6 +9,7 @@
  * Ses i prototypens elev.html .notif-bell + .notif-drawer + .notif-toast.
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   v2Api,
@@ -126,7 +127,7 @@ export function NotifBell() {
         )}
       </button>
 
-      {open && (
+      {open && createPortal(
         <>
           <div className="notif-scrim" onClick={() => setOpen(false)} />
           <aside className="notif-drawer" role="dialog" aria-label="Notiser">
@@ -189,10 +190,11 @@ export function NotifBell() {
               )}
             </div>
           </aside>
-        </>
+        </>,
+        document.body,
       )}
 
-      {toast && (
+      {toast && createPortal(
         <div
           className="notif-toast show"
           role="status"
@@ -206,7 +208,8 @@ export function NotifBell() {
             className="notif-toast-body"
             dangerouslySetInnerHTML={{ __html: toast.notif.body }}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

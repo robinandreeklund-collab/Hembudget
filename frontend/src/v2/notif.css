@@ -62,7 +62,10 @@
 .notif-scrim {
   position: fixed;
   inset: 56px 0 0 0;
-  z-index: 90;
+  /* Notif renderas via createPortal i document.body — z-index gäller
+     globalt mot allt på sidan. Höjt över alla potentiella stacking-
+     contexts (1000-talet för säkerhets skull). */
+  z-index: 9990;
   background: rgba(10, 14, 26, 0.55);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
@@ -82,7 +85,7 @@
   bottom: 0;
   width: 420px;
   max-width: 100vw;
-  z-index: 95;
+  z-index: 9995;
   background: var(--bg-mid);
   border-left: 1px solid var(--line-strong);
   display: flex;
@@ -302,7 +305,7 @@
   position: fixed;
   right: 22px;
   top: 70px;
-  z-index: 90;
+  z-index: 9990;
   background: var(--bg-mid);
   border: 1px solid var(--accent);
   border-left: 3px solid var(--accent);

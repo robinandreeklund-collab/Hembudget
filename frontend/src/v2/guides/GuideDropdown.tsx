@@ -3,21 +3,38 @@
  * 11 guider att välja mellan. Speglar prototypens .guide-dropdown.
  */
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { GUIDES } from "./guidesData";
 import { useGuide } from "./GuideContext";
 
 export function GuideDropdown() {
   const { startGuide, completedKeys } = useGuide();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Positionera dropdown anchor:ad mot knappen — beräknas i fixed
+  // koordinater eftersom dropdown renderas via Portal i body, utanför
+  // knappens stacking-context.
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const r = buttonRef.current.getBoundingClientRect();
+    setAnchor({
+      top: r.bottom + 8,
+      right: window.innerWidth - r.right,
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (
-        ref.current &&
-        !ref.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node;
+      const inButton = buttonRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+      if (!inButton && !inDropdown) {
         setOpen(false);
       }
     }
@@ -35,9 +52,10 @@ export function GuideDropdown() {
   const guides = Object.values(GUIDES);
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <>
       <button
         type="button"
+        ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
         title="Interaktiva guider"
         className="tb-echo tb-echo-ghost"
@@ -46,16 +64,19 @@ export function GuideDropdown() {
         <span>Guider</span>
       </button>
 
-      {open && (
+      {open && anchor && createPortal(
         <div
+          ref={dropdownRef}
           className="guide-dropdown show"
           style={{
-            position: "absolute",
-            right: 0,
-            top: "calc(100% + 8px)",
+            position: "fixed",
+            top: anchor.top,
+            right: anchor.right,
             minWidth: 380,
             maxWidth: "calc(100vw - 40px)",
-            zIndex: 50,
+            // Portal-renderat i body → konkurrerar globalt med allt på
+            // sidan. Höjt långt över alla stacking-contexts.
+            zIndex: 9990,
             background: "rgba(15,21,37,0.98)",
             border: "1px solid rgba(251,191,36,0.3)",
             borderRadius: 8,
@@ -224,8 +245,9 @@ export function GuideDropdown() {
             först om det är din första gång. Övriga guider antar
             grundläggande förståelse.
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
