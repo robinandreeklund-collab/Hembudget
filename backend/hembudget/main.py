@@ -301,6 +301,85 @@ def build_app() -> FastAPI:
             "errors": list(reversed(items)),  # nyast först
         }
 
+    @app.get("/healthz/cleanup-stale-conns")
+    def healthz_cleanup_stale_conns() -> dict:
+        """Manuell fix för Cloud SQL-saturation: pg_terminate_backend
+        på alla connections från ANDRA Cloud Run-revisioner (gamla
+        revisioner som hänger kvar med idle conn).
+
+        Auth-fri så användaren kan curla från mobilen för att
+        omedelbart frigöra Cloud SQL-slots utan gcloud-tillgång.
+
+        Identifierar 'andra revisioner' via application_name som
+        börjar med 'hembudget@' eller 'hembudget-scope@' men inte
+        matchar current K_REVISION.
+        """
+        import os as _os_clean
+        out: dict = {
+            "current_revision": _os_clean.environ.get("K_REVISION", ""),
+            "killed": [],
+            "total_killed": 0,
+        }
+        try:
+            from sqlalchemy import (
+                create_engine as _ce_clean, text as _text_clean,
+            )
+            from sqlalchemy.pool import NullPool as _NP_clean
+            from .school.engines import (
+                _master_engine as _me_clean,
+                _master_db_url as _murl_clean,
+            )
+            if _me_clean is None:
+                out["error"] = "master_engine not initialized"
+                return out
+            _url = _murl_clean()
+            _diag_engine = _ce_clean(
+                _url, poolclass=_NP_clean,
+                connect_args={
+                    "connect_timeout": 3,
+                    "application_name": "hembudget-cleanup",
+                } if _url.startswith("postgresql") else {},
+            )
+            current_rev = _os_clean.environ.get("K_REVISION", "")
+            current_marker = f"@{current_rev}" if current_rev else "@local"
+            with _diag_engine.connect() as conn:
+                # Lista connections från andra revisioner
+                rows = conn.execute(_text_clean(
+                    """
+                    SELECT pid, application_name,
+                           extract(epoch from now() - backend_start)::int
+                             as age_seconds
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                      AND pid <> pg_backend_pid()
+                      AND application_name LIKE 'hembudget%'
+                      AND application_name NOT LIKE :current
+                    """,
+                ), {"current": f"%{current_marker}"}).fetchall()
+                for pid, app_name, age in rows:
+                    try:
+                        conn.execute(_text_clean(
+                            "SELECT pg_terminate_backend(:p)",
+                        ), {"p": pid})
+                        out["killed"].append({
+                            "pid": int(pid),
+                            "application": app_name,
+                            "age_seconds": int(age) if age else None,
+                        })
+                    except Exception as e:
+                        out["killed"].append({
+                            "pid": int(pid),
+                            "application": app_name,
+                            "error": str(e)[:200],
+                        })
+                conn.commit()
+            out["total_killed"] = sum(
+                1 for k in out["killed"] if "error" not in k
+            )
+        except Exception as e:
+            out["error"] = repr(e)
+        return out
+
     @app.get("/healthz/db")
     def healthz_db() -> dict:
         """Diagnostik · pool-config + aktuell användning + Cloud SQL
