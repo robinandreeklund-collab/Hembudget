@@ -103,6 +103,59 @@ def build_app() -> FastAPI:
         )
         from .school.models import Student
 
+        # === V1 legacy gating ===
+        # V2-frontend anropar bara /v2/*-endpoints (verifierat). V1
+        # endpoints (/budget/*, /balances/*, /users, m.fl.) drog
+        # tidigare ner scope-poolen eftersom legacy frontend-tabbar
+        # eller cachade browser-states fortfarande pollade dem.
+        # Pool 2+3 räckte inte → 13 parallella V1 requests timeoutade
+        # på 30 s.
+        # Vi returnerar nu 410 Gone direkt i middleware för dessa
+        # paths i school-mode → frontend retryar inte, och inga
+        # connections allokeras alls för legacy-trafik.
+        # Lägg till mer paths här om Cloud Logging visar fler V1-fail.
+        _V1_BLOCKED_PREFIXES = (
+            "/budget/",
+            "/balances/",
+            "/wellbeing/",
+            "/transfers/",
+            "/upcoming/",
+            "/funds/",
+            "/scenarios/",
+            "/reports/",
+            "/ledger/",
+            "/loans/",
+            "/transactions",  # exact + sub-paths
+            "/elpris",
+            "/utility/",
+        )
+        _V1_BLOCKED_EXACT = {
+            "/users",
+            "/events/pending",
+            "/events/decline-streak",
+        }
+
+        class V1LegacyGateMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                path = request.url.path
+                if (
+                    path in _V1_BLOCKED_EXACT
+                    or any(
+                        path.startswith(p) for p in _V1_BLOCKED_PREFIXES
+                    )
+                ):
+                    from starlette.responses import JSONResponse
+                    return JSONResponse(
+                        status_code=410,
+                        content={
+                            "detail": "Legacy V1-endpoint avstängd i "
+                            "school-mode. Använd /v2/*-motsvarigheten.",
+                        },
+                    )
+                return await call_next(request)
+
+        app.add_middleware(V1LegacyGateMiddleware)
+
         # In-memory TTL-cache för (student_id, teacher_id) → scope_key.
         # Tidigare gjorde middlewaren EN master-DB-query per
         # autentiserad request bara för att slå upp scope-nyckeln.
