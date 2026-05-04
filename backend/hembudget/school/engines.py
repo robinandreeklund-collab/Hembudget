@@ -156,11 +156,13 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # Se _init_shared_scope_engine för full kommentar.
-        # Master + scope delar 25-cap-poolen; 4+4 per engine = max 16
-        # (under Cloud SQL:s ~20 användbara).
+        # Master-engine delas nu med scope-engine i Postgres-läge
+        # (_init_shared_scope_engine återanvänder oss). Vi äger DÄRFÖR
+        # ENSAM Cloud SQL:s ~20 användbara connections.
+        # 6+6 = max 12 → 8 headroom. Säker marginal under deploys när
+        # två revisioner kortvarigt överlappar.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=4, max_overflow=4,
+            pool_pre_ping=True, pool_size=6, max_overflow=6,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -571,9 +573,13 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     """Lazy-init en gemensam Postgres-engine för ALLA scope-keys.
     Bara när HEMBUDGET_DATABASE_URL är satt.
 
-    Bulletproof: även om create_all eller migrationerna failar ska vi
-    kunna returnera en användbar engine + sessionmaker. Annars cachas
-    inte engine, varje request retry:ar och hela tjänsten blir 500.
+    I Postgres-läge pekar master + scope på SAMMA databas. För att inte
+    äta Cloud SQL:s 25-connection-tak två gånger återanvänder vi
+    master-engines connection-pool när URL:erna matchar. Tidigare körde
+    vi två separata pooler (4+4 master + 4+4 scope = 16 max) vilket
+    gjorde att vi konstant pendlade nära taket — och vid deploys när
+    gamla + nya revisionen överlappade kortvarigt sprängde vi det med
+    "FATAL: remaining connection slots are reserved" som följd.
     """
     global _shared_scope_engine, _shared_scope_session
     if _shared_scope_engine is not None:
@@ -585,19 +591,38 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     from ..db.migrate import run_migrations
 
     url = _master_db_url()
+
+    # Postgres-läge: dela master-engine om den finns (samma DB → samma
+    # pool). Scope-modellerna är registrerade på en separat Base men
+    # ligger fysiskt i samma Postgres-instans, så pooling kan delas.
+    if url.startswith("postgresql") and _master_engine is not None:
+        engine = _master_engine
+        # create_all för Base (scope-tabellerna) — idempotent.
+        try:
+            Base.metadata.create_all(engine)
+        except Exception:
+            log.exception(
+                "shared scope create_all failed (delar master-engine) "
+                "— fortsätter ändå",
+            )
+        try:
+            run_migrations(engine)
+        except Exception:
+            log.exception("shared scope migrations failed — fortsätter")
+        try:
+            _refresh_scope_columns_cache(engine)
+        except Exception:
+            log.exception("scope-columns-cache refresh misslyckades")
+        _shared_scope_engine = engine
+        _shared_scope_session = sessionmaker(
+            bind=engine, autoflush=False, expire_on_commit=False,
+        )
+        return engine, _shared_scope_session
+
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Cloud SQL db-f1-micro · max 25 connections totalt, varav ~5
-        # reserverade för superuser → ~20 användbara. Vi kör 1 instans,
-        # 1 process, men 2 engines (master + scope) som DELAR samma DB.
-        # Hård regel: master + scope total connections < 20.
-        # 4+4 per engine × 2 engines = 16 max → 4 i headroom. Trångt
-        # men säkert. Tidigare 8+8 (=32) sprängde taket → FATAL
-        # "remaining connection slots are reserved for non-replication
-        # superuser connections".
-        # Real-perf-fixen är att inte öppna så MÅNGA sessions per
-        # request (caching + batched-read i v2.py) — pool-storlek är
-        # bara säkerhetsventil.
+        # Fallback: master-engine inte initierad än. Använd egen pool.
+        # 4+4 per engine, master kommer också initiera 4+4 = 16 max.
         engine_kwargs.update(
             pool_pre_ping=True, pool_size=4, max_overflow=4,
             pool_recycle=1800, pool_timeout=10,

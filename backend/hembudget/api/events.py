@@ -500,7 +500,10 @@ def list_classmates() -> dict:
 
     actor_id = get_current_actor_student()
     if actor_id is None:
-        raise HTTPException(403, "Saknar student-kontext")
+        # Lärare utan elev-impersonation har ingen klasskamrat-lista.
+        # Returnera tom istället för 403 så frontend kan rendera utan
+        # error-toast.
+        return {"classmates": [], "invites_enabled": False}
 
     with master_session() as ms:
         me = ms.query(Student).filter(Student.id == actor_id).first()
@@ -730,7 +733,9 @@ def list_invitations(scope: Session = Depends(db)) -> dict:
 
     actor_id = get_current_actor_student()
     if actor_id is None:
-        raise HTTPException(403, "Saknar student-kontext")
+        # Lärare utan elev-impersonation har ingen "inkorg" att visa.
+        # Returnera tom lista istället för 403.
+        return {"invitations": []}
 
     with master_session() as ms:
         rows = (
