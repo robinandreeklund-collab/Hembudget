@@ -3277,13 +3277,21 @@ export const v2Api = {
     api<void>(`/v2/teacher/students/${studentId}`, {
       method: "DELETE",
     }),
-  /** Radera ALLA mina elever (super-admin · destruktiv operation). */
+  /** Starta bakgrunds-radering av alla mina elever. Returnerar omedelbart. */
   teacherDeleteAllMyStudents: () =>
+    api<{ status: string; teacher_id: number }>(
+      `/v2/teacher/bulk-delete-all-my-students`,
+      { method: "DELETE" },
+    ),
+  /** Polla status på pågående bulk-delete. */
+  teacherBulkDeleteStatus: () =>
     api<{
-      deleted_count: number;
-      failed_count: number;
-      failed_ids: number[];
-    }>(`/v2/teacher/bulk-delete-all-my-students`, { method: "DELETE" }),
+      status: "idle" | "queued" | "running" | "done" | "failed";
+      deleted_count?: number;
+      failed_count?: number;
+      failed_ids?: number[];
+      error?: string;
+    }>(`/v2/teacher/bulk-delete-status`),
   // === /v2/teacher/students/{id}/activity-log (Fas 2Y) ===
   teacherStudentHistory: (studentId: number, limit = 100) =>
     api<V2HistoryResponse>(

@@ -15446,139 +15446,166 @@ class V2BulkDeleteResponse(BaseModel):
     failed_ids: list[int] = Field(default_factory=list)
 
 
-@router.delete(
-    "/teacher/bulk-delete-all-my-students",
-    response_model=V2BulkDeleteResponse,
-)
-def v2_delete_all_my_students(
-    info: TokenInfo = Depends(require_token),
-) -> V2BulkDeleteResponse:
-    """Radera ALLA elever som tillhör läraren (super-admin-funktion).
+# In-memory job-tracker för bulk-delete. Async så frontend inte hänger
+# på 30+ sekunder (Postgres CASCADE kan ta tid med många FK).
+# {teacher_id: {"status": "running"|"done"|"failed", "deleted_count": N, ...}}
+_bulk_delete_jobs: dict[int, dict] = {}
 
-    OBS path: /v2/teacher/bulk-delete-all-my-students (inte
-    /students/all). FastAPI matchar i deklarations-ordning och
-    /students/{student_id} med {student_id}='all' triggar Pydantic-
-    validation-error (422). Egen path undviker krock helt.
 
-    SÄKERHET: använder samma tenant_id-filter-pattern som
-    v2_delete_student. Auto-filter på UPDATE/DELETE i db/base.py
-    skyddar dessutom mot cross-tenant-radering vid bug.
-
-    Returnerar deleted_count + failed_count + failed_ids så UI kan
-    visa exakt resultat. Idempotent: kör flera gånger och få
-    deleted_count=0 efter första.
-    """
-    teacher_id = _require_teacher(info)
-    from ..school.engines import (
-        scope_for_student as _sfs_b, scope_context as _sctx_b,
-        get_scope_session as _gss_b,
-    )
-    from ..db.base import Base, TenantMixin
-
-    deleted = 0
-    failed: list[int] = []
-
-    # Hämta alla elever (id + family_id) för att räkna ut scope_keys
-    with master_session() as ms:
-        student_rows = (
-            ms.query(Student.id, Student.family_id)
-            .filter(Student.teacher_id == teacher_id)
-            .all()
-        )
-        if not student_rows:
-            return V2BulkDeleteResponse(deleted_count=0, failed_count=0)
-        # Beräkna scope_keys: f_<family_id> om family, annars s_<id>
-        scope_keys = list({
-            f"f_{fid}" if fid else f"s_{sid}"
-            for sid, fid in student_rows
-        })
-        student_ids = [r[0] for r in student_rows]
-
-    import logging
-    log = logging.getLogger(__name__)
-    log.info(
-        "v2_delete_all_my_students: teacher_id=%s, %d elever, "
-        "%d unika scopes",
-        teacher_id, len(student_ids), len(scope_keys),
-    )
-
-    # === BATCH 1: Radera ALL scope-data för ALLA tenant-keys på en gång ===
-    # Tidigare: loop över N elever × M tabeller = N×M DELETEs.
-    # Nu: M DELETEs (en per tabell) med tenant_id IN (alla scopes).
-    # För 28 elever × 30 tabeller = 840 DELETEs → 30 DELETEs.
-    # Postgres processar tenant_id IN-listan effektivt med index.
+def _bulk_delete_worker(teacher_id: int) -> None:
+    """Bakgrunds-task som faktiskt utför raderingen. Skriver
+    progress till _bulk_delete_jobs[teacher_id]."""
+    import logging as _logging_b
+    log = _logging_b.getLogger(__name__)
+    job = _bulk_delete_jobs.setdefault(teacher_id, {})
+    job.update(status="running", deleted_count=0, failed_count=0)
     try:
-        # I Postgres-mode delar alla scopes samma engine. Vi öppnar
-        # en session UTAN scope_context (auto-filter inaktivt) så vi
-        # kan använda IN på tenant_id.
-        from ..school.engines import _init_shared_scope_engine
-        import os as _os_pg
-        if _os_pg.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
-            _, session_maker = _init_shared_scope_engine()
-            with session_maker() as ss:
-                for table in reversed(Base.metadata.sorted_tables):
-                    cls = next(
-                        (
-                            c.class_ for c in Base.registry.mappers
-                            if c.local_table is table
-                        ),
-                        None,
-                    )
-                    if cls is None or not issubclass(cls, TenantMixin):
-                        continue
-                    try:
-                        ss.query(cls).filter(
-                            cls.tenant_id.in_(scope_keys),
-                        ).delete(synchronize_session=False)
-                    except Exception:
-                        log.exception(
-                            "bulk-delete: batch-delete failed för "
-                            "%s (skopes %s)", cls.__name__, scope_keys,
-                        )
-                ss.commit()
-        else:
-            # SQLite-fil-läge: en fil per scope, radera filen istället
-            from ..school.engines import _scope_db_path
-            for scope_key in scope_keys:
-                try:
-                    path = _scope_db_path(scope_key)
-                    if path and path.exists():
-                        path.unlink()
-                except Exception:
-                    pass
-    except Exception:
-        log.exception(
-            "bulk-delete: scope-cleanup phase failed",
-        )
+        from ..db.base import Base, TenantMixin
 
-    # === BATCH 2: Radera master-rader (CASCADE tar relations) ===
-    # En SQL DELETE som raderar alla studentens via teacher_id.
-    try:
-        with master_session() as s:
-            n = (
-                s.query(Student)
+        # Hämta scope-keys
+        with master_session() as ms:
+            student_rows = (
+                ms.query(Student.id, Student.family_id)
                 .filter(Student.teacher_id == teacher_id)
-                .delete(synchronize_session=False)
+                .all()
             )
-            s.commit()
-            deleted = int(n)
-    except Exception:
+            if not student_rows:
+                job.update(status="done", deleted_count=0)
+                return
+            scope_keys = list({
+                f"f_{fid}" if fid else f"s_{sid}"
+                for sid, fid in student_rows
+            })
+            student_ids = [r[0] for r in student_rows]
+
+        log.info(
+            "bulk-delete-worker: teacher=%s, %d elever, %d scopes",
+            teacher_id, len(student_ids), len(scope_keys),
+        )
+
+        # Batch-DELETE per tabell
+        try:
+            from ..school.engines import _init_shared_scope_engine
+            import os as _os_pg
+            if _os_pg.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+                _, session_maker = _init_shared_scope_engine()
+                with session_maker() as ss:
+                    for table in reversed(Base.metadata.sorted_tables):
+                        cls = next(
+                            (
+                                c.class_ for c in Base.registry.mappers
+                                if c.local_table is table
+                            ),
+                            None,
+                        )
+                        if (cls is None
+                                or not issubclass(cls, TenantMixin)):
+                            continue
+                        try:
+                            ss.query(cls).filter(
+                                cls.tenant_id.in_(scope_keys),
+                            ).delete(synchronize_session=False)
+                        except Exception:
+                            log.exception(
+                                "bulk-delete-worker: %s failed",
+                                cls.__name__,
+                            )
+                    ss.commit()
+            else:
+                from ..school.engines import _scope_db_path
+                for scope_key in scope_keys:
+                    try:
+                        path = _scope_db_path(scope_key)
+                        if path and path.exists():
+                            path.unlink()
+                    except Exception:
+                        pass
+        except Exception:
+            log.exception(
+                "bulk-delete-worker: scope-cleanup phase failed",
+            )
+
+        # Master-radering
+        deleted = 0
+        try:
+            with master_session() as s:
+                n = (
+                    s.query(Student)
+                    .filter(Student.teacher_id == teacher_id)
+                    .delete(synchronize_session=False)
+                )
+                s.commit()
+                deleted = int(n)
+        except Exception:
+            log.exception(
+                "bulk-delete-worker: master-delete failed för "
+                "teacher %s",
+                teacher_id,
+            )
+            job.update(
+                status="failed",
+                deleted_count=deleted,
+                failed_count=len(student_ids),
+                failed_ids=student_ids,
+                error="Master delete failed (se Cloud Logging)",
+            )
+            return
+
+        job.update(
+            status="done",
+            deleted_count=deleted,
+            failed_count=0,
+        )
+        log.info(
+            "bulk-delete-worker: KLART teacher=%s, deleted=%d",
+            teacher_id, deleted,
+        )
+    except Exception as e:
         log.exception(
-            "bulk-delete: master-delete failed för teacher %s",
+            "bulk-delete-worker: total failure för teacher %s",
             teacher_id,
         )
-        failed = student_ids
+        job.update(status="failed", error=str(e)[:300])
 
-    log.info(
-        "v2_delete_all_my_students: teacher_id=%s, deleted=%d, failed=%d",
-        teacher_id, deleted, len(failed),
-    )
 
-    return V2BulkDeleteResponse(
-        deleted_count=deleted,
-        failed_count=len(failed),
-        failed_ids=failed,
-    )
+@router.delete(
+    "/teacher/bulk-delete-all-my-students",
+)
+def v2_delete_all_my_students(
+    background_tasks: BackgroundTasks,
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Starta bakgrunds-radering av alla teachers elever.
+
+    Returnerar OMEDELBART (inom ms) med job_id. Frontend pollar
+    /v2/teacher/bulk-delete-status för progress.
+
+    Tidigare körde detta synkront — Postgres CASCADE på 30+ tabeller
+    kunde ta 30-60 s, frontend hängde och såg ut som om inget hände.
+    Nu schemaläggs som BackgroundTask + status-endpoint.
+    """
+    teacher_id = _require_teacher(info)
+    # Reset job state
+    _bulk_delete_jobs[teacher_id] = {
+        "status": "queued",
+        "deleted_count": 0,
+        "failed_count": 0,
+    }
+    background_tasks.add_task(_bulk_delete_worker, teacher_id)
+    return {"status": "queued", "teacher_id": teacher_id}
+
+
+@router.get("/teacher/bulk-delete-status")
+def v2_bulk_delete_status(
+    info: TokenInfo = Depends(require_token),
+) -> dict:
+    """Polla för status på pågående bulk-delete."""
+    teacher_id = _require_teacher(info)
+    job = _bulk_delete_jobs.get(teacher_id)
+    if job is None:
+        return {"status": "idle"}
+    return job
+
 
 
 @router.post(

@@ -88,14 +88,37 @@ export function TeacherCreateStudentV2() {
     }
     setBulkDeleting(true);
     try {
-      const res = await v2Api.teacherDeleteAllMyStudents();
-      alert(
-        `Radering klar: ${res.deleted_count} elever borta, ` +
-        `${res.failed_count} misslyckades` +
-        (res.failed_count > 0
-          ? `\nFailed IDs: ${res.failed_ids.join(", ")}`
-          : ""),
-      );
+      // Starta bakgrunds-job (returnerar omedelbart)
+      await v2Api.teacherDeleteAllMyStudents();
+      // Polla status var 2:a sekund tills done/failed
+      const startedAt = Date.now();
+      while (true) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const status = await v2Api.teacherBulkDeleteStatus();
+        if (status.status === "done") {
+          alert(
+            `Radering klar: ${status.deleted_count ?? 0} elever borta`
+            + (status.failed_count
+              ? `, ${status.failed_count} misslyckades`
+              : ""),
+          );
+          break;
+        }
+        if (status.status === "failed") {
+          alert(
+            `Radering misslyckades: ${status.error || "okänt fel"}`,
+          );
+          break;
+        }
+        // Skydd mot evig loop (max 5 min)
+        if (Date.now() - startedAt > 5 * 60 * 1000) {
+          alert(
+            "Radering tar längre än 5 min — fortsätter i bakgrund. "
+            + "Ladda om sidan för att se aktuellt status.",
+          );
+          break;
+        }
+      }
       await load();
     } catch (e) {
       alert(`Fel: ${String((e as Error)?.message || e)}`);
