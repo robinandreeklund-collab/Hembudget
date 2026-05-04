@@ -391,9 +391,25 @@ def tick_month(
     `release_base`: T0 för realtid-projektion. När satt får varje
     seedat MailItem/Transaction ett `released_at` baserat på spel-dagen
     (1-30) så händelserna dyker upp gradvis i postlådan/banken över
-    5 real-dagar (en skolvecka). None = ingen projektion (allt synligt
-    direkt — passande för retroaktiva ticks i biz-tick eller liknande).
+    5 real-dagar (en skolvecka).
+
+    När `release_base` INTE skickas auto-detekterar vi:
+    - Historisk year_month (innan innevarande månad) → None, allt
+      synligt direkt (förra månaden HAR redan hänt ur elevens
+      perspektiv).
+    - Innevarande eller framtida year_month → utcnow(), realtid-
+      projektion gäller (eleven ska se eventen rulla in över veckan).
     """
+    if release_base is None:
+        try:
+            from datetime import date as _d_now
+            today = _d_now.today()
+            current_ym = f"{today.year:04d}-{today.month:02d}"
+            # Lexikografisk jämförelse fungerar för "YYYY-MM"
+            if year_month >= current_ym:
+                release_base = datetime.utcnow()
+        except Exception:
+            pass
     skipped, run_id = _check_and_create_run(
         student.id, year_month, profile.seed,
     )

@@ -575,6 +575,10 @@ class BankSummary(BaseModel):
     income_this_month: float
     expenses_this_month: float
     transactions_count: int
+    # Realtid-projektion · när nästa pending tx släpps till banken.
+    # None = inga pending. Frontend kan visa "Nästa transaktion om 2 h".
+    next_release_at: Optional[datetime] = None
+    pending_count: int = 0
 
 
 class BankResponse(BaseModel):
@@ -784,6 +788,22 @@ def get_bank(
                 and not bool(getattr(t, "is_transfer", False))
             )
 
+            # Realtid-projektion · nästa pending tx-release
+            now_utc = datetime.utcnow()
+            next_pending_tx = (
+                s.query(Transaction.released_at)
+                .filter(Transaction.released_at.isnot(None))
+                .filter(Transaction.released_at > now_utc)
+                .order_by(Transaction.released_at.asc())
+                .first()
+            )
+            pending_tx_count = (
+                s.query(Transaction.id)
+                .filter(Transaction.released_at.isnot(None))
+                .filter(Transaction.released_at > now_utc)
+                .count()
+            )
+
             return BankResponse(
                 student_id=info.student_id,
                 year_month=_current_year_month(),
@@ -795,6 +815,10 @@ def get_bank(
                     income_this_month=round(income, 2),
                     expenses_this_month=round(expenses, 2),
                     transactions_count=len(month_txs),
+                    next_release_at=(
+                        next_pending_tx[0] if next_pending_tx else None
+                    ),
+                    pending_count=int(pending_tx_count or 0),
                 ),
                 accounts=accounts_out,
                 recent_transactions=recent_tx,
@@ -15287,22 +15311,19 @@ def _seed_initial_student_data(
                 )
 
     try:
-        # Realtid-projektion: T0 = nu (eller student.created_at om den
-        # finns) så att MailItem/Transaction släpps gradvis över 5
-        # real-dagar (= 1 spelmånad). Eleven ser några fakturor direkt
-        # och resten dyker upp varje real-dag — istället för att allt
-        # kommer i en klump.
-        from datetime import datetime as _dt
-        release_base = (
-            getattr(student, "created_at", None) or _dt.utcnow()
-        )
+        # Förra månaden ska vara HELT synlig direkt — den HAR redan hänt
+        # ur elevens perspektiv. Eleven loggar in och ser hela förra
+        # månadens lön, fakturor och utgifter som historik.
+        #
+        # Realtid-projektion (release_base) gäller bara framtida ticks
+        # av spel-tiden — när lärare/cron-jobb kör en ny månad framåt.
+        # Då ska eventen släppas gradvis över 5 real-dagar.
         tick_month(
             student,
             profile,
             year_month,
             spend_profile=spend_profile,
             starting_level=starting_level,
-            release_base=release_base,
         )
     except Exception:
         import logging

@@ -580,8 +580,32 @@ export function BankV2() {
                   color: "var(--text-mid)",
                 }}
               >
-                Inga transaktioner än. Saldot uppdateras när läraren seedar
-                månadsdata.
+                {summary.next_release_at ? (
+                  <>
+                    Inga transaktioner synliga än.{" "}
+                    {(() => {
+                      const t = new Date(summary.next_release_at).getTime();
+                      const sec = Math.round((t - Date.now()) / 1000);
+                      if (sec <= 0) return "Nästa släpps strax — ladda om sidan.";
+                      if (sec < 60) return `Nästa släpps om ${sec} s.`;
+                      if (sec < 3600) return `Nästa släpps om ${Math.round(sec/60)} min.`;
+                      if (sec < 86400) return `Nästa släpps om ${Math.round(sec/3600)} h.`;
+                      const d = Math.floor(sec/86400);
+                      const h = Math.round((sec - d*86400)/3600);
+                      return h > 0
+                        ? `Nästa släpps om ${d} d ${h} h.`
+                        : `Nästa släpps om ${d} d.`;
+                    })()}
+                    {summary.pending_count > 1 && (
+                      <> ({summary.pending_count} st väntar totalt)</>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Inga transaktioner än. Den här månaden har precis börjat —
+                    lön och utgifter rullar in när månaden tickas fram.
+                  </>
+                )}
               </div>
             ) : (
               <div className="tx-list">

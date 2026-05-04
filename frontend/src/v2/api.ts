@@ -124,6 +124,8 @@ export type BankSummary = {
   income_this_month: number;
   expenses_this_month: number;
   transactions_count: number;
+  next_release_at: string | null;
+  pending_count: number;
 };
 
 export type BankData = {
