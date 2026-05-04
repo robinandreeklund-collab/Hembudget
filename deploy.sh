@@ -297,7 +297,14 @@ if [[ "$MODE" == "school" ]]; then
         ENV_VARS+=",HEMBUDGET_BOOTSTRAP_TEACHER_NAME=$TEACHER_NAME"
     fi
 
-    # Skol-läge låser till 1 instans — SQLite-filer delas inte över instanser
+    # Skol-läge: 1 instans i nuläget eftersom Cloud SQL db-f1-micro
+    # (25 conn) inte räcker för flera instanser. För att skala:
+    #   1) Bumpa Cloud SQL till db-g1-small (50) eller större, ELLER
+    #   2) Sätt upp PgBouncer som connection-multiplexer.
+    # Sen kan MAX_INSTANCES bumpas och poolen i school/engines.py
+    # justeras därefter.
+    # Med 1 instans + concurrency 20 + Postgres-pool 3+3 (=6 conn,
+    # delade master+scope) hanterar vi ~20 samtidiga requests.
     MAX_INSTANCES=1
     MIN_INSTANCES=1
 

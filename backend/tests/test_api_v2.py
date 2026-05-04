@@ -40,6 +40,15 @@ def fx(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     from hembudget.school import demo_seed as demo_seed_mod
     monkeypatch.setattr(demo_seed_mod, "build_demo", lambda: {"skipped": True})
 
+    # Töm in-process-cachar mellan tester. Annars cache:ar /v2/
+    # notifications svar från ett tidigare test där student_id råkar
+    # vara samma som i nuvarande test (typiskt sid=1) och de följande
+    # testerna ser stale data.
+    from hembudget.api import v2 as _v2_mod
+    _v2_mod._notif_cache.clear()
+    _v2_mod._wellbeing_cache.clear()
+    _v2_mod._mailcount_cache.clear()
+
     import importlib
     import hembudget.main as main_mod
     importlib.reload(main_mod)
@@ -8194,6 +8203,135 @@ def test_v2_notifications_teacher_overdue_assignment(fx) -> None:
     )
     titles = [n["title"] for n in r.json()["items"]]
     assert any("FÖRSENAT" in t for t in titles)
+
+
+def test_v2_notifications_caches_within_ttl(fx) -> None:
+    """Andra anropet inom TTL ska vara cache-hit (ingen DB-trafik).
+    Verifierar via att vi mutar master-DB:n MELLAN anropen och ser
+    att svaret är oförändrat tills cachen invalideras."""
+    from hembudget.school.models import Message as _M
+    from hembudget.api.v2 import invalidate_notif_cache
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    invalidate_notif_cache()  # rensa eventuell residual cache
+
+    # 1) Första anropet — bygger upp cachen, 0 nya meddelanden
+    r1 = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r1.status_code == 200
+    items1 = r1.json()["items"]
+    msg_count_1 = sum(
+        1 for n in items1 if n["title"] == "Meddelande från läraren"
+    )
+
+    # 2) Skicka ett meddelande direkt i master-DB
+    with master_session() as db:
+        db.add(_M(
+            student_id=sid, teacher_id=tid,
+            sender_role="teacher",
+            body="Cache-test",
+        ))
+        db.commit()
+
+    # 3) Andra anropet — ska INTE se det nya meddelandet (cache hit)
+    r2 = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    items2 = r2.json()["items"]
+    msg_count_2 = sum(
+        1 for n in items2 if n["title"] == "Meddelande från läraren"
+    )
+    assert msg_count_2 == msg_count_1, (
+        "andra anropet inom TTL ska vara cache-hit; saw "
+        f"{msg_count_1} → {msg_count_2}"
+    )
+
+    # 4) Invalidera och verifiera att det nya meddelandet syns
+    invalidate_notif_cache("student", sid)
+    r3 = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    titles3 = [n["title"] for n in r3.json()["items"]]
+    assert any("Meddelande" in t for t in titles3), (
+        "efter cache-invalidate ska nytt meddelande synas"
+    )
+
+
+def test_v2_notifications_feedback_no_n_plus_one(fx) -> None:
+    """10 reflektioner med feedback ska resultera i ENDA FeedbackRead-
+    SELECT (batched), inte 10 (N+1).
+    Mäter via SQLAlchemy event-counter på Session.execute."""
+    from hembudget.school.models import (
+        Module as _M, ModuleStep as _MS,
+        StudentStepProgress as _SSP, FeedbackRead as _FR,
+    )
+    from hembudget.api.v2 import invalidate_notif_cache
+    from sqlalchemy import event
+
+    client, _tch, _sa, stu, tid, _said, sid = fx
+    invalidate_notif_cache()
+
+    # Seeda 10 reflektioner med teacher_feedback satt
+    with master_session() as db:
+        m = _M(teacher_id=tid, title="N+1", is_template=False)
+        db.add(m); db.flush()
+        for i in range(10):
+            st = _MS(
+                module_id=m.id, sort_order=i,
+                kind="reflect", title=f"Q{i}",
+            )
+            db.add(st); db.flush()
+            db.add(_SSP(
+                student_id=sid, step_id=st.id,
+                completed_at=datetime.utcnow(),
+                feedback_at=datetime.utcnow(),
+                teacher_feedback=f"Bra svar {i}!",
+                data={"reflection": "Mitt svar"},
+            ))
+        db.commit()
+
+    # Räkna antal queries mot FeedbackRead-tabellen.
+    fr_query_count = {"n": 0}
+
+    @event.listens_for(_FR, "load")
+    def _on_load(_target, _ctx):  # pragma: no cover
+        fr_query_count["n"] += 1
+
+    # Räkna istället via raw SQL - lägg till statement-listener
+    seen_statements: list[str] = []
+
+    from sqlalchemy.engine import Engine
+
+    @event.listens_for(Engine, "before_cursor_execute")
+    def _on_exec(_conn, _cursor, statement, *_args, **_kwargs):
+        if "feedback_reads" in statement.lower():
+            seen_statements.append(statement)
+
+    try:
+        r = client.get(
+            "/v2/notifications",
+            headers={"Authorization": f"Bearer {stu}"},
+        )
+        assert r.status_code == 200
+        # Grundkrav: notiserna ska finnas
+        titles = [n["title"] for n in r.json()["items"]]
+        feedback_notifs = [
+            t for t in titles if "Feedback" in t
+        ]
+        assert len(feedback_notifs) == 10
+        # Den kritiska assertionen: bara 1 SELECT mot feedback_reads,
+        # inte 10. Tidigare: en per progress-rad inne i for-loopen.
+        assert len(seen_statements) <= 1, (
+            f"N+1 regression: {len(seen_statements)} queries mot "
+            f"feedback_reads (förväntade ≤1).\n"
+            f"Statements: {seen_statements}"
+        )
+    finally:
+        event.remove(Engine, "before_cursor_execute", _on_exec)
 
 
 def test_v2_notifications_teacher_flagged_reflection(fx) -> None:

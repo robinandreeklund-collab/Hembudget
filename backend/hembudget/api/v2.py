@@ -15638,6 +15638,16 @@ def _auto_pay_historical_invoices(
             s.commit()
 
 
+# Bounded parallelism för seed-jobb. Tidigare kunde 20+ background-
+# seeds köra parallellt när läraren batch-skapade elever, vilket
+# spräckte både Cloud SQL-poolen (varje seed öppnar 5+ scope-sessions)
+# och 1 GiB-minnesgränsen. Med max 2 samtidiga seeds får vi naturlig
+# back-pressure utan att blockera UI:t.
+import threading as _threading_seed
+_SEED_CONCURRENCY = 2
+_seed_semaphore = _threading_seed.Semaphore(_SEED_CONCURRENCY)
+
+
 def _seed_initial_student_data_safe(
     student_id: int,
     spend_profile: str,
@@ -15646,31 +15656,33 @@ def _seed_initial_student_data_safe(
 ) -> None:
     """Bakgrunds-säker wrapper kring _seed_initial_student_data.
 
-    Hämtar Student-raden från master och delegerar. Tystas helt mot
-    exceptioner — det här körs som FastAPI BackgroundTask, en
-    exception skulle förloras tyst ändå men loggas här så vi ser
-    misslyckanden i Cloud Logging.
+    Serializerad via _seed_semaphore (max 2 samtidiga) så batch-create
+    inte spränger connection-pool eller minne. Hämtar Student-raden
+    från master och delegerar. Tystas helt mot exceptioner — det här
+    körs som FastAPI BackgroundTask och en exception skulle förloras
+    tyst ändå, men loggas här så vi ser misslyckanden i Cloud Logging.
     """
-    try:
-        with master_session() as s:
-            stu = s.get(Student, student_id)
-            if stu is None:
-                return
-            s.expunge(stu)
-        _seed_initial_student_data(
-            stu,
-            spend_profile=spend_profile,
-            starting_level=starting_level,
-            partner_model=partner_model,
-        )
-    except Exception:
-        import logging
-        logging.getLogger(__name__).exception(
-            "BackgroundTask: _seed_initial_student_data failed för "
-            "student %s — eleven kan ha tomma vyer tills "
-            "auto-recovery i student-detail kör",
-            student_id,
-        )
+    with _seed_semaphore:
+        try:
+            with master_session() as s:
+                stu = s.get(Student, student_id)
+                if stu is None:
+                    return
+                s.expunge(stu)
+            _seed_initial_student_data(
+                stu,
+                spend_profile=spend_profile,
+                starting_level=starting_level,
+                partner_model=partner_model,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "BackgroundTask: _seed_initial_student_data failed "
+                "för student %s — eleven kan ha tomma vyer tills "
+                "auto-recovery i student-detail kör",
+                student_id,
+            )
 
 
 def _seed_initial_student_data(
@@ -16890,6 +16902,50 @@ class V2NotificationsResponse(BaseModel):
     items: list[V2Notification]
 
 
+# In-memory TTL-cache för /v2/notifications-svar.
+# Frontend pollar var 30:e sekund från NotifBell + Sidebar → med 15 s TTL
+# fångar vi ena pollen ur två som cache-hit. Per-process-cache är OK
+# eftersom Cloud Run kör --max-instances=1 i school-läge.
+_NOTIF_CACHE_TTL_SECONDS = 15.0
+_notif_cache: dict[
+    tuple[str, int], tuple[float, "V2NotificationsResponse"]
+] = {}
+
+
+def _notif_cache_get(
+    key: tuple[str, int],
+) -> Optional["V2NotificationsResponse"]:
+    import time as _t_n
+    entry = _notif_cache.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if expires_at < _t_n.monotonic():
+        _notif_cache.pop(key, None)
+        return None
+    return value
+
+
+def _notif_cache_set(
+    key: tuple[str, int], value: "V2NotificationsResponse",
+) -> None:
+    import time as _t_n
+    _notif_cache[key] = (
+        _t_n.monotonic() + _NOTIF_CACHE_TTL_SECONDS, value,
+    )
+
+
+def invalidate_notif_cache(
+    role: Optional[str] = None, target_id: Optional[int] = None,
+) -> None:
+    """Töm notis-cachen — anropas av endpoints som ändrar notif-state
+    (t.ex. mark-all-read, ny lärarmeddelande)."""
+    if role is None or target_id is None:
+        _notif_cache.clear()
+        return
+    _notif_cache.pop((role, target_id), None)
+
+
 def _time_label_for(dt: datetime) -> str:
     now = datetime.utcnow()
     delta = now - dt
@@ -16915,13 +16971,20 @@ def _time_label_for(dt: datetime) -> str:
 def get_v2_notifications(
     info: TokenInfo = Depends(require_token),
 ) -> V2NotificationsResponse:
-    """Live-notiser för eleven · aggregerade från flera källor.
+    """Live-notiser · aggregerade från flera källor.
 
-    Frontend pollar denna var 30:e sekund för att simulera realtid.
-    Returnerar sortering nyast först.
+    Frontend pollar denna var 30-60:e sekund från NotifBell + Sidebar.
+    Per-användare-cachat 15 s in-memory så samma poll inte triggar
+    samma 5+ master-DB-queries två gånger inom poll-intervallet.
     """
     if info.role == "teacher" and info.teacher_id is not None:
-        return _build_teacher_notifications(info.teacher_id)
+        cache_key = ("teacher", info.teacher_id)
+        cached = _notif_cache_get(cache_key)
+        if cached is not None:
+            return cached
+        result = _build_teacher_notifications(info.teacher_id)
+        _notif_cache_set(cache_key, result)
+        return result
 
     if info.role != "student" or info.student_id is None:
         # Tom payload för demo / okänd roll
@@ -16933,7 +16996,21 @@ def get_v2_notifications(
             items=[],
         )
 
-    sid = info.student_id
+    cache_key = ("student", info.student_id)
+    cached = _notif_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    result = _build_student_notifications(info.student_id)
+    _notif_cache_set(cache_key, result)
+    return result
+
+
+def _build_student_notifications(
+    sid: int,
+) -> V2NotificationsResponse:
+    """Aggregator för elev-notiser. Kallas från GET /v2/notifications
+    (cachat 15 s) och kan kallas direkt av andra endpoints som vill
+    ha samma vy."""
     notifs: list[V2Notification] = []
     now = datetime.utcnow()
     cutoff = now - timedelta(days=14)
@@ -17030,20 +17107,27 @@ def get_v2_notifications(
             .limit(10)
             .all()
         )
-        for prog in fb_progress:
-            if prog.feedback_at is None:
-                continue
-            # Kontrollera om eleven läst feedbacken
-            already_read = (
-                ms.query(_FR)
+        # Batcha FeedbackRead-lookups i ETT query istället för en
+        # per progress-rad. Tidigare N+1: med 10 reflektioner blev
+        # det 11 queries per notif-poll, och frontend pollar var
+        # 30:e sekund per användare → konstant overhead.
+        progress_ids = [p.id for p in fb_progress if p.id is not None]
+        read_progress_ids: set[int] = set()
+        if progress_ids:
+            read_rows = (
+                ms.query(_FR.source_id)
                 .filter(
                     _FR.student_id == sid,
                     _FR.kind == "module_step",
-                    _FR.source_id == prog.id,
+                    _FR.source_id.in_(progress_ids),
                 )
-                .first()
+                .all()
             )
-            unread = already_read is None
+            read_progress_ids = {row[0] for row in read_rows}
+        for prog in fb_progress:
+            if prog.feedback_at is None:
+                continue
+            unread = prog.id not in read_progress_ids
             notifs.append(V2Notification(
                 id=f"fb-{prog.id}",
                 kind="teacher",

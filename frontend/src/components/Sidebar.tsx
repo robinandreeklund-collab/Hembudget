@@ -121,13 +121,15 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   });
   const isSuperAdmin = Boolean(adminQ.data?.is_super_admin);
 
-  // Pollar olästa-räknare var 30 sek. Bara för elev/impersonering —
+  // Pollar olästa-räknare var 60 sek. Bara för elev/impersonering —
   // läraren har sin egen vy. Fail-soft: badges visas inte om endpoint
-  // saknas.
+  // saknas. (Tidigare 30 s — för aggressivt; varje aktiv användare
+  // bidrog med 2 polls/min plus NotifBell:s 2 polls/min plus mail-
+  // pollers, totalt ~24 req/min/user → 720+ req/min vid 30 elever.)
   const notifQ = useQuery({
     queryKey: ["sidebar-notifications"],
     queryFn: () => api<NotificationCounts>("/student/notifications/counts"),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
     enabled: isStudent || isTeacherViewing,
     retry: false,
   });

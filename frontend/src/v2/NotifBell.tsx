@@ -19,7 +19,10 @@ import {
 } from "./api";
 import "./notif.css";
 
-const POLL_INTERVAL_MS = 30_000;
+// 60 s polling — backend cachar var 15 s så snabba dubbel-polls ger
+// cache-träff, men 60 s är tillräckligt "live"-känsla för en
+// ekonomi-app där notiser inte är realtid-kritiska.
+const POLL_INTERVAL_MS = 60_000;
 
 const KIND_LABEL: Record<V2NotifKind, string> = {
   teacher: "Lärare",

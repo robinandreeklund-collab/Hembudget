@@ -240,16 +240,16 @@ def build_app() -> FastAPI:
 
     @app.get("/healthz/db")
     def healthz_db() -> dict:
-        """Diagnostik · returnerar pool-config + aktuell användning för
-        master + scope-engines. Används för att VERIFIERA att deployad
-        kod faktiskt har förväntad pool-storlek (annars kan vi inte
-        skilja "fix deployad inte" från "fix räcker inte")."""
+        """Diagnostik · pool-config + aktuell användning. Auth-fri så
+        man kan curla från terminalen. Kan tas bort när vi är säkra
+        på att perf är stabil."""
+        import os as _os_diag
         out: dict = {
-            "school_mode": os.environ.get(
+            "school_mode": _os_diag.environ.get(
                 "HEMBUDGET_SCHOOL_MODE", "",
             ),
             "has_database_url": bool(
-                os.environ.get("HEMBUDGET_DATABASE_URL", "").strip(),
+                _os_diag.environ.get("HEMBUDGET_DATABASE_URL", "").strip(),
             ),
             "engines": {},
         }
@@ -263,21 +263,26 @@ def build_app() -> FastAPI:
                     out["engines"][label] = {"initialized": False}
                     continue
                 pool = engine.pool
-                out["engines"][label] = {
+                stats: dict = {
                     "initialized": True,
                     "is_same_as_master": (
-                        engine is _eng._master_engine and label != "master"
+                        engine is _eng._master_engine
+                        and label != "master"
                     ),
                     "pool_class": type(pool).__name__,
-                    "pool_size": getattr(pool, "size", lambda: None)(),
-                    "checked_out": getattr(
-                        pool, "checkedout", lambda: None,
-                    )(),
-                    "checked_in": getattr(
-                        pool, "checkedin", lambda: None,
-                    )(),
-                    "overflow": getattr(pool, "overflow", lambda: None)(),
                 }
+                # NullPool och QueuePool har olika introspection-API.
+                # Inget av dessa får krascha här — endpoint:en är
+                # diagnostik och måste alltid svara.
+                for attr_name in (
+                    "size", "checkedout", "checkedin", "overflow",
+                ):
+                    try:
+                        fn = getattr(pool, attr_name, None)
+                        stats[attr_name] = fn() if callable(fn) else None
+                    except Exception:
+                        stats[attr_name] = None
+                out["engines"][label] = stats
         except Exception as e:
             out["engines_error"] = repr(e)
         return out

@@ -99,9 +99,10 @@ export function PostladanV2() {
 
   useEffect(() => {
     load(tab);
-    // Bug #14 + #15 · Realtid via polling var 15:e sekund.
-    // Lärar-postlådan-injection och nya brev syns automatiskt.
-    const interval = setInterval(() => load(tab), 15000);
+    // Realtid via polling. Sänkt från 15 s → 30 s eftersom 15 s
+    // räknades med 30+ andra polling-loops i samma session och
+    // fyllde Cloud SQL-poolen vid 30+ samtidiga användare.
+    const interval = setInterval(() => load(tab), 30000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);

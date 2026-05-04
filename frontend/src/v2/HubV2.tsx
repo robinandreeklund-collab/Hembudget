@@ -83,7 +83,8 @@ export function HubV2() {
         .catch(() => undefined);
     };
     fetchMail();
-    const t = setInterval(fetchMail, 15000);
+    // 30 s · sänkt från 15 s pga. polling-aggregat överbelastade Postgres
+    const t = setInterval(fetchMail, 30000);
     return () => clearInterval(t);
   }, []);
 

@@ -154,15 +154,31 @@ def init_master_engine() -> Engine:
 
     url = _master_db_url()
     is_sqlite = url.startswith("sqlite:")
+    is_postgres = url.startswith("postgresql")
     engine_kwargs: dict = {"future": True}
-    if not is_sqlite:
-        # Master-engine delas nu med scope-engine i Postgres-läge
+    if is_postgres:
+        # Master-engine delas med scope-engine i Postgres-läge
         # (_init_shared_scope_engine återanvänder oss). Vi äger DÄRFÖR
         # ENSAM Cloud SQL:s ~20 användbara connections.
-        # 6+6 = max 12 → 8 headroom. Säker marginal under deploys när
-        # två revisioner kortvarigt överlappar.
+        #
+        # 3+3 = max 6 per Cloud-Run-revision. Vid deploy är gamla +
+        # nya revisionen aktiva samtidigt → 6 + 6 = 12 < 20. Med
+        # 6+6 (= 24 totalt under deploy) bröts taket → nya revisionen
+        # kunde inte få connection vid startup, container failade
+        # listen-on-port → CI rött.
+        #
+        # connect_timeout=5: om Cloud SQL inte svarar inom 5s ska vi
+        # ge upp och returnera ett fel uppåt — INTE hänga startup-
+        # hooken. Tidigare hängde vi förbi Cloud Run:s 240s timeout.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=6, max_overflow=6,
+            pool_pre_ping=True, pool_size=3, max_overflow=3,
+            pool_recycle=1800, pool_timeout=10,
+            connect_args={"connect_timeout": 5},
+        )
+    elif not is_sqlite:
+        # Annan dialekt (MySQL, etc.) — sätt bara generella pool-args.
+        engine_kwargs.update(
+            pool_pre_ping=True, pool_size=3, max_overflow=3,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -640,11 +656,12 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
 
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Fallback: master-engine inte initierad än. Använd egen pool.
-        # 4+4 per engine, master kommer också initiera 4+4 = 16 max.
+        # Fallback: master-engine inte initierad än. Använd egen pool
+        # med samma defensiva config som master (3+3, connect_timeout).
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=4, max_overflow=4,
+            pool_pre_ping=True, pool_size=3, max_overflow=3,
             pool_recycle=1800, pool_timeout=10,
+            connect_args={"connect_timeout": 5},
         )
     engine = create_engine(url, **engine_kwargs)
     log.info(
