@@ -13805,6 +13805,7 @@ def _build_competencies_for_student(
 )
 def teacher_student_detail(
     student_id: int,
+    background_tasks: BackgroundTasks,
     info: TokenInfo = Depends(require_token),
 ) -> V2TeacherStudentDetail:
     """Lärar-detaljvy · alla aspekter av en specifik elev.
@@ -13833,24 +13834,44 @@ def teacher_student_detail(
             student, "v2_onboarding_completed_at", None,
         )
 
-    # Auto-recovery · Bug-fix för "seed failed" på gamla elever:
-    # Om eleven inte har en SINGLE WeekTickRun med status='completed'
-    # så har den aldrig fått sin initial data. Trigga seed nu.
-    # Detta fixar elever som skapades innan seed-funktionen byggdes,
-    # eller elever vars tick failade av en gammal bugg.
+    # Auto-recovery · om eleven inte har en SINGLE WeekTickRun med
+    # status='completed' så har den aldrig fått sin initial data.
+    # Trigga seed i BAKGRUNDEN så lärar-vyn kan renderas direkt
+    # (~200 ms i stället för 3-4 s synkron seed).
+    #
+    # Tidigare körde detta synkront → varje klick på en elev som
+    # saknar data tog 3-4 s vilket är oacceptabelt UX. Nu schemaläggs
+    # det som BackgroundTask: lärar-vyn renderar omedelbart med tom
+    # data, och nästa request till samma elev (efter att seed klar)
+    # ger full data.
+    #
+    # Vi gör en SNABB check för completed_runs här för att avgöra
+    # om bakgrunds-task behövs, så vi inte schemalägger seed för
+    # alla elever (bara de som faktiskt saknar data).
     try:
-        _ensure_student_has_initial_data(
-            student_id=student_id,
-            student_name=student_name,
-            spend_profile=spend_profile or "balanserad",
-            starting_level=v2_level,
-            partner_model=partner or "solo",
-        )
+        from ..school.game_engine_models import WeekTickRun as _WTR_q
+        with master_session() as _s_q:
+            _completed_runs = (
+                _s_q.query(_WTR_q)
+                .filter(
+                    _WTR_q.student_id == student_id,
+                    _WTR_q.status == "completed",
+                )
+                .count()
+            )
+        if _completed_runs == 0:
+            background_tasks.add_task(
+                _seed_initial_student_data_safe,
+                student_id,
+                spend_profile or "balanserad",
+                v2_level,
+                partner or "solo",
+            )
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
-            "auto-recovery seed failed för student %s — vyn renderas "
-            "ändå, men data kan saknas",
+            "auto-recovery check failed för student %s — vyn "
+            "renderas ändå, seed försöks nästa gång",
             student_id,
         )
 
