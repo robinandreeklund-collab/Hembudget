@@ -156,15 +156,15 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # Postgres: pre-ping så stale connections från Cloud SQL inte
-        # smäller. Cloud SQL db-f1-micro har max ~25 connections totalt.
-        # Vi delar mellan master + shared-scope + Postgres internal, så
-        # håll pools rimliga: 5+5=10 per engine = 20 totalt med
-        # headroom 5. (Tidigare 2+3=5 räckte inte: en aktiv elev gör
-        # 5-10 parallella requests vid sidladdning → pool slut →
-        # "remaining connection slots are reserved" på prod.)
+        # Cloud SQL db-f1-micro har max 25 connections totalt.
+        # Cloud Run kan skala till flera instanser, så vi måste vara
+        # konservativa: 2 per engine × 2 engines × 3 instanser = 12.
+        # Plus internal Cloud SQL-connections (~5) → ~17 totalt under
+        # tak 25. Tidigare 5+5=10 per engine kraschade alla nya
+        # connections när Cloud Run skalade upp ("loaded_dbapi.connect"
+        # failed på ALLA requests).
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=2, max_overflow=2,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -591,11 +591,11 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Cloud SQL db-f1-micro har max ~25 connections totalt. Vi
-        # håller master + shared-scope under 20 totalt med headroom.
-        # 5+5=10 per engine räcker för ~5 samtidiga aktiva elever.
+        # Cloud SQL db-f1-micro · max 25 connections totalt.
+        # Konservativt med flera Cloud Run-instanser: 2 per engine
+        # × 2 engines × 3 instanser = 12. Plus internal ~5 = ~17.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
+            pool_pre_ping=True, pool_size=2, max_overflow=2,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
