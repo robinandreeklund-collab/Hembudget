@@ -69,43 +69,12 @@ def wipe_demo(s) -> dict:
     return counts
 
 
-def build_demo(force: bool = False) -> dict:
+def build_demo() -> dict:
     """Säkerställ att en färsk demo-lärare + elever + batchar finns.
-
     Idempotent: rensar befintlig demo-data först, bygger sedan upp
-    allt från grunden. Tar 1-3 min på Cloud SQL Postgres pga
-    100+ DB-roundtrips (5 elever × 3 batches × N artifacts).
-
-    `force=False` (default): skippa rebuild om demo-läraren redan
-    finns med ≥5 elever. Det undviker pool-exhaustion under cold-
-    start på Cloud Run och eliminerar race med riktiga user-requests.
-    Reset-loopen anropar med `force=True` var 10:e min för att ge
-    färsk data.
-    """
+    allt från grunden."""
     stats = {"built_at": datetime.utcnow().isoformat()}
     with master_session() as s:
-        # Skip om demo redan är byggd och vi inte är force
-        if not force:
-            existing = (
-                s.query(Teacher)
-                .filter(
-                    Teacher.is_demo.is_(True),
-                    Teacher.email == DEMO_TEACHER_EMAIL,
-                )
-                .first()
-            )
-            if existing is not None:
-                n_students = (
-                    s.query(Student)
-                    .filter(Student.teacher_id == existing.id)
-                    .count()
-                )
-                if n_students >= len(DEMO_STUDENTS):
-                    stats["skipped"] = (
-                        f"demo redan byggd · {n_students} elever"
-                    )
-                    return stats
-
         cleaned = wipe_demo(s)
         stats["cleaned"] = cleaned
 

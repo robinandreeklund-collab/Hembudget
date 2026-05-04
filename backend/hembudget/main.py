@@ -378,11 +378,7 @@ async def _demo_seed_and_scheduler() -> None:
             try:
                 # Första build i bakgrund — frigör event-loopen så
                 # /healthz kan svara medan demo byggs.
-                # force=False: hoppa över rebuild om demo redan finns
-                # från en tidigare deploy. Undviker race med user-
-                # requests (login, create-student) som kan kollidera
-                # med wipe_demo + bulk-insert.
-                stats = await asyncio.to_thread(build_demo, False)
+                stats = await asyncio.to_thread(build_demo)
                 next_demo_reset_at = datetime.utcnow() + timedelta(
                     seconds=DEMO_RESET_INTERVAL_SECONDS,
                 )
@@ -396,9 +392,7 @@ async def _demo_seed_and_scheduler() -> None:
             while True:
                 try:
                     await asyncio.sleep(DEMO_RESET_INTERVAL_SECONDS)
-                    # force=True: rensa och bygg om var 10:e min så
-                    # demo-användare får färsk data.
-                    s = await asyncio.to_thread(build_demo, True)
+                    s = await asyncio.to_thread(build_demo)
                     next_demo_reset_at = datetime.utcnow() + timedelta(
                         seconds=DEMO_RESET_INTERVAL_SECONDS,
                     )
