@@ -15478,95 +15478,96 @@ def v2_delete_all_my_students(
     deleted = 0
     failed: list[int] = []
 
-    # Hämta alla elev-ids först
+    # Hämta alla elever (id + family_id) för att räkna ut scope_keys
     with master_session() as ms:
         student_rows = (
-            ms.query(Student.id)
+            ms.query(Student.id, Student.family_id)
             .filter(Student.teacher_id == teacher_id)
             .all()
         )
+        if not student_rows:
+            return V2BulkDeleteResponse(deleted_count=0, failed_count=0)
+        # Beräkna scope_keys: f_<family_id> om family, annars s_<id>
+        scope_keys = list({
+            f"f_{fid}" if fid else f"s_{sid}"
+            for sid, fid in student_rows
+        })
         student_ids = [r[0] for r in student_rows]
-
-    if not student_ids:
-        return V2BulkDeleteResponse(deleted_count=0, failed_count=0)
 
     import logging
     log = logging.getLogger(__name__)
     log.info(
-        "v2_delete_all_my_students: teacher_id=%s, %d elever att radera",
-        teacher_id, len(student_ids),
+        "v2_delete_all_my_students: teacher_id=%s, %d elever, "
+        "%d unika scopes",
+        teacher_id, len(student_ids), len(scope_keys),
     )
 
-    # Radera en åt gången — om en failar fortsätter vi med nästa.
-    # Per-elev: scope-data först, sen master-row (CASCADE tar
-    # StudentProfile / BankIDSession / WeekTickRun etc).
-    for sid in student_ids:
-        try:
-            with master_session() as s:
-                st = s.get(Student, sid)
-                if st is None or st.teacher_id != teacher_id:
-                    failed.append(sid)
-                    continue
-                scope_key = _sfs_b(st)
-                if not scope_key or not isinstance(scope_key, str):
-                    failed.append(sid)
-                    continue
-
-                # Radera scope-data (alla TenantMixin-tabeller)
-                try:
-                    with _sctx_b(scope_key):
-                        with _gss_b(scope_key)() as ss:
-                            for table in reversed(
-                                Base.metadata.sorted_tables,
-                            ):
-                                cls = next(
-                                    (
-                                        c.class_
-                                        for c in Base.registry.mappers
-                                        if c.local_table is table
-                                    ),
-                                    None,
-                                )
-                                if (cls is None
-                                        or not issubclass(cls, TenantMixin)):
-                                    continue
-                                try:
-                                    ss.query(cls).filter(
-                                        cls.tenant_id == scope_key,
-                                    ).delete(synchronize_session=False)
-                                except Exception:
-                                    log.exception(
-                                        "bulk-delete: failed deleting "
-                                        "%s for scope %s",
-                                        cls.__name__, scope_key,
-                                    )
-                            ss.commit()
-                except Exception:
-                    log.exception(
-                        "bulk-delete: scope-cleanup failed for sid=%s",
-                        sid,
+    # === BATCH 1: Radera ALL scope-data för ALLA tenant-keys på en gång ===
+    # Tidigare: loop över N elever × M tabeller = N×M DELETEs.
+    # Nu: M DELETEs (en per tabell) med tenant_id IN (alla scopes).
+    # För 28 elever × 30 tabeller = 840 DELETEs → 30 DELETEs.
+    # Postgres processar tenant_id IN-listan effektivt med index.
+    try:
+        # I Postgres-mode delar alla scopes samma engine. Vi öppnar
+        # en session UTAN scope_context (auto-filter inaktivt) så vi
+        # kan använda IN på tenant_id.
+        from ..school.engines import _init_shared_scope_engine
+        import os as _os_pg
+        if _os_pg.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+            _, session_maker = _init_shared_scope_engine()
+            with session_maker() as ss:
+                for table in reversed(Base.metadata.sorted_tables):
+                    cls = next(
+                        (
+                            c.class_ for c in Base.registry.mappers
+                            if c.local_table is table
+                        ),
+                        None,
                     )
-
-                # Radera SQLite-fil-läge (om aktivt)
+                    if cls is None or not issubclass(cls, TenantMixin):
+                        continue
+                    try:
+                        ss.query(cls).filter(
+                            cls.tenant_id.in_(scope_keys),
+                        ).delete(synchronize_session=False)
+                    except Exception:
+                        log.exception(
+                            "bulk-delete: batch-delete failed för "
+                            "%s (skopes %s)", cls.__name__, scope_keys,
+                        )
+                ss.commit()
+        else:
+            # SQLite-fil-läge: en fil per scope, radera filen istället
+            from ..school.engines import _scope_db_path
+            for scope_key in scope_keys:
                 try:
-                    import os as _os_b
-                    from ..school.engines import _scope_db_path
                     path = _scope_db_path(scope_key)
-                    if path and _os_b.path.exists(path):
-                        _os_b.remove(path)
+                    if path and path.exists():
+                        path.unlink()
                 except Exception:
                     pass
+    except Exception:
+        log.exception(
+            "bulk-delete: scope-cleanup phase failed",
+        )
 
-                # Master-radering · CASCADE tar bort relations
-                s.delete(st)
-                s.commit()
-                deleted += 1
-        except Exception:
-            log.exception(
-                "bulk-delete: failed for sid=%s — fortsätter med nästa",
-                sid,
+    # === BATCH 2: Radera master-rader (CASCADE tar relations) ===
+    # En SQL DELETE som raderar alla studentens via teacher_id.
+    try:
+        with master_session() as s:
+            n = (
+                s.query(Student)
+                .filter(Student.teacher_id == teacher_id)
+                .delete(synchronize_session=False)
             )
-            failed.append(sid)
+            s.commit()
+            deleted = int(n)
+    except Exception:
+        log.exception(
+            "bulk-delete: master-delete failed för teacher %s",
+            teacher_id,
+        )
+        failed = student_ids
 
     log.info(
         "v2_delete_all_my_students: teacher_id=%s, deleted=%d, failed=%d",
