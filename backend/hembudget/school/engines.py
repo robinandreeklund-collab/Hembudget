@@ -167,24 +167,31 @@ def init_master_engine() -> Engine:
         # kunde inte få connection vid startup, container failade
         # listen-on-port → CI rött.
         #
-        # Pool 5+5 = max 10 per Cloud-Run-revision. Tidigare 2+2 räckte
-        # inte för normal trafik (frontend dashboard pollar 10+ parallella
-        # endpoints) → /healthz/db själv kunde inte få en connection.
-        # 5+5 + Postgres idle_session_timeout=30s = även med deploy-
-        # overlap (gamla revisionen dör på Postgres-sidan inom 30 s)
-        # håller vi oss under Cloud SQL:s 25-cap.
+        # NullPool = ingen pool alls. Varje query öppnar+stänger en
+        # egen connection. ~10-30 ms overhead per query via Cloud SQL
+        # Unix-socket men:
+        # - OMÖJLIGT att läcka connections (varje connection lever ENDAST
+        #   under sin sessions livstid)
+        # - INGEN risk för pool exhaustion ens vid burst-trafik
+        # - GAMLA revisioner kan inte hålla connections under deploy
+        # - Cloud SQL:s 25-cap blir bara en gräns på TILLFÄLLIGA
+        #   parallella requests, inte ackumulerad pool-storlek
+        #
+        # Tidigare försök med pool_size=2+2 → 5+5 visade alla samma
+        # symptom: "checkedout: max, checkedin: 0" → läcka eller
+        # extremt långsamma queries. Hellre lite dyrare per request
+        # än att hela tjänsten 500:ar.
+        from sqlalchemy.pool import NullPool as _NP_master
         import os as _os_pool
         _rev = _os_pool.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
-            pool_recycle=300, pool_timeout=10,
+            poolclass=_NP_master,
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget@{_rev}",
                 "options": (
                     "-c statement_timeout=30000 "
-                    "-c idle_in_transaction_session_timeout=15000 "
-                    "-c idle_session_timeout=30000"
+                    "-c idle_in_transaction_session_timeout=15000"
                 ),
             },
         )
@@ -669,20 +676,18 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
 
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Fallback: master-engine inte initierad än. Använd egen pool
-        # med samma defensiva config som master.
+        # NullPool — se kommentar i init_master_engine för rationale.
+        from sqlalchemy.pool import NullPool as _NP_scope
         import os as _os_pool2
         _rev2 = _os_pool2.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=5, max_overflow=5,
-            pool_recycle=300, pool_timeout=10,
+            poolclass=_NP_scope,
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget-scope@{_rev2}",
                 "options": (
                     "-c statement_timeout=30000 "
-                    "-c idle_in_transaction_session_timeout=15000 "
-                    "-c idle_session_timeout=30000"
+                    "-c idle_in_transaction_session_timeout=15000"
                 ),
             },
         )

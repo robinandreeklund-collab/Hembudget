@@ -295,13 +295,28 @@ def build_app() -> FastAPI:
 
         # === Cloud SQL postgres-state via pg_stat_activity ===
         # Visar TOTAL connection-bild på Postgres-sidan, inte bara vår
-        # pool. Avslöjar om gamla Cloud Run-revisioner håller
-        # connections från sin pool och sprängar 25-cap-taket.
+        # pool. Använder en EGEN connection (NullPool) som bypass:ar
+        # vår vanliga pool — annars går diagnostiken inte att köra
+        # när poolen är saturerad (vilket är PRECIS NÄR vi behöver den).
         try:
-            from sqlalchemy import text as _text_diag
-            from .school.engines import _master_engine as _me_diag
+            from sqlalchemy import (
+                create_engine as _ce_diag, text as _text_diag,
+            )
+            from sqlalchemy.pool import NullPool as _NullPool_diag
+            from .school.engines import (
+                _master_engine as _me_diag, _master_db_url as _murl_diag,
+            )
             if _me_diag is not None:
-                with _me_diag.connect() as conn:
+                _diag_url = _murl_diag()
+                _diag_engine = _ce_diag(
+                    _diag_url, poolclass=_NullPool_diag,
+                    connect_args={
+                        "connect_timeout": 3,
+                        "application_name": "hembudget-diag",
+                        "options": "-c statement_timeout=5000",
+                    } if _diag_url.startswith("postgresql") else {},
+                )
+                with _diag_engine.connect() as conn:
                     result = conn.execute(_text_diag(
                         """
                         SELECT
