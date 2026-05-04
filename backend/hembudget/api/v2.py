@@ -214,7 +214,9 @@ class HubMonthSummary(BaseModel):
     income: float
     expenses: float
     saved: float
-    save_rate_pct: float
+    # None när inkomst = 0 (division-by-zero-fall). Frontend visar "—"
+    # för att inte påstå "0 % sparkvot" när vi faktiskt inte vet.
+    save_rate_pct: Optional[float] = None
     transactions_count: int
 
 
@@ -298,7 +300,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             v2_partner_model="solo",
             month_summary=HubMonthSummary(
                 income=0, expenses=0, saved=0,
-                save_rate_pct=0, transactions_count=0,
+                save_rate_pct=None, transactions_count=0,
             ),
             total_balance=0,
             accounts_count=0,
@@ -389,7 +391,8 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
     # 2. Pentagon (live via wellbeing-calculator)
     pentagon: Optional[HubPentagon] = None
     month_summary = HubMonthSummary(
-        income=0, expenses=0, saved=0, save_rate_pct=0, transactions_count=0,
+        income=0, expenses=0, saved=0,
+        save_rate_pct=None, transactions_count=0,
     )
     total_balance = 0.0
     accounts_count = 0
@@ -468,12 +471,14 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
                 and not bool(getattr(t, "is_transfer", False))
             )
             saved = income - expenses
-            save_rate = (saved / income * 100) if income > 0 else 0.0
+            save_rate: Optional[float] = (
+                round(saved / income * 100, 1) if income > 0 else None
+            )
             month_summary = HubMonthSummary(
                 income=round(income, 2),
                 expenses=round(expenses, 2),
                 saved=round(saved, 2),
-                save_rate_pct=round(save_rate, 1),
+                save_rate_pct=save_rate,
                 transactions_count=len(txs),
             )
 
@@ -849,7 +854,8 @@ class V2BudgetSummary(BaseModel):
     expenses_total: float
     planned_expenses_total: float
     saved: float
-    save_rate_pct: float
+    # None när income_total = 0 — frontend visar "—" istället för 0 %.
+    save_rate_pct: Optional[float] = None
     days_into_month: int
     days_in_month: int
     progress_pct: float
@@ -950,7 +956,7 @@ def _empty_budget(student_id: int, month: str) -> V2BudgetResponse:
             expenses_total=0,
             planned_expenses_total=0,
             saved=0,
-            save_rate_pct=0,
+            save_rate_pct=None,
             days_into_month=today.day,
             days_in_month=days_in_month,
             progress_pct=0,
@@ -1074,7 +1080,10 @@ def get_budget(
             income_total = float(summ.income or 0)
             expenses_total = float(summ.expenses or 0)
             saved = income_total - expenses_total
-            save_rate = (saved / income_total * 100) if income_total > 0 else 0.0
+            save_rate: Optional[float] = (
+                round(saved / income_total * 100, 1)
+                if income_total > 0 else None
+            )
             planned_total = float(sum(
                 Decimal(c.planned)
                 for c in categories
@@ -1093,7 +1102,7 @@ def get_budget(
                     expenses_total=round(expenses_total, 2),
                     planned_expenses_total=round(planned_total, 2),
                     saved=round(saved, 2),
-                    save_rate_pct=round(save_rate, 1),
+                    save_rate_pct=save_rate,
                     days_into_month=days_into,
                     days_in_month=days_in_month,
                     progress_pct=round(progress_pct, 1),
@@ -7532,13 +7541,15 @@ def buy_fund(
                 cash_remaining=float(cash),
             )
 
-        # 1. Cash-uttag
+        # 1. Cash-uttag · markera som transfer (kapital-omflyttning,
+        # inte konsumtion) så hub inte räknar fond-köp som utgift.
         tx = Transaction(
             account_id=acc.id,
             date=today,
             amount=-amount,
             raw_description=f"Köp fond · {body.fund_name}",
             user_verified=True,
+            is_transfer=True,
             hash=idem,
         )
         s.add(tx)

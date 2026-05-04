@@ -159,7 +159,11 @@ def buy_stock(
             f"Köp {quantity} st {stock.name} @ {price} "
             f"{stock.currency or 'SEK'}{fx_note}"
         ),
-        is_transfer=False,
+        # Investeringar (cash → värdepapper inom ISK) räknas som
+        # transfer i hub-summor — det är kapital-omflyttning, inte
+        # konsumtion. Annars syns aktie-köp som "utgifter denna mån"
+        # och drar ned sparkvoten artificiellt.
+        is_transfer=True,
         hash=h,
     )
     scope_session.add(cash_tx)
@@ -302,7 +306,9 @@ def sell_stock(
         amount=net_proceeds,
         currency=acc.currency or "SEK",
         raw_description=f"Sälj {quantity} st {stock.name} @ {price}",
-        is_transfer=False,
+        # Realisering av värdepapper (värdepapper → cash inom ISK) är
+        # symmetrisk med köp — kapital-omflyttning, inte lön/inkomst.
+        is_transfer=True,
         hash=h,
     )
     scope_session.add(cash_tx)

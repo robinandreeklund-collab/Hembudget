@@ -327,17 +327,26 @@ export function HubV2() {
           <div className="hub-recap-cell">
             <div className="hub-recap-eye">Sparkvot</div>
             <div className="hub-recap-num">
-              {month_summary.save_rate_pct.toFixed(1)} %
+              {month_summary.save_rate_pct == null
+                ? "—"
+                : `${month_summary.save_rate_pct.toFixed(1)} %`}
             </div>
             <div className="hub-recap-bar">
               <div
                 className="hub-recap-bar-fill"
                 style={{
-                  width: `${Math.max(0, Math.min(100, month_summary.save_rate_pct))}%`,
+                  width: `${Math.max(
+                    0,
+                    Math.min(100, month_summary.save_rate_pct ?? 0),
+                  )}%`,
                 }}
               />
             </div>
-            <div className="hub-recap-sub">mål 15 %</div>
+            <div className="hub-recap-sub">
+              {month_summary.save_rate_pct == null
+                ? "ingen lön denna mån"
+                : "mål 15 %"}
+            </div>
           </div>
         </div>
 

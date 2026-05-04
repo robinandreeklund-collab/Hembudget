@@ -283,10 +283,16 @@ export function BudgetV2() {
                 <span>/ {SEK(summary.income_total)} inkomst</span>
               </div>
               <div className="budget-total-meta">
-                Sparkvot {summary.save_rate_pct.toFixed(1)} %
-                {summary.save_rate_pct >= 15
-                  ? " · över mål 15 %"
-                  : " · under mål 15 %"}
+                {summary.save_rate_pct == null
+                  ? "Sparkvot — (ingen lön ännu)"
+                  : (
+                    <>
+                      Sparkvot {summary.save_rate_pct.toFixed(1)} %
+                      {summary.save_rate_pct >= 15
+                        ? " · över mål 15 %"
+                        : " · under mål 15 %"}
+                    </>
+                  )}
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

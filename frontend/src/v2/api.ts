@@ -60,7 +60,7 @@ export type HubMonthSummary = {
   income: number;
   expenses: number;
   saved: number;
-  save_rate_pct: number;
+  save_rate_pct: number | null;
   transactions_count: number;
 };
 
@@ -156,7 +156,7 @@ export type V2BudgetSummary = {
   expenses_total: number;
   planned_expenses_total: number;
   saved: number;
-  save_rate_pct: number;
+  save_rate_pct: number | null;
   days_into_month: number;
   days_in_month: number;
   progress_pct: number;

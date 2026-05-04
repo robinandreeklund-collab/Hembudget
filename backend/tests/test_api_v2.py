@@ -677,6 +677,200 @@ def test_v2_bank_with_account_and_transactions(fx) -> None:
         assert t["account_name"] == "Lönekonto"
 
 
+def test_v2_hub_isk_purchases_count_as_transfer_not_expense(fx) -> None:
+    """ISK-/fond-köp ska markeras med is_transfer=True så hub-summary
+    inte räknar dem som "utgifter denna mån". Pedagogiskt: investering
+    är kapital-omflyttning, inte konsumtion.
+
+    Regression-test för bug där "Sparat denna mån" visade −4 436 kr
+    trots att eleven faktiskt FLYTTAT 5 000 kr till sparkonto + köpt
+    aktier för 4 436 kr (= positiv kapital-omflyttning, inte utgift).
+    """
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    def seed(s) -> None:
+        # Lönekonto med opening + en lön-in-transaktion (riktig inkomst)
+        check = _Acc(
+            name="Lönekonto", bank="SEB", type="checking",
+            currency="SEK", opening_balance=_D("10000"),
+            opening_balance_date=_d(2026, 1, 1),
+        )
+        s.add(check)
+        isk = _Acc(
+            name="ISK", bank="SEB", type="isk",
+            currency="SEK", opening_balance=_D("0"),
+        )
+        s.add(isk)
+        s.flush()
+        # Lön + ICA = riktiga inkomst/utgift
+        s.add(_Tx(
+            account_id=check.id, date=_d.today(),
+            amount=_D("20000"), currency="SEK",
+            raw_description="Lön april", hash="t-isk-lon",
+            user_verified=True, is_transfer=False,
+        ))
+        s.add(_Tx(
+            account_id=check.id, date=_d.today(),
+            amount=_D("-1500"), currency="SEK",
+            raw_description="ICA Maxi", hash="t-isk-ica",
+            user_verified=True, is_transfer=False,
+        ))
+        # ISK-köp · MÅSTE vara is_transfer=True för att inte räknas
+        # som utgift. (stocks/trading.py och fund-buy sätter detta nu.)
+        s.add(_Tx(
+            account_id=isk.id, date=_d.today(),
+            amount=_D("-2657"), currency="SEK",
+            raw_description="Köp 5 st Volvo B @ 529.98 SEK",
+            hash="t-isk-volvo", user_verified=True, is_transfer=True,
+        ))
+        s.add(_Tx(
+            account_id=isk.id, date=_d.today(),
+            amount=_D("-321"), currency="SEK",
+            raw_description="Köp 1 st Electrolux B @ 319.50 SEK",
+            hash="t-isk-elec", user_verified=True, is_transfer=True,
+        ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get(
+        "/v2/hub", headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    ms = r.json()["month_summary"]
+    # Inkomst = bara lönen, INTE ISK-köp (som är negativa transfers)
+    assert ms["income"] == 20000, ms
+    # Utgifter = bara ICA, INTE ISK-köp
+    assert ms["expenses"] == 1500, ms
+    # Sparat = 20000 - 1500 = 18500 (inte -4436 + 20000-1500=14064 buggen)
+    assert ms["saved"] == 18500, ms
+    # Sparkvot räknas på riktig inkomst
+    assert ms["save_rate_pct"] is not None
+    assert abs(ms["save_rate_pct"] - 92.5) < 0.1, ms
+
+
+def test_v2_hub_leon_scenario_isk_buys_dont_destroy_save_rate(fx) -> None:
+    """Reproduce Leons skärmdump-scenario:
+    - Lönekonto med opening 17 205 (efter april-aktivitet)
+    - Maj-aktivitet: 4 överföringar (5000 kr ISK, 5000 kr sparkonto) +
+      6 ISK-köp för totalt -4 436 kr
+    - Förväntat: hub visar sparat=0, sparkvot=null (ingen lön i maj än)
+    - Buggen var: sparat=-4 436, sparkvot=0.0% (vilseledande)
+    """
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    today = _d.today()
+
+    def seed(s) -> None:
+        check = _Acc(
+            name="Lönekonto", bank="Spelbanken", type="checking",
+            currency="SEK", opening_balance=_D("17205"),
+            opening_balance_date=_d(today.year, today.month, 1),
+        )
+        s.add(check)
+        savings = _Acc(
+            name="Sparkonto", bank="Spelbanken", type="savings",
+            currency="SEK", opening_balance=_D("0"),
+        )
+        s.add(savings)
+        isk = _Acc(
+            name="ISK", bank="Spelbanken", type="isk",
+            currency="SEK", opening_balance=_D("0"),
+        )
+        s.add(isk)
+        s.flush()
+        # Överföringar (transfer-pair)
+        for i, (src, dst, amt) in enumerate([
+            (check, isk, 5000),
+            (check, savings, 5000),
+        ]):
+            out_tx = _Tx(
+                account_id=src.id, date=today, amount=_D(-amt),
+                currency="SEK",
+                raw_description=f"Överföring till {dst.name}",
+                hash=f"leon-tr-out-{i}", is_transfer=True,
+                user_verified=True,
+            )
+            in_tx = _Tx(
+                account_id=dst.id, date=today, amount=_D(amt),
+                currency="SEK",
+                raw_description=f"Överföring från {src.name}",
+                hash=f"leon-tr-in-{i}", is_transfer=True,
+                user_verified=True,
+            )
+            s.add_all([out_tx, in_tx])
+        # 6 ISK-köp · is_transfer=True (efter min fix)
+        isk_amounts = [-321, -589, -166, -245, -460, -2657]
+        for i, amt in enumerate(isk_amounts):
+            s.add(_Tx(
+                account_id=isk.id, date=today, amount=_D(amt),
+                currency="SEK",
+                raw_description=f"Köp aktie #{i}",
+                hash=f"leon-isk-{i}", is_transfer=True,
+                user_verified=True,
+            ))
+
+    _seed_scope(sid, seed)
+
+    r = client.get("/v2/hub", headers={"Authorization": f"Bearer {stu}"})
+    assert r.status_code == 200, r.text
+    ms = r.json()["month_summary"]
+    # Inga riktiga inkomster eller utgifter — allt är transfers/investeringar
+    assert ms["income"] == 0, f"Inkomst ska vara 0 (inga riktiga inkomster), fick {ms['income']}"
+    assert ms["expenses"] == 0, f"Utgifter ska vara 0 (ISK-köp är transfers), fick {ms['expenses']}"
+    assert ms["saved"] == 0, f"Sparat ska vara 0 (inga in/ut), fick {ms['saved']}"
+    assert ms["save_rate_pct"] is None, (
+        "Sparkvot ska vara None när income=0, "
+        f"fick {ms['save_rate_pct']} (vilseleder eleven)"
+    )
+    # Saldot räknas: 17205 (opening) - 10000 (transfers ut från lk)
+    # = 7205 på lönekonto, 5000 på spar, 5000-4438=562 på ISK
+    # Total = 7205 + 5000 + 562 = 12767
+    total = r.json()["total_balance"]
+    assert 12760 <= total <= 12770, f"Total saldo {total} avviker från 12 767"
+
+
+def test_v2_hub_save_rate_null_when_no_income(fx) -> None:
+    """Sparkvot ska vara None (frontend visar "—") när income = 0,
+    inte 0.0 % som vilseleder eleven att tro hen sparar 0 %."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import Account as _Acc, Transaction as _Tx
+
+    def seed(s) -> None:
+        acc = _Acc(
+            name="Lk", bank="B", type="checking", currency="SEK",
+            opening_balance=_D("5000"),
+        )
+        s.add(acc)
+        s.flush()
+        # Bara en utgift, ingen inkomst
+        s.add(_Tx(
+            account_id=acc.id, date=_d.today(),
+            amount=_D("-200"), currency="SEK",
+            raw_description="Willys", hash="t-saverate-1",
+            user_verified=True, is_transfer=False,
+        ))
+
+    _seed_scope(sid, seed)
+    r = client.get(
+        "/v2/hub", headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200
+    ms = r.json()["month_summary"]
+    assert ms["income"] == 0
+    assert ms["expenses"] == 200
+    assert ms["save_rate_pct"] is None, (
+        f"Sparkvot ska vara None när income=0, fick {ms['save_rate_pct']}"
+    )
+
+
 def test_v2_bank_limit_transactions_param(fx) -> None:
     """limit_transactions kapar antalet returnerade transaktioner."""
     client, _tch, _sa, stu, _tid, _said, sid = fx
