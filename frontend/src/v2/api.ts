@@ -262,9 +262,6 @@ export type V2MailSummary = {
   // Realtid-projektion · när nästa pending mail "släpps" till postlådan.
   next_release_at: string | null;
   pending_count: number;
-  // NYA = unhandled + viewed (= need-action), HISTORISKA = paid/handled/expired
-  new_count: number;
-  historical_count: number;
 };
 
 export type MailData = {
@@ -3295,16 +3292,6 @@ export const v2Api = {
   // === /v2/notifications (Fas 2AB · live-notiser) ===
   notifications: () =>
     api<V2NotificationsResponse>("/v2/notifications"),
-  notifMarkRead: (notifId: string) =>
-    api<void>("/v2/notifications/mark-read", {
-      method: "POST",
-      body: JSON.stringify({ notif_id: notifId }),
-    }),
-  notifMarkAllRead: () =>
-    api<void>("/v2/notifications/mark-all-read", {
-      method: "POST",
-      body: "{}",
-    }),
   // === Fas 2AF · skapa uppdrag från lärar-elev-detalj ===
   teacherCreateAssignment: (
     studentId: number,
@@ -3759,14 +3746,7 @@ export const v2Api = {
     api<V2TeacherCreditOverview>(
       `/v2/teacher/students/${studentId}/credit-overview`,
     ),
-  postladan: (
-    filter?:
-      | V2MailType
-      | "unhandled"
-      | "new"
-      | "historical"
-      | "other",
-  ) =>
+  postladan: (filter?: V2MailType | "unhandled" | "other") =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>
     api<V2MailItem>(`/v2/postladan/${mailId}/status`, {

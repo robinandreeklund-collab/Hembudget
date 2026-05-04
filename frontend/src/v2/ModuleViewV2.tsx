@@ -11,7 +11,6 @@
 import { Link } from "react-router-dom";
 import { V2Banner } from "./V2Banner";
 import { ModuleViewInner } from "../pages/ModuleView";
-import "./module-view-v2.css";
 
 
 export function ModuleViewV2() {
@@ -43,11 +42,22 @@ export function ModuleViewV2() {
         </Link>
       </div>
 
-      {/* v2-tema · CSS-overrides i module-view-v2.css mappar v1
-          Tailwind-klasser till mörkt tema (bg-slate-50 → bg-mid,
-          text-slate-900 → vit, etc.). Step-renderare, AI, celebrate
-          fortsätter funka identiskt — bara färgerna skiftas. */}
-      <div className="v2-module-frame">
+      {/*
+       * v1 step-renderare har egen ljus bakgrund (bg-slate-50). Vi
+       * wrappar den i en mörk frame så v2-topbar smälter in. Inom
+       * step-vyn bibehålls v1-färger så pedagogisk kod-renderaren,
+       * AI-knappen, celebrate-overlay etc fortsätter funka identiskt.
+       */}
+      <div
+        style={{
+          background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)",
+          margin: "12px 28px 28px",
+          borderRadius: 16,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 12px 40px rgba(0, 0, 0, 0.4)",
+        }}
+      >
         <ModuleViewInner />
       </div>
     </div>

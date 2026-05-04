@@ -99,47 +99,8 @@ export function NotifBell() {
       : items.filter((n) => n.kind === activeTab);
 
   function handleNotifClick(n: V2Notification) {
-    // 1. Optimistisk UI · sätt unread=false direkt så badge sjunker
-    //    utan att vänta på round-trip / nästa poll.
-    if (n.unread) {
-      setData((prev) => {
-        if (!prev) return prev;
-        const items = prev.items.map((it) =>
-          it.id === n.id ? { ...it, unread: false } : it,
-        );
-        const unread_count = items.filter((it) => it.unread).length;
-        return {
-          ...prev,
-          items,
-          summary: { ...prev.summary, unread_count },
-        };
-      });
-      // 2. Persistera read-state i backend (eld and forget · backend
-      //    är idempotent. Felfall fångas av nästa poll som återställer.)
-      v2Api.notifMarkRead(n.id).catch(() => {
-        // tyst — nästa poll synkar
-      });
-    }
     setOpen(false);
     if (n.target_route) navigate(n.target_route);
-  }
-
-  async function handleMarkAllRead() {
-    // Optimistisk: rensa alla unread direkt
-    setData((prev) => {
-      if (!prev) return prev;
-      const items = prev.items.map((it) => ({ ...it, unread: false }));
-      return {
-        ...prev,
-        items,
-        summary: { ...prev.summary, unread_count: 0 },
-      };
-    });
-    try {
-      await v2Api.notifMarkAllRead();
-    } catch {
-      // Nästa poll synkar
-    }
   }
 
   function handleToastClick() {
@@ -178,36 +139,13 @@ export function NotifBell() {
                   {data?.summary.new_today_count || 0} nya idag
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {unread > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleMarkAllRead}
-                    title="Markera alla som lästa"
-                    style={{
-                      background: "transparent",
-                      border: "1px solid var(--line-strong)",
-                      color: "var(--text-mid)",
-                      fontFamily: "var(--mono)",
-                      fontSize: 9.5,
-                      letterSpacing: "1px",
-                      textTransform: "uppercase",
-                      padding: "6px 10px",
-                      borderRadius: 100,
-                      cursor: "pointer",
-                    }}
-                  >
-                    ✓ Alla
-                  </button>
-                )}
-                <button
-                  className="notif-drawer-close"
-                  onClick={() => setOpen(false)}
-                  aria-label="Stäng"
-                >
-                  ×
-                </button>
-              </div>
+              <button
+                className="notif-drawer-close"
+                onClick={() => setOpen(false)}
+                aria-label="Stäng"
+              >
+                ×
+              </button>
             </div>
 
             <div className="notif-drawer-actions">

@@ -1103,38 +1103,6 @@ class StudentActivity(MasterBase):
     )
 
 
-class V2NotifReadState(MasterBase):
-    """Spårar att en elev har läst en specifik notif via klick.
-
-    Notifs i sig är härledda (ej egna rader) — de aggregeras live från
-    Message/Assignment/StudentModule etc i /v2/notifications. När
-    eleven klickar på en notif loggas (student_id, notif_id) här så
-    nästa poll filtrerar bort den från unread-räkningen.
-
-    notif_id är samma sträng som V2Notification.id i API-responsen
-    ("uppdrag-42", "msg-17", "modul-7", "mail-128", ...).
-    """
-    __tablename__ = "v2_notif_read_state"
-    __table_args__ = (
-        UniqueConstraint(
-            "student_id", "notif_id",
-            name="uq_v2_notif_read",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    student_id: Mapped[int] = mapped_column(
-        ForeignKey("students.id", ondelete="CASCADE"),
-        nullable=False, index=True,
-    )
-    notif_id: Mapped[str] = mapped_column(
-        String(60), nullable=False, index=True,
-    )
-    read_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(),
-    )
-
-
 # Aktie-master-modeller (StockMaster, StockQuote, LatestStockQuote,
 # MarketCalendar) — importeras här så att MasterBase.metadata känner
 # till dem vid create_all.

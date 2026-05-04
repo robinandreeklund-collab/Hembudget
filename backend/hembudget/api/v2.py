@@ -1876,10 +1876,6 @@ class V2MailSummary(BaseModel):
     # Frontend kan visa "nästa brev kommer 14:32" eller liknande.
     next_release_at: Optional[datetime] = None
     pending_count: int = 0
-    # NYA = unhandled + viewed (= unhandled_count för bakåtkompat)
-    # HISTORISKA = handled + paid + exported + expired
-    new_count: int = 0
-    historical_count: int = 0
 
 
 class V2MailResponse(BaseModel):
@@ -1941,23 +1937,14 @@ def get_mail(
                     MailItem.received_at.desc(), MailItem.id.desc()
                 )
             )
-            if filter == "unhandled" or filter == "new":
-                # NYA / Ohanterade = unhandled OCH viewed.
+            if filter == "unhandled":
+                # 'Ohanterade' = både unhandled OCH viewed.
                 # Brev som eleven läst men inte aktivt hanterat
                 # (betalat/exporterat/ignorerat) räknas som ohanterade
-                # tills explicit val gjorts.
+                # tills explicit val gjorts. Annars känns det som om
+                # öppning = hantering, vilket användaren inte vill.
                 q = q.filter(
                     MailItem.status.in_(["unhandled", "viewed"])
-                )
-            elif filter == "historical":
-                # HISTORISKA = brev som eleven har avslutat (paid,
-                # exported, expired) eller läst utan action (handled).
-                # Här hamnar betalda fakturor, lästa lönespec/info-brev,
-                # och fakturor eleven valt att ignorera.
-                q = q.filter(
-                    MailItem.status.in_(
-                        ["handled", "paid", "exported", "expired"],
-                    )
                 )
             elif filter == "invoice":
                 q = q.filter(MailItem.mail_type == "invoice")
@@ -1992,7 +1979,6 @@ def get_mail(
             authority_count = 0
             info_count = 0
             other_count = 0
-            historical_count = 0
             to_pay = Decimal("0")
             incoming = Decimal("0")
             overdue = 0
@@ -2005,8 +1991,6 @@ def get_mail(
                 # exporterar, betalar eller ignorerar explicit.
                 if m.status in ("unhandled", "viewed"):
                     unhandled_count += 1
-                elif m.status in ("handled", "paid", "exported", "expired"):
-                    historical_count += 1
                 if m.mail_type == "invoice":
                     invoice_count += 1
                 elif m.mail_type == "salary_slip":
@@ -2106,8 +2090,6 @@ def get_mail(
                         next_pending[0] if next_pending else None
                     ),
                     pending_count=int(pending_count or 0),
-                    new_count=unhandled_count,
-                    historical_count=historical_count,
                 ),
                 items=items,
             )
@@ -11341,18 +11323,9 @@ def get_mail_detail(
         if m.released_at is not None and m.released_at > datetime.utcnow():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
 
-        # Auto-status vid öppning · skiljer på "kräver action"-brev
-        # och "läs och dismissera"-brev:
-        # - invoice / reminder med belopp → status="viewed" så eleven
-        #   måste fortfarande betala/exportera/ignorera
-        # - info / authority / salary_slip → status="handled" direkt,
-        #   det finns ingen action att göra (lönespec är bara info)
+        # Markera viewed om unhandled
         if m.status == "unhandled":
-            auto_handled_types = {"info", "authority", "salary_slip"}
-            if m.mail_type in auto_handled_types:
-                m.status = "handled"
-            else:
-                m.status = "viewed"
+            m.status = "viewed"
             s.flush()
 
         cc_data: Optional[V2CcInvoiceData] = None
@@ -15289,65 +15262,6 @@ def _ensure_student_has_initial_data(
     return True
 
 
-def _seed_default_budget(s, *, profile) -> None:
-    """Seedar en default-budget för INNEVARANDE månad om eleven
-    inte redan har en. Konsumentverket-skalad mot profilens lön +
-    boendekostnad.
-
-    Idempotent: gör inget om budget för månaden redan finns.
-    Pedagogiken: matchar prototypen /proposals/vol-7/elev.html
-    (Hyra/Mat/Restaurang/Transport/Sparmål/ISK/Förbrukning/Försäkringar).
-    """
-    from datetime import date as _d_b
-    from decimal import Decimal as _D_b
-    from ..db.models import Budget, Category
-
-    today = _d_b.today()
-    ym = f"{today.year:04d}-{today.month:02d}"
-
-    # Finns budget redan? skip
-    existing = (
-        s.query(Budget).filter(Budget.month == ym).first()
-    )
-    if existing is not None:
-        return
-
-    net = int(profile.monthly_net or 23000)
-    housing = int(profile.housing.monthly_cost or 7000)
-
-    # Default-rader (kategori-namn, planerat belopp).
-    # Sparmål/ISK skalas mot 10 + 3 % av nettolön (pay-yourself-first).
-    # Övriga utgifter mot Konsumentverkets schabloner.
-    rows: list[tuple[str, int]] = [
-        ("Hyra & boende", housing),
-        ("Mat & livsmedel", 4000),
-        ("Restaurang & nöje", 1200),
-        ("Transport", 1100),
-        ("Sparmål", max(500, int(net * 0.10))),
-        ("Avanza ISK", max(200, int(net * 0.03))),
-        ("Förbrukningsvaror", 1320),
-        ("Försäkringar", 320),
-    ]
-
-    for cat_name, amount in rows:
-        cat = (
-            s.query(Category)
-            .filter(Category.name == cat_name)
-            .first()
-        )
-        if cat is None:
-            cat = Category(name=cat_name)
-            s.add(cat)
-            s.flush()
-        b = Budget(
-            month=ym,
-            category_id=cat.id,
-            planned_amount=_D_b(str(amount)),
-        )
-        s.add(b)
-    s.flush()
-
-
 def _auto_pay_historical_invoices(
     student: "Student", year_month: str,
 ) -> None:
@@ -15668,20 +15582,6 @@ def _seed_initial_student_data(
                 import logging
                 logging.getLogger(__name__).exception(
                     "_seed_initial_student_data: rental seed failed för %s",
-                    student.id,
-                )
-
-            # === Default-budget · Konsumentverket-baserad ===
-            # Pedagogiken: eleven ska SE en budget för innevarande
-            # månad direkt — inte tom-state. Budget speglar prototypens
-            # struktur (Hyra/Mat/Restaurang/Transport/Sparmål/ISK/
-            # Förbrukning/Försäkringar) skalad mot profil-lön.
-            try:
-                _seed_default_budget(s, profile=profile)
-            except Exception:
-                import logging
-                logging.getLogger(__name__).exception(
-                    "_seed_initial_student_data: budget seed failed för %s",
                     student.id,
                 )
 
@@ -16677,73 +16577,6 @@ def _time_label_for(dt: datetime) -> str:
     return f"{dt.day} {months[dt.month - 1]}"
 
 
-class V2NotifMarkReadIn(BaseModel):
-    notif_id: str = Field(min_length=1, max_length=60)
-
-
-@router.post("/notifications/mark-read", status_code=204)
-def mark_v2_notif_read(
-    body: V2NotifMarkReadIn,
-    info: TokenInfo = Depends(require_token),
-) -> Response:
-    """Markera en notif som läst · idempotent.
-
-    Frontend kallar denna när eleven klickar på en notif. Räkningen
-    av olästa minskar omedelbart eftersom nästa GET /v2/notifications
-    filtrerar med read_ids.
-    """
-    if info.role != "student" or info.student_id is None:
-        raise HTTPException(403, "Endast elever kan markera notiser")
-    from ..school.models import V2NotifReadState as _NRS
-    with master_session() as ms:
-        existing = (
-            ms.query(_NRS)
-            .filter(
-                _NRS.student_id == info.student_id,
-                _NRS.notif_id == body.notif_id,
-            )
-            .first()
-        )
-        if existing is None:
-            ms.add(_NRS(
-                student_id=info.student_id,
-                notif_id=body.notif_id,
-            ))
-            ms.commit()
-    return Response(status_code=204)
-
-
-@router.post("/notifications/mark-all-read", status_code=204)
-def mark_all_v2_notifs_read(
-    info: TokenInfo = Depends(require_token),
-) -> Response:
-    """Markera ALLA aktuella notifs som lästa (one-click)."""
-    if info.role != "student" or info.student_id is None:
-        raise HTTPException(403, "Endast elever")
-    # Bygg notifs via samma aggregator-helper som GET /notifications
-    # använder. Att kalla route-handlern direkt fungerar i Python men
-    # kan smälla i edge-case (Depends-default-arg, sync/async-mismatch).
-    response = _build_student_notifications(info.student_id)
-    from ..school.models import V2NotifReadState as _NRS
-    with master_session() as ms:
-        existing_ids = {
-            r.notif_id for r in (
-                ms.query(_NRS)
-                .filter(_NRS.student_id == info.student_id)
-                .all()
-            )
-        }
-        for n in response.items:
-            if n.id in existing_ids:
-                continue
-            ms.add(_NRS(
-                student_id=info.student_id,
-                notif_id=n.id,
-            ))
-        ms.commit()
-    return Response(status_code=204)
-
-
 @router.get(
     "/notifications", response_model=V2NotificationsResponse,
 )
@@ -16768,14 +16601,7 @@ def get_v2_notifications(
             items=[],
         )
 
-    return _build_student_notifications(info.student_id)
-
-
-def _build_student_notifications(
-    sid: int,
-) -> V2NotificationsResponse:
-    """Aggregator för elev-notiser · delas av GET /notifications och
-    POST /mark-all-read så vi inte behöver kalla route-handler direkt."""
+    sid = info.student_id
     notifs: list[V2Notification] = []
     now = datetime.utcnow()
     cutoff = now - timedelta(days=14)
@@ -16789,26 +16615,6 @@ def _build_student_notifications(
                     new_today_count=0, by_kind={},
                 ),
                 items=[],
-            )
-
-        # Hämta vilka notif-IDs eleven REDAN klickat på (= read).
-        # Notif-id är härlett ("uppdrag-42", "modul-7" etc.) så vi
-        # joinar in det per item nedan. Om V2NotifReadState-tabellen
-        # ännu inte finns (gammal scope, migration ej körd) → tom
-        # set så aggregator inte kraschar.
-        read_ids: set[str] = set()
-        try:
-            from ..school.models import V2NotifReadState as _NRS
-            read_ids = {
-                r.notif_id for r in (
-                    ms.query(_NRS).filter(_NRS.student_id == sid).all()
-                )
-            }
-        except Exception:
-            import logging
-            logging.getLogger(__name__).warning(
-                "V2NotifReadState query failed — fortsätter med tomt "
-                "read_ids så notifs kan visas",
             )
 
         # 1. Lärar-meddelanden (olästa = sender_role=teacher + read_at=None)
@@ -16828,16 +16634,15 @@ def _build_student_notifications(
             body = (m.body or "")[:140]
             if len(m.body or "") > 140:
                 body += "…"
-            nid = f"msg-{m.id}"
             notifs.append(V2Notification(
-                id=nid,
+                id=f"msg-{m.id}",
                 kind="teacher",
                 icon="AL",
                 occurred_at=m.created_at,
                 time_label=_time_label_for(m.created_at),
                 title="Meddelande från läraren",
                 body=body,
-                unread=(m.read_at is None) and (nid not in read_ids),
+                unread=m.read_at is None,
                 target_route="/v2/meddelanden",
             ))
 
@@ -16860,13 +16665,9 @@ def _build_student_notifications(
         for a in assignments:
             if a.manually_completed_at is not None:
                 continue
-            nid = f"uppdrag-{a.id}"
-            # Unread om < 7 dagar gammal OCH eleven inte klickat än
-            age_unread = (
-                (now - a.created_at).total_seconds() < 7 * 24 * 3600
-            )
+            unread = (now - a.created_at).total_seconds() < 7 * 24 * 3600
             notifs.append(V2Notification(
-                id=nid,
+                id=f"uppdrag-{a.id}",
                 kind="uppdrag",
                 icon="▷",
                 occurred_at=a.created_at,
@@ -16879,54 +16680,8 @@ def _build_student_notifications(
                         if a.due_date else ""
                     )
                 ),
-                unread=age_unread and (nid not in read_ids),
+                unread=unread,
                 target_route="/v2/uppdrag",
-            ))
-
-        # 2b. Nya modul-tilldelningar (StudentModule, ej started_at).
-        # Visas som "modul"-notif så eleven ser att läraren tilldelat
-        # en modul — inte bara dess underliggande uppdrag.
-        student_modules = (
-            ms.query(_SchoolStudentModule)
-            .filter(
-                _SchoolStudentModule.student_id == sid,
-                _SchoolStudentModule.assigned_at >= cutoff,
-            )
-            .order_by(_SchoolStudentModule.assigned_at.desc())
-            .limit(10)
-            .all()
-        )
-        for sm in student_modules:
-            mod = ms.get(_SchoolModule, sm.module_id)
-            if mod is None:
-                continue
-            nid = f"modul-{sm.id}"
-            age_unread = (
-                (now - sm.assigned_at).total_seconds() < 7 * 24 * 3600
-            )
-            # Antal steg + uppskattad tid (om finns på modulen)
-            n_steps = (
-                ms.query(_SchoolModuleStep)
-                .filter(_SchoolModuleStep.module_id == mod.id)
-                .count()
-            )
-            time_est = getattr(mod, "estimated_minutes", None)
-            time_part = (
-                f" · ~{time_est} min" if time_est else ""
-            )
-            notifs.append(V2Notification(
-                id=nid,
-                kind="modul",
-                icon="M",
-                occurred_at=sm.assigned_at,
-                time_label=_time_label_for(sm.assigned_at),
-                title=f"{teacher_name} tilldelade modul",
-                body=(
-                    f"<em>{mod.title}</em> · {n_steps} steg"
-                    f"{time_part} · rekommenderad"
-                ),
-                unread=age_unread and (nid not in read_ids),
-                target_route=f"/v2/moduler/{mod.id}",
             ))
 
         # 3. Lärar-feedback på reflektioner (senaste 14 dgr · oläst)
@@ -16995,9 +16750,8 @@ def _build_student_notifications(
                         if m.mail_type == "reminder"
                         else "MYNDIGHETSPOST"
                     )
-                    nid = f"mail-{m.id}"
                     notifs.append(V2Notification(
-                        id=nid,
+                        id=f"mail-{m.id}",
                         kind="bank",
                         icon=icon,
                         occurred_at=m.received_at or now,
@@ -17010,7 +16764,7 @@ def _build_student_notifications(
                                 if m.amount is not None else ""
                             )
                         ),
-                        unread=(nid not in read_ids),
+                        unread=True,
                         target_route="/v2/postladan",
                     ))
     except Exception:
