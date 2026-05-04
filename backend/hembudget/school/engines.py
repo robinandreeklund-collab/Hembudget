@@ -167,22 +167,33 @@ def init_master_engine() -> Engine:
         # kunde inte få connection vid startup, container failade
         # listen-on-port → CI rött.
         #
-        # NullPool — se nedan för rationale.
-        # connect_args är minimalt: bara connect_timeout (för att
-        # startup inte ska hänga). statement_timeout togs BORT
-        # eftersom analytical queries (t.ex. budget/_history_median_abs)
-        # legitimt kan ta >30s och killades med "server closed the
-        # connection unexpectedly". Med NullPool finns ingen pool
-        # att skydda från idle-läckor → idle_session_timeout och
-        # idle_in_transaction_session_timeout behövs inte heller.
-        from sqlalchemy.pool import NullPool as _NP_master
+        # QueuePool 10+10 = max 20 per Cloud-Run-revision.
+        # Cloud SQL db-g1-small har 50 max_connections → ~45 användbara
+        # → även med deploy-overlap (gammal+ny revision = 40 conn)
+        # finns headroom.
+        #
+        # NullPool användes som diagnostik tidigare för att bevisa att
+        # det INTE fanns connection-leakar. Det funkade men kostade
+        # 10-30 ms per query för en ny TCP-socket → klass-overview
+        # med 28 elever × ~5 queries kunde bli 1-3 s bara av
+        # connection-setup. QueuePool återanvänder sockets → varje
+        # query betalar bara round-trip-tiden.
+        #
+        # idle_in_transaction_session_timeout=15s skyddar mot
+        # transaktioner som glömts öppna (läcka som annars stannar
+        # connectionen i poolen för evigt).
+        # statement_timeout sätts INTE — analytical queries
+        # (_history_median_abs i budget) kan legitimt ta >30s.
+        # pool_pre_ping=True så stale connections kasseras tyst.
         import os as _os_pool
         _rev = _os_pool.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            poolclass=_NP_master,
+            pool_pre_ping=True, pool_size=10, max_overflow=10,
+            pool_recycle=300, pool_timeout=10,
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget@{_rev}",
+                "options": "-c idle_in_transaction_session_timeout=15000",
             },
         )
     elif not is_sqlite:
@@ -666,15 +677,17 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
 
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # NullPool — se kommentar i init_master_engine för rationale.
-        from sqlalchemy.pool import NullPool as _NP_scope
+        # Fallback-pool om master-engine inte är initierad än.
+        # Samma config som master.
         import os as _os_pool2
         _rev2 = _os_pool2.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            poolclass=_NP_scope,
+            pool_pre_ping=True, pool_size=10, max_overflow=10,
+            pool_recycle=300, pool_timeout=10,
             connect_args={
                 "connect_timeout": 5,
                 "application_name": f"hembudget-scope@{_rev2}",
+                "options": "-c idle_in_transaction_session_timeout=15000",
             },
         )
     engine = create_engine(url, **engine_kwargs)
