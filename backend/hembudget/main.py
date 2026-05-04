@@ -344,7 +344,18 @@ def _demo_bootstrap() -> None:
 @app.on_event("startup")
 async def _demo_seed_and_scheduler() -> None:
     """School-mode: bygg upp demo-läraren + starta 10-min-reset-loop.
-    Skippas tyst om school-mode inte är aktivt eller om init misslyckas."""
+    Skippas tyst om school-mode inte är aktivt eller om init misslyckas.
+
+    KRITISKT · build_demo() är tung (5 elever × 3 batches × ~30 artifacts
+    = 100+ DB-roundtrips mot Cloud SQL Postgres). Vid kall start kan det
+    ta 1-4 min vilket blockerar /healthz tills startup-hooks är klara.
+    Cloud Run startup probe har 4 min timeout → revision rejected.
+
+    Lösning: master-engine init synkront (snabbt + kritiskt), sedan
+    build_demo i en bakgrundsuppgift som inte blockar uppstart. Demo-
+    data är tillgänglig efter ~10-30 sek på prod istället för före
+    första healthz-svaret. Reset-loopen tar över därefter.
+    """
     import os as _os
     import asyncio
     from datetime import datetime, timedelta
@@ -356,20 +367,32 @@ async def _demo_seed_and_scheduler() -> None:
             return
         from .school.engines import init_master_engine
         from .school.demo_seed import build_demo
+        # Master-engine MÅSTE vara up innan andra requests kommer in.
+        # Snabb operation (create_all + 32 ALTER TABLE-checks).
         init_master_engine()
-        # Första build
-        stats = build_demo()
-        next_demo_reset_at = datetime.utcnow() + timedelta(
-            seconds=DEMO_RESET_INTERVAL_SECONDS,
-        )
-        logging.getLogger(__name__).info("demo seed: %s", stats)
 
-        async def _reset_loop():
+        async def _first_build_and_then_loop():
+            """Första build + sen 10-min loop. Allt async-bakgrund så
+            startup-probe hinner svara på /healthz."""
             global next_demo_reset_at
+            try:
+                # Första build i bakgrund — frigör event-loopen så
+                # /healthz kan svara medan demo byggs.
+                stats = await asyncio.to_thread(build_demo)
+                next_demo_reset_at = datetime.utcnow() + timedelta(
+                    seconds=DEMO_RESET_INTERVAL_SECONDS,
+                )
+                logging.getLogger(__name__).info("demo seed: %s", stats)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "first demo build misslyckades — reset-loop "
+                    "fortsätter ändå",
+                )
+
             while True:
                 try:
                     await asyncio.sleep(DEMO_RESET_INTERVAL_SECONDS)
-                    s = build_demo()
+                    s = await asyncio.to_thread(build_demo)
                     next_demo_reset_at = datetime.utcnow() + timedelta(
                         seconds=DEMO_RESET_INTERVAL_SECONDS,
                     )
@@ -377,9 +400,11 @@ async def _demo_seed_and_scheduler() -> None:
                 except asyncio.CancelledError:
                     break
                 except Exception:
-                    logging.getLogger(__name__).exception("demo reset misslyckades")
+                    logging.getLogger(__name__).exception(
+                        "demo reset misslyckades",
+                    )
 
-        asyncio.create_task(_reset_loop())
+        asyncio.create_task(_first_build_and_then_loop())
     except Exception:
         logging.getLogger(__name__).exception("demo seed misslyckades")
 
