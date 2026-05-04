@@ -167,27 +167,16 @@ def init_master_engine() -> Engine:
         # kunde inte få connection vid startup, container failade
         # listen-on-port → CI rött.
         #
-        # connect_timeout=5: om Cloud SQL inte svarar inom 5s ska vi
-        # ge upp och returnera ett fel uppåt — INTE hänga startup-
-        # hooken. Tidigare hängde vi förbi Cloud Run:s 240s timeout.
-        #
-        # statement_timeout=30000 (30s): hård gräns på QUERY-tid också,
-        # inte bara connect-tid.
-        #
-        # idle_session_timeout=30000 (30s): Postgres dödar SJÄLV idle
-        # connections efter 30s. KRITISKT på Cloud Run där gamla
-        # revisioner annars kan hålla pooler från sin förra
-        # konfiguration (8+8 = 16 conn) tills de skalas ner — vilket
-        # kan ta minuter och tillsammans med ny revisions pool sprängs
-        # 25-cap-taket. Med detta dör connections från övergivna
-        # revisioner inom 30 s utan att vi behöver göra något.
-        #
-        # application_name: gör synligt i pg_stat_activity vilken
-        # Cloud Run-revision en connection tillhör.
+        # Pool 5+5 = max 10 per Cloud-Run-revision. Tidigare 2+2 räckte
+        # inte för normal trafik (frontend dashboard pollar 10+ parallella
+        # endpoints) → /healthz/db själv kunde inte få en connection.
+        # 5+5 + Postgres idle_session_timeout=30s = även med deploy-
+        # overlap (gamla revisionen dör på Postgres-sidan inom 30 s)
+        # håller vi oss under Cloud SQL:s 25-cap.
         import os as _os_pool
         _rev = _os_pool.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=2,
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
             pool_recycle=300, pool_timeout=10,
             connect_args={
                 "connect_timeout": 5,
@@ -685,7 +674,7 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
         import os as _os_pool2
         _rev2 = _os_pool2.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=2, max_overflow=2,
+            pool_pre_ping=True, pool_size=5, max_overflow=5,
             pool_recycle=300, pool_timeout=10,
             connect_args={
                 "connect_timeout": 5,
