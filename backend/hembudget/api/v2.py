@@ -16720,8 +16720,10 @@ def mark_all_v2_notifs_read(
     """Markera ALLA aktuella notifs som lästa (one-click)."""
     if info.role != "student" or info.student_id is None:
         raise HTTPException(403, "Endast elever")
-    # Hämta alla notif-ids genom att kalla aggregeringen igen
-    response = get_v2_notifications(info)  # type: ignore[arg-type]
+    # Bygg notifs via samma aggregator-helper som GET /notifications
+    # använder. Att kalla route-handlern direkt fungerar i Python men
+    # kan smälla i edge-case (Depends-default-arg, sync/async-mismatch).
+    response = _build_student_notifications(info.student_id)
     from ..school.models import V2NotifReadState as _NRS
     with master_session() as ms:
         existing_ids = {
@@ -16766,7 +16768,14 @@ def get_v2_notifications(
             items=[],
         )
 
-    sid = info.student_id
+    return _build_student_notifications(info.student_id)
+
+
+def _build_student_notifications(
+    sid: int,
+) -> V2NotificationsResponse:
+    """Aggregator för elev-notiser · delas av GET /notifications och
+    POST /mark-all-read så vi inte behöver kalla route-handler direkt."""
     notifs: list[V2Notification] = []
     now = datetime.utcnow()
     cutoff = now - timedelta(days=14)
@@ -16784,13 +16793,23 @@ def get_v2_notifications(
 
         # Hämta vilka notif-IDs eleven REDAN klickat på (= read).
         # Notif-id är härlett ("uppdrag-42", "modul-7" etc.) så vi
-        # joinar in det per item nedan.
-        from ..school.models import V2NotifReadState as _NRS
-        read_ids = {
-            r.notif_id for r in (
-                ms.query(_NRS).filter(_NRS.student_id == sid).all()
+        # joinar in det per item nedan. Om V2NotifReadState-tabellen
+        # ännu inte finns (gammal scope, migration ej körd) → tom
+        # set så aggregator inte kraschar.
+        read_ids: set[str] = set()
+        try:
+            from ..school.models import V2NotifReadState as _NRS
+            read_ids = {
+                r.notif_id for r in (
+                    ms.query(_NRS).filter(_NRS.student_id == sid).all()
+                )
+            }
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "V2NotifReadState query failed — fortsätter med tomt "
+                "read_ids så notifs kan visas",
             )
-        }
 
         # 1. Lärar-meddelanden (olästa = sender_role=teacher + read_at=None)
         from ..school.models import Message as _M
