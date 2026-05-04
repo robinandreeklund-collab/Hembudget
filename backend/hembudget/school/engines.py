@@ -172,16 +172,31 @@ def init_master_engine() -> Engine:
         # hooken. Tidigare hängde vi förbi Cloud Run:s 240s timeout.
         #
         # statement_timeout=30000 (30s): hård gräns på QUERY-tid också,
-        # inte bara connect-tid. Utan detta kan en enskild query mot
-        # överbelastad Cloud SQL hänga oändligt och blockera hela
-        # request-handlern (startup-hook eller user request) — tester
-        # i prod visar att deploy:en fastnade exakt här.
+        # inte bara connect-tid.
+        #
+        # idle_session_timeout=30000 (30s): Postgres dödar SJÄLV idle
+        # connections efter 30s. KRITISKT på Cloud Run där gamla
+        # revisioner annars kan hålla pooler från sin förra
+        # konfiguration (8+8 = 16 conn) tills de skalas ner — vilket
+        # kan ta minuter och tillsammans med ny revisions pool sprängs
+        # 25-cap-taket. Med detta dör connections från övergivna
+        # revisioner inom 30 s utan att vi behöver göra något.
+        #
+        # application_name: gör synligt i pg_stat_activity vilken
+        # Cloud Run-revision en connection tillhör.
+        import os as _os_pool
+        _rev = _os_pool.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=3, max_overflow=3,
-            pool_recycle=1800, pool_timeout=10,
+            pool_pre_ping=True, pool_size=2, max_overflow=2,
+            pool_recycle=300, pool_timeout=10,
             connect_args={
                 "connect_timeout": 5,
-                "options": "-c statement_timeout=30000",
+                "application_name": f"hembudget@{_rev}",
+                "options": (
+                    "-c statement_timeout=30000 "
+                    "-c idle_in_transaction_session_timeout=15000 "
+                    "-c idle_session_timeout=30000"
+                ),
             },
         )
     elif not is_sqlite:
@@ -666,11 +681,21 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
         # Fallback: master-engine inte initierad än. Använd egen pool
-        # med samma defensiva config som master (3+3, connect_timeout).
+        # med samma defensiva config som master.
+        import os as _os_pool2
+        _rev2 = _os_pool2.environ.get("K_REVISION", "local")
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=3, max_overflow=3,
-            pool_recycle=1800, pool_timeout=10,
-            connect_args={"connect_timeout": 5},
+            pool_pre_ping=True, pool_size=2, max_overflow=2,
+            pool_recycle=300, pool_timeout=10,
+            connect_args={
+                "connect_timeout": 5,
+                "application_name": f"hembudget-scope@{_rev2}",
+                "options": (
+                    "-c statement_timeout=30000 "
+                    "-c idle_in_transaction_session_timeout=15000 "
+                    "-c idle_session_timeout=30000"
+                ),
+            },
         )
     engine = create_engine(url, **engine_kwargs)
     log.info(

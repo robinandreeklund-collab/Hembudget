@@ -240,11 +240,17 @@ def build_app() -> FastAPI:
 
     @app.get("/healthz/db")
     def healthz_db() -> dict:
-        """Diagnostik · pool-config + aktuell användning. Auth-fri så
-        man kan curla från terminalen. Kan tas bort när vi är säkra
-        på att perf är stabil."""
+        """Diagnostik · pool-config + aktuell användning + Cloud SQL
+        connection-state via pg_stat_activity. Auth-fri så man kan
+        curla från terminalen för att se vad SOM faktiskt händer i
+        prod (gamla revisioner som håller connections etc.)."""
         import os as _os_diag
+        import socket as _socket_diag
         out: dict = {
+            "hostname": _socket_diag.gethostname(),
+            "revision": _os_diag.environ.get(
+                "K_REVISION", "",
+            ),  # Cloud Run sätter K_REVISION
             "school_mode": _os_diag.environ.get(
                 "HEMBUDGET_SCHOOL_MODE", "",
             ),
@@ -252,6 +258,7 @@ def build_app() -> FastAPI:
                 _os_diag.environ.get("HEMBUDGET_DATABASE_URL", "").strip(),
             ),
             "engines": {},
+            "postgres": {},
         }
         try:
             from .school import engines as _eng
@@ -285,6 +292,73 @@ def build_app() -> FastAPI:
                 out["engines"][label] = stats
         except Exception as e:
             out["engines_error"] = repr(e)
+
+        # === Cloud SQL postgres-state via pg_stat_activity ===
+        # Visar TOTAL connection-bild på Postgres-sidan, inte bara vår
+        # pool. Avslöjar om gamla Cloud Run-revisioner håller
+        # connections från sin pool och sprängar 25-cap-taket.
+        try:
+            from sqlalchemy import text as _text_diag
+            from .school.engines import _master_engine as _me_diag
+            if _me_diag is not None:
+                with _me_diag.connect() as conn:
+                    result = conn.execute(_text_diag(
+                        """
+                        SELECT
+                            state,
+                            count(*) as n,
+                            min(extract(epoch from now() - state_change))::int as oldest_seconds,
+                            max(extract(epoch from now() - backend_start))::int as oldest_backend_seconds
+                        FROM pg_stat_activity
+                        WHERE datname = current_database()
+                          AND pid <> pg_backend_pid()
+                        GROUP BY state
+                        ORDER BY state NULLS FIRST
+                        """,
+                    ))
+                    by_state: list[dict] = []
+                    total = 0
+                    for row in result:
+                        by_state.append({
+                            "state": row[0] or "(null)",
+                            "count": int(row[1]),
+                            "oldest_in_state_seconds": (
+                                int(row[2]) if row[2] is not None else None
+                            ),
+                            "oldest_backend_seconds": (
+                                int(row[3]) if row[3] is not None else None
+                            ),
+                        })
+                        total += int(row[1])
+                    out["postgres"]["by_state"] = by_state
+                    out["postgres"]["total_connections"] = total
+                    # max_connections från servern
+                    mc = conn.execute(_text_diag(
+                        "SHOW max_connections",
+                    )).scalar()
+                    out["postgres"]["max_connections"] = int(mc)
+                    # Connections per application_name (visar om gamla
+                    # revisioner håller pool — de använder sannolikt
+                    # samma SQLAlchemy-default name).
+                    apps = conn.execute(_text_diag(
+                        """
+                        SELECT
+                            application_name,
+                            count(*) as n
+                        FROM pg_stat_activity
+                        WHERE datname = current_database()
+                          AND pid <> pg_backend_pid()
+                        GROUP BY application_name
+                        ORDER BY n DESC
+                        """,
+                    ))
+                    out["postgres"]["by_application"] = [
+                        {"application": r[0] or "(unset)", "count": int(r[1])}
+                        for r in apps
+                    ]
+        except Exception as e:
+            out["postgres"]["error"] = repr(e)
+
         return out
 
     # Servera byggd frontend (dist/) när den finns i containern.
