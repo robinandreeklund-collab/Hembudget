@@ -154,55 +154,15 @@ def init_master_engine() -> Engine:
 
     url = _master_db_url()
     is_sqlite = url.startswith("sqlite:")
-    is_postgres = url.startswith("postgresql")
     engine_kwargs: dict = {"future": True}
-    if is_postgres:
-        # Master-engine delas med scope-engine i Postgres-läge
-        # (_init_shared_scope_engine återanvänder oss). Vi äger DÄRFÖR
-        # ENSAM Cloud SQL:s ~20 användbara connections.
-        #
-        # 3+3 = max 6 per Cloud-Run-revision. Vid deploy är gamla +
-        # nya revisionen aktiva samtidigt → 6 + 6 = 12 < 20. Med
-        # 6+6 (= 24 totalt under deploy) bröts taket → nya revisionen
-        # kunde inte få connection vid startup, container failade
-        # listen-on-port → CI rött.
-        #
-        # NullPool — kritiskt för att INTE ackumulera idle
-        # connections per revision. Diagnostik visade i prod att
-        # QueuePool 10+10 från GAMLA revisioner som Cloud Run inte
-        # dödat efter deploys håller kvar idle conn → tillsammans
-        # med ny revision sprängs Cloud SQL:s 50-cap → "FATAL:
-        # remaining connection slots are reserved".
-        #
-        # NullPool öppnar+stänger en connection per query (~10-30 ms
-        # overhead över Cloud SQL Unix-socket). Trade-off: lite
-        # långsammare per query, men:
-        #  - Gamla revisioner har 0 lingrande connections
-        #  - Endast aktiva queries håller connection (Cloud Run
-        #    concurrency=20 → max 20 conn per revision även vid
-        #    burst)
-        #  - Ingen risk för pool exhaustion
-        #
-        # Med /v2/notifications cachat 15 s + klass-overview
-        # prefetch + reducerad polling är connection-overhead
-        # försumbart — typiska sidor kör 5-10 queries (50-300 ms
-        # overhead totalt).
-        from sqlalchemy.pool import NullPool as _NP_master
-        import os as _os_pool
-        _rev = _os_pool.environ.get("K_REVISION", "local")
+    if not is_sqlite:
+        # Postgres: pre-ping så stale connections från Cloud SQL inte
+        # smäller. Cloud SQL db-f1-micro har max ~25 connections totalt.
+        # Vi delar mellan master + shared-scope + Postgres internal, så
+        # håll pools små: 2+3=5 per engine = 10 totalt med headroom.
         engine_kwargs.update(
-            poolclass=_NP_master,
-            connect_args={
-                "connect_timeout": 5,
-                "application_name": f"hembudget@{_rev}",
-                "options": "-c idle_in_transaction_session_timeout=15000",
-            },
-        )
-    elif not is_sqlite:
-        # Annan dialekt (MySQL, etc.) — sätt bara generella pool-args.
-        engine_kwargs.update(
-            pool_pre_ping=True, pool_size=3, max_overflow=3,
-            pool_recycle=1800, pool_timeout=10,
+            pool_pre_ping=True, pool_size=2, max_overflow=3,
+            pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)
 
@@ -234,21 +194,6 @@ def init_master_engine() -> Engine:
     _master_session = sessionmaker(
         bind=engine, autoflush=False, expire_on_commit=False,
     )
-    # Logga POOL-CONFIG för verifiering — utan detta kan vi inte
-    # skilja på "fix deployad inte" och "fix räcker inte" när
-    # connections timar ut i prod.
-    try:
-        pool = engine.pool
-        log.info(
-            "MASTER engine initialized · pool_class=%s "
-            "pool_size=%s max_overflow=%s url=%s",
-            type(pool).__name__,
-            getattr(pool, "_pool", None) and pool.size(),
-            getattr(pool, "_max_overflow", None),
-            url.split("@")[-1] if "@" in url else url,
-        )
-    except Exception:
-        pass
     # Cacha kolumn-existens efter migrations. API-lagret konsulterar
     # detta innan deferred-fält accessas så att SELECT inte kraschar
     # mot prod-Postgres där en migration eventuellt failat.
@@ -627,13 +572,9 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     """Lazy-init en gemensam Postgres-engine för ALLA scope-keys.
     Bara när HEMBUDGET_DATABASE_URL är satt.
 
-    I Postgres-läge pekar master + scope på SAMMA databas. För att inte
-    äta Cloud SQL:s 25-connection-tak två gånger återanvänder vi
-    master-engines connection-pool när URL:erna matchar. Tidigare körde
-    vi två separata pooler (4+4 master + 4+4 scope = 16 max) vilket
-    gjorde att vi konstant pendlade nära taket — och vid deploys när
-    gamla + nya revisionen överlappade kortvarigt sprängde vi det med
-    "FATAL: remaining connection slots are reserved" som följd.
+    Bulletproof: även om create_all eller migrationerna failar ska vi
+    kunna returnera en användbar engine + sessionmaker. Annars cachas
+    inte engine, varje request retry:ar och hela tjänsten blir 500.
     """
     global _shared_scope_engine, _shared_scope_session
     if _shared_scope_engine is not None:
@@ -645,57 +586,14 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     from ..db.migrate import run_migrations
 
     url = _master_db_url()
-
-    # Postgres-läge: dela master-engine om den finns (samma DB → samma
-    # pool). Scope-modellerna är registrerade på en separat Base men
-    # ligger fysiskt i samma Postgres-instans, så pooling kan delas.
-    if url.startswith("postgresql") and _master_engine is not None:
-        engine = _master_engine
-        # create_all för Base (scope-tabellerna) — idempotent.
-        try:
-            Base.metadata.create_all(engine)
-        except Exception:
-            log.exception(
-                "shared scope create_all failed (delar master-engine) "
-                "— fortsätter ändå",
-            )
-        try:
-            run_migrations(engine)
-        except Exception:
-            log.exception("shared scope migrations failed — fortsätter")
-        try:
-            _refresh_scope_columns_cache(engine)
-        except Exception:
-            log.exception("scope-columns-cache refresh misslyckades")
-        _shared_scope_engine = engine
-        _shared_scope_session = sessionmaker(
-            bind=engine, autoflush=False, expire_on_commit=False,
-        )
-        log.info(
-            "SCOPE engine initialized (DELAR master-engine, en pool "
-            "för båda)",
-        )
-        return engine, _shared_scope_session
-
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # NullPool — se kommentar i init_master_engine för rationale.
-        from sqlalchemy.pool import NullPool as _NP_scope
-        import os as _os_pool2
-        _rev2 = _os_pool2.environ.get("K_REVISION", "local")
+        # Cloud SQL har låg connection-limit. Håll båda engines små.
         engine_kwargs.update(
-            poolclass=_NP_scope,
-            connect_args={
-                "connect_timeout": 5,
-                "application_name": f"hembudget-scope@{_rev2}",
-                "options": "-c idle_in_transaction_session_timeout=15000",
-            },
+            pool_pre_ping=True, pool_size=2, max_overflow=3,
+            pool_recycle=1800,
         )
     engine = create_engine(url, **engine_kwargs)
-    log.info(
-        "SCOPE engine initialized SEPARAT (master-engine fanns inte "
-        "när vi initierades — egen pool 4+4)",
-    )
 
     # create_all kan misslyckas mot existerande Postgres-schema (typkonflikt,
     # FK-konflikt, etc). Logga och fortsätt — engine är fortfarande
