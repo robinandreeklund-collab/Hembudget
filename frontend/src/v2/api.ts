@@ -3277,6 +3277,13 @@ export const v2Api = {
     api<void>(`/v2/teacher/students/${studentId}`, {
       method: "DELETE",
     }),
+  /** Radera ALLA mina elever (super-admin · destruktiv operation). */
+  teacherDeleteAllMyStudents: () =>
+    api<{
+      deleted_count: number;
+      failed_count: number;
+      failed_ids: number[];
+    }>(`/v2/teacher/students/all`, { method: "DELETE" }),
   // === /v2/teacher/students/{id}/activity-log (Fas 2Y) ===
   teacherStudentHistory: (studentId: number, limit = 100) =>
     api<V2HistoryResponse>(

@@ -56,6 +56,8 @@ export function TeacherCreateStudentV2() {
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<V2CreatedStudentRow | null>(null);
   const [qrStudentId, setQrStudentId] = useState<number | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const navigate = useNavigate();
 
   async function load() {
@@ -67,8 +69,54 @@ export function TeacherCreateStudentV2() {
     }
   }
 
+  async function bulkDeleteAll() {
+    if (!data || data.rows.length === 0) return;
+    const count = data.rows.length;
+    const first = window.confirm(
+      `Radera ALLA ${count} elever permanent?\n\n` +
+      `All scope-data, BankID-sessioner, profiler och login-koder ` +
+      `försvinner. Detta GÅR INTE att ångra.\n\n` +
+      `Klicka OK för att gå vidare till bekräftelse.`,
+    );
+    if (!first) return;
+    const second = window.prompt(
+      `Skriv "RADERA ${count}" för att bekräfta:`,
+    );
+    if (second !== `RADERA ${count}`) {
+      alert("Bekräftelse-text matchade inte. Avbryter.");
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await v2Api.teacherDeleteAllMyStudents();
+      alert(
+        `Radering klar: ${res.deleted_count} elever borta, ` +
+        `${res.failed_count} misslyckades` +
+        (res.failed_count > 0
+          ? `\nFailed IDs: ${res.failed_ids.join(", ")}`
+          : ""),
+      );
+      await load();
+    } catch (e) {
+      alert(`Fel: ${String((e as Error)?.message || e)}`);
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   useEffect(() => {
     load();
+    // Hämta super-admin-status. Importerar api dynamiskt för att inte
+    // ändra existerande imports.
+    import("../api/client").then(({ api }) => {
+      api<{ is_super_admin: boolean }>("/admin/ai/me")
+        .then((d) => {
+          if (d && typeof d.is_super_admin === "boolean") {
+            setIsSuperAdmin(d.is_super_admin);
+          }
+        })
+        .catch(() => undefined);
+    });
   }, []);
 
   if (error && !data) {
@@ -252,21 +300,44 @@ export function TeacherCreateStudentV2() {
             )}
           </div>
           {data.rows.length > 0 && (
-            <button
-              type="button"
-              onClick={async () => {
-                const r = await printAllLoginQrs();
-                if (r.error) alert(r.error);
-              }}
-              className="larare-tb-btn solid"
-              style={{
-                background: "var(--warm, #fbbf24)",
-                color: "#422006",
-                borderColor: "var(--warm, #fbbf24)",
-              }}
-            >
-              🖨 Skriv ut alla koder ({data.rows.length})
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  const r = await printAllLoginQrs();
+                  if (r.error) alert(r.error);
+                }}
+                className="larare-tb-btn solid"
+                style={{
+                  background: "var(--warm, #fbbf24)",
+                  color: "#422006",
+                  borderColor: "var(--warm, #fbbf24)",
+                }}
+              >
+                🖨 Skriv ut alla koder ({data.rows.length})
+              </button>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={bulkDeleteAll}
+                  disabled={bulkDeleting}
+                  className="larare-tb-btn solid"
+                  title="Super-admin: radera ALLA mina elever permanent"
+                  style={{
+                    background: bulkDeleting
+                      ? "rgba(239,68,68,0.4)"
+                      : "rgba(239,68,68,0.9)",
+                    color: "#fff",
+                    borderColor: "rgba(239,68,68,1)",
+                    cursor: bulkDeleting ? "wait" : "pointer",
+                  }}
+                >
+                  {bulkDeleting
+                    ? "⏳ Raderar…"
+                    : `🗑 Radera ALLA elever (${data.rows.length})`}
+                </button>
+              )}
+            </div>
           )}
         </div>
 

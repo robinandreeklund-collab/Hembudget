@@ -15440,6 +15440,141 @@ def v2_delete_student(
     return Response(status_code=204)
 
 
+class V2BulkDeleteResponse(BaseModel):
+    deleted_count: int
+    failed_count: int
+    failed_ids: list[int] = Field(default_factory=list)
+
+
+@router.delete(
+    "/teacher/students/all",
+    response_model=V2BulkDeleteResponse,
+)
+def v2_delete_all_my_students(
+    info: TokenInfo = Depends(require_token),
+) -> V2BulkDeleteResponse:
+    """Radera ALLA elever som tillhör läraren (super-admin-funktion).
+
+    SÄKERHET: använder samma tenant_id-filter-pattern som
+    v2_delete_student. Auto-filter på UPDATE/DELETE i db/base.py
+    skyddar dessutom mot cross-tenant-radering vid bug.
+
+    Returnerar deleted_count + failed_count + failed_ids så UI kan
+    visa exakt resultat. Idempotent: kör flera gånger och få
+    deleted_count=0 efter första.
+    """
+    teacher_id = _require_teacher(info)
+    from ..school.engines import (
+        scope_for_student as _sfs_b, scope_context as _sctx_b,
+        get_scope_session as _gss_b,
+    )
+    from ..db.base import Base, TenantMixin
+
+    deleted = 0
+    failed: list[int] = []
+
+    # Hämta alla elev-ids först
+    with master_session() as ms:
+        student_rows = (
+            ms.query(Student.id)
+            .filter(Student.teacher_id == teacher_id)
+            .all()
+        )
+        student_ids = [r[0] for r in student_rows]
+
+    if not student_ids:
+        return V2BulkDeleteResponse(deleted_count=0, failed_count=0)
+
+    import logging
+    log = logging.getLogger(__name__)
+    log.info(
+        "v2_delete_all_my_students: teacher_id=%s, %d elever att radera",
+        teacher_id, len(student_ids),
+    )
+
+    # Radera en åt gången — om en failar fortsätter vi med nästa.
+    # Per-elev: scope-data först, sen master-row (CASCADE tar
+    # StudentProfile / BankIDSession / WeekTickRun etc).
+    for sid in student_ids:
+        try:
+            with master_session() as s:
+                st = s.get(Student, sid)
+                if st is None or st.teacher_id != teacher_id:
+                    failed.append(sid)
+                    continue
+                scope_key = _sfs_b(st)
+                if not scope_key or not isinstance(scope_key, str):
+                    failed.append(sid)
+                    continue
+
+                # Radera scope-data (alla TenantMixin-tabeller)
+                try:
+                    with _sctx_b(scope_key):
+                        with _gss_b(scope_key)() as ss:
+                            for table in reversed(
+                                Base.metadata.sorted_tables,
+                            ):
+                                cls = next(
+                                    (
+                                        c.class_
+                                        for c in Base.registry.mappers
+                                        if c.local_table is table
+                                    ),
+                                    None,
+                                )
+                                if (cls is None
+                                        or not issubclass(cls, TenantMixin)):
+                                    continue
+                                try:
+                                    ss.query(cls).filter(
+                                        cls.tenant_id == scope_key,
+                                    ).delete(synchronize_session=False)
+                                except Exception:
+                                    log.exception(
+                                        "bulk-delete: failed deleting "
+                                        "%s for scope %s",
+                                        cls.__name__, scope_key,
+                                    )
+                            ss.commit()
+                except Exception:
+                    log.exception(
+                        "bulk-delete: scope-cleanup failed for sid=%s",
+                        sid,
+                    )
+
+                # Radera SQLite-fil-läge (om aktivt)
+                try:
+                    import os as _os_b
+                    from ..school.engines import _scope_db_path
+                    path = _scope_db_path(scope_key)
+                    if path and _os_b.path.exists(path):
+                        _os_b.remove(path)
+                except Exception:
+                    pass
+
+                # Master-radering · CASCADE tar bort relations
+                s.delete(st)
+                s.commit()
+                deleted += 1
+        except Exception:
+            log.exception(
+                "bulk-delete: failed for sid=%s — fortsätter med nästa",
+                sid,
+            )
+            failed.append(sid)
+
+    log.info(
+        "v2_delete_all_my_students: teacher_id=%s, deleted=%d, failed=%d",
+        teacher_id, deleted, len(failed),
+    )
+
+    return V2BulkDeleteResponse(
+        deleted_count=deleted,
+        failed_count=len(failed),
+        failed_ids=failed,
+    )
+
+
 @router.post(
     "/teacher/students/{student_id}/reseed-initial-data",
     response_model=V2ReseedResponse,
