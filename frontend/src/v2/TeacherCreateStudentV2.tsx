@@ -316,12 +316,27 @@ export function TeacherCreateStudentV2() {
               <span>Nivå</span>
               <span>Skapad</span>
               <span>QR</span>
+              <span>Radera</span>
             </div>
             {data.rows.map((row) => (
               <CreatedStudentRow
                 key={row.student_id}
                 row={row}
                 onShowQr={() => setQrStudentId(row.student_id)}
+                onDelete={async () => {
+                  if (!confirm(
+                    `Radera ${row.student_name} permanent? `
+                    + "All scope-data, BankID-sessioner, profil och login-kod försvinner. "
+                    + "Detta går inte att ångra."
+                  )) return;
+                  try {
+                    await v2Api.teacherDeleteStudent(row.student_id);
+                    const next = await v2Api.teacherListCreatedStudents();
+                    setData(next);
+                  } catch (e) {
+                    alert(`Fel: ${String((e as Error)?.message || e)}`);
+                  }
+                }}
               />
             ))}
           </div>
@@ -603,16 +618,18 @@ function CreateForm({
 function CreatedStudentRow({
   row,
   onShowQr,
+  onDelete,
 }: {
   row: V2CreatedStudentRow;
   onShowQr: () => void;
+  onDelete: () => void;
 }) {
   const isPending = !row.activated;
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "120px 1.5fr 110px 110px 110px 100px 80px",
+        gridTemplateColumns: "120px 1.5fr 110px 110px 110px 100px 80px 70px",
         gap: 12,
         padding: "12px 16px",
         borderBottom: "1px solid var(--line, rgba(255,255,255,0.1))",
@@ -732,6 +749,26 @@ function CreatedStudentRow({
         }}
       >
         ▦ QR
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        title="Radera elev permanent"
+        style={{
+          background: "rgba(252,165,165,0.08)",
+          border: "1px solid rgba(252,165,165,0.4)",
+          color: "#fda594",
+          padding: "6px 10px",
+          borderRadius: 6,
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 9.5,
+          fontWeight: 700,
+          letterSpacing: 1.2,
+          textTransform: "uppercase",
+          cursor: "pointer",
+        }}
+      >
+        ✕ Radera
       </button>
     </div>
   );

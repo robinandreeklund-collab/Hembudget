@@ -7557,6 +7557,123 @@ def test_v2_teacher_create_student_random_archetype(fx) -> None:
     assert data["partner_model"] in ("solo", "ai", "klasskompis")
 
 
+def test_v2_teacher_delete_student(fx) -> None:
+    """Lärare kan radera elev permanent · scope-data + master-rad bort."""
+    from hembudget.school.models import Student as _S
+
+    client, tch, *_ = fx
+    # Skapa Otto
+    create_r = client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={"first_name": "Otto", "last_initial": "D."},
+    )
+    assert create_r.status_code == 200, create_r.text
+    otto_id = create_r.json()["student_id"]
+    # Verifiera att han finns
+    with master_session() as s:
+        assert s.get(_S, otto_id) is not None
+    # Radera
+    del_r = client.delete(
+        f"/v2/teacher/students/{otto_id}",
+        headers={"Authorization": f"Bearer {tch}"},
+    )
+    assert del_r.status_code == 204, del_r.text
+    # Verifiera att han är borta
+    with master_session() as s:
+        assert s.get(_S, otto_id) is None
+
+
+def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
+    """Lärare kan inte radera annan lärares elev."""
+    client, _tch, _sa, _stu, _tid, _said, sid = fx
+    # Skapa en annan lärare
+    from hembudget.school.models import Teacher as _T
+    from hembudget.security.crypto import hash_password
+    with master_session() as s:
+        other = _T(
+            email="annan@skola.se",
+            password_hash=hash_password("hemligt12"),
+            display_name="Annan",
+            email_verified_at=datetime.utcnow(),
+        )
+        s.add(other)
+        s.commit()
+        s.refresh(other)
+    login_r = client.post(
+        "/auth/teacher/login",
+        json={"email": "annan@skola.se", "password": "hemligt12"},
+    )
+    assert login_r.status_code == 200
+    other_token = login_r.json()["access_token"]
+    # Försök radera Eva (sid tillhör tch, inte annan)
+    r = client.delete(
+        f"/v2/teacher/students/{sid}",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert r.status_code == 404
+
+
+def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
+    """Reproduce: ny elev → april ska vara HISTORIK (alla fakturor
+    autogiro-betalda, status=paid), inte ohanterade.
+
+    Buggen: april-fakturor seedades med status=unhandled så
+    eleven såg dem som "förfallna" trots att april redan hänt.
+    """
+    from hembudget.api.v2 import _seed_initial_student_data
+    from hembudget.db.models import MailItem
+    from hembudget.school.models import Student as _S
+
+    _client, tch, *_ = fx
+    # Skapa elev (utlöser seed)
+    create_r = _client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "first_name": "Greta",
+            "archetype": "vard_underskoterska",
+            "starting_level": 1,
+        },
+    )
+    assert create_r.status_code == 200, create_r.text
+    sid_g = create_r.json()["student_id"]
+
+    # Kolla i scope-DB att alla fakturor från förra månaden är paid
+    from datetime import date as _d
+    today = _d.today()
+    if today.month == 1:
+        prev_y, prev_m = today.year - 1, 12
+    else:
+        prev_y, prev_m = today.year, today.month - 1
+    period_start = _d(prev_y, prev_m, 1)
+    period_end = (
+        _d(prev_y + 1, 1, 1) if prev_m == 12
+        else _d(prev_y, prev_m + 1, 1)
+    )
+
+    def check(s) -> None:
+        prev_invoices = (
+            s.query(MailItem)
+            .filter(MailItem.mail_type == "invoice")
+            .filter(MailItem.due_date >= period_start)
+            .filter(MailItem.due_date < period_end)
+            .all()
+        )
+        # Det ska finnas några fakturor från förra månaden
+        assert len(prev_invoices) > 0, (
+            "fixed_expenses skapar normalt 5-7 fakturor per månad"
+        )
+        # Alla ska vara paid (autogiro)
+        unhandled = [m for m in prev_invoices if m.status != "paid"]
+        assert not unhandled, (
+            f"April-fakturor som inte är paid: "
+            f"{[(m.id, m.status, m.subject) for m in unhandled]}"
+        )
+
+    _seed_scope(sid_g, check)
+
+
 def test_v2_teacher_list_created_students(fx) -> None:
     client, tch, *_ = fx
     # Eva finns från fixture (ej aktiverad)

@@ -260,7 +260,12 @@ def generate_variable_expenses(
             continue
         n = rng.randint(*plan.n_transactions)
         amounts = _split_amount(rng, plan.monthly_amount, n)
-        cat = get_or_create_category(s, plan.name)
+        # Säkerställ att kategorin EXISTERAR i scope-DB:n så eleven
+        # senare kan välja den vid manuell klassning. Men vi sätter
+        # INTE category_id på tx — pedagogiken är att eleven ska
+        # själv klassificera sina variabla utgifter (mat, kläder,
+        # nöje etc.) via Bokföring-vyn.
+        get_or_create_category(s, plan.name)
         cat_total = 0
 
         for idx, amt in enumerate(amounts):
@@ -279,7 +284,7 @@ def generate_variable_expenses(
                 currency="SEK",
                 raw_description=f"{merchant} {tx_date.isoformat()}",
                 normalized_merchant=merchant,
-                category_id=cat.id,
+                category_id=None,  # Eleven klassar själv
                 hash=_hash_for_tx(student_scope, year_month, plan.name, idx),
                 user_verified=False,
                 released_at=released_at,

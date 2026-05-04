@@ -77,7 +77,9 @@ export function MailDetailV2() {
     }
   }
 
-  async function setStatus(status: "paid" | "expired" | "viewed") {
+  async function setStatus(
+    status: "paid" | "expired" | "viewed" | "handled",
+  ) {
     if (!data) return;
     setExporting(true);
     setExportMsg(null);
@@ -89,6 +91,7 @@ export function MailDetailV2() {
         paid: "✓ Markerat som betalt",
         expired: "⊘ Markerat som ignorerat (utgången)",
         viewed: "✓ Markerat som granskad",
+        handled: "✓ Markerat som hanterat",
       };
       setExportMsg(labels[status]);
     } catch (e) {
@@ -370,6 +373,27 @@ export function MailDetailV2() {
                     style={{ border: 0, cursor: "pointer" }}
                   >
                     Markera som betald →
+                  </button>
+                )}
+              {/* Markera som hanterat — för info/authority/reminder/
+                  salary_slip där det inte finns en "betal"-action.
+                  Försvinner från postlådan + dashboard som
+                  "senaste händelse". */}
+              {(m.mail_type === "info"
+                || m.mail_type === "authority"
+                || m.mail_type === "salary_slip"
+                || (m.mail_type === "reminder" && (m.amount ?? 0) >= 0))
+                && m.status !== "handled"
+                && m.status !== "paid"
+                && m.status !== "exported" && (
+                  <button
+                    type="button"
+                    className="cta-btn ghost"
+                    disabled={exporting}
+                    onClick={() => setStatus("handled")}
+                    style={{ border: 0, cursor: "pointer" }}
+                  >
+                    Markera som hanterat ✓
                   </button>
                 )}
               {/* Ignorera = sätt expired (eleven har valt att inte hantera) */}

@@ -1828,7 +1828,9 @@ def delete_goal(
 # === Postlådan (MailItem-tabellen) ===
 
 MailType = Literal["invoice", "salary_slip", "authority", "reminder", "info"]
-MailStatus = Literal["unhandled", "viewed", "exported", "paid", "expired"]
+MailStatus = Literal[
+    "unhandled", "viewed", "exported", "paid", "expired", "handled",
+]
 MailSenderKind = Literal[
     "bank", "cred", "skv", "ins", "land", "util", "work", "pen", "other",
 ]
@@ -15022,6 +15024,84 @@ class V2ReseedResponse(BaseModel):
     last_failed_run: Optional[dict] = None
 
 
+@router.delete(
+    "/teacher/students/{student_id}",
+    status_code=204,
+)
+def v2_delete_student(
+    student_id: int,
+    info: TokenInfo = Depends(require_token),
+) -> Response:
+    """Radera en elev permanent · scope-DB + master-rader + cascade.
+
+    Endast lärarens egna elever. Raderar:
+    - Student-raden (cascade tar StudentProfile, BankIDSession,
+      WeekTickRun, EmployerSatisfaction etc. via FK ON DELETE)
+    - Scope-DB:n (sqlite-fil) raderas i fil-läge; i postgres-läge
+      tas bara raderna eftersom databasen är delad
+    """
+    teacher_id = _require_teacher(info)
+    with master_session() as s:
+        st = s.get(Student, student_id)
+        if st is None or st.teacher_id != teacher_id:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Eleven hittades inte",
+            )
+        # Radera scope-DB-data INNAN master-raden tas bort så vi
+        # fortfarande kan resolva scope_key
+        from ..school.engines import (
+            scope_for_student as _sfs_d, scope_context as _sctx_d,
+            get_scope_session as _gss_d,
+        )
+        scope_key = _sfs_d(st)
+        try:
+            with _sctx_d(scope_key):
+                with _gss_d(scope_key)() as ss:
+                    # Postgres: tenant-isolerade rader. Loopa alla
+                    # TenantMixin-tabeller och radera tenant_id-matched.
+                    from ..db.base import Base, TenantMixin
+                    for table in reversed(Base.metadata.sorted_tables):
+                        cls = next(
+                            (
+                                c.class_ for c in Base.registry.mappers
+                                if c.local_table is table
+                            ),
+                            None,
+                        )
+                        if cls is None or not issubclass(cls, TenantMixin):
+                            continue
+                        try:
+                            ss.query(cls).delete(
+                                synchronize_session=False,
+                            )
+                        except Exception:
+                            pass
+                    ss.commit()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "v2_delete_student: scope-cleanup failed för %s",
+                student_id,
+            )
+        # SQLite-fil-läge: radera filen från disk så det inte
+        # ligger kvar gammal data om eleven återskapas senare.
+        try:
+            import os as _os_d
+            from ..school.engines import _scope_db_path
+            path = _scope_db_path(scope_key)
+            if path and _os_d.path.exists(path):
+                _os_d.remove(path)
+        except Exception:
+            pass
+
+        # Master-radering · CASCADE tar bort StudentProfile,
+        # BankIDSession, WeekTickRun, etc. via FK ON DELETE.
+        s.delete(st)
+        s.commit()
+
+    return Response(status_code=204)
+
+
 @router.post(
     "/teacher/students/{student_id}/reseed-initial-data",
     response_model=V2ReseedResponse,
@@ -15182,6 +15262,85 @@ def _ensure_student_has_initial_data(
     return True
 
 
+def _auto_pay_historical_invoices(
+    student: "Student", year_month: str,
+) -> None:
+    """Markera alla fakturor från en historisk månad som BETALDA via
+    autogiro + skapa motsvarande Transaction från lönekonto.
+
+    Pedagogiskt: förra månaden HAR redan hänt — fakturor som
+    seedats av fixed_expenses ska inte ligga som "ohanterade" i
+    postlådan. Vi simulerar att autogiro drog dem på due_date.
+
+    Idempotent via stable hash. year_month = "YYYY-MM".
+    """
+    from datetime import date as _d_pay
+    from hashlib import sha256 as _sha
+    from ..db.models import Account, MailItem, Transaction
+    from ..school.engines import (
+        scope_context as _sctx_p, scope_for_student as _sfs_p,
+    )
+
+    try:
+        y, m = map(int, year_month.split("-"))
+        period_start = _d_pay(y, m, 1)
+        period_end = (
+            _d_pay(y + 1, 1, 1) if m == 12 else _d_pay(y, m + 1, 1)
+        )
+    except Exception:
+        return
+
+    scope_key = _sfs_p(student)
+    with _sctx_p(scope_key):
+        with session_scope() as s:
+            lonekonto = (
+                s.query(Account)
+                .filter(Account.type == "checking")
+                .order_by(Account.id.asc())
+                .first()
+            )
+            if lonekonto is None:
+                return
+            mails = (
+                s.query(MailItem)
+                .filter(
+                    MailItem.mail_type == "invoice",
+                    MailItem.status.in_(["unhandled", "viewed"]),
+                    MailItem.due_date >= period_start,
+                    MailItem.due_date < period_end,
+                )
+                .all()
+            )
+            for m_inv in mails:
+                if m_inv.amount is None:
+                    continue
+                # Stabilt idempotent-hash baserat på mail_id + period
+                raw = f"autopaid|{student.id}|{year_month}|{m_inv.id}"
+                tx_hash = _sha(raw.encode()).hexdigest()[:32]
+                existing = (
+                    s.query(Transaction)
+                    .filter(Transaction.hash == tx_hash)
+                    .first()
+                )
+                if existing is None:
+                    tx = Transaction(
+                        account_id=lonekonto.id,
+                        date=m_inv.due_date or period_start,
+                        amount=m_inv.amount,  # negativt = utgift
+                        currency="SEK",
+                        raw_description=(
+                            f"Autogiro · {m_inv.sender}"
+                        ),
+                        normalized_merchant=m_inv.sender,
+                        hash=tx_hash,
+                        is_transfer=False,
+                        user_verified=True,
+                    )
+                    s.add(tx)
+                m_inv.status = "paid"
+            s.commit()
+
+
 def _seed_initial_student_data(
     student: "Student",
     *,
@@ -15322,13 +15481,10 @@ def _seed_initial_student_data(
                 )
 
     try:
-        # Förra månaden ska vara HELT synlig direkt — den HAR redan hänt
-        # ur elevens perspektiv. Eleven loggar in och ser hela förra
-        # månadens lön, fakturor och utgifter som historik.
-        #
-        # Realtid-projektion (release_base) gäller bara framtida ticks
-        # av spel-tiden — när lärare/cron-jobb kör en ny månad framåt.
-        # Då ska eventen släppas gradvis över 5 real-dagar.
+        # === Steg 2 (FÖRRA MÅNADEN, april) ===
+        # Förra månaden HAR redan hänt — fakturor är betalda via
+        # autogiro, lönen är dragen, utgifter är genomförda. Eleven
+        # ska se den som färdig historik (ingen "ohanterad" faktura).
         tick_month(
             student,
             profile,
@@ -15336,12 +15492,41 @@ def _seed_initial_student_data(
             spend_profile=spend_profile,
             starting_level=starting_level,
         )
+        # Auto-betala alla fakturor från förra månaden — skapa
+        # autogiro-transaktioner från lönekonto + markera mail
+        # som status="paid" så de inte ligger kvar i postlådan
+        # som ohanterade.
+        _auto_pay_historical_invoices(student, year_month)
     except Exception:
         import logging
         logging.getLogger(__name__).exception(
-            "_seed_initial_student_data: tick_month failed för %s",
+            "_seed_initial_student_data: tick_month (förra mån) failed för %s",
             student.id,
         )
+
+    # === Steg 2b (NUVARANDE MÅNAD, maj) ===
+    # Tick även innevarande månad — då släpps fakturor + lön via
+    # realtid-projektion (auto-detect i tick_month sätter
+    # release_base = NOW när year_month >= current_ym). Eleven
+    # ser nya fakturor rulla in över 5 skoldagar.
+    today2 = _d.today()
+    current_ym = f"{today2.year:04d}-{today2.month:02d}"
+    if current_ym != year_month:  # Skippa om vi seedat current redan
+        try:
+            tick_month(
+                student,
+                profile,
+                current_ym,
+                spend_profile=spend_profile,
+                starting_level=starting_level,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "_seed_initial_student_data: tick_month (innevarande) "
+                "failed för %s",
+                student.id,
+            )
 
     # === Steg 3-4: pension + boende ===
     with scope_context(scope_key):
