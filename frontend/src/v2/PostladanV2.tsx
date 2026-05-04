@@ -47,7 +47,8 @@ const STATUS_LABEL: Record<V2MailStatus, string> = {
 
 type TabKey =
   | "all"
-  | "unhandled"
+  | "new"
+  | "historical"
   | "invoice"
   | "salary_slip"
   | "authority"
@@ -55,10 +56,11 @@ type TabKey =
 
 const TAB_TO_FILTER: Record<
   TabKey,
-  V2MailType | "unhandled" | "other" | undefined
+  V2MailType | "new" | "historical" | "other" | undefined
 > = {
   all: undefined,
-  unhandled: "unhandled",
+  new: "new",
+  historical: "historical",
   invoice: "invoice",
   salary_slip: "salary_slip",
   authority: "authority",
@@ -87,7 +89,9 @@ function deriveSenderMeta(m: V2MailItem): string {
 export function PostladanV2() {
   const [data, setData] = useState<MailData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("all");
+  // Default-fliken är "Nya" — eleven ska först se det som väntar
+  // action, inte arkivet.
+  const [tab, setTab] = useState<TabKey>("new");
   const navigate = useNavigate();
 
   function load(currentTab: TabKey) {
@@ -268,8 +272,31 @@ export function PostladanV2() {
           </div>
         </div>
 
-        {/* TABS */}
+        {/* TABS · NYA = väntar action, HISTORISKA = avslutade.
+            Typ-flikar nedanför filtrerar på mail_type oavsett status. */}
         <div className="mail-tabs" data-guide="postladan-tabs">
+          <a
+            className={`mail-tab${tab === "new" ? " active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setTab("new");
+            }}
+            href="#"
+          >
+            Nya{" "}
+            <span className="count">{summary.new_count}</span>
+          </a>
+          <a
+            className={`mail-tab${tab === "historical" ? " active" : ""}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setTab("historical");
+            }}
+            href="#"
+          >
+            Historiska{" "}
+            <span className="count">{summary.historical_count}</span>
+          </a>
           <a
             className={`mail-tab${tab === "all" ? " active" : ""}`}
             onClick={(e) => {
@@ -279,17 +306,6 @@ export function PostladanV2() {
             href="#"
           >
             Allt <span className="count">{summary.total_count}</span>
-          </a>
-          <a
-            className={`mail-tab${tab === "unhandled" ? " active" : ""}`}
-            onClick={(e) => {
-              e.preventDefault();
-              setTab("unhandled");
-            }}
-            href="#"
-          >
-            Ohanterade{" "}
-            <span className="count">{summary.unhandled_count}</span>
           </a>
           <a
             className={`mail-tab${tab === "invoice" ? " active" : ""}`}

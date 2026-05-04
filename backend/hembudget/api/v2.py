@@ -1876,6 +1876,10 @@ class V2MailSummary(BaseModel):
     # Frontend kan visa "nästa brev kommer 14:32" eller liknande.
     next_release_at: Optional[datetime] = None
     pending_count: int = 0
+    # NYA = unhandled + viewed (= unhandled_count för bakåtkompat)
+    # HISTORISKA = handled + paid + exported + expired
+    new_count: int = 0
+    historical_count: int = 0
 
 
 class V2MailResponse(BaseModel):
@@ -1937,14 +1941,23 @@ def get_mail(
                     MailItem.received_at.desc(), MailItem.id.desc()
                 )
             )
-            if filter == "unhandled":
-                # 'Ohanterade' = både unhandled OCH viewed.
+            if filter == "unhandled" or filter == "new":
+                # NYA / Ohanterade = unhandled OCH viewed.
                 # Brev som eleven läst men inte aktivt hanterat
                 # (betalat/exporterat/ignorerat) räknas som ohanterade
-                # tills explicit val gjorts. Annars känns det som om
-                # öppning = hantering, vilket användaren inte vill.
+                # tills explicit val gjorts.
                 q = q.filter(
                     MailItem.status.in_(["unhandled", "viewed"])
+                )
+            elif filter == "historical":
+                # HISTORISKA = brev som eleven har avslutat (paid,
+                # exported, expired) eller läst utan action (handled).
+                # Här hamnar betalda fakturor, lästa lönespec/info-brev,
+                # och fakturor eleven valt att ignorera.
+                q = q.filter(
+                    MailItem.status.in_(
+                        ["handled", "paid", "exported", "expired"],
+                    )
                 )
             elif filter == "invoice":
                 q = q.filter(MailItem.mail_type == "invoice")
@@ -1979,6 +1992,7 @@ def get_mail(
             authority_count = 0
             info_count = 0
             other_count = 0
+            historical_count = 0
             to_pay = Decimal("0")
             incoming = Decimal("0")
             overdue = 0
@@ -1991,6 +2005,8 @@ def get_mail(
                 # exporterar, betalar eller ignorerar explicit.
                 if m.status in ("unhandled", "viewed"):
                     unhandled_count += 1
+                elif m.status in ("handled", "paid", "exported", "expired"):
+                    historical_count += 1
                 if m.mail_type == "invoice":
                     invoice_count += 1
                 elif m.mail_type == "salary_slip":
@@ -2090,6 +2106,8 @@ def get_mail(
                         next_pending[0] if next_pending else None
                     ),
                     pending_count=int(pending_count or 0),
+                    new_count=unhandled_count,
+                    historical_count=historical_count,
                 ),
                 items=items,
             )
@@ -11323,9 +11341,18 @@ def get_mail_detail(
         if m.released_at is not None and m.released_at > datetime.utcnow():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Saknas")
 
-        # Markera viewed om unhandled
+        # Auto-status vid öppning · skiljer på "kräver action"-brev
+        # och "läs och dismissera"-brev:
+        # - invoice / reminder med belopp → status="viewed" så eleven
+        #   måste fortfarande betala/exportera/ignorera
+        # - info / authority / salary_slip → status="handled" direkt,
+        #   det finns ingen action att göra (lönespec är bara info)
         if m.status == "unhandled":
-            m.status = "viewed"
+            auto_handled_types = {"info", "authority", "salary_slip"}
+            if m.mail_type in auto_handled_types:
+                m.status = "handled"
+            else:
+                m.status = "viewed"
             s.flush()
 
         cc_data: Optional[V2CcInvoiceData] = None
@@ -15262,6 +15289,65 @@ def _ensure_student_has_initial_data(
     return True
 
 
+def _seed_default_budget(s, *, profile) -> None:
+    """Seedar en default-budget för INNEVARANDE månad om eleven
+    inte redan har en. Konsumentverket-skalad mot profilens lön +
+    boendekostnad.
+
+    Idempotent: gör inget om budget för månaden redan finns.
+    Pedagogiken: matchar prototypen /proposals/vol-7/elev.html
+    (Hyra/Mat/Restaurang/Transport/Sparmål/ISK/Förbrukning/Försäkringar).
+    """
+    from datetime import date as _d_b
+    from decimal import Decimal as _D_b
+    from ..db.models import Budget, Category
+
+    today = _d_b.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    # Finns budget redan? skip
+    existing = (
+        s.query(Budget).filter(Budget.month == ym).first()
+    )
+    if existing is not None:
+        return
+
+    net = int(profile.monthly_net or 23000)
+    housing = int(profile.housing.monthly_cost or 7000)
+
+    # Default-rader (kategori-namn, planerat belopp).
+    # Sparmål/ISK skalas mot 10 + 3 % av nettolön (pay-yourself-first).
+    # Övriga utgifter mot Konsumentverkets schabloner.
+    rows: list[tuple[str, int]] = [
+        ("Hyra & boende", housing),
+        ("Mat & livsmedel", 4000),
+        ("Restaurang & nöje", 1200),
+        ("Transport", 1100),
+        ("Sparmål", max(500, int(net * 0.10))),
+        ("Avanza ISK", max(200, int(net * 0.03))),
+        ("Förbrukningsvaror", 1320),
+        ("Försäkringar", 320),
+    ]
+
+    for cat_name, amount in rows:
+        cat = (
+            s.query(Category)
+            .filter(Category.name == cat_name)
+            .first()
+        )
+        if cat is None:
+            cat = Category(name=cat_name)
+            s.add(cat)
+            s.flush()
+        b = Budget(
+            month=ym,
+            category_id=cat.id,
+            planned_amount=_D_b(str(amount)),
+        )
+        s.add(b)
+    s.flush()
+
+
 def _auto_pay_historical_invoices(
     student: "Student", year_month: str,
 ) -> None:
@@ -15582,6 +15668,20 @@ def _seed_initial_student_data(
                 import logging
                 logging.getLogger(__name__).exception(
                     "_seed_initial_student_data: rental seed failed för %s",
+                    student.id,
+                )
+
+            # === Default-budget · Konsumentverket-baserad ===
+            # Pedagogiken: eleven ska SE en budget för innevarande
+            # månad direkt — inte tom-state. Budget speglar prototypens
+            # struktur (Hyra/Mat/Restaurang/Transport/Sparmål/ISK/
+            # Förbrukning/Försäkringar) skalad mot profil-lön.
+            try:
+                _seed_default_budget(s, profile=profile)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "_seed_initial_student_data: budget seed failed för %s",
                     student.id,
                 )
 

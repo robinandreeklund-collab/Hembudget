@@ -7614,6 +7614,184 @@ def test_v2_teacher_delete_student_other_teachers_student_404(fx) -> None:
     assert r.status_code == 404
 
 
+def test_v2_mail_detail_auto_handles_info_types(fx) -> None:
+    """När eleven öppnar ett info/authority/salary_slip-brev ska
+    status sättas till "handled" direkt (ej "viewed") — det finns
+    ingen action att göra på dem.
+
+    Bug-trigger: lönespec-brev låg kvar på dashboard som "Senaste
+    händelse" trots att eleven hade läst det, eftersom viewed
+    fortfarande räknas som "ohanterad" i unhandled-filtret.
+    """
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from datetime import date as _d
+    from decimal import Decimal as _D
+    from hembudget.db.models import MailItem as _Mail
+
+    mail_id = {"id": None}
+
+    def seed(s) -> None:
+        m = _Mail(
+            sender="Arbetsgivaren",
+            sender_short="WORK",
+            sender_kind="work",
+            mail_type="salary_slip",
+            subject="Lönespec 2026-04",
+            body_meta="Nettolön 19 356 kr",
+            body="Lönespec...",
+            amount=_D("19356"),
+            status="unhandled",
+        )
+        s.add(m)
+        s.flush()
+        mail_id["id"] = m.id
+
+    _seed_scope(sid, seed)
+
+    # Öppna brevet
+    r = client.get(
+        f"/v2/postladan/{mail_id['id']}/detail",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+
+    # Verifiera att status är "handled", inte "viewed"
+    def check(s) -> None:
+        m = s.get(_Mail, mail_id["id"])
+        assert m.status == "handled", (
+            f"Lönespec ska bli handled direkt vid öppning, fick "
+            f"{m.status}"
+        )
+
+    _seed_scope(sid, check)
+
+    # Verifiera att brevet INTE finns i 'new' (= unhandled-filtret)
+    r2 = client.get(
+        "/v2/postladan?filter=new",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    new_ids = [it["id"] for it in r2.json()["items"]]
+    assert mail_id["id"] not in new_ids
+
+    # Men finns i 'historical'
+    r3 = client.get(
+        "/v2/postladan?filter=historical",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    hist_ids = [it["id"] for it in r3.json()["items"]]
+    assert mail_id["id"] in hist_ids
+
+
+def test_v2_postladan_new_and_historical_filters(fx) -> None:
+    """Postlådan ska ha flikar 'Nya' (unhandled+viewed) och
+    'Historiska' (handled+paid+exported+expired)."""
+    client, _tch, _sa, stu, _tid, _said, sid = fx
+    from decimal import Decimal as _D
+    from hembudget.db.models import MailItem as _Mail
+
+    def seed(s) -> None:
+        # Ohanterad faktura → ska hamna i NYA
+        s.add(_Mail(
+            sender="Hyresvärden", sender_short="HYR",
+            sender_kind="land", mail_type="invoice",
+            subject="Hyra maj", body="...", amount=_D("-3800"),
+            status="unhandled",
+        ))
+        # Betald gammal faktura → HISTORISKA
+        s.add(_Mail(
+            sender="Tibber", sender_short="EL",
+            sender_kind="util", mail_type="invoice",
+            subject="El april", body="...", amount=_D("-566"),
+            status="paid",
+        ))
+        # Hanterad info → HISTORISKA
+        s.add(_Mail(
+            sender="AF", sender_short="AF",
+            sender_kind="skv", mail_type="authority",
+            subject="Notis", body="...", amount=None,
+            status="handled",
+        ))
+
+    _seed_scope(sid, seed)
+
+    # NYA
+    r = client.get(
+        "/v2/postladan?filter=new",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200
+    new_subjects = [i["subject"] for i in r.json()["items"]]
+    assert "Hyra maj" in new_subjects
+    assert "El april" not in new_subjects
+    assert "Notis" not in new_subjects
+
+    # HISTORISKA
+    r2 = client.get(
+        "/v2/postladan?filter=historical",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r2.status_code == 200
+    hist_subjects = [i["subject"] for i in r2.json()["items"]]
+    assert "Hyra maj" not in hist_subjects
+    assert "El april" in hist_subjects
+    assert "Notis" in hist_subjects
+
+    # Summary count-fält
+    summary = r.json()["summary"]
+    assert summary["new_count"] >= 1
+    assert summary["historical_count"] >= 2
+
+
+def test_v2_seed_initial_creates_default_budget(fx) -> None:
+    """Ny elev → default-budget seedas för innevarande månad så
+    /v2/budget visar Konsumentverket-baserade rader (matchar prototyp
+    /proposals/vol-7/elev.html). Tidigare visades "0 kategorier" tom-
+    state vilket avvek från prototypen.
+    """
+    from hembudget.db.models import Budget
+
+    _client, tch, *_ = fx
+    create_r = _client.post(
+        "/v2/teacher/students/create",
+        headers={"Authorization": f"Bearer {tch}"},
+        json={
+            "first_name": "Sara",
+            "archetype": "vard_underskoterska",
+            "starting_level": 1,
+        },
+    )
+    assert create_r.status_code == 200, create_r.text
+    sid = create_r.json()["student_id"]
+
+    from datetime import date as _d
+    today = _d.today()
+    ym = f"{today.year:04d}-{today.month:02d}"
+
+    def check(s) -> None:
+        budgets = (
+            s.query(Budget).filter(Budget.month == ym).all()
+        )
+        assert len(budgets) >= 6, (
+            f"Minst 6 budget-rader förväntade för {ym}, fick "
+            f"{len(budgets)}"
+        )
+        # Verifiera att Hyra finns och har positivt belopp
+        from hembudget.db.models import Category
+        cat_names = {
+            c.id: c.name for c in s.query(Category).all()
+        }
+        rows_by_name = {
+            cat_names.get(b.category_id, "?"): float(b.planned_amount)
+            for b in budgets
+        }
+        assert "Hyra & boende" in rows_by_name, rows_by_name
+        assert rows_by_name["Hyra & boende"] > 0
+        assert "Mat & livsmedel" in rows_by_name
+        assert "Sparmål" in rows_by_name
+
+    _seed_scope(sid, check)
+
+
 def test_v2_seed_initial_marks_april_as_paid(fx) -> None:
     """Reproduce: ny elev → april ska vara HISTORIK (alla fakturor
     autogiro-betalda, status=paid), inte ohanterade.

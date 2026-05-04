@@ -262,6 +262,9 @@ export type V2MailSummary = {
   // Realtid-projektion · när nästa pending mail "släpps" till postlådan.
   next_release_at: string | null;
   pending_count: number;
+  // NYA = unhandled + viewed (= need-action), HISTORISKA = paid/handled/expired
+  new_count: number;
+  historical_count: number;
 };
 
 export type MailData = {
@@ -3746,7 +3749,14 @@ export const v2Api = {
     api<V2TeacherCreditOverview>(
       `/v2/teacher/students/${studentId}/credit-overview`,
     ),
-  postladan: (filter?: V2MailType | "unhandled" | "other") =>
+  postladan: (
+    filter?:
+      | V2MailType
+      | "unhandled"
+      | "new"
+      | "historical"
+      | "other",
+  ) =>
     api<MailData>(`/v2/postladan${filter ? `?filter=${filter}` : ""}`),
   updateMailStatus: (mailId: number, status: V2MailStatus) =>
     api<V2MailItem>(`/v2/postladan/${mailId}/status`, {
