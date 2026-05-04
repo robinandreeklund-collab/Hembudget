@@ -15351,11 +15351,26 @@ def v2_delete_student(
             get_scope_session as _gss_d,
         )
         scope_key = _sfs_d(st)
+        # SÄKERHETSCHECK: scope_key måste finnas. Utan den nedan-
+        # körda DELETE skulle träffa ALLA tenant-rader (auto-filter
+        # i db/base.py applied bara på SELECT, inte DELETE → utan
+        # explicit WHERE tenant_id raderas hela tabellen).
+        if not scope_key or not isinstance(scope_key, str):
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "Saknar scope_key — radering avbruten av säkerhetsskäl",
+            )
         try:
             with _sctx_d(scope_key):
                 with _gss_d(scope_key)() as ss:
                     # Postgres: tenant-isolerade rader. Loopa alla
                     # TenantMixin-tabeller och radera tenant_id-matched.
+                    #
+                    # KRITISKT: explicit `filter(cls.tenant_id == scope_key)`.
+                    # Auto-filter-event-listenern (`_scope_select_filter` i
+                    # db/base.py) applied bara på SELECT — DELETE går
+                    # förbi den. Utan denna filter raderar query.delete()
+                    # ALLA rader i tabellen, inte bara aktuell tenant.
                     from ..db.base import Base, TenantMixin
                     for table in reversed(Base.metadata.sorted_tables):
                         cls = next(
@@ -15368,11 +15383,16 @@ def v2_delete_student(
                         if cls is None or not issubclass(cls, TenantMixin):
                             continue
                         try:
-                            ss.query(cls).delete(
-                                synchronize_session=False,
-                            )
+                            ss.query(cls).filter(
+                                cls.tenant_id == scope_key,
+                            ).delete(synchronize_session=False)
                         except Exception:
-                            pass
+                            import logging
+                            logging.getLogger(__name__).exception(
+                                "v2_delete_student: delete %s för "
+                                "tenant %s failade — fortsätter",
+                                cls.__name__, scope_key,
+                            )
                     ss.commit()
         except Exception:
             import logging

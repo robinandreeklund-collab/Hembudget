@@ -53,10 +53,15 @@ def _current_tenant() -> Optional[str]:
 
 @event.listens_for(Session, "do_orm_execute")
 def _scope_select_filter(state):
-    """Auto-filter alla SELECT på tenant_id om en scope-context är
-    aktiv. Påverkar bara entiteter som ärver TenantMixin (= scope-DB-
-    modellerna), så master-DB-queries går orörda."""
-    if not state.is_select:
+    """Auto-filter alla SELECT/UPDATE/DELETE på tenant_id om en scope-
+    context är aktiv. Påverkar bara entiteter som ärver TenantMixin
+    (= scope-DB-modellerna), så master-DB-queries går orörda.
+
+    KRITISKT att den även fångar UPDATE/DELETE — annars raderar
+    `query(Model).delete()` ALLA rader i tabellen, inte bara aktuell
+    tenant. Bug funnen 2026-05-04 efter att v2_delete_student wipe:ade
+    all elevdata istället för bara den eleven som skulle raderas."""
+    if not (state.is_select or state.is_update or state.is_delete):
         return
     if state.is_relationship_load:
         return
