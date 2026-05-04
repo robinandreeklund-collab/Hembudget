@@ -1,16 +1,25 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..chat import tools as chat_tools
 from ..db.models import Account, FundHolding, Transaction
 from .deps import db, require_auth
+
+
+def _released_filter():
+    """Realtid-projektion · samma princip som /v2/bank — exkludera
+    transaktioner som ännu inte släppts till eleven."""
+    return or_(
+        Transaction.released_at.is_(None),
+        Transaction.released_at <= datetime.utcnow(),
+    )
 
 router = APIRouter(prefix="/balances", tags=["balances"], dependencies=[Depends(require_auth)])
 
@@ -52,7 +61,7 @@ def list_balances(
         q = session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
             Transaction.account_id == acc.id,
             Transaction.date <= target_date,
-        )
+        ).filter(_released_filter())
         if start is not None:
             q = q.filter(Transaction.date > start)
         movement = Decimal(str(q.scalar() or 0))

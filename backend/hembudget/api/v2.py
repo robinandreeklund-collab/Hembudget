@@ -1589,6 +1589,7 @@ def get_goals(info: TokenInfo = Depends(require_token)) -> V2GoalsResponse:
                             _fn.sum(Transaction.amount), 0,
                         ))
                         .filter(Transaction.account_id == g.account_id)
+                        .filter(_released_filter(Transaction))
                         .scalar() or Decimal("0")
                     )
                     if not isinstance(tx_sum, Decimal):
@@ -2321,6 +2322,7 @@ def create_v2_transfer(
             tx_sum = (
                 s.query(_func.coalesce(_func.sum(Transaction.amount), 0))
                 .filter(Transaction.account_id == src.id)
+                .filter(_released_filter(Transaction))
                 .scalar() or Decimal("0")
             )
             if not isinstance(tx_sum, Decimal):
@@ -3208,6 +3210,7 @@ def get_skatten(
             income_q = (
                 s.query(_func.coalesce(_func.sum(Transaction.amount), 0))
                 .filter(Transaction.amount > 0)
+                .filter(_released_filter(Transaction))
                 .filter(Transaction.date >= year_start)
                 .filter(Transaction.date < year_end)
                 .filter(_func.lower(Transaction.raw_description).like("%lön%"))
@@ -3504,6 +3507,7 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
                 tx_q = (
                     s.query(Transaction)
                     .filter(Transaction.loan_id == loan.id)
+                    .filter(_released_filter(Transaction))
                     .order_by(Transaction.date.desc())
                     .limit(4)
                     .all()
@@ -3748,6 +3752,7 @@ def extra_amortering(
         tx_sum = (
             s.query(_f.coalesce(_f.sum(Transaction.amount), 0))
             .filter(Transaction.account_id == acc.id)
+            .filter(_released_filter(Transaction))
             .scalar() or Decimal("0")
         )
         if not isinstance(tx_sum, Decimal):
@@ -7424,6 +7429,7 @@ def _isk_cash_balance(s, account_id: int) -> Decimal:
             _sa_func_local.sum(Transaction.amount), 0,
         ))
         .filter(Transaction.account_id == account_id)
+        .filter(_released_filter(Transaction))
         .scalar()
     )
     return base + Decimal(str(total or 0))
@@ -8132,8 +8138,13 @@ def classify_bulk(
     today = _date.today()
 
     with session_scope() as s:
-        # Hitta unclassified
-        q = s.query(Transaction).filter(Transaction.category_id.is_(None))
+        # Hitta unclassified — endast bland synliga transaktioner
+        # (realtid-projektion: pending tx släpps inte för klassning än).
+        q = (
+            s.query(Transaction)
+            .filter(Transaction.category_id.is_(None))
+            .filter(_released_filter(Transaction))
+        )
         if body.transaction_ids:
             q = q.filter(Transaction.id.in_(body.transaction_ids))
         elif body.period and body.period != "all":
@@ -10228,6 +10239,7 @@ def get_tx_detail(
         if t.normalized_merchant:
             rec_rows = (
                 s.query(Transaction)
+                .filter(_released_filter(Transaction))
                 .filter(
                     Transaction.normalized_merchant == t.normalized_merchant,
                     Transaction.date >= cutoff_90,
@@ -10421,6 +10433,7 @@ def create_rule_from_tx(
             ucat = (
                 s.query(Transaction)
                 .filter(Transaction.category_id.is_(None))
+                .filter(_released_filter(Transaction))
                 .filter(
                     or_(
                         Transaction.normalized_merchant == merchant,
@@ -10992,6 +11005,7 @@ def _build_cc_invoice_data(
 
     txs_q = (
         s.query(Transaction)
+        .filter(_released_filter(Transaction))
         .filter(Transaction.date >= period_start)
         .filter(Transaction.date <= period_end)
     )
@@ -11017,6 +11031,7 @@ def _build_cc_invoice_data(
     prev_period_start = prev_period_end - _td_cc(days=30)
     prev_q = (
         s.query(Transaction)
+        .filter(_released_filter(Transaction))
         .filter(Transaction.date >= prev_period_start)
         .filter(Transaction.date <= prev_period_end)
     )
@@ -16102,6 +16117,7 @@ def _gather_axis_events_for(
                 with session_scope() as s:
                     txs = (
                         s.query(Transaction)
+                        .filter(_released_filter(Transaction))
                         .order_by(Transaction.date.desc())
                         .limit(15)
                         .all()

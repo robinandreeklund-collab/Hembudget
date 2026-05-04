@@ -585,14 +585,20 @@ def sign_payment_batch(
 
 
 def _balance_for_account(scope, account_id: int) -> Decimal:
-    from sqlalchemy import func as sa_func
+    from sqlalchemy import func as sa_func, or_ as _or
     acc = scope.get(Account, account_id)
     if acc is None:
         return Decimal("0")
     base = acc.opening_balance or Decimal("0")
+    # Realtid-projektion: räkna inte transaktioner som inte är synliga än
     q = scope.query(
         sa_func.coalesce(sa_func.sum(Transaction.amount), 0),
-    ).filter(Transaction.account_id == account_id)
+    ).filter(Transaction.account_id == account_id).filter(
+        _or(
+            Transaction.released_at.is_(None),
+            Transaction.released_at <= datetime.utcnow(),
+        )
+    )
     if acc.opening_balance_date is not None:
         q = q.filter(Transaction.date >= acc.opening_balance_date)
     total = q.scalar() or Decimal("0")
@@ -921,11 +927,18 @@ def _compute_credit_for_student(
         three_months_ago = three_months_ago.replace(
             month=three_months_ago.month - 3,
         )
+    from sqlalchemy import or_ as _or_b
     expenses = (
         scope.query(sa_func.coalesce(sa_func.sum(Transaction.amount), 0))
         .filter(
             Transaction.amount < 0,
             Transaction.date >= three_months_ago,
+        )
+        .filter(
+            _or_b(
+                Transaction.released_at.is_(None),
+                Transaction.released_at <= datetime.utcnow(),
+            )
         )
         .scalar() or 0
     )

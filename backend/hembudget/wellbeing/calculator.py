@@ -19,11 +19,26 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func as sa_func
+from datetime import datetime as _dt
+
+from sqlalchemy import func as sa_func, or_ as sa_or
 from sqlalchemy.orm import Session
 
 from ..db.models import Account, Budget, Loan, Transaction, WellbeingScore
 from .minimums import check_against_minimum
+
+
+def _released_filter():
+    """Realtid-projektion · `released_at IS NULL OR released_at <= NOW`.
+
+    Wellbeing måste matcha exakt vad eleven ser i banken, postlådan och
+    bokföringen — annars blir pentagon-poäng baserade på data som inte
+    är synlig än, och saldot Pentagon visar avviker från bankens.
+    """
+    return sa_or(
+        Transaction.released_at.is_(None),
+        Transaction.released_at <= _dt.utcnow(),
+    )
 
 
 @dataclass
@@ -72,7 +87,9 @@ def _saldo_for(session: Session, account_id: int) -> Decimal:
     base = acc.opening_balance or Decimal("0")
     q = session.query(
         sa_func.coalesce(sa_func.sum(Transaction.amount), 0),
-    ).filter(Transaction.account_id == account_id)
+    ).filter(
+        Transaction.account_id == account_id,
+    ).filter(_released_filter())
     if acc.opening_balance_date is not None:
         q = q.filter(Transaction.date >= acc.opening_balance_date)
     total = q.scalar() or Decimal("0")
@@ -753,6 +770,7 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         cutoff_book = _d_book.today() - _td_book(days=30)
         recent_txs = (
             session.query(Transaction)
+            .filter(_released_filter())
             .filter(Transaction.date >= cutoff_book)
             .filter(Transaction.is_transfer.is_(False))
             .all()
