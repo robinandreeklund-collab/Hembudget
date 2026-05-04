@@ -15447,13 +15447,18 @@ class V2BulkDeleteResponse(BaseModel):
 
 
 @router.delete(
-    "/teacher/students/all",
+    "/teacher/bulk-delete-all-my-students",
     response_model=V2BulkDeleteResponse,
 )
 def v2_delete_all_my_students(
     info: TokenInfo = Depends(require_token),
 ) -> V2BulkDeleteResponse:
     """Radera ALLA elever som tillhör läraren (super-admin-funktion).
+
+    OBS path: /v2/teacher/bulk-delete-all-my-students (inte
+    /students/all). FastAPI matchar i deklarations-ordning och
+    /students/{student_id} med {student_id}='all' triggar Pydantic-
+    validation-error (422). Egen path undviker krock helt.
 
     SÄKERHET: använder samma tenant_id-filter-pattern som
     v2_delete_student. Auto-filter på UPDATE/DELETE i db/base.py
