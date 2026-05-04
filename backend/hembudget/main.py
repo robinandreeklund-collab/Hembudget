@@ -253,11 +253,28 @@ def build_app() -> FastAPI:
         request: "Request | None", exc: BaseException,
     ) -> None:
         try:
+            # Följ chain till ROOT-exception (cause/context). En
+            # 'generator didn't stop after throw()' är vanligen ett
+            # CLEANUP-fel — det riktiga felet ligger i .__context__
+            # eller .__cause__.
+            root = exc
+            seen = {id(root)}
+            while True:
+                inner = root.__cause__ or root.__context__
+                if inner is None or id(inner) in seen:
+                    break
+                seen.add(id(inner))
+                root = inner
+
             with _error_lock:
                 _error_buffer.append({
                     "ts": _dt_err.utcnow().isoformat() + "Z",
                     "type": type(exc).__name__,
                     "message": str(exc)[:500],
+                    "root_type": type(root).__name__ if root is not exc else None,
+                    "root_message": (
+                        str(root)[:500] if root is not exc else None
+                    ),
                     "path": (
                         str(request.url.path) if request is not None
                         else None
@@ -269,7 +286,15 @@ def build_app() -> FastAPI:
                         _tb_err.format_exception(
                             type(exc), exc, exc.__traceback__,
                         ),
-                    )[-2000:],  # sista 2 KB av traceback räcker
+                    )[-2000:],
+                    "root_traceback": (
+                        "".join(
+                            _tb_err.format_exception(
+                                type(root), root, root.__traceback__,
+                            ),
+                        )[-2000:]
+                        if root is not exc else None
+                    ),
                 })
         except Exception:
             pass

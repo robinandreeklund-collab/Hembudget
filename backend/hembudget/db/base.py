@@ -159,12 +159,37 @@ def session_scope() -> Iterator[Session]:
             session = maker()
             try:
                 yield session
-                session.commit()
+                try:
+                    session.commit()
+                except Exception:
+                    # commit-fel propageras inte ut — vi vill inte
+                    # maskera ev. exception från endpoint:en.
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "session_scope: commit failed",
+                    )
+                    raise
             except Exception:
-                session.rollback()
+                # Robust cleanup: rollback OCH close måste KÖRAS men
+                # får INTE ersätta original-exceptionen.
+                try:
+                    session.rollback()
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "session_scope: rollback efter exception "
+                        "misslyckades — original-exception propageras",
+                    )
                 raise
             finally:
-                session.close()
+                try:
+                    session.close()
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "session_scope: session.close() misslyckades "
+                        "— ignorerar",
+                    )
             return
 
         # School-mode UTAN scope_key → använd shared-scope-engine
@@ -185,12 +210,32 @@ def session_scope() -> Iterator[Session]:
                 session = session_maker()
                 try:
                     yield session
-                    session.commit()
+                    try:
+                        session.commit()
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "session_scope (shared): commit failed",
+                        )
+                        raise
                 except Exception:
-                    session.rollback()
+                    try:
+                        session.rollback()
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "session_scope (shared): rollback "
+                            "misslyckades — original propageras",
+                        )
                     raise
                 finally:
-                    session.close()
+                    try:
+                        session.close()
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).exception(
+                            "session_scope (shared): close misslyckades",
+                        )
                 return
         except Exception:
             import logging
