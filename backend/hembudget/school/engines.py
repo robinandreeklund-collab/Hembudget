@@ -156,15 +156,11 @@ def init_master_engine() -> Engine:
     is_sqlite = url.startswith("sqlite:")
     engine_kwargs: dict = {"future": True}
     if not is_sqlite:
-        # Cloud SQL db-f1-micro · max 25 connections totalt.
-        # Skol-läge är låst till --max-instances=1 (deploy.sh), så vi
-        # är ensamma om poolen. 2+2 räckte inte (lärar-hubb gör tiotals
-        # session-öppningar per request → QueuePool timeout). Se
-        # _init_shared_scope_engine för identisk kommentar — när vi
-        # eventuellt skalar måste båda sänkas eller flyttas bakom
-        # PgBouncer.
+        # Se _init_shared_scope_engine för full kommentar.
+        # Master + scope delar 25-cap-poolen; 4+4 per engine = max 16
+        # (under Cloud SQL:s ~20 användbara).
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=8, max_overflow=8,
+            pool_pre_ping=True, pool_size=4, max_overflow=4,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)
@@ -591,20 +587,19 @@ def _init_shared_scope_engine() -> tuple[Engine, sessionmaker[Session]]:
     url = _master_db_url()
     engine_kwargs: dict = {"future": True}
     if url.startswith("postgresql"):
-        # Cloud SQL db-f1-micro · max 25 connections totalt.
-        # Skol-läget kör --max-instances=1 (deploy.sh) så vi äger HELA
-        # connection-poolen själva. 2+2=4 räckte inte ens till en enda
-        # klass-overview-render (lärar-hubb öppnar 1-2 session-scope per
-        # elev × 28 elever sekventiellt + parallella requests från andra
-        # tabbar). Resultat: QueuePool timeout efter 10 s → frontend
-        # hängde i flera minuter.
-        # Nu 8+8=16 per engine, 2 engines = 32 max — överstiger Cloud
-        # SQL-taket men i praktiken når vi aldrig båda max samtidigt
-        # eftersom requests rör sig snabbt mellan master och scope.
-        # Om vi någonsin går till max-instances>1 måste detta sänkas
-        # eller flyttas till PgBouncer.
+        # Cloud SQL db-f1-micro · max 25 connections totalt, varav ~5
+        # reserverade för superuser → ~20 användbara. Vi kör 1 instans,
+        # 1 process, men 2 engines (master + scope) som DELAR samma DB.
+        # Hård regel: master + scope total connections < 20.
+        # 4+4 per engine × 2 engines = 16 max → 4 i headroom. Trångt
+        # men säkert. Tidigare 8+8 (=32) sprängde taket → FATAL
+        # "remaining connection slots are reserved for non-replication
+        # superuser connections".
+        # Real-perf-fixen är att inte öppna så MÅNGA sessions per
+        # request (caching + batched-read i v2.py) — pool-storlek är
+        # bara säkerhetsventil.
         engine_kwargs.update(
-            pool_pre_ping=True, pool_size=8, max_overflow=8,
+            pool_pre_ping=True, pool_size=4, max_overflow=4,
             pool_recycle=1800, pool_timeout=10,
         )
     engine = create_engine(url, **engine_kwargs)

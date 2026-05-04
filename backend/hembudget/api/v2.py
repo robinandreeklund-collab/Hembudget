@@ -12797,9 +12797,12 @@ class V2KlassOverview(BaseModel):
 # Per-process TTL-cache för dyra per-elev-beräkningar i lärar-hubben.
 # Klass-överblicken itererar 20-30 elever och varje wellbeing-beräkning
 # gör ~20 DB-queries i scope-DB. Utan cache → 60-120 s laddtid per klick.
-# 60 s freshness är OK för en lärar-dashboard; alternativet (eventer som
+# 5 min freshness är OK för en lärar-dashboard; alternativet (eventer som
 # invaliderar exakt) är komplext och behövs inte här.
-_TEACHER_METRICS_TTL_SECONDS = 60.0
+_TEACHER_METRICS_TTL_SECONDS = 300.0
+# Hur färska persisterade WellbeingScore-rader får vara för att
+# återanvändas i klass-prefetch utan att räkna om wellbeing.
+_WELLBEING_SNAPSHOT_FRESH_SECONDS = 600.0
 # scope_key → (expires_at, (total, eco, safe, health, social, leisure))
 _wellbeing_cache: dict[
     str, tuple[float, tuple[int, int, int, int, int, int]]
@@ -12848,7 +12851,9 @@ def _collect_student_metrics(
 
     Tidigare gjordes detta i två separata helpers, var och en med eget
     `scope_context` + `session_scope`. Klass-hubben med 28 elever
-    triggade då 56 session-öppningar mot scope-DB:n. Här delar de en.
+    triggade då 56 session-öppningar mot scope-DB:n. Här delar de en
+    OCH persisterar wellbeing-snapshoten så framtida klass-overviews
+    kan batch-läsa istället för att räkna om.
     """
     from ..school.engines import scope_context, scope_for_student
 
@@ -12868,12 +12873,23 @@ def _collect_student_metrics(
             with session_scope() as s:
                 if cached_wb is None:
                     try:
+                        from ..wellbeing.calculator import (
+                            persist_wellbeing as _persist_wb,
+                        )
                         ym = _current_year_month()
                         wb = calculate_wellbeing(s, ym)
                         wb_tuple = (
                             wb.total_score, wb.economy, wb.safety,
                             wb.health, wb.social, wb.leisure,
                         )
+                        # Persistera snapshoten i scope-DB:n så
+                        # _prefetch_klass_metrics kan batch-läsa
+                        # nästa gång istället för att räkna om
+                        # wellbeing för samma elev.
+                        try:
+                            _persist_wb(s, wb)
+                        except Exception:
+                            pass
                     except Exception:
                         wb_tuple = None
                 if cached_mail is None:
@@ -12914,6 +12930,124 @@ def _collect_student_metrics(
         _cache_set(_wellbeing_cache, scope_key, wb_tuple)
     _cache_set(_mailcount_cache, scope_key, mail_tuple)
     return wb_tuple, mail_tuple
+
+
+def _prefetch_klass_metrics(
+    scope_keys: list[str], year_month: str,
+) -> None:
+    """Förladda TTL-cachen med en handfull batched queries istället för
+    28+ scope_context-öppningar.
+
+    Postgres-läge: alla elev-scopes ligger i samma DB med tenant_id-
+    isolering. Vi kan därför läsa över hela klassen i:
+    - 1 query för WellbeingScore (senaste snapshot per scope för
+      aktuell månad, om < 10 min gammal)
+    - 1 query för MailItem (count + min(received_at) + bool authority
+      per scope, GROUP BY tenant_id)
+
+    SQLite-läge (pytest + dev): varje scope = egen fil, ingen batching
+    möjlig → no-op, fall-back till per-scope-loopen.
+    """
+    import os
+    if not os.environ.get("HEMBUDGET_DATABASE_URL", "").strip():
+        return
+    if not scope_keys:
+        return
+
+    # Bara nycklar som inte redan ligger i cachen behöver hämtas.
+    missing_wb = [
+        k for k in scope_keys
+        if _cache_get(_wellbeing_cache, k) is None
+    ]
+    missing_mail = [
+        k for k in scope_keys
+        if _cache_get(_mailcount_cache, k) is None
+    ]
+    if not missing_wb and not missing_mail:
+        return
+
+    try:
+        from ..school.engines import _init_shared_scope_engine
+        from sqlalchemy import func as _sa_func, case as _sa_case
+        from ..db.models import WellbeingScore as _WS, MailItem as _MI
+
+        _, session_maker = _init_shared_scope_engine()
+        # OBS: ingen scope_context aktiv → tenant-filter är AV, vi
+        # ser tvärs över alla tenants. Måste själva filtrera på
+        # tenant_id.in_(scope_keys).
+        with session_maker() as s:
+            if missing_wb:
+                fresh_after = (
+                    datetime.utcnow()
+                    - timedelta(seconds=_WELLBEING_SNAPSHOT_FRESH_SECONDS)
+                )
+                rows = (
+                    s.query(
+                        _WS.tenant_id, _WS.total_score, _WS.economy,
+                        _WS.safety, _WS.health, _WS.social, _WS.leisure,
+                    )
+                    .filter(
+                        _WS.year_month == year_month,
+                        _WS.tenant_id.in_(missing_wb),
+                        _WS.computed_at >= fresh_after,
+                    )
+                    .all()
+                )
+                for (
+                    tenant, total, eco, safe, health, social, leisure,
+                ) in rows:
+                    if tenant is None:
+                        continue
+                    _cache_set(
+                        _wellbeing_cache, tenant,
+                        (total, eco, safe, health, social, leisure),
+                    )
+
+            if missing_mail:
+                # GROUP BY tenant_id med aggregerings-sub-query.
+                authority_case = _sa_case(
+                    (_MI.mail_type == "authority", 1), else_=0,
+                )
+                mail_rows = (
+                    s.query(
+                        _MI.tenant_id,
+                        _sa_func.count(_MI.id),
+                        _sa_func.min(_MI.received_at),
+                        _sa_func.max(authority_case),
+                    )
+                    .filter(
+                        _MI.status == "unhandled",
+                        _MI.tenant_id.in_(missing_mail),
+                    )
+                    .group_by(_MI.tenant_id)
+                    .all()
+                )
+                seen: set[str] = set()
+                now = datetime.utcnow()
+                for tenant, cnt, oldest, has_auth in mail_rows:
+                    if tenant is None:
+                        continue
+                    seen.add(tenant)
+                    oldest_days: Optional[int] = None
+                    if oldest is not None:
+                        oldest_days = max(0, (now - oldest).days)
+                    _cache_set(
+                        _mailcount_cache, tenant,
+                        (int(cnt or 0), oldest_days, bool(has_auth)),
+                    )
+                # Scopes utan ohanterad post → tomma rader.
+                for k in missing_mail:
+                    if k not in seen:
+                        _cache_set(
+                            _mailcount_cache, k, (0, None, False),
+                        )
+    except Exception:
+        # Prefetchen är en optimering — om den failar fortsätter
+        # vi via per-scope-loopen i klass-overview.
+        import logging
+        logging.getLogger(__name__).exception(
+            "klass-prefetch failed — fortsätter via per-scope-loopen",
+        )
 
 
 def _safe_calc_wellbeing_for(
@@ -13009,6 +13143,17 @@ def teacher_klass_overview(
         if d["last_login_at"] is not None
         and (today - d["last_login_at"]).days == 0
     )
+
+    # Pre-fetch hela klassens wellbeing+mail på 2 queries (Postgres-läge)
+    # innan vi går in i per-elev-loopen. Tomt på SQLite-läge.
+    try:
+        from ..school.engines import scope_for_student as _sfs_pre
+        prefetch_keys = [
+            _sfs_pre(d["obj"]) for d in students_data
+        ]
+        _prefetch_klass_metrics(prefetch_keys, _current_year_month())
+    except Exception:
+        pass  # prefetch är best-effort
 
     # Beräkna wellbeing per elev (i scope-context — kan ej ligga inom
     # master_session ovan eftersom scope-engine är separat)
