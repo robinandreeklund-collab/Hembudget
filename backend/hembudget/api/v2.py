@@ -227,6 +227,20 @@ class HubMonthSummary(BaseModel):
     start_of_month_balance: float = 0.0
 
 
+class HubEventItem(BaseModel):
+    """Pending social event eller klasskompis-bjudning på Hub-feed."""
+    id: int
+    kind: Literal["event", "invite"]
+    title: str
+    category: str
+    cost: float
+    deadline: _date
+    source: str  # "system" | "classmate_invite" | "teacher_triggered"
+    from_name: Optional[str] = None  # bara för invites
+    days_until_deadline: int
+    declinable: bool
+
+
 class HubResponse(BaseModel):
     student_id: int
     character: HubCharacter
@@ -238,6 +252,7 @@ class HubResponse(BaseModel):
     month_summary: HubMonthSummary
     total_balance: float
     accounts_count: int
+    pending_events: list[HubEventItem] = Field(default_factory=list)
 
 
 def _current_year_month() -> str:
@@ -403,6 +418,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
     )
     total_balance = 0.0
     accounts_count = 0
+    pending_events: list[HubEventItem] = []
 
     try:
         with session_scope() as s:
@@ -519,11 +535,71 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
             month_summary.start_of_month_balance = round(
                 total_balance - month_summary.saved, 2,
             )
+
+            # Pending sociala events i scope-DB (max 5 visas på Hub)
+            from ..db.models import StudentEvent as _SE_hub
+            pending_se = (
+                s.query(_SE_hub)
+                .filter(_SE_hub.status == "pending")
+                .order_by(_SE_hub.deadline.asc())
+                .limit(5)
+                .all()
+            )
+            for ev in pending_se:
+                pending_events.append(HubEventItem(
+                    id=ev.id,
+                    kind="event",
+                    title=ev.title,
+                    category=ev.category,
+                    cost=float(ev.cost),
+                    deadline=ev.deadline,
+                    source=ev.source,
+                    from_name=None,
+                    days_until_deadline=(ev.deadline - today).days,
+                    declinable=ev.declinable,
+                ))
     except Exception:
         # Scope-DB saknas eller wellbeing failar — returnera minimal
         # data så hubben inte blir vit. Eleven kan fortfarande se
         # karaktär + v2-fält från master.
         pass
+
+    # Inkomna klasskompis-bjudningar (master-DB) — bara för v2-elever
+    try:
+        from ..school.social_models import ClassEventInvite as _CEI_hub
+        with master_session() as ms2:
+            invites = (
+                ms2.query(_CEI_hub)
+                .filter(
+                    _CEI_hub.to_student_id == target_sid,
+                    _CEI_hub.status == "pending",
+                )
+                .order_by(_CEI_hub.deadline.asc())
+                .limit(5)
+                .all()
+            )
+            for inv in invites:
+                from_name = None
+                from_st = ms2.get(Student, inv.from_student_id)
+                if from_st is not None:
+                    from_name = from_st.display_name
+                pending_events.append(HubEventItem(
+                    id=inv.id,
+                    kind="invite",
+                    title=inv.event_title,
+                    category="social",
+                    cost=float(inv.swish_amount or 0),
+                    deadline=inv.deadline,
+                    source="classmate_invite",
+                    from_name=from_name,
+                    days_until_deadline=(
+                        inv.deadline - _date.today()
+                    ).days,
+                    declinable=True,
+                ))
+    except Exception:
+        pass
+    pending_events.sort(key=lambda e: e.days_until_deadline)
 
     return HubResponse(
         student_id=target_sid,
@@ -535,6 +611,7 @@ def get_hub(info: TokenInfo = Depends(require_token)) -> HubResponse:
         pentagon=pentagon,
         month_summary=month_summary,
         total_balance=total_balance,
+        pending_events=pending_events,
         accounts_count=accounts_count,
     )
 
@@ -18132,6 +18209,94 @@ def _build_student_notifications(
                         unread=True,
                         target_route="/v2/postladan",
                     ))
+
+                # 5. Pending sociala events (StudentEvent · pending status)
+                from ..db.models import StudentEvent as _SE_notif
+                pending_events = (
+                    s.query(_SE_notif)
+                    .filter(_SE_notif.status == "pending")
+                    .order_by(_SE_notif.deadline.asc())
+                    .limit(8)
+                    .all()
+                )
+                for ev in pending_events:
+                    icon_map = {
+                        "social": "♥", "family": "✦", "culture": "♪",
+                        "sport": "▲", "mat": "◉", "lifestyle": "✧",
+                        "opportunity": "★", "unexpected": "!",
+                    }
+                    icon_e = icon_map.get(ev.category, "●")
+                    days_left = (ev.deadline - now.date()).days
+                    deadline_str = (
+                        f"deadline {ev.deadline.strftime('%-d %b')}"
+                        if days_left > 1
+                        else (
+                            "deadline imorgon" if days_left == 1
+                            else "deadline IDAG"
+                        )
+                    )
+                    body_parts = [
+                        f"<em>{ev.title}</em>",
+                        f"{int(float(ev.cost))} kr" if ev.cost > 0 else "",
+                        deadline_str,
+                    ]
+                    body_e = " · ".join(p for p in body_parts if p)
+                    src_prefix = (
+                        "BJUDNING · " if ev.source == "classmate_invite"
+                        else "HÄNDELSE · "
+                    )
+                    notifs.append(V2Notification(
+                        id=f"event-{ev.id}",
+                        kind="social",
+                        icon=icon_e,
+                        occurred_at=ev.created_at or now,
+                        time_label=_time_label_for(ev.created_at or now),
+                        title=f"{src_prefix}{ev.category.upper()}",
+                        body=body_e,
+                        unread=True,
+                        target_route="/v2/handelser",
+                    ))
+    except Exception:
+        pass
+
+    # 6. Inkomna klasskompis-bjudningar (master-DB · ClassEventInvite)
+    try:
+        from ..school.social_models import ClassEventInvite as _CEI
+        from ..school.models import Student as _Stu_inv
+        invites = (
+            ms.query(_CEI)
+            .filter(
+                _CEI.to_student_id == sid,
+                _CEI.status == "pending",
+            )
+            .order_by(_CEI.deadline.asc())
+            .limit(8)
+            .all()
+        )
+        for inv in invites:
+            from_name = "klasskompis"
+            from_st = ms.get(_Stu_inv, inv.from_student_id)
+            if from_st is not None:
+                from_name = from_st.display_name or from_name
+            cost_str = (
+                f"{int(float(inv.swish_amount))} kr"
+                if inv.swish_amount and inv.swish_amount > 0
+                else "gratis"
+            )
+            notifs.append(V2Notification(
+                id=f"invite-{inv.id}",
+                kind="social",
+                icon="♥",
+                occurred_at=inv.created_at or now,
+                time_label=_time_label_for(inv.created_at or now),
+                title=f"BJUDNING · {from_name}",
+                body=(
+                    f"<em>{inv.event_title}</em> · {cost_str} · "
+                    f"deadline {inv.deadline.strftime('%-d %b')}"
+                ),
+                unread=True,
+                target_route="/v2/handelser",
+            ))
     except Exception:
         pass
 

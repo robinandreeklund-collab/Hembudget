@@ -9080,3 +9080,168 @@ def test_v2_loan_apply_logs_activity_for_teacher(fx) -> None:
         assert len(events) == 1
         assert events[0].payload["loan_kind"] == "smslan"
         assert events[0].payload["amount"] == 5000
+
+
+# =================================================================
+# Sociala events / händelser i V2 (StudentEvent + ClassEventInvite)
+# =================================================================
+
+def _seed_event_for_student(sid: int, *, category: str = "social"):
+    """Skapa en pending StudentEvent direkt i scope-DB:n."""
+    from datetime import date, timedelta
+    from decimal import Decimal as _Dec
+    from hembudget.db.models import StudentEvent
+    from hembudget.school.engines import (
+        scope_for_student, scope_context, get_scope_session,
+    )
+    from hembudget.school.models import Student as _Stu
+    with master_session() as ms:
+        st = ms.get(_Stu, sid)
+        sk = scope_for_student(st)
+    with scope_context(sk):
+        with get_scope_session(sk)() as ss:
+            ev = StudentEvent(
+                event_code="bio_filmstaden",
+                title="Bio på Filmstaden",
+                description="Klasskompisar bjuder dig på bio.",
+                category=category,
+                cost=_Dec("180"),
+                deadline=date.today() + timedelta(days=4),
+                source="system",
+                status="pending",
+                social_invite_allowed=True,
+                declinable=True,
+            )
+            ss.add(ev)
+            ss.commit()
+            return ev.id
+
+
+def _seed_event_template(code: str = "bio_filmstaden"):
+    """Säkerställ att master har EventTemplate-raden så accept fungerar."""
+    from hembudget.school.event_models import EventTemplate
+    with master_session() as ms:
+        existing = (
+            ms.query(EventTemplate)
+            .filter(EventTemplate.code == code)
+            .first()
+        )
+        if existing is None:
+            tpl = EventTemplate(
+                code=code,
+                title="Bio på Filmstaden",
+                description="Klasskompisar bjuder dig på bio.",
+                category="social",
+                cost_min=150, cost_max=200,
+                impact_economy=-1,
+                impact_social=3,
+                impact_leisure=2,
+            )
+            ms.add(tpl)
+            ms.commit()
+
+
+def test_v2_event_accept_creates_tx_and_applies_pentagon(fx) -> None:
+    """Accept ett event → skapar Transaction + applicerar pentagon-delta
+    via apply_pentagon_delta. Tidigare buggen: impacts lagrades bara
+    som JSON i ev.impact_applied — pentagon uppdaterades aldrig."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_event_template()
+    ev_id = _seed_event_for_student(sid)
+
+    # Acceptera
+    r = client.post(
+        f"/events/{ev_id}/accept",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["status"] == "accepted"
+    assert data["impact_applied"]["social"] == 3
+
+    # Verifiera att WellbeingEvent-rader skapades (pentagon-delta)
+    from hembudget.game_engine.pentagon.wellbeing_log import (
+        pentagon_history_for_student,
+    )
+    history = pentagon_history_for_student(sid, days=7)
+    # Vi förväntar minst en rad för axis='social' med reason_kind='event_accepted'
+    social_rows = [
+        h for h in history
+        if h.axis == "social" and h.reason_kind == "event_accepted"
+    ]
+    assert len(social_rows) >= 1, (
+        f"Pentagon-delta saknas — events: "
+        f"{[(h.axis, h.reason_kind) for h in history]}"
+    )
+
+
+def test_v2_event_decline_logs_activity(fx) -> None:
+    """Decline → log_activity 'event.declined' + ev pentagon-delta."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_event_template()
+    ev_id = _seed_event_for_student(sid)
+
+    r = client.post(
+        f"/events/{ev_id}/decline",
+        headers={"Authorization": f"Bearer {stu}"},
+        json={"decision_reason": "valde sparande"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["status"] == "declined"
+
+    # Aktivitet loggad
+    from hembudget.school.models import StudentActivity
+    with master_session() as ms:
+        events_ = (
+            ms.query(StudentActivity)
+            .filter(
+                StudentActivity.student_id == sid,
+                StudentActivity.kind == "event.declined",
+            )
+            .all()
+        )
+        assert len(events_) == 1
+
+
+def test_v2_notifications_includes_pending_events(fx) -> None:
+    """Pending StudentEvent ska dyka upp i /v2/notifications som social."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_event_for_student(sid, category="social")
+
+    # Töm cachen så vi får färska data
+    from hembudget.api import v2 as v2_mod
+    v2_mod._notif_cache.clear()
+
+    r = client.get(
+        "/v2/notifications",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    event_notifs = [n for n in data["items"] if n["id"].startswith("event-")]
+    assert len(event_notifs) >= 1
+    assert event_notifs[0]["kind"] == "social"
+    assert event_notifs[0]["target_route"] == "/v2/handelser"
+
+
+def test_v2_hub_includes_pending_events(fx) -> None:
+    """Hub-svaret ska innehålla pending_events-listan."""
+    client, tch, *_ = fx
+    sid, stu = _create_seeded_student_and_get_token(client, tch)
+    _seed_event_for_student(sid, category="culture")
+
+    r = client.get(
+        "/v2/hub",
+        headers={"Authorization": f"Bearer {stu}"},
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "pending_events" in data
+    assert len(data["pending_events"]) >= 1
+    assert data["pending_events"][0]["category"] == "culture"
+    assert data["pending_events"][0]["kind"] == "event"

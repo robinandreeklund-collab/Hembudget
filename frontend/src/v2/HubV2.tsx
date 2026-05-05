@@ -290,6 +290,18 @@ export function HubV2() {
               <Link to="/v2/avanza" className="hub-char-pill">
                 Avanza
               </Link>
+              <Link
+                to="/v2/handelser"
+                className={`hub-char-pill${
+                  hub.pending_events && hub.pending_events.length > 0
+                    ? " alert"
+                    : ""
+                }`}
+              >
+                Händelser
+                {hub.pending_events && hub.pending_events.length > 0
+                  && ` · ${hub.pending_events.length}`}
+              </Link>
               <Link to="/v2/moduler" className="hub-char-pill">
                 Mina moduler
               </Link>
@@ -374,6 +386,57 @@ export function HubV2() {
             </div>
           </div>
         </div>
+
+        {/* HÄNDELSER · pending events + bjudningar */}
+        {hub.pending_events && hub.pending_events.length > 0 && (
+          <section className="hub-events">
+            <div className="hub-events-head">
+              <span className="hub-events-eye">● Händelser att hantera</span>
+              <Link to="/v2/handelser" className="hub-events-link">
+                Visa alla →
+              </Link>
+            </div>
+            <div className="hub-events-list">
+              {hub.pending_events.slice(0, 4).map((ev) => {
+                const icon: Record<string, string> = {
+                  social: "♥", family: "✦", culture: "♪",
+                  sport: "▲", opportunity: "★", unexpected: "!",
+                  mat: "◉", lifestyle: "✧",
+                };
+                const urgent = ev.days_until_deadline <= 1;
+                return (
+                  <Link
+                    to="/v2/handelser"
+                    key={`${ev.kind}-${ev.id}`}
+                    className={`hub-event-card${urgent ? " urgent" : ""}${
+                      ev.kind === "invite" ? " invite" : ""
+                    }`}
+                  >
+                    <span className="hub-event-icon">
+                      {icon[ev.category] || "●"}
+                    </span>
+                    <div className="hub-event-body">
+                      <div className="hub-event-cat">
+                        {ev.kind === "invite" && ev.from_name
+                          ? `Bjudning från ${ev.from_name}`
+                          : ev.category}
+                      </div>
+                      <div className="hub-event-title">{ev.title}</div>
+                      <div className="hub-event-meta">
+                        {ev.cost > 0 && `${SEK(ev.cost)} kr · `}
+                        {ev.days_until_deadline <= 0
+                          ? "deadline IDAG"
+                          : ev.days_until_deadline === 1
+                            ? "deadline imorgon"
+                            : `${ev.days_until_deadline} dagar kvar`}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* PENTAGON · live från wellbeing · klick på axel = flip-card */}
         {pentagon ? (

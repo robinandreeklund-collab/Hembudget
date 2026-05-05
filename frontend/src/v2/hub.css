@@ -519,3 +519,89 @@ body[data-mode="business"] .v2-larare-root {
     max-height: 280px;
   }
 }
+
+/* === HÄNDELSER-feed på Hub === */
+.hub-root .hub-events {
+  margin: 28px 0 0;
+}
+.hub-root .hub-events-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.hub-root .hub-events-eye {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--warm);
+}
+.hub-root .hub-events-link {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+.hub-root .hub-events-link:hover {
+  color: var(--warm);
+}
+.hub-root .hub-events-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.hub-root .hub-event-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+  align-items: start;
+}
+.hub-root .hub-event-card:hover {
+  border-color: var(--warm);
+  background: rgba(255, 255, 255, 0.04);
+}
+.hub-root .hub-event-card.urgent {
+  border-left-color: var(--accent);
+}
+.hub-root .hub-event-card.invite {
+  border-left-color: #8b5cf6;
+}
+.hub-root .hub-event-icon {
+  font-size: 18px;
+  color: var(--warm);
+  line-height: 1;
+}
+.hub-root .hub-event-cat {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.hub-root .hub-event-title {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+.hub-root .hub-event-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.hub-root .hub-event-card.urgent .hub-event-meta {
+  color: #fca5a5;
+}

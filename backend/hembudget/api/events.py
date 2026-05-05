@@ -329,6 +329,55 @@ def accept_event(
     # Nollställ decline-streak — eleven har sagt ja
     _reset_decline_streak(scope)
 
+    # === Wellbeing-pentagon delta (V2) ===
+    # Tidigare lagrades impacts BARA i ev.impact_applied som JSON för
+    # audit. Pentagon-vyn uppdaterades aldrig automatiskt → eleven såg
+    # att hen accepterat 5 sociala events utan att 'social'-axeln rörde
+    # sig. Nu applicerar vi varje impact-axel via apply_pentagon_delta
+    # (samma funktion som lön / mail / lån-flöden använder).
+    from ..school.engines import get_current_actor_student
+    actor_id = get_current_actor_student()
+    if actor_id is not None:
+        from ..game_engine.pentagon import apply_pentagon_delta
+        # Mappa impact-axel-namn till pentagon-axlarna. EventTemplate
+        # använder economy/health/social/leisure/safety vilket är
+        # exakt samma namn som pentagon — så vi kan loopa direkt.
+        for axis, delta in impacts.items():
+            if delta == 0:
+                continue
+            try:
+                apply_pentagon_delta(
+                    actor_id,
+                    axis=axis,
+                    requested_delta=delta,
+                    reason_kind="event_accepted",
+                    reason_id=ev.id,
+                    reason_table="student_events",
+                    explanation=f"Accepterade '{ev.title}'",
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "event accept: pentagon-delta misslyckades",
+                )
+
+    # Lärar-spårning
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="event.accepted",
+            summary=f"Accepterade '{ev.title}'",
+            payload={
+                "event_id": ev.id,
+                "event_code": ev.event_code,
+                "category": ev.category,
+                "cost": float(ev.cost),
+                "impacts": impacts,
+            },
+        )
+    except Exception:
+        pass
+
     # Pedagogisk note
     if is_income:
         note = (
@@ -426,6 +475,45 @@ def decline_event(
     ev.decided_at = _dt.utcnow()
     ev.impact_applied = decline_impact
     scope.flush()
+
+    # Wellbeing-delta även vid decline (negativ social om socialt event)
+    from ..school.engines import get_current_actor_student
+    actor_id = get_current_actor_student()
+    if actor_id is not None and any(decline_impact.values()):
+        from ..game_engine.pentagon import apply_pentagon_delta
+        for axis, delta in decline_impact.items():
+            if delta == 0:
+                continue
+            try:
+                apply_pentagon_delta(
+                    actor_id,
+                    axis=axis,
+                    requested_delta=delta,
+                    reason_kind="event_declined",
+                    reason_id=ev.id,
+                    reason_table="student_events",
+                    explanation=f"Nekade '{ev.title}'",
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "event decline: pentagon-delta misslyckades",
+                )
+
+    try:
+        from ..school.activity import log_activity
+        log_activity(
+            kind="event.declined",
+            summary=f"Nekade '{ev.title}'",
+            payload={
+                "event_id": ev.id,
+                "event_code": ev.event_code,
+                "category": ev.category,
+                "reason": payload.decision_reason,
+            },
+        )
+    except Exception:
+        pass
 
     # Underhåll decline-streak. social-kategori utan 'sparande'-skäl
     # räknas som onödigt nej.

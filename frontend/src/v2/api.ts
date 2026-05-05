@@ -65,6 +65,19 @@ export type HubMonthSummary = {
   start_of_month_balance: number;
 };
 
+export type HubEventItem = {
+  id: number;
+  kind: "event" | "invite";
+  title: string;
+  category: string;
+  cost: number;
+  deadline: string;
+  source: string;
+  from_name: string | null;
+  days_until_deadline: number;
+  declinable: boolean;
+};
+
 export type HubData = {
   student_id: number;
   character: HubCharacter;
@@ -76,6 +89,66 @@ export type HubData = {
   month_summary: HubMonthSummary;
   total_balance: number;
   accounts_count: number;
+  pending_events: HubEventItem[];
+};
+
+// === Events / sociala händelser (V2) ===
+
+export type V2EventItem = {
+  id: number;
+  event_code: string;
+  title: string;
+  description: string;
+  category: string;
+  cost: number;
+  proposed_date: string | null;
+  deadline: string;
+  source: string;
+  status: string;
+  social_invite_allowed: boolean;
+  declinable: boolean;
+  created_at: string;
+};
+
+export type V2InviteItem = {
+  id: number;
+  from_student_id: number;
+  from_name: string;
+  event_code: string;
+  event_title: string;
+  proposed_date: string | null;
+  deadline: string;
+  cost: number;
+  cost_split_model: string;
+  swish_amount: number | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type V2ClassmateItem = {
+  student_id: number;
+  display_name: string;
+  class_label: string | null;
+};
+
+export type V2EventAcceptResponse = {
+  event_id: number;
+  status: string;
+  transaction_id: number | null;
+  cost_applied: number;
+  income_applied: number;
+  impact_applied: Record<string, number>;
+  pedagogical_note: string;
+};
+
+export type V2EventDeclineResponse = {
+  event_id: number;
+  status: string;
+  impact_applied: Record<string, number>;
+  pedagogical_note: string;
+  current_decline_streak: number;
+  show_streak_nudge: boolean;
 };
 
 export type BankAccount = {
@@ -2376,6 +2449,66 @@ export type OnboardingEventType =
 export const v2Api = {
   status: () => api<V2Status>("/v2/status"),
   hub: () => api<HubData>("/v2/hub"),
+  // === Events / sociala händelser ===
+  eventsPending: () =>
+    api<{ events: V2EventItem[]; count: number }>("/events/pending"),
+  eventsHistory: (limit: number = 30) =>
+    api<{ events: V2EventItem[]; count: number }>(
+      `/events/history?limit=${limit}`,
+    ),
+  eventAccept: (id: number, accountId?: number, decisionReason?: string) =>
+    api<V2EventAcceptResponse>(`/events/${id}/accept`, {
+      method: "POST",
+      body: JSON.stringify({
+        account_id: accountId,
+        decision_reason: decisionReason,
+      }),
+    }),
+  eventDecline: (id: number, decisionReason?: string) =>
+    api<V2EventDeclineResponse>(`/events/${id}/decline`, {
+      method: "POST",
+      body: JSON.stringify({ decision_reason: decisionReason }),
+    }),
+  eventClassmates: () =>
+    api<{ classmates: V2ClassmateItem[]; invites_enabled: boolean }>(
+      "/events/classmates",
+    ),
+  eventInviteClassmates: (
+    eventId: number,
+    classmateIds: number[],
+    message?: string,
+  ) =>
+    api<{ created: number; invite_ids: number[] }>(
+      "/events/invite-classmates",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          event_id: eventId,
+          classmate_ids: classmateIds,
+          message,
+        }),
+      },
+    ),
+  eventInvitations: () =>
+    api<{ invitations: V2InviteItem[]; count: number }>(
+      "/events/invitations",
+    ),
+  eventInviteRespond: (
+    inviteId: number,
+    accept: boolean,
+    decisionReason?: string,
+  ) =>
+    api<{ status: string; resulting_event_id: number | null }>(
+      "/events/invitations/respond",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          invite_id: inviteId,
+          accept,
+          decision_reason: decisionReason,
+        }),
+      },
+    ),
   bank: (limitTransactions: number = 30) =>
     api<BankData>(`/v2/bank?limit_transactions=${limitTransactions}`),
   budget: (month?: string) =>

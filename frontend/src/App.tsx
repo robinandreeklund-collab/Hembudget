@@ -74,6 +74,7 @@ import { V2DevFooter } from "./v2/V2DevFooter";
 import { EchoDrawer } from "./v2/EchoDrawer";
 import { MalV2 } from "./v2/MalV2";
 import { PostladanV2 } from "./v2/PostladanV2";
+import { HandelserV2 } from "./v2/HandelserV2";
 import { V2Bootstrap } from "./v2/V2Bootstrap";
 import { V2RootRedirect } from "./v2/V2RootRedirect";
 import { DashboardV2Guard } from "./v2/DashboardV2Guard";
@@ -348,6 +349,7 @@ export default function App() {
           <Route path="/v2/skatten" element={<SkattenV2 />} />
           <Route path="/v2/lan" element={<LanV2 />} />
           <Route path="/v2/forsakringar" element={<ForsakringarV2 />} />
+          <Route path="/v2/handelser" element={<HandelserV2 />} />
           <Route path="/v2/forbrukning" element={<ForbrukningV2 />} />
           {/* Boendemarknaden — wrapper med tabbar för hyra + köp/sälj.
               /v2/hyresvarden är bakåt-kompat-alias så befintliga länkar

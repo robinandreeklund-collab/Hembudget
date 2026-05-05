@@ -131,8 +131,11 @@ def build_app() -> FastAPI:
         )
         _V1_BLOCKED_EXACT = {
             "/users",
-            "/events/pending",
-            "/events/decline-streak",
+            # /events/* används av V2 (sociala händelser, klasskompis-
+            # bjudningar) — får INTE blockeras här. Tidigare blockerades
+            # /events/pending + /events/decline-streak för att V1 drog
+            # ner scope-poolen, men nu är endpointarna integrerade i
+            # V2-frontenden (EventsV2 + Hub-feed + notifications).
         }
 
         class V1LegacyGateMiddleware(BaseHTTPMiddleware):
