@@ -22,7 +22,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from ...db.models import Account, Transaction
+from ...db.models import Account, Budget, Category, Transaction
 from ...school.konsumentverket import (
     GEMENSAMT_PER_PERSONER,
     INDIVID_OVRIGT_PER_AGE,
@@ -42,6 +42,82 @@ SPEND_MULTIPLIER = {
 }
 
 VARIATION_PER_LEVEL = {1: 0.05, 2: 0.12, 3: 0.20}
+
+
+# === Elasticitet per kategori ===========================================
+# floor = lägsta andel av KV-baseline som transaktionerna någonsin
+# genereras till, oavsett hur lågt eleven sätter sin budget. Tanken:
+# du KAN inte leva på 0 kr mat (kropp protesterar) men du KAN avstå
+# från Netflix helt om du vill (0 % floor = restaurang/nöje följer
+# helt elev-budgeten).
+#
+# Effekt på genererade transaktioner:
+#   effective_spend = max(elev_budget, floor × kv_baseline)
+#   monthly_amount  = effective_spend × spend_profile × variation
+#
+# Pedagogiken: budget styr verkligheten. Om eleven sätter mat på 1500
+# kr blir transaktionerna ungefär 2000 kr (70 % av 2840 KV) och
+# wellbeing-violation triggas. Om eleven sätter mat på 4000 kr
+# genereras runt 4000 kr.
+ELASTICITY: dict[str, float] = {
+    "Mat & livsmedel":        0.70,
+    "Hälsa & hygien":         0.70,
+    "Transport (övrigt)":     0.60,
+    "Barn & familj":          0.80,
+    "Förbrukningsvaror":      0.40,
+    "Kläder & skor":          0.20,
+    "Nöje & fritid":          0.00,
+    "Restaurang & café":      0.00,
+}
+
+
+def _read_student_budgets(
+    session: "Optional[Session]", year_month: str,
+) -> dict[str, int]:
+    """Läs elevens budget per kategori-namn för en månad.
+
+    Returnerar {kategorinamn: planerat_belopp_positivt}. Tom dict om
+    ingen session ges (används av tester) eller om eleven inte har
+    seedat budget än (förstagångs-tick före seed_initial_budget).
+    Negativa Budget.planned_amount → absoluttal (utgift).
+    """
+    if session is None:
+        return {}
+    out: dict[str, int] = {}
+    try:
+        rows = (
+            session.query(Budget, Category.name)
+            .join(Category, Category.id == Budget.category_id)
+            .filter(Budget.month == year_month)
+            .all()
+        )
+        for b, cat_name in rows:
+            out[cat_name] = abs(int(b.planned_amount or 0))
+    except Exception:
+        # Krasch får aldrig ta ner tick_month — KV-baseline är
+        # fallbacken. Logga och returnera tom dict.
+        import logging
+        logging.getLogger(__name__).exception(
+            "_read_student_budgets: misslyckades, fallback till KV-baseline",
+        )
+    return out
+
+
+def _apply_elasticity(
+    plan_name: str,
+    kv_baseline: int,
+    student_budget: Optional[int],
+) -> int:
+    """Räkna ut effective_spend för en kategori.
+
+    Om eleven inte har en budget för kategorin används KV-baseline rakt
+    av. Annars: max(elev_budget, floor × kv_baseline).
+    """
+    if student_budget is None:
+        return kv_baseline
+    floor_share = ELASTICITY.get(plan_name, 0.50)
+    floor = int(kv_baseline * floor_share)
+    return max(int(student_budget), floor)
 
 
 @dataclass(frozen=True)
@@ -100,8 +176,16 @@ def _plans_for(
     profile: GeneratedProfile,
     spend_profile: str,
     starting_level: int,
+    *,
+    student_budgets: Optional[dict[str, int]] = None,
 ) -> list[CategoryPlan]:
-    """Bygger CategoryPlan-lista för månaden."""
+    """Bygger CategoryPlan-lista för månaden.
+
+    Om `student_budgets` ges (mappar kategorinamn → kr/mån) styr
+    elevens budget den genererade utgiftsnivån via
+    `_apply_elasticity()`. Då blir t.ex. matlådan 70 % av KV-schablonen
+    minst, men annars exakt elevens valda nivå × spend_profile.
+    """
     from ..difficulty import get_difficulty
     base = _baseline_for_household(profile)
     base_mult = SPEND_MULTIPLIER.get(spend_profile, 1.0)
@@ -119,19 +203,30 @@ def _plans_for(
     def _vary(amount: int) -> int:
         return max(0, int(amount * mult * (1 + rng.uniform(-variation, variation))))
 
+    sb = student_budgets or {}
+
+    def _eff(name: str, kv_baseline: int) -> int:
+        """Elasticity-applicerat månadsbelopp för en kategori."""
+        return _apply_elasticity(name, kv_baseline, sb.get(name))
+
     persons = _persons_in_household(profile)
 
     plans = [
         CategoryPlan(
             name="Mat & livsmedel",
-            monthly_amount=_vary(int(base["mat"] * food_mult)),
+            monthly_amount=_vary(_eff(
+                "Mat & livsmedel", int(base["mat"] * food_mult),
+            )),
             n_transactions=(4, 8),
             merchants=["ICA", "Coop", "Willys", "Hemköp", "Lidl"],
             cost_mult_kind="food",
         ),
         CategoryPlan(
             name="Restaurang & café",
-            monthly_amount=_vary(int(900 * food_mult * persons * 0.7)),
+            monthly_amount=_vary(_eff(
+                "Restaurang & café",
+                int(900 * food_mult * persons * 0.7),
+            )),
             n_transactions=(2, 6),
             merchants=[
                 "Espresso House", "Wayne's Coffee", "Joe & The Juice",
@@ -141,25 +236,34 @@ def _plans_for(
         ),
         CategoryPlan(
             name="Kläder & skor",
-            monthly_amount=_vary(int(base["individ"] * 0.20)),
+            monthly_amount=_vary(_eff(
+                "Kläder & skor", int(base["individ"] * 0.20),
+            )),
             n_transactions=(1, 3),
             merchants=["H&M", "Lindex", "Zalando", "Stadium", "Åhléns"],
         ),
         CategoryPlan(
             name="Hälsa & hygien",
-            monthly_amount=_vary(int(base["individ"] * 0.15)),
+            monthly_amount=_vary(_eff(
+                "Hälsa & hygien", int(base["individ"] * 0.15),
+            )),
             n_transactions=(1, 3),
             merchants=["Apoteket", "Lyko", "Apotek Hjärtat"],
         ),
         CategoryPlan(
             name="Förbrukningsvaror",
-            monthly_amount=_vary(base["forbruk"]),
+            monthly_amount=_vary(_eff(
+                "Förbrukningsvaror", base["forbruk"],
+            )),
             n_transactions=(1, 3),
             merchants=["Rusta", "Jula", "Clas Ohlson"],
         ),
         CategoryPlan(
             name="Nöje & fritid",
-            monthly_amount=_vary(int(profile.facts.get("budget_for_leisure", 1500))),
+            monthly_amount=_vary(_eff(
+                "Nöje & fritid",
+                int(profile.facts.get("budget_for_leisure", 1500)),
+            )),
             n_transactions=(2, 5),
             merchants=[
                 "Spotify", "Netflix", "Bio Rio", "SF Bio",
@@ -168,7 +272,9 @@ def _plans_for(
         ),
         CategoryPlan(
             name="Transport (övrigt)",
-            monthly_amount=_vary(int(350 * transport_mult)),
+            monthly_amount=_vary(_eff(
+                "Transport (övrigt)", int(350 * transport_mult),
+            )),
             n_transactions=(1, 4),
             merchants=["Uber", "Bolt", "Voi", "SJ", "Taxi Stockholm"],
             cost_mult_kind="transport",
@@ -178,7 +284,10 @@ def _plans_for(
     if profile.family.children_count > 0:
         plans.append(CategoryPlan(
             name="Barn & familj",
-            monthly_amount=_vary(700 + 300 * profile.family.children_count),
+            monthly_amount=_vary(_eff(
+                "Barn & familj",
+                700 + 300 * profile.family.children_count,
+            )),
             n_transactions=(2, 5),
             merchants=["Babyland", "Lekia", "BR Leksaker"],
         ))
@@ -227,7 +336,14 @@ def generate_variable_expenses(
     """
     rng = rng or random.Random(f"{student_scope}|{year_month}|var")
 
-    plans = _plans_for(rng, profile, spend_profile, starting_level)
+    # Läs elevens budgetval — styr elasticity per kategori. Tom dict
+    # om inget är seedat (då används KV-baseline rakt av).
+    student_budgets = _read_student_budgets(s, year_month)
+
+    plans = _plans_for(
+        rng, profile, spend_profile, starting_level,
+        student_budgets=student_budgets,
+    )
     # Difficulty-extra-multiplikator (Fas 8b): nivå 3 har högre
     # impulsköp + småutgifter eleven inte planerar för
     diff = get_difficulty(starting_level)

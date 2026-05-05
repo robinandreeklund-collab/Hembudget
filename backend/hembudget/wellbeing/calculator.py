@@ -147,21 +147,68 @@ def _high_cost_credit_count(session: Session) -> int:
         return 0
 
 
-def _budget_violations(session: Session, year_month: str) -> tuple[int, list[str]]:
-    """Kollar elevens budget för denna månad mot Konsumentverket. Returnerar
-    (antal_violations, lista_av_categorinamn) — kategorinamn behövs i UI."""
+def _load_active_student_profile() -> object | None:
+    """Hämta master-DB::StudentProfile för aktuell scope-elev (None om
+    saknas eller om vi inte är i en student-scope)."""
+    try:
+        from ..school.engines import (
+            get_current_actor_student,
+            master_session as _ms,
+        )
+        from ..school.models import StudentProfile
+        actor_id = get_current_actor_student()
+        if actor_id is None:
+            return None
+        with _ms() as msdb:
+            prof = (
+                msdb.query(StudentProfile)
+                .filter(StudentProfile.student_id == actor_id)
+                .first()
+            )
+            if prof is None:
+                return None
+            # Detacha fältvärdena så de funkar utanför sessionen
+            class _Snap:
+                pass
+            snap = _Snap()
+            for f in (
+                "age", "family_status", "children_ages",
+                "housing_type",
+            ):
+                setattr(snap, f, getattr(prof, f, None))
+            return snap
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_load_active_student_profile: misslyckades",
+        )
+        return None
+
+
+def _budget_violations(
+    session: Session, year_month: str,
+) -> tuple[int, list[tuple[str, str, float]]]:
+    """Kollar elevens budget för denna månad mot Konsumentverket.
+
+    Returnerar (antal_violations, [(cat_name, severity, ratio), ...])
+    så caller kan applicera differentierat straff (subexistens vs snålt).
+    Använder familje-aware lookup om StudentProfile är tillgänglig.
+    """
     from ..db.models import Category
+    profile = _load_active_student_profile()
     rows = (
         session.query(Budget, Category.name)
         .join(Category, Category.id == Budget.category_id)
         .filter(Budget.month == year_month)
         .all()
     )
-    violations: list[str] = []
+    violations: list[tuple[str, str, float]] = []
     for b, cat_name in rows:
-        check = check_against_minimum(cat_name, int(b.planned_amount))
+        # Budgetar lagras negativa för utgifter — använd absolutbeloppet.
+        actual = abs(int(b.planned_amount or 0))
+        check = check_against_minimum(cat_name, actual, profile=profile)
         if check.is_violation:
-            violations.append(cat_name)
+            violations.append((cat_name, check.severity, check.ratio))
     return len(violations), violations
 
 
@@ -966,17 +1013,54 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
         )
 
     # --- HÄLSA-DIMENSION (budget vs minimum) ---
+    # Pedagogik: ju lägre eleven sätter budgeten under KV-schablonen,
+    # desto hårdare drar det i pentagon. Matens subexistens-nivå (under
+    # 50 % av KV) ger extra hälso-straff utöver baslinjen — du KAN inte
+    # leva på halva matbudgeten utan att kroppen märker det. Och 3+
+    # samtidiga violations sänker även sociala axeln (isolering pga
+    # snål budget — ingen råd med vänner, presenter, fika).
     health = 50
-    n_violations, violation_cats = _budget_violations(session, year_month)
+    social_penalty_budget = 0  # Tillämpas när social initierats nedan
+    social_penalty_factor: Optional[WellbeingFactor] = None
+    n_violations, violation_rows = _budget_violations(session, year_month)
+    cat_names_only = [c for c, _, _ in violation_rows]
     if n_violations > 0:
-        delta = -5 * n_violations
-        health += delta
-        cat_str = ", ".join(violation_cats[:3])
+        per_cat_delta = 0
+        for cat_name, severity, _ratio in violation_rows:
+            per_cat_delta += -5 if severity == "subexistens" else -2
+        health += per_cat_delta
+        cat_str = ", ".join(cat_names_only[:3])
         factors.append(WellbeingFactor(
-            "health", delta,
-            f"{n_violations} budget(ar) under Konsumentverket-minimum "
-            f"({cat_str}). −5 p per kategori.",
+            "health", per_cat_delta,
+            f"{n_violations} budget"
+            f"{'ar' if n_violations > 1 else ''} under Konsumentverkets "
+            f"minimum ({cat_str}). −2 p per snål, −5 p per subexistens.",
         ))
+
+        # Eskalering 1 · mat-subexistens slår direkt mot hälsa
+        mat_subexistens = any(
+            severity == "subexistens"
+            and any(k in cat_name.lower()
+                    for k in ("mat", "livsmedel", "ica", "coop", "willys"))
+            for cat_name, severity, _r in violation_rows
+        )
+        if mat_subexistens:
+            health -= 3
+            factors.append(WellbeingFactor(
+                "health", -3,
+                "Mat under hälften av KV-schablon — kropp och energi "
+                "kan inte hänga med i längden.",
+            ))
+
+        # Eskalering 2 · 3+ samtidiga violations → social isolering
+        # (sparas som deferred — social-axeln initieras längre ned)
+        if n_violations >= 3:
+            social_penalty_budget = -5
+            social_penalty_factor = WellbeingFactor(
+                "social", -5,
+                f"{n_violations} samtidiga budget-violations — när allt "
+                "ska klippas hamnar vänner, fika och presenter sist.",
+            )
     elif rows_total := (
         session.query(Budget).filter(Budget.month == year_month).count()
     ):
@@ -1013,6 +1097,10 @@ def calculate_wellbeing(session: Session, year_month: str) -> WellbeingResult:
 
     social = 50
     leisure = 50
+    if social_penalty_budget != 0:
+        social += social_penalty_budget
+        if social_penalty_factor is not None:
+            factors.append(social_penalty_factor)
     for e in decided_events:
         impact = e.impact_applied or {}
         social += int(impact.get("social", 0))

@@ -1353,10 +1353,35 @@ def update_budget_category(
         # Om eleven sänker en kategori under Konsumentverket-minimum loggas
         # det DIREKT som WellbeingEvent (snarare än vänta på nästa
         # wellbeing-recompute). Pedagogiskt: eleven ser konsekvensen direkt
-        # i pentagon-historiken.
+        # i pentagon-historiken. Familje-aware (sambo/barn) via student-
+        # profile-lookup mot master-DB.
         if not body.is_income:
             from ..wellbeing.minimums import check_against_minimum
-            check = check_against_minimum(cat.name, int(body.planned_amount))
+            _kv_profile = None
+            try:
+                from ..school.models import StudentProfile as _SP_kv
+                with master_session() as _msdb_kv:
+                    _kv_profile = (
+                        _msdb_kv.query(_SP_kv)
+                        .filter(_SP_kv.student_id == info.student_id)
+                        .first()
+                    )
+                    if _kv_profile is not None:
+                        # Detacha så vi kan använda fältvärdena
+                        class _Snap:
+                            pass
+                        _snap = _Snap()
+                        for f in (
+                            "age", "family_status", "children_ages",
+                            "housing_type",
+                        ):
+                            setattr(_snap, f, getattr(_kv_profile, f, None))
+                        _kv_profile = _snap
+            except Exception:
+                _kv_profile = None
+            check = check_against_minimum(
+                cat.name, int(body.planned_amount), profile=_kv_profile,
+            )
             if check.is_violation:
                 try:
                     from ..game_engine.pentagon import apply_pentagon_delta
@@ -17218,6 +17243,29 @@ def _seed_initial_student_data(
                 "failed för %s",
                 student.id,
             )
+
+    # === Steg 2c · KV-startbudget (Sprint 7) ===
+    # Pedagogiskt: eleven ska INTE öppna /v2/budget och se en tom
+    # tabell. Onboarding-uppdrag #1 är "Skapa din budget" — vi seedar
+    # KV-schablonerna som utgångsläge så eleven kan justera dem nedåt
+    # eller uppåt och direkt se konsekvenserna i pentagon.
+    # Familje-aware via suggest_budget(profile.family.*).
+    try:
+        from ..budget.seed import seed_initial_budget_for_months
+        with scope_context(scope_key):
+            with session_scope() as s:
+                months_to_seed = [year_month]
+                if current_ym != year_month:
+                    months_to_seed.append(current_ym)
+                seed_initial_budget_for_months(
+                    s, profile=profile, year_months=months_to_seed,
+                )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "_seed_initial_student_data: budget seed failed för %s",
+            student.id,
+        )
 
     # === Steg 3-4: pension + boende ===
     with scope_context(scope_key):
