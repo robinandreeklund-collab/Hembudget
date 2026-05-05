@@ -131,6 +131,11 @@ class JobApplicationOut(BaseModel):
     rounds_data: Optional[dict]
     started_on: str
     completed_on: Optional[str]
+    # Sprint 7 · läses av lärar-vyn så hen kan se elevens texter
+    cover_letter_text: Optional[str] = None
+    case_answer_text: Optional[str] = None
+    ai_feedback_md: Optional[str] = None
+    job_ad_data: Optional[dict] = None
 
 
 class RoundIn(BaseModel):
@@ -223,6 +228,10 @@ def _to_app_out(app: JobApplication) -> JobApplicationOut:
         rounds_data=app.rounds_data,
         started_on=app.started_on.isoformat() if app.started_on else "",
         completed_on=app.completed_on.isoformat() if app.completed_on else None,
+        cover_letter_text=getattr(app, "cover_letter_text", None),
+        case_answer_text=getattr(app, "case_answer_text", None),
+        ai_feedback_md=getattr(app, "ai_feedback_md", None),
+        job_ad_data=getattr(app, "job_ad_data", None),
     )
 
 
@@ -248,9 +257,37 @@ def list_jobs(
                 status.HTTP_404_NOT_FOUND, "Elevens profil saknas.",
             )
     profile = _profile_from_studentprofile(sp)
-    jobs = available_jobs_for_student(profile, ym, n=max(1, min(n, 12)))
+
+    # Difficulty-progression · 3+ avslag på 30 dagar → -10p match-score
+    # på alla jobb (verkligheten · arbetsgivare ser aktivitet men
+    # något skickar varningssignaler).
+    from datetime import date as _d_diff, timedelta as _td_diff
+    cutoff = _d_diff.today() - _td_diff(days=30)
+    with session_scope() as scope_s:
+        recent_rejections = (
+            scope_s.query(JobApplication)
+            .filter(
+                JobApplication.status.in_(("rejected", "abandoned")),
+                JobApplication.completed_on.isnot(None),
+                JobApplication.completed_on >= cutoff,
+            )
+            .count()
+        )
+    difficulty_modifier = -10 if recent_rejections >= 3 else 0
+
+    jobs = available_jobs_for_student(
+        profile, ym, n=max(1, min(n, 12)),
+        difficulty_modifier=difficulty_modifier,
+    )
+    mats_msg = MATS_OPENING_MESSAGE
+    if difficulty_modifier < 0:
+        mats_msg += (
+            f"\n\n⚠ Du har {recent_rejections} avslag/avbrott senaste "
+            "30 dagarna — det syns i din profil. Match-score är något "
+            "nedjusterad. Lägg mer tid per ansökan."
+        )
     return JobsResponse(
-        mats_message=MATS_OPENING_MESSAGE,
+        mats_message=mats_msg,
         year_month=ym,
         jobs=[JobOpeningOut(**asdict(j)) for j in jobs],
     )

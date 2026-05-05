@@ -149,12 +149,18 @@ def available_jobs_for_student(
     *,
     n: int = 6,
     same_city_only: bool = True,
+    difficulty_modifier: int = 0,
 ) -> list[JobOpening]:
     """Generera deterministisk pool av jobb för (elev, year_month).
 
     Filterar:
     - Bara yrken med education_level ≤ elevens (eller +1 nivå utveckling)
     - Stadsfilter: bara samma stad om same_city_only=True
+
+    `difficulty_modifier`: -10..+10, dras direkt från match_score per
+    jobb. Används av API:t för att simulera att 3+ avslag på 30 dagar
+    gör nya ansökningar svårare (verkligheten · arbetsgivare ser att
+    man är aktiv men något skickar varningssignaler).
     """
     rng = random.Random(f"jobs|{profile.seed}|{year_month}|{profile.city_key}")
     edu_levels = ["ingen", "gymnasium", "yh", "hogskola", "doktor"]
@@ -182,6 +188,7 @@ def available_jobs_for_student(
     scored: list[tuple[JobOpening, int]] = []
     for y in candidates:
         ms = calculate_match_score(profile, y, rng=random.Random(rng.random()))
+        ms = max(0, min(100, ms + difficulty_modifier))
         ad_rng = random.Random(f"ad|{profile.seed}|{year_month}|{y.key}")
         full_ad = _build_full_ad(y, ad_rng)
         opening = JobOpening(

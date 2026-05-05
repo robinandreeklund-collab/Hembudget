@@ -456,12 +456,11 @@ function ActiveInterviewPanel({
   // Round 2
   const [tone, setTone] = useState<"saker" | "reflekterande" | "ansprakvol" | "arlig">("reflekterande");
   const [answers, setAnswers] = useState<string[]>(["", "", "", ""]);
-  // Round 3
-  const [effort, setEffort] = useState<"lat" | "normal" | "djup">("normal");
+  // Round 3 · case-uppgift med riktig text
   const [caseAnswer, setCaseAnswer] = useState("");
-  // Round 4
+  // Round 4 · klädsel + research-svar
   const [dress, setDress] = useState<"vardag" | "business_casual" | "formell">("business_casual");
-  const [research, setResearch] = useState(0.5);
+  const [researchText, setResearchText] = useState("");
 
   const submit = async (payload: Record<string, unknown>) => {
     setSubmitting(true);
@@ -692,74 +691,123 @@ function ActiveInterviewPanel({
 
       {app.status === "round_3" && (
         <div>
-          <h3 style={ronH3Style}>Rond 3 · Case</h3>
-          <label style={ronLabelStyle}>
-            Effort:&nbsp;
-            <select
-              value={effort}
-              onChange={(e) => setEffort(e.target.value as typeof effort)}
-              style={ronSelectStyle}
-            >
-              <option value="lat">Lat (mindre tid)</option>
-              <option value="normal">Normal</option>
-              <option value="djup">Djup (kostar fritid)</option>
-            </select>
-          </label>
+          <h3 style={ronH3Style}>Rond 3 · Kompetenstest · case-uppgift</h3>
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 13.5,
+              color: "var(--text-mid)",
+              lineHeight: 1.5,
+              marginBottom: 12,
+            }}
+          >
+            <strong style={{ color: "#fff" }}>Caset:</strong> En kollega
+            kommer till dig med ett problem som rör rollen som{" "}
+            <em style={{ color: "var(--warm)" }}>{app.yrke_display}</em>.
+            Beskriv hur du skulle hantera situationen — visa hur du tänker
+            steg-för-steg, inte bara slutsatsen. Sikta på 80–250 ord.
+            AI bedömer både innehåll och språk.
+          </p>
           <textarea
-            rows={6}
-            style={{ ...ronTextareaStyle, marginTop: 10 }}
-            placeholder="Skriv ditt case-svar här..."
+            rows={10}
+            style={{ ...ronTextareaStyle, marginTop: 4 }}
+            placeholder="Steg 1: jag skulle först fråga... Steg 2: ..."
             value={caseAnswer}
             onChange={(e) => setCaseAnswer(e.target.value)}
           />
+          <div
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 10,
+              color: "var(--text-dim)",
+              marginTop: 6,
+              marginBottom: 12,
+            }}
+          >
+            {caseAnswer.trim().split(/\s+/).filter(Boolean).length} ord
+            {caseAnswer.trim().split(/\s+/).filter(Boolean).length < 30
+              && " · för kort (min 30)"}
+          </div>
           <button
             type="button"
-            disabled={submitting}
-            onClick={() => submit({ effort_level: effort, case_answer: caseAnswer })}
+            disabled={
+              submitting
+              || caseAnswer.trim().split(/\s+/).filter(Boolean).length < 30
+            }
+            onClick={() => submit({ case_answer_text: caseAnswer })}
             style={btnStyle()}
           >
-            Skicka in
+            {submitting ? "AI-bedömer..." : "Skicka in →"}
           </button>
         </div>
       )}
 
       {app.status === "round_4" && (
         <div>
-          <h3 style={ronH3Style}>Rond 4 · Intervju på plats</h3>
+          <h3 style={ronH3Style}>Rond 4 · Slutintervju på plats</h3>
+          <p
+            style={{
+              fontFamily: "var(--serif)",
+              fontSize: 13.5,
+              color: "var(--text-mid)",
+              lineHeight: 1.5,
+              marginBottom: 14,
+            }}
+          >
+            Du sitter på en stol mitt emot rekryteraren från{" "}
+            <strong style={{ color: "#fff" }}>{app.employer_name}</strong>.
+            Hen ler och säger: "Berätta — vad vet du om oss? Varför vill
+            du jobba just här?"
+          </p>
+
           <label style={ronLabelStyle}>
-            Klädsel:&nbsp;
+            Klädsel
             <select
               value={dress}
               onChange={(e) => setDress(e.target.value as typeof dress)}
-              style={ronSelectStyle}
+              style={{ ...ronSelectStyle, marginLeft: 8 }}
             >
               <option value="vardag">Vardags</option>
               <option value="business_casual">Business casual</option>
               <option value="formell">Formell</option>
             </select>
           </label>
-          <div
-            style={{
-              marginTop: 10,
-              fontFamily: "var(--mono)",
-              fontSize: 11,
-              color: "#fff",
-            }}
-          >
-            Företagsforskning: {research} h
-            <input
-              type="range" min="0" max="2" step="0.5" value={research}
-              onChange={(e) => setResearch(parseFloat(e.target.value))}
-              style={{ width: "100%", marginTop: 4 }}
+
+          <div style={{ marginTop: 14 }}>
+            <label style={ronLabelStyle}>
+              Ditt research-svar (vad vet du om {app.employer_name}?)
+            </label>
+            <textarea
+              rows={8}
+              style={{ ...ronTextareaStyle, marginTop: 4 }}
+              placeholder={`${app.employer_name} är ett företag som... Det jag tycker är intressant med just er roll är...`}
+              value={researchText}
+              onChange={(e) => setResearchText(e.target.value)}
             />
+            <div
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--text-dim)",
+                marginTop: 6,
+              }}
+            >
+              {researchText.trim().split(/\s+/).filter(Boolean).length} ord
+              {researchText.trim().split(/\s+/).filter(Boolean).length < 20
+                && " · skriv minst 20 ord"}
+            </div>
           </div>
+
           <button
             type="button"
-            disabled={submitting}
-            onClick={() => submit({ dress, research_hours: research })}
-            style={btnStyle()}
+            disabled={
+              submitting
+              || researchText.trim().split(/\s+/).filter(Boolean).length < 20
+            }
+            onClick={() => submit({ dress, research_text: researchText })}
+            style={{ ...btnStyle(), marginTop: 14 }}
           >
-            Skicka in
+            {submitting ? "AI-bedömer..." : "Skicka in →"}
           </button>
         </div>
       )}

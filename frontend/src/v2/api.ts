@@ -909,6 +909,11 @@ export type V2ArbetsformedlingenApplication = {
   rounds_data: Record<string, unknown> | null;
   started_on: string;
   completed_on: string | null;
+  // Sprint 7 · läses av elev + lärar-vy
+  cover_letter_text: string | null;
+  case_answer_text: string | null;
+  ai_feedback_md: string | null;
+  job_ad_data: Record<string, unknown> | null;
 };
 
 export type V2ArbetsformedlingenRoundOut = {
