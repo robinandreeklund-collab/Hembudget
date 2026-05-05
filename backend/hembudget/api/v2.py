@@ -3712,12 +3712,19 @@ def get_loans(info: TokenInfo = Depends(require_token)) -> V2LoanResponse:
             # frekvens).
             from datetime import timedelta as _td
             check = latest_credit_check(s)
+            # Räkna alltid om om vi inte har student_id/profile-data
+            # i existerande cache (gamla rader använde formel utan
+            # ålder/familj/boende = base 100, gav alla A).
             stale = (
                 check is None
                 or (datetime.utcnow() - check.computed_at) > _td(days=7)
+                or check.uc_score_value == 100
             )
             if stale and annual_gross_dec > 0:
-                check = compute_credit_check(s, annual_gross_dec)
+                check = compute_credit_check(
+                    s, annual_gross_dec,
+                    student_id=info.student_id,
+                )
 
             if check is not None:
                 credit_class = check.uc_score_class
@@ -5004,7 +5011,9 @@ def teacher_create_payment_mark(
                     else Decimal("0")
                 )
             if annual_gross > 0:
-                compute_credit_check(s, annual_gross)
+                compute_credit_check(
+                    s, annual_gross, student_id=student_id,
+                )
 
             return V2PaymentMarkOut(
                 id=mark.id,
